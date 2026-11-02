@@ -10,6 +10,7 @@ import type { FrameAdapter } from '@hyperframes/core';
 import type { gsap as Gsap } from 'gsap';
 import { parseStartExpression } from '@hyperframes/core/runtime/start-expression';
 import type { SceneBrandContext } from './brand-kit';
+import type { SceneRuntimeModules } from './scene-modules';
 
 const { Activity, createContext, memo, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } = React;
 
@@ -38,6 +39,27 @@ class Clock {
   frame = 0;
   private listeners = new Set<() => void>();
   private seekers = new Set<() => void>();
+  renderers = new Set<() => Promise<void>>();
+  updates = new Set<() => Promise<void>>();
+  commits = new Set<() => Promise<void>>();
+  work = new Set<Promise<void>>();
+  failure: unknown = null;
+  hold(promise: Promise<unknown>) {
+    const work = promise.then(() => undefined, error => { this.failure = error; });
+    this.work.add(work);
+    void work.then(() => this.work.delete(work));
+  }
+  async settle() {
+    do {
+      while (this.work.size) await Promise.all(this.work);
+      for (const commit of this.commits) await commit();
+    } while (this.work.size);
+    if (this.failure) throw this.failure;
+    this.seek();
+    for (const update of this.updates) await update();
+    if (this.failure) throw this.failure;
+    for (const render of this.renderers) await render();
+  }
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   /** GSAP timelines seek after React has drawn the frame, so they read beat starts that moved in it. */
   follow = (seeker: () => void) => { this.seekers.add(seeker); return () => { this.seekers.delete(seeker); }; };
@@ -73,6 +95,18 @@ function useSceneState() {
   const scene = useContext(SceneContext);
   if (!scene) throw new Error('Revline hooks work only inside a scene.');
   return scene;
+}
+
+/** Context bridge for renderers with a separate React root, such as R3F. */
+export function useSceneBridge() {
+  const state = useSceneState(), beat = useContext(BeatContext)!;
+  return useMemo(() => ({
+    wrap: (children: React.ReactNode) => <SceneContext.Provider value={state}><BeatContext.Provider value={beat}>{children}</BeatContext.Provider></SceneContext.Provider>,
+    notify: () => state.clock.notify(),
+    time: () => Math.max(0, beat.frame(state.clock.frame) / state.fps - beat.start),
+    hold: (promise: Promise<unknown>) => state.clock.hold(promise),
+    register: (render: () => Promise<void>, phase: 'commit' | 'update' | 'draw' = 'update') => { const list = phase === 'draw' ? state.clock.renderers : phase === 'commit' ? state.clock.commits : state.clock.updates; list.add(render); return () => { list.delete(render); }; },
+  }), [state, beat]);
 }
 
 /** The scene's size, length, fps, brand and media. */
@@ -171,17 +205,17 @@ export function Beat({ id, start = 0, duration, track = 0, keep = false, style, 
  *   });
  *   return <h1 ref={ref}>Every thread, in reach.</h1>;
  */
-export function useTimeline<T extends HTMLElement = HTMLDivElement>(build: (tl: gsap.core.Timeline, el: T) => void, deps: React.DependencyList = []): React.RefObject<T | null> {
+export function useTimeline<T extends object = HTMLDivElement>(build: (tl: gsap.core.Timeline, el: T) => void, deps: React.DependencyList = []): React.RefObject<T | null> {
   const { clock, fps } = useSceneState(), beat = useContext(BeatContext)!;
   const ref = useRef<T>(null), latest = useRef(build);
   latest.current = build;
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) throw new Error('useTimeline needs its ref on an element: <div ref={ref}>.');
+    if (!el) throw new Error('useTimeline needs its ref on an HTML element or Three.js object, such as <div ref={ref}> or <group ref={ref}>.');
     if (!gsap) throw new Error('GSAP is not loaded in this scene.');
     const engine = gsap;
     let tl!: gsap.core.Timeline;
-    const context = engine.context(() => { tl = engine.timeline({ paused: true }); latest.current(tl, el); }, el);
+    const context = engine.context(() => { tl = engine.timeline({ paused: true }); latest.current(tl, el); }, el instanceof HTMLElement ? el : undefined);
     // Seeked straight from the clock, outside React: the component itself never re-renders per frame.
     const seek = () => { tl.seek(Math.max(0, beat.frame(clock.frame) / fps - beat.start), false); };
     seek();
@@ -358,9 +392,10 @@ export function createReactSceneAdapter(options: ReactSceneOptions): FrameAdapte
       commit(() => clock.notify());
       clock.seek();
     },
-    settle: () => { const waiting = pending; pending = []; return Promise.all(waiting).then(() => undefined); },
+    settle: async () => { const waiting = pending; pending = []; await Promise.all(waiting); await clock.settle(); },
     destroy: () => { root?.unmount(); root = null; },
   };
 }
 
-export const modules = { revline, react: React, 'react/jsx-runtime': ReactJSXRuntime };
+export const rendererBridge = { useSceneBridge, useScene };
+export const modules = { revline, react: React, 'react/jsx-runtime': ReactJSXRuntime } satisfies SceneRuntimeModules<'react'>;

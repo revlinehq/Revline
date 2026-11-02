@@ -5,7 +5,7 @@ import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { loadSceneCode } from './scene_code';
 
 /** Revisions kept per project. Each row is small (scene code is stored by hash), so this covers weeks of editing. */
-export const REVISION_RETENTION = 2000;
+const REVISION_RETENTION = 2000;
 /** The row that holds a tab's settings besides its clips (fps, aspect ratio, tracks, markers, LUTs). */
 export const TIMELINE_ROW = ':timeline';
 /** restoreTimeline reads every change since the revision; past this many it asks for single clips instead. */

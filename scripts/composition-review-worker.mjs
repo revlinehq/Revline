@@ -20,7 +20,7 @@ try{
   if(!Array.isArray(variants)||!variants.length||variants.some(variant=>variant!=='edited'&&variant!=='reference'))throw new Error('Invalid capture variants.');
   // Pacing reads every sample as a small grayscale frame, all in one file, instead of a PNG each.
   const crop=settings.pacing?.crop;
-  const pacing=settings.pacing?{width:settings.pacing.width,height:Math.max(2,Math.round(settings.pacing.width*settings.height*(crop?.h??1)/(settings.width*(crop?.w??1)))),frames:[]}:undefined;
+  const pacing=settings.pacing?{width:settings.pacing.width,height:settings.pacing.height??Math.max(2,Math.round(settings.pacing.width*settings.height*(crop?.h??1)/(settings.width*(crop?.w??1)))),frames:[]}:undefined;
   const safe=[];
   for(const variant of variants){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');

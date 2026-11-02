@@ -1,3 +1,4 @@
+import { recordIncident, incidentDeployment } from './incidents';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
@@ -42,6 +43,11 @@ export async function insertMediaTask(ctx: MutationCtx, value: Omit<Doc<'mediaTa
 }
 
 export async function patchMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, patch: Partial<Omit<Doc<'mediaTasks'>, '_id' | '_creationTime'>>) {
+  if (patch.status === 'failed' && task.status !== 'failed') await recordIncident(ctx, {
+    source: 'media-worker', kind: task.kind === 'render' ? 'export' : 'media-task', message: patch.error ?? task.error ?? 'Media task failed',
+    context: { location: 'convex/lib/media_task_data:patchMediaTask', taskKind: task.kind, taskId: task._id, jobId: task.renderJobId, attempt: task.attempt },
+    projectId: task.projectId, deployment: incidentDeployment(),
+  });
   await ctx.db.patch(task._id, patch);
   if (patch.status && active(task.status) !== active(patch.status)) {
     await initializeMediaCapacity(ctx, task.ownerId);

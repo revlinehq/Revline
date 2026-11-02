@@ -31,7 +31,7 @@ export function boundedEntries<T extends { timeline?: Timeline; id?: unknown; by
   return kept;
 }
 /** Stored rows carry a current-version fingerprint; others fall back to hashing. */
-export async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
+async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
   const loaded = entries.every(entry => entry.key || entry.timeline) ? entries : await historyTimelines(ctx, entries);
   return Promise.all(loaded.map(entry => entry.key ?? timelineHistoryKey(entry.timeline!)));
 }

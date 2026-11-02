@@ -70,7 +70,7 @@ async function logoFrom(urls: string[], referer: string) {
   }
 }
 
-export type ScrapedBrand = { sourceUrl: string; colors: BrandColor[]; fonts: FontRow[]; logo?: string; copy: BrandCopy; notes: string[] };
+type ScrapedBrand = { sourceUrl: string; colors: BrandColor[]; fonts: FontRow[]; logo?: string; copy: BrandCopy; notes: string[] };
 
 export async function scrapeBrand(ctx: ActionCtx, url: string): Promise<ScrapedBrand> {
   const page = await get(url);

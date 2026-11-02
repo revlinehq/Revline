@@ -2,6 +2,7 @@
 import { ThinkingBlock, ToolChain } from './tool-chain';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { ReferenceCard, referenceOf, type ReferenceMedia } from './reference-card';
+import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
@@ -101,7 +102,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, editing:editingTimeline=running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activitySource, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
@@ -111,7 +112,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   allowedModels?: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>; hasClips: boolean; demo: boolean;
-  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>;
+  onRetry?: (promptMessageId:string) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
@@ -130,19 +131,19 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
   const [sending, setSending] = useState(false);
+  const [resumingTurnId,setResumingTurnId]=useState<string|null>(null);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
-  const answering = (running && !externalAgent) || sending || !!pendingReply;
+  const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
   const composerControls = useAssistantComposerControls({ settings: { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels }, draftKey, disabled: answering });
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
-  const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
   // A long tool run can fill a page before its user message is loaded.
   // The visible assistant-only prefix is still the active turn, not a failed historical edit.
-  const turnId = optimisticRequest?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
+  const turnId = optimisticRequest?.id ?? resumingTurnId ?? messages.findLast(message=>message.role==='user'&&message.turnState==='running')?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   // The sent message shows at once under a placeholder id; when the saved message replaces it,
   // that turn keeps the placeholder's id so the chat scroller sees one continuous item.
@@ -161,10 +162,18 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
-      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,error:group.id===turnId?(localError||(!waiting?error:null)):null});
+      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
       return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
+  const reportedFailures=useRef(new Set<string>());
+  useEffect(()=>{
+    for(const group of groups)for(const card of group.cards){
+      if(card.state!=='error'||reportedFailures.current.has(group.id+card.key))continue;
+      reportedFailures.current.add(group.id+card.key);
+      reportClientIncident({source:'editor-chat',kind:card.title==='Save not confirmed'?'save-confirmation':'turn-failure',message:`${card.title}: ${card.detail}`,context:{location:'components/editor/assistant-panel:failure-card',turnId:group.id}});
+    }
+  },[groups]);
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
@@ -184,14 +193,21 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     catch (e) { setStopState(null); setLocalError(userError(e, 'Could not stop this edit.')); }
   }
 
-  async function sendRequest(draft: string, retry = false) {
+  async function sendRequest(draft: string) {
     if (!draft.trim() || sendInFlight.current || sending || (!conversationStarted&&running) || pendingReply) return;
     const key=draftKey;sendInFlight.current=true;
-    if (!retry) changePrompt('');
+    changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
-    catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
+    try { await onSend(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
+    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
+  }
+  async function retryRequest(request:ChatMessage) {
+    if(!onRetry||sendInFlight.current||answering)return;
+    sendInFlight.current=true;setResumingTurnId(request.id);setLocalError('');setStopState(null);
+    try { await onRetry(request.sourceId??request.id); }
+    catch(error){setLocalError(userError(error,'Could not resume this request.'));}
+    finally {sendInFlight.current=false;setResumingTurnId(null);}
   }
   async function submit() { await sendRequest(prompt); }
 
@@ -213,11 +229,6 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
         const groupMessages = group.messages;
         const replies = group.replies;
         const editing = group.id === turnId && waiting;
-        const currentReply = replies.at(-1);
-        // Steps left without results by Stop or a finished run are not still working.
-        const hasRunningTool = editing && replies.some(message=>message.steps?.some(step=>step.state==='running'));
-        const showingReply = !!currentReply?.text.trim() && !activity && !hasRunningTool && (currentReply.status === 'streaming' || answering);
-        const loading = editing && (!showingReply || stopState === 'stopping');
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
         // As in shadcn Chat: each person's message is its own anchored item; the reply is the item after it.
@@ -236,9 +247,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
               </Fragment>)}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
-                {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest('Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.', true)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
+                {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
               </div>)}</div>}
-              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
+              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&now.label==='Thinking about the next step'?'Resuming…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;

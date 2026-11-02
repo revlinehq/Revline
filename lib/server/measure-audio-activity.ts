@@ -14,7 +14,7 @@ export async function measureAudioActivity(input: string, signal: AbortSignal, t
 }
 
 /** 10ms RMS and peak levels in source time, shared by activity and speech windowing. */
-export async function measureAudioEnergy(input: string, signal: AbortSignal): Promise<{ frames: AudioEnergyFrames; duration: number }> {
+async function measureAudioEnergy(input: string, signal: AbortSignal): Promise<{ frames: AudioEnergyFrames; duration: number }> {
   const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=channels,start_time:format=duration', '-of', 'json', input], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 });
   const probe = JSON.parse(stdout) as { streams?: { channels?: number; start_time?: string }[]; format?: { duration?: string } };
   const duration = Number(probe.format?.duration), channels = probe.streams?.[0]?.channels ?? 0;

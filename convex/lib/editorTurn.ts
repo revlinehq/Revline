@@ -4,7 +4,7 @@ import { editorModeForRequest, editModeInstructions, PRECISE_MODE_NOTICE, PRECIS
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
 import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
-import {assistantRunArgs,continuationValidator} from './assistant_run';
+import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
@@ -22,8 +22,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { google } from '@ai-sdk/google';
 import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
-import { v, type ObjectType } from "convex/values";
-import { components, internal } from "../_generated/api";
+import { type ObjectType } from "convex/values";
+import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
@@ -31,10 +31,10 @@ import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderRevie
 import { editorCapabilityIndex } from '../../lib/ai/editor-capabilities';
 import { CLIPPING_SKILL_ROUTING } from '../../lib/ai/skills/clipping';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
-export const editorTurnArgs={...assistantRunArgs,continuation:v.optional(continuationValidator)};
+export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
-export type EditorTurnHooks={signal?:AbortSignal;onStepFinished?:(progress:{steps:number;savedEdits:number;editMode:EditorEditMode;pendingFastFrames:number[]})=>void};
+type EditorTurnHooks={signal?:AbortSignal;onStepFinished?:(progress:{steps:number;savedEdits:number;editMode:EditorEditMode;pendingFastFrames:number[]})=>void};
 
 /** One chat turn: the model loop with the editor tools. Convex runs it in an action, or the agent runner on
  * Cloudflare runs it with a context that calls these same functions over HTTP, with no time limit. */
@@ -68,7 +68,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     checking = true;
     void ctx.runQuery(internal.assistant.isRunActive, run).then(active => {
       if (!active) controller.abort();
-    }).catch(() => controller.abort()).finally(() => { checking = false; });
+    }).catch(() => {}).finally(() => { checking = false; });
   }, 2000);
   try {
     const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
@@ -85,7 +85,8 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const recovery = args.recovery ?? project.aiRecovery;
     const recovering = recovery !== undefined || !!args.continuation;
     void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort }).catch(() => {});
-    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, editMode: initialEditMode, pendingFastFrames: args.continuation?.pendingFastFrames, onPrecise: announcePrecise, initialPlans: args.continuation && initialEditMode === 'precise' ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
+    const draft=args.continuation?await ctx.runQuery(internal.assistantTurnRecovery.draft,run):null;
+    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, segment,draft:draft?.timeline, editMode: initialEditMode, pendingFastFrames: args.continuation?.pendingFastFrames, onPrecise: announcePrecise, initialPlans: args.continuation && initialEditMode === 'precise' ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
     session = editSession;
     const { provider, modelId } = selection;
@@ -138,62 +139,71 @@ Appearance, text and marker edits can save immediately. Changes to existing sour
 For edit requests, use one brief initial sentence stating the requested action, then run tools. Do not narrate every tool call or expose internal implementation details. The interface shows verified result cards. For edits confirmed by saved:true tool evidence, finish with one short completion sentence. The application appends the actual editing mode and the Fast double-check offer; do not duplicate that footer. For staged changes, finish with one neutral sentence, such as 'Finishing that change.' Do not say 'awaiting save', claim the draft is saved, or describe it as still pending. The application appends the final save or failure message from server confirmation. Only mention meaningful failures or limitations. Do not repeat the card counts or produce long recap lists. For questions asking for an explanation, answer the actual question clearly. Keep replies brief. The latest saved user message is the current instruction. Current selection/playhead are authoritative when the user says here/this clip; older conversation timestamps may be SOURCE times and must not replace the current TIMELINE position. Map source windows through each retained clip and playback rate. When recovery context records an unfinished prior run, inspectTimeline before any timeline mutation regardless of the current wording. Preserve all already-saved clips/settings and perform only remaining work toward the latest request; do not repeat media additions already present at the same timeline/source range. Unchanged tool results do not represent new saved changes.
  ${EDITOR_CONTEXT_NOTICE} \n# Shared effects, text and style catalog\nSupported effects and text catalog (names only; details are in the effects, vfx-recipes, text-styling and color-grading skills): ${JSON.stringify(editorCapabilityIndex())}.${EDITOR_CONTEXT_BOUNDARY}${memorySection(memories)}${briefSection(brief)}Current user request: ${JSON.stringify(currentPrompt)}. Recovery context: ${JSON.stringify(recovery ?? null)}. Automatic continuation: ${JSON.stringify(args.continuation??null)}. On automatic continuation this is the same user request and undo group: inspect the current timeline, keep all completed work, reuse saved analysis, and finish only the remaining goals. Do not repeat completed edits or passed reviews. Recovery requests are chronological unfinished goals, not instructions to repeat saved work. Saved edit count refers to that prior run only; earlier saved edits also remain on the current timeline. The current user request takes precedence over every older goal; if the earlier goal is unknown, do not invent it. Use duplicateClips for explicitly requested copies, including during recovery. Attached media IDs in this request identify the newly attached project sources; when the user says these/new media, use these IDs before older selection references. Do not edit unrelated sources. When the user shares a video to remake or to take style from (remake this, like this, in this style, use this as a reference, this transition or title), read the reference-footage skill first and break the video down with analyzeMedia mode reference; that reference stays off the timeline. Editing context: ${JSON.stringify({ attachedAssetIds:args.attachedAssetIds??[], selectedClipId: args.selectedClipId ?? null, selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead ?? null })}. Use the selectedClipIds for the current selection, and selectedClipId for the primary clip when the user says this clip. Call inspectTimeline before editing when you need current saved state or diagnostics; it refreshes saved state when there is no staged replacement; during a replacement it inspects the private draft and checks for conflicting manual edits. Changes after that read remain protected by revision checks. Current project: ${JSON.stringify({ revision: editSession.revision, timeline: modelTimeline(editSession.timeline, args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : [])), assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, analysis,analysisKinds }) => ({ _id, fileName, kind, duration, width, height, audioAssetId, hasTranscript: !!analysis?.transcript||!!analysisKinds?.includes("transcribe"), hasSceneAnalysis: !!analysis?.understanding||!!analysisKinds?.includes("understand"), hasShotBoundaries: !!analysis?.shots||!!analysisKinds?.includes("shots"), hasBeatMap: analysis?.beats?.engine === BEAT_ANALYSIS_ENGINE, hasAccents: analysis?.beats?.accents !== undefined, hasDropCandidates: analysis?.beats?.dropCandidates !== undefined, hasSubjectTracking: !!analysis?.focus?.length||!!analysisKinds?.includes("track") })) })}` });
     const steps: { content: readonly unknown[] }[] = [];
-    let finishReason = 'stop', repairFeedback: string | undefined;
+    let finishReason = 'stop', repairFeedback: string | undefined=args.continuation?.feedback;
     let reviewRequirements:{plans:EffectPlan[];revision:number;validReviews?:{planIds:string[];output:Record<string,unknown>}[]}={plans:toolkit.plans(),revision:editSession.revision};
     // Keep the same request, lock, draft, undo group and token budget.
     // Two bounded repair passes replace asking the user to retry a known error.
-    for (let pass = 0; pass <= 2; pass++) {
-      abortSignal.throwIfAborted();
-      if (pass > 0 && !await ctx.runQuery(internal.assistant.isRunActive, run)) return null;
-      const offset = steps.length;
-      const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
-        promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
-        prepareStep: async ({ steps: current, messages }) => {
-          const completedSteps = [...steps, ...current];
-          const correctedError = completedSteps.some(step => step.content.some(value => value && typeof value === 'object' && 'type' in value && value.type === 'tool-error'));
-          if (correctedError && !hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
-          return { activeTools: Object.keys(tools).filter(name => (!args.command || name !== 'exportVideo') && (toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name))), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }] };
-        },
-        ...(repairFeedback ? {
-          stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
-        } : {}),
-        onStepStart: event => { currentStep = offset + event.stepNumber; },
-        // Provider usage arrives before potentially slow analysis/tool execution.
-        onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-        onStepEnd: event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, editMode: toolkit.editMode(), pendingFastFrames: toolkit.pendingFastFrames() }); },
-        onError: ({ error }) => { streamError = error; },
-      }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(recent),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
-      const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
-      finishReason = reason;
-      steps.push(...completed);
-      if (streamError) throw streamError;
-      if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
-      // Reuse only server-validated review snapshots of the current visible
-      // scope, including those saved before a durable continuation.
-      const reviewState=toolkit.editMode()==='precise'&&toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
-      reviewRequirements={...reviewState,revision:editSession.revision};
-      repairFeedback = toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
-      if (!repairFeedback || pass === 2) break;
-      console.log(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
+    for (let pass = args.continuation?.repairPass??0; pass <= MAX_REPAIR_PASSES; pass++) {
+      streamError=undefined;
+      try {
+        abortSignal.throwIfAborted();
+        if (pass > 0 && !await ctx.runQuery(internal.assistant.isRunActive, run)) return null;
+        const offset = steps.length;
+        const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
+          promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
+          prepareStep: async ({ steps: current, messages }) => {
+            const completedSteps = [...steps, ...current];
+            if (!hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
+            return { activeTools: Object.keys(tools).filter(name => (!args.command || name !== 'exportVideo') && (toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name))), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }] };
+          },
+          ...(repairFeedback ? {
+            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
+          } : {}),
+          onStepStart: event => { currentStep = offset + event.stepNumber; },
+          // Provider usage arrives before potentially slow analysis/tool execution.
+          onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
+          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, editMode: toolkit.editMode(), pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
+          onError: ({ error }) => { streamError = error; },
+        }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(recent),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
+        const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
+        finishReason = reason;
+        steps.push(...completed);
+        if (streamError) throw streamError;
+        if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+        // Reuse only server-validated review snapshots of the current visible
+        // scope, including those saved before a durable continuation.
+        const reviewState=toolkit.editMode()==='precise'&&toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
+        reviewRequirements={...reviewState,revision:editSession.revision};
+        repairFeedback = toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
+        if (!repairFeedback) {
+          if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+          if (streamError) throw streamError;
+          if (hasFailedRenderChecks(steps, reviewRequirements)) throw new AssistantRenderReviewError();
+          const missingFastReview = toolkit.fastReviewFeedback();
+          if (missingFastReview) throw new AnalysisStepError('Fast could not finish its required frame checks. The edit is not fully checked.');
+          const toolFailed = hasUnresolvedToolFailures(steps);
+          if (finishReason === 'stop' && !toolFailed) await editSession.confirmRepairs();
+          await editSession.complete(finishReason, toolFailed, steps.length);
+          break;
+        }
+        if(pass===MAX_REPAIR_PASSES)throw new AnalysisStepError('The remaining steps could not be repaired after two attempts. Retry unfinished steps to continue from your saved timeline.');
+      } catch(passError) {
+        if(pass===MAX_REPAIR_PASSES||abortSignal.aborted||!repairable(passError))throw passError;
+        repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
+      }
+      if(!await ctx.runMutation(internal.assistantTurnRecovery.advance,{...run,segment,expectedPass:pass,feedback:repairFeedback??'Inspect saved work and finish the remaining steps.'}))return null;
+      console.info(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
     }
-    if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
-    if (streamError) throw streamError;
-    if (hasFailedRenderChecks(steps, reviewRequirements)) throw new AssistantRenderReviewError();
-    const missingFastReview = toolkit.fastReviewFeedback();
-    if (missingFastReview) throw new AnalysisStepError('Fast could not finish its required frame checks. The edit is not fully checked.');
-    const toolFailed = hasUnresolvedToolFailures(steps);
-    const correctedToolError = steps.some(step => step.content.some(value => value && typeof value === 'object' && 'type' in value && value.type === 'tool-error'));
-    if (finishReason === 'stop' && !toolFailed && correctedToolError) await editSession.confirmRepairs();
-    await editSession.complete(finishReason, toolFailed, steps.length);
-    if (progress().savedEdits > 0) await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: toolkit.editMode() === 'fast' ? 'Edited in Fast. Precise can double-check it.' : 'Edited in Precise.' } });
-    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
+    if (progress().savedEdits > 0) await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: toolkit.editMode() === 'fast' ? 'Edited in Fast. Precise can double-check it.' : 'Edited in Precise.' } }).catch(()=>console.warn(`[ai-repair] ${JSON.stringify({event:'mode-footer-unavailable',runId:args.runId})}`));
+    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId,segment });
     costLog.finish('completed', progress());
   } catch (error) {
     if (!await ctx.runQuery(internal.assistant.isRunActive, run)) {
       costLog.finish('stopped_or_replaced', progress(), true);
-      if(session?.staged)await ctx.runMutation(internal.assistant.finish,{...run,publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:'aborted'}});
+      if(session?.staged)await ctx.runMutation(internal.assistant.finish,{...run,segment,publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:'aborted'}});
       return null;
     }
+    if(repairable(error)&&await ctx.runMutation(internal.assistantTurnRecovery.interrupted,{...run,segment,feedback:providerErrorText(error,selectedProvider)??'The connection was interrupted. Inspect saved work and finish only remaining steps.'}))return null;
     let cause = abortSignal.aborted ? abortSignal.reason : error instanceof AssistantToolRetryError ? error : streamError ?? error;
     let partialSaved = false;
     try { partialSaved = await session?.savePartial() ?? false; }
@@ -204,7 +214,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
-    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: reason, savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
+    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
   } finally { clearInterval(watch); await costHistory.flush(); }
   return null;
 }
@@ -233,4 +243,11 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** Configuration, exhausted credit and explicit budgets need a user/backend change. */
+function repairable(error:unknown) {
+  if(error instanceof AssistantTokenBudgetError||error instanceof AssistantToolRetryError)return false;
+  const detail=assistantFailureReason(error)??(error instanceof Error?error.message:'');
+  return !/credits.*exhausted|billing|authentication failed|cannot access the selected model|requires .*API_KEY|token budget/i.test(detail);
 }

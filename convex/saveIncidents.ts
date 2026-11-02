@@ -1,3 +1,4 @@
+import { recordIncident, incidentDeployment } from './lib/incidents';
 import { v, ConvexError } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -29,11 +30,9 @@ export const observe = internalMutation({
     if (run && (run.projectId !== step.projectId || run.ownerId !== ownerId)) throw new ConvexError('Incident run does not match this project.');
     if (!run) {
       await ctx.db.insert('saveIncidentRuns', { runId: step.runId, projectId: step.projectId, ownerId });
-      // Covers stopped actions and lost runners whose finally block never executes.
-      await ctx.scheduler.runAfter(60_000, internal.saveIncidents.settle, { runId: step.runId });
     }
     await ctx.db.insert('saveIncidentSteps', step);
-    if (!active.aiRunning || active.aiRunId !== step.runId) await ctx.scheduler.runAfter(60_000, internal.saveIncidents.settle, { runId: step.runId });
+    if (!active.aiRunning || active.aiRunId !== step.runId) await ctx.scheduler.runAfter(0, internal.saveIncidents.settle, { runId: step.runId });
     return null;
   },
 });
@@ -45,7 +44,6 @@ export const settle = internalMutation({ args: { runId: v.string() }, returns: v
   if (!run.finishedAt) {
     const active = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', run.projectId)).unique();
     if (active?.aiRunning && active.aiRunId === runId) {
-      await ctx.scheduler.runAfter(60_000, internal.saveIncidents.settle, { runId });
       return null;
     }
   }
@@ -53,6 +51,11 @@ export const settle = internalMutation({ args: { runId: v.string() }, returns: v
   for (const step of steps) {
     const condition = terminalSaveCondition(step, run.publication);
     if (condition) {
+      await recordIncident(ctx, {
+        source: step.source, kind: 'save-confirmation', message: `Save not confirmed: ${condition}`,
+        context: { location: 'convex/saveIncidents:settle', toolName: step.toolName, condition, inputShape: step.inputShape, outputShape: step.outputShape },
+        projectId: step.projectId, runId, deployment: incidentDeployment(),
+      });
       const identity = deploymentIdentity();
       // Omit project, prompt, revisions and input values so repeats of one protocol failure group together.
       const bytes = new TextEncoder().encode(JSON.stringify({ version: 1, tool: step.toolName, condition, outputShape: step.outputShape }));

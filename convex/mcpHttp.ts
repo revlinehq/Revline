@@ -7,6 +7,7 @@ import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { CLIPPING_SKILL_ROUTING } from '../lib/ai/skills/clipping';
 import { MCP_ORIGIN_HEADER, requestMcpOrigin } from './lib/mcp_origin';
+import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
 // the OAuth 2.1 authorization server MCP clients discover from it.
@@ -23,7 +24,9 @@ const isDevelopment = () => process.env.APP_ORIGIN?.startsWith('http://localhost
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers } });
 
-export const MCP_INSTRUCTIONS = `Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
+export const MCP_INSTRUCTIONS = `If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or contradicts its documented contract, call reportIssue once with its name, a minimal input summary, what happened and what you expected. Never include credentials, tokens, user text or media. Do not report ordinary validation failures or unsupported requests. Continue safely and describe any unresolved limitation honestly.
+
+Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
 For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. Default workflow: listProjects -> getProject (read its brief: the user's direction for this project, and follow it) -> inspectTimeline (same projectId) -> edit -> inspectTimeline again to confirm. When the user gives lasting direction, record it with updateBrief. Edits to a film with several sections pass scope, the section the user asked about; every other section is locked. Use getFrames to see the composited result at a few timeline seconds after visual changes (captions, framing, effects). Every editing tool needs projectId. Clip IDs, asset IDs and times come only from inspectTimeline, inspectClip, getProject and inspectAssetAnalysis; never invent them. Timeline times are seconds on the timeline; tools that say SOURCE seconds mean time inside the original media.
 ${CLIPPING_SKILL_ROUTING}
@@ -31,7 +34,7 @@ Before speech cuts, captions or take selection, read the relevant SOURCE transcr
 Bring in footage with uploadMedia (a local file: run the script it returns, then finishUpload) or importVideoLink (a URL).
 
 Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other code of your own to look at, measure or time video or audio: every script means a Revline tool was skipped, and its result never reaches the project.
-- Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges. Every brand logo or app icon comes from findIcon (the official SVG), and hand-made shapes (brush strokes, torn paper) from traceShape; never draw either by hand. After building, compareReference sets the reference beside your timeline at each moment with a difference score; fix the worst first.
+- Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges. Every brand logo or app icon comes from findIcon (the official SVG), and hand-made shapes (brush strokes, torn paper) from traceShape; never draw either by hand. After building, compareReference sets the reference beside your timeline at each moment with a difference score; fix the worst first. For a demo sub-panel beside a storyboard, set referenceCrop and leave timelineCrop full-frame; do not reposition your film inside a copy of the reference. Use referenceCropKeyframes in SOURCE seconds when that panel moves. compareMotion accepts the same independent crops.
 - Removing awkward moments from footage (dead air, looking away, reaching for the camera): readSkill visual-inspection. readFrames momentsOnly maps the whole clip, then readFrames fps 10 confirms each candidate before you cut.
 - Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
 - Narration: listVoices (with sampleText for playable samples) and generateVoice, which places the voice and returns every word's timeline time. A narrated explainer film follows the explainer skill.
@@ -52,20 +55,21 @@ let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string) {
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number) {
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: isDevelopment() ? `${MCP_INSTRUCTIONS}\n\n${HARNESS_REPORT}` : MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
     return { tools: await toolCatalog };
   });
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {} });
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
 }
 
 const mcpHandler = httpAction(async (ctx, request) => {
+  const comparisonDeadline = Date.now() + REFERENCE_COMPARISON_BUDGET_MS;
   let body: unknown;
   try { body = await request.json(); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
   // MCP 2025-06-18 removed JSON-RPC batching; one message per request keeps rate limits exact.
@@ -81,7 +85,7 @@ const mcpHandler = httpAction(async (ctx, request) => {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
   }
   // Stateless: a fresh server and transport per request, answering with JSON rather than an event stream.
-  const server = revlineServer(ctx, auth.ownerId, auth.clientName);
+  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await server.connect(transport);

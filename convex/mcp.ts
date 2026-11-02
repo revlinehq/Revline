@@ -11,7 +11,7 @@ import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
-import { importVideoFor } from './mediaTasks';
+import { cancelMediaTask, importVideoFor } from './mediaTasks';
 import { exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
@@ -36,9 +36,11 @@ function projectIdOf(ctx: QueryCtx, projectId: string) {
 
 const editorUrl = (projectId: string) => `${process.env.APP_ORIGIN ?? ''}/editor/${projectId}`;
 
-export const normalizeSnapshotId = internalQuery({ args:{snapshotId:v.string(),ownerId:v.string(),projectId:v.id('projects'),kind:v.union(v.literal('pacing'),v.literal('sound'))},returns:v.id('frameSnapshots'),handler:async(ctx,args)=>{
+export const normalizeSnapshotId = internalQuery({ args:{snapshotId:v.string(),ownerId:v.string(),projectId:v.id('projects'),kind:v.union(v.literal('pacing'),v.literal('sound')),timelineId:v.optional(v.string()),check:v.optional(v.boolean())},returns:v.id('frameSnapshots'),handler:async(ctx,args)=>{
   const id=ctx.db.normalizeId('frameSnapshots',args.snapshotId),snapshot=id?await ctx.db.get(id):null;
   if(!snapshot||snapshot.ownerId!==args.ownerId||snapshot.projectId!==args.projectId||!snapshot[args.kind])throw new ConvexError('This saved check is unavailable for this project.');
+  if(args.timelineId&&snapshot.timelineId&&args.timelineId!==snapshot.timelineId)throw new ConvexError('This saved check belongs to another timeline tab.');
+  if(args.check!==undefined&&snapshot.sound?.check!==args.check)throw new ConvexError('Resume this saved check with the tool that started it (checkSound or getSound).');
   return snapshot._id;
 }});
 
@@ -155,9 +157,9 @@ export const duplicateProject = internalMutation({ args: { ownerId: v.string(), 
   return { projectId, editorUrl: editorUrl(projectId), note: 'A full copy with every timeline tab and its media. Edits to it never change the original.' };
 }});
 export const deleteProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  await beginProjectDeletion(ctx, args.ownerId, project);
-  return { deleted: true, title: project.title };
+  const project = await ctx.db.get(projectIdOf(ctx, args.projectId));
+  if(project)await beginProjectDeletion(ctx, args.ownerId, project);
+  return { deleted: true, ...(project?{title:project.title}:{}) };
 }});
 export const renameTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), name: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   await renameTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId, name: args.name });
@@ -197,7 +199,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
@@ -207,10 +209,11 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   const draft = args.runId ? await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', project._id)).unique() : null;
   const drafted = draft && draft.runId === args.runId && !other ? draft.timeline : null;
   const now = drafted ?? stored ?? currentTimeline(project), revision = args.revision;
-  // An earlier saved revision, rebuilt from the revision log: the tab as it looked then.
-  const past = revision === undefined ? null : await pastTimeline(ctx, project, other ?? activeTabOf(project), stored ?? currentTimeline(project), revision);
   const source = args.sourceSnapshotId ? await ctx.db.get(args.sourceSnapshotId) : null;
   if (args.sourceSnapshotId && (!source || source.ownerId !== args.ownerId || source.projectId !== project._id || !source.sourceTimeline)) throw new ConvexError('The comparison snapshot is unavailable.');
+  // A continued check uses its frozen source even after revision history has moved on.
+  const past = revision === undefined || source ? null : await pastTimeline(ctx, project, other ?? activeTabOf(project), stored ?? currentTimeline(project), revision);
+  if (args.comparison?.aspectRatio !== undefined && (!Number.isFinite(args.comparison.aspectRatio) || args.comparison.aspectRatio <= 0)) throw new ConvexError('Use a positive comparison aspect ratio.');
   if (args.comparison?.crop && !comparisonCrop.safeParse(args.comparison.crop).success) throw new ConvexError('Keep the normalized comparison crop inside the frame.');
   const timeline = source?.sourceTimeline ?? past ?? now, duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
@@ -232,12 +235,12 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   if (!normalization && !pacing && !sound && !motion && (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || pacing || motion || sound || normalization ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.revision ?? project.revision ?? 0, times: normalization || pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(past ? { atRevision: revision } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || pacing || motion || sound || normalization ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.atRevision ?? source?.revision ?? (pacing || sound ? revision : undefined) ?? project.revision ?? 0, times: normalization || pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other || pacing || sound ? { timelineId: source?.timelineId ?? other ?? activeTabOf(project) } : {}), ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(past ? { atRevision: revision } : {}) });
   const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion });
   await ctx.db.patch(snapshotId, { taskId });
-  // Frames are read once; anything unread is removed shortly after.
-  await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.expireFrames, { snapshotId });
+  // Measurements are saved verification records, kept until the project is deleted.
+  if (!pacing && !sound) await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});
 
@@ -267,28 +270,30 @@ export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
-  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.timelineId ? { timelineId: snapshot.timelineId } : {}), ...(snapshot.sound || snapshot.pacing ? { requestedRange: snapshot.sound ?? snapshot.pacing } : {}), ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
-/** frames, for a caller that is done once it has the result: a finished or failed request is deleted as it is read,
- *  so its images are read once instead of again by discardFrames. */
+/** Consume ephemeral images once; saved sound and pacing measurements remain retrievable. */
 export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapshotId: v.id('frameSnapshots') }, returns: v.any(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
-  if (snapshot.status !== 'queued') await ctx.db.delete(snapshot._id);
+  if (snapshot.status !== 'queued' && !snapshot.sound && !snapshot.pacing) await ctx.db.delete(snapshot._id);
   return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
-  if (snapshot) await ctx.db.delete(snapshot._id);
+  if (snapshot && !snapshot.sound && !snapshot.pacing) {
+    if (snapshot.comparison && snapshot.status === 'queued' && snapshot.taskId) await cancelMediaTask(ctx, snapshot.taskId);
+    await ctx.db.delete(snapshot._id);
+  }
   return null;
 }});
 
 export const expireFrames = internalMutation({args:{snapshotId:v.id('frameSnapshots')},returns:v.null(),handler:async(ctx,args)=>{
   const snapshot=await ctx.db.get(args.snapshotId);
-  if(!snapshot)return null;
+  if(!snapshot||snapshot.sound||snapshot.pacing)return null;
   const task=snapshot.taskId?await ctx.db.get(snapshot.taskId):null;
   if(snapshot.status==='queued'&&task&&(task.status==='queued'||task.status==='running'||task.status==='retrying')){
     await ctx.scheduler.runAfter(15*60_000,internal.mcp.expireFrames,args);

@@ -2,21 +2,22 @@
 import { v } from 'convex/values';
 import { z } from 'zod';
 import { editorEditModeSchema, PRECISE_MODE_NOTICE, type EditorEditMode } from '../lib/ai/edit-mode';
+import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit } from './lib/editorToolkit';
+import { toolBehavior } from '../lib/ai/tool-definitions';
 import { mediaDownloadUrl } from './lib/media_storage';
 import { readRunId } from './lib/run_ids';
 import { completeUpload, openUpload, signPartUrl } from './r2';
-import { startLocalUpload } from './mcpUploads';
+import { startLocalUpload, mediaKind } from './mcpUploads';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
 // An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
 const CALL_LIMIT_MS = 9 * 60_000;
-const RUN_SCOPED_TOOLS = new Set(['usePreciseMode', 'planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 
 const PROJECT_TOOLS = {
@@ -27,7 +28,7 @@ const PROJECT_TOOLS = {
   duplicateProject: { description: 'Copy a whole project (every timeline tab and its media) into a new project, e.g. to try another version without touching the original. Returns the new projectId.', inputSchema: z.object({ projectId: projectIdField, title: z.string().min(1).max(120).optional() }) },
   deleteProject: { description: 'Permanently delete a project with its timelines, chat and exports. Only when the user explicitly asks to delete it; confirm must be true. Not possible during an edit or render.', inputSchema: z.object({ projectId: projectIdField, confirm: z.literal(true) }) },
   importVideoLink: { description: 'Import a video from a link (YouTube and other supported sites) into a project, or into a new project when projectId is omitted. Any length imports. When only part of a long video is needed (a moment from a podcast, a talk, a stream recording), pass start and end in SOURCE seconds of the original video and only that part is downloaded, which is much faster; pad the range a few seconds on each side, then trim to the exact words after transcribing. The imported file starts at 0 at the range start. Returns a taskId to poll with getMediaTask.', inputSchema: z.object({ url: z.string().url(), projectId: projectIdField.optional(), start: z.coerce.number().min(0).optional().describe('SOURCE second of the original video to start from; needs end.'), end: z.coerce.number().positive().optional().describe('SOURCE second to stop at, after start.') }) },
-  uploadMedia: { description: 'Upload a local video, image or audio file into a project. No file metadata is required. Returns a shell script that reads size, dimensions and duration itself, uploads the file, and prints the arguments for finishUpload. Run it with sh on the machine holding the file (Node 22+ and ffprobe required), then pass its JSON to finishUpload. Upload access lasts one hour. Callers that already know all metadata may still supply it; that legacy script prints a parts array instead.', inputSchema: z.object({ projectId: projectIdField, filePath: z.string().min(1).describe('Local path of the file, used only to write the upload script.'), fileName: z.string().min(1).max(255), contentType: z.string().regex(/^(video|image|audio)\/[\w.+-]+$/).describe('MIME type, e.g. video/mp4, video/quicktime, image/png, audio/mpeg.'), size: z.number().int().positive().optional().describe('Optional known byte size. Omit metadata to let the upload script read it.'), width: z.number().int().positive().optional(), height: z.number().int().positive().optional(), duration: z.number().positive().optional() }) },
+  uploadMedia: { description: 'Upload a local video, image, audio or self-contained GLB model file into a project. No file metadata is required. Returns a shell script that reads size, dimensions and duration itself, uploads the file, and prints the arguments for finishUpload. Run it with sh on the machine holding the file (Node 22+ and ffprobe required), then pass its JSON to finishUpload. GLB models (up to 32 MB) finish in the script and print an assetId to attach as scene media; no finishUpload is needed. Upload access lasts one hour. Callers that already know all metadata may still supply it; that legacy script prints a parts array instead.', inputSchema: z.object({ projectId: projectIdField, filePath: z.string().min(1).describe('Local path of the file, used only to write the upload script.'), fileName: z.string().min(1).max(255), contentType: z.string().regex(/^(?:(video|image|audio)\/[\w.+-]+|model\/gltf-binary)$/).describe('MIME type, e.g. video/mp4, video/quicktime, image/png, audio/mpeg.'), size: z.number().int().positive().optional().describe('Optional known byte size. Omit metadata to let the upload script read it.'), width: z.number().int().positive().optional(), height: z.number().int().positive().optional(), duration: z.number().positive().optional() }) },
   finishUpload: { description: 'Finish an uploadMedia upload with the uploadId and parts from the JSON its script printed. Adds the file to the project media and starts processing; place it on the timeline with addMedia.', inputSchema: z.object({ uploadId: z.string().min(1), parts: z.array(z.object({ partNumber: z.number().int().positive(), etag: z.string().min(1) })).min(1) }) },
   listTimelines: { description: 'List the project\'s timeline tabs: each is a separate video with its own aspect ratio, clips and undo. Editing tools act on the open (active) one.', inputSchema: z.object({ projectId: projectIdField }) },
   openTimeline: { description: 'Open another timeline tab so editing tools act on it. It also switches the editor tab the user sees. Not possible while an edit is running.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1) }) },
@@ -56,7 +57,7 @@ type EditorTool = { description?: string; inputSchema: z.ZodType; execute: (inpu
 // Tool definitions are pure closures; only their execution touches ctx or the run.
 function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorToolkit>[1]) {
   const toolkit = createEditorToolkit(ctx, options);
-  return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => !RUN_SCOPED_TOOLS.has(name))) as unknown as Record<string, EditorTool> };
+  return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => toolBehavior(name)?.mcp !== 'hidden')) as unknown as Record<string, EditorTool> };
 }
 
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
@@ -83,16 +84,28 @@ const message = (error: unknown) => {
   return (typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : error instanceof Error ? error.message : String(error)).slice(0, 2000);
 };
 
-export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+function toolFailureMessage(text: string): string {
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { return text; }
+  const parsed = z.object({ error: z.union([z.string(), z.object({ message: z.string() })]).optional(), message: z.string().optional(), reason: z.string().optional() }).safeParse(value);
+  if (!parsed.success) return 'Revline tool returned an unsuccessful result';
+  return typeof parsed.data.error === 'string' ? parsed.data.error : parsed.data.error?.message ?? parsed.data.message ?? parsed.data.reason ?? 'Revline tool returned an unsuccessful result';
+}
+
+export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+  const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS) : undefined;
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   // The editor shows the agent as working across its whole request, not only during each call.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
   const touch = () => projectId ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, ...(args.agentName ? { agentName: args.agentName } : {}) }).catch(() => null) : null;
   await touch();
   try {
-    if (args.name in PROJECT_TOOLS) return await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input);
-    return await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
-  } catch (error) { return result(message(error), true); }
+    const output = args.name in PROJECT_TOOLS
+      ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
+      : await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName, comparisonDeadline);
+    if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: toolFailureMessage(output.text) }).catch(() => {});
+    return output;
+  } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   finally { await touch(); }
 }});
 
@@ -153,7 +166,8 @@ const shellQuote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`;
 
 /** Opens the same multipart upload the editor uses and writes a script that PUTs each part and prints the parts JSON. */
 async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeof PROJECT_TOOLS.uploadMedia.inputSchema>) {
-  const kind = input.contentType.split('/')[0] as 'video' | 'image' | 'audio';
+  const kind = mediaKind(input.contentType);
+  if (kind === 'model') return startLocalUpload(ctx, { ownerId, projectId: input.projectId, fileName: input.fileName, contentType: input.contentType }, input.filePath);
   if (input.size === undefined || kind !== 'audio' && (!input.width || !input.height) || kind !== 'image' && !input.duration) return startLocalUpload(ctx, { ownerId, projectId: input.projectId, fileName: input.fileName, contentType: input.contentType }, input.filePath);
   const upload = await openUpload(ctx, { projectId: input.projectId as Id<'projects'>, fileName: input.fileName, contentType: input.contentType, kind, size: input.size, ...(input.duration ? { duration: input.duration } : {}), ...(kind !== 'audio' ? { width: input.width, height: input.height } : {}) }, ownerId);
   const lease = await ctx.runQuery(internal.r2.getLease, { uploadId: upload.uploadId, ownerId });
@@ -168,12 +182,6 @@ async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeo
   return { uploadId: upload.uploadId, partCount: upload.partCount, script: lines.join('\n'), next: 'Run the script with sh, then call finishUpload with this uploadId and the JSON array it printed as parts.' };
 }
 
-// Pure reads: they neither stage edits nor start analysis, so they skip the project lock and
-// run alongside in-app or MCP edits. inspectAssetAnalysis can refresh a transcript and
-// inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
-// Blueprint tools never touch the timeline, so they skip the project lock while the worker renders.
-// Frame readings look at source media only, so they skip the lock too.
-const READ_ONLY_TOOLS = new Set(['compareReference', 'compareMotion', 'motionMap', 'checkPacing', 'getSound', 'checkSound', 'inspectTimeline', 'inspectClip', 'diffScene', 'listRevisions', 'readBrief', 'readSkill', 'listVoices', 'readFrames', 'listenReference', 'trackReference', 'getTrack', 'measureFrame', 'traceShape', 'matchFont', 'findIcon', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
 /** A tool output's labeled images become MCP image content after the text. */
 function withImages(output: unknown, isError: boolean): CallResult {
   if (!output || typeof output !== 'object' || !Array.isArray((output as { images?: unknown }).images)) return result(output, isError);
@@ -181,21 +189,21 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise'): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise', comparisonDeadline?: number): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, comparisonDeadline });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     return withImages(output, failed(output));
   } catch (error) { return result(message(error), true); }
 }
 
-async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string): Promise<CallResult> {
+async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string, comparisonDeadline?: number): Promise<CallResult> {
   const { projectId: rawProjectId, timelineId: rawTimelineId, editMode: rawEditMode, ...rawInput } = raw;
   const editMode = editorEditModeSchema.default('precise').parse(rawEditMode);
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
@@ -207,7 +215,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode, comparisonDeadline);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };
@@ -223,7 +231,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode(), ...(editMode === 'fast' && toolkit.editMode() === 'precise' ? { modeNotice: PRECISE_MODE_NOTICE } : {}) } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
-    return withImages(published && output && typeof output === 'object' ? { ...output, applied: true, saved: true, staged: false, revision: toolkit.editSession.revision } : output, failed(output));
+    return withImages(published ? toolkit.publicationResult(output) : output, failed(output));
   } catch (error) {
     return result(abortSignal.aborted && !deadline.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
   } finally {

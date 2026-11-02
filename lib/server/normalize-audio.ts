@@ -58,7 +58,7 @@ async function measure(
 }
 
 /** Two-pass EBU R128 normalization, with a measurement of the actual stored PCM output. */
-export async function normalizeAudioFile(
+async function normalizeAudioFile(
   input: string,
   output: string,
   targetLufs: number,

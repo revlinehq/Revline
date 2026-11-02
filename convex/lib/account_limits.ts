@@ -5,9 +5,9 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 const MINUTE_MS = 60_000;
 /** One video needs three tasks (extract, preview, then transcribe),
  * so the default admits eight sources transferring and preparing at once. */
-export const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
+const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
 /** Fresh preparation tasks queued by one source upload. */
-export const uploadPreparationTasks = (kind: 'video' | 'audio' | 'image') => kind === 'video' ? 3 : kind === 'audio' ? 2 : 0;
+export const uploadPreparationTasks = (kind: 'video' | 'audio' | 'image' | 'model') => kind === 'video' ? 3 : kind === 'audio' ? 2 : 0;
 
 /** An abandoned transfer stops holding capacity after this; its completion still meets the ceiling. */
 export const UPLOAD_RESERVATION_MS = 3600_000;
@@ -18,10 +18,10 @@ export function accountLimit(name: string, fallback: number, min: number, max: n
   if (!Number.isInteger(value) || value < min || value > max) throw new Error(`${name} must be between ${min} and ${max}`);
   return value;
 }
-export const activeMediaTaskLimit = () => accountLimit('MAX_ACTIVE_MEDIA_TASKS_PER_ACCOUNT', DEFAULT_MAX_ACTIVE_MEDIA_TASKS, 3, 200);
+const activeMediaTaskLimit = () => accountLimit('MAX_ACTIVE_MEDIA_TASKS_PER_ACCOUNT', DEFAULT_MAX_ACTIVE_MEDIA_TASKS, 3, 200);
 
 /** Outstanding (queued, running, retrying) worker tasks across all of an owner's projects. */
-export async function activeMediaTasks(ctx: QueryCtx | MutationCtx, ownerId: string, cap: number) {
+async function activeMediaTasks(ctx: QueryCtx | MutationCtx, ownerId: string, cap: number) {
   return (await ctx.db.query('mediaTaskSlots').withIndex('by_owner', q => q.eq('ownerId', ownerId)).take(cap)).length;
 }
 /** Recent source transfers hold the preparation tasks they will queue, so
@@ -49,7 +49,7 @@ type Quota = { period: number; max: number; message: string };
 /** Fixed windows aligned to UTC minutes and days. One row per owner, name and
  * period keeps each check to a single indexed read; a refused request rolls
  * back with its mutation and consumes nothing. */
-export async function consumeAccountQuota(ctx: MutationCtx, ownerId: string, name: string, quotas: readonly Quota[]) {
+async function consumeAccountQuota(ctx: MutationCtx, ownerId: string, name: string, quotas: readonly Quota[]) {
   const now = Date.now();
   for (const quota of quotas) {
     const windowStart = now - now % quota.period;

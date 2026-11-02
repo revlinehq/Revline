@@ -3,8 +3,8 @@ import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
 import { enforceClaudeModelPolicy, GPT_ONLY_EDITING_ERROR } from './claude-model-policy';
 
-export const CLAUDE_MODEL = 'claude-sonnet-5-5';
-export const CLAUDE_GATEWAY_MODEL = 'anthropic/claude-sonnet-5.5';
+const CLAUDE_MODEL = 'claude-sonnet-5-5';
+const CLAUDE_GATEWAY_MODEL = 'anthropic/claude-sonnet-5.5';
 
 export const CLAUDE_EDIT_MODELS = [
   { id: 'haiku', label: 'Haiku 5.5', modelId: 'claude-haiku-5-5', gatewayModelId: 'anthropic/claude-haiku-5.5' },
@@ -27,7 +27,7 @@ export const OPENAI_EDIT_MODELS = [
 ] as const;
 // Google rates, USD / 1M tokens, from ai.google.dev/gemini-api/docs/pricing (2026-10-29): $2 input,
 // $10 output, $0.10 implicit cache reads until 2026-11-30; $4 / $20 / $0.20 from 2026-12-01.
-export const GOOGLE_EDIT_MODELS = [
+const GOOGLE_EDIT_MODELS = [
   { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon 4', modelId: 'gemini-4-argon' },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
@@ -38,7 +38,7 @@ export type EditorSpeedMode = typeof EDITOR_SPEED_MODES[number];
 // Every editor model takes an effort level; Fast mode is OpenAI-only here.
 // Sonnet 5.5 rejects `speed`, and Opus 5.5 fast mode is a research preview
 // this Anthropic org has no rate limit for (0 tokens/min, 2026-10-25).
-export function editorModelSupportsFast(selection: Pick<ClaudeModelSelection, 'provider'>) {
+function editorModelSupportsFast(selection: Pick<ClaudeModelSelection, 'provider'>) {
   return selection.provider === 'openai';
 }
 // Legacy IDs remain decodable for historical records and stale queued requests.
@@ -106,7 +106,7 @@ export function withEditorSpeed(selection: ClaudeModelSelection, speedMode?: Edi
 }
 
 /** Anthropic request options for the Claude editing models. */
-export function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
+function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
   if (!/^(?:anthropic\/)?claude-(?:haiku|sonnet|opus)-5[.-]5$/.test(modelId)) return undefined;
   const anthropic = {
     cacheControl: { type: 'ephemeral', ttl: '5m' },
@@ -119,7 +119,7 @@ export function claudeProviderOptions(modelId: string, effort: EditorReasoningEf
 }
 
 /** Gemini thinks at low, medium or high; the higher editor efforts map to high. */
-export function googleProviderOptions(effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
+function googleProviderOptions(effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
   const google = { thinkingConfig: { thinkingLevel: effort === 'low' || effort === 'medium' ? effort : 'high' } } satisfies GoogleGenerativeAIProviderOptions;
   return { google };
 }

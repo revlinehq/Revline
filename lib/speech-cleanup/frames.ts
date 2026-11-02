@@ -1,5 +1,5 @@
 /** Per-10ms acoustic features of mono PCM: loudness, voicing, pitch and spectral shape. */
-export const FRAME_SECONDS = .01;
+const FRAME_SECONDS = .01;
 const WINDOW_SECONDS = .03;
 
 export type Frames = {

@@ -10,14 +10,16 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // the attempt that claimed the run, and must belong to a run the runner is still working on. Its owner, project, run and chat ids must be
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
-  'saveIncidents:observe',
+  'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
+  'toolWrites:run', 'toolWrites:receipt',
+  'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportRunner',
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',
   'assistant:listRunTimelines', 'assistant:createRunTimeline', 'assistant:openRunTimeline', 'assistant:importRunVideo', 'assistant:runMediaTask', 'assistant:exportRunVideo',
   'assistant:analysisRequest', 'assistant:apply', 'assistant:attachRunStockAudio', 'assistant:beginEditing', 'assistant:clearAnalysis', 'assistant:currentPrompt', 'assistant:finish', 'assistant:getRun', 'assistant:getRunAsset', 'assistant:getRunTimeline', 'assistant:isRunActive', 'assistant:previewDraft', 'assistant:recordBudget', 'assistant:recordEffort', 'assistant:requestAnalysis', 'assistant:diffScene', 'assistant:recordFix', 'assistant:revisionChanges', 'assistant:revisionHistory', 'assistant:saveGeneratedSound', 'assistant:undoLatestEdit',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:get', 'brandKits:list', 'brandKits:update',
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',
-  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
+  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:normalizeSnapshotId', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */

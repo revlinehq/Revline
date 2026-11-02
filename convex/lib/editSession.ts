@@ -3,7 +3,7 @@ import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { rebaseNonDestructiveEdit } from './editSessionRebase';
 import { isApprovalRejection, isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
-export const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
+const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 export class IncompleteEditError extends Error {
   constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number, steps = 0) {
     const cause = reason === 'step_limit' ? steps >= EDITOR_HARD_STEPS ? 'This request reached its editing step limit before finishing.' : 'The request paused because recent steps made no new timeline changes.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
@@ -44,6 +44,27 @@ export class EditSession {
   }
 
   wait() { return this.pending; }
+
+  restoreDraft(timeline:Timeline) {
+    this.timeline=normalizeTimeline(timeline);
+    this.staged=true;
+    this.stagedEdits=1;
+  }
+
+  /** Only used after the tool layer recovered an atomic receipt or a direct mutation's save. */
+  async reconcileSaved(read: () => Promise<{ timeline: Timeline; revision: number }>,force=false) {
+    await this.pending;
+    const current = await read();
+    if (!force&&current.revision <= this.revision) return;
+    const advanced=current.revision>this.revision;
+    this.timeline = normalizeTimeline(current.timeline);
+    this.revision = current.revision;
+    if(advanced)this.savedEdits++;
+    this.staged = false;
+    this.stagedEdits = 0;
+    this.failed = false;
+    this.needsInspection = false;
+  }
 
   private async publishCurrentTimeline() {
     if (this.failed || this.needsInspection) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');

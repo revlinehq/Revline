@@ -21,7 +21,7 @@ export function scriptedDemoMedia(originals: readonly MediaAsset[]) {
 /** A local recording script, never an analysis of the uploaded footage or speech. */
 export function scriptedDemoPlan(assets: readonly MediaAsset[], prompt: string, runId: string) {
   const fps = 30;
-  const visuals = assets.filter(asset => asset.kind === 'image' || asset.kind === 'video' && Number.isFinite(asset.duration) && asset.duration! >= 1 / fps).slice(0, 8);
+  const visuals = assets.filter((asset): asset is MediaAsset & { kind: 'image' | 'video' } => asset.kind === 'image' || asset.kind === 'video' && Number.isFinite(asset.duration) && asset.duration! >= 1 / fps).slice(0, 8);
   if (!visuals.length) throw new Error('Attach a readable video or image before starting the edit.');
   const aspectRatio = (visuals[0].height ?? 0) > (visuals[0].width ?? 0) ? 'vertical' as const : 'landscape' as const;
   const sound = assets.find(asset => asset.kind === 'audio' && Number.isFinite(asset.duration) && asset.duration! >= 1 / fps);

@@ -190,7 +190,7 @@ export function NewConversation() {
       const projectId = await activeJob.start({
         stage: stashFiles,
         create: (value, assetIds) => { const picture = cloudMedia?.find(asset => (asset.kind === 'video' || asset.kind === 'image') && asset.width && asset.height); return createProject({ title: value, aspectRatio: picture ? aspectRatioForSize(picture.width!, picture.height!) : 'vertical', ...(assetIds.length ? { assetIds } : {}), ...(activeJob.input.placeOnTimeline === false ? { placeOnTimeline: false } : {}) }); },
-        project: async projectId => { const project = await convex.query(api.projects.get, { projectId }); return { timeline: project.timeline, revision: project.revision ?? 0 }; },
+        project: async projectId => { const project = await convex.query(api.projects.get, { projectId }); if (!project) throw new Error('This project is no longer available. Start a new project to retry.'); return { timeline: project.timeline, revision: project.revision ?? 0 }; },
         upload: (projectId, file, progress) => uploadSourceFile(file, {
           start: metadata => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...metadata }),
           partUrl: (uploadId, partNumber) => partUrl({ uploadId, partNumber }),

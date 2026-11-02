@@ -6,7 +6,7 @@ import type { Clip, Timeline } from './types';
  * Every edit rewrites (and every open editor re-reads) the timeline, so this keeps both small, and
  * identical code is stored once. Editing logic only ever sees timelines with their code restored.
  */
-export async function sceneCodeHash(code: string): Promise<string> {
+async function sceneCodeHash(code: string): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(code));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
 }
@@ -65,11 +65,4 @@ export async function withoutSceneCode<T extends Pick<Timeline, 'clips'>>(timeli
 /** Serialized size of a timeline as stored, with each code counted as its hash. */
 export function storedTimelineBytes(timeline: unknown) {
   return new TextEncoder().encode(JSON.stringify(timeline, (key, value) => key === 'code' && typeof value === 'string' && value.length > 64 ? '#'.repeat(64) : value)).byteLength;
-}
-/** Characters of distinct scene and blueprint code in a timeline. Code is stored by hash, so code shared by several
- * clips (a blueprint mounted in each beat, or one film split into beat clips) counts once. */
-export function sceneCodeCharacters(timeline: Pick<Timeline, 'clips'>) {
-  const codes = new Set<string>();
-  for (const clip of timeline.clips) if (clip.scene) { codes.add(clip.scene.code); for (const item of clip.scene.blueprints ?? []) codes.add(item.code); }
-  return [...codes].reduce((sum, code) => sum + code.length, 0);
 }

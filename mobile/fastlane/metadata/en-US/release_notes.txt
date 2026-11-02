@@ -1,0 +1,1 @@
+The first Revline app for iPhone: edit by prompt, import your footage, review changes in the expandable conversation, and export from one workspace.

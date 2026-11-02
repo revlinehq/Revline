@@ -7,7 +7,7 @@ import { activeAppleEntitlement } from './apple_entitlements';
 export const billingEnabled = () => process.env.BILLING_ENABLED === 'true';
 export const billingConfigured = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_WEBHOOK_SECRET && !!process.env.STRIPE_PRO_PRICE_ID && !!process.env.APP_ORIGIN;
 export const ultraBillingConfigured = () => ULTRA_OFFERED && billingConfigured() && !!process.env.STRIPE_ULTRA_PRICE_ID;
-export const isUltraSubscription = (sub: { priceId: string }) => !!process.env.STRIPE_ULTRA_PRICE_ID && sub.priceId === process.env.STRIPE_ULTRA_PRICE_ID;
+const isUltraSubscription = (sub: { priceId: string }) => !!process.env.STRIPE_ULTRA_PRICE_ID && sub.priceId === process.env.STRIPE_ULTRA_PRICE_ID;
 export const isEditorSubscription = (sub: { priceId: string; metadata?: Record<string, unknown> }) => sub.priceId === process.env.STRIPE_PRO_PRICE_ID || isUltraSubscription(sub) || sub.metadata?.app === 'revline-editor';
 export const hasEditorAccess = (sub: { status: string; currentPeriodEnd: number }) => (sub.status === 'active' || sub.status === 'trialing') && sub.currentPeriodEnd > Date.now() / 1000;
 
@@ -27,14 +27,6 @@ export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string)
   if (!!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now())) return true;
   if (!billingEnabled() || !ultraBillingConfigured()) return false;
   return (await editorSubscriptions(ctx, ownerId)).some(sub => isUltraSubscription(sub) && hasEditorAccess(sub));
-}
-
-/** On a free trial: editor access comes only from a trialing subscription (not a paid one or a complimentary grant). */
-export async function onFreeTrial(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  if (await activeAppleEntitlement(ctx, ownerId)) return false;
-  if (!billingEnabled() || !billingConfigured() || await hasComplimentaryEditorAccess(ctx, ownerId)) return false;
-  const live = (await editorSubscriptions(ctx, ownerId)).filter(hasEditorAccess);
-  return live.length > 0 && live.every(sub => sub.status === 'trialing');
 }
 
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {

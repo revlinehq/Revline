@@ -1,4 +1,5 @@
 'use client';
+import { reportClientIncident } from '@/lib/incident-client';
 import { SafeAreaOverlay } from './safe-area-overlay';
 import type { SafeAreaPlatform } from '@/lib/editor/safe-areas';
 import { userError } from '@/lib/user-error';
@@ -199,7 +200,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       })}));
     };
     diagnostic.current=diagnose;
-    const iframeError=(event:MessageEvent)=>{if(cancelled||event.source!==p?.iframeElement?.contentWindow||event.origin!==window.location.origin||event.data?.source!=='revline-preview-error')return;console.error(`[Revline preview error] ${event.data.label}: ${event.data.message}`,{chatId:debugId});callbacks.current.onError(`Preview: ${event.data.message}`);};
+    const iframeError=(event:MessageEvent)=>{if(cancelled||event.source!==p?.iframeElement?.contentWindow||event.origin!==window.location.origin||event.data?.source!=='revline-preview-error')return;reportClientIncident({source:'preview',kind:'preview-error',message:String(event.data.message),stack:typeof event.data.stack==='string'?event.data.stack:undefined,context:{location:'components/editor/preview:iframeError',label:String(event.data.label)}});console.error(`[Revline preview error] ${event.data.label}: ${event.data.message}`,{chatId:debugId});callbacks.current.onError(`Preview: ${event.data.message}`);};
     window.addEventListener('message',iframeError);
     const preparation=new AbortController(),cache=sourceCache.current!;
     const disposePlayer=()=>{

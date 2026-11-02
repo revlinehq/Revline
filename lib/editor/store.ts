@@ -18,7 +18,7 @@ export type EditorState = {
   endUndoGroup: () => void;
 };
 
-export const RIPPLE_STORAGE_KEY = 'revline-timeline-ripple';
+const RIPPLE_STORAGE_KEY = 'revline-timeline-ripple';
 /** Auto-join is a personal editing preference, so it survives reloads and projects. */
 function savedRipple() { try { return typeof window !== 'undefined' && localStorage.getItem(RIPPLE_STORAGE_KEY) === 'true'; } catch { return false; } }
 export function setRipplePreference(on: boolean) { try { localStorage.setItem(RIPPLE_STORAGE_KEY, String(on)); } catch { /* The toggle still applies to this session. */ } }

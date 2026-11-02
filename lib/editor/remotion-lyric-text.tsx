@@ -8,7 +8,7 @@ const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'} as const;
 const progress=(frame:number,from:number,to:number)=>interpolate(frame,[from,Math.max(from+.001,to)],[0,1],clamp);
 
 /** Frame-derived entrance, hold and exit. Frozen template timing survives split/trim. */
-export function lyricTextTiming(frame:number,fps:number,durationInFrames:number){
+function lyricTextTiming(frame:number,fps:number,durationInFrames:number){
   const last=Math.max(0,durationInFrames-1);
   const enter=Math.min(fps*.34,last*.28),exit=Math.min(fps*.28,last*.24);
   const entering=last<=1?1:progress(frame,0,enter);

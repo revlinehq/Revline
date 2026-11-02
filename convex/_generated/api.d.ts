@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accountDeletion from "../accountDeletion.js";
+import type * as accountDeletionActions from "../accountDeletionActions.js";
 import type * as agentRunner from "../agentRunner.js";
 import type * as agentRunnerHttp from "../agentRunnerHttp.js";
 import type * as aiCosts from "../aiCosts.js";
@@ -19,6 +21,7 @@ import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as assistantMessages from "../assistantMessages.js";
+import type * as assistantTurnRecovery from "../assistantTurnRecovery.js";
 import type * as assistantWorkflow from "../assistantWorkflow.js";
 import type * as billing from "../billing.js";
 import type * as blueprints from "../blueprints.js";
@@ -38,8 +41,11 @@ import type * as fpsMigration from "../fpsMigration.js";
 import type * as http from "../http.js";
 import type * as iconCache from "../iconCache.js";
 import type * as icons from "../icons.js";
+import type * as incidentDelivery from "../incidentDelivery.js";
+import type * as incidents from "../incidents.js";
 import type * as lib_account_limits from "../lib/account_limits.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
+import type * as lib_apple_account_revocation from "../lib/apple_account_revocation.js";
 import type * as lib_apple_entitlements from "../lib/apple_entitlements.js";
 import type * as lib_apple_roots from "../lib/apple_roots.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
@@ -60,6 +66,7 @@ import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_editorTurn from "../lib/editorTurn.js";
 import type * as lib_editor_command from "../lib/editor_command.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
+import type * as lib_incidents from "../lib/incidents.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
@@ -83,6 +90,8 @@ import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_sound_validator from "../lib/sound_validator.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
 import type * as lib_timeline from "../lib/timeline.js";
+import type * as lib_toolSaveReceipts from "../lib/toolSaveReceipts.js";
+import type * as lib_tool_write_receipt from "../lib/tool_write_receipt.js";
 import type * as lib_workflows from "../lib/workflows.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpActions from "../mcpActions.js";
@@ -111,6 +120,7 @@ import type * as storageMigration from "../storageMigration.js";
 import type * as superwallBilling from "../superwallBilling.js";
 import type * as timelineShares from "../timelineShares.js";
 import type * as timelineTabs from "../timelineTabs.js";
+import type * as toolWrites from "../toolWrites.js";
 import type * as uploads from "../uploads.js";
 import type * as users from "../users.js";
 
@@ -121,6 +131,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountDeletion: typeof accountDeletion;
+  accountDeletionActions: typeof accountDeletionActions;
   agentRunner: typeof agentRunner;
   agentRunnerHttp: typeof agentRunnerHttp;
   aiCosts: typeof aiCosts;
@@ -132,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
   assistantMessages: typeof assistantMessages;
+  assistantTurnRecovery: typeof assistantTurnRecovery;
   assistantWorkflow: typeof assistantWorkflow;
   billing: typeof billing;
   blueprints: typeof blueprints;
@@ -151,8 +164,11 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   iconCache: typeof iconCache;
   icons: typeof icons;
+  incidentDelivery: typeof incidentDelivery;
+  incidents: typeof incidents;
   "lib/account_limits": typeof lib_account_limits;
   "lib/ai_cost": typeof lib_ai_cost;
+  "lib/apple_account_revocation": typeof lib_apple_account_revocation;
   "lib/apple_entitlements": typeof lib_apple_entitlements;
   "lib/apple_roots": typeof lib_apple_roots;
   "lib/asset_analysis": typeof lib_asset_analysis;
@@ -173,6 +189,7 @@ declare const fullApi: ApiFromModules<{
   "lib/editorTurn": typeof lib_editorTurn;
   "lib/editor_command": typeof lib_editor_command;
   "lib/effect_plan": typeof lib_effect_plan;
+  "lib/incidents": typeof lib_incidents;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/mcp_origin": typeof lib_mcp_origin;
   "lib/media_storage": typeof lib_media_storage;
@@ -196,6 +213,8 @@ declare const fullApi: ApiFromModules<{
   "lib/sound_validator": typeof lib_sound_validator;
   "lib/storage_accounting": typeof lib_storage_accounting;
   "lib/timeline": typeof lib_timeline;
+  "lib/toolSaveReceipts": typeof lib_toolSaveReceipts;
+  "lib/tool_write_receipt": typeof lib_tool_write_receipt;
   "lib/workflows": typeof lib_workflows;
   mcp: typeof mcp;
   mcpActions: typeof mcpActions;
@@ -224,6 +243,7 @@ declare const fullApi: ApiFromModules<{
   superwallBilling: typeof superwallBilling;
   timelineShares: typeof timelineShares;
   timelineTabs: typeof timelineTabs;
+  toolWrites: typeof toolWrites;
   uploads: typeof uploads;
   users: typeof users;
 }>;

@@ -58,6 +58,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   const metadata = await ctx.db.system.get(args.storageId);
   if (!metadata) throw new ConvexError("Uploaded file not found");
   if (!metadata.contentType?.startsWith(`${args.kind}/`)) throw new ConvexError("File content type must match the selected media kind");
+  if (args.kind === 'model' && (metadata.contentType !== 'model/gltf-binary' || metadata.size > 32 * 1024 * 1024)) throw new ConvexError('Use a self-contained GLB model under 32 MB.');
   if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0 || args.duration > 24 * 60 * 60)) throw new ConvexError("Invalid media duration");
   for (const size of [args.width, args.height]) if (size !== undefined && (!Number.isInteger(size) || size < 1 || size > 16384)) throw new ConvexError("Invalid media dimensions");
   const count = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).take(200);
@@ -65,7 +66,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   await consumeUpload(ctx, args.storageId, ownerId, args.projectId);
   const assetId = await ctx.db.insert("assets", { ownerId, projectId: args.projectId, storageId: args.storageId, fileName, contentType: metadata.contentType, size: metadata.size, kind: args.kind, createdAt: Date.now(), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) });
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
-  if(args.kind!=='image'){
+  if(args.kind!=='image'&&args.kind!=='model'){
     await requireMediaTaskCapacity(ctx,ownerId,uploadPreparationTasks(args.kind));
     await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:args.kind==='video'?'extract':'waveform'});
     if(args.kind==='video')await enqueueMediaTask(ctx,{ownerId,projectId:args.projectId,assetId,kind:'preview'});

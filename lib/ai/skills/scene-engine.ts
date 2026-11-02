@@ -1,3 +1,5 @@
+import { threeScenesPage } from './three-scenes';
+import { threeCraftPage } from './three-craft';
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
@@ -27,6 +29,8 @@ const checklistPage: EditorSkillPage = {
   name: 'checklist',
   description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
+
+For 3D builds, read page \`three-craft\` and check material identity, highlight/edge quality, contact cues, camera purpose and type clearance in rendered frames.
 
 For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
@@ -58,7 +62,7 @@ A React scene is a TSX module whose default export is a component. It is a React
 - **One component per part.** Rebuild the product UI as components named for what they are (\`Sidebar\`, \`Composer\`, \`ThreadList\`, \`DiffPanel\`), composed by an app component, all in the film file. The inspector lists the components each clip draws, so names matter.
 - **Long films are written in parts.** Keep every call under about 20k tokens (60,000 characters) of code. addFilm gets the whole film's clip and sections and the first part, with markers where the rest goes: \`{/* more beats */}\` where the next \`<Beat>\` belongs and \`/* more parts */\` where the next components belong. Each later part is a patchScene edit that finds the marker with \`insert: 'before'\`, so the marker stays for the next part and the film compiles after every call. Sections not written yet show the stage until their part lands.
 - **Approved sections are off-limits.** An approved film section (\`approved\` in inspectTimeline, with the user's note) owns its \`<Beat>\` and every component, style object and helper that Beat uses: patchScene refuses an edit to any of them, and a change to a shared component counts. Keep each section's look in its own components, give every \`<Beat>\` literal \`start\` and \`duration\` numbers, and change approved work only when the user names it (\`overrideApproved: true\` with \`overrideReason\` quoting them).
-- **Edit with patchScene; never retype the film.** Read a short block with inspectClip \`section: "Composer"\` or \`lines: {start: 40, end: 65}\`. Its sceneCode.blocks include exact code and absolute, 1-based numberedCode. Patch with the same section and small exact find/replace edits, or \`edits: [{lines: {start: 48, end: 51}, replace: "new lines"}]\` without quoting old code. All line edits in a call use the inspected snapshot; keep ranges separate and pass its revision as expectedRevision. Reinspect after saving. A missing find returns nearby numbered lines for retry. Without section markers, use whole-scene line ranges. Shared-code warnings mean checking transitions on both sides; keep spanning tweens on the shared timeline and use scope covering the affected sections. Never resend the whole film through editScene or rebuild a section as a separate scene.
+- **Edit with patchScene; never retype the film.** Read a short block with inspectClip \`section: "Composer"\` or \`lines: {start: 40, end: 65}\`. Its sceneCode.blocks include exact code and absolute, 1-based numberedCode. Patch with the same section and small find/replace edits, or \`edits: [{lines: {start: 48, end: 51}, replace: "new lines"}]\` without quoting old code. Snippet matching tolerates line indentation differences only when unique; ambiguous matches save nothing. Read ranges past EOF are clamped to the actual source. All line edits in a call use the inspected snapshot; keep ranges separate and pass its revision as expectedRevision. Nonoverlapping changed lines since that revision are merged; conflicts save nothing and return nearby numbered code. Reinspect after saving. A missing find returns nearby numbered lines for retry. A code change isolated to one Beat infers scope; shared edits still need scope covering the affected sections. Title-only edits need no scope, and binding-only refreshes without scope must leave every existing section visually unchanged. Without section markers, use whole-scene line ranges. Shared-code warnings mean checking transitions on both sides; keep spanning tweens on the shared timeline and use scope covering the affected sections. Never resend the whole film through editScene or rebuild a section as a separate scene.
 - **Standalone scenes** (a title card, an overlay, one beat on its own) use addScene, or addScenes for several. Older films made of beat clips with a film kit (\`blueprint:film\`) and \`<Transition>\` clips on V3 still render and edit as before; build new films with addFilm.
 
 ## Motion
@@ -85,6 +89,9 @@ function Title({ text }: { text: string }) {
 - \`progress\`, \`mix\`, \`ramp(t, times, values, ease)\`, \`spring(t, { from, to, stiffness, damping })\`, \`ease(name)\`: eases use GSAP names.
 - \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips between standalone scenes (inside a film, a move across a cut is just a tween). \`waitFor(promise)\` holds a frame until it settles.
 - Imports: \`revline\`, \`react\` and \`gsap\` with its plugins (\`gsap/SplitText\` etc.). Fonts, media, icons and the brand work as in GSAP scenes.
+
+## 3D layers
+Import from \`revline/three\` to mix a transparent React Three Fiber layer with HTML and GSAP. Read page \`three-scenes\` before authoring cameras, lights, primitives, 3D text or GLB/glTF models.
 
 ## Performance
 Only components that read time re-render; static parts render once. A useTimeline component does not re-render per frame. Keep heavy static UI in components that never call useBeat, wrap big static subtrees in \`<Still>\`, and prefer \`useBeat(select)\` in hot components.`,
@@ -146,7 +153,7 @@ For choreography, read the gsap skill (readSkill name "gsap"): GreenSock's offic
 ## Project media
 Real screenshots, screen recordings, photos and logos from the project's media can appear inside a scene:
 - Use the project's media (the user adds files in the editor; over MCP, uploadMedia adds them and getProject lists them). Images (png, jpg, webp) and videos up to 2 minutes.
-- Attach them by name: addScene or editScene with \`media: [{ name: 'editor', assetId: '…' }]\` (up to 8). A brand kit's saved screens also arrive in \`media\` when the kit is attached; a project item with the same name wins.
+- Attach them by name: addScene or editScene with \`media: [{ name: 'editor', assetId: '…' }]\`. A brand kit's saved screens also arrive in \`media\` when the kit is attached; a project item with the same name wins.
 - In code, \`media.editor\` is a URL: \`<img src="\${media.editor}">\`, \`<video src="\${media.demo}">\` or \`background-image:url(\${media.editor})\`. It is undefined if the file is missing, so keep a fallback.
 - Videos follow the scene clock, frame-exact, and are always muted (sound belongs on audio clips): \`data-start\` is the scene second the video begins (default 0), \`data-offset\` the source second it starts from, \`data-rate\` its speed, \`data-loop\` loops it. Do not call play(); the engine seeks it.
 - Treat media like any element: crop it with a wrapper and \`overflow:hidden\`, zoom with scale and transform-origin, tilt it with perspective, mask it, blur it, stack copies.
@@ -162,5 +169,5 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [editLanesPage, reactScenesPage, checklistPage],
+  pages: [threeScenesPage, threeCraftPage, editLanesPage, reactScenesPage, checklistPage],
 };

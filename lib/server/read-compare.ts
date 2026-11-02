@@ -1,7 +1,7 @@
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
-import { cropBounds } from '@/lib/ai/reference-comparison';
+import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
 import { frameAt, probe, sheet } from './read-reference';
 
 type Work = NonNullable<MediaWorkItem['read']>;
@@ -44,9 +44,11 @@ export async function readCompare(path: string, directory: string, work: Work, s
   const tiles: { image: Buffer; label: string }[] = [], scores: { time: number; difference: number }[] = [];
   for (const [index, time] of times.entries()) {
     const full = await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
-    const reference = work.compareCrop ? await sharp(full).extract(cropBounds(work.compareCrop, source.width, source.height)).png().toBuffer() : full;
+    const crop = referenceCropAt(time, work.compareCrop, work.referenceCropKeyframes);
+    const reference = crop ? await sharp(full).extract(cropBounds(crop, source.width, source.height)).png().toBuffer() : full;
     // Comparison snapshots crop the render before compression; the reference is cropped here on its displayed axes.
-    const yours = Buffer.from(rendered[index].image, 'base64');
+    const meta = await sharp(reference).metadata();
+    const yours = await sharp(Buffer.from(rendered[index].image, 'base64')).resize(meta.width!, meta.height!, { fit: 'fill' }).png().toBuffer();
     const score = round(await difference(reference, yours));
     scores.push({ time: round(time), difference: score });
     // Pairs sit side by side: the sheet lays out an even number of columns, so a reference and its render share a row.
@@ -58,6 +60,7 @@ export async function readCompare(path: string, directory: string, work: Work, s
   const sheets = [];
   // The sheets travel in one stored result, so they share one image budget.
   const count = Math.ceil(tiles.length / 6), budget = Math.floor(880_000 / count);
-  for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), (work.compareCrop ? source.width * work.compareCrop.w / (source.height * work.compareCrop.h) : source.width / source.height), 2, budget));
+  const firstCrop = referenceCropAt(times[0], work.compareCrop, work.referenceCropKeyframes);
+  for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), (firstCrop ? source.width * firstCrop.w / (source.height * firstCrop.h) : source.width / source.height), 2, budget));
   return { ...sheets[0], ...(sheets.length > 1 ? { extraImages: sheets.slice(1).map(item => item.image) } : {}), sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps), frames: times.map(time => ({ time: round(time) })), scores };
 }

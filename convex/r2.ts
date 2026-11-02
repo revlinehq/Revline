@@ -38,7 +38,7 @@ export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('pro
   }
   return repaired;
 }});
-type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;previewRange?:{start:number;end:number};purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
+type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;previewRange?:{start:number;end:number};purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image'|'model';contentType:string;duration?:number };
 async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,task:Doc<'mediaTasks'>|null) {
   if(!args.purpose){if(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
   if(!task||task.kind!=='preview'||task.projectId!==args.projectId||task.assetId!==args.sourceAssetId||args.jobId||args.kind!=='video'||args.contentType!=='video/mp4'||args.previewVersion!==PREVIEW_VERSION||!Number.isFinite(args.duration)||args.duration!<=0||!Number.isFinite(args.previewFps)||args.previewFps!<=0||args.previewFps!>240)throw new ConvexError('This task cannot upload that preview');
@@ -129,7 +129,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!args.contentType.startsWith(`${args.kind}/`) && !(args.kind === 'audio' && /^video\/(mp4|quicktime|webm)$/.test(args.contentType))) throw new ConvexError('File content type does not match the media');
   if (!Number.isSafeInteger(args.size) || args.size < 1) throw new ConvexError('This file is empty or has an invalid size');
   if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0)) throw new ConvexError('Invalid media duration');
-  if (args.kind !== 'audio' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
+  if (args.kind !== 'audio' && args.kind !== 'model' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
   const partSize = uploadPartSize(args.size);
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
@@ -204,7 +204,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
-  else if (lease.kind !== 'image') {
+  else if (lease.kind !== 'image' && lease.kind !== 'model') {
     // The lease reserved this source's tasks before its bytes moved, so only a
     // lease older than its reservation meets a backstop of twice the limit.
     // Fresh leases skip the read: running tasks heartbeat constantly, and
@@ -238,7 +238,7 @@ export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }
 export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   if(isStockAudioKey(args.key))return null;
   try{await storageControl({ action: 'delete', key: args.key });}
-  catch(error){const attempt=args.attempt??0;if(attempt>=8)throw error;await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
+  catch(error){const attempt=args.attempt??0;if(attempt>=8){await ctx.runMutation(internal.incidents.reportIncident,{source:'storage',kind:'delete-failure',message:error instanceof Error?error.message:'Storage deletion failed',stack:error instanceof Error?error.stack:undefined,context:{location:'convex/r2:deleteObject',taskKind:'delete',attempt},deployment:'server'}).catch(()=>{});throw error;}await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.deleteObject,{key:args.key,attempt:attempt+1});}
   return null;
 } });
 
@@ -251,7 +251,7 @@ export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads')
     if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
     await ctx.runMutation(internal.r2.removeLease, {uploadId:args.uploadId});
   } catch(error) {
-    const attempt=args.attempt??0;if(attempt>=8)throw error;
+    const attempt=args.attempt??0;if(attempt>=8){await ctx.runMutation(internal.incidents.reportIncident,{source:'storage',kind:'upload-failure',message:error instanceof Error?error.message:'Upload cleanup failed',stack:error instanceof Error?error.stack:undefined,context:{location:'convex/r2:cleanupLease',taskKind:'upload-cleanup',attempt},projectId:lease.projectId,deployment:'server'}).catch(()=>{});throw error;}
     await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.r2.cleanupLease,{uploadId:args.uploadId,attempt:attempt+1});
   }
   return null;

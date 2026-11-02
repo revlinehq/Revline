@@ -1,5 +1,8 @@
 'use client';
+import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
+import Link from 'next/link';
+import { Button } from '@/components/ui/button';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { startTransition, useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
@@ -40,10 +43,15 @@ function editorLoading(projectId: string) {
 }
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
-  const project=useQuery(api.projects.get,isAuthenticated?{projectId:projectId as Id<'projects'>,includeHistory:false,sceneCode:'refs'}:'skip');
+  const project=useQuery(api.projects.get,isAuthenticated?{projectId,includeHistory:false,sceneCode:'refs'}:'skip');
+  if(project===null)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild variant="outline"><Link href="/chats">Your projects</Link></Button></div>;
+  if(!project)return editorLoading(projectId);
+  return <LoadedEditor key={projectId} projectId={projectId} project={project}/>;
+}
+function LoadedEditor({projectId,project}:{projectId:string;project:Doc<'projects'>}) {
   // Undo history is up to 10 full timelines. Subscribe to its small index and read each stored snapshot once:
   // snapshots never change, so their queries stay cached while they remain in history.
-  const historyIds=useQuery(api.projects.historyIndex,isAuthenticated?{projectId}:'skip');
+  const historyIds=useQuery(api.projects.historyIndex,{projectId});
   const snapshots=useQueries(useMemo(()=>Object.fromEntries((historyIds??[]).map(id=>[id,{query:api.projects.historySnapshot,args:{projectId,id,sceneCode:'refs'}}])),[historyIds,projectId]));
   const complete=historyIds!==undefined&&historyIds.every(id=>snapshots[id]!==undefined);
   const stored=useMemo(()=>historyIds&&complete?historyIds.flatMap(id=>{const timeline=snapshots[id];return timeline&&!(timeline instanceof Error)?[timeline as Timeline]:[];}):null,[historyIds,complete]);// eslint-disable-line react-hooks/exhaustive-deps
@@ -71,7 +79,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const restorePreview=useSceneCode(projectId,[storedPreview?.timeline,storedPreview&&{clips:storedPreview.removedClips}]);
   const livePreview=useMemo(()=>storedPreview&&restorePreview?{...storedPreview,timeline:restorePreview(storedPreview.timeline),removedClips:restorePreview({clips:storedPreview.removedClips}).clips}:storedPreview===null?null:undefined,[storedPreview,restorePreview]);
   const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
-  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
+  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const retryTurn=useMutation(api.assistant.retry);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
   const importVideo=useMutation(api.mediaTasks.importVideo);
   const removeAsset=useMutation(api.assets.remove);
   const registerStockAudio=useMutation(api.assets.registerStockAudio);
@@ -113,10 +121,11 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const viewedTimeline=useMemo(()=>{const snapshot=watchedTab?tabSnapshots?.find(item=>item.id===watchedTab):undefined;return snapshot?normalizeTimeline(snapshot.timeline):undefined;},[watchedTab,tabSnapshots]);
   const openTab=useMutation(api.timelineTabs.open),createTab=useMutation(api.timelineTabs.create),renameTab=useMutation(api.timelineTabs.rename),removeTab=useMutation(api.timelineTabs.remove);const [jobId,setJobId]=useState<Id<'renderJobs'>|null>(null);const job=useQuery(api.renders.get,jobId?{jobId}:'skip');
   const [store]=useState(()=>createEditorStore(project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},project.history??[]));const timeline=useStore(store,s=>s.timeline);const history=useStore(store,s=>s.history);const future=useStore(store,s=>s.future);const timelineRef=useRef(timeline);const [saving,setSaving]=useState(false);const [saveFailed,setSaveFailed]=useState(false);const [error,setError]=useState('');const [title,setTitle]=useState(project.title);
+  useEffect(()=>{if(error)reportClientIncident({source:'editor',kind:'user-failure',message:error,projectId,context:{location:'components/editor/connected-editor:error'}});},[error,projectId]);
   useEffect(()=>{setTitle(project.title);},[project.title]);
   const [saves]=useState(()=>createTimelineSaveQueue({timeline,revision:project.revision??0,history:project.history??[]},{
     save: edit=>save({projectId,...edit}),
-    load: async()=>{const fresh=await convex.query(api.projects.get,{projectId});return {timeline:fresh.timeline??{...EMPTY_TIMELINE,aspectRatio:fresh.aspectRatio},revision:fresh.revision??0,history:fresh.history??[]};},
+    load: async()=>{const fresh=await convex.query(api.projects.get,{projectId});if(!fresh)throw new Error('This project is no longer available.');return {timeline:fresh.timeline??{...EMPTY_TIMELINE,aspectRatio:fresh.aspectRatio},revision:fresh.revision??0,history:fresh.history??[]};},
     update: (next,kind,history)=>{timelineRef.current=next;store.getState().replace(next,kind==='remote'?history??true:false);},
     saving:setSaving,failed:setSaveFailed,
     error:(e,rejected)=>setError(rejected?`This edit couldn’t be saved and was undone. ${userError(e,'')}`.trim():userError(e, 'Could not save this edit.')),
@@ -223,10 +232,11 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const waitForSave=()=>saves.wait();
   // The turn works on the tab on screen, even if another agent opens a different tab meanwhile.
   const shownTab=watchedTab??pendingTab?.id??project.activeTimelineId;
-  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retry?:boolean}={})=>{
+  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retryPromptMessageId?:string}={})=>{
     aiStarting.current=true;
-    const {retry,...requestContext}=context;
-    const attached=retry?[]:[...composerAssetIds];
+    const {retryPromptMessageId,...requestContext}=context;
+    if(retryPromptMessageId){try{await waitForSave();await retryTurn({projectId,promptMessageId:retryPromptMessageId});}finally{aiStarting.current=false;}return;}
+    const attached=[...composerAssetIds];
     try{if(!ai?.running&&!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(shownTab?{timelineId:shownTab}:{}),...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
     finally{aiStarting.current=false;}
   };

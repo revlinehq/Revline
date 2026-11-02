@@ -1,4 +1,4 @@
-import type { ComparisonCrop } from '../lib/ai/reference-comparison';
+import { comparisonCrop, referenceCropKeyframes, type ComparisonCrop, type ReferenceCropKeyframe } from '../lib/ai/reference-comparison';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { z } from 'zod';
 import { internalMutation, internalQuery, type ActionCtx } from './_generated/server';
@@ -7,9 +7,9 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { enqueueMediaTask, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask, RECREATION_PROCESSOR_VERSION, REFERENCE_CROP_PROCESSOR_VERSION } from './mediaTasks';
 import type { MotionMap } from '../lib/inspo-motion/motion-map';
-import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult } from './schema';
+import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult, referenceCropKeyframesValidator } from './schema';
 
 // Reading a source video for an agent: the worker cuts frames into one labeled sheet image the model looks at,
 // follows a boxed object frame by frame, or reads exact pixels of one frame. Times and boxes are SOURCE seconds and pixels.
@@ -35,7 +35,7 @@ export const READ_TOOL_DESCRIPTIONS = {
 export type ReadToolName = keyof typeof READ_TOOL_INPUTS;
 type ReadResult = Infer<typeof referenceReadResult>;
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
@@ -43,9 +43,11 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (asset.kind !== 'video') throw new ConvexError('Only videos can be read frame by frame.');
   const duration = asset.duration ?? Infinity;
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);
+  if (args.compareCrop) comparisonCrop.parse(args.compareCrop);
+  if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
   await requireMediaTaskCapacity(ctx, ownerId, 1);
   const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: RECREATION_PROCESSOR_VERSION });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: args.referenceCropKeyframes ? REFERENCE_CROP_PROCESSOR_VERSION : RECREATION_PROCESSOR_VERSION });
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });
@@ -68,6 +70,7 @@ export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id
 
 export const discard = internalMutation({ args: { readId: v.id('referenceReads') }, returns: v.null(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
+  if (read?.mode === 'compare' && read.status === 'queued' && read.taskId) await cancelMediaTask(ctx, read.taskId);
   if (read) await ctx.db.delete(read._id);
   return null;
 }});
@@ -108,8 +111,8 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
 }
 
 /** How a reference video moves over SOURCE start to end (motionMap), read on the media worker. */
-export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal, compareCrop?: ComparisonCrop): Promise<MotionMap> {
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end, ...(compareCrop ? { compareCrop } : {}) });
+export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[]): Promise<MotionMap> {
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   const deadline = Date.now() + 300_000;
   try {
     while (Date.now() < deadline) {
@@ -135,17 +138,17 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, signal?: AbortSignal, compareCrop?: ComparisonCrop): Promise<ReadResult> {
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}) });
-  const deadline = Date.now() + 300_000;
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[]): Promise<ReadResult | null> {
+  if (Date.now() >= deadline) return null;
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') return state.result as ReadResult;
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
-    throw new Error('The comparison took too long. Try fewer moments.');
+    return null;
   } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }

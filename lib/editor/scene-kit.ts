@@ -13,7 +13,7 @@ export const FILM_KIT = 'film';
 const FILM_KIT_IMPORT = /\bfrom\s*['"]blueprint:\s*film\s*['"]/i;
 type Scene = NonNullable<Clip['scene']>;
 
-export const importsFilmKit = (code: string) => FILM_KIT_IMPORT.test(code);
+const importsFilmKit = (code: string) => FILM_KIT_IMPORT.test(code);
 const kitOf = (scene: Pick<Scene, 'blueprints'> | undefined) => scene?.blueprints?.find(item => item.name.toLowerCase() === FILM_KIT);
 
 /** The film kit already on the timeline (every clip that mounts it holds the same code). */

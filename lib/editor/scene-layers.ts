@@ -1,7 +1,7 @@
 import { dimensions, trackOf, type Clip, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
-import { isReactScene, isSceneTransition, REACT_SCENE_PATTERN } from './scene-modules';
+import { isReactScene, isSceneTransition, sceneRuntimeNames, SCENE_RUNTIME_BUNDLES, type SceneRuntimeName } from './scene-modules';
 
 /** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
 /** A project image a scene uses, by the name its code reads from `media`. */
@@ -15,7 +15,7 @@ export type SceneBlueprint = { name: string; code: string; codeRef?: string };
  */
 export type SceneFilm = { duration: number };
 export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
-export const SCENE_MEDIA_LIMIT = 8, SCENE_BLUEPRINT_LIMIT = 4;
+export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
 // Scene code has no length limit; only titles are capped.
 export const SCENE_LIMITS = { title: 80 } as const;
@@ -30,20 +30,20 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (scene.brand) validateSceneBrand(scene.brand);
   if (scene.film && !(Number.isFinite(scene.film.duration) && scene.film.duration > 0 && scene.film.duration <= 600)) throw new Error('A film runs 0 to 600 seconds.');
   if (scene.blueprints && (scene.blueprints.length > SCENE_BLUEPRINT_LIMIT || scene.blueprints.some(item => !item.name?.trim() || item.name.length > 60 || typeof item.code !== 'string' || !item.code.trim()))) throw new Error(`A scene can mount up to ${SCENE_BLUEPRINT_LIMIT} blueprints.`);
-  if (scene.media && (scene.media.length > SCENE_MEDIA_LIMIT || scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error(`Scene media needs up to ${SCENE_MEDIA_LIMIT} images with unique names (letters, digits, - or _).`);
+  if (scene.media && (scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error('Scene media needs files with unique names (letters, digits, - or _).');
 }
 
 /** A beat clip next to a transition clip; `start` is in the transition's own seconds. */
 export type SceneNeighbourSource = { role: 'from' | 'to'; code: string; blueprints?: SceneBlueprint[]; start: number; duration: number };
 /** `duration` is the clip's own; `filmDuration`, for a beat clip of a film, is what the scene module receives as its duration. */
-export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; neighbours?: SceneNeighbourSource[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+export type SceneLayerSource = { runtimes: SceneRuntimeName[]; clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; neighbours?: SceneNeighbourSource[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
+    runtimes: sceneRuntimeNames({ ...clip.scene, ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}) }), clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
 }
@@ -77,17 +77,15 @@ export function sceneMediaAssetIds(timeline: Timeline) {
 
 /** fileUrls maps remote file URLs (brand fonts) to the copies an export wrote beside the composition. */
 export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}, fileUrls: Record<string, string> = {}) {
-  return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls){
+  return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls,bundles){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
-var runtimeSource=null,reactSource=null,iconSource=null,overscan=16;
+var runtimeSources=new Map(),iconSource=null,overscan=16;
 function vendorScript(url,what){return fetch(url).then(function(response){if(!response.ok)throw new Error('The '+what+' could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});}
-function runtimeScript(){if(!runtimeSource)runtimeSource=vendorScript(new URL(runtimeUrl,document.baseURI).href,'scene renderer');return runtimeSource;}
-// React scenes (opt-in: they import from 'revline') also get React and the scene adapter, loaded once per composition.
-function isReact(source){return /${REACT_SCENE_PATTERN.source}/.test(source.code);}
-function reactScript(){if(!reactSource)reactSource=vendorScript(new URL('scene-react.js',new URL(runtimeUrl,document.baseURI)).href,'React scene renderer');return reactSource;}
+function runtimeScript(name){if(!runtimeSources.has(name))runtimeSources.set(name,vendorScript(name==='gsap'?new URL(runtimeUrl,document.baseURI).href:new URL(bundles[name].file,new URL(runtimeUrl,document.baseURI)).href,bundles[name].label));return runtimeSources.get(name);}
+function isThree(source){return source.runtimes.indexOf('three')>=0;}
 var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anchor.style.cssText='position:absolute;width:0;height:0;pointer-events:none';composition.appendChild(anchor);
-function report(entry,message){var error=new Error('Scene "'+entry.source.title+'": '+message);entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
+function report(entry,message,stack){var error=new Error('Scene "'+entry.source.title+'": '+message);if(stack)error.stack=stack;entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
 function find(id){var nodes=composition.querySelectorAll('[data-scene-clip]');for(var i=0;i<nodes.length;i++)if(nodes[i].dataset.sceneClip===id)return nodes[i];return null;}
 function font(item){if(!fontData.has(item.url))fontData.set(item.url,fetch(new URL(fileUrls[item.url]||item.url,document.baseURI).href).then(function(response){if(!response.ok)throw new Error('font');return response.arrayBuffer();}).then(function(data){return {family:item.family,weight:item.weight,data:data};},function(){return null;}));return fontData.get(item.url);}
@@ -98,7 +96,7 @@ function wantedIcons(source){/* Every quoted kebab-case name that is a Lucide ic
 function wantedFonts(source){var code=allCode(source),list=fonts.filter(function(item){return item.family==='Space Grotesk'||code.indexOf(item.family)>=0;}).concat(source.brand?source.brand.fonts:[]);return Promise.all(list.map(font)).then(function(list){return list.filter(Boolean);});}
 // A scene's code with its blueprints and, for a transition, the beat clips it draws.
 function allCode(source){var parts=[source.code];(source.blueprints||[]).concat((source.neighbours||[]).reduce(function(list,item){return list.concat([item]).concat(item.blueprints||[]);},[])).forEach(function(item){parts.push(item.code);});return parts.join('\\n');}
-function frameDocument(source,script,react){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+(react?'<script>'+react+'</'+'script>':'')+'<script>'+script+'</'+'script></body></html>';}
+function frameDocument(source,scripts){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+scripts.map(function(script){return '<script>'+script+'</'+'script>';}).join('')+'</body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
   var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.neighbours||null,source.width,source.height,source.fps,source.filmDuration||source.duration]),entry=entries.get(source.clipId);
@@ -112,7 +110,7 @@ function mount(source){
     var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');
     entry={node:node,frame:frame,key:key,source:source,seq:0,waiters:new Map(),compiled:false,error:null};
     var current=entry;current.ready=new Promise(function(resolve){current.resolve=resolve;});
-    node.appendChild(frame);Promise.all([runtimeScript(),isReact(source)?reactScript():'']).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts[0],scripts[1]);},function(error){report(current,error.message);current.resolve();});
+    node.appendChild(frame);Promise.all(source.runtimes.map(runtimeScript)).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts);},function(error){report(current,error.message);current.resolve();});
   }
   entry.source=source;entry.frame.style.width=(source.width+overscan*2)+'px';entry.frame.style.height=(source.height+overscan*2)+'px';entry.frame.style.left=entry.frame.style.top=(-overscan*source.scale)+'px';entry.frame.style.transform='scale('+source.scale+')';
   entries.set(source.clipId,entry);
@@ -127,7 +125,7 @@ function seek(entry,time){entry.seq++;entry.posted=time;entry.inflight=entry.seq
 function follow(entry,time){if(entry.inflight&&Date.now()-entry.sentAt<1000)entry.queued=time;else seek(entry,time);}
 function paint(time){
   bindExport();
-  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&entry.posted!==localTime(entry,time))follow(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
+  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&!entry.error&&entry.posted!==localTime(entry,time))follow(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
 }
 // Some clock moves (player swaps, end-of-playback resets) bypass render and onUpdate.
 function watch(){if(entries.size)paint(clock.time());nextFrame(watch);}
@@ -139,20 +137,25 @@ function whenReady(time){
       if(entry.error)throw entry.error;
       // HyperFrames calls this on every runtime tick; a frame the scene already drew needs no new seek.
       var at=localTime(entry,time);if(entry.drawn===at&&!entry.inflight)return;
-      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
+      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},isThree(entry.source)?45000:15000);});
     }));
   });
-  return Promise.all(pending).then(function(){});
+  return Promise.all(pending).then(function(){entries.forEach(function(entry){if(visibleAt(entry,time)&&entry.error)throw entry.error;});});
 }
 function bindExport(){if(!entries.size){if(unregister){unregister();unregister=undefined;}return;}if(!unregister&&host.__hyperframes)unregister=host.__hyperframes.registerFrameSource({element:anchor,render:whenReady});}
 window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],neighbours:entry.source.neighbours||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
+    if(data.type==='resource'){
+      if(!isThree(entry.source))return;
+      var url;try{url=new URL(data.url);if(url.protocol!=='https:')throw new Error('3D resources need an HTTPS URL or project media.');}catch(error){send(entry,{type:'resource',id:data.id,error:String(error)});return;}
+      fetch(new URL(fileUrls[url.href]||url.href,document.baseURI).href,{credentials:'omit',signal:AbortSignal.timeout(30000)}).then(function(response){if(!response.ok)throw new Error('3D resource HTTP '+response.status);return response.arrayBuffer();}).then(function(bytes){send(entry,{type:'resource',id:data.id,data:bytes});},function(error){send(entry,{type:'resource',id:data.id,error:error.message});});
+    }
+    else if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],neighbours:entry.source.neighbours||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
-    else if(data.type==='error'){report(entry,String(data.message));entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
+    else if(data.type==='error'){report(entry,String(data.message),data.stack);entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
   });
 });
 function setSources(sources){
@@ -167,7 +170,7 @@ clock.eventCallback('onUpdate',function(){if(previousUpdate)previousUpdate.call(
 window.addEventListener('hf-seek',function(event){var detail=event.detail;if(detail&&typeof detail.waitUntil==='function')detail.waitUntil(whenReady(detail.time));});
 host.__revlineSceneController={setSources:setSources,whenReady:whenReady,hasMedia:function(id){return !!mediaUrls[id];}};
 setSources(initial);nextFrame(watch);
-})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')},${JSON.stringify(fileUrls).replace(/</g, '\\u003c')});`;
+})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')},${JSON.stringify(fileUrls).replace(/</g, '\\u003c')},${JSON.stringify(SCENE_RUNTIME_BUNDLES)});`;
 }
 
 export const SCENE_FONT_FAMILIES = TEXT_FONTS.map(font => font.family);

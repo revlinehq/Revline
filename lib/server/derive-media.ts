@@ -58,7 +58,7 @@ export async function deriveMedia(source: string, kind: 'video' | 'image', direc
 }
 
 /** Split a frame multiplier into RIFE passes of 2 to 5x. */
-export function factorPasses(factor: number) {
+function factorPasses(factor: number) {
   const total = Math.max(2, Math.min(8, Math.round(factor)));
   if (total <= 5) return [total];
   return [2, Math.ceil(total / 2)];
@@ -138,7 +138,7 @@ async function frameCount(path: string, signal: AbortSignal) {
 }
 
 export type ColorStats = { time: number; percentiles: { red: number[]; green: number[]; blue: number[]; luma: number[] }; saturation: number; cast: { warmth: number; tint: number }; dominant: { hex: string; share: number }[] };
-export const STAT_PERCENTILES = [.02, .1, .25, .5, .75, .9, .98];
+const STAT_PERCENTILES = [.02, .1, .25, .5, .75, .9, .98];
 
 /** Measure color at source times: per-channel percentiles, saturation, neutral cast and dominant colors. */
 export async function measureColor(source: string, kind: 'video' | 'image', times: number[], signal: AbortSignal): Promise<ColorStats[]> {

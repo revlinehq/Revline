@@ -26,7 +26,7 @@ export type PlainExportPlan = { width: number; height: number; fps: 24 | 30 | 60
 export type PlainExportDecision = { eligible: true; plan: PlainExportPlan } | { eligible: false; reason: string };
 
 /** The encoder opens every sounding clip at once (footage is chunked). Larger mixes keep the browser path. */
-export const PLAIN_EXPORT_MAX_AUDIO_TRACKS = 64;
+const PLAIN_EXPORT_MAX_AUDIO_TRACKS = 64;
 // HyperFrames snaps clip edges within 1/1000 frame to the frame grid (parityContract FRAME_BOUNDARY_EPSILON).
 const FRAME_BOUNDARY_EPSILON = 1e-3;
 const SHARED_KEYS = new Set<keyof Clip>(['id', 'kind', 'assetId', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'linkedClipId', 'audioSeparated', 'effectPreset', 'motion', 'motionOffset']);
@@ -43,7 +43,7 @@ function visibleTicks(clip: Pick<Clip, 'start' | 'duration'>, fps: number) {
   return { first, end: Math.max(first, end) };
 }
 /** HyperFrames' composition frame count (durationToFrameCount). */
-export function exportFrameCount(duration: number, fps: number) {
+function exportFrameCount(duration: number, fps: number) {
   const raw = duration * fps, nearest = Math.round(raw);
   return Math.max(1, Math.abs(raw - nearest) <= FRAME_BOUNDARY_EPSILON ? nearest : Math.ceil(raw));
 }

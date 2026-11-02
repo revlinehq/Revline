@@ -1,10 +1,26 @@
-import { READ_ONLY_TOOLS } from './read-only-tools';
+import { z } from 'zod';
+import { EDITOR_TOOL_DEFINITIONS, toolBehavior } from './tool-definitions';
+
+const revision = z.number().int().nonnegative();
+const toolSaveReceiptSchema = z.union([
+  z.object({ kind: z.literal('timeline'), status: z.enum(['saved', 'staged', 'unchanged']), revision }),
+  z.object({ kind: z.literal('resource'), status: z.enum(['saved', 'unchanged']), revision }),
+  z.object({ kind: z.literal('job'), status: z.enum(['queued', 'unchanged']), revision }),
+  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('failed'), revision, message: z.string() }),
+  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('interrupted'), revision, message: z.string() }),
+]);
+export type ToolSaveReceipt = z.infer<typeof toolSaveReceiptSchema>;
+export function toolSaveReceipt(output: { saveReceipt?: unknown } | undefined) {
+  const parsed = toolSaveReceiptSchema.safeParse(output?.saveReceipt);
+  return parsed.success ? parsed.data : undefined;
+}
 
 /** These tools persist outside the timeline and confirm through their own result. */
-export const SAVED_ELSEWHERE = new Set(['remember', 'forget', 'createBrandKit', 'updateBrandKit', 'saveBlueprint']);
+export const SAVED_ELSEWHERE = new Set<string>(Object.entries(EDITOR_TOOL_DEFINITIONS).filter(([, definition]) => definition.effect === 'resource').map(([name]) => name));
 
 export function needsSaveConfirmation(name: string) {
-  return !READ_ONLY_TOOLS.has(name) && !SAVED_ELSEWHERE.has(name);
+  const effect = toolBehavior(name)?.effect;
+  return effect === 'timeline' || effect === 'job';
 }
 
 export function hasSaveEvidence(output: { saved?: unknown; unchanged?: unknown } | undefined) {

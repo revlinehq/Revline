@@ -15,6 +15,8 @@ import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_vali
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { alertFields } from './lib/discord_alert';
 import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
+import { toolWriteReceipt } from './lib/tool_write_receipt';
+import { assistantRunArgs, assistantRecoveryValidator } from './lib/assistant_run';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -37,7 +39,7 @@ export const blueprintLineValidator = v.object({ axis: v.union(v.literal('x'), v
 export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id('_storage'), width: v.optional(v.number()), height: v.optional(v.number()), note: v.optional(v.string()) });
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
-export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"));
+export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("model"));
 export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond: v.number() });
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
@@ -54,7 +56,7 @@ export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v
 export const audioSettingsValidator=v.object({role:v.union(v.literal('original'),v.literal('voice'),v.literal('music')),fadeIn:v.number(),fadeOut:v.number(),ducking:v.object({enabled:v.boolean(),amount:v.number(),attack:v.number(),release:v.number()})});
 const clipApprovalValidator = v.object({ note: v.optional(v.string()), at: v.number(), by: v.union(v.literal('user'), v.literal('agent')) });
 export const clipValidator = v.object({
-  id: v.string(), kind: v.union(assetKind, v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
+  id: v.string(), kind: v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
   normalizedAudio:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number())})), assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   playbackRate: v.optional(v.number()),
   audio:v.optional(audioSettingsValidator),
@@ -120,7 +122,7 @@ export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number
 // Legacy: timelines saved while sections existed may still hold them; saving drops them.
 const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
 export const timelineValidator = v.object({ audioNormalization:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number())})), clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)), sections: v.optional(v.array(timelineSectionValidator)), luts: v.optional(v.array(v.object({ id: v.string(), name: v.string(), size: v.number(), data: v.string() }))) });
-export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
+export { assistantRecoveryValidator } from './lib/assistant_run';
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
   aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number()})),
@@ -133,7 +135,7 @@ export const aiStateFields = {
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
 };
 export const projectFields = {
-  deleting:v.optional(v.boolean()), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
+  deleting:v.optional(v.boolean()), deletionJobId:v.optional(v.id('_scheduled_functions')), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId:v.optional(v.string()), ...aiStateFields,
   // Timeline tabs: the open tab's timeline is `timeline`; the others live in projectTimelines.
@@ -162,6 +164,7 @@ export const analysisValidator = v.object({ facecam:v.optional(facecamValidator)
   reference: v.optional(v.string()) });
 export const frameRequestValidator = v.object({ start: v.number(), end: v.number(), question: v.string() });
 export const referenceBox = v.object({ x: v.number(), y: v.number(), w: v.number(), h: v.number() });
+export const referenceCropKeyframesValidator = v.array(v.object({ time: v.number(), crop: referenceBox }));
 export const referenceReadResult = v.object({ motion: v.optional(v.any()), sounds: v.optional(v.array(v.object({ time: v.number(), end: v.number(), level: v.number(), hit: v.optional(v.number()), kind: v.optional(v.string()), description: v.optional(v.string()), prompt: v.optional(v.string()), onScreen: v.optional(v.string()) }))), music: v.optional(v.object({ present: v.boolean(), description: v.string(), prompt: v.string() })), silentHits: v.optional(v.array(v.number())), fonts: v.optional(v.array(v.object({ family: v.string(), weight: v.number(), style: v.union(v.literal('normal'), v.literal('italic')), category: v.string(), score: v.number() }))), fontColors: v.optional(v.object({ ink: v.string(), background: v.string() })), image: v.optional(v.string()), extraImages: v.optional(v.array(v.string())), width: v.number(), height: v.number(), sourceWidth: v.number(), sourceHeight: v.number(), fps: v.number(), frames: v.array(v.object({ time: v.number(), change: v.optional(v.number()), changed: v.optional(referenceBox) })), moments: v.optional(v.array(v.object({ start: v.number(), end: v.number(), peak: v.number(), kind: v.union(v.literal('cut'), v.literal('motion')), region: v.optional(referenceBox) }))), holds: v.optional(v.array(v.object({ start: v.number(), end: v.number() }))), scores: v.optional(v.array(v.object({ time: v.number(), difference: v.number() }))), track: v.optional(v.array(v.object({ time: v.number(), x: v.number(), y: v.number(), w: v.number(), h: v.number(), scale: v.number(), rotation: v.number(), confidence: v.number() }))), moves: v.optional(v.array(v.object({ start: v.number(), end: v.number(), duration: v.number(), from: v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number() }), to: v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number() }), ease: v.string(), fit: v.number(), gsap: v.string() }))), colors: blueprintCheckResultValidator.fields.colors, edges: blueprintCheckResultValidator.fields.edges, trace: v.optional(v.object({ box: referenceBox, svg: v.string(), paths: v.array(v.object({ d: v.string(), fill: v.string() })), color: v.string(), background: v.string(), coverage: v.number(), centerline: v.optional(v.object({ d: v.string(), width: v.number(), length: v.number() })) })) });
 export const frameTargetValidator=v.object({frameIndex:v.number(),time:v.number(),label:v.string(),confidence:v.union(v.literal('low'),v.literal('medium'),v.literal('high')),box:v.object({left:v.number(),top:v.number(),right:v.number(),bottom:v.number()})});
 export const frameInspectionValidator = v.object({ ...frameRequestValidator.fields, geometry:v.optional(v.object({sourceWidth:v.number(),sourceHeight:v.number(),decodedWidth:v.number(),decodedHeight:v.number()})),targets:v.optional(v.array(frameTargetValidator)),sourceFps: v.number(), sampleInterval: v.number(), consecutive: v.boolean(), summary: v.string(), uncertainty: v.string(), frames: v.array(v.object({ frameIndex: v.number(), time: v.number(), observation: v.string() })), events: v.array(v.object({ frameIndex: v.number(), time: v.number(), description: v.string(), confidence: v.union(v.literal('low'), v.literal('medium'), v.literal('high')) })) });
@@ -212,6 +215,7 @@ export const r2UploadFields = {
 };
 export const r2UploadDocument = v.object({ _id: v.id("r2Uploads"), _creationTime: v.number(), ...r2UploadFields });
 export const userFields = {
+  aiConsentVersion: v.optional(v.number()), aiConsentAt: v.optional(v.number()),
   clerkId: v.string(), email: v.optional(v.string()), name: v.optional(v.string()), imageUrl: v.optional(v.string()),
   createdAt: v.number(), updatedAt: v.number(),
 };
@@ -257,6 +261,28 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  incidents: defineTable({
+    fingerprint: v.string(), source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), deployment: v.string(),
+    count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),
+    status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('resolved')),
+    delivery: v.union(v.literal('pending'), v.literal('claimed'), v.literal('finished'), v.literal('failed')),
+    claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
+    samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
+  }).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
+  assistantTurns: defineTable({
+    projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
+    args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
+    pendingFastFrames:v.array(v.number()),feedback:v.optional(v.string()),
+    status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
+  }).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
+  toolWriteReceipts: defineTable({
+    projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), writeId: v.string(),
+    toolName: v.string(), functionName: v.string(), receipt: v.optional(toolWriteReceipt), value:v.optional(v.any()), valueParts:v.optional(v.number()), stagedRevision: v.optional(v.number()), expiresAt: v.number(),
+  }).index('by_write', ['writeId']).index('by_run_stage', ['runId', 'stagedRevision']).index('by_expires', ['expiresAt']),
+  toolWriteResultParts:defineTable({writeId:v.string(),part:v.number(),value:v.string()}).index('by_write_part',['writeId','part']),
+  accountDeletions: defineTable({ownerId:v.string(),phase:v.union(v.literal('pending'),v.literal('projects'),v.literal('rows')),table:v.number(),cursor:v.union(v.string(),v.null()),changed:v.boolean(),requestedAt:v.number()}).index('by_owner',['ownerId']),
+  deletedAccountTokens: defineTable({subjectHash:v.string(),expiresAt:v.number()}).index('by_hash',['subjectHash']).index('by_expiry',['expiresAt']),
+  accountDeletionRefs: defineTable({ownerId:v.string(),resourceId:v.string()}).index('by_owner_resource',['ownerId','resourceId']),
   // Operational diagnostics only. No editor subscription reads these tables.
   saveIncidentRuns: defineTable({
     runId: v.string(), projectId: v.id('projects'), ownerId: v.string(),
@@ -289,7 +315,7 @@ export default defineSchema({
   agentRunnerNonces:defineTable({nonce:v.string(),expiresAt:v.number()}).index('by_nonce',['nonce']).index('by_expiresAt',['expiresAt']),
   aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(storedEditorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
-  assistantQueue:defineTable({command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,editMode:v.optional(editorEditModeValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),timelineId:v.optional(v.string()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
+  assistantQueue:defineTable({clientPlatform:v.optional(v.literal('ios')),command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,editMode:v.optional(editorEditModeValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),timelineId:v.optional(v.string()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),
   // A stored tab's undo history sits apart from its timeline, so reading tab timelines never reads it.
   projectTimelineHistories:defineTable({projectId:v.id('projects'),timelineId:v.string(),history:v.array(timelineValidator)}).index('by_project_timeline',['projectId','timelineId']),
@@ -306,7 +332,7 @@ export default defineSchema({
   timelineHistoryIndex:defineTable({projectId:v.id('projects'),keyVersion:v.number(),entries:v.array(v.object({id:v.id('timelineRevisions'),sequence:v.number(),key:v.string(),bytes:v.number()}))}).index('by_project',['projectId']),
   projectCatalog:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
-  storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
+  storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), modelBytes:v.optional(v.number()), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
   storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:v.union(assetKind,v.literal('export')), size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
@@ -380,9 +406,9 @@ export default defineSchema({
   // findIcon's fetched logos and icons with their preview (convex/icons.ts).
   iconCache: defineTable({ key: v.string(), value: v.string(), fetchedAt: v.number() }).index('by_key', ['key']),
   // A reading of a source video for the agent: a sheet of frames, or an object tracked frame by frame.
-  referenceReads: defineTable({ projectId: v.id('projects'), ownerId: v.string(), assetId: v.id('assets'), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(v.object({ x: v.number(), y: v.number(), label: v.optional(v.string()) }))), lines: v.optional(v.array(v.object({ axis: v.union(v.literal('x'), v.literal('y')), at: v.number(), from: v.number(), to: v.number(), label: v.optional(v.string()) }))), status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), result: v.optional(referenceReadResult), error: v.optional(v.string()), taskId: v.optional(v.id('mediaTasks')), createdAt: v.number() }).index('by_project', ['projectId']),
+  referenceReads: defineTable({ projectId: v.id('projects'), ownerId: v.string(), assetId: v.id('assets'), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(v.object({ x: v.number(), y: v.number(), label: v.optional(v.string()) }))), lines: v.optional(v.array(v.object({ axis: v.union(v.literal('x'), v.literal('y')), at: v.number(), from: v.number(), to: v.number(), label: v.optional(v.string()) }))), status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), result: v.optional(referenceReadResult), error: v.optional(v.string()), taskId: v.optional(v.id('mediaTasks')), createdAt: v.number() }).index('by_project', ['projectId']),
   // Rendered timeline frames an MCP client asked to see; deleted once read.
-  frameSnapshots: defineTable({normalization:v.optional(normalizationRequestValidator),normalizationResult:v.optional(normalizationResultValidator), sourceTimeline: v.optional(timelineValidator), comparison: v.optional(v.object({ crop: v.optional(referenceBox) })), projectId: v.id("projects"), ownerId: v.string(), runId: v.optional(v.string()), revision: v.number(), times: v.array(v.number()), taskId: v.optional(v.id("mediaTasks")), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), frames: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), error: v.optional(v.string()), createdAt: v.number(), clipId: v.optional(v.string()), key: v.optional(v.string()), timelineId: v.optional(v.string()), shareId: v.optional(v.id('timelineShares')), pacing: v.optional(pacingRequestValidator), pacingResult: v.optional(pacingResultValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), motionResult: v.optional(v.any()), sound: v.optional(soundRequestValidator), soundResult: v.optional(soundResultValidator), atRevision: v.optional(v.number()), guard: v.optional(v.object({ baseline: timelineValidator, candidate: timelineValidator })), differences: v.optional(v.array(v.number())) }).index("by_project", ["projectId"]).index("by_project_key", ["projectId", "key"]).index("by_project_clip", ["projectId", "clipId"]),
+  frameSnapshots: defineTable({normalization:v.optional(normalizationRequestValidator),normalizationResult:v.optional(normalizationResultValidator), sourceTimeline: v.optional(timelineValidator), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), projectId: v.id("projects"), ownerId: v.string(), runId: v.optional(v.string()), revision: v.number(), times: v.array(v.number()), taskId: v.optional(v.id("mediaTasks")), status: v.union(v.literal("queued"), v.literal("completed"), v.literal("failed")), frames: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), error: v.optional(v.string()), createdAt: v.number(), clipId: v.optional(v.string()), key: v.optional(v.string()), timelineId: v.optional(v.string()), shareId: v.optional(v.id('timelineShares')), pacing: v.optional(pacingRequestValidator), pacingResult: v.optional(pacingResultValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), motionResult: v.optional(v.any()), sound: v.optional(soundRequestValidator), soundResult: v.optional(soundResultValidator), atRevision: v.optional(v.number()), guard: v.optional(v.object({ baseline: timelineValidator, candidate: timelineValidator })), differences: v.optional(v.array(v.number())) }).index("by_project", ["projectId"]).index("by_project_key", ["projectId", "key"]).index("by_project_clip", ["projectId", "clipId"]),
   // Per-minute counters keyed by owner (tool calls) or "register:<ip>" (client registration).
   // The project's living brief: the user's lasting direction for this project, one rule each with the words they said it in.
   projectBriefs: defineTable({ projectId: v.id('projects'), ownerId: v.string(), rules: v.array(v.object({ id: v.string(), rule: v.string(), words: v.string(), at: v.number() })), updatedAt: v.number() }).index('by_project', ['projectId']),

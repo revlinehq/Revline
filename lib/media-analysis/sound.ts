@@ -122,7 +122,7 @@ function kWeighted(channel: Float32Array) {
 }
 
 /** Momentary loudness and sample peak each 0.1 s, integrated loudness (gated as BS.1770), and silent stretches. */
-export function measureLoudness(left: Float32Array, right: Float32Array, rate = SOUND_RATE) {
+function measureLoudness(left: Float32Array, right: Float32Array, rate = SOUND_RATE) {
   const block = Math.round(rate / 10), blocks = Math.floor(left.length / block);
   const [kl, kr] = [kWeighted(left), kWeighted(right)];
   const power: number[] = [], peaks: number[] = [];

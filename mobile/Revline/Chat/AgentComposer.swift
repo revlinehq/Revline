@@ -5,112 +5,86 @@ struct AgentComposer: View {
     let store: ProjectStore
     let player: PlayerController
     let onAttach: () -> Void
-    let onFocusChange: (Bool) -> Void
-    @State private var prompt = ""
-    @State private var mode = "fast"
-    @State private var model = ""
+    var dismissKeyboard = 0
+    var onConversation: () -> Void = { }
+    var onFocusChange: (Bool) -> Void = { _ in }
+    var onAccepted: () -> Void = { }
+    var onHeightChange: (CGFloat) -> Void = { _ in }
     @FocusState private var focused: Bool
     @State private var sent = 0
+    @State private var consent = false
 
     private var canSend: Bool {
-        !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !store.sending && store.status?.configured == true
+        !store.promptDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !store.sending && (store.status?.mobileConfigured ?? store.status?.configured) == true
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            if !store.attachedAssetIDs.isEmpty {
-                ScrollView(.horizontal) {
-                    HStack {
-                        ForEach(store.attachedAssetIDs, id: \.self) { id in
-                            Button {
-                                store.attachedAssetIDs.removeAll { $0 == id }
-                            } label: {
-                                Label(store.assets.first { $0.id == id }?.fileName ?? "Media", systemImage: "xmark.circle")
-                                    .lineLimit(1)
-                            }.buttonStyle(.bordered).frame(minHeight: 44)
-                        }
-                    }
+        @Bindable var store = store
+        VStack(spacing: 10) {
+            HStack {
+                Picker("Editing mode", selection: $store.editMode) {
+                    Text("Fast").tag("fast")
+                    Text("Precise").tag("precise")
+                }
+                .pickerStyle(.segmented)
+                .frame(width: 180, height: 44)
+                Spacer(minLength: 8)
+                Button("Show conversation", systemImage: "bubble.left", action: onConversation)
+                    .labelStyle(.iconOnly).buttonStyle(.borderless).frame(width: 44, height: 44)
+                if !store.attachedAssetIDs.isEmpty {
+                    Button("\(store.attachedAssetIDs.count) attached", action: onAttach)
+                        .font(.subheadline).buttonStyle(.borderless).frame(minHeight: 44)
                 }
             }
-            HStack(alignment: .bottom) {
-                TextField("What would you change next?", text: $prompt, axis: .vertical)
-                    .textFieldStyle(.roundedBorder).lineLimit(1...5).focused($focused)
-                    .accessibilityLabel("Describe your next edit").disabled(store.sending)
-                    .frame(minHeight: 44)
-                if store.status?.running == true && prompt.isEmpty {
-                    Button("Stop", systemImage: "stop.fill") { Task { await store.stop(session) } }
-                        .labelStyle(.iconOnly).buttonStyle(.bordered).controlSize(.large)
-                        .frame(minWidth: 44, minHeight: 44)
+            HStack(alignment: .bottom, spacing: 4) {
+                Menu("Attachments and commands", systemImage: "paperclip") {
+                    Button("Import media", systemImage: "photo.on.rectangle", action: onAttach)
+                    Button("Clip footage", systemImage: "scissors") { store.promptDraft = "/clip "; focused = true }
+                    Button("Recreate motion", systemImage: "play.rectangle") { store.promptDraft = "/inspo-motion "; focused = true }
+                }
+                .labelStyle(.iconOnly).buttonStyle(.borderless)
+                .frame(width: 44, height: 44)
+                TextField("What should change?", text: $store.promptDraft, axis: .vertical)
+                    .textFieldStyle(.plain).lineLimit(1...5).focused($focused)
+                    .font(.body).padding(.vertical, 12)
+                    .accessibilityLabel("Describe your next edit")
+                    .submitLabel(.send)
+                    .onSubmit { if canSend { Task { await send() } } }
+                if store.status?.running == true && store.promptDraft.isEmpty {
+                    Button("Stop editing", systemImage: "stop.fill") { Task { await store.stop(session) } }
+                        .labelStyle(.iconOnly).buttonStyle(.bordered).buttonBorderShape(.circle)
+                        .frame(width: 44, height: 44)
                 } else {
                     Button { Task { await send() } } label: {
-                        if store.sending { ProgressView() }
-                        else { Label("Send message", systemImage: "arrow.up").labelStyle(.iconOnly) }
+                        if store.sending { ProgressView().frame(width: 20, height: 20) }
+                        else { Label("Send edit", systemImage: "arrow.up").foregroundStyle(Color.revlineForeground).labelStyle(.iconOnly).frame(width: 20, height: 20) }
                     }
-                    .buttonStyle(.borderedProminent).controlSize(.large)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .accessibilityLabel(store.status?.running == true ? "Queue message" : "Send message")
+                    .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
+                    .tint(.revlineAccent).controlSize(.regular)
+                    .frame(width: 44, height: 44)
                     .disabled(!canSend)
+                    .accessibilityLabel(store.status?.running == true ? "Queue edit" : "Send edit")
                 }
             }
-            ViewThatFits(in: .horizontal) {
-                HStack { mediaControls; modePicker; modelPicker }.fixedSize(horizontal: true, vertical: false)
-                VStack(alignment: .leading) {
-                    HStack { mediaControls; modePicker }
-                    modelPicker
-                }
-            }
-            .font(.subheadline)
+            .padding(6)
+            .background(Color.revlinePopover, in: .rect(cornerRadius: 28))
+            .overlay { RoundedRectangle(cornerRadius: 28).stroke(Color.revlineBorder, lineWidth: 1) }
         }
-        .padding().background(Color.revlineCard)
-        .toolbar {
-            ToolbarItemGroup(placement: .keyboard) {
-                Spacer()
-                Button("Done") { focused = false }
-            }
-        }
+        .foregroundStyle(Color.revlineForeground)
+        .padding(.horizontal, 16).padding(.bottom, 8)
+        .fixedSize(horizontal: false, vertical: true)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }
         .onChange(of: focused) { _, value in onFocusChange(value) }
+        .onChange(of: dismissKeyboard) { focused = false }
         .sensoryFeedback(.success, trigger: sent)
-    }
-
-    private var mediaControls: some View {
-        HStack {
-            Button("Add media", systemImage: "plus", action: onAttach)
-                .labelStyle(.iconOnly).buttonStyle(.bordered).frame(minWidth: 44, minHeight: 44)
-            Menu("Slash commands", systemImage: "slash.circle") {
-                Button("Clip footage") { prompt = "/clip "; focused = true }
-                Button("Recreate motion") { prompt = "/inspo-motion "; focused = true }
-            }
-            .labelStyle(.iconOnly).buttonStyle(.bordered).frame(minWidth: 44, minHeight: 44)
-        }
-    }
-
-    private var modePicker: some View {
-        Picker("Editing mode", selection: $mode) {
-            Text("Fast").tag("fast")
-            Text("Precise").tag("precise")
-        }.pickerStyle(.menu).buttonStyle(.bordered).frame(minHeight: 44)
-    }
-
-    @ViewBuilder private var modelPicker: some View {
-        if store.status?.modelSwitcher == true {
-            Menu {
-                Picker("Model", selection: $model) {
-                    Text("Default").tag("")
-                    ForEach(store.status?.allowedModels ?? [], id: \.self) { Text(modelLabel($0)).tag($0) }
-                }
-            } label: {
-                Text(modelLabel(model.isEmpty ? store.status?.defaultModelChoice ?? "Default" : model)).lineLimit(1)
-            }
-            .buttonStyle(.bordered).frame(minHeight: 44)
-            .accessibilityLabel("Model")
-            .accessibilityValue(modelLabel(model.isEmpty ? store.status?.defaultModelChoice ?? "Default" : model))
-        }
+        .sheet(isPresented: $consent) { AIConsentView { Task { await send() } } }
     }
 
     private func send() async {
         guard canSend else { return }
-        if await store.send(session, prompt: prompt, mode: mode, model: model.isEmpty ? nil : model, playhead: player.time) {
-            prompt = ""; sent += 1; focused = false
+        guard session.aiConsentGranted else { consent = true; return }
+        if await store.send(session, prompt: store.promptDraft, mode: store.editMode, playhead: player.time) {
+            store.promptDraft = ""; sent += 1; focused = false; onAccepted()
         }
     }
 }

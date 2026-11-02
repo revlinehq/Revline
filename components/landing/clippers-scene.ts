@@ -1,5 +1,4 @@
 import { CustomEase } from 'gsap/CustomEase';
-import type { gsap } from 'gsap';
 import { createEditor } from './clippers-editor';
 import { icon, part as editorPart } from './clippers-dom';
 
@@ -558,7 +557,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     '<span style="font:600 24px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">JYNXZI</span>',
   ];
   const targets = [284600, 192400, 87600, 143800, 68100, 216700];
-  openings.forEach((o, i) => {
+  openings.forEach((_, i) => {
     const frame = make(montage, 'short-card', 'left:0;top:0;width:0;height:0');
     const art = make(
       frame,

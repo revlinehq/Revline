@@ -14,12 +14,12 @@ export function fitPreviewView(canvas: PreviewSize): PreviewView {
   return { scale: null, center: { x: canvas.width / 2, y: canvas.height / 2 } };
 }
 
-export function previewFitScale(canvas: PreviewSize, viewport: PreviewViewportSize) {
+function previewFitScale(canvas: PreviewSize, viewport: PreviewViewportSize) {
   if (canvas.width <= 0 || canvas.height <= 0 || viewport.width <= 0 || viewport.height <= 0) return 1;
   return Math.min(Math.max(1, viewport.width - 2 * viewport.padding) / canvas.width, Math.max(1, viewport.height - 2 * viewport.padding) / canvas.height);
 }
 
-export function clampPreviewScale(scale: number) {
+function clampPreviewScale(scale: number) {
   return Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM_MAX, Number.isFinite(scale) ? scale : 1));
 }
 

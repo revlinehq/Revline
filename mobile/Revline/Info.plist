@@ -17,18 +17,18 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>com.revline.app</string>
+				<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 			</array>
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1</string>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSAppTransportSecurity</key>
@@ -46,12 +46,10 @@
 	<string>$(REVLINE_CONVEX_URL)</string>
 	<key>RevlineEnvironment</key>
 	<string>$(REVLINE_ENVIRONMENT)</string>
-	<key>RevlineProProduct</key>
-	<string>$(REVLINE_PRO_PRODUCT_ID)</string>
+	<key>RevlineSubscriptionProduct</key>
+	<string>$(REVLINE_SUBSCRIPTION_PRODUCT_ID)</string>
 	<key>RevlineSuperwallKey</key>
 	<string>$(REVLINE_SUPERWALL_API_KEY)</string>
-	<key>RevlineUltraProduct</key>
-	<string>$(REVLINE_ULTRA_PRODUCT_ID)</string>
 	<key>RevlineWebURL</key>
 	<string>$(REVLINE_WEB_URL)</string>
 	<key>UILaunchScreen</key>

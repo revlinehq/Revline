@@ -6,10 +6,10 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
-type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:'video'|'audio'|'image'|'export'; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
+type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:Doc<'storageObjects'>['kind']; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
 type Context = MutationCtx | QueryCtx;
 export function objectKey(source:StoredObject) { return source.r2Key ? `r2:${source.r2Key}` : source.storageId ? `convex:${source.storageId}` : null; }
-export const emptyStorage = { usedBytes:0,reservedBytes:0,videoBytes:0,audioBytes:0,imageBytes:0,exportBytes:0,fileCount:0 };
+export const emptyStorage = { usedBytes:0,reservedBytes:0,videoBytes:0,audioBytes:0,imageBytes:0,modelBytes:0,exportBytes:0,fileCount:0 };
 export async function storageAccount(ctx:Context,ownerId:string) { return ctx.db.query('storageAccounts').withIndex('by_owner',q=>q.eq('ownerId',ownerId)).unique(); }
 export async function accountingReady(ctx:Context) { return !!(await ctx.db.query('storageAccounting').withIndex('by_name',q=>q.eq('name','objects-v1')).unique())?.ready; }
 async function adjust(ctx:MutationCtx,ownerId:string,source:Pick<Doc<'storageObjects'>,'kind'|'size'|'pending'|'auxiliary'>,direction:1|-1) {
@@ -26,7 +26,7 @@ async function adjust(ctx:MutationCtx,ownerId:string,source:Pick<Doc<'storageObj
   if (row) await ctx.db.patch(row._id,next); else await ctx.db.insert('storageAccounts',{ownerId,...next});
 }
 /** One record per physical object per account, even when several projects reuse it. */
-export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails,backfill=false) {
+export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails) {
   if(isStockAudioKey(source.r2Key))return;
   const key=objectKey(source); if(!key)return;
   if (!Number.isSafeInteger(source.size)||source.size<0) throw new ConvexError('Invalid stored file size');
@@ -43,11 +43,11 @@ export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:
   const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
   if(row){await adjust(ctx,ownerId,row,-1);await ctx.db.delete(row._id);}
 }
-export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>,backfill=false) {
-  await recordStorageObject(ctx,asset,backfill);
+export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>) {
+  await recordStorageObject(ctx,asset);
   await updateProjectCover(ctx,asset);
-  if(hasPreview(asset))await recordStorageObject(ctx,{ownerId:asset.ownerId,r2Key:asset.previewR2Key,fileName:`${asset.fileName} preview`,kind:'video',size:asset.previewSize!,createdAt:asset.createdAt,auxiliary:true},backfill);
-  if(asset.thumbnailStorageId){const metadata=await ctx.db.system.get(asset.thumbnailStorageId);if(metadata)await recordStorageObject(ctx,{ownerId:asset.ownerId,storageId:asset.thumbnailStorageId,fileName:`${asset.fileName} thumbnail`,size:metadata.size,kind:'image',createdAt:asset.createdAt,auxiliary:true},backfill);}
+  if(hasPreview(asset))await recordStorageObject(ctx,{ownerId:asset.ownerId,r2Key:asset.previewR2Key,fileName:`${asset.fileName} preview`,kind:'video',size:asset.previewSize!,createdAt:asset.createdAt,auxiliary:true});
+  if(asset.thumbnailStorageId){const metadata=await ctx.db.system.get(asset.thumbnailStorageId);if(metadata)await recordStorageObject(ctx,{ownerId:asset.ownerId,storageId:asset.thumbnailStorageId,fileName:`${asset.fileName} thumbnail`,size:metadata.size,kind:'image',createdAt:asset.createdAt,auxiliary:true});}
 }
 export async function ownedObjectReferences(ctx:Context,ownerId:string,source:StoredObject,thumbnail:boolean|'preview'=false) {
   const assets=thumbnail==='preview' ? ctx.db.query('assets').withIndex('by_owner_previewR2Key',q=>q.eq('ownerId',ownerId).eq('previewR2Key',source.r2Key)) : source.r2Key ? ctx.db.query('assets').withIndex('by_owner_r2Key',q=>q.eq('ownerId',ownerId).eq('r2Key',source.r2Key)) : thumbnail ? ctx.db.query('assets').withIndex('by_owner_thumbnail',q=>q.eq('ownerId',ownerId).eq('thumbnailStorageId',source.storageId)) : ctx.db.query('assets').withIndex('by_owner_storageId',q=>q.eq('ownerId',ownerId).eq('storageId',source.storageId));
