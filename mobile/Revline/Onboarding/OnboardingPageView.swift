@@ -13,7 +13,7 @@ struct OnboardingPageView: View {
                 Text(page.description).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            .padding().frame(maxWidth: 560).frame(maxWidth: .infinity)
+            .padding().frame(maxWidth: .infinity)
         }
     }
 }

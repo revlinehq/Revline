@@ -9,7 +9,7 @@ struct RootView: View {
     var body: some View {
         Group {
             if !onboarded { OnboardingView { onboarded = true } }
-            else if !clerk.isLoaded { WorkspaceStateView(title: "Connecting to Revline…", loading: true) }
+            else if !clerk.isLoaded { ClerkConnectionView() }
             else if clerk.session == nil { WelcomeView() }
             else if session.authenticated {
                 if session.purchases.status == nil {

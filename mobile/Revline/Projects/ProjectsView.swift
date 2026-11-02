@@ -2,10 +2,10 @@ import SwiftUI
 
 struct ProjectsView: View {
     @Environment(AppSession.self) private var session
-    @State private var store = ProjectsStore()
-    @State private var path: [String] = []
+    let store: ProjectsStore
+    @Binding var path: [String]
+    let onCreate: () -> Void
     @State private var search = ""
-    @State private var creating = false
     @State private var renaming: ProjectSummary?
 
     private var filtered: [ProjectSummary] {
@@ -36,7 +36,7 @@ struct ProjectsView: View {
                     } description: {
                         Text("Create a project to start your next story.")
                     } actions: {
-                        Button("Create project") { creating = true }.buttonStyle(.borderedProminent)
+                        Button("Create project", action: onCreate).buttonStyle(.borderedProminent)
                     }
                 } else if filtered.isEmpty && !search.isEmpty {
                     ContentUnavailableView.search
@@ -44,17 +44,9 @@ struct ProjectsView: View {
             }
             .navigationTitle("Projects")
             .searchable(text: $search, prompt: "Find a project")
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("New project", systemImage: "plus") { creating = true }
-                }
-            }
             .navigationDestination(for: String.self) { ProjectView(projectID: $0) }
             .refreshable { store.refreshID += 1 }
             .task(id: store.refreshID) { await store.observe(session) }
-            .sheet(isPresented: $creating) {
-                CreateProjectView(store: store) { id in creating = false; path.append(id) }
-            }
             .sheet(item: $renaming) { RenameProjectView(project: $0, store: store) }
         }
     }

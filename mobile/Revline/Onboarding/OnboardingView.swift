@@ -26,7 +26,7 @@ struct OnboardingView: View {
                     ActionLabel(title: page == pages.count - 1 ? "Get started" : "Continue")
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
-                .padding().frame(maxWidth: 560).frame(maxWidth: .infinity)
+                .padding().frame(maxWidth: .infinity)
                 .background(.bar)
             }
             .navigationTitle("Revline").navigationBarTitleDisplayMode(.inline)

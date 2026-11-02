@@ -30,6 +30,7 @@
 		5146F4E5691DDCB5FBCBBE04 /* OnboardingPageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 829A1D978B65CCD3BB4458DE /* OnboardingPageView.swift */; };
 		54E9F293DEB718E1EBE3F842 /* ShareSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A5CEBC25B72CEFF90550A7 /* ShareSheet.swift */; };
 		5D4396E405E1A87518373728 /* ToolActivityRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F602486C63B1B8B41DBF92D5 /* ToolActivityRow.swift */; };
+		5F2D1DFC8A3F98605CE6E2F1 /* ClerkConnectionView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1085B98C60814E6955F0C8A0 /* ClerkConnectionView.swift */; };
 		5F376E9AD9981396523FF735 /* ClerkTokenProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 192D3831A1C52E0703590365 /* ClerkTokenProvider.swift */; };
 		64A7176BCB15A00098C8D259 /* PurchaseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F2BC68942D5ADFF328A9DC /* PurchaseCoordinator.swift */; };
 		67C40EE7180AC62444334CFC /* SuperwallKit in Frameworks */ = {isa = PBXBuildFile; productRef = C2CB99CF4498ABBD9D47632F /* SuperwallKit */; };
@@ -58,6 +59,7 @@
 		C935799BEF2921FD2CDECC1B /* StreamingMessage.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6515EE32DD6C01EB1C9B8BC7 /* StreamingMessage.swift */; };
 		C963BE330CDF27A4F772244D /* QueuedMessagesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0F8F816CE920B3AB78C0584 /* QueuedMessagesView.swift */; };
 		CB78B6EC8BCC53D7E1CB6175 /* ProjectRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58299061C165FB866A558EC1 /* ProjectRow.swift */; };
+		CBB6501FB35EBF804163C03C /* WorkspaceTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 77BD3E9AE50CC2420A814C67 /* WorkspaceTab.swift */; };
 		D0E462E8632CA22341DFFB49 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FA920B4A97BBDED8CAEE04F2 /* PrivacyInfo.xcprivacy */; };
 		D25749A36BD08E74E5867E3A /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A3AA6CC22F9537131028CB5 /* AppConfiguration.swift */; };
 		D39053B6B0861CDC7BB931D1 /* ConvexConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE182F228B1BB2D6AE0C7D4 /* ConvexConcurrency.swift */; };
@@ -78,6 +80,7 @@
 		049A4969062B0DF95D05C945 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		068CA863967A09630F9FCCB3 /* WebPlayer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebPlayer.swift; sourceTree = "<group>"; };
 		0B0A95623C3BFB458EF725A3 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		1085B98C60814E6955F0C8A0 /* ClerkConnectionView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkConnectionView.swift; sourceTree = "<group>"; };
 		11676755ABCFC2ACE2B76C5B /* PreviewTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PreviewTransport.swift; sourceTree = "<group>"; };
 		15DCE65378F51B976E3E5285 /* WorkspaceStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceStateView.swift; sourceTree = "<group>"; };
 		1606D57EF304CAC8FB09C00C /* MediaThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaThumbnail.swift; sourceTree = "<group>"; };
@@ -102,6 +105,7 @@
 		72D9C22FF1C2CAE4F4B84137 /* RenameProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameProjectView.swift; sourceTree = "<group>"; };
 		72DDA7EB40D372FEDA5D9CFE /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		73034845044E92B8E1BD2D15 /* Revline.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Revline.entitlements; sourceTree = "<group>"; };
+		77BD3E9AE50CC2420A814C67 /* WorkspaceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTab.swift; sourceTree = "<group>"; };
 		795BAA8D5A900021380B7BF3 /* CreateProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateProjectView.swift; sourceTree = "<group>"; };
 		79745406EA248D19C963F8F0 /* RevlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevlineApp.swift; sourceTree = "<group>"; };
 		7E70D0B8BB0E6DB455FEA7D2 /* TimelineStrip.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TimelineStrip.swift; sourceTree = "<group>"; };
@@ -192,6 +196,7 @@
 				EE235B903B089F5FB813A356 /* AppSession.swift */,
 				79745406EA248D19C963F8F0 /* RevlineApp.swift */,
 				5480908AD5ED8486BB2F14DE /* RootView.swift */,
+				77BD3E9AE50CC2420A814C67 /* WorkspaceTab.swift */,
 				62626E45466C22AA18D505FC /* WorkspaceTabs.swift */,
 			);
 			path = App;
@@ -271,6 +276,7 @@
 		962CCF1F5A3E762AC1094EB4 /* Auth */ = {
 			isa = PBXGroup;
 			children = (
+				1085B98C60814E6955F0C8A0 /* ClerkConnectionView.swift */,
 				192D3831A1C52E0703590365 /* ClerkTokenProvider.swift */,
 				D35196EFBB82C29CCC2A6870 /* WelcomeView.swift */,
 			);
@@ -481,6 +487,7 @@
 				2DFC56088D886D09C150F317 /* ChatMessage.swift in Sources */,
 				7CC1888D451F6E86619A452C /* ChatMessageView.swift in Sources */,
 				31814E637B90BC5364CE7C74 /* ChatStore.swift in Sources */,
+				5F2D1DFC8A3F98605CE6E2F1 /* ClerkConnectionView.swift in Sources */,
 				5F376E9AD9981396523FF735 /* ClerkTokenProvider.swift in Sources */,
 				FABB3A879080DB72CF8868AB /* ConversationView.swift in Sources */,
 				D39053B6B0861CDC7BB931D1 /* ConvexConcurrency.swift in Sources */,
@@ -528,6 +535,7 @@
 				96CAC4A258ECAE872DD45B2A /* WelcomeView.swift in Sources */,
 				7B79957A6214F94D4124A7AB /* WorkingLabel.swift in Sources */,
 				19C97C967514A117573B09CD /* WorkspaceStateView.swift in Sources */,
+				CBB6501FB35EBF804163C03C /* WorkspaceTab.swift in Sources */,
 				82578EE8DAF3EFA039AEDB84 /* WorkspaceTabs.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -539,15 +547,18 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
 				CODE_SIGN_ENTITLEMENTS = Revline/Revline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"ENABLE_DEBUG_DYLIB[sdk=iphonesimulator*]" = NO;
 				INFOPLIST_FILE = Revline/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker $(REVLINE_SIMULATOR_ENTITLEMENTS)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -612,7 +623,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.2;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -684,7 +695,7 @@
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_STRICT_CONCURRENCY = complete;
 				SWIFT_VERSION = 6.2;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -692,15 +703,18 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				"CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]" = NO;
 				CODE_SIGN_ENTITLEMENTS = Revline/Revline.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				"ENABLE_DEBUG_DYLIB[sdk=iphonesimulator*]" = NO;
 				INFOPLIST_FILE = Revline/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
+				"OTHER_LDFLAGS[sdk=iphonesimulator*]" = "$(inherited) -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker $(REVLINE_SIMULATOR_ENTITLEMENTS)";
 				SDKROOT = iphoneos;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};

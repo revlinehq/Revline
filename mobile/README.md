@@ -1,6 +1,6 @@
 # Revline for iOS
 
-Native SwiftUI client, iOS 17+, iPhone and iPad. Bundle identifier placeholder: `com.revline.app`.
+Native SwiftUI client, iOS 17+, iPhone only. Bundle identifier placeholder: `com.revline.app`.
 
 The app uses the official ConvexMobile client and the existing Clerk instance. Project management, agent turns, message streams, uploads, media tasks, and exports call the same Convex functions as the web editor. No Next `/api` route is used. The only embedded web surface is the existing renderer, exposed at `/mobile/player/[projectId]`.
 
@@ -12,21 +12,23 @@ Requirements: Xcode 26.1+, Swift 6.2, XcodeGen (`brew install xcodegen`), Node 2
 2. Copy `Config/Secrets.example.xcconfig` to `Config/Secrets.xcconfig`. Fill in the Superwall public API key and the two App Store product identifiers when provisioned. Both Debug and Release read this ignored file.
 3. In the repository root, provision the existing development `.env.local`, then run `npm ci` and `PORT=3002 npm run dev`. Wait for both `[web]` and `[worker]` readiness. Do not start or replace the main checkout's server on port 3001.
 4. Run `xcodegen generate --spec mobile/project.yml` from the repository root. The generated `mobile/Revline.xcodeproj` and package resolution are checked in, so XcodeGen is only needed after changing the specification or adding files.
-5. Open `mobile/Revline.xcodeproj`, choose Revline and an iOS Simulator, and Run. The user completes sign-in in the app.
+5. Connect the iPhone, enable Developer Mode, and select it as the Revline run destination in Xcode. In Signing & Capabilities, select the existing development team with automatic signing. The user completes any device trust prompts and signs in in the app.
 
-Command-line Simulator build with ad hoc signing for Clerk Keychain access from the repository root:
+Find the connected phone with `xcrun devicectl list devices`. Build for its device UDID using the existing signing team:
 
 ```sh
 xcodebuild -project mobile/Revline.xcodeproj -scheme Revline \
-  -configuration Debug -destination 'platform=iOS Simulator,name=Revline iPhone' \
+  -configuration Debug -destination "id=$REVLINE_IPHONE_UDID" \
   -derivedDataPath mobile/.build/DerivedData \
   -clonedSourcePackagesDirPath mobile/.build/SourcePackages \
-  -jobs 1 \
-  CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
-  ONLY_ACTIVE_ARCH=YES build
+  -jobs 1 -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM="$REVLINE_SIGNING_TEAM" build
+xcrun devicectl device install app --device "$REVLINE_IPHONE_UDID" \
+  mobile/.build/DerivedData/Build/Products/Debug-iphoneos/Revline.app
+xcrun devicectl device process launch --device "$REVLINE_IPHONE_UDID" com.revline.app
 ```
 
-There are no test targets, test files, mock services, or sample backend records. Verify using `npm run typecheck`, `npm run build`, `xcodebuild`, and the running app. Build products, downloaded packages, local configuration, and screenshots are ignored. Remove only `mobile/.build/DerivedData` when finished to reclaim build space. The installed Simulator app continues to work.
+There are no test targets, test files, mock services, or sample backend records. Verify using `npm run typecheck`, `npm run build`, `xcodebuild`, and the running app. Build products, downloaded packages, local configuration, and screenshots are ignored. Remove only `mobile/.build/DerivedData` when finished to reclaim build space. Keep the watched Simulator running while verifying the interface.
 
 Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `ClerkRuntime`, which does not compile with this Mac's Swift 6.2.1. Convex 0.8.2 documents its Rust client as thread-safe but has no Sendable declaration; `ConvexConcurrency.swift` supplies that compatibility conformance. Reassess both when upgrading the packages. SDK source is not patched. A build phase adjusts the bundled English authentication copy to Revline’s punctuation style.
 
@@ -37,7 +39,7 @@ Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `Cler
 | Debug | `https://majestic-alpaca-541.convex.cloud` | `http://localhost:3002` | Existing dev instance via `Debug.local.xcconfig` |
 | Release | `https://different-gnu-398.convex.cloud` | `https://tryrevline.com` | Existing production instance via `Release.local.xcconfig`, `pk_live_` only |
 
-URLs come from xcconfig and Info.plist. Release validates the exact production backend and website and refuses a test Clerk key. A missing configuration produces a setup screen instead of silently using development. Local networking is allowed for the Simulator renderer; remote services use HTTPS. Override the Debug web URL with this Mac's LAN address for a physical device. Do not point a production build at the development backend.
+URLs come from xcconfig and Info.plist. Release validates the exact production backend and website and refuses a test Clerk key. A missing configuration produces a setup screen instead of silently using development. Local networking is allowed for the development renderer; remote services use HTTPS. On a physical phone, localhost refers to the phone itself. Override the Debug web URL with a development address reachable from the phone; the configured server must accept those connections. Do not point a production build at the development backend.
 
 The `/mobile/player` route must be present on the configured web server. Use this worktree on port 3002 or reuse the existing port 3001 server when its checkout includes that route. The hosted production site receives changes through the normal release process. No deployment is required to use the new native screens against the existing development API. New Apple billing functions require a later authorized Convex deployment.
 
@@ -110,28 +112,24 @@ Both sources upsert the same `appleEntitlements` row by transaction ID and recor
 
 ## Native interface
 
-The interface follows the system appearance in light and dark mode. Projects use an inset grouped List with thumbnails, native navigation rows, search, pull to refresh, swipe actions and context menus. Project creation, renaming, media import, exports and account settings use system Form or List sections. The chat composer uses a native multiline TextField, menu Pickers and system button styles. Focusing the composer reduces the preview height so the conversation and keyboard remain usable.
+The interface uses native system controls in dark appearance, including launch and presented sheets. Projects use an inset grouped List with thumbnails, native navigation rows, search, pull to refresh, swipe actions and context menus. Project creation, renaming, media import, exports and account settings use system Form or List sections. The chat composer uses a native multiline TextField, menu Pickers and system button styles. Focusing the composer reduces the preview height so the conversation and keyboard remain usable.
 
-Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. No custom button style, palette, shadow, gradient, press animation or sheet animation remains. Clerk uses its default adaptive interface. The WKWebView renderer and Superwall paywall presentation are unchanged.
+Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. No custom button style, palette, shadow, gradient, press animation or sheet animation remains. New project lives in the separate trailing tab on iOS 26; iOS 17 and 18 use a standard third tab. Opening and cancelling creation preserves the previous tab. Clerk uses its default adaptive interface. The WKWebView renderer and Superwall paywall presentation are unchanged.
 
 Before/after captures for this change are local in `Screenshots/native-after`, excluded from Git. `before-` images record the previous custom styling; `after-` images record the native interface. Account/profile captures may contain private information and should not be used as public marketing images.
 
-## Verification from the initial implementation
+## Verification
 
-On 2026-11-01, `npm run typecheck`, `npm run build`, signed Debug and optimized Release Simulator builds passed with Xcode 26.1.1 and Swift 6.2.1. The app ran on the iPhone 17 and iPad Pro 11-inch Simulators with iOS 26.1. Onboarding, welcome, and the live Clerk sign-in screen were visually inspected. iPad onboarding and welcome were inspected in landscape, and onboarding in portrait. The onboarding column is capped at 600 points. The Release bundle's URLs were checked for the production deployment and website, and the app was launched on iPad to verify it safely displays Setup required without production Clerk configuration. Use `-jobs 1` on this 8 GB Mac to avoid parallel SDK compilation exhausting memory.
+The physical iPhone signing path currently requires the paid team's account holder to accept Apple's updated Program License Agreement. Use the existing Revline iPhone Simulator for the current UI pass; do not shut it down while the user is watching. The project targets device family 1 only. Keep one build job on this 8 GB Mac. Debug and Release Simulator builds passed during the native interface work, before the switch to the physical iPhone. Device signing, installation and launch are verified separately using the connected phone; a Simulator build does not verify device provisioning.
 
-The initial unsigned Keychain failure was fixed by adding the application/keychain entitlements and using Simulator ad hoc signing. The native sign-in screen is connected to the existing development Clerk instance and is waiting for the user to sign in. In Simulator, select **Revline iPhone**, then complete the email or Google flow in the open Revline sign-in sheet using your existing account. No credentials were entered by the agent.
+The development renderer can reuse the existing port 3001 server through the ignored Debug local configuration. Do not edit or restart that server. Debug uses the development Convex deployment; Release retains the exact production deployment and website. The existing App Store setup and sandbox billing checks above remain required.
 
-Local screenshots, excluded from Git:
+### Unsigned Simulator builds
 
-- `Screenshots/01-onboarding-edit.png`
-- `Screenshots/02-onboarding-clipping.png`
-- `Screenshots/03-onboarding-motion.png`
-- `Screenshots/04-welcome.png`
-- `Screenshots/05-clerk-sign-in.png`
-- `Screenshots/06-ipad-onboarding.png`
-- `Screenshots/07-release-setup.png`
-- `Screenshots/08-ipad-landscape.png`
-- `Screenshots/09-ipad-welcome.png`
+Build with `CODE_SIGNING_ALLOWED=NO` into `mobile/.build/DerivedData`, then install and launch using `xcrun simctl`. Simulator build settings embed `Config/Simulator.entitlements` in the executable's `__TEXT,__entitlements` section and keep the executable unsplit. This gives Clerk its normal Simulator Keychain identity without Apple provisioning or alternate credential storage. Device signing and entitlements remain unchanged. If the placeholder bundle identifier changes, update this Simulator identity and Keychain group to match.
 
-The authenticated project, chat, media, timeline, export, and account flows still need runtime inspection after the user completes sign-in. New Apple/Superwall billing functions have not been deployed, and purchase/restore/webhook verification requires the App Store products, dashboard configuration, backend environment variables, and a real Sandbox transaction. No account was deleted and no purchase was made. The renderer and development worker remain running on port 3002; the main checkout's port 3001 server was not changed or restarted.
+The old unsigned build lacked that section, so Clerk returned OSStatus -34018 and never finished loading its client. Startup now also presents a native retry state when Clerk refresh fails. No SDK source or authentication backend was changed.
+
+On this Mac, the local Debug config points `REVLINE_SIMULATOR_ENTITLEMENTS` at an ignored plist containing the earlier Simulator app's Keychain group. This restores the existing Clerk session through the SDK rather than creating another local identity. The checked-in default has no personal team identifier. Keep the local override and its plist together when cleaning build artifacts.
+
+Current validation: unsigned Debug and optimized Release Simulator builds, `npm run typecheck`, `npm run build`, and `git diff --check` pass. The real development Clerk session restores, Convex projects/media/membership load, and the trailing plus opens the dark create sheet from both tabs. Cancelling returns to the previous tab. Onboarding, native pickers, media and export confirmation were inspected in dark appearance. The development preview showed its existing server-unavailable state, so playback was not verified. No export, purchase, agent turn or account deletion was performed. The watched Revline iPhone Simulator remains running.

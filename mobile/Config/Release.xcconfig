@@ -1,3 +1,4 @@
+REVLINE_SIMULATOR_ENTITLEMENTS = $(SRCROOT)/Config/Simulator.entitlements
 REVLINE_ENVIRONMENT = production
 REVLINE_CONVEX_URL = https:/$()/different-gnu-398.convex.cloud
 REVLINE_WEB_URL = https:/$()/tryrevline.com

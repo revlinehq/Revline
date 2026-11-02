@@ -24,7 +24,7 @@ struct SettingsView: View {
                     Text("Manage your profile, sign-in methods, security, or delete your account.")
                 }
                 Section("Workspace") {
-                    LabeledContent("Appearance", value: "System")
+                    LabeledContent("Appearance", value: "Dark")
                     Label(session.connected ? "Connected" : "Reconnecting…", systemImage: session.connected ? "checkmark.icloud" : "icloud.slash")
                 }
                 Section("Membership") {

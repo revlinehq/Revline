@@ -37,7 +37,7 @@ struct ProjectView: View {
                 WorkspaceStateView(title: "Opening project…", loading: true)
             }
         }
-        .frame(maxWidth: 1000).frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity)
         .navigationTitle(store.project?.title ?? "Project").navigationBarTitleDisplayMode(.inline)
         .toolbar(.hidden, for: .tabBar)
         .toolbarBackground(.visible, for: .navigationBar)

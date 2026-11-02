@@ -26,7 +26,7 @@ settings:
     SWIFT_VERSION: "6.2"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
     PRODUCT_BUNDLE_IDENTIFIER: com.revline.app
-    TARGETED_DEVICE_FAMILY: "1,2"
+    TARGETED_DEVICE_FAMILY: "1"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
     CODE_SIGN_STYLE: Automatic
@@ -37,6 +37,12 @@ targets:
   Revline:
     type: application
     platform: iOS
+    settings:
+      base:
+        TARGETED_DEVICE_FAMILY: "1"
+        "CODE_SIGNING_ALLOWED[sdk=iphonesimulator*]": NO
+        "ENABLE_DEBUG_DYLIB[sdk=iphonesimulator*]": NO
+        "OTHER_LDFLAGS[sdk=iphonesimulator*]": $(inherited) -Xlinker -sectcreate -Xlinker __TEXT -Xlinker __entitlements -Xlinker $(REVLINE_SIMULATOR_ENTITLEMENTS)
     sources:
       - path: Revline
     info:
@@ -45,7 +51,8 @@ targets:
         CFBundleDisplayName: Revline
         CFBundleURLTypes:
           - CFBundleURLSchemes: [com.revline.app]
-        UILaunchScreen: {}
+        UIUserInterfaceStyle: Dark
+        UILaunchScreen: {UIColorName: LaunchBackground}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
         NSPhotoLibraryAddUsageDescription: Save your exported Revline videos to your photo library.

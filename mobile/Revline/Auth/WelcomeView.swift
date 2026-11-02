@@ -23,7 +23,7 @@ struct WelcomeView: View {
                         .buttonStyle(.borderless).frame(minHeight: 44)
                     if let error { ErrorBanner(message: error) }
                 }
-                .padding().frame(maxWidth: 560).frame(maxWidth: .infinity)
+                .padding().frame(maxWidth: .infinity)
             }
             .safeAreaInset(edge: .bottom) {
                 VStack(spacing: 12) {
@@ -39,7 +39,7 @@ struct WelcomeView: View {
                     Text("Your projects stay in sync across iPhone and the web.")
                         .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 }
-                .controlSize(.large).padding().frame(maxWidth: 560).frame(maxWidth: .infinity)
+                .controlSize(.large).padding().frame(maxWidth: .infinity)
                 .background(.bar)
             }
             .navigationTitle("Revline")

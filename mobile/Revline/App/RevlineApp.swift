@@ -26,6 +26,8 @@ struct RevlineApp: App {
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
+            .preferredColorScheme(.dark)
         }
     }
 }
