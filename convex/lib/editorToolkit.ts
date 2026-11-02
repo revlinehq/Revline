@@ -31,6 +31,8 @@ import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors'
 import { APPROVAL_NOTE_LIMIT, approvalRefusal, approvalViolations, approveClip, approveSection, approvedWork, isApproved, markerSection, unapproveClip, type ApprovalViolation } from '../../lib/editor/approvals';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
+import { needsSaveConfirmation, hasSaveEvidence } from '../../lib/ai/save-confirmation';
+import { incidentShape } from './save_incidents';
 import { readRunTab } from "./run_ids";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
@@ -230,7 +232,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return names.length ? { tool: names.join(', ').slice(0, 120) } : {};
   };
   const editSession = new EditSession(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
-    apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) }),
+    apply: (timeline, expectedRevision,publication) => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication?{stagedPublication:true}:{}),...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) }),
     validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
@@ -1573,6 +1575,36 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const overridden = approvalOverride.overridden.slice(from);
         return overridden.length && output && typeof output === 'object' ? { ...output, approvedOverridden: { reason: overrideReason, clips: overridden.map(item => ({ clipId: item.clipId, name: item.name, change: item.what })) }, note: 'Approved work was changed because the user asked. Say so in your reply; it stays approved.' } : output;
       } finally { approvalOverride.active--; }
+    };
+  }
+  // Observe the final tool envelope, including every wrapper above, in both server runtimes and MCP.
+  for (const [name, tool] of Object.entries(tools as Record<string, { execute?: (...args: never[]) => Promise<unknown> }>)) {
+    const execute = tool.execute;
+    if (!execute || !needsSaveConfirmation(name)) continue;
+    tool.execute = async function (this: unknown, ...args: never[]) {
+      const revisionBefore = editSession.revision;
+      const output = await execute.apply(this ?? tool, args);
+      if (output && typeof output === 'object' && !Array.isArray(output)) {
+        const evidence = z.object({ saved: z.unknown().optional(), unchanged: z.unknown().optional(), staged: z.unknown().optional(), revision: z.unknown().optional(), success: z.unknown().optional(), error: z.unknown().optional(), isError: z.unknown().optional() }).parse(output);
+        if (evidence.success === false || evidence.error || evidence.isError === true || (evidence.staged !== true && hasSaveEvidence(evidence))) return output;
+        const call = z.object({ toolCallId: z.string().optional() }).safeParse(args[1] ?? {});
+        const observation = {
+          ...run, ...options.publication, ...(project.threadId && !options.publication ? { threadId: project.threadId } : {}),
+          source: options.publication ? 'editor' as const : 'mcp' as const, toolName: name, toolCallId: (call.success ? call.data.toolCallId : undefined) ?? crypto.randomUUID(),
+          inputShape: incidentShape(args[0]), outputShape: incidentShape(output), revisionBefore, revisionAfter: editSession.revision,
+          staged: evidence.staged === true, ...(typeof evidence.revision === 'number' && Number.isSafeInteger(evidence.revision) ? { stagedRevision: evidence.revision } : {}),
+          observedAt: Date.now(),
+        };
+        // Reuse the call identity after a dropped response so a committed write is not counted twice.
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try { await ctx.runMutation(internal.saveIncidents.observe, observation); break; }
+          catch {
+            // Diagnostics must never turn a saved edit into a tool failure. No raw payload is logged.
+            if (attempt === 2) console.warn(`[save-incidents] ${JSON.stringify({ event: 'observation-failed', runId: run.runId, toolName: name })}`);
+          }
+        }
+      }
+      return output;
     };
   }
   return { tools, editSession, plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
