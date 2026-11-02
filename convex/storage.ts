@@ -12,6 +12,8 @@ import { removeMediaAttachment,removeShareAssets } from './lib/shared_media';
 import { removeOwnedExport } from './renders';
 import { mediaUrl } from './lib/media_storage';
 import { allTabTimelines } from './timelineTabs';
+import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+import { removeShareTabs } from './lib/shared_media';
 
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
@@ -58,16 +60,16 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
   if(refs.shares.length)result.inUse=true;
   const projectIds=[...new Set(refs.attachments.map(asset=>asset.projectId))];
   for(const projectId of projectIds) {
-    const project=await(reads?reads.project(projectId):ctx.db.get(projectId));if(!project||project.ownerId!==row.ownerId)continue;
+    const project=await(reads?reads.project(projectId):ctx.db.get(projectId));if(!project||project.deleting||project.ownerId!==row.ownerId)continue;
     const sources=refs.attachments.filter(asset=>asset.projectId===projectId);
     const ids=new Set(sources.map(asset=>String(asset._id)));
     const timelines=await allTabTimelines(ctx,project);
-    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId))||normalizationAssetIds(timeline).some(id=>ids.has(id)));
+    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId))||sceneMediaAssetIds(timeline).some(id=>ids.has(id))||normalizationAssetIds(timeline).some(id=>ids.has(id)));
     // Extracted audio is retained while a video using that linked source remains in the edit.
     if(!used&&sources.some(asset=>asset.kind==='audio')) {
       const linked=await Promise.all(sources.filter(asset=>asset.kind==='audio').map(asset=>ctx.db.query('assets').withIndex('by_owner_audio',q=>q.eq('ownerId',row.ownerId).eq('audioAssetId',asset._id)).take(201)));
       const videos=new Set(linked.flat().filter(asset=>asset.projectId===projectId).map(asset=>String(asset._id)));
-      used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&videos.has(clip.assetId)));
+      used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&videos.has(clip.assetId))||sceneMediaAssetIds(timeline).some(id=>videos.has(id)));
     }
     if(used) {result.workspaces.push({id:project._id,title:project.title});result.inUse=true;}
     if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';
@@ -86,23 +88,33 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
   const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
   return {...page,page:args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows};
 }});
-export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.null(),handler:async(ctx,{fileIds})=>{
+export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.array(v.id('projects')),handler:async(ctx,{fileIds})=>{
   const ownerId=await requireOwner(ctx);if(!fileIds.length||fileIds.length>20)throw new ConvexError('Delete between 1 and 20 files');
   const rows=await Promise.all([...new Set(fileIds)].map(id=>ctx.db.get(id)));
+  const projects=new Set<Id<'projects'>>();
   for(const row of rows) {
-    if(!row||row.ownerId!==ownerId||row.pending||row.auxiliary)throw new ConvexError('File not found');
+    if(!row)continue;
+    if(row.ownerId!==ownerId||row.pending||row.auxiliary)throw new ConvexError('File not found');
     const info=await describe(ctx,row);if(!info.canDelete)throw new ConvexError(info.protectedReason??'Remove this media from its workspace first');
+    if(row.kind!=='export')for(const project of info.workspaces)projects.add(project.id);
   }
-  // Revalidation and removal are atomic; a concurrently changed edit cannot lose its source.
+  // Validate the whole selection before hiding any project shared by several files.
+  for(const projectId of projects){const project=await ctx.db.get(projectId);if(project)await beginProjectDeletion(ctx,ownerId,project);}
   for(const row of rows) {
-    if(row!.kind==='export')await removeOwnedExport(ctx,ownerId,row!.jobId!);
+    if(!row||!await ctx.db.get(row._id))continue;
+    if(row.kind==='export')await removeOwnedExport(ctx,ownerId,row.jobId!);
     else {
-      const info=await describe(ctx,row!),doomed=new Set(info.workspaces.map(workspace=>String(workspace.id)));
-      for(const workspace of info.workspaces){const project=await ctx.db.get(workspace.id);if(project&&!project.deleting)await beginProjectDeletion(ctx,ownerId,project);}
-      const refs=await ownedObjectReferences(ctx,ownerId,row!);
-      for(const asset of refs.attachments){if(doomed.has(String(asset.projectId)))await removeMediaAttachment(ctx,asset);else await removeOwnedAsset(ctx,ownerId,asset._id);}
-      for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){await removeShareAssets(ctx,shareId);await ctx.db.delete(shareId);}
+      const refs=await ownedObjectReferences(ctx,ownerId,row);
+      for(const asset of refs.attachments){
+        const project=await ctx.db.get(asset.projectId);
+        if(project&&project.ownerId!==ownerId)throw new ConvexError('Project not found');
+        if(!project||project.deleting){
+          if(project){projects.add(project._id);await beginProjectDeletion(ctx,ownerId,project);}
+          await removeMediaAttachment(ctx,asset);
+        }else await removeOwnedAsset(ctx,ownerId,asset._id);
+      }
+      for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.delete(shareId);}
     }
   }
-  return null;
+  return [...projects];
 }});

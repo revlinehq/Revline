@@ -7,6 +7,6 @@ import { isProjectNotFound } from '@/lib/user-error';
 export default function EditorError({error,reset}: {error:Error;reset:()=>void}) {
   const missing=isProjectNotFound(error);
   useEffect(() => { if(!missing)captureClientException(error); }, [error,missing]);
-  if(missing)return <div className="editor-boot"><h1>Project not found.</h1><p>This project may have been deleted, or the link may be incorrect.</p><Button asChild><Link href="/chats">Your projects</Link></Button></div>;
+  if(missing)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild><Link href="/chats">Your projects</Link></Button></div>;
   return <div className="editor-boot"><h1>The editor encountered a problem.</h1><p>Try reopening the editor. Your saved project remains in Your projects.</p><Button onClick={reset}>Try again</Button><Link href="/chats">Your projects</Link></div>;
 }

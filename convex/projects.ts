@@ -1,6 +1,6 @@
 import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
 import { shareAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,readHistoryIndex,projectCoverOf } from './lib/project_data';
+import { writeProject,createProject,readProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
 import { loadSceneCode, sceneCodeText } from './lib/scene_code';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
@@ -121,9 +121,11 @@ export const create = mutation({ args: createProjectForArgs, returns: v.id("proj
 function routeProjectId(ctx:QueryCtx,projectId:string){const id=ctx.db.normalizeId('projects',projectId);if(!id)throw new ConvexError('Project not found');return id;}
 /** `sceneCode: 'refs'` returns scene code by hash (load it with `sceneCode`); otherwise timelines carry their code. */
 const sceneCodeMode=v.optional(v.literal('refs'));
-export const get = query({ args: { projectId: v.string(),includeHistory:v.optional(v.boolean()),sceneCode:sceneCodeMode }, returns: projectDocument, handler: async (ctx, args) => {
-  const projectId=routeProjectId(ctx,args.projectId);
-  await projectIdentity(ctx,projectId,await requireOwner(ctx));const project=(await readProject(ctx,projectId,args.includeHistory!==false,args.sceneCode!=='refs'))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+export const get = query({ args: { projectId: v.string(),includeHistory:v.optional(v.boolean()),sceneCode:sceneCodeMode }, returns: v.union(projectDocument,v.null()), handler: async (ctx, args) => {
+  const ownerId=await requireOwner(ctx),projectId=ctx.db.normalizeId('projects',args.projectId);
+  if(!projectId)return null;
+  const raw=await ctx.db.get(projectId);if(!raw||raw.deleting||raw.ownerId!==ownerId)return null;
+  const project=(await readProject(ctx,projectId,args.includeHistory!==false,args.sceneCode!=='refs'))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
 }});
 export const history=query({args:{projectId:v.string()},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
   const projectId=routeProjectId(ctx,args.projectId);
@@ -230,16 +232,44 @@ export const undo = mutation({ args: { projectId: v.id("projects") }, returns: v
   await writeProject(ctx,project._id, { timeline: previous, aspectRatio: previous.aspectRatio, history, revision, updatedAt: Date.now() }, undefined, { tool: 'Undo' }); return revision;
 }});
 export const remove = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId=await requireOwner(ctx),project=await requireProject(ctx,args.projectId,ownerId);
-  await beginProjectDeletion(ctx,ownerId,project);
+  const ownerId=await requireOwner(ctx),project=await ctx.db.get(args.projectId);
+  if(project)await beginProjectDeletion(ctx,ownerId,project);
+  return null;
+}});
+export const deletionStatus=query({args:{projectIds:v.array(v.id('projects'))},returns:v.union(v.literal('pending'),v.literal('failed'),v.literal('complete')),handler:async(ctx,{projectIds})=>{
+  const ownerId=await requireOwner(ctx);if(projectIds.length>4000)throw new ConvexError('Too many projects');
+  let pending=false;
+  for(const projectId of new Set(projectIds)){
+    const project=await ctx.db.get(projectId);if(!project)continue;
+    if(project.ownerId!==ownerId)throw new ConvexError('Project not found');
+    const job=project.deletionJobId?await ctx.db.system.get(project.deletionJobId):null;
+    if(!project.deleting||!job||!['pending','inProgress'].includes(job.state.kind))return 'failed';
+    pending=true;
+  }
+  return pending?'pending':'complete';
+}});
+export const retryDeletion=mutation({args:{projectIds:v.array(v.id('projects'))},returns:v.null(),handler:async(ctx,{projectIds})=>{
+  const ownerId=await requireOwner(ctx);if(projectIds.length>4000)throw new ConvexError('Too many projects');
+  for(const projectId of new Set(projectIds)){
+    const project=await ctx.db.get(projectId);if(!project)continue;
+    if(project.ownerId!==ownerId||!project.deleting)throw new ConvexError('Project not found');
+    await beginProjectDeletion(ctx,ownerId,project);
+  }
   return null;
 }});
 /** Hides a project at once and reclaims its data in background batches. */
 export async function beginProjectDeletion(ctx:MutationCtx,ownerId:string,project:import('./_generated/dataModel').Doc<'projects'>) {
-  const rendering=await ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status','rendering')).first();
-  if(rendering||project.aiRunning)throw new ConvexError('Wait for the active render or AI edit before deleting the project');
+  if(project.ownerId!==ownerId)throw new ConvexError('Project not found');
+  if(project.deleting){
+    const job=project.deletionJobId?await ctx.db.system.get(project.deletionJobId):null;
+    if(job&&(job.state.kind==='pending'||job.state.kind==='inProgress'))return;
+  }else{
+    const jobs=await Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',project._id).eq('status',status)).first()));
+    if(jobs.some(Boolean)||(await projectRun(ctx,project._id,ownerId)).aiRunning)throw new ConvexError('Wait for the active render or AI edit before deleting the project');
+  }
   await writeProject(ctx,project._id,{deleting:true});
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',project._id)).take(2);
   for(const share of shares)await ctx.db.patch(share._id,{published:false});
-  await ctx.scheduler.runAfter(0,internal.projectDeletion.batch,{projectId:project._id,ownerId});
+  const deletionJobId=await ctx.scheduler.runAfter(0,internal.projectDeletion.batch,{projectId:project._id,ownerId});
+  await ctx.db.patch(project._id,{deletionJobId});
 }
