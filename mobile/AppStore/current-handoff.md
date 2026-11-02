@@ -23,3 +23,19 @@ App Store purchases remain blocked until the Apple app/product and server config
 Apple's [Prepare your app for iPhone Duo](https://developer.apple.com/videos/play/tech-talks/111461/) guidance was read. The code uses size classes and local available geometry, preserves safe areas and native navigation, and changes the editor from a bottom drawer to a preview/conversation split when space permits. Composer controls reflow for narrow widths and accessibility text. The target remains iPhone-only.
 
 This Mac has only Xcode 26.1.1 / iOS 26.1 SDK. The owner must install Xcode 27.1 to build with the full-screen Duo opt-in and validate folding, reserved regions and its asymmetric safe areas. No claim of tested Duo support is made. The 2007×2853 inner-display screenshot set remains pending the SDK and real capture; no new simulator was installed or opened.
+
+## Build and export result
+
+Debug built successfully with `CODE_SIGNING_ALLOWED=NO` for generic iPhoneOS. The root web typecheck and production build passed after merging current main. The Superwall framework typecheck and self-contained snapshot build also passed. The Release archive succeeded at `mobile/.build/Revline.xcarchive`; strict code-signature verification passed. Its Info.plist confirms `com.zurahq.revline`, device family `[1]`, production Convex `different-gnu-398`, `https://tryrevline.com`, live Clerk and the configured public Superwall key.
+
+The single distribution-export attempt failed with exit 70: `exportArchive codesign command failed` / `errSecInternalComponent`. The installed Apple Distribution certificate/profile were selected, and codesign returned `errSecInternalComponent`. The owner should check access to the distribution private key in the login keychain. No retry or current-source IPA/TestFlight upload followed. The old `mobile/.build/AppStoreExport/Revline.ipa` predates this pass and must not be mistaken for the new build.
+
+Owner action: unlock the login keychain in **Keychain Access → login**, locate **My Certificates → Apple Distribution: Ivan Kolos**, expand its private key and allow `/usr/bin/codesign` to use it when macOS asks. The owner enters the Mac password directly, never in chat. For a cloud-managed alternative, grant **App Store Connect → Users and Access → the signing user → Additional Resources → Access to Cloud Managed Distribution Certificate**. Then export the saved archive after the Apple app record exists. The agent does not change keychain permissions or retry the failed export.
+
+To avoid rebuilding, after resolving signing, the owner can run from `mobile/`:
+
+```sh
+xcodebuild -exportArchive -archivePath .build/Revline.xcarchive -exportPath .build/AppStoreExport-current -exportOptionsPlist .build/ExportOptions.plist
+```
+
+The export-options file is prepared locally, ignored by git, and contains only the signing team/profile selection. This command was not retried by the agent. Upload only the newly exported IPA after the app record exists.

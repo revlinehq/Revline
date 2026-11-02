@@ -16,3 +16,18 @@
 - No App Review submission or deployment to production was performed.
 
 Append successful capability, subscription, metadata, screenshot and TestFlight changes here after verifying the API or upload response. Planned changes are not completed changes.
+
+## Priority pass after merged PR #36
+
+See [current store handoff](current-handoff.md) and [Superwall resource IDs](../superwall/README.md).
+
+- Created Superwall Revline project `44005` and iOS app `59270` for the actual signed bundle `com.zurahq.revline`; saved Apple team `Z42PHGH527`. App creation also created default entitlement `pro` (`63344`). No other app was changed.
+- Created product `687838` for `com.revline.app.monthly`, USD 3900 cents per month, seven trial days, granting `pro`. This is Superwall configuration only, not an App Store Connect product creation.
+- Created draft headless paywall `288100`, with the monthly product attached, gated fullscreen presentation and source committed under `mobile/superwall`.
+- Created campaign `116338`, enabled placement `onboarding_paywall` (`151759`), paused audience `198843` and 100% treatment variant `687815` pointing to the draft paywall. Nothing was promoted or enabled for delivery.
+- Generated this Superwall app's forwarding notification URL to confirm its host/path match the existing Convex forwarding allowlist. Its token was not printed, committed or installed into any Convex environment.
+- Saved the app's public SDK key only to ignored `mobile/Config/Secrets.xcconfig`. No private Apple or Superwall credential was copied, printed or uploaded.
+- Snapshot version pushes failed twice with Superwall HTTP 500 / runtime renderer 404. The versions list is empty; publishing and campaign activation remain pending. Unsupported iOS support-URL/icon updates were rejected and made no change.
+- Rechecked the App Store Connect app record with the existing authorized key, and attempted metadata upload. Apple still reports the app record absent, so no listing, category, age-rating, privacy, screenshot, subscription or TestFlight update was made by those operations.
+- No production backend deployment, purchase, App Review submission or advertising change was performed.
+- The new Release archive succeeded and its production settings/signature were verified. The one distribution export failed with codesign `errSecInternalComponent` (exit 70). No current-source IPA or TestFlight upload was produced; no signing retry or new certificate/profile was attempted.
