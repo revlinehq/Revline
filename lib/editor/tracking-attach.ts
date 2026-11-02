@@ -49,7 +49,7 @@ function timelineSamples(footage: Clip, samples: TrackSample[], start: number, e
   if (mapped.length < 1) throw new Error('The tracked path does not cover this clip. Track the subject over the clip\'s time first.');
   // A symmetric filter reduces subpixel jitter without adding temporal lag.
   const smooth = mapped.map((sample, index) => {
-    if (index === 0 || index === mapped.length - 1) return sample;
+    if (index === 0 || index === mapped.length - 1 || sample.confidence === 0 || mapped[index-1].confidence === 0 || mapped[index+1].confidence === 0) return sample;
     const before = mapped[index - 1], after = mapped[index + 1];
     return { ...sample, x: sample.x * (1 - smoothing) + (before.x + after.x) * smoothing / 2, y: sample.y * (1 - smoothing) + (before.y + after.y) * smoothing / 2,
       scale: (sample.scale ?? 1) * (1 - smoothing) + ((before.scale ?? 1) + (after.scale ?? 1)) * smoothing / 2,
@@ -81,7 +81,7 @@ export function attachOverlayPatch(overlay: Clip, footage: Clip, asset: Pick<Med
   const keyframes = path.map(sample => {
     const { canvas, scale, rotation } = map(sample.x, sample.y, sample.time);
     const x = canvas.x + offset.x - center.x, y = canvas.y + offset.y - center.y;
-    return { time: Math.min(overlay.duration, Math.max(0, sample.at - overlay.start)), x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), scale: options.followTransform === false ? 1 : Math.max(.1, Math.min(10, (sample.scale ?? 1) * scale / seed.scale)), rotation: options.followTransform === false ? 0 : Math.max(-360, Math.min(360, (sample.rotation ?? 0) + rotation - seed.rotation)), opacity: 1, brightness: 1 };
+    return { time: Math.min(overlay.duration, Math.max(0, sample.at - overlay.start)), x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)), scale: options.followTransform === false ? 1 : Math.max(.1, Math.min(10, (sample.scale ?? 1) * scale / seed.scale)), rotation: options.followTransform === false ? 0 : Math.max(-360, Math.min(360, (sample.rotation ?? 0) + rotation - seed.rotation)), opacity: sample.confidence === 0 ? 0 : 1, brightness: 1 };
   }).filter((key, index, keys) => index === 0 || key.time > keys[index - 1].time);
   const dense = samples.some(sample => sample.confidence !== undefined);
   if (dense) {

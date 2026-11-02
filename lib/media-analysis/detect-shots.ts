@@ -1,3 +1,4 @@
+import { workerToolPath } from '../server/worker-tool-path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
@@ -6,7 +7,7 @@ import { parseShots, type ShotDetection } from './shots';
 
 const run = promisify(execFile);
 export async function detectShots(path: string, duration: number, signal: AbortSignal): Promise<ShotDetection> {
-  const python = process.env.SCENE_DETECT_PYTHON || join(process.cwd(), '.data/scene-detection/bin/python');
+  const python = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
   let stdout: string;
   try {
     ({ stdout } = await run(python, [join(process.cwd(), 'scripts/detect-shots.py'), path], { signal, timeout: 90_000, maxBuffer: 2 * 1024 * 1024 }));

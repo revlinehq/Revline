@@ -1,3 +1,5 @@
+import { importCheckpoint } from './import-checkpoint';
+import { ownedMediaUrl } from './owned-media';
 import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
 import { MAX_SPEAKER_WINDOW_SECONDS, SPEAKER_ANALYSIS_VERSION, speakerAnalysis } from '../media-analysis/clipping';
@@ -18,7 +20,7 @@ import { transcribeWithDeepgram } from '@/lib/media-analysis/deepgram';
 import { currentTranscript, type Transcript } from '@/lib/media-analysis/transcript';
 import { detectShots } from '@/lib/media-analysis/detect-shots';
 import { detectMusicBeats } from '@/lib/media-analysis/music-beats';
-import { AnalysisError } from '@/lib/media-analysis/errors';
+import { AnalysisError, isRetryableAnalysisError } from '@/lib/media-analysis/errors';
 import { trackSourceFace } from './track-source-face';
 import { readReference, videoMoments } from './read-reference';
 import { runBlueprintCheck } from './blueprint-check';
@@ -68,15 +70,18 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     onActivity?.(activity);logPhase(MEDIA_ACTIVITY_LABELS[activity],'started',geminiActivityStartedAt);
     geminiHeartbeat=setInterval(()=>logPhase(MEDIA_ACTIVITY_LABELS[activity],'still running',geminiActivityStartedAt),15_000);
   };
-  const directory = await mkdtemp(join(tmpdir(), 'revline-task-'));
+  const checkpoint = task.kind === 'import' ? await importCheckpoint(convexUrl, task.taskId) : undefined;
+  const directory = checkpoint?.directory ?? await mkdtemp(join(tmpdir(), 'revline-task-'));
+  let completed = false;
   const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
   const uploadContext: UploadContext = { convex, refreshAuth: async () => { signal.throwIfAborted(); }, exclusive };
   try {
     if (task.kind === 'import') {
-      if (task.outputAssetId) return {};
+      if (task.outputAssetId) { completed = true; return {}; }
       if (!task.sourceUrl) throw new AnalysisError('The video link is missing.', 400);
       const { path, ...metadata } = await importVideoLink(task.sourceUrl, directory, signal, onProgress, task.importRange);
       await uploadMediaFile(path, { ...credentials, projectId: task.projectId, ...metadata, kind: 'video', contentType: 'video/mp4' }, uploadContext, signal);
+      completed = true;
       onProgress(98);
       return {};
     }
@@ -147,11 +152,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
-    const source = join(directory, 'source'), sourceUrl = download.url;
+    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
+    const source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : join(directory, 'source'), sourceUrl = download.url;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    const reusedSource = await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
+    const reusedSource = rangeRead ? false : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
@@ -342,5 +348,6 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return { videoInspection: { ...local, question: request.question, start: request.start, end: request.end, matches: local.matches.map(match => ({ ...match, start: toSource(match.start), end: toSource(match.end) })).filter(match => match.end > match.start) } };
     }
     return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity,{projectId:task.projectId,taskId:task.taskId})) } };
-  } finally { clearInterval(geminiHeartbeat);await rm(directory, { recursive: true, force: true }); }
+  } catch(error) { if(checkpoint&&!isRetryableAnalysisError(error))completed=true;throw error; }
+  finally { checkpoint?.close(); clearInterval(geminiHeartbeat); if (!checkpoint || completed) await rm(directory, { recursive: true, force: true }); }
 }

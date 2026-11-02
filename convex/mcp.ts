@@ -36,6 +36,12 @@ function projectIdOf(ctx: QueryCtx, projectId: string) {
 
 const editorUrl = (projectId: string) => `${process.env.APP_ORIGIN ?? ''}/editor/${projectId}`;
 
+export const normalizeSnapshotId = internalQuery({ args:{snapshotId:v.string(),ownerId:v.string(),projectId:v.id('projects'),kind:v.union(v.literal('pacing'),v.literal('sound'))},returns:v.id('frameSnapshots'),handler:async(ctx,args)=>{
+  const id=ctx.db.normalizeId('frameSnapshots',args.snapshotId),snapshot=id?await ctx.db.get(id):null;
+  if(!snapshot||snapshot.ownerId!==args.ownerId||snapshot.projectId!==args.projectId||!snapshot[args.kind])throw new ConvexError('This saved check is unavailable for this project.');
+  return snapshot._id;
+}});
+
 async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
   const preview = await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', projectId)).unique();
   if (preview) await ctx.db.delete(preview._id);
@@ -226,12 +232,12 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   if (!normalization && !pacing && !sound && !motion && (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || motion || sound || normalization ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.revision ?? project.revision ?? 0, times: normalization || pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(past ? { atRevision: revision } : {}) });
-  const requiredProcessorVersion=Math.max(10,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || pacing || motion || sound || normalization ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.revision ?? project.revision ?? 0, times: normalization || pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(past ? { atRevision: revision } : {}) });
+  const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion });
   await ctx.db.patch(snapshotId, { taskId });
   // Frames are read once; anything unread is removed shortly after.
-  await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.discardFrames, { snapshotId });
+  await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});
 
@@ -253,7 +259,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
   await ctx.db.patch(snapshotId, { taskId });
-  await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.discardFrames, { snapshotId });
+  await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});
 
@@ -277,5 +283,15 @@ export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapsh
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (snapshot) await ctx.db.delete(snapshot._id);
+  return null;
+}});
+
+export const expireFrames = internalMutation({args:{snapshotId:v.id('frameSnapshots')},returns:v.null(),handler:async(ctx,args)=>{
+  const snapshot=await ctx.db.get(args.snapshotId);
+  if(!snapshot)return null;
+  const task=snapshot.taskId?await ctx.db.get(snapshot.taskId):null;
+  if(snapshot.status==='queued'&&task&&(task.status==='queued'||task.status==='running'||task.status==='retrying')){
+    await ctx.scheduler.runAfter(15*60_000,internal.mcp.expireFrames,args);
+  }else await ctx.db.delete(snapshot._id);
   return null;
 }});

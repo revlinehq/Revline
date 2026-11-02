@@ -1,4 +1,5 @@
 import { processorBackend } from './lib/processor_backend';
+import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
 import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
@@ -55,14 +56,14 @@ const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineVali
 const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
 // A reading of a source video: a labeled frame sheet (with how much each frame changed), a tracked box, or pixels measured.
 const readWork = v.object({ mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-const workItem = v.object({read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string()})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview: 5, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview: 5, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
 /** Shape tracing (traceShape) came after plain frame reads. */
 export const TRACE_PROCESSOR_VERSION = 14;
 /** Font matching (matchFont) came after shape tracing. */
@@ -130,24 +131,24 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   await beforeEnqueue?.();
   const now = Date.now();
   const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
+  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId, ...(input.kind==='import'?{resumable:true}:{}) }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
 }
 
 export const process = mediaWorkflow.define({
-  args: { taskId: v.id('mediaTasks') }, returns: v.null(),
-  handler: async (step, { taskId }): Promise<null> => {
-    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+  args: { taskId: v.id('mediaTasks'), resumable:v.optional(v.boolean()) }, returns: v.null(),
+  handler: async (step, { taskId, resumable }): Promise<null> => {
+    for (let attempt = 1; resumable || attempt <= MAX_ATTEMPTS; attempt++) {
       const ready: boolean = await step.runMutation(internal.mediaTasks.prepareAttempt, { taskId, attempt });
       if (!ready) return null;
       const result = await step.awaitEvent({ name: `attempt-${attempt}`, validator: eventResult });
       if (result.success) return null;
-      if (!result.retryable || attempt === MAX_ATTEMPTS) {
+      if (!result.retryable || !resumable && attempt === MAX_ATTEMPTS) {
         await step.runMutation(internal.mediaTasks.markFailed, { taskId, error: result.error ?? 'Media processing failed.' });
         return null;
       }
-      await step.sleep(2_000 * 2 ** (attempt - 1));
+      await step.sleep(2_000 * 2 ** Math.min(attempt - 1, 4));
     }
     return null;
   },
@@ -361,8 +362,8 @@ export const ready = query({ args: { workerSecret: v.string(),processorVersion:v
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);return !!cutout&&cutout.ownerId===task.ownerId&&cutout.projectId===task.projectId&&cutout.status==='queued';}
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);return !!row&&row.ownerId===task.ownerId&&row.projectId===task.projectId&&row.status==='queued';}
-  if(task.readId){const read=await ctx.db.get(task.readId);return !!read&&read.ownerId===task.ownerId&&read.projectId===task.projectId&&read.status==='queued'&&read.createdAt+300000>Date.now();}
-  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued'&&snapshot.createdAt+(snapshot.pacing||snapshot.sound||snapshot.guard?600000:300000)>Date.now();}
+  if(task.readId){const read=await ctx.db.get(task.readId);return !!read&&read.ownerId===task.ownerId&&read.projectId===task.projectId&&read.status==='queued';}
+  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued';}
   if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);return !!check&&check.ownerId===task.ownerId&&check.projectId===task.projectId&&check.status==='queued'&&check.createdAt+180000>Date.now();}
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
@@ -440,7 +441,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);

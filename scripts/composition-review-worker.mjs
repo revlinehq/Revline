@@ -1,6 +1,6 @@
 // Capture bounded edited/reference samples with the same seek, FFmpeg frame
 // injection and screenshot engine as export, in an isolated renderer process.
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { createCaptureSession, initializeSession, closeCaptureSession, captureFrameToBuffer, createVideoFrameInjector,createFileServer } from '@hyperframes/producer';
 import { parseVideoElements, extractAllVideoFrames, createFrameLookupTable } from '@hyperframes/engine';
@@ -60,7 +60,7 @@ try{
           });
         }));
       }
-    }finally{try{if(session)await closeCaptureSession(session);}finally{server.close();}}
+    }finally{try{if(session)await closeCaptureSession(session);}finally{server.close();await rm(join(dir,'frames'),{recursive:true,force:true});}}
   }
   if(pacing)await writeFile(join(root,'pacing.bin'),Buffer.concat(pacing.frames));
   await writeFile(join(root,'text-safe.json'),JSON.stringify(safe));report({type:'complete',warnings:0});

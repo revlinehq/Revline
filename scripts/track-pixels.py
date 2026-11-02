@@ -55,7 +55,7 @@ def is_cut(a, b):
     distance = cv2.compareHist(ha, hb, cv2.HISTCMP_BHATTACHARYYA)
     if distance > .7 and difference > 45:
         return True
-    return scene_transform(a, b) is None
+    return difference > 65 and distance > .45 and scene_transform(a, b) is None
 
 
 def scene_transform(a, b):
@@ -126,8 +126,55 @@ class Tracker:
             raise ValueError('Seed patch is flat. Select a textured point or box.')
         self.scale, self.rotation = 1., 0.
         self.velocity = np.zeros(2, np.float32)
+        self.seed_polygon = polygon.copy()
+        self.seed_center = center.copy()
+        self.seed_image = gray.copy()
+        self.lost = False
+
+    def recover(self, gray):
+        """Re-identify a visible patch after loss, without synthesizing its path."""
+        h, w = gray.shape
+        best = None
+        for image, polygon in [(self.previous, self.polygon), (self.seed_image, self.seed_polygon)]:
+            x, y, bw, bh = cv2.boundingRect(np.round(polygon).astype(np.int32))
+            template = image[max(0, y):min(h, y+bh), max(0, x):min(w, x+bw)]
+            if template.size == 0 or template.std() < 4:
+                continue
+            # Search the complete frame after loss so a camera pan has no
+            # displacement or elapsed-time ceiling. Reject ambiguous peaks.
+            for factor in (.5, .67, .8, 1., 1.25, 1.5, 2.):
+                tw, th = max(8, round(template.shape[1]*factor)), max(8, round(template.shape[0]*factor))
+                if tw >= w or th >= h:
+                    continue
+                scores = cv2.matchTemplate(gray, cv2.resize(template, (tw, th)), cv2.TM_CCOEFF_NORMED)
+                _, score, _, location = cv2.minMaxLoc(scores)
+                sx, sy = location
+                scores[max(0, sy-th//2):sy+th//2+1, max(0, sx-tw//2):sx+tw//2+1] = -1
+                if score < .82 or score-float(scores.max()) < .08:
+                    continue
+                candidate = (polygon-np.array([x, y], np.float32))*factor+np.array([sx, sy], np.float32)
+                if correlation(self.reference, patch(gray, candidate, self.size)) < .65:
+                    continue
+                if best is None or score > best[0]:
+                    best = (score, candidate)
+        if best is None:
+            return None, 'occluded'
+        score, polygon = best
+        matrix, _ = cv2.estimateAffinePartial2D(self.seed_polygon, polygon)
+        points = corners(gray, polygon)
+        if matrix is None or points is None or len(points) < 4:
+            return None, 'unreliable'
+        self.center = cv2.transform(self.seed_center.reshape(1, 1, 2), matrix)[0, 0]
+        self.polygon, self.points, self.previous = polygon, points, gray
+        self.scale = math.hypot(matrix[0, 0], matrix[1, 0])
+        self.rotation = math.degrees(math.atan2(matrix[1, 0], matrix[0, 0]))
+        self.velocity = np.zeros(2, np.float32)
+        self.lost = False
+        return min(.9, score), None
 
     def advance(self, gray):
+        if self.lost:
+            return self.recover(gray)
         if is_cut(self.previous, gray):
             return None, 'cut'
         h, w = gray.shape
@@ -392,12 +439,22 @@ def main(path, request):
             stopped = False
             for batch in source.batches(seed_point, direction):
                 for point, gray in batch:
+                    previous = (tracker.polygon.copy(), tracker.center.copy(), tracker.scale, tracker.rotation)
                     confidence, reason = tracker.advance(gray)
-                    if reason:
+                    if reason == 'cut':
                         stops[name] = dict(time=point[1], reason=reason)
                         stopped = True
                         break
-                    add(sample(tracker, point, confidence))
+                    if reason:
+                        tracker.polygon, tracker.center, tracker.scale, tracker.rotation = previous
+                        tracker.lost = True
+                        confidence, reason = tracker.recover(gray)
+                    if reason:
+                        # Zero-confidence rows preserve the measured frame clock.
+                        # Attachments hide them until a real match is recovered.
+                        add(sample(tracker, point, 0.))
+                    else:
+                        add(sample(tracker, point, confidence))
                     # Transport batches are repeated, never a shot/frame limit.
                     if len(pending) >= 256:
                         emit(dict(type='chunk', chunk=dict(direction=name, sequence=sequence, samples=sorted(pending, key=lambda row: row['frameIndex']))))
