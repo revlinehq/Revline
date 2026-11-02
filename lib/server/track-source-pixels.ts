@@ -1,3 +1,4 @@
+import { workerToolPath } from './worker-tool-path';
 import { localizeTrackingObject } from './localize-tracking-object';
 import { spawn } from 'node:child_process';
 import { join } from 'node:path';
@@ -16,7 +17,7 @@ export async function trackSourcePixels(source: string, directory: string, reque
     grounding = { ...localized, noun: input.seed.noun };
     input = pixelTrackRequest.parse({ ...input, time: localized.time, seed: { kind: 'box', box: localized.box } });
   }
-  const python = process.env.PIXEL_TRACK_PYTHON || process.env.SCENE_DETECT_PYTHON || join(process.cwd(), '.data/scene-detection/bin/python');
+  const python = workerToolPath(process.env.PIXEL_TRACK_PYTHON || process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
   const child = spawn(python, [join(process.cwd(), 'scripts/track-pixels.py'), source, JSON.stringify(input)], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
   let stderr = '', spawnError: Error | undefined;
   child.stderr.on('data', (data: Buffer) => { stderr = (stderr + data.toString()).slice(-1000); });

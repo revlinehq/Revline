@@ -1,4 +1,5 @@
 import { processingThreads } from './processing-resources';
+import type { SubjectSelection } from './subject-segmentation';
 import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -13,13 +14,13 @@ import { AnalysisError } from '@/lib/media-analysis/errors';
 const run = promisify(execFile);
 const RIFE_ENDPOINT = 'fal-ai/rife/video', VIDEO_UPSCALE_ENDPOINT = 'fal-ai/video-upscaler', IMAGE_UPSCALE_ENDPOINT = 'fal-ai/seedvr/upscale/image';
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
-export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats' | 'parallax'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number; backgroundPrompt?: string };
+export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats' | 'parallax'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number; backgroundPrompt?: string; selection?: SubjectSelection };
 export type DerivedFile = { path: string; kind: 'video' | 'image'; contentType: string; width: number; height: number; duration?: number };
 
 /** Make the requested copy of `source` (a video or image file) in `directory`. */
 export async function deriveMedia(source: string, kind: 'video' | 'image', directory: string, request: DeriveRequest, signal: AbortSignal, onProgress: (value: number) => void): Promise<DerivedFile> {
   if (request.op === 'freeze') return freezeStill(source, directory, request.time ?? request.start, signal);
-  if (request.op === 'parallax') return freezeParallax(source, kind, directory, request.time ?? request.start, request.backgroundPrompt, signal, onProgress);
+  if (request.op === 'parallax') return freezeParallax(source, kind, directory, request.time ?? request.start, request.backgroundPrompt, signal, onProgress, request.selection);
   const key = process.env.FAL_KEY;
   if (!key) throw new AnalysisError('AI video processing is not configured on the media worker.', 503);
   const fal = createFalClient({ credentials: key });

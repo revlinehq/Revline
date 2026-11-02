@@ -68,6 +68,9 @@ export function installPixelTracking(sources: Source[], endpoint: string, files:
         if (!entry.pending && !entry.error) entry.pending = load(entry, source).catch(error => { if (abort.signal.aborted) return; entry.error = error; console.error('Pixel tracking data failed', { trackId: binding.reference.trackId, message: error instanceof Error ? error.message : String(error) }); }).finally(() => { entry.pending = undefined; paint(); });
         continue;
       }
+      const after=page.samples.findIndex(sample=>sample.time>source);
+      const before=after<0?page.samples[page.samples.length-1]:page.samples[Math.max(0,after-1)];
+      if(before?.confidence===0){hide(entry);continue;}
       const { width, height } = dimensions(binding.aspectRatio, resolution);
       if (binding.mode === 'move') {
         const node = moveNode(entry);

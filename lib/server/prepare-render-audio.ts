@@ -18,7 +18,7 @@ export async function prepareRenderAudioSource(input:string,output:string,signal
     const metadata=JSON.parse(stdout) as {streams?:{codec_name:string;channels:number}[];format?:{format_name:string;duration:string}};
     const codec=metadata.streams?.[0]?.codec_name;
     if(!codec)throw new AnalysisError('Export source has no decodable audio.',422);
-    if(metadata.format?.format_name==='wav'&&seekSafePcm.has(codec))return {path:input,decoded:false,sourceStart:0,elapsedMs:performance.now()-started};
+    if(!window&&metadata.format?.format_name==='wav'&&seekSafePcm.has(codec))return {path:input,decoded:false,sourceStart:0,elapsedMs:performance.now()-started};
     const duration=Number(metadata.format?.duration),channels=metadata.streams?.[0]?.channels??0;
     if(!Number.isFinite(duration)||duration<=0||!Number.isSafeInteger(channels)||channels<1)throw new AnalysisError('Export audio source has unsupported duration or channels.',422);
     const start=window?.start??0,end=Math.min(window?.end??duration,duration);
@@ -31,7 +31,7 @@ export async function prepareRenderAudioSource(input:string,output:string,signal
     const seek=Math.max(0,Math.floor(start)-1),skip=Math.round((start-seek)*SAMPLE_RATE);
     const inputWindow=window?['-ss',String(seek),'-t',String(end-seek+.1)]:[];
     const filter=window?['-af',`aresample=${SAMPLE_RATE},atrim=start_sample=${skip}:end_sample=${skip+sampleCount},asetpts=PTS-STARTPTS`]:[];
-    await run('ffmpeg',['-v','error','-threads','1',...inputWindow,'-i',input,'-map','0:a:0','-vn',...filter,'-c:a','pcm_s16le','-ar',String(SAMPLE_RATE),'-rf64','auto','-y',output],{signal,timeout:180_000,maxBuffer:1024*1024});
+    await run('ffmpeg',['-v','error','-threads','1',...inputWindow,'-i',input,'-map','0:a:0','-vn',...filter,'-c:a','pcm_s16le','-ar',String(SAMPLE_RATE),'-rf64','auto','-y',output],{signal,maxBuffer:1024*1024});
     return {path:output,decoded:true,sourceStart:start,elapsedMs:performance.now()-started};
   } catch(error) {
     if(signal.aborted||error instanceof AnalysisError)throw error;

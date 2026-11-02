@@ -8,7 +8,16 @@ export const trackSeed = z.union([
   z.object({ kind: z.literal('point'), x: fraction, y: fraction }).strict(),
   z.object({ kind: z.literal('box'), box: trackBox }).strict(),
 ]);
-export const pixelTrackRequest = z.object({ start: z.number().nonnegative(), end: z.number().positive(), time: z.number().nonnegative(), seed: z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict()]) }).strict().refine(value => value.end > value.start && value.time >= value.start && value.time < value.end, 'The seed must be inside the source tracking window.');
+const subjectSeed = z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict()]);
+export const subjectSelection = z.object({ time:z.number().nonnegative(), seed:subjectSeed }).strict();
+export const pixelTrackRequest = z.object({ start: z.number().nonnegative(), end: z.number().positive(), time: z.number().nonnegative(), seed: subjectSeed }).strict().refine(value => value.end > value.start && value.time >= value.start && value.time < value.end, 'The seed must be inside the source tracking window.');
+export function subjectSelectionKey(selection: z.infer<typeof subjectSelection> | undefined) {
+  if(!selection)return '';
+  const {time,seed}=selection;
+  if(seed.kind==='object')return JSON.stringify([time,seed.kind,seed.noun]);
+  if(seed.kind==='point')return JSON.stringify([time,seed.kind,seed.x,seed.y]);
+  return JSON.stringify([time,seed.kind,seed.box.left,seed.box.top,seed.box.right,seed.box.bottom]);
+}
 const stop = z.object({ time: z.number().nonnegative(), reason: z.enum(['boundary', 'cut', 'occluded', 'out-of-frame', 'unreliable']) });
 export const pixelTrackSample = z.object({ frameIndex: z.number().int().nonnegative(), time: z.number().nonnegative(), x: fraction, y: fraction, confidence: fraction, scale: z.number().positive(), rotation: z.number(), box: trackBox.optional() });
 export const pixelTrackHeader = z.object({ seedTime: z.number().nonnegative(), sourceFps: z.number().positive(), width: z.number().positive(), height: z.number().positive() });

@@ -156,24 +156,14 @@ export async function normalizeTimelineAudio(
         (c.volume ?? 1) > 0,
     ),
   );
-  if (
-    timeline.clips.some(
-      (c) =>
-        (!target || c.id === target.id) &&
-        (c.volume ?? 1) > 0 &&
-        c.speedRamp?.length,
-    )
-  )
-    throw new AnalysisError(
-      "Normalize constant-speed sound. Speed-ramped audio is not supported by the analysis decoder.",
-      400,
-    );
   const { assetUrls, audioSourceOffsets } = await prepareComposition(
     directory,
     timeline,
     assets,
     convexUrl,
     signal,
+    [],
+    [{start,end}],
   );
   const n = Math.round(duration * RATE),
     left = new Float32Array(n),

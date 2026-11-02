@@ -66,7 +66,9 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         state.activeTasks++; state.lastWorkAt = Date.now();
         const controller = new AbortController();
         const startedAt = Date.now(), deadline = AbortSignal.timeout(options.deadlineMs);
-        let signal = AbortSignal.any([controller.signal, shutdown, deadline]);
+        // Source duration must not decide whether a healthy import or analysis
+        // survives. Lease renewal and explicit cancellation own their lifetime.
+        const signal = task.kind === 'render' ? AbortSignal.any([controller.signal, shutdown, deadline]) : AbortSignal.any([controller.signal, shutdown]);
         const credentials = { taskId: task.taskId, leaseToken: task.leaseToken };
         let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt, queued = false, writing = 0;
         // A transient transport failure retries on the next tick. Stop when Convex
@@ -106,7 +108,6 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         options.log('media-started', { projectId: task.projectId, kind: task.kind, taskId: task.taskId });
         try {
           const snapshot = await client.query(api.mediaTasks.work, credentials);
-          if (snapshot.derive?.op === 'pixelTrack') signal = AbortSignal.any([controller.signal, shutdown]);
           signal.throwIfAborted();
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
             progress = Math.max(progress, Math.min(99, percent));

@@ -11,13 +11,18 @@ import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
-import { sourceEndOf } from '../editor/playback-rate';
+import { sourceEndOf, sourceTimeAt, timelineTimeAtSource } from '../editor/playback-rate';
+import { offsetClipMotion } from '../editor/clip-effects';
 import { forEachLimited } from './run-limited';
+import { ownedMediaUrl } from './owned-media';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const run = promisify(execFile);
 
 type CompositionAsset=MediaAsset&{size:number;ownerId?:string;projectId?:string;contentType?:string;r2Key?:string;storageId?:string};
 
 /** Shared trusted assets/runtime preparation for MP4 export and rendered review. */
-export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal,referenceTimelines:Timeline[] = []) {
+export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal,referenceTimelines:Timeline[] = [],windows?:{start:number;end:number}[]) {
   timeline=resolvedAudioTimeline(timeline);
   const assetUrls:Record<string,string>={},audioSourceOffsets:Record<string,number>={};
   const audioWindows=new Map<string,{start:number;end:number}>();
@@ -33,6 +38,25 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   await forEachLimited(needed,3,async([index,asset],stop)=>{
     const sourceSignal=AbortSignal.any([signal,stop]);
     const audioWindow=audioWindows.get(asset._id);
+    if(windows && (asset.kind==='video'||asset.kind==='audio')){
+      const clips=[timeline,...referenceTimelines].flatMap(t=>t.clips).filter(c=>c.assetId===asset._id);
+      if(clips.length){
+        const spans=clips.flatMap(c=>windows.filter(w=>c.start<w.end&&c.start+c.duration>w.start).map(w=>({start:sourceTimeAt(c,Math.max(c.start,w.start)),end:sourceTimeAt(c,Math.min(c.start+c.duration,w.end))})));
+        if(!spans.length)return;
+        const start=Math.max(0,Math.min(...spans.map(s=>s.start))),end=Math.max(...spans.map(s=>s.end));
+        const source=ownedMediaUrl(asset.url!,new URL(convexUrl).origin);
+        if(asset.kind==='audio'){
+          const name=`asset-${index}-decoded.wav`;
+          await prepareRenderAudioSource(source,join(directory,name),sourceSignal,{start,end});
+          prepared.set(index,{url:`./${name}`,offset:start});return;
+        }
+        const alpha=asset.contentType==='video/webm'||!!asset.cutoutOf,name=`asset-${index}-window.${alpha?'webm':'mp4'}`;
+        const codec=alpha?(await run('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=codec_name','-of','csv=p=0',source],{signal:sourceSignal})).stdout.trim():'';
+        const decoder=codec==='vp8'?'libvpx':codec==='vp9'?'libvpx-vp9':undefined;
+        await run('ffmpeg',['-v','error','-threads','2',...(decoder?['-c:v',decoder]:[]),'-ss',String(start),'-i',source,'-t',String(end-start),'-map','0:v:0','-map','0:a:0?',...(alpha?['-c:v','libvpx-vp9','-pix_fmt','yuva420p','-auto-alt-ref','0','-b:v','0','-crf','18','-deadline','realtime']:['-c:v','libx264','-preset','veryfast','-crf','14','-pix_fmt','yuv420p','-movflags','+faststart']),'-threads','2','-c:a',alpha?'libopus':'aac','-y',join(directory,name)],{signal:sourceSignal,maxBuffer:1024*1024});
+        prepared.set(index,{url:`./${name}`,offset:start});return;
+      }
+    }
     const sourceExtension=extname(asset.fileName).toLowerCase();
     const extension=/^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif)$/.test(sourceExtension)?sourceExtension:asset.kind==='video'?'.mp4':asset.kind==='audio'?'.audio':'.image';
     const name=`asset-${index}${extension}`;
@@ -50,7 +74,8 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     prepared.set(index,decoded?{url:`./asset-${index}-decoded.wav`,offset:audioWindow!.start}:{url:`./${name}`});
   });
   for(const [index,asset] of needed){
-    const {url,offset}=prepared.get(index)!;
+    const value=prepared.get(index);if(!value)continue;
+    const {url,offset}=value;
     assetUrls[asset._id]=url;
     if(offset!==undefined)audioSourceOffsets[asset._id]=offset;
   }
@@ -80,6 +105,8 @@ export async function linkCompositionResources(root:string,directory:string,asse
   }
 }
 export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:ExportResolution,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000),audioSourceOffsets:Record<string,number>={}) {
+  timeline=resolvedAudioTimeline(timeline);
+  timeline={...timeline,clips:timeline.clips.filter(clip=>!clip.assetId||assetUrls[clip.assetId])};
   const audibleVideo=new Set(timeline.clips.filter(clip=>clip.kind==='video'&&clip.volume!==0).map(clip=>clip.assetId));
   const silent=new Set<string>();
   const audible=assets.filter(asset=>asset.kind==='video'&&audibleVideo.has(asset._id));
@@ -90,8 +117,12 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
   // An unmuted video is also authored as sound by the native producer. Probe
   // the downloaded source rather than assuming every video has an audio stream.
   const rendered={...timeline,clips:timeline.clips.map(clip=>{
-    if(clip.kind==='video'&&clip.assetId&&silent.has(clip.assetId))return {...clip,volume:0};
-    const offset=clip.kind==='audio'&&clip.assetId?audioSourceOffsets[clip.assetId]:undefined;
+    if(clip.kind==='video'&&clip.assetId&&silent.has(clip.assetId))clip={...clip,volume:0};
+    const offset=clip.assetId?audioSourceOffsets[clip.assetId]:undefined;
+    if(offset!==undefined&&clip.sourceStart<offset){
+      const delta=timelineTimeAtSource(clip,offset)-clip.start;
+      return {...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:Math.max(0,clip.duration-delta),sourceStart:0};
+    }
     return offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip;
   })};
   // HyperFrames dedupes a video's sound by comparing the authored src with the

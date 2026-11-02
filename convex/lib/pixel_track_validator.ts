@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 const box = v.object({ left: v.number(), top: v.number(), right: v.number(), bottom: v.number() });
 export const pixelTrackRequestValidator = v.object({ start: v.number(), end: v.number(), time: v.number(), seed: v.union(v.object({ kind: v.literal('point'), x: v.number(), y: v.number() }), v.object({ kind: v.literal('box'), box }), v.object({ kind: v.literal('object'), noun: v.string() })) });
+export const subjectSelectionValidator = v.object({ time: v.number(), seed: pixelTrackRequestValidator.fields.seed });
 const stop = v.object({ time: v.number(), reason: v.union(v.literal('boundary'), v.literal('cut'), v.literal('occluded'), v.literal('out-of-frame'), v.literal('unreliable')) });
 export const pixelTrackSampleValidator = v.object({ frameIndex: v.number(), time: v.number(), x: v.number(), y: v.number(), confidence: v.number(), scale: v.number(), rotation: v.number(), box: v.optional(box) });
 export const pixelTrackHeaderValidator = v.object({ seedTime: v.number(), sourceFps: v.number(), width: v.number(), height: v.number() });

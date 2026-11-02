@@ -50,7 +50,9 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
-  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[]);
+  const range=snapshot.pacing??snapshot.sound??snapshot.motion;
+  const windows=range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[],windows);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);

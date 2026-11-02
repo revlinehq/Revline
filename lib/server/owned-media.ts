@@ -6,7 +6,7 @@ import { pipeline } from 'node:stream/promises';
 
 type DownloadOptions = { concurrency?: 1 | 2 | 3; onProgress?: (downloaded: number, total: number) => void };
 
-export async function downloadOwnedMedia(url: string, path: string, origin: string, expectedSize: number, signal: AbortSignal, options: DownloadOptions = {}) {
+export function ownedMediaUrl(url: string, origin: string) {
   const parsed = new URL(url);
   const mediaOrigin = process.env.MEDIA_WORKER_URL ? new URL(process.env.MEDIA_WORKER_URL).origin : null;
   const fromR2 = parsed.origin === mediaOrigin && parsed.pathname === '/read';
@@ -14,6 +14,12 @@ export async function downloadOwnedMedia(url: string, path: string, origin: stri
   if (parsed.username || parsed.password || (!fromR2 && !fromLegacyStorage)) {
     throw new Error('Render media must come from this project’s configured storage.');
   }
+  return parsed.toString();
+}
+
+export async function downloadOwnedMedia(url: string, path: string, origin: string, expectedSize: number, signal: AbortSignal, options: DownloadOptions = {}) {
+  const parsed = new URL(ownedMediaUrl(url, origin));
+  const fromR2 = parsed.pathname === '/read';
   if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) throw new Error('The source file has invalid size metadata. Re-upload it.');
   const disk = await statfs(tmpdir());
   // Keep room for the export and other concurrent jobs; capacity follows the host disk.

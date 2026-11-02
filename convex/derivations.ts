@@ -1,6 +1,7 @@
+import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
-import { pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
+import { subjectSelection, subjectSelectionKey, pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -25,7 +26,7 @@ const HANDLE_SECONDS = .25, PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 36
 // fal.ai (Oct 2026): video upscaler $0.0008 per output megapixel; RIFE $0.0013 per compute second (about 1.5 s per output second).
 const UPSCALE_USD_PER_MEGAPIXEL = .0008, RIFE_USD_PER_OUTPUT_SECOND = .002;
 
-type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; tracking?: PixelTrackRequest; start: number; end: number; backgroundPrompt?: string; time?: number; times?: number[]; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
+type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; selection?: Pick<PixelTrackRequest, 'time' | 'seed'>; tracking?: PixelTrackRequest; start: number; end: number; backgroundPrompt?: string; time?: number; times?: number[]; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
 
 /** Queue (or reuse) a processed copy. Window times are source seconds. */
 export async function startDerivation(ctx: MutationCtx, input: StartInput) {
@@ -57,6 +58,10 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   }
   if (input.op === 'slowmo' && (asset.kind !== 'video' || asset.cutoutOf)) throw new ConvexError('Smooth slow motion needs original video footage, not a cut-out.');
   if (input.op === 'upscale' && (asset.kind === 'audio' || asset.cutoutOf)) throw new ConvexError('Upscale a video or image clip (not a cut-out).');
+  if(input.selection){
+    input.selection=subjectSelection.parse(input.selection);
+    if(input.selection.time!==(input.time??input.start))throw new ConvexError('Select the subject on the freeze frame.');
+  }
   const duration = asset.duration ?? 0;
   let start = input.start, end = input.end;
   if (asset.kind === 'video') {
@@ -66,7 +71,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   }
   const limit = input.op === 'slowmo' ? MAX_SLOWMO_SECONDS : MAX_UPSCALE_SECONDS;
   if (input.op !== 'freeze' && end - start > limit) throw new ConvexError(`Process up to ${limit} seconds at a time. Split or trim this clip first.`);
-  const same = (row: Doc<'derivations'>) => row.op === input.op && row.sourceAssetId === asset._id && (input.op === 'freeze' || input.op === 'parallax' ? row.backgroundPrompt === input.backgroundPrompt && Math.abs((row.time ?? -1) - (input.time ?? 0)) < 1e-3
+  const same = (row: Doc<'derivations'>) => row.op === input.op && row.sourceAssetId === asset._id && (input.op === 'freeze' || input.op === 'parallax' ? subjectSelectionKey(row.selection) === subjectSelectionKey(input.selection) && row.backgroundPrompt === input.backgroundPrompt && Math.abs((row.time ?? -1) - (input.time ?? 0)) < 1e-3
     : row.start <= start + 1e-6 && row.end >= end - 1e-6 && (row.factor ?? 1) >= (input.factor ?? 1) && row.target === input.target);
   const rows = await ctx.db.query('derivations').withIndex('by_source_op', q => q.eq('sourceAssetId', asset._id).eq('op', input.op)).order('desc').take(30);
   for (const row of rows) {
@@ -77,7 +82,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   }
   await requireMediaTaskCapacity(ctx, input.ownerId, 1);
   const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: input.op, start, end,
-    ...(input.backgroundPrompt !== undefined ? { backgroundPrompt: input.backgroundPrompt } : {}), ...(input.time !== undefined ? { time: input.time } : {}), ...(input.factor ? { factor: input.factor } : {}), ...(input.scale ? { scale: input.scale } : {}), ...(input.target ? { target: input.target } : {}),
+    ...(input.selection ? { selection: input.selection } : {}), ...(input.backgroundPrompt !== undefined ? { backgroundPrompt: input.backgroundPrompt } : {}), ...(input.time !== undefined ? { time: input.time } : {}), ...(input.factor ? { factor: input.factor } : {}), ...(input.scale ? { scale: input.scale } : {}), ...(input.target ? { target: input.target } : {}),
     ...(input.placeLater ? { placeLater: true } : {}), status: 'queued', createdAt: Date.now() });
   const taskId = await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, ...(input.op === 'parallax' ? { requiredProcessorVersion: MEDIA_PROCESSOR_VERSION } : {}) });
   await ctx.db.patch(derivationId, { taskId });
@@ -94,7 +99,7 @@ async function requireRun(ctx: MutationCtx | import('./_generated/server').Query
 }
 
 export const startFromRun = internalMutation({
-  args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, tracking: v.optional(pixelTrackRequestValidator), start: v.number(), end: v.number(), backgroundPrompt: v.optional(v.string()), time: v.optional(v.number()), times: v.optional(v.array(v.number())), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
+  args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, tracking: v.optional(pixelTrackRequestValidator), start: v.number(), end: v.number(), selection: v.optional(subjectSelectionValidator), backgroundPrompt: v.optional(v.string()), time: v.optional(v.number()), times: v.optional(v.array(v.number())), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
   returns: v.object({ derivationId: v.id('derivations'), status: v.union(v.literal('queued'), v.literal('completed')), outputAssetId: v.optional(v.id('assets')), estimatedUsd: v.number() }),
   handler: async (ctx, { runId, ...args }) => { await requireRun(ctx, { ...args, runId }); return startDerivation(ctx, args); },
 });
