@@ -28,7 +28,9 @@ Logs and jobs are private under `~/.revline-incidents/`. Inspect `listener.log`,
 
 Optional real webhooks use deployment env `INCIDENT_WEBHOOK_URL`. A zero-delay Convex action POSTs the sanitized incident when a fingerprint opens or regresses, using `<incidentId>:<generation>` as its idempotency key. This is independent of the local claim. An HTTP failure appears in Convex action logs; it does not consume the local delivery. No periodic delivery attempts are scheduled.
 
-Development deployments must preserve unmerged PR #23 (`origin/scene-3d`): deploy from a temporary merge until that PR is merged. While this pipeline PR is also unmerged, include `origin/incident-pipeline` in that temporary merge; deploying another checkout without it removes the incident functions. Never use production credentials for dev verification.
+Development deployments must preserve unmerged PR #23 (`origin/scene-3d`): deploy from a temporary merge until that PR is merged. While this pipeline PR is also unmerged, include `origin/incident-pipeline` in that temporary merge; deploying another checkout without it removes the incident functions. If `.data/incident-dev-deploy` exists, include its HEAD as well to preserve the other active dev tests; keep that shared checkout read-only. Never use production credentials for dev verification.
+
+Verified on dev on 2026-11-02: real missing-clip failures in a disposable project deduplicated into one incident, the subscription claimed it and launched native Sol with `gpt-6.1-sol` and `xhigh`, and `record-pr.ts` wrote [temporary draft #28](https://github.com/zuraHQ/revline-editor/pull/28) back to that incident. The synthetic investigation was stopped, the audit PR closed unmerged and its branch removed. A real MCP `reportIssue` call, resolved-fingerprint regression, existing-PR reuse and rejected unauthorized requests were also verified. App and runner typechecks and the production build passed. Production was not deployed or configured.
 
 After user merge approval, production rollout is manual:
 
