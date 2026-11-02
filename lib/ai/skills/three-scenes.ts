@@ -5,6 +5,8 @@ export const threeScenesPage: EditorSkillPage = {
   description: 'Mix Three.js / React Three Fiber with HTML and GSAP: cameras, lights, primitives, extruded type, GLB/glTF models, frame determinism and CPU export budgets.',
   body: `# 3D inside a scene
 
+Read scene-engine page \`three-craft\` on every 3D build for materials, shaped light, grounding, camera/type composition and licensed models within these renderer limits.
+
 Import \`{ ThreeLayer, Model, Text3D, useThree } from 'revline/three'\`, hooks and layers from \`revline\`, and Three.js classes/types from \`three\`. Three.js loads only for scenes that import it, including their blueprints and transition neighbours. This is React Three Fiber: standard lowercase tags (mesh, group, boxGeometry, meshStandardMaterial, ambientLight, directionalLight) work inside ThreeLayer. HTML, Beat and Layer go outside it. Do not import Canvas, useFrame, controls or arbitrary drei modules. These are authored scenes, not interactive apps.
 
 ## One clock for HTML, camera and objects
