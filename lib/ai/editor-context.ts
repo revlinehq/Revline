@@ -1,3 +1,4 @@
+import { audioNormalizationKey, timelineNormalizationKey } from '../editor/audio-normalization';
 import type { LanguageModelV4Prompt, LanguageModelV4ToolResultOutput } from '@ai-sdk/provider';
 import type { ModelMessage } from 'ai';
 import type { Timeline, MediaAsset } from '../editor/types';
@@ -23,9 +24,10 @@ function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[
 /** A read-only model projection; the edit session retains every source sample. */
 export function modelTimeline(timeline: Timeline, selectedClipIds: readonly string[] = []) {
   const selected = new Set(selectedClipIds);
-  return { ...timeline, clips: timeline.clips.map(clip => {
-    const { motion, focus, scene, ...settings } = clip;
+  return { ...timeline,...(timeline.audioNormalization?{audioNormalization:{assetId:timeline.audioNormalization.assetId,targetLufs:timeline.audioNormalization.targetLufs,truePeakCeiling:timeline.audioNormalization.truePeak,active:timeline.audioNormalization.key===timelineNormalizationKey(timeline)}}:{}), clips: timeline.clips.map(clip => {
+    const { motion, focus, scene, normalizedAudio, ...settings } = clip;
     return { ...settings,
+      ...(normalizedAudio?{normalizedAudio:{assetId:normalizedAudio.assetId,targetLufs:normalizedAudio.targetLufs,truePeakCeiling:normalizedAudio.truePeak,active:normalizedAudio.key===audioNormalizationKey(timeline,clip)}}:{}),
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       // Compacted history can hold timelines whose scene code was already summarized.
@@ -36,10 +38,12 @@ export function modelTimeline(timeline: Timeline, selectedClipIds: readonly stri
 
 /** Keep verbal/visual evidence. Dense numerical maps can be read by source range. */
 export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>, window?: { start: number; end: number }) {
-  const { focus, beats, transcript, audioActivity, shots, speechCleanup, ...observations } = analysis;
+  const { focus, beats, transcript, audioActivity, shots, speechCleanup, speakers, facecam, ...observations } = analysis;
   const inRange = (time: number) => !window || (time >= window.start && time <= window.end);
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
+    ...(facecam?{facecam:{...facecam,samples:window?facecam.samples.filter(s=>s.time>=window.start&&s.time<=window.end):facecam.samples}}:{}),
+    ...(speakers?{speakers:{version:speakers.version,start:speakers.start,end:speakers.end,identityScope:speakers.identityScope,...(window?{turns:speakers.turns.filter(t=>t.end>=window.start&&t.start<=window.end)}:{turnCount:speakers.turns.length,speakerIds:[...new Set(speakers.turns.map(t=>t.speaker))],turnSamples:denseRead(speakers.turns.length)}),focusSummary:denseRead(speakers.focus.length),...(window?{focus:speakers.focus.filter(s=>inRange(s.time))}:{})}}:{}),
     ...(window ? { sourceWindow: window } : {}),
     ...(transcript ? { transcript: {
       segments: transcript.segments.filter(segment => !window || (segment.end >= window.start && segment.start <= window.end)),

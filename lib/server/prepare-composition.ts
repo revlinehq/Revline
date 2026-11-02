@@ -1,5 +1,6 @@
 import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-files';
 import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
+import { resolvedAudioTimeline } from '../editor/audio-normalization';
 import { extname, join } from 'node:path';
 import type { MediaAsset, Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
@@ -17,6 +18,7 @@ type CompositionAsset=MediaAsset&{size:number;ownerId?:string;projectId?:string;
 
 /** Shared trusted assets/runtime preparation for MP4 export and rendered review. */
 export async function prepareComposition(directory:string,timeline:Timeline,assets:CompositionAsset[],convexUrl:string,signal:AbortSignal,referenceTimelines:Timeline[] = []) {
+  timeline=resolvedAudioTimeline(timeline);
   const assetUrls:Record<string,string>={},audioSourceOffsets:Record<string,number>={};
   const audioWindows=new Map<string,{start:number;end:number}>();
   for(const clip of timeline.clips)if(clip.kind==='audio'&&clip.assetId&&(clip.volume??1)>0){

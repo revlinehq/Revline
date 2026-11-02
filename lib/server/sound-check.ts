@@ -1,3 +1,4 @@
+import { resolvedAudioTimeline } from '../editor/audio-normalization';
 import { spawn } from 'node:child_process';
 import { basename, extname, join } from 'node:path';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
@@ -52,19 +53,23 @@ function gainOf(timeline: Snapshot['timeline'], clip: Clip, volume: number) {
 }
 
 /** Decode every clip that sounds in the range as export mixes it, find the words spoken there, and analyze it. */
-export async function measureTimelineSound(snapshot: Snapshot, directory: string, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, range: { start: number; end: number }, signal: AbortSignal, check?: { fps: number; hits: VisualHit[] }): Promise<SoundResult> {
-  const { timeline } = snapshot, assets = new Map(snapshot.assets.map(asset => [asset._id as string, asset]));
+export async function decodeTimelineSound(snapshot: Snapshot, directory: string, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, range: { start: number; end: number }, signal: AbortSignal, consume?: (track:DecodedTrack)=>void,selectedClipId?:string) {
+  const timeline=resolvedAudioTimeline(snapshot.timeline), assets = new Map(snapshot.assets.map(asset => [asset._id as string, asset]));
   const tracks: DecodedTrack[] = [], words: SoundWord[] = [];
+  // Word evidence stays on authored sources even when the sounding file is a normalized mix.
+  for(const clip of snapshot.timeline.clips){
+    if(selectedClipId&&clip.id!==selectedClipId)continue;
+    if(!clip.assetId||!['audio','video'].includes(clip.kind)||(clip.volume??1)<=0)continue;
+    const source=assets.get(clip.assetId),end=sourceEndOf(clip);
+    words.push(...(source?.analysis?.transcript?.words??[]).filter(w=>w.start>=clip.sourceStart-1e-7&&w.start<end-1e-7).map(w=>({text:w.text,start:timelineTimeAtSource(clip,w.start),end:timelineTimeAtSource(clip,Math.min(w.end,end))})).filter(w=>w.end>range.start&&w.start<range.end));
+  }
   for (const clip of timeline.clips) {
+    if(selectedClipId&&clip.id!==selectedClipId)continue;
     if (clip.kind !== 'audio' && clip.kind !== 'video' || !clip.assetId) continue;
     const volume = Number.isFinite(clip.volume) ? Math.min(MAX_CLIP_VOLUME, Math.max(0, clip.volume!)) : 1;
     const from = Math.max(range.start, clip.start), to = Math.min(range.end, clip.start + clip.duration), asset = assets.get(clip.assetId), url = assetUrls[clip.assetId];
     if (volume === 0 || to <= from || !asset || !url?.startsWith('./')) continue;
-    const rate = playbackRateOf(clip), sourceEnd = sourceEndOf(clip);
-    const spoken = (asset.analysis?.transcript?.words ?? []).filter(word => word.text.trim() && word.start >= clip.sourceStart - 1e-7 && word.start < sourceEnd - 1e-7)
-      .map(word => ({ text: word.text.trim(), start: Math.round(timelineTimeAtSource(clip, word.start) * 1000) / 1000, end: Math.round(timelineTimeAtSource(clip, Math.min(word.end, sourceEnd)) * 1000) / 1000 }))
-      .filter(word => word.end > range.start && word.start < range.end);
-    words.push(...spoken);
+    const rate = playbackRateOf(clip);
     const role = audioSettings(clip).role;
     const kind: SoundKind = clip.kind === 'video' ? 'footage' : role === 'voice' || asset.analysis?.transcript?.words.length ? 'voice' : role === 'music' || clip.duration > EFFECT_LENGTH ? 'music' : 'sfx';
     const name = basename(asset.fileName, extname(asset.fileName)).slice(0, 60);
@@ -74,9 +79,16 @@ export async function measureTimelineSound(snapshot: Snapshot, directory: string
     const gain = gainOf(timeline, clip, volume), first = Math.round((from - range.start) * SOUND_RATE), length = Math.min(decoded.left.length, Math.round((to - from) * SOUND_RATE));
     const left = decoded.left.subarray(0, length), right = decoded.right.subarray(0, length);
     for (let i = 0; i < length; i++) { const g = gain(from - clip.start + i / SOUND_RATE); left[i] *= g; right[i] *= g; }
-    tracks.push({ event: { clipId: clip.id, name, kind, start: Math.round(clip.start * 1000) / 1000, end: Math.round((clip.start + clip.duration) * 1000) / 1000, gain: Math.round(volume * 100) / 100 }, offset: first, left, right });
+    const track:DecodedTrack={ event: { clipId: clip.id, name, kind, start: Math.round(clip.start * 1000) / 1000, end: Math.round((clip.start + clip.duration) * 1000) / 1000, gain: Math.round(volume * 100) / 100 }, offset: first, left, right };
+    if(consume)consume(track);else tracks.push(track);
   }
-  if (!tracks.length && !check) throw new AnalysisError('Nothing sounds in this range: no audio or footage with sound plays here.', 400);
+  return {tracks,words};
+}
+
+/** Analyze exactly the decoded gain/fade/speed/ducking mix used for normalization. */
+export async function measureTimelineSound(snapshot: Snapshot, directory: string, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, range: { start: number; end: number }, signal: AbortSignal, check?: { fps: number; hits: VisualHit[] }): Promise<SoundResult> {
+  const {tracks,words}=await decodeTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,range,signal);
+  if(!tracks.length&&!check)throw new AnalysisError('Nothing sounds in this range: no audio or footage with sound plays here.',400);
   const masterGain = Number(process.env.PRODUCER_AUDIO_GAIN ?? 1);
-  return analyzeSound(tracks, words.sort((a, b) => a.start - b.start), range, Number.isFinite(masterGain) && masterGain >= 0 ? masterGain : 1, check && { ...check, timelineFps: timeline.fps });
+  return analyzeSound(tracks, words.sort((a, b) => a.start - b.start), range, Number.isFinite(masterGain) && masterGain >= 0 ? masterGain : 1, check && { ...check, timelineFps: snapshot.timeline.fps });
 }

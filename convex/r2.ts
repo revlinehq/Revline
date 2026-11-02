@@ -67,7 +67,11 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
   const ownerId = task?.ownerId ?? args.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
   if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
   await previewSource(ctx,args,task);
-  if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import', 'cutout', 'derive'].includes(task.kind) || (task.kind === 'derive' && (args.jobId || !(args.kind === 'video' && args.contentType === 'video/mp4' || args.kind === 'image' && /^image\/(jpeg|png)$/.test(args.contentType)))) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'cutout' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/webm')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
+  if(task?.kind==='snapshot'){
+    const snapshot=task.snapshotId?await ctx.db.get(task.snapshotId):null;
+    if(!snapshot?.normalization||args.jobId||args.kind!=='audio'||args.contentType!=='audio/wav')throw new ConvexError('Only normalization tasks can upload a normalized WAV.');
+  }
+  if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import', 'cutout', 'derive', 'snapshot'].includes(task.kind) || (task.kind === 'derive' && (args.jobId || !(args.kind === 'video' && args.contentType === 'video/mp4' || args.kind === 'image' && /^image\/(jpeg|png)$/.test(args.contentType)))) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'cutout' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/webm')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
   if (args.jobId && !task) {
     if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');
     const job = await ctx.db.get(args.jobId);

@@ -1,3 +1,4 @@
+import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
 import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
@@ -44,7 +45,7 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   // The link opens on the edit being worked on when it is included.
   const primary=tabs.find(tab=>tab.id===open)??tabs[0],timeline=primary.timeline,assets=new Map<string,Doc<'assets'>>();
   // Footage and the images or videos that scenes show (screenshots), so the link can play every scene.
-  const ids=[...new Set(tabs.flatMap(tab=>[...tab.timeline.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(tab.timeline)]))];
+  const ids=[...new Set(tabs.flatMap(tab=>[...tab.timeline.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...sceneMediaAssetIds(tab.timeline),...tab.timeline.audioNormalization?[tab.timeline.audioNormalization.assetId]:[]]))];
   for(const raw of ids){const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==ownerId||asset.projectId!==projectId)throw new ConvexError('A source could not be shared.');assets.set(asset._id,asset);}
   // Preserve the linked audio source so adding this footage in the copy keeps audio separation.
   for(const asset of Array.from(assets.values()))if(asset.audioAssetId&&!assets.has(asset.audioAssetId)){
@@ -102,7 +103,7 @@ export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:
 export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timelineId:v.optional(v.string())},returns:v.id('projects'),handler:async(ctx,{shareId,timelineId})=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await ctx.db.get(shareId);if(!share?.published)throw new ConvexError('This timeline is no longer shared.');
   const tab=timelineId&&share.tabCount?(await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',shareId)).take(20)).find(row=>row.timelineId===timelineId):undefined;
-  const source=tab?.timeline??share.timeline,used=new Set([...source.clips.flatMap(clip=>clip.assetId?[clip.assetId]:[]),...sceneMediaAssetIds(source)]);
+  const source=tab?.timeline??share.timeline,used=new Set([...source.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...sceneMediaAssetIds(source),...source.audioNormalization?[source.audioNormalization.assetId]:[]]);
   // A multi-tab share pins every tab's media; the copy keeps only what its timeline uses (and linked audio).
   const all=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',shareId)).take(200),now=Date.now();
   for(const pin of all)if(used.has(pin.sourceId)&&pin.audioAssetId)used.add(pin.audioAssetId);
@@ -110,6 +111,9 @@ export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timeline
   const projectId=await createProject(ctx,{ownerId,title:tab?`${share.title} · ${tab.name}`:share.title,aspectRatio:source.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
   for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});await recordAssetStorage(ctx,(await ctx.db.get(id))!);ids.set(sourceId,id);}
   for(const pin of pins)if(pin.audioAssetId&&ids.has(pin.audioAssetId))await ctx.db.patch(ids.get(pin.sourceId)!,{audioAssetId:ids.get(pin.audioAssetId)!});
-  const timeline=normalizeTimeline({...source,clips:source.clips.map(clip=>({...clip,...(clip.assetId?{assetId:ids.get(clip.assetId)!}:{}),...(clip.scene?.media?{scene:{...clip.scene,media:clip.scene.media.map(item=>({...item,assetId:ids.get(item.assetId)??item.assetId}))}}:{})}))});
-  await writeProject(ctx,projectId,{timeline});return projectId;
+  const timeline=normalizeTimeline({...source,...(source.audioNormalization?{audioNormalization:{...source.audioNormalization,assetId:ids.get(source.audioNormalization.assetId)!}}:{}),clips:source.clips.map(clip=>({...clip,...(clip.assetId?{assetId:ids.get(clip.assetId)!}:{}),...(clip.normalizedAudio?{normalizedAudio:{...clip.normalizedAudio,assetId:ids.get(clip.normalizedAudio.assetId)!}}:{}),...(clip.scene?.media?{scene:{...clip.scene,media:clip.scene.media.map(item=>({...item,assetId:ids.get(item.assetId)??item.assetId}))}}:{})}))});
+  const baked={...timeline,clips:timeline.clips.map((clip,i)=>clip.normalizedAudio&&source.clips[i].normalizedAudio?.key===audioNormalizationKey(source,source.clips[i])?{...clip,normalizedAudio:{...clip.normalizedAudio,key:audioNormalizationKey(timeline,clip)}}:clip)};
+  const master=source.audioNormalization;
+  if(master?.key===timelineNormalizationKey(source)&&baked.audioNormalization)baked.audioNormalization.key=timelineNormalizationKey(baked);
+  await writeProject(ctx,projectId,{timeline:baked});return projectId;
 }});

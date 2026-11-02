@@ -3,7 +3,7 @@ import {DEFAULT_CROP,DEFAULT_TRANSFORM,type Clip,type SourceCrop,type VisualTran
 export const VISUAL_INPUT_UNITS=['normalized','pixels'] as const;
 export type VisualInputUnits=typeof VISUAL_INPUT_UNITS[number];
 export const VISUAL_CANVAS_REFERENCE=1080;
-export const VISUAL_TRANSFORM_LIMITS={x:[-5,5],y:[-5,5],scale:[.1,5],rotation:[-360,360],opacity:[0,1]} as const;
+export const VISUAL_TRANSFORM_LIMITS={x:[-20,20],y:[-20,20],scale:[.1,40],rotation:[-360,360],opacity:[0,1]} as const;
 export const MAX_SOURCE_CROP=.95;
 type Size={width?:number;height?:number};
 const defined=<T extends object>(input:T)=>Object.fromEntries(Object.entries(input).filter(([,value])=>value!==undefined)) as T;

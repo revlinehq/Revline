@@ -28,7 +28,7 @@ Pixels are decoded at full source resolution. Feature detection and optical flow
 
 Nothing was deployed from this branch. Deploy the matching components together, with development and production credentials kept separate:
 
-1. Rebuild the media processor image, including `scripts/track-pixels.py`, and restart the local development worker from the merged checkout. Pixel jobs require processor contract 25 or newer; an older worker leaves them queued.
+1. Rebuild the media processor image, including `scripts/track-pixels.py`, and restart the local development worker from the merged checkout. The integrated clipping/VFX/tracking release uses processor contract 26; pixel jobs require that contract or newer, and an older worker leaves them queued.
 2. Deploy Convex schema/functions for tracking derivations, chunk storage/indexes, the `/pixel-track` HTTP route, task payloads/results and tools.
 3. Deploy the agent runner, which bundles the editor toolkit and skills.
 4. Deploy the frontend and the export image so streamed attachments and tracked-mask visibility agree in preview and export. Export machines need the render changes, not Python/OpenCV tracking dependencies.

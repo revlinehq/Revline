@@ -1,5 +1,6 @@
+import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
-import { pixelTrackRequest, parsePixelTrackResult, PIXEL_TRACK_PROCESSOR_VERSION, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
+import { pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -43,7 +44,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
     if (tracking.end > (asset.duration ?? 0) + 1e-6) throw new ConvexError('Track inside the source duration.');
     await requireMediaTaskCapacity(ctx, input.ownerId, 1);
     const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: 'pixelTrack', start: tracking.start, end: tracking.end, tracking, trackingToken: crypto.randomUUID(), status: 'queued', createdAt: Date.now() });
-    await ctx.db.patch(derivationId, { taskId: await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, requiredProcessorVersion: PIXEL_TRACK_PROCESSOR_VERSION }) });
+    await ctx.db.patch(derivationId, { taskId: await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION }) });
     return { derivationId, status: 'queued' as const, estimatedUsd: 0 };
   }
   if (input.op === 'stats') {
@@ -78,7 +79,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   const derivationId = await ctx.db.insert('derivations', { ownerId: input.ownerId, projectId: project._id, clipId: input.clipId, sourceAssetId: asset._id, op: input.op, start, end,
     ...(input.backgroundPrompt !== undefined ? { backgroundPrompt: input.backgroundPrompt } : {}), ...(input.time !== undefined ? { time: input.time } : {}), ...(input.factor ? { factor: input.factor } : {}), ...(input.scale ? { scale: input.scale } : {}), ...(input.target ? { target: input.target } : {}),
     ...(input.placeLater ? { placeLater: true } : {}), status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, ...(input.op === 'parallax' ? { requiredProcessorVersion: 25 } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: input.ownerId, projectId: project._id, assetId: asset._id, kind: 'derive', derivationId, ...(input.op === 'parallax' ? { requiredProcessorVersion: MEDIA_PROCESSOR_VERSION } : {}) });
   await ctx.db.patch(derivationId, { taskId });
   const seconds = end - start, fps = input.fps ?? 30;
   const estimatedUsd = input.op === 'parallax' ? .08 : input.op === 'freeze' ? 0 : input.op === 'slowmo' ? seconds * (input.factor ?? 2) * RIFE_USD_PER_OUTPUT_SECOND

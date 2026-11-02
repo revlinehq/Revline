@@ -8,6 +8,7 @@ import { createPreviewMediaSession } from '@/lib/editor/preview-media-session';
 import { createPreviewSourceCache, MAX_PREVIEW_BYTES } from '@/lib/editor/preview-source-cache';
 import { tracePreviewPlayback } from '@/lib/editor/preview-diagnostics';
 import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useImperativeHandle } from 'react';
+import { resolvedAudioTimeline } from '@/lib/editor/audio-normalization';
 import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle } from 'lucide-react';
@@ -52,7 +53,7 @@ function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=pl
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
 export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
-  timeline=normalizeTimeline(timeline);
+  timeline=useMemo(()=>resolvedAudioTimeline(normalizeTimeline(committedTimeline)),[committedTimeline]);
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
   const cropControls=useRef<CropControlsHandle>(null);
   const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad};
