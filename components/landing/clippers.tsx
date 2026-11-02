@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { Card } from '@/components/ui/card';
 import { LandingHeading, LandingSection } from './ui';
 
 /** The film's editor and montage, rendered as a passive, viewport-driven illustration. */
@@ -49,25 +50,27 @@ export function LandingClippers() {
       className="landing-clippers"
       headingId="landing-clippers-heading"
     >
-      <LandingHeading
-        id="landing-clippers-heading"
-        title="Revline for clippers"
-        description="Drop in a stream and get vertical clips with the creator on top and the gameplay below, ready to post."
-      />
-      <div
-        ref={frame}
-        className="landing-clippers-frame"
-        role="img"
-        aria-label="Revline splits a stream into ten vertical clips, then reveals six creator videos with illustrative view counts."
-      >
-        <img
-          className="landing-clippers-still"
-          src="/landing/clippers-still.webp"
-          alt=""
-          loading="lazy"
+      <Card className="landing-showcase-card">
+        <LandingHeading
+          id="landing-clippers-heading"
+          title="Revline for clippers"
+          description="Drop in a stream and get vertical clips with the creator on top and the gameplay below, ready to post."
         />
-        {Animation && <Animation playing={playing} />}
-      </div>
+        <Card
+          ref={frame}
+          className="landing-clippers-frame"
+          role="img"
+          aria-label="Revline splits a stream into ten vertical clips, then reveals six creator videos with illustrative view counts."
+        >
+          <img
+            className="landing-clippers-still"
+            src="/landing/clippers-still.webp"
+            alt=""
+            loading="lazy"
+          />
+          {Animation && <Animation playing={playing} />}
+        </Card>
+      </Card>
     </LandingSection>
   );
 }
