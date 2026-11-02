@@ -1,0 +1,6 @@
+REVLINE_ENVIRONMENT = production
+REVLINE_CONVEX_URL = https:/$()/different-gnu-398.convex.cloud
+REVLINE_WEB_URL = https:/$()/tryrevline.com
+REVLINE_LOCAL_NETWORKING = NO
+#include? "Release.local.xcconfig"
+#include? "Secrets.xcconfig"

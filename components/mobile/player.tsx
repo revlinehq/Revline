@@ -85,6 +85,7 @@ function AuthenticatedPlayer({ projectId, timelineId, controls }: { projectId: s
   const snapshots = useQuery(api.timelineTabs.snapshots, project ? { projectId: project._id } : 'skip');
   const [store] = useState(() => createEditorStore(EMPTY_TIMELINE));
   const [time, setTime] = useState(0);
+  const reportedAt = useRef(0);
   const [container, setContainer] = useState({ width: 1, height: 1 });
   const host = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -106,7 +107,12 @@ function AuthenticatedPlayer({ projectId, timelineId, controls }: { projectId: s
     {project && assets && timeline && timeline.clips.length > 0 ? <EditorStateProvider store={store}>
       <div className="mobile-player-frame" style={{ width: projectCanvas.width * scale, height: projectCanvas.height * scale }}>
         <Preview ref={controls} timeline={timeline} assets={assets} time={time} muted={false} debugId={projectId}
-          onTime={value => { setTime(value); store.setState({ playhead: value }); notify({ kind: 'time', time: value }); }}
+          onTime={value => {
+            const now = performance.now();
+            if (store.getState().playing && now - reportedAt.current < 100) return;
+            reportedAt.current = now;
+            setTime(value); store.setState({ playhead: value }); notify({ kind: 'time', time: value });
+          }}
           onPlaying={playing => { store.setState({ playing }); notify({ kind: 'playing', playing }); }}
           onReady={() => notify({ kind: 'ready' })}
           onError={message => notify({ kind: 'error', message })}
