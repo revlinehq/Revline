@@ -173,6 +173,7 @@ export const analysisRequestDocument = v.object({ _id: v.id("analysisRequests"),
 export const previewFields = { previewR2Key:v.optional(v.string()), previewSize:v.optional(v.number()), previewWidth:v.optional(v.number()), previewHeight:v.optional(v.number()), previewFps:v.optional(v.number()), previewVersion:v.optional(v.number()) };
 export const previewSegmentUrl = v.object({ start:v.number(), end:v.number(), url:v.string(), size:v.number() });
 export const assetFields = {
+  importSourceUrl:v.optional(v.string()),importRange:v.optional(v.object({start:v.number(),end:v.number()})),
   previewOriginalPlayable:v.optional(v.boolean()),
   ...previewFields,
   ownerId: v.string(), projectId: v.id("projects"), storageId: v.optional(v.id("_storage")), r2Key: v.optional(v.string()), fileName: v.string(),
@@ -347,7 +348,7 @@ export default defineSchema({
   users: defineTable(userFields).index("by_clerk_id", ["clerkId"]),
   projects: defineTable(projectFields).index("by_ownerId_updatedAt", ["ownerId", "updatedAt"]),
   previewSegments: defineTable({assetId:v.id('assets'),ownerId:v.string(),r2Key:v.string(),start:v.number(),end:v.number(),size:v.number(),version:v.number()}).index('by_asset',['assetId']).index('by_r2Key',['r2Key']).index('by_owner_r2Key',['ownerId','r2Key']),
-  assets: defineTable(assetFields).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
+  assets: defineTable(assetFields).index('by_project_import',['projectId','importSourceUrl','importRange.start','importRange.end']).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
   // The timeline an export renders, apart from its job so listing exports never reads whole timelines.
   renderSnapshots: defineTable({ jobId: v.id('renderJobs'), timeline: timelineValidator }).index('by_job', ['jobId']),
   renderJobs: defineTable(renderFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_status_createdAt", ["status", "createdAt"]).index("by_owner_project_status",["ownerId","projectId","status"]).index('by_owner_status',['ownerId','status']),

@@ -247,6 +247,22 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 60, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
+  let imported=await ctx.db.query('assets').withIndex('by_project_import',q=>q.eq('projectId',projectId).eq('importSourceUrl',sourceUrl).eq('importRange.start',importRange?.start).eq('importRange.end',importRange?.end)).first();
+  if(!imported){
+    // Receipts from before source identity was stored on assets remain reusable.
+    const completed=await ctx.db.query('mediaTasks').withIndex('by_project_kind_status',q=>q.eq('projectId',projectId).eq('kind','import').eq('status','completed')).filter(q=>q.and(q.eq(q.field('sourceUrl'),sourceUrl),q.eq(q.field('importRange.start'),importRange?.start),q.eq(q.field('importRange.end'),importRange?.end))).order('desc').take(20);
+    for(const task of completed){
+      const source=task.outputAssetId?await ctx.db.get(task.outputAssetId):null;
+      if(source&&source.ownerId===ownerId&&source.projectId===projectId&&source.kind==='video'){
+        imported=source;await ctx.db.patch(source._id,{importSourceUrl:sourceUrl,...(importRange?{importRange}:{})});break;
+      }
+    }
+  }
+  if(imported&&imported.ownerId===ownerId&&imported.kind==='video'){
+    const taskId=await insertMediaTask(ctx,{ownerId,projectId,kind:'import',sourceUrl,...(importRange?{importRange}:{}),sourcesOnly:args.sourcesOnly??false,assetId:imported._id,outputAssetId:imported._id,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});
+    if(!args.sourcesOnly)await ctx.scheduler.runAfter(0,internal.mediaTasks.placeImport,{taskId,attempt:1});
+    return {projectId,taskId};
+  }
   await initializeMediaCapacity(ctx, ownerId);
   const existing = await ctx.db.query('mediaTaskSlots').withIndex('by_import', q => q.eq('projectId', projectId).eq('kind', 'import').eq('sourceUrl', sourceUrl).eq('importRange.start', importRange?.start).eq('importRange.end', importRange?.end)).collect();
   const matching = existing.find(task => !!task.sourcesOnly === !!args.sourcesOnly);
@@ -322,9 +338,8 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
-  // Frame readings, timeline frames and blueprint checks take seconds and an agent waits on each: they go before
-  // exports and long analysis, so a turn never stalls behind a minutes-long job.
-  for(const kind of ['read','snapshot','blueprint','preview'] as const){
+  // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
+  for(const kind of ['preview','read','snapshot','blueprint'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
     // A frame check an agent waits on goes before scene thumbnails and share covers, which nobody is waiting for.
     if(kind==='snapshot'){const asked=[];for(const row of rows){const snapshot=row.snapshotId?await ctx.db.get(row.snapshotId):null;if(snapshot&&!snapshot.clipId&&!snapshot.shareId)asked.push(row);}if(asked.length)rows=asked;}
@@ -592,6 +607,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
   import: async (ctx, task) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
+    if(task.sourceUrl)await ctx.db.patch(output._id,{importSourceUrl:task.sourceUrl,...(task.importRange?{importRange:task.importRange}:{})});
     const project = await requireProject(ctx, task.projectId, task.ownerId, false);
     if (output.duration < 1 / currentTimeline(project).fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
     // A new revision would fail an AI edit's staged draft as "changed
@@ -680,7 +696,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
   await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
-  await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now(),...(task.kind==='import'&&task.outputAssetId?{assetId:task.outputAssetId}:{}) });
   await signalResult(ctx, task, { success: true, retryable: false });
   await releaseRenderSeat(ctx, task);
   return null;
