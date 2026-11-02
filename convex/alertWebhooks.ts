@@ -46,7 +46,7 @@ function providerLink(value: unknown, domain: string) {
 export function registerAlertWebhooks(http: HttpRouter) {
   http.route({ path: '/clerk/webhook', method: 'POST', handler: httpAction(async (ctx, request) => {
     const signingSecret = process.env.CLERK_WEBHOOK_SIGNING_SECRET;
-    if (!signingSecret || !discordWebhookUrl('clerk')) return unavailable();
+    if (!signingSecret) return unavailable();
     let event;
     try {
       const body = await readBody(request);
@@ -56,7 +56,8 @@ export function registerAlertWebhooks(http: HttpRouter) {
     const eventId = request.headers.get('svix-id')?.trim();
     if (!eventId || eventId.length > 256) return new Response('Invalid event ID', { status: 400 });
     try {
-      await ctx.runMutation(internal.discordAlerts.enqueue, { source: 'clerk', eventId, title: event.type === 'user.created' ? 'New Revline signup' : 'Revline account deleted', description: `Event: ${event.type}\nUser: ${id(event.data.id)}` });
+      if(event.type==='user.deleted' && event.data.id){await ctx.runMutation(internal.accountDeletion.prepare,{ownerId:event.data.id});await ctx.runAction(internal.accountDeletionActions.stopWebRenewals,{ownerId:event.data.id});await ctx.runMutation(internal.accountDeletion.activate,{ownerId:event.data.id});}
+      if(discordWebhookUrl('clerk'))await ctx.runMutation(internal.discordAlerts.enqueue, { source: 'clerk', eventId, title: event.type === 'user.created' ? 'New Revline signup' : 'Revline account deleted', description: `Event: ${event.type}\nUser: ${id(event.data.id)}` });
       return received();
     } catch { return new Response('Notification could not be queued', { status: 503 }); }
   }) });

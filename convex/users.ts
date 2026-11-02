@@ -10,6 +10,7 @@ export const store = mutation({
   handler: async ctx => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new ConvexError('Authentication required');
+    await requireOwner(ctx);
     const existing = await ctx.db.query('users').withIndex('by_clerk_id', q => q.eq('clerkId', identity.subject)).unique();
     // Missing claims must not erase details stored by an earlier verified token.
     const profile = {
@@ -46,3 +47,12 @@ export const removeFromClerk = internalMutation({
     return null;
   },
 });
+
+/** Versioned consent is explicit, withdrawable and separate from authentication. */
+export const setAIConsent = mutation({args:{accepted:v.boolean()},returns:v.null(),handler:async(ctx,{accepted})=>{
+  const ownerId=await requireOwner(ctx);
+  const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();
+  if(!user)throw new ConvexError('Account not found');
+  await ctx.db.patch(user._id,{aiConsentVersion:accepted?1:0,aiConsentAt:Date.now(),updatedAt:Date.now()});
+  return null;
+}});

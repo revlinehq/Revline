@@ -34,6 +34,7 @@ struct WorkspaceTabs: View {
                 }
             }
         }
+        .toolbar(projectPath.isEmpty || selectedTab == .account ? .visible : .hidden, for: .tabBar)
         .onChange(of: selectedTab) { _, tab in
             if tab == .create {
                 selectedTab = previousTab

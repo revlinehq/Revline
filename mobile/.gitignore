@@ -4,4 +4,6 @@ Config/Secrets.xcconfig
 DerivedData/
 *.xcuserstate
 xcuserdata/
-Screenshots/
+/Screenshots/
+fastlane/report.xml
+fastlane/Preview.html

@@ -25,7 +25,6 @@ settings:
   base:
     SWIFT_VERSION: "6.2"
     IPHONEOS_DEPLOYMENT_TARGET: "17.0"
-    PRODUCT_BUNDLE_IDENTIFIER: com.revline.app
     TARGETED_DEVICE_FAMILY: "1"
     MARKETING_VERSION: "1.0.0"
     CURRENT_PROJECT_VERSION: "1"
@@ -49,8 +48,10 @@ targets:
       path: Revline/Info.plist
       properties:
         CFBundleDisplayName: Revline
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         CFBundleURLTypes:
-          - CFBundleURLSchemes: [com.revline.app]
+          - CFBundleURLSchemes: [$(PRODUCT_BUNDLE_IDENTIFIER)]
         UIUserInterfaceStyle: Dark
         UILaunchScreen: {UIColorName: RevlineBackground}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
@@ -64,8 +65,7 @@ targets:
         RevlineClerkPublishableKey: $(REVLINE_CLERK_PUBLISHABLE_KEY)
         RevlineClerkDomain: $(REVLINE_CLERK_DOMAIN)
         RevlineSuperwallKey: $(REVLINE_SUPERWALL_API_KEY)
-        RevlineProProduct: $(REVLINE_PRO_PRODUCT_ID)
-        RevlineUltraProduct: $(REVLINE_ULTRA_PRODUCT_ID)
+        RevlineSubscriptionProduct: $(REVLINE_SUBSCRIPTION_PRODUCT_ID)
     entitlements:
       path: Revline/Revline.entitlements
       properties:
@@ -91,7 +91,6 @@ targets:
         inputFiles:
           - $(BUILT_PRODUCTS_DIR)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
         outputFiles:
-          - $(BUILT_PRODUCTS_DIR)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
           - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
           - $(DERIVED_FILE_DIR)/revline-auth-copy.stamp
 schemes:

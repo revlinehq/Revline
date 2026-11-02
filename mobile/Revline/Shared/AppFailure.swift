@@ -12,6 +12,7 @@ struct AppFailure: LocalizedError {
            let message = value.string ?? value["message"]?.string {
             return message
         }
+        if case ClientError.ServerError = error { return "Revline couldn’t complete this request. Try again in a moment." }
         if let failure = error as? AppFailure { return failure.message }
         if error is CancellationError { return "Cancelled." }
         if let urlError = error as? URLError {
