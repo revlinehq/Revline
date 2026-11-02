@@ -9,7 +9,7 @@ const workerSecret = process.env.RENDER_WORKER_SECRET;
 if (!convexUrl || !workerSecret) throw new Error('Configure the production Convex URL and media worker secret.');
 const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
 // The Ultra slot claims only Ultra exports; regular slots leave them to it.
-const lane = { ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' as const } : {}),
+const lane = { ...(process.env.MEDIA_PROCESSOR_BACKEND === 'fly' ? { processorBackend: 'fly' as const, lane: 'any' as const } : {}), ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' as const } : {}),
   // Fly export machines claim only exports of their lane.
   ...(process.env.MEDIA_RENDERS_ONLY === 'true' ? { rendersOnly: true } : {}) };
 // Staying warm after work spares the next export a container and Chromium cold

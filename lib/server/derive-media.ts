@@ -1,3 +1,4 @@
+import { processingThreads } from './processing-resources';
 import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -26,7 +27,7 @@ export async function deriveMedia(source: string, kind: 'video' | 'image', direc
   const probe = await videoInfo(source, signal), fps = Math.min(60, Math.max(1, Math.round(probe.fps || 30)));
   // Only the window goes to fal, which bills by the work it does.
   const clip = join(directory, 'derive-source.mp4');
-  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-ss', request.start.toFixed(6), '-i', source, '-t', (request.end - request.start).toFixed(6), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', request.start.toFixed(6), '-i', source, '-t', (request.end - request.start).toFixed(6), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
   onProgress(15);
   let current = clip, outputFps = fps;
   if (request.op === 'slowmo') {

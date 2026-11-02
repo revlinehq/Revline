@@ -14,7 +14,7 @@ const RUNTIME_PREFIXES = [
   'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',
   'scripts/track-pixels.py', 'scripts/detect-beats.py', 'scripts/detect-shots.py', 'scripts/install-beat-model.mjs', 'scripts/copy-vendor.mjs',
   'scripts/beat-tracking-requirements.txt', 'scripts/scene-detection-requirements.txt', 'scripts/video-import-requirements.txt',
-  'scripts/deploy-production.mjs', 'package.json', 'package-lock.json', 'tsconfig.json',
+  'scripts/deploy-production.mjs', 'scripts/deploy-fly-processor.mjs', 'scripts/deploy-fly-exports.mjs', 'package.json', 'package-lock.json', 'tsconfig.json',
 ];
 
 function report(changed, reason, files = []) {
