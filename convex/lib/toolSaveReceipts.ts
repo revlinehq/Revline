@@ -19,6 +19,16 @@ export class ToolSaveReceipts {
   private stagedBy?: string;
   constructor(private run: EditorRun) {}
 
+  private stamp(output: unknown, receipt: ToolSaveReceipt) {
+    const parsed = object.safeParse(output);
+    const result = parsed.success ? parsed.data : { result: output ?? null };
+    return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, saveReceipt: receipt };
+  }
+
+  publishedResult(output: unknown, revision: number) {
+    return { ...this.stamp(output, { kind: 'timeline', status: 'saved', revision }), applied: true };
+  }
+
   private record(receipt: ToolSaveReceipt) {
     const execution = this.active.getStore();
     if (!execution) return;
@@ -44,9 +54,9 @@ export class ToolSaveReceipts {
     });
   }
 
-  checkpoint(result: { saved: boolean; staged: boolean; unchanged?: boolean; revision: number }) {
-    if (result.unchanged) return;
-    this.record({ kind: 'timeline', status: result.staged ? 'staged' : 'saved', revision: result.revision });
+  checkpoint(result: { staged: boolean; unchanged?: boolean; revision: number }) {
+    if (result.unchanged || !result.staged) return;
+    this.record({ kind: 'timeline', status: 'staged', revision: result.revision });
   }
 
   /** Every editing-tool mutation crosses the same atomic revision/receipt boundary. */
@@ -89,14 +99,12 @@ export class ToolSaveReceipts {
       if (behavior.effect === 'read' || behavior.effect === 'analysis') return output;
       if (execution.receipt?.kind === 'timeline' && execution.receipt.status === 'saved' && execution.receipt.revision > revision()) await reconcile().catch(() => {});
       if (execution.responseLost && execution.receipt) output = { recovered: true, note: 'The write committed. Its response was interrupted; inspect the saved state before continuing.' };
-      const parsed = object.safeParse(output);
-      const result = parsed.success ? parsed.data : { result: output ?? null };
       const kind = behavior.effect;
       const receipt: ToolSaveReceipt = execution.receipt
         ?? (execution.writeFailed ? { kind, status: 'failed', revision: revision(), message: execution.writeFailed }
           : execution.interrupted ? { kind, status: 'interrupted', revision: revision(), message: execution.interrupted }
             : { kind, status: 'unchanged', revision: revision() });
-      return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, saveReceipt: receipt };
+      return this.stamp(output, receipt);
     });
   }
 }

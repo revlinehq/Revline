@@ -79,7 +79,9 @@ The tool layer overwrites hand-written save flags with its receipt: `saved`,
 `unchanged: true`; accepted background work gets a queued receipt and does not
 claim a timeline edit. Private checkpoints remain staged until their matching
 publication receipt. Image-output conversion preserves the receipt, and the
-chat unpacks structured text parts when reading it.
+chat unpacks structured text parts when reading it. A saved publication remains
+final when the SDK combines message parts or a later cleanup appends a failure;
+obsolete failure prose is removed from both text and rendered blocks.
 
 A lost mutation response triggers a receipt query without replaying the write.
 A recovered write remains saved, and the session reloads its committed state.
@@ -95,3 +97,38 @@ mutation dispatcher has a bounded allowlist and rejects mismatched owners,
 projects or runs. Receipt rows contain no mutation inputs or outputs, use an
 exact write-id index, and expire after a day through bounded cleanup. Editor
 queries do not subscribe to this table.
+
+## Live verification
+
+The throwaway development project is `j974jyf6affmrr40hxb7he72a58hf5ja`.
+The baseline browser run reproduced the false warning after `readBrief` and a
+saved title. Desktop (1440 px) and phone (390 px) screenshots were captured
+from the running app.
+
+MCP confirmed a brief save as a resource receipt at revision 1, a marker save
+at revision 2, an unchanged repeated marker at revision 2, and a staged title
+delete published at revision 3. Its outer result and nested receipt both named
+saved revision 3. A real stale-revision mutation was refused; revision 2 and
+the persisted timeline remained unchanged during that check.
+
+A fresh native Convex `assistantActions.respond` turn ran `readBrief`,
+`inspectTimeline`, `editText` and `getFrames`, saved revision 5, and completed
+normally. This check exposed an existing use of the Node-only global `Buffer`
+in frame serialization; portable byte conversion now works in Convex and the
+Cloudflare runner.
+
+PR #23 merged during this work. Development deployment used a temporary
+checkout combining current main, this branch, and the already deployed
+storage/account/incident changes from concurrent sessions. Those concurrent
+changes are not part of this PR. Only `majestic-alpaca-541` and
+`revline-agent-runner-dev` were deployed; production was not deployed.
+
+The headless browser on port 3012 then ran `readBrief`, `inspectTimeline`,
+`readSkill`, `delete`, `addGraphic` and `getFrames` through the Cloudflare runner.
+Both edits stayed staged at revision 5 until publication saved revision 6;
+the completed turn showed no failure card. A late failed cleanup added no
+failure receipt under the matching deployment and left the error clear. The
+chat also keeps the saved receipt authoritative if an older deployment has
+already appended a contradictory failure for that same run/base revision.
+A final marker edit saved revision 7, and its repeat confirmed unchanged
+revision 7 using only the mutation's receipt.

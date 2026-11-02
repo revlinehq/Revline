@@ -17,10 +17,15 @@ function failureSummary(text:string):boolean {
 }
 const receiptFailureText=new Set(['Your pending replacement was not saved.','Your pending replacement was cancelled.']);
 
+function withoutFailureSummaries(replies: readonly ChatMessage[]): ChatMessage[] {
+  const clean = (text: string) => text.split(/\n\s*\n/).filter(part=>!failureSummary(part)&&!receiptFailureText.has(part.trim())).join('\n\n');
+  return replies.map(message=>({...message,text:clean(message.text),blocks:message.blocks?.map(block=>block.type==='text'?{...block,text:clean(block.text)}:block).filter(block=>block.type!=='text'||!!block.text.trim())}));
+}
+
 /** A turn has one failure surface; saved results and the assistant's actual answer stay visible. */
 export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt,active=false}:{error?:string|null;receipt?:TimelinePublicationReceipt;active?:boolean}={}) {
   // A recovered publication can outlive a transport error's stale progress summary.
-  if(receipt?.status==='saved'&&!error&&!cards.some(card=>card.state==='error'))return {replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),cards};
+  if(receipt?.status==='saved'&&!error&&!cards.some(card=>card.state==='error'))return {replies:withoutFailureSummaries(replies),cards};
   // A tool rejection is recoverable while the agent is still working. Publish
   // one terminal failure only after the run stops, or the server confirms it.
   if(active&&!error&&receipt?.status!=='failed'&&receipt?.status!=='aborted')return {replies,cards:cards.filter(card=>card.state!=='error')};
@@ -43,7 +48,7 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   detail=detail.replace('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.','Some steps remain unfinished. Your saved edits are still here.');
   if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
   return {
-    replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),
+    replies:withoutFailureSummaries(replies),
     cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':savedChanges?'Edit partially completed':'Some steps are unfinished',detail,state:'error' as const}],
   };
 }

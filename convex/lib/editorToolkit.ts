@@ -144,7 +144,8 @@ function referenceSummary(asset: { _id: string; fileName: string; analysis?: { r
 // inline in results were read over and over. Store each image as a file and keep only its URL in the result.
 async function imagePart(ctx: unknown, data: string, mediaType: string) {
   if (!ctx || typeof ctx !== 'object' || !('storage' in ctx) || !('runMutation' in ctx)) return { type: 'file' as const, data: { type: 'data' as const, data }, mediaType };
-  const { file } = await storeFile(ctx as ActionCtx, components.agent, new Blob([Buffer.from(data, 'base64')], { type: mediaType }));
+  const bytes = Uint8Array.from(atob(data), character => character.charCodeAt(0));
+  const { file } = await storeFile(ctx as ActionCtx, components.agent, new Blob([bytes], { type: mediaType }));
   return { type: 'file' as const, data: { type: 'url' as const, url: new URL(file.url) }, mediaType };
 }
 
@@ -1763,7 +1764,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const execute = tool.execute;
     if (!execute) continue;
     tool.execute = function (this: unknown, ...args: never[]) {
-      return receipts.execute(name, () => editSession.revision, () => execute.apply(this ?? tool, args), () => editSession.reconcileSaved(() => ctx.runQuery(internal.assistant.getRunTimeline, run)));
+      const instance = this && typeof this === 'object' ? this : tool;
+      const supplied = 'ctx' in instance && instance.ctx && typeof instance.ctx === 'object' ? instance.ctx : {};
+      const bound = { ...instance, ctx: { ...supplied, ...ctx } };
+      return receipts.execute(name, () => editSession.revision, () => execute.apply(bound, args), () => editSession.reconcileSaved(() => ctx.runQuery(internal.assistant.getRunTimeline, run)));
     };
     const serialize = tool.toModelOutput;
     if (!serialize) continue;
@@ -1817,5 +1821,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
 }

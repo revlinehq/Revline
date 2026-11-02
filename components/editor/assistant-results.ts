@@ -41,9 +41,15 @@ export function publicationReceiptFromPart(value:unknown):TimelinePublicationRec
   return receipt.status==='saved'?{...identity,status:'saved',revision:Number(receipt.revision)}:{...identity,status:receipt.status as 'failed'|'aborted'};
 }
 
+function latestPublicationReceipt(receipts: readonly TimelinePublicationReceipt[]): TimelinePublicationReceipt | undefined {
+  const latest = receipts.at(-1);
+  // A committed publication is final, even if older cleanup code appends a failure later.
+  return latest && latest.status !== 'saved' ? receipts.findLast(receipt=>receipt.status==='saved'&&receipt.runId===latest.runId&&receipt.stagedRevision===latest.stagedRevision) ?? latest : latest;
+}
+
 /** Preserve the SDK's raw prompt identity alongside its stable streamed React key. */
 export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;parts:readonly unknown[]}):ChatMessage {
-  const publicationReceipt=message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}).at(-1);
+  const publicationReceipt=latestPublicationReceipt(message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}));
   // Text and tool calls in the order the model produced them; adjacent tool calls form one group.
   const blocks:ChatBlock[]=[];
   for(const part of message.parts){
@@ -61,10 +67,11 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
 /** The receipt stays with its original request, including a paginated partial turn. */
 export function turnPublicationReceipt(messages:readonly ChatMessage[]):TimelinePublicationReceipt|undefined {
   const request=messages.find(message=>message.role==='user');
-  return messages.filter(message=>message.role==='assistant').flatMap(message=>{
+  const receipts = messages.filter(message=>message.role==='assistant').flatMap(message=>{
     const receipt=message.publicationReceipt;
     return receipt&&(!request||receipt.promptMessageId===(request.sourceId??request.id))&&(!message.threadId||receipt.threadId===message.threadId)&&(!request?.threadId||receipt.threadId===request.threadId)?[receipt]:[];
-  }).at(-1);
+  });
+  return latestPublicationReceipt(receipts);
 }
 const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
 function unpack(value: unknown): { output?: Record<string, unknown>; error?: string } {
