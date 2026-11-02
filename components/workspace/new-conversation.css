@@ -12,6 +12,3 @@ html[data-workspace-theme=dark] .new-conversation-intro p{color:#aaa}
 html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 @media(max-width:600px){.new-conversation-main{width:calc(100% - 32px);gap:28px}.new-conversation-start{margin-top:40px;gap:28px}.new-conversation-intro h1{font-size:34px}.new-conversation-intro p{font-size:14px}.new-conversation-drop-note{bottom:20px;max-width:calc(100% - 32px);white-space:nowrap}}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}}
-.new-conversation-entry[data-dragging=true] .composer-input-group{border-color:var(--ws-muted)}
-
-.new-conversation .composer-submit[data-slot=button]{--primary:var(--ws-text);--primary-foreground:var(--ws-bg)}
