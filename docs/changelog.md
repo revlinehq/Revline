@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Incidents: Verified missing-clip capture, local Sol launch and draft PR write-back in a disposable dev project. Why: audit the event-driven delivery path; no product fix is needed.
 - Storage: Make shared-media deletion and retries idempotent, report project cleanup failures, and handle disappeared projects calmly. Why: a shared project could abort a multi-file cascade.
 - Scenes: Added timeline-driven 3D layers, cameras, lights, models and extruded text beside HTML/GSAP. Why: mix real depth with motion design in preview, frame capture and CPU exports.
 - Landing: Mix three gaming clips with three podcast and interview clips, keeping six caption styles. Why: show clipping for both gaming streams and podcasts.
