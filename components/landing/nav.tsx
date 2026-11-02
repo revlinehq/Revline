@@ -6,7 +6,7 @@ import { LandingHomeLink } from './home-link';
 import { LandingProductMenu } from './product-menu';
 
 const links = [
-  { label: 'Pricing', href: '#pricing' },
+  { label: 'Pricing', href: '/pricing' },
   { label: 'FAQ', href: '#faq' },
 ];
 

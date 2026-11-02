@@ -14,6 +14,13 @@ const questions = [
 
 export function LandingFaq() {
   return <LandingSection id="faq" className="landing-faq" headingId="landing-faq-heading" data-nav-tone="dark">
+    <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: questions.map(([name, text]) => ({
+        '@type': 'Question', name, acceptedAnswer: { '@type': 'Answer', text },
+      })),
+    }).replace(/</g, '\\u003c') }} />
     <LandingHeading id="landing-faq-heading" title="Frequently asked questions" />
     <div className="landing-faq-list">{questions.map(([question, answer], index) => <details name="landing-faq" key={question} open={index === 0}>
       <summary>{question}<Plus className="landing-faq-plus" size={18} aria-hidden="true" /><Minus className="landing-faq-minus" size={18} aria-hidden="true" /></summary>

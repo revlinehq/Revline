@@ -12,7 +12,7 @@ export function LandingFooter() {
   return <footer className="landing-footer landing-section" data-nav-tone="dark">
     <div className="landing-footer-brand"><Brand /><small>© 2026</small></div>
     <nav aria-label="Footer navigation">
-      <a href="#pricing">Pricing</a>
+      <a href="/pricing">Pricing</a>
       <a href="#faq">FAQ</a>
       {footerNotes.map(({ label, title, description }) => <Dialog key={label}><DialogTrigger className="landing-footer-link">{label}</DialogTrigger><DialogContent className="landing-legal-dialog"><DialogHeader><DialogTitle>{title}</DialogTitle><DialogDescription>{description}</DialogDescription></DialogHeader></DialogContent></Dialog>)}
     </nav>
