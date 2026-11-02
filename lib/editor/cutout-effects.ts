@@ -4,7 +4,7 @@ import { deriveTrackCounts, dimensions, layerGroup, maxTrackCount, normalizeTime
 
 /** One-shot looks built from a clip and its transparent cut-out: the original stays
  * underneath (keeping its audio) and the cut-out is stacked above in exact sync. */
-export const CUTOUT_EFFECTS = ['text-behind', 'backdrop', 'outline', 'color-pop', 'spotlight', 'blur'] as const;
+const CUTOUT_EFFECTS = ['text-behind', 'backdrop', 'outline', 'color-pop', 'spotlight', 'blur'] as const;
 export type CutoutEffectKind = typeof CUTOUT_EFFECTS[number];
 export type CutoutEffect = { kind: CutoutEffectKind; text?: string; color?: string };
 
@@ -74,7 +74,7 @@ export function applyCutoutEffect(input: Timeline, clipId: string, cutoutAssetId
 }
 
 /** Slow drifting colour fields; cheap radial gradients rather than CSS blur filters. */
-export const BACKDROP_SCENE = `const FIELDS = [
+const BACKDROP_SCENE = `const FIELDS = [
   ['#ff4d8d', 0.2, 0.25, 0.8, 3.1, 2.6],
   ['#5b6cff', 0.8, 0.3, 0.9, 2.5, 3.4],
   ['#22d3ee', 0.35, 0.8, 0.85, 3.7, 2.3],

@@ -62,7 +62,7 @@ function Pair<P extends Record<string,unknown>>({ presentation, progress, durati
 }
 
 /** Genuine Remotion presentations; the existing editor/export clock supplies progress. */
-export function RemotionTransitionPresentation({preset,direction,progress,durationInFrames,outputHeight=1080,from,to,...settings}:RemotionTransitionPresentationProps){
+function RemotionTransitionPresentation({preset,direction,progress,durationInFrames,outputHeight=1080,from,to,...settings}:RemotionTransitionPresentationProps){
   if(!Number.isFinite(progress)||!Number.isFinite(durationInFrames)||durationInFrames<1||!Number.isFinite(outputHeight)||outputHeight<=0)throw new Error('Transition presentation needs finite progress and positive frame duration/output height.');
   const bounded=Math.max(0,Math.min(1,progress));
   const pair={progress:bounded,durationInFrames,from,to};

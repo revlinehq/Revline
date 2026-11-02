@@ -29,7 +29,7 @@ const timeOf = (step: ChatTool) => {
 
 /** One row per run of the same tool: consecutive successful calls fold into ×N
  * with the timeline range they covered, so 20 captions read as one line. */
-export function toolChainRows(steps: ChatTool[]): Row[] {
+function toolChainRows(steps: ChatTool[]): Row[] {
   const rows: Row[] = [];
   steps.forEach((step, index) => {
     const args = argumentsOf(step), previous = rows.at(-1), time = timeOf(step);

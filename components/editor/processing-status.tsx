@@ -19,14 +19,3 @@ export function ProcessingStatus({ label, detail, progress, state = 'working', b
     </div>
   </div>;
 }
-
-export function processingDetail(activity?: string | null, source?: string | null) {
-  if (source) return source;
-  if (activity?.startsWith('Queued')) return 'Waiting for an available media worker.';
-  if (activity?.startsWith('Retrying')) return 'Reconnecting to the media service.';
-  if (activity?.startsWith('Listening')) return 'Preparing words and their timestamps.';
-  if (activity?.startsWith('Analyzing')) return 'Looking for moments that match your request.';
-  if (activity?.startsWith('Finding the rhythm')) return 'Listening for hits in your chosen audio.';
-  if (activity?.startsWith('Following')) return 'Keeping the chosen subject in frame.';
-  return undefined;
-}

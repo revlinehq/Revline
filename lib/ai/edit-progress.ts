@@ -3,7 +3,7 @@ import { READ_ONLY_TOOLS } from './read-only-tools';
 export const EDITOR_SOFT_STEPS = 50;
 export const EDITOR_HARD_STEPS = 100;
 export const EDITOR_PROGRESS_WINDOW = 5;
-export const EDITOR_VERIFICATION_STEPS = 8;
+const EDITOR_VERIFICATION_STEPS = 8;
 type Steps = readonly { content: readonly unknown[] }[];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const ids = (value: unknown) => Array.isArray(value) && value.some(id => typeof id === 'string' && id.length > 0);

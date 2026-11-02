@@ -12,7 +12,6 @@ import { Check, ChevronDown, CircleAlert, Copy, Download, Film, History, Link2, 
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
-import { ClaudeLogo, CursorLogo, OpenAILogo } from './ai-app-logos';
 import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';

@@ -3,7 +3,7 @@
 import { useSyncExternalStore } from 'react';
 
 type EditorMode = 'agentic' | 'tracks';
-export const EDITOR_MODE_STORAGE_KEY = 'revline-editor-mode';
+const EDITOR_MODE_STORAGE_KEY = 'revline-editor-mode';
 const changedEvent = 'revline:editor-mode-changed';
 let sessionMode: EditorMode | undefined;
 

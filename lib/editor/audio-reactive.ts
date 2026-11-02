@@ -15,7 +15,7 @@ export type AudioReactive = { rate: number; start: number; levels: string; targe
 export const MAX_REACTIVE_SAMPLES = 7200, MAX_REACTIVE_TARGETS = 4, REACTIVE_RATE = 30;
 const CSS_LIMITS: Record<CssReactiveTarget, [number, number]> = { scale: [-.5, .5], shake: [0, .1], rotate: [-20, 20] };
 
-export const isCssTarget = (property: string): property is CssReactiveTarget => (CSS_REACTIVE_TARGETS as readonly string[]).includes(property);
+const isCssTarget = (property: string): property is CssReactiveTarget => (CSS_REACTIVE_TARGETS as readonly string[]).includes(property);
 /** Allowed amount for a target: CSS limits, or plus/minus one full range of an effect control. */
 export function reactiveAmountRange(property: string): [number, number] | undefined {
   if (isCssTarget(property)) return CSS_LIMITS[property];
@@ -50,7 +50,7 @@ export function validateAudioReactive(clip: { kind: string; audioReactive?: Audi
 }
 
 /** The level (0..1) at timeline time `time`, linear between samples; 0 outside the curve. */
-export function levelAt(reactive: Pick<AudioReactive, 'rate' | 'start'>, levels: Uint8Array, time: number) {
+function levelAt(reactive: Pick<AudioReactive, 'rate' | 'start'>, levels: Uint8Array, time: number) {
   const position = (time - reactive.start) * reactive.rate;
   if (!(position >= 0) || position > levels.length - 1) return 0;
   const index = Math.floor(position), mix = position - index;

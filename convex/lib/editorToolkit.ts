@@ -103,13 +103,13 @@ import { compareMotion, type MotionMap } from '../../lib/inspo-motion/motion-map
 import type { ActionCtx } from "../_generated/server";
 
 export class AnalysisStepError extends Error {}
-export async function reportAnalysisFailure<T>(work: () => Promise<T>) {
+async function reportAnalysisFailure<T>(work: () => Promise<T>) {
   try { return await work(); }
   catch (error) { if (error instanceof AnalysisStepError) return { success: false as const, error: error.message.slice(0, 1000) }; throw error; }
 }
 
 export type EditorRun = { projectId: Id<'projects'>; ownerId: string; runId: string };
-export type EditorToolkitOptions = {
+type EditorToolkitOptions = {
   run: EditorRun;
   project: Doc<'projects'>;
   /** Shared with the caller; analysis and generated sounds update it in place. */

@@ -6,7 +6,7 @@ export type TextGradient = {
   animation?: { duration: number; direction: 'forward' | 'reverse'; loop: boolean };
   offset?: number;
 };
-export const DEFAULT_TEXT_GRADIENT: TextGradient = { colors: ['#FFFFFF', '#A78BFA'], angle: 90 };
+const DEFAULT_TEXT_GRADIENT: TextGradient = { colors: ['#FFFFFF', '#A78BFA'], angle: 90 };
 export type TextGradientChanges = { enabled: boolean; colors?: string[]; angle?: number; animation?: { enabled: boolean; duration?: number; direction?: 'forward' | 'reverse'; loop?: boolean } };
 const hex = /^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i;
 

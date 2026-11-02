@@ -8,7 +8,7 @@ const countFields = ['model', 'input', 'instructions', 'tools', 'tool_choice', '
 type Measurement = { method: 'openai-input-tokens'; countedTokens: number; reservedTokens: number };
 
 /** Capture the installed SDK's exact token-bearing wire format locally. */
-export async function encodeOpenAICount(params: LanguageModelV4CallOptions, modelId: string): Promise<Record<string, unknown>> {
+async function encodeOpenAICount(params: LanguageModelV4CallOptions, modelId: string): Promise<Record<string, unknown>> {
   let body: Record<string, unknown> | undefined;
   const serializer = createOpenAI({ apiKey: 'local-serialization-only', baseURL: BASE, fetch: async (_url, init) => {
     body = JSON.parse(String(init?.body));

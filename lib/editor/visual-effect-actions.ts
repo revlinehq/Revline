@@ -1,7 +1,7 @@
 import {DEFAULT_DITHER,VISUAL_EFFECT_DEFAULTS,VISUAL_EFFECT_KEYS,validateVisualEffects,type VisualEffects} from './visual-effects';
 import type {Clip} from './types';
 
-export const VISUAL_EFFECT_GROUPS=VISUAL_EFFECT_KEYS;
+const VISUAL_EFFECT_GROUPS=VISUAL_EFFECT_KEYS;
 export type VisualEffectGroup=typeof VISUAL_EFFECT_GROUPS[number];
 /** Groups offered for new edits; retired ones stay renderable in saved projects. */
 const RETIRED_VISUAL_EFFECT_GROUPS:readonly string[]=['dither','neonEdges','lightLeak','zoomBlur','lensDistortion','frameDistortion','directionalBlur'];

@@ -28,7 +28,7 @@ import './timeline-sharing.css';
 
 export type SharedTimeline = { _id: string; title: string; updatedAt: number; timeline: Timeline; tabs?: { id: string; name: string; timeline: Timeline }[]; openTimelineId?: string; assets: MediaAsset[]; chat?: SharedChatMessage[] };
 const noEdit = () => {};
-export function timelineSignInPath(shareId: string) { return `/sign-in?redirect_url=${encodeURIComponent(timelineSharePath(shareId))}`; }
+function timelineSignInPath(shareId: string) { return `/sign-in?redirect_url=${encodeURIComponent(timelineSharePath(shareId))}`; }
 
 export function TimelineShowcase({ shareId }: { shareId: string }) {
   const router = useRouter();
@@ -52,7 +52,7 @@ function ShowcaseHeader({ title = 'Shared timeline', copying = false }: { title?
   return <header className="timeline-showcase-header"><Link href="/" aria-label="Revline home"><Brand/></Link><span>{title}</span><small>{copying ? 'Creating copy…' : 'Showcase'}</small></header>;
 }
 
-export function TimelineShowcaseView(props: { share: SharedTimeline; sceneThumbs?: Record<string, { time: number; image: string }[]>; tabId?: string; onTab?: (id: string) => void; signedIn: boolean; useDisabled?: boolean; onUse: () => Promise<void> }) {
+function TimelineShowcaseView(props: { share: SharedTimeline; sceneThumbs?: Record<string, { time: number; image: string }[]>; tabId?: string; onTab?: (id: string) => void; signedIn: boolean; useDisabled?: boolean; onUse: () => Promise<void> }) {
   const [store] = useState(() => createEditorStore(props.share.timeline));
   return <EditorStateProvider store={store}><ShowcaseContent {...props}/></EditorStateProvider>;
 }

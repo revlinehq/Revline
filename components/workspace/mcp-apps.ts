@@ -14,6 +14,3 @@ export const MCP_APPS: Record<McpAppId, McpApp> = {
 };
 
 export const claudeCodeCommand = (mcpUrl: string) => `claude mcp add --transport http revline ${mcpUrl}`;
-
-/** Revline's public MCP endpoint (MCP_PUBLIC_ORIGIN on production), for pages shown before sign-in. */
-export const PUBLIC_MCP_URL = 'https://tryrevline.com/mcp';

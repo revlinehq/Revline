@@ -49,7 +49,7 @@ export function scanPage(html: string, baseUrl: string): PageScan {
 }
 
 /** next/font and similar tools hash family names (`__Inter_d65c78`); scenes use the readable name. */
-export function readableFamily(family: string) {
+function readableFamily(family: string) {
   const name = family.trim().replace(/^["']|["']$/g, '');
   const hashed = name.match(/^__(.+?)_[\da-f]{5,}$/i);
   return (hashed ? hashed[1].replace(/_/g, ' ') : name).trim();
@@ -99,7 +99,7 @@ function translucent(color: string) {
   return alpha !== undefined && (alpha.endsWith('%') ? Number.parseFloat(alpha) < 100 : Number(alpha) < 1);
 }
 
-export function normalizeColor(color: string) {
+function normalizeColor(color: string) {
   const hex = color.trim().toLowerCase();
   if (/^#[\da-f]{3}$/.test(hex)) return `#${hex.slice(1).split('').map(c => c + c).join('')}`;
   return hex.replace(/\s+/g, ' ');

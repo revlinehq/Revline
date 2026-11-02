@@ -21,10 +21,10 @@ export function subjectSelectionKey(selection: z.infer<typeof subjectSelection> 
 const stop = z.object({ time: z.number().nonnegative(), reason: z.enum(['boundary', 'cut', 'occluded', 'out-of-frame', 'unreliable']) });
 export const pixelTrackSample = z.object({ frameIndex: z.number().int().nonnegative(), time: z.number().nonnegative(), x: fraction, y: fraction, confidence: fraction, scale: z.number().positive(), rotation: z.number(), box: trackBox.optional() });
 export const pixelTrackHeader = z.object({ seedTime: z.number().nonnegative(), sourceFps: z.number().positive(), width: z.number().positive(), height: z.number().positive() });
-export const trackGrounding = z.object({ provider: z.enum(['fal-florence-2', 'gemini']), noun: z.string(), box: trackBox, time: z.number().nonnegative() });
-export const pixelTrackSummary = pixelTrackHeader.extend({ grounding: trackGrounding.optional(), engine: z.literal('opencv-klt-template-v2'), sampleCount: z.number().int().positive(), minConfidence: fraction, firstTime: z.number().nonnegative(), lastTime: z.number().nonnegative(), backward: stop, forward: stop });
-export const legacyPixelTrackResult = pixelTrackHeader.extend({ engine: z.literal('opencv-klt-template-v1'), samples: z.array(pixelTrackSample).min(1), backward: stop, forward: stop });
-export const pixelTrackResult = z.discriminatedUnion('engine', [legacyPixelTrackResult, pixelTrackSummary]);
+const trackGrounding = z.object({ provider: z.enum(['fal-florence-2', 'gemini']), noun: z.string(), box: trackBox, time: z.number().nonnegative() });
+const pixelTrackSummary = pixelTrackHeader.extend({ grounding: trackGrounding.optional(), engine: z.literal('opencv-klt-template-v2'), sampleCount: z.number().int().positive(), minConfidence: fraction, firstTime: z.number().nonnegative(), lastTime: z.number().nonnegative(), backward: stop, forward: stop });
+const legacyPixelTrackResult = pixelTrackHeader.extend({ engine: z.literal('opencv-klt-template-v1'), samples: z.array(pixelTrackSample).min(1), backward: stop, forward: stop });
+const pixelTrackResult = z.discriminatedUnion('engine', [legacyPixelTrackResult, pixelTrackSummary]);
 export const pixelTrackChunk = z.object({ direction: z.enum(['forward', 'backward']), sequence: z.number().int().nonnegative(), samples: z.array(pixelTrackSample).min(1) });
 export const pixelTrackMessage = z.discriminatedUnion('type', [z.object({ type: z.literal('header'), header: pixelTrackHeader }), z.object({ type: z.literal('chunk'), chunk: pixelTrackChunk }), z.object({ type: z.literal('complete'), result: pixelTrackSummary })]);
 export const pixelTrackPage = z.discriminatedUnion('status', [
