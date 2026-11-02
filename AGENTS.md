@@ -27,16 +27,18 @@ The agent that built the change writes its pull request, because it knows what i
   ```
   <one sentence: what the user will notice>
 
+  **What it is for:** <one line: what the feature or fix is for, in plain words>
+  **Why:** <one line: why it was requested and what problem it solves (who or what asked: the user, an agent test, an incident)>
+
   **Changed**
   - <up to 5 bullets, one line each, plain words>
 
   **Before / after** (only if something is visible)
   | Before | After |
 
-  **Tested:** <one line>
   **Risk:** <one line, or "None">
   ```
-  No background, no restating the request, no file-by-file walkthrough, no headings beyond these. Add a Mermaid diagram only when the change rewires how systems talk to each other.
+  Keep **What it is for** and **Why** short and concrete, not a retelling of the conversation. No file-by-file walkthrough, no list of checks you ran, no headings beyond these. Add a Mermaid diagram only when the change rewires how systems talk to each other.
 - An entry in `docs/changelog.md` (newest first, under a `## YYYY-MM-DD` heading): `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
 - Before and after screenshots of every page or screen a change touches visibly (web: desktop and phone width; iOS: the Simulator), taken from the running app, never mocked. Do not commit them to your branch: push them to the `pr-assets` branch under `<your-branch>/before/` and `<your-branch>/after/`, and show them in the description as a before | after table per page, linked as `https://github.com/zuraHQ/revline-editor/blob/pr-assets/<path>?raw=true`.
 If you were told not to push, hand the description and the screenshot folders to whoever started you, and they open the draft PR with your text unchanged.
