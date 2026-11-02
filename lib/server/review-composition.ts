@@ -65,21 +65,20 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     const start=Math.round(Math.min(range.start,last)*timeline.fps)/timeline.fps,end=Math.min(range.end,last);
     const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
     if(times.length<3)throw new AnalysisError('Check at least 0.3 s.',400);
-    const width=320,height=Math.max(2,Math.round(width*size.height/size.width));
+    const crop=snapshot.comparison?.crop,aspect=snapshot.comparison?.aspectRatio??size.width*(crop?.w??1)/(size.height*(crop?.h??1));
+    const width=320,height=Math.max(2,Math.round(width/aspect));
     const frames:Uint8Array[]=[];
     // Bound video extraction and capture to four seconds, preserving every sample and the original film clock.
     const perChunk=Math.max(1,Math.floor(4*fps));
     for(let first=0;first<times.length;first+=perChunk){
       const group=times.slice(first,first+perChunk);
-      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group,start:group[0],end:group[group.length-1]+frame,variants:['edited'],pacing:{width,...(snapshot.comparison?.crop?{crop:snapshot.comparison.crop}:{})}},signal);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group,start:group[0],end:group[group.length-1]+frame,variants:['edited'],pacing:{width,height,...(snapshot.comparison?.crop?{crop:snapshot.comparison.crop}:{})}},signal);
       const bytes=await readFile(join(directory,'pacing.bin'));
-      const crop=snapshot.comparison?.crop,smallHeight=crop?Math.max(2,Math.round(width*size.height*crop.h/(size.width*crop.w))):height;
-      if(bytes.length!==group.length*width*smallHeight)throw new AnalysisError('The picture check returned an incomplete frame buffer.',500);
-      frames.push(...group.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*smallHeight,width*smallHeight)));
+      if(bytes.length!==group.length*width*height)throw new AnalysisError('The picture check returned an incomplete frame buffer.',500);
+      frames.push(...group.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height)));
       onProgress(20+Math.round(65*Math.min(first+group.length,times.length)/times.length));
     }
-    const crop=snapshot.comparison?.crop;
-    return {width,height:crop?Math.max(2,Math.round(width*size.height*crop.h/(size.width*crop.w))):height,start:times[0],frames};
+    return {width,height,start:times[0],frames};
   };
   if(snapshot.motion){
     const fps=Math.min(30,timeline.fps),{width,height,start,frames}=await sampled({start:Math.max(0,snapshot.motion.start-.5),end:Math.min(last,snapshot.motion.end+.5)},fps);
