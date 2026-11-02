@@ -151,7 +151,11 @@ export const speechCleanupValidator = v.object({ version: v.number(), cuts: v.ar
 const clippingRect = v.object({ x:v.number(), y:v.number(), w:v.number(), h:v.number() });
 export const facecamValidator = v.object({ version:v.literal(1), samples:v.array(v.object({ time:v.number(), kind:v.union(v.literal('overlay'),v.literal('creator-only'),v.literal('gameplay-only'),v.literal('uncertain')), facecam:v.union(clippingRect,v.null()), gameplay:v.union(clippingRect,v.null()), confidence:v.number(), reason:v.string() })) });
 export const speakerRequestValidator=v.object({start:v.number(),end:v.number()});
-export const speakersValidator = v.object({ version:v.literal(1),start:v.number(),end:v.number(),identityScope:v.union(v.literal('source'),v.literal('window')), turns:v.array(v.object({ start:v.number(), end:v.number(), speaker:v.number(), confidence:v.number(), face:v.union(clippingRect,v.null()) })), focus:focusValidator });
+const speakerFields = { start:v.number(),end:v.number(),identityScope:v.union(v.literal('source'),v.literal('window')), turns:v.array(v.object({ start:v.number(), end:v.number(), speaker:v.number(), confidence:v.number(), face:v.union(clippingRect,v.null()) })), focus:focusValidator };
+export const speakersValidator = v.union(
+  v.object({ ...speakerFields, version:v.literal(1) }),
+  v.object({ ...speakerFields, version:v.literal(2), framing:v.array(v.object({ start:v.number(),end:v.number(),shot:v.number(),method:v.union(v.literal('shot-dominant'),v.literal('turn-mouth'),v.literal('identity-reuse'),v.literal('fallback')),confidence:v.number(),face:v.union(clippingRect,v.null()),faceId:v.union(v.number(),v.null()),speaker:v.union(v.number(),v.null()) })) }),
+);
 export const analysisValidator = v.object({ facecam:v.optional(facecamValidator), speakers:v.optional(speakersValidator), transcript: v.optional(transcriptValidator), audioActivity: v.optional(audioActivityValidator), speechCleanup: v.optional(speechCleanupValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator),
   // A reference breakdown (lib/media-analysis/reference.ts) as validated JSON: shots, their parts and the style to borrow.
   reference: v.optional(v.string()) });

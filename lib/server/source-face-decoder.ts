@@ -39,7 +39,7 @@ export async function withSourceFaceDecoder<T>(source: string, signal: AbortSign
   const cancel = () => { void browser?.close(); };
   signal.addEventListener('abort', cancel, { once: true });
   try {
-    browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
+    browser = await puppeteer.launch({ headless: true, protocolTimeout: 10 * 60_000, args: ['--no-sandbox', '--disable-dev-shm-usage'] });
     signal.throwIfAborted();
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${address.port}/`);
