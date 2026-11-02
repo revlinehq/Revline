@@ -236,6 +236,11 @@ export const remove = mutation({ args: { projectId: v.id('projects') }, returns:
   if(project)await beginProjectDeletion(ctx,ownerId,project);
   return null;
 }});
+export const pendingDeletions=query({args:{},returns:v.array(v.id('projects')),handler:async ctx=>{
+  const ownerId=await requireOwner(ctx);
+  const projects=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.eq(q.field('deleting'),true)).take(200);
+  return projects.map(project=>project.projectId);
+}});
 export const deletionStatus=query({args:{projectIds:v.array(v.id('projects'))},returns:v.union(v.literal('pending'),v.literal('failed'),v.literal('complete')),handler:async(ctx,{projectIds})=>{
   const ownerId=await requireOwner(ctx);if(projectIds.length>4000)throw new ConvexError('Too many projects');
   let pending=false;
