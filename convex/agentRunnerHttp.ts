@@ -12,7 +12,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 const TURN_FUNCTIONS = new Set([
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
-  'saveIncidents:observe',
+  'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportRunner',
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',
   'assistant:listRunTimelines', 'assistant:createRunTimeline', 'assistant:openRunTimeline', 'assistant:importRunVideo', 'assistant:runMediaTask', 'assistant:exportRunVideo',

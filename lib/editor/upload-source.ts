@@ -1,3 +1,4 @@
+import { reportClientFailure } from '@/lib/incident-client';
 import type { Id } from '@/convex/_generated/dataModel';
 import { inspectMedia, uploadMultipart } from './media';
 import { uploadPartSize } from './limits';
@@ -65,6 +66,7 @@ export async function uploadSourceFile(
     log('Source saved; upload complete');
     return assetId;
   } catch (error) {
+    reportClientFailure(error, 'lib/editor/upload-source');
     log('Upload failed; releasing unfinished upload');
     if (uploadId && !completed) await transport.abort(uploadId).catch(() => undefined);
     throw error;

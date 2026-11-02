@@ -1,4 +1,5 @@
 'use client';
+import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -119,6 +120,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const viewedTimeline=useMemo(()=>{const snapshot=watchedTab?tabSnapshots?.find(item=>item.id===watchedTab):undefined;return snapshot?normalizeTimeline(snapshot.timeline):undefined;},[watchedTab,tabSnapshots]);
   const openTab=useMutation(api.timelineTabs.open),createTab=useMutation(api.timelineTabs.create),renameTab=useMutation(api.timelineTabs.rename),removeTab=useMutation(api.timelineTabs.remove);const [jobId,setJobId]=useState<Id<'renderJobs'>|null>(null);const job=useQuery(api.renders.get,jobId?{jobId}:'skip');
   const [store]=useState(()=>createEditorStore(project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},project.history??[]));const timeline=useStore(store,s=>s.timeline);const history=useStore(store,s=>s.history);const future=useStore(store,s=>s.future);const timelineRef=useRef(timeline);const [saving,setSaving]=useState(false);const [saveFailed,setSaveFailed]=useState(false);const [error,setError]=useState('');const [title,setTitle]=useState(project.title);
+  useEffect(()=>{if(error)reportClientIncident({source:'editor',kind:'user-failure',message:error,projectId,context:{location:'components/editor/connected-editor:error'}});},[error,projectId]);
   useEffect(()=>{setTitle(project.title);},[project.title]);
   const [saves]=useState(()=>createTimelineSaveQueue({timeline,revision:project.revision??0,history:project.history??[]},{
     save: edit=>save({projectId,...edit}),

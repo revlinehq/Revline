@@ -260,6 +260,14 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  incidents: defineTable({
+    fingerprint: v.string(), source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), deployment: v.string(),
+    count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),
+    status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('resolved')),
+    delivery: v.union(v.literal('pending'), v.literal('claimed'), v.literal('finished'), v.literal('failed')),
+    claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
+    samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
+  }).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
   assistantTurns: defineTable({
     projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),

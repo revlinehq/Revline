@@ -1,3 +1,4 @@
+import { recordIncident, incidentDeployment } from './lib/incidents';
 import { MAX_SPEAKER_WINDOW_SECONDS } from '../lib/media-analysis/clipping';
 import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
@@ -500,6 +501,11 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   if(turn&&turn.status==='running')await ctx.db.patch(turn._id,{status:args.error&&!committed?'failed':'completed',error:committed?undefined:args.error?.slice(0,1000),updatedAt:Date.now()});
   await finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication);
   const error = committed ? undefined : args.error;
+  if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncident(ctx, {
+    source: 'assistant', kind: 'turn-failure', message: error,
+    context: { location: 'convex/assistant:finish', savedEdits: args.savedEdits },
+    projectId: args.projectId, runId: args.runId, deployment: incidentDeployment(),
+  });
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     await clearLivePreview(ctx,project._id);
     const requests = await ctx.db.query("analysisRequests").withIndex("by_projectId_runId", q => q.eq("projectId", args.projectId).eq("aiRunId", args.runId)).take(16);

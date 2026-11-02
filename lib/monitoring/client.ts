@@ -1,3 +1,4 @@
+import { reportClientFailure } from '../incident-client';
 import { sentryOptions } from './sentry-options';
 
 const enabled = process.env.NEXT_PUBLIC_TELEMETRY_ENABLED === 'true';
@@ -41,6 +42,7 @@ export function initializeClientMonitoring() {
 }
 
 export function captureClientException(error: unknown) {
+  reportClientFailure(error, 'react:error-boundary');
   initializeClientMonitoring();
   void sentry?.then(sdk => { sdk.captureException(error); }).catch(() => {});
 }

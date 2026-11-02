@@ -1,4 +1,4 @@
-import {userError} from '@/lib/user-error';
+import {userErrorMessage as userError} from '@/lib/user-error';
 import type {ChatMessage,ResultCard,TimelinePublicationReceipt} from './assistant-results';
 
 const fallback='This step could not finish. Your saved edits remain.';

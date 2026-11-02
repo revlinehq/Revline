@@ -2,6 +2,7 @@
 import { ThinkingBlock, ToolChain } from './tool-chain';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { ReferenceCard, referenceOf, type ReferenceMedia } from './reference-card';
+import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
@@ -178,6 +179,14 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
+  const reportedFailures=useRef(new Set<string>());
+  useEffect(()=>{
+    for(const group of groups)for(const card of group.cards){
+      if(card.state!=='error'||reportedFailures.current.has(group.id+card.key))continue;
+      reportedFailures.current.add(group.id+card.key);
+      reportClientIncident({source:'editor-chat',kind:card.title==='Save not confirmed'?'save-confirmation':'turn-failure',message:`${card.title}: ${card.detail}`,context:{location:'components/editor/assistant-panel:failure-card',turnId:group.id}});
+    }
+  },[groups]);
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
