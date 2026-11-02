@@ -23,15 +23,25 @@ const LICENSES: Record<string, { spdx: string; url: string }> = {
   'material-symbols': { spdx: 'Apache-2.0', url: 'https://github.com/google/material-design-icons/blob/master/LICENSE' },
   heroicons: { spdx: 'MIT', url: 'https://github.com/tailwindlabs/heroicons/blob/master/LICENSE' },
   mdi: { spdx: 'Apache-2.0', url: 'https://github.com/Templarian/MaterialDesign/blob/master/LICENSE' },
+  // The SVG artwork is Apache-2.0; Noto's font license is a separate OFL license.
+  noto: { spdx: 'Apache-2.0', url: 'https://github.com/googlefonts/noto-emoji/blob/main/2D/svg/LICENSE' },
+  'fluent-emoji': { spdx: 'MIT', url: 'https://github.com/microsoft/fluentui-emoji/blob/main/LICENSE' },
 };
 const LOGO_SETS = ['logos', 'skill-icons', 'devicon'], UI_SETS = ['lucide', 'tabler', 'ph', 'material-symbols', 'heroicons', 'mdi'];
+const EMOJI_SETS = ['noto', 'fluent-emoji'];
+const allowedSets = () => Object.entries(LICENSES).map(([name, license]) => `${name} (${license.spdx})`).join(', ');
+function validateIconId(id: string) {
+  const [prefix, name, extra] = id.split(':');
+  if (!Object.hasOwn(LICENSES, prefix)) throw new Error(`Icon set "${prefix}" is not supported by findIcon's license allow-list. Allowed sets: ${allowedSets()}.`);
+  if (extra !== undefined || !/^[a-z0-9-]+$/.test(name ?? '')) throw new Error(`Invalid icon id "${id}". Use set:icon-name. Allowed sets: ${allowedSets()}.`);
+}
 const TRADEMARK = 'A trademark of its owner: show it as it is, to name that product. Never recolor, distort, restyle or combine it with other marks, and never imply endorsement.';
 const MAX_SVG = 40_000;
 /** Raise when results change shape or quality, so cached answers are fetched again. */
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 type SimpleIcon = { title: string; slug: string; hex: string; source: string; guidelines?: string; license?: { type: string; url?: string }; aliases?: { aka?: string[]; dup?: { title: string }[]; loc?: Record<string, string>; old?: string[] } };
-type Candidate = { id: string; title: string; kind: 'logo' | 'glyph' | 'ui'; score: number; hex?: string; simple?: SimpleIcon };
+type Candidate = { id: string; title: string; kind: 'logo' | 'glyph' | 'ui' | 'emoji'; score: number; hex?: string; simple?: SimpleIcon };
 type Style = 'logo' | 'glyph' | 'ui';
 
 async function fetchFrom(url: string, as: 'text' | 'json') {
@@ -71,7 +81,7 @@ async function iconifyCandidates(query: string, sets: string[], kind: Candidate[
     const [prefix, name] = id.split(':');
     const year = Number(name.match(/(?:19|20)\d\d/)?.[0] ?? 0);
     const base = name.replace(/-(icon|wordmark|light|dark|\d{4})$/g, '').replace(/^google-/, '');
-    const score = kind === 'ui' ? 3 - order / 100 : match(query, base) + (name.endsWith('-icon') ? .3 : 0) + year / 1e5 - sets.indexOf(prefix) * .2 - (name.includes('wordmark') ? .4 : 0);
+    const score = kind === 'ui' || kind === 'emoji' ? 3 - order / 100 : match(query, base) + (name.endsWith('-icon') ? .3 : 0) + year / 1e5 - sets.indexOf(prefix) * .2 - (name.includes('wordmark') ? .4 : 0);
     return { id, title: name.replace(/-/g, ' '), kind, score };
   }).filter(candidate => candidate.score >= 1).sort((a, b) => b.score - a.score);
 }
@@ -79,7 +89,7 @@ async function iconifyCandidates(query: string, sets: string[], kind: Candidate[
 /** The icon's markup ready to inline: no fixed size, no title, nothing executable, the brand fill on a single-color mark. */
 async function iconSvg(candidate: Candidate, color?: string) {
   const [prefix, name] = candidate.id.split(':');
-  if (!LICENSES[prefix] || !/^[a-z0-9-]+$/.test(name ?? '')) throw new Error(`Unknown icon ${candidate.id}.`);
+  validateIconId(candidate.id);
   let svg = String(prefix === 'simple-icons' ? await fetchFrom(`${SIMPLE_ICONS}/icons/${name}.svg`, 'text') : await fetchFrom(`https://api.iconify.design/${prefix}/${name}.svg`, 'text'));
   if (!svg.trimStart().startsWith('<svg')) throw new Error(`${candidate.id} is not an icon.`);
   svg = svg.replace(/<script[\s\S]*?<\/script>|<foreignObject[\s\S]*?<\/foreignObject>|<title>[\s\S]*?<\/title>/gi, '').replace(/\son[a-z]+="[^"]*"/gi, '').replace(/\s(?:xlink:)?href="(?!#)[^"]*"/gi, '').replace(/\s+/g, ' ').trim();
@@ -117,8 +127,9 @@ export const find = internalAction({
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     const name = args.name.trim(), color = args.color?.trim();
     if (color && !/^#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(color)) throw new Error('color must be a hex color like #1a1a1a.');
-    const exact = /^[a-z0-9-]+:[a-z0-9-]+$/.test(name) ? name : undefined;
-    const style: Style = args.style ?? (exact && UI_SETS.includes(exact.split(':')[0]) ? 'ui' : 'logo');
+    const exact = name.includes(':') ? name : undefined;
+    if (exact) validateIconId(exact);
+    const style: Style = args.style ?? (exact && UI_SETS.includes(exact.split(':')[0]) ? 'ui' : exact && EMOJI_SETS.includes(exact.split(':')[0]) ? 'glyph' : 'logo');
     const key = `${CACHE_VERSION}|${style}|${color ?? ''}|${exact ?? words(name)}`;
     const cached = await ctx.runQuery(internal.iconCache.get, { key });
     if (cached) return cached;
@@ -127,23 +138,24 @@ export const find = internalAction({
     if (exact) {
       const [prefix, slug] = exact.split(':');
       const simple = prefix === 'simple-icons' ? (await simpleIconData()).find(icon => icon.slug === slug) : undefined;
-      candidates = [{ id: exact, title: simple?.title ?? slug.replace(/-/g, ' '), kind: prefix === 'simple-icons' ? 'glyph' : UI_SETS.includes(prefix) ? 'ui' : 'logo', score: 3, ...(simple ? { hex: `#${simple.hex}`, simple } : {}) }];
+      candidates = [{ id: exact, title: simple?.title ?? slug.replace(/-/g, ' '), kind: prefix === 'simple-icons' ? 'glyph' : UI_SETS.includes(prefix) ? 'ui' : EMOJI_SETS.includes(prefix) ? 'emoji' : 'logo', score: 3, ...(simple ? { hex: `#${simple.hex}`, simple } : {}) }];
     } else if (style === 'ui') {
       candidates = await iconifyCandidates(name, UI_SETS, 'ui');
     } else {
-      const [simple, logos] = await Promise.all([simpleCandidates(name).catch(() => []), iconifyCandidates(name, LOGO_SETS, 'logo').catch(() => [])]);
+      const [simple, logos, emoji] = await Promise.all([simpleCandidates(name).catch(() => []), iconifyCandidates(name, LOGO_SETS, 'logo').catch(() => []), style === 'glyph' ? iconifyCandidates(name, EMOJI_SETS, 'emoji').catch(() => []) : Promise.resolve([])]);
       // A full-color logo leads for 'logo' when it is the same name; the brand's single-color mark leads for 'glyph'.
       const exactLogos = logos.filter(candidate => candidate.score >= 2), rest = logos.filter(candidate => candidate.score < 2);
-      candidates = style === 'glyph' ? [...simple, ...exactLogos, ...rest] : [...exactLogos, ...simple, ...rest];
+      candidates = style === 'glyph' ? [...simple, ...emoji, ...exactLogos, ...rest] : [...exactLogos, ...simple, ...rest];
     }
     candidates = candidates.filter((candidate, index) => candidates.findIndex(other => other.id === candidate.id) === index).slice(0, 8);
     if (!candidates.length) {
-      return { found: false, name, style, note: style === 'ui' ? 'No UI icon matched. Try a plainer word for the thing it shows (send, calendar, check, mic).' : `No logo for "${name}" in simple-icons or Iconify's logo sets. Do not draw it from memory. If the logo shows in a reference video or the user's media, traceShape it at a frame where it is whole and sharp (box tight around the mark): that outline is the real logo. Otherwise show the name as type in the brand's font and color. Never stop to ask the user for the logo file.` };
+      return { found: false, name, style, allowedSets: Object.keys(LICENSES), note: style === 'ui' ? 'No UI icon matched. Try a plainer word for the thing it shows (send, calendar, check, mic).' : style === 'glyph' ? 'No glyph or emoji matched. Try a plainer name or an exact id such as noto:trophy or fluent-emoji:trophy.' : `No logo for "${name}" in simple-icons or Iconify's logo sets. Do not draw it from memory. If the logo shows in a reference video or the user's media, traceShape it at a frame where it is whole and sharp (box tight around the mark): that outline is the real logo. Otherwise show the name as type in the brand's font and color. Never stop to ask the user for the logo file.` };
     }
 
-    const shown = (await Promise.all(candidates.slice(0, 4).map(async candidate => { try { return { candidate, ...await iconSvg(candidate, color) }; } catch { return null; } }))).filter(icon => icon !== null);
-    if (!shown.length) throw new Error('The icon sources did not answer. Try again shortly.');
-    const chosen = shown[0], prefix = chosen.candidate.id.split(':')[0], brand = chosen.candidate.kind !== 'ui';
+    const fetched = await Promise.allSettled(candidates.slice(0, 4).map(async candidate => ({ candidate, ...await iconSvg(candidate, candidate.kind === 'emoji' ? undefined : color) })));
+    const shown = fetched.flatMap(result => result.status === 'fulfilled' ? [result.value] : []);
+    if (!shown.length) throw new Error(`Could not load ${candidates.slice(0, 4).map(candidate => candidate.id).join(', ')}: ${fetched.flatMap(result => result.status === 'rejected' ? [result.reason instanceof Error ? result.reason.message : String(result.reason)] : []).join('; ')}`);
+    const chosen = shown[0], prefix = chosen.candidate.id.split(':')[0], brand = chosen.candidate.kind === 'logo' || chosen.candidate.kind === 'glyph';
     const simple = chosen.candidate.simple;
     let images: { label: string; data: string; mimeType: string }[] = [];
     try { images = [{ label: `Preview, left to right: ${shown.map((icon, index) => `${index + 1} ${icon.candidate.id}${index === 0 ? ' (returned)' : ''}`).join(', ')}`, data: await previewSheet(shown), mimeType: 'image/png' }]; } catch { /* The markup is the result; a preview that cannot be drawn is left out. */ }

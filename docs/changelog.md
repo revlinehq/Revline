@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Agent tools: Remove scene image-binding caps, make patches and inspection recover from routine input drift, and support licensed Noto/Fluent emoji with accurate icon errors. Why: Terra hit repeated tool friction while building a motion film.
 - Skills: Add renderer-proven 3D craft guidance for materials, lighting, grounding, cameras and licensed models. Why: Zura's cursor review exposed mechanics without visual craft.
 - Codebase: Remove unused components and helpers, keep module-only exports private, and simplify timeline comparison, storage helpers and runner startup. Why: the user requested behaviour-preserving cleanup across the web, backend, workers and scripts.
 - Landing: Recover interrupted video loads, resume visible films and keep playable posters when autoplay is blocked. Why: Zura reported landing videos sometimes stayed stopped.
