@@ -711,7 +711,14 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }
           const saved = await ctx.runMutation(internal.generatedImages.save, { ...run, images: uploaded, provenance: { requestId, prompt: input.prompt, model: IMAGE_MODEL, size: imageGenerationSize(input), transparentBackground: input.transparentBackground ?? false, quality: 'medium', referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], usage } });
           assets.push(...saved);
-          return { assetIds: saved.map(asset => asset._id), assets: saved.map(asset => ({ assetId: asset._id, fileName: asset.fileName, width: asset.width, height: asset.height })), model: IMAGE_MODEL, usage, images: generated.images.map((image, index) => ({ label: `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' })), note: 'Saved to project media. Inspect the previews, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
+          // Keep the MCP/action response bounded even for four detailed PNGs. Originals stay untouched in media.
+          let previewBytes = 0;
+          const images = generated.images.flatMap((image, index) => {
+            if (index > 0 && previewBytes + image.data.length > 8_000_000) return [];
+            previewBytes += image.data.length;
+            return [{ label: `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' }];
+          });
+          return { assetIds: saved.map(asset => asset._id), assets: saved.map(asset => ({ assetId: asset._id, fileName: asset.fileName, width: asset.width, height: asset.height })), model: IMAGE_MODEL, usage, images, ...(images.length < saved.length ? { previewNote: 'Large variants have limited inline previews; all variants are saved in project media.' } : {}), note: 'Saved to project media. Inspect the previews, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
         } catch (error) {
           await ctx.runMutation(internal.generatedImages.cleanup, { ...run, keys: uploaded.map(image => image.r2Key) }).catch(() => {});
           throw error;

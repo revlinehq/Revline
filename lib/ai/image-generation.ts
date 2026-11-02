@@ -2,7 +2,8 @@ import { generateImage as generateOpenAIImage, APICallError } from 'ai';
 import { z } from 'zod';
 import { activeOpenAIKey, editorOpenAI } from './openai-keys';
 
-export const IMAGE_MODEL = 'gpt-image-2';
+// GPT Image 2 rejects transparent backgrounds; Flare supports both plates and cut-outs.
+export const IMAGE_MODEL = 'gpt-image-2.5-flare';
 const sizes = { '1:1': '1024x1024', '3:2': '1536x1024', '2:3': '1024x1536', '16:9': '1536x864', '9:16': '864x1536' } as const;
 export const imageGenerationInput = z.object({
   prompt: z.string().trim().min(1).max(16000).describe('One isolated subject, framing, palette and material. Include no text; use transparentBackground for cut-outs.'),
@@ -41,7 +42,7 @@ export async function generateImagePlates(input: ImageGenerationInput, reference
   // Direct Images API tariffs, verified 2026-11-02: no cached input discount.
   // https://developers.openai.com/api/docs/pricing
   const estimatedUsd = inputTokens !== null && outputTokens !== null && textTokens !== null && imageTokens !== null && textTokens + imageTokens === inputTokens
-    ? Math.round((textTokens * 2.5 + imageTokens * 4 + outputTokens * 15) / 1_000_000 * 1e12) / 1e12 : null;
+    ? Math.round((textTokens * 5 + imageTokens * 8 + outputTokens * 30) / 1_000_000 * 1e12) / 1e12 : null;
   const usage = { inputTokens, outputTokens, textTokens, imageTokens, estimatedUsd };
   return { usage, images: result.images.map(image => {
     const bytes = Uint8Array.from(image.uint8Array);
