@@ -76,7 +76,7 @@ export function EditComposer({ value, onChange, onSubmit, onAttach, attachments 
   }, [attachments.length, uploadOnHover]);
   useLayoutEffect(() => {
     const field = textarea.current;
-    if (!field) return;
+    if (!field || variant === 'compact' && CSS.supports('field-sizing', 'content')) return;
     const resize = () => {
       // Measure the typed text only: Chromium counts placeholder text in scrollHeight, and the
       // placeholder changes while a reply runs (the longer queue hint), which made the box jump.

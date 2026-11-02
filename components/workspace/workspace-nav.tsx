@@ -3,7 +3,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useEffect, useRef, useState, type ReactNode, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
@@ -36,11 +36,11 @@ export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const connected = !!isSignedIn && isAuthenticated && !demo;
   const projects = useQuery(api.projects.list, connected && enabled ? { limit } : 'skip');
-  const chats: WorkspaceChat[] = connected ? (projects ?? []).map(project => ({
+  const chats = useMemo<WorkspaceChat[]>(() => connected ? (projects ?? []).map(project => ({
     id: project._id, title: project.title, updatedAt: project.updatedAt,
     clipCount: project.clipCount, coverUrl: project.coverUrl,
     coverKind: project.coverKind, running: !!project.aiRunning, agent: project.agent,
-  })) : [];
+  })) : [], [connected, projects]);
   return { chats, loading: enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined)))), connected };
 }
 
