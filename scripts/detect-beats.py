@@ -7,8 +7,8 @@ import sys
 import wave
 
 threads = int(os.environ.get("BEAT_TRACK_THREADS", "2"))
-if threads < 1 or threads > 4:
-    raise ValueError("Beat tracking threads must be between 1 and 4")
+if threads < 1 or threads > 8:
+    raise ValueError("Beat tracking threads must be between 1 and 8")
 os.environ.setdefault("OMP_NUM_THREADS", str(threads))
 os.environ.setdefault("MKL_NUM_THREADS", str(threads))
 import numpy as np

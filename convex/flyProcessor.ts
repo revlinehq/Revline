@@ -10,7 +10,7 @@ const machineSchema = z.object({ id: z.string(), state: z.string(), config: z.ob
 const volumeSchema = z.object({ id: z.string(), name: z.string(), state: z.string(), attached_machine_id: z.string().nullable().optional(), created_at: z.string() });
 const activeStates = new Set(['created', 'starting', 'started', 'replacing', 'updating', 'stopping']);
 const lockName = 'processor';
-// Longer than a dispatch's bounded API calls, including eight sequential creates.
+// Reconciliation yields after five minutes, leaving room for in-flight API calls before this lock expires.
 const lockMs = 10 * 60_000;
 
 function configuration() {
@@ -69,15 +69,17 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
   if (!process.env.FLY_PROCESSOR_IMAGE || !await ctx.runMutation(internal.flyProcessor.acquireDispatch, {})) return null;
   try {
     const config = configuration();
+    const reconcileUntil = Date.now() + 5 * 60_000;
     const [wanted, machines] = await Promise.all([ctx.runQuery(internal.flyProcessor.demand, {}), fly(config, 'GET', '/machines').then(value => z.array(machineSchema).parse(value))]);
     // Count all active machines in this dedicated app, even an interrupted create
     // whose acknowledgement was lost. The next cron cannot exceed the cap.
     for (const machine of machines) {
+      if (Date.now() >= reconcileUntil) break;
       if (machine.config?.metadata?.revline_processor === 'true' && ['stopped', 'failed'].includes(machine.state)) await fly(config, 'DELETE', `/machines/${machine.id}?force=true`);
     }
     const active = machines.filter(machine => activeStates.has(machine.state)).length;
     let need = processorBackend() === 'fly' ? Math.min(Math.max(0, wanted.waiting - Math.max(0, active - wanted.running)), config.max - active) : 0;
-    for (; need > 0; need--) {
+    for (; need > 0 && Date.now() < reconcileUntil; need--) {
       const volume = volumeSchema.parse(await fly(config, 'POST', '/volumes', { name: 'processor_scratch', region: config.region, size_gb: 20, require_unique_zone: false, snapshot_retention: 1, auto_backup_enabled: false }));
       try { await fly(config, 'POST', '/machines', { region: config.region, config: {
         image: config.image, guest: { cpu_kind: 'performance', cpus: config.cpus, memory_mb: config.cpus * 2048 },
@@ -85,7 +87,7 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
         // No public services. fly-entry.sh clears scratch and drops root privileges.
         mounts: [{ volume: volume.id, path: '/scratch' }],
         env: { MEDIA_PROCESSOR_BACKEND: 'fly', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000',
-          MEDIA_PROCESSOR_THREADS: String(config.cpus), MEDIA_PREVIEW_CPUS: String(config.cpus),
+          MEDIA_PROCESSOR_THREADS: String(config.cpus), MEDIA_PREVIEW_CPUS: String(config.cpus), REVLINE_RENDER_ENCODE_THREADS: String(config.cpus),
           BEAT_TRACK_THREADS: String(config.cpus), OMP_NUM_THREADS: String(config.cpus), MKL_NUM_THREADS: String(config.cpus), OMP_THREAD_LIMIT: String(config.cpus) },
         metadata: { revline_processor: 'true', revline_version: String(MEDIA_PROCESSOR_VERSION) },
       } }); } catch (error) {
@@ -99,7 +101,8 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
     // reconciliation, with grace for a create whose response was interrupted.
     const volumes = z.array(volumeSchema).parse(await fly(config, 'GET', '/volumes'));
     for (const volume of volumes) {
-      if (['processor_scratch', 'processor_preflight'].includes(volume.name) && volume.state !== 'destroyed' && !volume.attached_machine_id && Date.now() - Date.parse(volume.created_at) > 10 * 60_000) await fly(config, 'DELETE', `/volumes/${volume.id}`);
+      if (Date.now() >= reconcileUntil) break;
+      if (['processor_scratch', 'processor_preflight'].includes(volume.name) && !['destroyed', 'pending_destroy'].includes(volume.state) && !volume.attached_machine_id && Date.now() - Date.parse(volume.created_at) > 10 * 60_000) await fly(config, 'DELETE', `/volumes/${volume.id}`);
     }
   } catch (error) {
     console.error('Fly processor dispatch failed; the queue is retained for scheduled recovery.', error instanceof Error ? error.message : 'Unknown error');

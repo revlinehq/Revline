@@ -27,7 +27,7 @@ Each processor machine gets one task slot, performance CPUs, two GiB RAM per CPU
 
 A machine exits after 60 seconds with no work and auto-destroys. Detached scratch volumes are removed by reconciliation after a ten-minute grace period, including after a backend rollback. Scratch is cleared at startup and the consumer runs as the unprivileged `node` user. No processor HTTP service is publicly exposed. Task timeouts stay at 15 minutes, including the existing special handling for pixel tracking. SIGTERM or a lost host leaves the normal lease expiry/retry mechanism in charge.
 
-`MEDIA_PROCESSOR_THREADS` sizes native encoding to the machine's CPUs; local consumers retain their two-thread budget. `MEDIA_PREVIEW_CPUS` is also set for the fast-preview chunk encoder. Torch/OpenMP/MKL receive the full CPU budget. Each machine has its own CPU budget, so concurrent jobs do not split one encoder's cores.
+`MEDIA_PROCESSOR_THREADS` sizes native encoding to the machine's CPUs; local consumers retain their two-thread budget. `MEDIA_PREVIEW_CPUS` divides that budget across two simultaneous chunks, with the full budget assigned to a short source that needs one chunk. The parallel chunk boundary and final mux approach follows `fast-preview` (`f608190`), while this branch retains the existing preview quality and queue contract. Browser-based encoders receive `REVLINE_RENDER_ENCODE_THREADS` too. Torch/OpenMP/MKL receive the full CPU budget. Each machine has its own CPU budget, so concurrent jobs do not split one encoder's cores.
 
 ## Deployment
 
@@ -81,10 +81,16 @@ The branch's trial rollout changes development only. Run these steps after mergi
 2. Run `npm run deploy:production -- --stage-only`. This creates `revline-processor` if needed, installs its production secrets, remotely builds and verifies its full runtime, deploys production Convex, and stages the Fly image. The selected queue backend is unchanged. Check the command reports `different-gnu-398` and `revline-processor`.
 3. Set any desired production capacity overrides using `npx convex env set FLY_PROCESSOR_CPUS 8 --prod` and `npx convex env set FLY_PROCESSOR_MAX_MACHINES 4 --prod`.
 4. Run `npx convex env set MEDIA_PROCESSOR_BACKEND fly --prod`, then `npx convex run flyProcessor:dispatch '{}' --prod`. New attempts route to Fly. Cloudflare finishes any existing leases and claims nothing further.
-5. Upload a video and request preview, transcription and a representative analysis through the hosted editor. Follow `flyctl logs -a revline-processor` and `npx convex logs --prod`. Confirm attempt 1 completes, output reaches the production R2 media Worker, progress updates, and `flyctl machine list -a revline-processor` becomes empty after idle. `flyctl volumes list -a revline-processor` should become empty after the cleanup grace period.
+5. Upload a video and request preview, transcription and a representative analysis through the hosted editor. Follow `flyctl logs -a revline-processor` and `npx convex logs --prod`. Confirm attempt 1 completes, output reaches the production R2 media Worker, progress updates, and `flyctl machine list -a revline-processor` becomes empty after idle. `flyctl volumes list -a revline-processor` should show no attached/live scratch volumes after the cleanup grace period. Fly may retain deleted entries as `pending_destroy` while removal finishes.
 6. Keep the Cloudflare container app until the user confirms Fly works. For subsequent releases, `npm run deploy:production` performs the verified Fly activation in one command.
 
 Rollback takes one setting: `npx convex env set MEDIA_PROCESSOR_BACKEND cloudflare --prod`, followed by `npx convex run mediaProcessor:wake '{}' --prod`. This does not interrupt active Fly leases. Keep the old Cloudflare wake URL and secret valid throughout the confirmation period. To return dev to its laptop consumer, set `MEDIA_PROCESSOR_BACKEND local --deployment majestic-alpaca-541`; leave the existing dev server and worker running.
+
+## Trial verification
+
+The complete image and scratch preflight passed on development. Natural queue wake started processors within the configured cap, existing snapshot work reported progress and renewed leases, and transcription, music beats and shot detection completed through the normal task APIs. The fresh beat task completed on attempt 1 in 6.283 seconds; shot detection of the original 25-second 4096×2160 source completed on attempt 1 in 41.137 seconds. The first trimmed podcast shot sample was rejected by the existing completeness check because its container declares 1,897 frames but only 1,800 decode; that check remains intact.
+
+Cold processor provisioning was observed at 36 to 52 seconds, including image pull and fresh scratch initialization. Benchmark times exclude this startup. All trial machines were removed, and scratch volumes were marked for deletion (`pending_destroy` on Fly). Both duplicated projects were removed while the original assets remained present. Development was returned to `MEDIA_PROCESSOR_BACKEND=local` after the trial; the existing server and local worker were never restarted. Production was not changed.
 
 ## Delete the retired Cloudflare container app
 
@@ -109,7 +115,17 @@ Measured on Fly development in `iad`, 2026-11-02, with the existing encoder from
 
 The preview source was the first ten minutes of the existing dev 1920×1080, 60 fps gameplay upload. Timings cover `preparePreviewVideo`, including its probes and faststart; they exclude machine startup, source download and output upload. The download took 7.726 seconds in the 4-CPU run. The transcription timing covers the full `processMediaTask` path, including a fresh source download, MP3 extraction, actual Deepgram request and both cleanup passes. It excludes machine startup and queue latency. No provider response was mocked. Outputs retained source duration and frame rate.
 
-Eight CPUs reduced preview wall time by 30%, at approximately 40% more encoding compute cost per preview than four CPUs. The default prioritizes faster processing and the larger memory allowance. Set `FLY_PROCESSOR_CPUS=4` for the cheaper alternative. The fast-preview branch was not yet committed when this baseline was measured; its chunk encoding must be measured separately after integration.
+The final parallel encoder was then measured with the same source and quality settings:
+
+| Operation | Machine | Wall time | CPU budget |
+| --- | --- | --- | --- |
+| Parallel 10-minute 1080p60 preview | performance-4x, 8 GiB | 232.247 s | Two chunks, two threads each |
+| Same parallel preview | performance-8x, 16 GiB | 177.603 s | Two chunks, four threads each |
+| Real 18.239708 s VFR portrait video | performance-8x, 16 GiB | 8.570 s | One chunk, eight threads |
+
+The ten-minute output retained all 36,001 video packets with exactly matching presentation timestamps and all 25,840 AAC packet timestamps. The VFR output retained all 1,083 video timestamps and 855 audio packet timestamps exactly. Every presentation timestamp was compared, including chunk joins. MP4 average-frame-rate headers can differ after concatenation even though presentation timestamps are identical.
+
+Eight CPUs reduced parallel preview wall time by 23.5%, at approximately 53% more encoding compute cost per preview than four CPUs. The default prioritizes faster processing and the larger memory allowance. Set `FLY_PROCESSOR_CPUS=4` for the cheaper alternative. The first table is the single-process baseline; the parallel table includes boundary scanning, encoding, concatenation and probing.
 
 Prices are per running machine, billed by the second in `iad`: performance-4x with 8 GiB RAM costs $0.1833/hour; performance-8x with 16 GiB costs $0.3667/hour. A 20 GB scratch volume adds approximately $0.00417 per provisioned hour, including its cleanup grace period. Four running performance-8x processors cost approximately $1.4668/hour in compute. These are rates, not a monthly spending cap. Internet egress and external transcription/vision APIs are separate.
 
