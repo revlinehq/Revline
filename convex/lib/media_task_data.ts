@@ -2,8 +2,8 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
 const active = (status: Doc<'mediaTasks'>['status']) => status === 'queued' || status === 'running' || status === 'retrying';
-function reservation(task: Pick<Doc<'mediaTasks'>, '_id' | 'ownerId' | 'projectId' | 'kind' | 'sourceUrl' | 'importRange'>) {
-  return { taskId: task._id, ownerId: task.ownerId, projectId: task.projectId, kind: task.kind, sourceUrl: task.sourceUrl, importRange: task.importRange };
+function reservation(task: Pick<Doc<'mediaTasks'>, '_id' | 'ownerId' | 'projectId' | 'kind' | 'sourceUrl' | 'importRange' | 'sourcesOnly'>) {
+  return { taskId: task._id, ownerId: task.ownerId, projectId: task.projectId, kind: task.kind, sourceUrl: task.sourceUrl, importRange: task.importRange, sourcesOnly: task.sourcesOnly };
 }
 
 /** Reservations change only when work enters or leaves the queue, never on a worker heartbeat. */

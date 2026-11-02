@@ -217,6 +217,11 @@ function unfinishedRenderChecks(steps: ToolSteps, requirements: RenderReviewRequ
     if (part.type === 'tool-call') { if (id) calls.set(id, { input: part.input, identities: identities(), epoch }); continue; }
     if (part.type !== 'tool-result') continue;
     const output = outputValue(part.output);
+    // A tab opens only after the toolkit verifies the previous tab's plans and publishes its draft.
+    if ((part.toolName === 'createTimeline' || part.toolName === 'openTimeline') && output.timelineChanged === true) {
+      plans.clear(); calls.clear(); latest.clear(); epoch = 0;
+      continue;
+    }
     if (part.toolName !== 'previewRender') {
       if (requirements.revision === undefined && Number.isInteger(output.revision)) revision = output.revision as number;
       if (changedDraft(output)) epoch++;

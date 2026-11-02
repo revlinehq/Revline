@@ -1,3 +1,4 @@
+import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
 import { FastFrameReview } from '../../lib/ai/fast-frame-review';
 import { effectPlanInput,validateEffectPlan,mergeEffectPlans,effectReviewBindings,type EffectPlan,type EffectEvidence } from '../../lib/ai/edit-plan';
@@ -150,7 +151,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -182,7 +183,8 @@ function sceneRanges(name: string, input: Record<string, unknown>) {
 const readLists = (checks: NonNullable<ReturnType<ReadCoverage['sceneCheck']>>[]) => Object.fromEntries((['unreadMoments', 'unseenMoments', 'splitMoments'] as const).map(key => [key, [...new Set(checks.flatMap(check => check[key] ?? []))]]).filter(([, list]) => list.length));
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
-  const { run, project, assets, recovering, selectedClipIds, abortSignal } = options;
+  const { run, project, assets, recovering, abortSignal } = options;
+  let selectedClipIds = options.selectedClipIds;
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
   let editMode = options.editMode ?? 'precise';
@@ -591,7 +593,39 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
   };
   const trimChangeInput=z.object({clipId:z.string().min(1),duration:z.number().positive(),sourceStart:z.number().min(0).optional()});
+  const verifyCurrentTimeline = async () => {
+    await editSession.wait();
+    const missingFrames = editMode === 'fast' ? fastReview.feedback() : undefined;
+    if (missingFrames) throw new Error(missingFrames);
+    if (effectPlans.length) {
+      const state = await ctx.runQuery(internal.compositionReview.completionState, { ...run, timeline: editSession.timeline, expectedRevision: editSession.revision });
+      const feedback = completionRepairFeedback([], 'stop', { ...state, revision: editSession.revision });
+      if (feedback) throw new Error(feedback);
+    }
+  };
+  const switchTimeline = async (open: (revision: number) => Promise<{ timeline: Timeline; revision: number; timelineId: string }>) => {
+    await verifyCurrentTimeline();
+    const result = await editSession.switchTimeline(open);
+    if (result.timelineChanged) {
+      selectedClipIds = [];
+      effectPlans = [];
+      stagedTools.clear();
+    }
+    inspected = true;
+    return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Finish and verify this clip before opening another tab. Never call tab changes in parallel with edits.' };
+  };
   const tools = {
+    listTimelines: createTool({ description: "List this project's timeline tabs, each a separate video sharing the project's sources. Editing tools act on the open tab.", inputSchema: z.object({}), execute: async () => ctx.runQuery(internal.assistant.listRunTimelines, run) }),
+    createTimeline: createTool({ description: "Create and open a blank timeline tab or duplicate the open tab. For clipping, use blank, vertical and the clip's title. Publishes the current draft first; finish its checks before switching. Never call alongside edits in parallel.", inputSchema: z.object({ from: z.enum(['blank', 'duplicate']), name: z.string().trim().min(1).max(60).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square']).optional() }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.createRunTimeline, { ...run, expectedRevision, ...input })) }),
+    openTimeline: createTool({ description: "Open an existing timeline tab by id from listTimelines. Publishes the current draft first; finish its checks before switching. Changes the editor tab the user sees. Never call alongside edits in parallel.", inputSchema: z.object({ timelineId: z.string().min(1) }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.openRunTimeline, { ...run, expectedRevision, ...input })) }),
+    importVideoLink: createTool({ description: "Import a YouTube or public media-file link into this project's Sources, keeping it off the timeline. Uses the server importer. For clipping discovery import the full source. Returns taskId; poll getMediaTask until completed, then inspectTimeline to refresh sources. Reuse existing imports on retries.", inputSchema: z.object({ url: z.string().url(), start: z.number().min(0).optional(), end: z.number().positive().optional() }), execute: async (_ctx, input) => ctx.runMutation(internal.assistant.importRunVideo, { ...run, ...input }) }),
+    getMediaTask: createTool({ description: "Check an import's status and resulting source assetId. Wait for completed before analysis; then inspectTimeline to refresh project media.", inputSchema: z.object({ taskId: z.string().min(1) }), execute: async (_ctx, { taskId }) => ctx.runQuery(internal.assistant.runMediaTask, { ...run, taskId }) }),
+    exportVideo: createTool({ description: "Render a saved timeline to MP4 only when explicitly requested. timelineId selects a tab from listTimelines; omit for the open tab. Call once per requested timeline. Finish all timeline edits before exporting.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }), execute: async (_ctx, input) => {
+      await verifyCurrentTimeline();
+      await editSession.publish();
+      return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
+    } }),
+
     usePreciseMode: createTool({ description: 'Switch this request to Precise before building a film or motion scene from scratch, recreating a reference, preparing a final publish/export, or an explicit full double-check. Keeps the model and restores the full verification harness. Never downgrade within a request.', inputSchema: z.object({}), execute: async () => { await requirePrecise(); return { editMode, instructions: editModeInstructions(editMode) }; } }),
     planEffects:createTool({description:"Not for scene clips: verify their rendered frames with getFrames and the scene-engine checklist; recreations also use compareReference and compareMotion. Scenes are never planned or reviewed as effects. Not for simple edits whose result is known from their settings: fades, crossfades or dissolves built from existing footage, opacity, volume, cuts, trims, moves, crops, layout and split screens. Apply those directly; never plan or previewRender them. Before an authorized effect or creative styling edit whose look must be judged (zoom punches, footage or texture effects, text looks), record one to eight concrete expectations: purpose, actual supported strength, timeline window/peak and anchor. Derive acceptance criteria from the current user request and decoded evidence; do not add new creative requirements. Subject readability means the requested object remains recognizable, not that fine print becomes legible unless the user explicitly asks for that. Describe the observed action literally: a hand-held object moving through the air is not evidence of unsupported free flight. If the requested opening is ambiguous, inspect it before claiming a hover or release. For observed action, use an evidenceId returned by this run's inspectVideo mapped match; never invent an impact. Markers and cuts must still exist. Requested-time anchors are for explicit requested timing. Include targetClipId for existing footage/text. No timeline edits, no approval question. Long looks can be reviewed in a short sample window. Calls add or update plans by ID and retain other plans and their output links, up to eight per run. Use a separate timed plan for each FX pulse with its actual start and full duration. Reviewed expectations stay fixed; other plans can still be corrected. To attach an output for review, pass previewRender bindings instead of rewriting the plan.",inputSchema:z.object({plans:z.array(effectPlanInput).min(1).max(8)}),execute:async(_ctx,{plans})=>{
       // Selecting an edit plan is explicit workflow intent, even while the
@@ -737,9 +771,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const transcript=asset.analysis?.audioActivity?refineTranscriptWithAudioActivity(raw,asset.analysis.audioActivity):raw;
         return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
       }).map(asset=>asset._id);
-      // Tabs cannot change during a run, so the run's project names the open one.
-      const tabs = project.timelineTabs?.length ? project.timelineTabs : [{ id: 'main', name: 'Timeline 1' }], openTab = tabs.find(tab => tab.id === (project.activeTimelineId ?? tabs[0].id)) ?? tabs[0];
-      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
+      const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = readRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
+      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
     } }),
     inspectClip: createTool({ description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. With no options, returns the full clip as before. For a short scene read, pass section (marker label or id), lines {start,end}, or both; sceneCode.blocks returns exact code and absolute numberedCode, plus the section block index. Line numbers are 1-based and inclusive for this revision. Scenes without identifiable sections use whole-scene line ranges. kit: true reads the shared film kit instead. search finds a literal string or per-line JavaScript regex with absolute line and column numbers and bounded previews, without returning the full code. Combine it with section, lines or kit; use search.startLine to continue a page. Scoped reads omit full scene and blueprint code. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string(), section: codeSectionInput.optional(), lines: codeLinesInput.optional(), kit: z.boolean().optional(), search: z.object({ query: z.string().min(1).max(500), regex: z.boolean().optional(), caseSensitive: z.boolean().optional().describe('Case-insensitive by default; true matches exact case.'), startLine: z.number().int().min(1).optional(), limit: z.number().int().min(1).max(100).optional() }).optional() }), execute: async (_ctx, input) => {
       await editSession.wait();
@@ -1534,7 +1567,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       try {
         const output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
         if (output?.staged === true) stagedTools.add(name);
-        if (editMode === 'fast' && before !== editSession.timeline) {
+        if (editMode === 'fast' && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const clip = input.clipId ? editSession.timeline.clips.find(clip => clip.id === input.clipId) : undefined;
           const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : undefined;
           fastReview.changed(before, editSession.timeline, moments);

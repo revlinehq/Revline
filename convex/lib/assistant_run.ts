@@ -1,3 +1,4 @@
+import {editorCommandValidator} from './editor_command';
 import {editorEditModeValidator} from './edit_mode';
 import {v} from 'convex/values';
 import {pinnedClaudeModelValidator} from './claude_model';
@@ -5,4 +6,4 @@ import {assistantRecoveryValidator} from '../schema';
 
 /** A turn the agent runner restarted after Cloudflare interrupted it: same request, finish what is left. */
 export const continuationValidator=v.object({segment:v.number(),savedEdits:v.number(),pendingFastFrames:v.optional(v.array(v.number()))});
-export const assistantRunArgs={projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),threadId:v.string(),promptMessageId:v.string(),pinnedModel:v.optional(pinnedClaudeModelValidator),editMode:v.optional(editorEditModeValidator),recovery:v.optional(assistantRecoveryValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number())};
+export const assistantRunArgs={command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),threadId:v.string(),promptMessageId:v.string(),pinnedModel:v.optional(pinnedClaudeModelValidator),editMode:v.optional(editorEditModeValidator),recovery:v.optional(assistantRecoveryValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number())};

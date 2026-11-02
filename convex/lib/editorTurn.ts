@@ -1,3 +1,5 @@
+import { editorCommandInstructions } from '../../lib/ai/slash-commands';
+import { editorSkillInstructions } from '../../lib/ai/skills';
 import { editorModeForRequest, editModeInstructions, PRECISE_MODE_NOTICE, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
@@ -77,7 +79,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');
     const memories = await ctx.runQuery(internal.memories.forRun, run), brief = await ctx.runQuery(internal.briefs.forRun, run);
     const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
-    const initialEditMode = editorModeForRequest(currentPrompt, args.editMode);
+    const initialEditMode = args.command ? 'precise' : editorModeForRequest(currentPrompt, args.editMode);
     const announcePrecise = () => saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: PRECISE_MODE_NOTICE } }).then(() => {});
     if (args.editMode === 'fast' && initialEditMode === 'precise' && !args.continuation) await announcePrecise();
     const recovery = args.recovery ?? project.aiRecovery;
@@ -86,7 +88,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     // recreation) runs at high: the scene code and the timing are the work. Everything else stays at medium or low,
     // and a repair pass raises low to medium.
     const autoEffort = selection.reasoningEffort === undefined;
-    const requested = autoEditorReasoningEffort(currentPrompt, { recovering });
+    const requested = args.command?.name === 'inspo-motion' ? 'high' : autoEditorReasoningEffort(currentPrompt, { recovering });
     let effort: EditorReasoningEffort = selection.reasoningEffort ?? (requested === 'high' ? 'high' : requested === 'low' ? 'low' : 'medium');
     const withEffort = (value: EditorReasoningEffort) => ({ ...selection, reasoningEffort: value });
     const showEffort = () => { costLog.selectModel(selection.modelId, selection.provider, effort, selection.speedMode ?? 'standard'); void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort }).catch(() => {}); };
@@ -113,6 +115,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
     const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
+${args.command ? `${editorCommandInstructions(args.command)}\n${args.command.name === 'clip' ? editorSkillInstructions('clipping') : editorSkillInstructions('reference-footage', 'recreation')}` : ''}
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
 # What you do
 You make and edit videos with Revline's tools: editing the user's footage (talking heads, vlogs, podcasts, reels, screen recordings) and building motion films from scratch as scenes (launch and feature films, explainers, recreations of a reference video). Greetings, small talk, and questions about your abilities do not request footage analysis or editing: answer directly without calling media-analysis or editing tools. When explaining abilities, skills, available effects, or multiple options, use a short Markdown bullet list with bold capability names and one concise explanation per item. Do not put a capability catalog into one long paragraph.
@@ -156,9 +159,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
       const passEffort = effort;
       const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
         promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(withEffort(passEffort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(passEffort)),
-        prepareStep: ({ steps: current, messages }) => {
+        prepareStep: async ({ steps: current, messages }) => {
+          const completedSteps = [...steps, ...current];
+          const correctedError = completedSteps.some(step => step.content.some(value => value && typeof value === 'object' && 'type' in value && value.type === 'tool-error'));
+          if (correctedError && !hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
           if (autoEffort && effort !== 'high' && stepsNeedHighEffort([...steps, ...current])) raiseEffort('high');
-          return { activeTools: Object.keys(tools).filter(name => toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name)), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }], ...(effort === passEffort ? {} : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) }) };
+          return { activeTools: Object.keys(tools).filter(name => (!args.command || name !== 'exportVideo') && (toolkit.editMode() === 'precise' || !PRECISE_ONLY_TOOLS.has(name))), messages: [...messages, { role: 'system', content: editModeInstructions(toolkit.editMode()) }], ...(effort === passEffort ? {} : { providerOptions: editorProviderOptions(withEffort(effort), cacheKey), maxOutputTokens: editorMaxOutputTokens(withEffort(effort)) }) };
         },
         ...(repairFeedback ? {
           stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],

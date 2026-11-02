@@ -61,7 +61,7 @@ YouTube recordings and public media-file links are supported by the current impo
 5. Verify every tab separately with inspectTimeline and getFrames: 9:16, 15 to 60 s, hook through payoff, one intended audible source, correct framing and no accidental gaps. Follow page \`finishing\` for optional changes and their checks.
 6. Export only when the user asks. Call exportVideo once per finished tab with its timelineId, then poll getExport for each job and label its download by title. Exports queue; listExports can show the batch. Never export the open tab repeatedly while assuming it selects different clips.
 
-Timeline-tab management, imports and exports are currently MCP project tools, not tools in the in-app editing turn. Check the callable surface before promising a batch. If required controls are unavailable, explain the gap and preserve the ranked plan for the supported MCP workflow; do not substitute a montage in one tab or one project per clip. An optional overview can list title, source range, duration, score and tab/export link. Do not require approval of an overview before building requested clips.
+Timeline-tab management, imports and exports are available in both MCP and the in-app editing turn. In the app, editing tools act on the tab opened by createTimeline or openTimeline. Finish and verify each clip before switching tabs; tab changes publish its pending draft. Never call tab changes in parallel with edits. Do not substitute a montage in one tab or one project per clip. An optional overview can list title, source range, duration, score and tab/export link. Do not require approval of an overview before building requested clips.
 `,
 };
 

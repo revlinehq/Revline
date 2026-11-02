@@ -1,3 +1,4 @@
+import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
@@ -16,7 +17,9 @@ import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { writeProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
-import { activeTabOf, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
+import { importVideoFor } from './mediaTasks';
+import { startRenderFor } from './renders';
+import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { billingEnabled, hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -119,20 +122,22 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
   if (!configured()) throw new ConvexError(providerReason);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
+  let command: ReturnType<typeof parseEditorCommand>;
+  try { command = parseEditorCommand(prompt); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid command.'); }
   const queued=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).first();
   if(project.aiRunning||queued){
     const pending=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).take(10);
     if(pending.length>=10)throw new ConvexError('You can queue up to 10 messages. Remove one before adding more.');
     await consumeAssistantRequest(ctx,ownerId);
     const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,...context}=args;
-    await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,createdAt:Date.now()});
+    await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,...(command?{command}:{}),createdAt:Date.now()});
     if(!project.aiRunning&&!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId});
     return null;
   }
   await consumeAssistantRequest(ctx,ownerId);
-  return beginRequest(ctx,project,prompt,pinnedModel,args);
+  return beginRequest(ctx,project,prompt,pinnedModel,{...args,...(command?{command}:{})});
 }});
-type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'|'editMode'>;
+type QueuedContext=Pick<Doc<'assistantQueue'>,'command'|'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'|'editMode'>;
 const sentFromOtherTab=(project:Doc<'projects'>,timelineId?:string)=>!!timelineId&&timelineId!==activeTabOf(project);
 /** The timeline of the tab a request was sent from: the open tab, or another one the user was looking at. */
 async function requestTimeline(ctx:MutationCtx,project:Doc<'projects'>,timelineId?:string){
@@ -142,7 +147,7 @@ async function requestTimeline(ctx:MutationCtx,project:Doc<'projects'>,timelineI
 }
 async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,pinnedModel:ClaudeModelSelection,request:QueuedContext):Promise<null>{
   // The turn works on the tab the user sent from. It opens here, in the transaction that takes the run lock,
-  // and no other tab can open until the turn ends, whatever another agent or editor does meanwhile.
+  // and external tab changes stay locked until the turn ends. The run can open tabs for a clip batch.
   const switching=sentFromOtherTab(sent,request.timelineId)&&tabsOf(sent).some(tab=>tab.id===request.timelineId);
   if(switching)await openTabFor(ctx,sent.ownerId,{projectId:sent._id,timelineId:request.timelineId!});
   const project=switching?(await readProject(ctx,sent._id))!:sent;
@@ -155,7 +160,7 @@ async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,p
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,editMode:request.editMode??'fast',...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
+  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.command?{command:request.command}:{}),editMode:request.editMode??'fast',...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
   // Long turns run on the Cloudflare agent runner; without one, inside Convex's ten-minute action limit.
   if (agentRunnerConfigured()) { await startRunnerTurn(ctx, turn); return null; }
   const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, turn,{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
@@ -225,6 +230,60 @@ export const recordBudget = internalMutation({ args: { ...runArgs, used: v.numbe
   else await ctx.db.insert('aiBudgets', { projectId: args.projectId, runId: args.runId, used, updatedAt: Date.now() });
   return null;
 }});
+/** Project tools used inside an existing editor run keep its lock and ownership checks. */
+async function requireActiveRun(ctx: QueryCtx | MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
+  const project = await readProject(ctx, args.projectId);
+  if (!project || project.deleting || project.ownerId !== args.ownerId || !project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  return project;
+}
+export const listRunTimelines = internalQuery({ args: runArgs, handler: async (ctx, args) => {
+  if (!args.runId.startsWith(READ_ONLY_RUN_PREFIX)) await requireActiveRun(ctx, args);
+  return listTabsFor(ctx, args.ownerId, args.projectId);
+}});
+const runTabArgs = { ...runArgs, expectedRevision: v.number() };
+async function prepareRunTab(ctx: MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string; expectedRevision: number }) {
+  const project = await requireActiveRun(ctx, args);
+  if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Inspect the current timeline before continuing.');
+  const preview = await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
+  if (preview && (preview.runId !== args.runId || preview.baseRevision !== args.expectedRevision || !equalTimelineValue(await loadSceneCode(ctx, preview.timeline), currentTimeline(project)))) throw new ConvexError('Finish the current timeline draft before opening another timeline.');
+  await clearLivePreview(ctx, args.projectId);
+  return project;
+}
+async function openedRunTab(ctx: MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
+  await writeProject(ctx, args.projectId, { aiUndoRecorded: false, aiCheckpointRevision: undefined });
+  const plan = await ctx.db.query('assistantPlans').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
+  if (plan?.runId === args.runId) await ctx.db.delete(plan._id);
+  const project = await requireActiveRun(ctx, args);
+  return { timelineId: activeTabOf(project), timeline: await loadSceneCode(ctx, currentTimeline(project)), revision: project.revision ?? 0 };
+}
+export const createRunTimeline = internalMutation({ args: { ...runTabArgs, from: v.union(v.literal('blank'), v.literal('duplicate')), name: v.optional(v.string()), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, handler: async (ctx, args) => {
+  await prepareRunTab(ctx, args);
+  await createTabFor(ctx, args.ownerId, { projectId: args.projectId, from: args.from, name: args.name, aspectRatio: args.aspectRatio }, args.runId);
+  return openedRunTab(ctx, args);
+}});
+export const openRunTimeline = internalMutation({ args: { ...runTabArgs, timelineId: v.string() }, handler: async (ctx, args) => {
+  const project = await prepareRunTab(ctx, args);
+  if (activeTabOf(project) === args.timelineId) return { timelineId: args.timelineId, timeline: await loadSceneCode(ctx, currentTimeline(project)), revision: project.revision ?? 0 };
+  await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: args.timelineId }, args.runId);
+  return openedRunTab(ctx, args);
+}});
+export const importRunVideo = internalMutation({ args: { ...runArgs, url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) }, handler: async (ctx, args) => {
+  await requireActiveRun(ctx, args);
+  return importVideoFor(ctx, args.ownerId, { projectId: args.projectId, url: args.url, start: args.start, end: args.end, sourcesOnly: true });
+}});
+export const runMediaTask = internalQuery({ args: { ...runArgs, taskId: v.string() }, handler: async (ctx, args) => {
+  await requireActiveRun(ctx, args);
+  const taskId = ctx.db.normalizeId('mediaTasks', args.taskId);
+  const task = taskId ? await ctx.db.get(taskId) : null;
+  if (!task || task.ownerId !== args.ownerId || task.projectId !== args.projectId) throw new ConvexError('Media task not found.');
+  return { taskId: task._id, status: task.status, progress: task.progress, error: task.error, assetId: task.outputAssetId ?? task.assetId };
+}});
+export const exportRunVideo = internalMutation({ args: { ...runArgs, timelineId: v.optional(v.string()), resolution: v.number(), fps: v.number(), quality: v.string() }, handler: async (ctx, args) => {
+  await requireActiveRun(ctx, args);
+  const jobId = await startRenderFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: args.timelineId, resolution: args.resolution, fps: args.fps, quality: args.quality });
+  return { jobId };
+}});
+
 export const beginEditing = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');

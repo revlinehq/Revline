@@ -45,6 +45,30 @@ export class EditSession {
 
   wait() { return this.pending; }
 
+  private async publishCurrentTimeline() {
+    if (this.failed || this.needsInspection) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');
+    if (!this.staged) return;
+    this.revision = await this.storage.apply(this.timeline, this.revision, true);
+    this.savedEdits++;
+    this.staged = false;
+    this.stagedEdits = 0;
+  }
+
+  publish() { return this.enqueue(() => this.publishCurrentTimeline()); }
+
+  /** Publish the current tab before replacing this session's working timeline. */
+  switchTimeline(open: (revision: number) => Promise<{ timeline: Timeline; revision: number; timelineId: string }>) {
+    return this.enqueue(async () => {
+      await this.publishCurrentTimeline();
+      const opened = await open(this.revision);
+      const timelineChanged = opened.revision !== this.revision;
+      this.timeline = normalizeTimeline(opened.timeline);
+      this.revision = opened.revision;
+      if (timelineChanged) this.savedEdits++;
+      return { timelineId: opened.timelineId, opened: true, timelineChanged, revision: this.revision, saved: timelineChanged };
+    });
+  }
+
   checkpoint(edit: (timeline: Timeline) => Timeline) {
     let preflightRejection: TimelineGestureRejection | undefined;
     return this.enqueue(async () => {

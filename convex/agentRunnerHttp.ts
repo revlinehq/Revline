@@ -12,6 +12,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 const TURN_FUNCTIONS = new Set([
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',
+  'assistant:listRunTimelines', 'assistant:createRunTimeline', 'assistant:openRunTimeline', 'assistant:importRunVideo', 'assistant:runMediaTask', 'assistant:exportRunVideo',
   'assistant:analysisRequest', 'assistant:apply', 'assistant:attachRunStockAudio', 'assistant:beginEditing', 'assistant:clearAnalysis', 'assistant:currentPrompt', 'assistant:finish', 'assistant:getRun', 'assistant:getRunAsset', 'assistant:getRunTimeline', 'assistant:isRunActive', 'assistant:previewDraft', 'assistant:recordBudget', 'assistant:recordEffort', 'assistant:requestAnalysis', 'assistant:diffScene', 'assistant:recordFix', 'assistant:revisionChanges', 'assistant:revisionHistory', 'assistant:saveGeneratedSound', 'assistant:undoLatestEdit',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:get', 'brandKits:list', 'brandKits:update',
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',

@@ -47,9 +47,13 @@ export async function allTabTimelines(ctx: QueryCtx, project: Doc<'projects'>): 
   return [...project.timeline ? [project.timeline] : [], ...rows.map(row => row.timeline)];
 }
 
-async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId: string) {
+async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId: string, runId?: string) {
   const project = await requireProject(ctx, projectId, ownerId, true);
   await requireEditorAccess(ctx, project.ownerId);
+  if (runId !== undefined) {
+    if (!project.aiRunning || project.aiRunId !== runId) throw new ConvexError('AI run is no longer active');
+    return project;
+  }
   // An in-app turn works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.
   // MCP runs are single calls; their own tab switch happens as the run takes the lock.
   if (project.aiRunning && !project.aiRunId?.startsWith('mcp-') || await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
@@ -112,8 +116,8 @@ export const snapshots = query({ args: { projectId: v.id('projects') }, returns:
 }});
 
 export const create = mutation({ args: createArgs, returns: v.string(), handler: async (ctx, args) => createTabFor(ctx, await requireOwner(ctx), args) });
-export async function createTabFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createArgs>) {
-  const project = await openProject(ctx, args.projectId, ownerId), tabs = tabsOf(project);
+export async function createTabFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createArgs>, runId?: string) {
+  const project = await openProject(ctx, args.projectId, ownerId, runId), tabs = tabsOf(project);
   if (tabs.length >= MAX_TIMELINE_TABS) throw new ConvexError(`A project holds up to ${MAX_TIMELINE_TABS} timelines`);
   const current = currentTimeline(project), id = crypto.randomUUID();
   const active = tabs.find(tab => tab.id === activeTabOf(project));
@@ -127,8 +131,8 @@ export async function createTabFor(ctx: MutationCtx, ownerId: string, args: Obje
 }
 
 export const open = mutation({ args: { projectId: v.id('projects'), timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => openTabFor(ctx, await requireOwner(ctx), args) });
-export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }) {
-  const project = await openProject(ctx, args.projectId, ownerId), tabs = tabsOf(project);
+export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }, runId?: string) {
+  const project = await openProject(ctx, args.projectId, ownerId, runId), tabs = tabsOf(project);
   if (args.timelineId === activeTabOf(project)) return null;
   const row = tabs.some(tab => tab.id === args.timelineId) ? await stashedRow(ctx, project._id, args.timelineId) : null;
   if (!row) throw new ConvexError('That timeline no longer exists');

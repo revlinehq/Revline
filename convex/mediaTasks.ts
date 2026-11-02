@@ -79,7 +79,7 @@ export const MOTION_PROCESSOR_VERSION = 23;
 /** Frozen comparison crops, displayed rotation and bounded sound capture. */
 export const RECREATION_PROCESSOR_VERSION = 23;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
@@ -224,7 +224,7 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
   // Reused or already-active work needs no new capacity.
   return enqueueMediaTask(ctx, { ...args, ownerId }, () => requireMediaTaskCapacity(ctx, ownerId, 1));
 }});
-const importVideoForArgs = { projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
+const importVideoForArgs = { sourcesOnly: v.optional(v.boolean()), projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
 export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
   await requireEditorAccess(ctx, ownerId);
   let sourceUrl: string;
@@ -241,13 +241,14 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 60, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
   await initializeMediaCapacity(ctx, ownerId);
-  const existing = await ctx.db.query('mediaTaskSlots').withIndex('by_import', q => q.eq('projectId', projectId).eq('kind', 'import').eq('sourceUrl', sourceUrl).eq('importRange.start', importRange?.start).eq('importRange.end', importRange?.end)).first();
-  if (existing) return { projectId, taskId: existing.taskId };
+  const existing = await ctx.db.query('mediaTaskSlots').withIndex('by_import', q => q.eq('projectId', projectId).eq('kind', 'import').eq('sourceUrl', sourceUrl).eq('importRange.start', importRange?.start).eq('importRange.end', importRange?.end)).collect();
+  const matching = existing.find(task => !!task.sourcesOnly === !!args.sourcesOnly);
+  if (matching) return { projectId, taskId: matching.taskId };
   const pending = await ctx.db.query('mediaTaskSlots').withIndex('by_project_kind', q => q.eq('projectId', projectId).eq('kind', 'import')).take(3);
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
   // Counted only once a fresh import is accepted; a refusal rolls back a new edit with it.
   await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl, ...(importRange ? { importRange, requiredProcessorVersion: RANGE_IMPORT_PROCESSOR_VERSION } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl, ...(args.sourcesOnly ? { sourcesOnly: true } : {}), ...(importRange ? { importRange, requiredProcessorVersion: RANGE_IMPORT_PROCESSOR_VERSION } : {}) });
   return { projectId, taskId };
 }
 export const importVideo = mutation({ args: importVideoForArgs, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => importVideoFor(ctx, await requireOwner(ctx), args) });
@@ -489,7 +490,7 @@ async function placeImportedVideo(ctx: MutationCtx, project: Doc<'projects'>, ta
 export const placeImport = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.null(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   const output = task?.status === 'completed' && task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
-  if (!task || !output?.duration || output.ownerId !== task.ownerId || output.projectId !== task.projectId) return null;
+  if (!task || task.sourcesOnly || !output?.duration || output.ownerId !== task.ownerId || output.projectId !== task.projectId) return null;
   const project = await readProject(ctx, task.projectId);
   if (!project || project.deleting || project.ownerId !== task.ownerId) return null;
   if (await editingWorkflowActive(ctx, project)) {
@@ -577,8 +578,10 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (output.duration < 1 / currentTimeline(project).fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
     // A new revision would fail an AI edit's staged draft as "changed
     // elsewhere". The import is saved in Sources; place it once the run settles.
-    if (await editingWorkflowActive(ctx, project)) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: 1 });
-    else await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
+    if (!task.sourcesOnly) {
+      if (await editingWorkflowActive(ctx, project)) await ctx.scheduler.runAfter(IMPORT_PLACEMENT_DELAY_MS, internal.mediaTasks.placeImport, { taskId: task._id, attempt: 1 });
+      else await placeImportedVideo(ctx, project, task._id, { ...output, duration: output.duration });
+    }
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'preview' });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'understand' });
