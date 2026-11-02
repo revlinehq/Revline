@@ -1,3 +1,4 @@
+import { resolvedAudioTimeline } from './audio-normalization';
 import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
@@ -96,6 +97,7 @@ export function trimmedFocus(clip: Clip) {
 
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
+  timeline=resolvedAudioTimeline(timeline);
   timeline = normalizeTimeline(timeline);
   const duration = timelineDuration(timeline);
   if (!Number.isFinite(duration)) throw new Error('Timeline duration must be finite.');

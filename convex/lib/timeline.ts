@@ -87,6 +87,10 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
       if (['start', 'duration', 'sourceStart'].some(key => Math.abs(clip[key as 'start'] - pair[key as 'start']) > 1e-7)) throw new ConvexError('Linked video and audio must stay synchronized');
       if (Math.abs(playbackRateOf(clip) - playbackRateOf(pair)) > 1e-7 || JSON.stringify(clip.speedRamp ?? null) !== JSON.stringify(pair.speedRamp ?? null)) throw new ConvexError('Linked video and audio must stay synchronized');
     }
+    if(clip.normalizedAudio){
+      const id=ctx.db.normalizeId('assets',clip.normalizedAudio.assetId),bake=id?await ctx.db.get(id):null;
+      if(clip.kind!=='audio'||!bake||bake.kind!=='audio'||bake.ownerId!==project.ownerId||bake.projectId!==project._id||clip.normalizedAudio.key.length>16000||!Number.isFinite(clip.normalizedAudio.targetLufs)||!Number.isFinite(clip.normalizedAudio.truePeak)||clip.normalizedAudio.truePeak> -1||(clip.normalizedAudio.offset!==undefined&&(!Number.isFinite(clip.normalizedAudio.offset)||clip.normalizedAudio.offset<0)))throw new ConvexError('Normalized sound must belong to this project.');
+    }
     const track = trackOf(clip);
     const group = layerGroup(clip.kind);
     if (track > maxTrackCount(group)) throw new ConvexError("Clip track exceeds its group limit");
@@ -118,6 +122,10 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (asset.kind !== "image" && asset.duration !== undefined && sourceEndOf(clip) > asset.duration + 1 / timeline.fps) throw new ConvexError("Source trim extends beyond the media duration");
   }
   try { transitionSources(timeline.clips,timeline.fps); } catch(error) { throw new ConvexError((error as Error).message); }
+  if(timeline.audioNormalization){
+    const bake=timeline.audioNormalization,id=ctx.db.normalizeId('assets',bake.assetId),asset=id?await ctx.db.get(id):null;
+    if(!asset||asset.kind!=='audio'||asset.ownerId!==project.ownerId||asset.projectId!==project._id||!Number.isFinite(bake.targetLufs)||!Number.isFinite(bake.truePeak)||bake.truePeak> -1||bake.key.length>100||bake.offset!==undefined&&(!Number.isFinite(bake.offset)||bake.offset<0))throw new ConvexError('The normalized timeline mix is unavailable.');
+  }
   try { validateAudioTimeline(timeline); } catch(error) { throw new ConvexError((error as Error).message); }
   // Sections were removed; drop any a saved timeline still carries.
   const { sections: _sections, ...kept } = timeline as Timeline & { sections?: unknown };

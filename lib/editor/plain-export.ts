@@ -1,3 +1,4 @@
+import { resolvedAudioTimeline } from './audio-normalization';
 import type { ExportResolution } from './composition';
 import { calculateVisualRect } from './visual-source-geometry';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
@@ -87,6 +88,7 @@ function framing(asset: MediaAsset, width: number, height: number, fit: 'cover' 
  * explicitly reproduce makes the timeline ineligible.
  */
 export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolution: ExportResolution, fps: number): PlainExportDecision {
+  timeline=resolvedAudioTimeline(timeline);
   const no = (reason: string): PlainExportDecision => ({ eligible: false, reason });
   if (fps !== 24 && fps !== 30 && fps !== 60) return no('unsupported export frame rate');
   if (resolution !== 720 && resolution !== 1080 && resolution !== 2160) return no('unsupported export resolution');

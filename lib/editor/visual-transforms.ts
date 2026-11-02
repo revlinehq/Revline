@@ -85,7 +85,7 @@ export function resizeVisualTransform(initial: VisualTransform, corner: VisualCo
   const radians=initial.rotation*Math.PI/180, cos=Math.cos(radians), sin=Math.sin(radians);
   const vx=sx*rect.width*cos-sy*rect.height*sin, vy=sx*rect.width*sin+sy*rect.height*cos;
   const delta=(dx*vx+dy*vy)/(rect.width*rect.width+rect.height*rect.height);
-  const scale=clamp(initial.scale+delta,.1,5);
+  const scale=clamp(initial.scale+delta,...VISUAL_TRANSFORM_LIMITS.scale);
   const next=anchoredScale(initial,corner,scale,width,height,rect);
   return {...next,x:clamp(next.x,...VISUAL_TRANSFORM_LIMITS.x),y:clamp(next.y,...VISUAL_TRANSFORM_LIMITS.y)};
 }
@@ -105,7 +105,7 @@ export function snapVisualResize(initial:VisualTransform,proposed:VisualTransfor
       const slope=one[axis][index]-zero[axis][index];
       if(Math.abs(slope)<1e-8||Math.abs(target-positions[axis][index])*screen/size>threshold)continue;
       const scale=(target-zero[axis][index])/slope;
-      if(scale<.1||scale>5)continue;
+      if(scale<VISUAL_TRANSFORM_LIMITS.scale[0]||scale>VISUAL_TRANSFORM_LIMITS.scale[1])continue;
       const transform=atScale(scale);
       if(transform.x<VISUAL_TRANSFORM_LIMITS.x[0]||transform.x>VISUAL_TRANSFORM_LIMITS.x[1]||transform.y<VISUAL_TRANSFORM_LIMITS.y[0]||transform.y>VISUAL_TRANSFORM_LIMITS.y[1])continue;
       const cornerPoint=visualCornerPosition(visualBounds(transform,rect,canvas.width,canvas.height),corner);

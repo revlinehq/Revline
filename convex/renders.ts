@@ -42,11 +42,11 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
   if (accountActive.reduce((count, jobs) => count + jobs.length, 0) >= limit) throw new ConvexError(`You already have ${limit} exports in progress. Wait for one to finish or cancel it before exporting again.`);
   const assetIds: Id<"assets">[] = [];
-  for (const assetId of [...timeline.clips.flatMap(clip => clip.assetId ? [clip.assetId] : []), ...sceneMediaAssetIds(timeline)]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
+  for (const assetId of [...timeline.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.normalizedAudio ? [clip.normalizedAudio.assetId] : []]), ...sceneMediaAssetIds(timeline),...timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...((timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio))?{requiredProcessorVersion:24}:{}), ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
 }

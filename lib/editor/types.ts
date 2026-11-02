@@ -49,6 +49,7 @@ export type Clip = {
   y?: number;
   volume?: number;
   audio?: AudioSettings;
+  normalizedAudio?: {assetId:string;key:string;targetLufs:number;truePeak:number;offset?:number};
   audioFadeTiming?: {duration:number;offset:number};
   visualFade?: VisualFadeSettings;
   visualFadeTiming?: {duration:number;offset:number};
@@ -116,7 +117,7 @@ export type Clip = {
   approvedSections?: ApprovedSection[];
 };
 export type TimelineMarker = { id: string; time: number; label?: string };
-export type Timeline = { clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
+export type Timeline = { audioNormalization?: NonNullable<Clip['normalizedAudio']>; clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio';
@@ -131,7 +132,9 @@ export type MediaAsset = {
   preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;
   analysis?: {
-    transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string}[]};
+    facecam?: import('../media-analysis/clipping').FacecamAnalysis;
+    speakers?: import('../media-analysis/clipping').SpeakerAnalysis;
+    transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string;speaker?:number;speakerConfidence?:number}[]};
     audioActivity?: import('../media-analysis/audio-activity').AudioActivity;
     speechCleanup?: import('../speech-cleanup/types').SpeechCleanup;
     understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[];suggestions?:SourceEditSuggestion[]};

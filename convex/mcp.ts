@@ -1,3 +1,4 @@
+import { normalizationRequestValidator } from './lib/normalization_validator';
 import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
@@ -189,7 +190,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
@@ -206,17 +207,27 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   if (args.comparison?.crop && !comparisonCrop.safeParse(args.comparison.crop).success) throw new ConvexError('Keep the normalized comparison crop inside the frame.');
   const timeline = source?.sourceTimeline ?? past ?? now, duration = timelineDuration(timeline);
   if (!timeline.clips.length) throw new ConvexError('The timeline is empty; there is nothing to look at yet.');
+  const normalization=args.normalization;
+  if(normalization){
+    if(args.sound||args.motion||args.pacing||args.comparison||args.times.length||args.revision!==undefined)throw new ConvexError('Normalize one current audio mix at a time.');
+    if(!Number.isFinite(normalization.targetLufs)||normalization.targetLufs< -24||normalization.targetLufs> -9||!Number.isFinite(normalization.truePeak)||normalization.truePeak< -6||normalization.truePeak> -1)throw new ConvexError('Choose -24 to -9 LUFS and a true peak between -6 and -1 dBTP.');
+    const clip=normalization.clipId?timeline.clips.find(c=>c.id===normalization.clipId):null;
+    if(normalization.clipId&&(!clip||!['audio','video'].includes(clip.kind)))throw new ConvexError('Choose a sounding audio or video clip.');
+    if((clip?.duration??duration)>600)throw new ConvexError('Normalize up to ten minutes at a time.');
+    if(timeline.clips.some(c=>c.kind==='scene'&&c.scene?.media?.length))throw new ConvexError('Normalize uploaded timeline audio. Scene-embedded sound must be placed on audio tracks first.');
+  }
   const pacing = args.pacing && { ...args.pacing, end: Math.min(args.pacing.end, duration) };
   if (pacing && (!Number.isFinite(pacing.start) || pacing.start < 0 || pacing.end - pacing.start < .3 || !(pacing.fps >= 2 && pacing.fps <= timeline.fps))) throw new ConvexError(`Check pacing over at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds, at 2 to ${timeline.fps} samples a second.`);
   const sound = args.sound && { ...args.sound, end: Math.min(args.sound.end, duration) };
   const motion = args.motion && { start: args.motion.start, end: Math.min(args.motion.end, duration, args.motion.start + 12) };
   if (motion && (!Number.isFinite(motion.start) || motion.start < 0 || motion.end - motion.start < .3)) throw new ConvexError(`Map at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds, up to 12 s at a time.`);
   if (sound && (!Number.isFinite(sound.start) || sound.start < 0 || sound.end - sound.start < .3 || sound.fps !== undefined && !(sound.fps >= 10 && sound.fps <= timeline.fps))) throw new ConvexError(`Listen to at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds${sound.check ? `, sampling the picture at 10 to ${timeline.fps} frames a second` : ''}.`);
-  if (!pacing && !sound && !motion && (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
+  if (!normalization && !pacing && !sound && !motion && (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to 6 times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
   await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || motion || sound ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.revision ?? project.revision ?? 0, times: pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(past ? { atRevision: revision } : {}) });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, ...(pacing ? { requiredProcessorVersion: PACING_PROCESSOR_VERSION } : {}), ...(motion ? { requiredProcessorVersion: MOTION_PROCESSOR_VERSION } : {}), ...(sound ? { requiredProcessorVersion: Math.max(SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION) } : {}), ...(args.comparison ? { requiredProcessorVersion: RECREATION_PROCESSOR_VERSION } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.comparison || motion || sound || normalization ? { sourceTimeline: await storeSceneCode(ctx, timeline) } : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: source?.revision ?? project.revision ?? 0, times: normalization || pacing || sound || motion ? [] : args.times, status: 'queued', createdAt: Date.now(), ...(other ? { timelineId: other } : {}), ...(drafted && !past ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(past ? { atRevision: revision } : {}) });
+  const requiredProcessorVersion=Math.max(10,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?24:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion });
   await ctx.db.patch(snapshotId, { taskId });
   // Frames are read once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.discardFrames, { snapshotId });
@@ -249,7 +260,7 @@ export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
-  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
 /** frames, for a caller that is done once it has the result: a finished or failed request is deleted as it is read,
@@ -259,7 +270,7 @@ export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapsh
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
   if (snapshot.status !== 'queued') await ctx.db.delete(snapshot._id);
-  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}) };
+  return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {

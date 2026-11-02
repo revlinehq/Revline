@@ -1,3 +1,6 @@
+import { normalizationAssetIds } from '../lib/editor/audio-normalization';
+import { allTabTimelines } from './timelineTabs';
+import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
 import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
 import { writeProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
@@ -124,9 +127,10 @@ export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id
   if (!asset || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
   const project = await requireProject(ctx, asset.projectId, ownerId, true);
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
+  if((await allTabTimelines(ctx,project)).some(t=>normalizationAssetIds(t).includes(asset._id)))throw new ConvexError('Remove this media from loudness normalization first');
   if (project.timeline?.clips.some(clip => clip.assetId === asset._id) || (project.timeline && sceneMediaAssetIds(project.timeline).includes(asset._id))) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
-  await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)), updatedAt: Date.now() });
+  await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)&&!normalizationAssetIds(t).includes(asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;
 }
 export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.null(), handler: async (ctx, args) => removeOwnedAsset(ctx,await requireOwner(ctx),args.assetId) });
@@ -201,6 +205,8 @@ export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects
 export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, changes: Infer<typeof analysisValidator>) {
   asset=await hydrateAsset(ctx,asset);
   const duration = asset.duration ?? 86400;
+  if(changes.facecam&&(!facecamAnalysis.safeParse(changes.facecam).success||changes.facecam.samples.some(s=>s.time>duration)))throw new ConvexError('Invalid facecam analysis');
+  if(changes.speakers&&(!speakerAnalysis.safeParse(changes.speakers).success||changes.speakers.turns.some(t=>t.end>duration)||changes.speakers.focus.some(s=>s.time>duration)))throw new ConvexError('Invalid speaker analysis');
   if (changes.focus) validateFocus(changes.focus, duration);
   if (changes.shots) {
     if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('Shot detection requires a video with a known duration');
@@ -241,7 +247,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');
     try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
   }
-  const analysis = { ...asset.analysis, ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}), ...(changes.reference ? { reference: changes.reference } : {}) };
+  const analysis = { ...asset.analysis, ...(changes.facecam ? {facecam:changes.facecam}:{}), ...(changes.speakers ? {speakers:changes.speakers}:{}), ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}), ...(changes.reference ? { reference: changes.reference } : {}) };
   if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };

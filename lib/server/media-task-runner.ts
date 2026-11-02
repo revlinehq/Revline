@@ -1,3 +1,7 @@
+import { MAX_SPEAKER_WINDOW_SECONDS, speakerAnalysis } from '../media-analysis/clipping';
+import { audioNormalizationKey, timelineNormalizationKey } from '../editor/audio-normalization';
+import { normalizeTimelineAudio, enforceNormalizedExportPeak } from './normalize-audio';
+import { detectSourceFacecam, trackSourceSpeakers } from './clipping-analysis';
 import type { ExportResolution } from '@/lib/editor/composition';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -105,12 +109,23 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const distributed = process.env.REVLINE_DISTRIBUTED_EXPORT === 'true' ? { maxChunks: Number(process.env.REVLINE_EXPORT_MAX_CHUNKS ?? 8), chunkGuest: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_GUEST ?? '{"cpu_kind":"performance","cpus":4,"memory_mb":8192}'), chunkEnv: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_ENV ?? '{}') as Record<string, string> } : null;
       if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
       else if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
+      const normalized=snapshot.timeline.clips.filter(c=>c.normalizedAudio&&c.normalizedAudio.key===audioNormalizationKey(snapshot.timeline,c)&&(c.volume??1)>0);
+      const master=snapshot.timeline.audioNormalization,ceilings=normalized.flatMap(c=>c.normalizedAudio?[c.normalizedAudio.truePeak]:[]);
+      if(master?.key===timelineNormalizationKey(snapshot.timeline))ceilings.push(master.truePeak);
+      if(ceilings.length)await runPhase('Verifying encoded true peak',()=>enforceNormalizedExportPeak(output,directory,Math.min(...ceilings),signal));
       onProgress(97);
       await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal));
       return {};
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     if(task.kind==='blueprint'){if(!task.blueprint)throw new AnalysisError('The blueprint check is unavailable.',400);return {blueprint:await runBlueprintCheck(task.blueprint,signal,onProgress)};}
+    if(task.kind==='snapshot'&&task.snapshot?.normalization){
+      const {path,...measurements}=await runPhase('Normalizing loudness',()=>normalizeTimelineAudio(task.snapshot!,directory,convexUrl,signal));
+      onProgress(90);
+      const assetId=task.outputAssetId??await uploadMediaFile(path,{...credentials,projectId:task.projectId,fileName:'Normalized social mix.wav',kind:'audio',contentType:'audio/wav',duration:measurements.duration},uploadContext,signal);
+      if(!assetId)throw new AnalysisError('The normalized audio could not be saved.',500);
+      return {snapshot:{frames:[],normalization:{assetId,...measurements}}};
+    }
     if(task.kind==='snapshot'){if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);return {snapshot:await captureTimelineFrames(task.snapshot,directory,convexUrl,signal,onProgress)};}
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
@@ -126,7 +141,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     // Footage questions read the stored 1280px playback preview when it exists:
     // originals reach hundreds of MB, and downloading and re-encoding one took
     // minutes before Gemini could start. The preview keeps every frame and audio.
-    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference' || task.kind === 'speakers') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
     const source = join(directory, 'source'), sourceUrl = download.url;
@@ -212,6 +227,31 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       onProgress(60);
       onActivity?.('analyzing');
       return { frameInspection: await runPhase('Inspecting frames',()=>inspectVideoFrames(images, sourceFps, task.frameRequest!, key, signal,geometry)) };
+    }
+    if(task.kind==='facecam'||task.kind==='speakers'){
+      if(!media.hasVideo)throw new AnalysisError('Clipping analysis needs a video source.',400);
+      const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+      if(!key)throw new AnalysisError('Gemini clipping analysis is not configured on the media worker.',503);
+      if(task.kind==='facecam')return {analysis:{facecam:asset.analysis?.facecam??await detectSourceFacecam(source,directory,media.duration,key,signal,onProgress)}};
+      const range=task.speakerRequest??{start:0,end:asset.duration??media.duration},cached=asset.analysis?.speakers;
+      if(range.start<0||range.end<=range.start||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS||range.end>(asset.duration??media.duration)+.01)throw new AnalysisError('Active-speaker analysis needs a valid source window of up to 120 seconds.',400);
+      if(cached&&cached.start<=range.start&&cached.end>=range.end)return {analysis:{speakers:cached}};
+      const window=join(directory,'active-speakers.mp4');
+      await extractVideoWindow(source,window,range.start,Math.min(range.end,media.duration),signal);
+      const duration=range.end-range.start,saved=asset.analysis?.transcript;
+      const words=saved?.words.filter(w=>w.end>range.start&&w.start<range.end).map(w=>({...w,start:Math.max(0,w.start-range.start),end:Math.min(duration,w.end-range.start)}));
+      let transcript:Transcript|undefined=words&&!words.some(w=>w.speaker===undefined)?{words,segments:[]}:undefined;
+      const identityScope=transcript?'source' as const:'window' as const;
+      if(!transcript){
+        if(!media.hasAudio)throw new AnalysisError('Speaker tracking requires audio.',400);
+        const speechKey=process.env.DEEPGRAM_API_KEY;
+        if(!speechKey)throw new AnalysisError('Deepgram diarization is not configured on the media worker.',503);
+        const audio=join(directory,'speaker-speech.mp3');await extractTranscriptionAudio(window,audio,signal);
+        transcript=await transcribeWithDeepgram(audio,duration,speechKey,signal);
+      }
+      const local=await trackSourceSpeakers(window,directory,duration,transcript,key,signal,onProgress);
+      const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start}))});
+      return {analysis:{speakers}};
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);

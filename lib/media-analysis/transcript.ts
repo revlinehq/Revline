@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export type TranscriptWord = { start: number; end: number; text: string };
+export type TranscriptWord = { start: number; end: number; text: string; speaker?: number; speakerConfidence?: number };
 export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number };
 export const MAX_TRANSCRIPT_WORDS = 5000;
 /** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.

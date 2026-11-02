@@ -1,3 +1,4 @@
+import { equalTimelineValue } from './timeline-equality';
 import type { ApprovedSection, Clip, ClipApproval, Timeline } from './types';
 
 /**
@@ -191,9 +192,11 @@ function shown(clips: Clip[], section: { start: number; end: number }) {
 /** Every change from `before` to `after` that touches approved work. Approval marks themselves are changed by their own tools. */
 export function approvalViolations(before: Timeline, after: Timeline): ApprovalViolation[] {
   const next = new Map(after.clips.map(clip => [clip.id, clip])), violations: ApprovalViolation[] = [];
+  const masterChanged=!equalTimelineValue(before.audioNormalization,after.audioNormalization);
   for (const clip of before.clips) {
     if (!isApproved(clip)) continue;
     const current = next.get(clip.id), name = clipName(clip);
+    if(masterChanged&&(clip.kind==='audio'||clip.kind==='video')&&(clip.volume??1)>0){violations.push({clipId:clip.id,name,what:'change its sound through timeline loudness normalization',note:clip.approval?.note});continue;}
     if (clip.approval) {
       if (!current) { violations.push({ clipId: clip.id, name, what: 'delete it', note: clip.approval.note }); continue; }
       if (comparable(clip, WHOLE_IGNORED) !== comparable(current, WHOLE_IGNORED)) violations.push({ clipId: clip.id, name, what: 'change it', note: clip.approval.note });

@@ -1,3 +1,4 @@
+import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { projectRun } from './lib/project_data';
 import { ConvexError,v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
@@ -61,7 +62,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     const sources=refs.attachments.filter(asset=>asset.projectId===projectId);
     const ids=new Set(sources.map(asset=>String(asset._id)));
     const timelines=await allTabTimelines(ctx,project);
-    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId)));
+    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId))||normalizationAssetIds(timeline).some(id=>ids.has(id)));
     // Extracted audio is retained while a video using that linked source remains in the edit.
     if(!used&&sources.some(asset=>asset.kind==='audio')) {
       const linked=await Promise.all(sources.filter(asset=>asset.kind==='audio').map(asset=>ctx.db.query('assets').withIndex('by_owner_audio',q=>q.eq('ownerId',row.ownerId).eq('audioAssetId',asset._id)).take(201)));
