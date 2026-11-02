@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Audio: Recover silent generated effects with a longer retry, trim short clips from their onset, and retain revision-bound sound and pacing checks. Why: tiny effects could be silent and verification results expired during later edits.
 - Reference comparison: Render batches in parallel and return scored revisions with a four-minute resume cursor that retains crop settings, without the 60-sample cap. Why: dense MCP comparisons timed out and lost finished results.
 - Media capture: Omit clips exhausted by prepared source windows while preserving timeline length for frames, reference comparisons and browser exports. Why: split, trimmed or retimed narration could leave zero-duration clips and block rendering.
 - Reference comparison: Score independent reference and timeline regions, with interpolated reference crop keyframes for pixels and motion. Why: compare moving demo sub-panels directly with full-screen recreations.
