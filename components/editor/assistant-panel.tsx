@@ -181,7 +181,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
   // The model picked for a project stays picked across reloads, so a long test never quietly switches models.
-  useEffect(() => { try { const saved = draftKey ? localStorage.getItem(`${draftKey}:model`) : null; setModelChoice(saved ? saved as ClaudeModelChoice : undefined); } catch { /* The default model applies. */ } }, [draftKey]);
+  useEffect(() => { try { const saved = draftKey ? localStorage.getItem(`${draftKey}:model`) : null; setModelChoice(EDITOR_MODELS.find(model => model.id === saved)?.id); } catch { /* The default model applies. */ } }, [draftKey]);
   function chooseModel(value: ClaudeModelChoice) { setModelChoice(value); try { if (draftKey) localStorage.setItem(`${draftKey}:model`, value); } catch { /* The choice holds for this visit. */ } }
   useEffect(() => {
     if (!pendingReply) return;
