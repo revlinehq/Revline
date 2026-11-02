@@ -1,0 +1,104 @@
+{
+  "projectName": "Landing: podcast clips",
+  "projectId": "j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
+  "developmentProjectUrl": "http://localhost:3001/editor/j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
+  "production": "Imported, clipped, reframed, captioned and normalized through Revline development MCP tools using the clipping skill. Active-speaker matching abstained where uncertain; face following or stable framing was retained. Muted 360x640 H.264 previews and WebP posters use Revline’s saved timelines and composition renderer, followed by small-asset compression. The short Acquired preview loops. No exportVideo call or export job was created.",
+  "sources": [
+    {
+      "asset": "theo",
+      "show": "Theo - t3.gg",
+      "episode": "Breaking down my current tech stack",
+      "moment": "Moving away from SQL and Next.js server components",
+      "sourceUrl": "https://www.youtube.com/watch?v=3c4UyGRBnmM",
+      "sourceRangeSeconds": [
+        39.92,
+        70.43
+      ],
+      "previewSourceRangeSeconds": [
+        51.595001,
+        62.995001
+      ],
+      "timelineId": "1685f121-9a61-49ef-b940-cefb207b87dc"
+    },
+    {
+      "asset": "lex",
+      "show": "Lex Fridman",
+      "episode": "Sam Altman: OpenAI CEO on GPT-4, ChatGPT, and the Future of AI | #367",
+      "moment": "GPT-4 compared with the earliest computers",
+      "sourceUrl": "https://www.youtube.com/watch?v=L_Guz73e6fw",
+      "sourceRangeSeconds": [
+        277,
+        304.1
+      ],
+      "previewSourceRangeSeconds": [
+        288.16,
+        296.16
+      ],
+      "timelineId": "main"
+    },
+    {
+      "asset": "dwarkesh",
+      "show": "Dwarkesh Podcast",
+      "episode": "Dario Amodei (Anthropic CEO)",
+      "moment": "Why AI scaling works is still an empirical mystery",
+      "sourceUrl": "https://www.youtube.com/watch?v=Nlkk3glap_U",
+      "sourceRangeSeconds": [
+        71.455,
+        96.945
+      ],
+      "previewSourceRangeSeconds": [
+        82.26,
+        86.86
+      ],
+      "timelineId": "fc73f5bd-f580-4004-9a9f-ce111f2da436"
+    },
+    {
+      "asset": "lenny",
+      "show": "Lenny’s Podcast",
+      "episode": "Brian Chesky’s new playbook",
+      "moment": "How different technical stacks and dependencies slow teams",
+      "sourceUrl": "https://www.youtube.com/watch?v=4ef0juAMqoE",
+      "sourceRangeSeconds": [
+        583.845,
+        621.223
+      ],
+      "previewSourceRangeSeconds": [
+        583.845,
+        588.445
+      ],
+      "timelineId": "138edf91-fe25-4a40-8392-17cf15932c09"
+    },
+    {
+      "asset": "acquired",
+      "show": "Acquired",
+      "episode": "NVIDIA CEO Jensen Huang",
+      "moment": "NVIDIA is not built like a military",
+      "sourceUrl": "https://www.youtube.com/watch?v=y6NfxiemvHg",
+      "sourceRangeSeconds": [
+        1676.8499,
+        1690.011633
+      ],
+      "previewSourceRangeSeconds": [
+        1682.337,
+        1685.057
+      ],
+      "timelineId": "382b0a28-7bd6-486d-88fb-8b0ef5e1d11e"
+    },
+    {
+      "asset": "allin",
+      "show": "All-In Podcast",
+      "episode": "Satya Nadella on AI’s Business Revolution",
+      "moment": "From edit suggestions to autonomous coding agents",
+      "sourceUrl": "https://www.youtube.com/watch?v=5nCbHsCG334",
+      "sourceRangeSeconds": [
+        194.735,
+        215.01
+      ],
+      "previewSourceRangeSeconds": [
+        199.455,
+        204.055
+      ],
+      "timelineId": "62024abc-699b-4684-b76d-e2e2161485b8"
+    }
+  ]
+}
