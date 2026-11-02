@@ -288,14 +288,19 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
 .landing-clippers,.landing-motion-design{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,13fr);grid-template-areas:"copy media";align-items:center;gap:48px;padding-block:96px}
 .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:32px}
-.landing-motion-design{grid-template-columns:minmax(0,13fr) minmax(0,7fr);grid-template-areas:"media copy"}
+.landing-motion-design{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-areas:"media copy"}
 .landing-showcase-copy{grid-area:copy;display:flex;flex-direction:column;align-items:flex-start;gap:24px;min-width:0}
-.landing-clippers-frame,.landing-motion-design-frame{grid-area:media;min-width:0}
+.landing-clippers-frame,.landing-motion-design-film{grid-area:media;min-width:0}
+.landing-motion-design-film{width:100%;max-width:360px;justify-self:center;margin:0}
+.landing-motion-design-film figcaption{margin-top:12px;font-size:13px;line-height:1.5;color:#666;text-align:center;text-wrap:balance}
+.landing-motion-design-film figcaption a:hover{color:#111}
 @media(max-width:760px){
   .landing-clippers,.landing-motion-design{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px;padding-block:64px}
   .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:0}
+  .landing-motion-design-film{max-width:320px}
 }
 .landing-clippers-frame,.landing-motion-design-frame{position:relative;width:100%;aspect-ratio:16/9;padding:0;overflow:hidden;border:1px solid #0000000f;border-radius:4px;background:#111;box-shadow:none}
+.landing-motion-design-frame{aspect-ratio:9/16}
 .landing-clippers-still,.landing-clippers-animation{position:absolute;inset:0;width:100%;height:100%;user-select:none}
 .landing-clippers-still{object-fit:contain;pointer-events:none}
 .landing-clippers-scene{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#111;isolation:isolate}
