@@ -18,7 +18,7 @@ export function incidentContext(value: unknown): string {
   // Only known diagnostic fields survive; never persist arbitrary inputs, headers, prompts or media.
   const fields = new Set(['location', 'toolName', 'taskKind', 'taskId', 'jobId', 'turnId', 'threadId', 'inputSummary', 'happened', 'expected', 'inputShape', 'outputShape', 'condition', 'attempt', 'savedEdits', 'label', 'event']);
   if (!value || typeof value !== 'object' || Array.isArray(value)) return '{}';
-  return JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key]) => fields.has(key)).slice(0, 16).map(([key, item]) => [key, typeof item === 'string' ? incidentText(item, 600) : typeof item === 'number' || typeof item === 'boolean' ? item : '[omitted]']))).slice(0, 8000);
+  return JSON.stringify(Object.fromEntries(Object.entries(value).filter(([key]) => fields.has(key)).slice(0, 16).map(([key, item]) => [key, typeof item === 'string' ? incidentText(item, 600) : typeof item === 'number' || typeof item === 'boolean' ? item : '[omitted]'])));
 }
 
 export function incidentNormalized(value: string): string {

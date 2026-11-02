@@ -61,7 +61,7 @@ async function drain() {
           console.info(`[incidents] ${incident.fingerprint} already has ${existing.url}`);
           continue;
         }
-        const slug = `${incident.deployment}-${incident.fingerprint.slice(-12)}-${incident.generation}`;
+        const slug = `${incident.deployment}-${incident.fingerprint.slice(-12)}-${incident.generation}-${claimToken.slice(0, 8)}`;
         const path = join(state, 'jobs', `${slug}.json`);
         const job: Job = { incident, claimToken, branch: `incident/${slug}`, directory: join(homedir(), 'Developer', `revline-incident-${slug}`), phase: 'starting', workerPid: process.pid };
         await writeJob(path, job);
