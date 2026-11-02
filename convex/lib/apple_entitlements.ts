@@ -7,6 +7,7 @@ export const appleEntitlementEvent = {
   productId: v.string(), plan: v.union(v.literal('pro'), v.literal('ultra')),
   environment: v.union(v.literal('Sandbox'), v.literal('Production')),
   purchasedAt: v.number(), expiresAt: v.number(), accessUntil: v.number(), eventAt: v.number(),
+  supersededAt: v.optional(v.number()),
   revokedAt: v.optional(v.number()), refundReversed: v.optional(v.boolean()),
   autoRenew: v.optional(v.boolean()), billingIssue: v.optional(v.boolean()), superwallSequence: v.optional(v.number()),
   forwardBody: v.optional(v.string()),

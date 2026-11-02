@@ -47,6 +47,7 @@ async function persist(ctx: ActionCtx, transaction: JWSTransactionDecodedPayload
     source: 'apple', eventId: details.eventId, ownerId, transactionId, originalTransactionId, productId,
     plan: appleProductPlan(productId), environment, purchasedAt: purchaseDate, expiresAt: expiresDate,
     accessUntil: revokedAt ? 0 : Math.max(expiresDate, expired ? 0 : graceUntil ?? 0), eventAt,
+    ...(transaction.isUpgraded ? { supersededAt: purchaseDate } : {}),
     ...(revokedAt ? { revokedAt } : {}),
     ...(details.notificationType === 'REFUND_REVERSED' ? { refundReversed: true } : {}),
     ...(details.renewal?.autoRenewStatus !== undefined ? { autoRenew: details.renewal.autoRenewStatus === 1 } : {}),

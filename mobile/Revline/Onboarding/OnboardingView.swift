@@ -56,6 +56,8 @@ struct OnboardingView: View {
                     .foregroundStyle(.black).padding(18).background(.white, in: .rect(cornerRadius: 16))
             }.padding(.horizontal, 24).padding(.bottom, 24)
         }
+        .frame(maxWidth: 600)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RevlineTheme.background)
     }
 }

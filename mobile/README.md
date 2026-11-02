@@ -21,6 +21,7 @@ xcodebuild -project mobile/Revline.xcodeproj -scheme Revline \
   -configuration Debug -destination 'platform=iOS Simulator,name=Revline iPhone' \
   -derivedDataPath mobile/.build/DerivedData \
   -clonedSourcePackagesDirPath mobile/.build/SourcePackages \
+  -jobs 1 \
   CODE_SIGNING_ALLOWED=YES CODE_SIGN_IDENTITY=- CODE_SIGNING_REQUIRED=NO \
   ONLY_ACTIVE_ARCH=YES build
 ```
@@ -93,7 +94,7 @@ Webhook URLs, using the deployment's **`.convex.site`** domain:
 
 Configure Apple V2 notifications in App Store Connect, pointing at Convex. Apple supports one destination per environment, so configure `SUPERWALL_APPLE_NOTIFICATIONS_URL` to forward the unmodified, verified payload to Superwall. Forwarding is queued atomically with the entitlement write and retried separately, so a Superwall outage cannot block Apple's entitlement update. In Superwall, configure the App Store Connect and In-App Purchase keys in its dashboard to enable revenue tracking. Those keys stay with Superwall and are not needed by the Convex JWS verifier. Superwall must use **Webhooks V2** and send initial purchase, renewal, cancellation, uncancellation, expiration, billing issue, refund, product change, and subscription extension events. The endpoint verifies raw-body Svix signatures and timestamps before parsing, validates project, store, bundle, environment and account ownership, and ignores non-App-Store payments. Stripe's existing webhook path is unchanged.
 
-Both sources upsert the same `appleEntitlements` row by transaction ID and record event receipts. Notification timestamps and Superwall sequence numbers reject stale state. Cancellation retains paid access until expiry, refunds revoke access, and a replayed active receipt cannot undo a refund. Only a verified Apple refund reversal can clear revocation. Expiry is checked when querying access; no client clock grants entitlement. Failed processing returns a retryable response rather than acknowledging a lost update. Web billing shows **Manage in App Store** and blocks new Stripe checkout and upgrade actions for active Apple subscriptions. `needsPayment` now describes lack of access, while `paymentIssue` preserves existing Stripe recovery behavior in the web UI.
+Both sources upsert the same `appleEntitlements` row by transaction ID and record event receipts. Notification timestamps and Superwall sequence numbers reject stale state. Cancellation retains paid access until expiry, refunds revoke access, and a replayed active receipt cannot undo a refund. Only a verified Apple refund reversal can clear revocation. A newer transaction caps the older transaction's access at its purchase time, and Apple's `isUpgraded` flag also retires the old purchase. Delayed receipts cannot revive a superseded plan after an upgrade or refund. Expiry is checked when querying access; no client clock grants entitlement. Failed processing returns a retryable response rather than acknowledging a lost update. Web billing shows **Manage in App Store** and blocks new Stripe checkout and upgrade actions for active Apple subscriptions. `needsPayment` now describes lack of access, while `paymentIssue` preserves existing Stripe recovery behavior in the web UI.
 
 ## App Store submission and remaining manual work
 
@@ -107,7 +108,9 @@ Both sources upsert the same `appleEntitlements` row by transaction ID and recor
 
 ## Verification from this session
 
-On 2026-11-01, `npm run typecheck`, `npm run build`, and the signed Debug Simulator build passed with Xcode 26.1.1 and Swift 6.2.1. The app ran on the iPhone 17 Simulator with iOS 26.1. Onboarding, welcome, and the live Clerk sign-in screen were visually inspected. The initial unsigned Keychain failure was fixed by adding the application/keychain entitlements and using Simulator ad hoc signing. The native sign-in screen is connected to the existing development Clerk instance and is waiting for the user to sign in. No credentials were entered by the agent.
+On 2026-11-01, `npm run typecheck`, `npm run build`, signed Debug and optimized Release Simulator builds passed with Xcode 26.1.1 and Swift 6.2.1. The app ran on the iPhone 17 and iPad Pro 11-inch Simulators with iOS 26.1. Onboarding, welcome, and the live Clerk sign-in screen were visually inspected. iPad onboarding and welcome were inspected in landscape, and onboarding in portrait. The onboarding column is capped at 600 points. The Release bundle's URLs were checked for the production deployment and website, and the app was launched on iPad to verify it safely displays Setup required without production Clerk configuration. Use `-jobs 1` on this 8 GB Mac to avoid parallel SDK compilation exhausting memory.
+
+The initial unsigned Keychain failure was fixed by adding the application/keychain entitlements and using Simulator ad hoc signing. The native sign-in screen is connected to the existing development Clerk instance and is waiting for the user to sign in. In Simulator, select **Revline iPhone**, then complete the email or Google flow in the open Revline sign-in sheet using your existing account. No credentials were entered by the agent.
 
 Local screenshots, excluded from Git:
 
@@ -116,5 +119,9 @@ Local screenshots, excluded from Git:
 - `Screenshots/03-onboarding-motion.png`
 - `Screenshots/04-welcome.png`
 - `Screenshots/05-clerk-sign-in.png`
+- `Screenshots/06-ipad-onboarding.png`
+- `Screenshots/07-release-setup.png`
+- `Screenshots/08-ipad-landscape.png`
+- `Screenshots/09-ipad-welcome.png`
 
 The authenticated project, chat, media, timeline, export, and account flows still need runtime inspection after the user completes sign-in. New Apple/Superwall billing functions have not been deployed, and purchase/restore/webhook verification requires the App Store products, dashboard configuration, backend environment variables, and a real Sandbox transaction. No account was deleted and no purchase was made. The renderer and development worker remain running on port 3002; the main checkout's port 3001 server was not changed or restarted.
