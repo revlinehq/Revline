@@ -9,7 +9,8 @@ import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {aiWorkflow} from './lib/workflows';
 import {cancelTurn} from './assistantWorkflow';
-import {agentRunnerConfigured,startRunnerTurn,stopRunnerTurn} from './agentRunner';
+import {stopRunnerTurn} from './agentRunner';
+import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
@@ -141,6 +142,27 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   return beginRequest(ctx,project,prompt,pinnedModel,{...args,...(command?{command}:{})});
 }});
 type QueuedContext=Pick<Doc<'assistantQueue'>,'command'|'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'|'editMode'>;
+/** Retry is a continuation of an existing prompt; it never writes a user message. */
+export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
+  const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);
+  const project=await requireProject(ctx,args.projectId,ownerId);
+  const [prompt]=await ctx.runQuery(components.agent.messages.getMessagesByIds,{messageIds:[args.promptMessageId]});
+  if(!prompt||prompt.threadId!==project.threadId||prompt.message?.role!=='user')throw new ConvexError('The original request is no longer available in this conversation.');
+  const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',args.promptMessageId)).unique();
+  if(project.aiRunning){if(turn?.runId===project.aiRunId)return null;throw new ConvexError('Wait for the current request before resuming this one.');}
+  if(turn?.status==='completed')return null;
+  const runId=crypto.randomUUID(),text=prompt.text??'';
+  const recovery:Doc<'projects'>['aiRecovery']=turn?{requests:[text],runId:turn.runId,revision:project.revision??0,savedEdits:turn.savedEdits,status:'failed',reason:turn.feedback??project.aiError??'Resume the unfinished request.',updatedAt:Date.now()}:project.aiRecovery;
+  const sameUndoGroup=turn?.runId===project.aiRunId&&project.aiCheckpointRevision===project.revision;
+  const pinnedModel=validatePinnedClaudeModel(turn?.args.pinnedModel??resolveClaudeModel());assertEditorModelConfigured(pinnedModel);
+  if(turn?.timelineId&&turn.timelineId!==activeTabOf(project))await openTabFor(ctx,ownerId,{projectId:args.projectId,timelineId:turn.timelineId});
+  const resumed={...(turn?.args??{}),projectId:args.projectId,ownerId,runId,threadId:prompt.threadId,promptMessageId:args.promptMessageId,pinnedModel,...(recovery?{recovery}:{}),continuation:{segment:0,repairPass:0,savedEdits:0,pendingFastFrames:turn?.pendingFastFrames??[],feedback:'Resume the original request in place. Inspect the saved timeline and finish only unfinished work; never repeat a completed edit.'}};
+  await writeProject(ctx,project._id,{aiRunning:true,aiEditing:false,aiAgentName:undefined,aiAgentActiveUntil:undefined,aiRunId:runId,aiError:undefined,aiQueuePaused:false,aiWorkflowId:undefined,aiAnalysisUsage:{runId,enqueued:0},aiRequest:{prompt:text,messageId:args.promptMessageId,startedRevision:project.revision??0},...(!sameUndoGroup?{aiUndoRecorded:false,aiCheckpointRevision:undefined}:{})});
+  if(turn)await ctx.db.patch(turn._id,{runId,args:resumed,pass:0,segment:0,status:'running',error:undefined,savedEdits:0,feedback:resumed.continuation.feedback,updatedAt:Date.now()});
+  else await rememberTurn(ctx,resumed,project);
+  await dispatchTurn(ctx,resumed);
+  return null;
+}});
 const sentFromOtherTab=(project:Doc<'projects'>,timelineId?:string)=>!!timelineId&&timelineId!==activeTabOf(project);
 /** The timeline of the tab a request was sent from: the open tab, or another one the user was looking at. */
 async function requestTimeline(ctx:MutationCtx,project:Doc<'projects'>,timelineId?:string){
@@ -162,12 +184,11 @@ async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,p
   const recovery = project.aiRecovery ?? (project.aiError ? assistantRecovery(project, 'failed', project.aiError) : undefined);
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
-  await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
+  await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiAgentName:undefined, aiAgentActiveUntil:undefined, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
   const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.command?{command:request.command}:{}),editMode:request.editMode??'fast',...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
-  // Long turns run on the Cloudflare agent runner; without one, inside Convex's ten-minute action limit.
-  if (agentRunnerConfigured()) { await startRunnerTurn(ctx, turn); return null; }
-  const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, turn,{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});
-  await writeProject(ctx,project._id,{aiWorkflowId:workflowId}); return null;
+  await rememberTurn(ctx,turn,project);
+  await dispatchTurn(ctx,turn);
+  return null;
 }
 
 /** The agent stores large tool images in file storage and leaves a URL object behind, which a query cannot
@@ -191,13 +212,15 @@ export const messages = query({
     const display = await ctx.db.query('assistantMessageThreads').withIndex('by_thread', q => q.eq('threadId', project.threadId!)).unique();
     const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : display?.completed && (!args.paginationOpts.cursor || args.paginationOpts.cursor.startsWith('display:')) && (!args.paginationOpts.endCursor || args.paginationOpts.endCursor.startsWith('display:')) ? await listMessageViews(ctx, project.threadId, args.paginationOpts) : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
     const streams = await syncStreams(ctx, components.agent, { threadId: project.threadId, streamArgs: args.streamArgs });
-    return { ...page, page: plainValues(page.page), streams: streams ?? { kind: "list" as const, messages: [] } };
+    const visible=await Promise.all(page.page.map(async message=>{if(message.role!=='user')return message;const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();return turn?{...message,turnState:turn.status,turnError:turn.error,turnResuming:turn.status==='running'&&(turn.pass>0||!!turn.args.continuation)}:message;}));
+    return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
 export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
   if (!project.aiRunning) return null;
+  if(project.aiRunId){const turn=await turnForRun(ctx,project.aiRunId);if(turn)await ctx.db.patch(turn._id,{status:'stopped',updatedAt:Date.now()});}
   if (project.threadId) {
     const streams = await listStreams(ctx, components.agent, { threadId: project.threadId, includeStatuses: ['streaming'] });
     for (const stream of streams) await abortStream(ctx, components.agent, { streamId: stream.streamId, reason: 'Stopped by the user' });
@@ -464,15 +487,18 @@ export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:
   if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
   return null;
 }});
-export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})) }, returns: v.null(), handler: async (ctx, args) => {
+export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})),segment:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+  const turn=await turnForRun(ctx,args.runId);
+  if(turn&&args.segment!==undefined&&turn.segment!==args.segment)return null;
   const project = await readProject(ctx,args.projectId);
   // A stopped action may finish after a new run starts. Its receipt belongs to
   // the original prompt; it must never stop or overwrite the newer run.
   const publication = args.publication && project?.ownerId === args.ownerId && project.threadId === args.publication.threadId ? args.publication : undefined;
   const written = publication ? await ctx.db.query('toolWriteReceipts').withIndex('by_run_stage', q => q.eq('runId', args.runId).eq('stagedRevision', publication.stagedRevision)).first() : null;
-  const committed = written?.ownerId === args.ownerId && written.projectId === args.projectId && written.receipt.kind === 'timeline' && written.receipt.status === 'saved' && written.receipt.revision === (publication?.stagedRevision ?? -1) + 1;
+  const committed = written?.ownerId === args.ownerId && written.projectId === args.projectId && written.receipt?.kind === 'timeline' && written.receipt.status === 'saved' && written.receipt.revision === (publication?.stagedRevision ?? -1) + 1;
   if(publication&&!committed)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...publication});
-  await finishIncidentRun(ctx, args.runId, committed && publication ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication);
+  if(turn&&turn.status==='running')await ctx.db.patch(turn._id,{status:args.error&&!committed?'failed':'completed',error:committed?undefined:args.error?.slice(0,1000),updatedAt:Date.now()});
+  await finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication);
   const error = committed ? undefined : args.error;
   if (project?.ownerId === args.ownerId && project.aiRunId === args.runId) {
     await clearLivePreview(ctx,project._id);

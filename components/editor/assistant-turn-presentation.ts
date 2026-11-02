@@ -23,12 +23,13 @@ function withoutFailureSummaries(replies: readonly ChatMessage[]): ChatMessage[]
 }
 
 /** A turn has one failure surface; saved results and the assistant's actual answer stay visible. */
-export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt,active=false}:{error?:string|null;receipt?:TimelinePublicationReceipt;active?:boolean}={}) {
+export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt,active=false,recovered=false}:{error?:string|null;receipt?:TimelinePublicationReceipt;active?:boolean;recovered?:boolean}={}) {
+  if(recovered&&!error)return {replies:withoutFailureSummaries(replies),cards:cards.filter(card=>card.state!=='error'&&card.state!=='running')};
   // A recovered publication can outlive a transport error's stale progress summary.
   if(receipt?.status==='saved'&&!error&&!cards.some(card=>card.state==='error'))return {replies:withoutFailureSummaries(replies),cards};
   // A tool rejection is recoverable while the agent is still working. Publish
   // one terminal failure only after the run stops, or the server confirms it.
-  if(active&&!error&&receipt?.status!=='failed'&&receipt?.status!=='aborted')return {replies,cards:cards.filter(card=>card.state!=='error')};
+  if(active)return {replies:withoutFailureSummaries(replies),cards:cards.filter(card=>card.state!=='error')};
   const summaries=replies.flatMap(message=>message.text.split(/\n\s*\n/).filter(failureSummary));
   const failures=cards.filter(card=>card.state==='error');
   const failed=!!error||failures.length>0||summaries.length>0||receipt?.status==='failed'||receipt?.status==='aborted';

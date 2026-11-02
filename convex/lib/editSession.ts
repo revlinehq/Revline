@@ -45,14 +45,21 @@ export class EditSession {
 
   wait() { return this.pending; }
 
+  restoreDraft(timeline:Timeline) {
+    this.timeline=normalizeTimeline(timeline);
+    this.staged=true;
+    this.stagedEdits=1;
+  }
+
   /** Only used after the tool layer recovered an atomic receipt or a direct mutation's save. */
-  async reconcileSaved(read: () => Promise<{ timeline: Timeline; revision: number }>) {
+  async reconcileSaved(read: () => Promise<{ timeline: Timeline; revision: number }>,force=false) {
     await this.pending;
     const current = await read();
-    if (current.revision <= this.revision) return;
+    if (!force&&current.revision <= this.revision) return;
+    const advanced=current.revision>this.revision;
     this.timeline = normalizeTimeline(current.timeline);
     this.revision = current.revision;
-    this.savedEdits++;
+    if(advanced)this.savedEdits++;
     this.staged = false;
     this.stagedEdits = 0;
     this.failed = false;

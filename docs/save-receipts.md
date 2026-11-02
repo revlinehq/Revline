@@ -96,9 +96,11 @@ heading.
 The web agent inside Convex, Cloudflare runner and MCP all construct the same
 toolkit. The runner bridge exposes the scoped receipt functions; the nested
 mutation dispatcher has a bounded allowlist and rejects mismatched owners,
-projects or runs. Receipt rows contain no mutation inputs or outputs, use an
-exact write-id index, and expire after a day through bounded cleanup. Editor
-queries do not subscribe to this table.
+projects or runs. Receipt rows use an exact write-id index and expire after a day through bounded
+cleanup. They also cache mutation return values so an interrupted response can
+be replayed without repeating the mutation; large values use bounded result
+parts. Mutation inputs are not retained. Editor queries do not subscribe to the
+receipt tables.
 
 ## Live verification
 
@@ -134,3 +136,68 @@ chat also keeps the saved receipt authoritative if an older deployment has
 already appended a contradictory failure for that same run/base revision.
 A final marker edit saved revision 7, and its repeat confirmed unchanged
 revision 7 using only the mutation's receipt.
+
+
+## Continuing a turn without another user bubble
+
+The original Retry path called `onSend` with a new continuation instruction.
+Both the optimistic chat and `assistant.send` therefore created a new user
+bubble. Retry now sends only the original prompt ID to `assistant.retry`.
+The server validates its project/thread/owner, keeps that prompt and its saved
+context, and starts an assistant continuation. Double clicks during an active
+continuation are a no-op. Completed turns are not rerun.
+
+`assistantTurns` checkpoints the original arguments, pass, generation, saved
+edit count and outstanding frame checks. Stream errors and publication errors
+now stay inside `editorTurn`'s existing two repair passes. A lost runner,
+watchdog timeout or native Convex workflow failure schedules the next pass of
+that same loop. The budget survives process restarts; it is not a new retry
+loop. Explicit Stop marks the turn stopped and invalidates its lock. A new
+generation fences older tool mutations and finalization, aborts stale streams,
+and restores only a private draft matching this run's current base revision.
+Configuration, billing and token-budget failures still stop with a specific
+message rather than spending repair passes on an unavailable capability.
+
+Each tool call uses a stable identity and per-function mutation ordinal.
+Repeated calls in one toolkit share their result. Across restarts, a repeated
+write returns its cached transaction result; a saved timeline is reloaded
+before continuing. A late publication uses its base revision in the stable
+publication identity. An interrupted HTTP response is retried with that same
+identity, including no-op and job acknowledgements. No possibly committed
+mutation is blindly repeated. The chat suppresses historical failure rows
+while a turn is recovering and retires them only after durable completion.
+A verification error cannot poison an already corrected private checkpoint.
+
+### Follow-up runtime evidence, 2026-11-02
+
+Only the newly created throwaway project
+`j9789a02r81atrsk8dqyzg2yb98hf5ka` was edited or interrupted for these checks.
+Its owner and title were verified before mutation. The visible user bubbles
+in the screenshots are deliberate verification prompts, not messages inserted
+by recovery.
+
+- A real HTTP proxy dropped the first response **after** `assistant.apply`
+  committed. The tool sent two requests with one write identity, returned saved
+  revision 3, and left exactly one `Transport recovered` marker. Revision moved
+  from 2 to 3 once.
+- With the browser closed, the runner for original prompt
+  `kx7cpv7jaht63jz2pgt9e05d7s8hffgr` was interrupted after its title saved.
+  Convex scheduled pass 1, generation 1 under the same run and prompt. It
+  completed with the original single title, revision 2 and one saved edit.
+- Three forced runner interruptions exhausted passes 0, 1 and 2 for prompt
+  `kx763ntvtc2gvpy3c6022dvzr18hfrt0`. The app showed one failure card. The
+  browser's Retry check kept all three user-message IDs unchanged. The same
+  original prompt completed under run `638130c7-35d1-47f8-8d03-521a2f2c96ce`
+  at revision 5 with no error, after the browser was closed again.
+- Repeating one `addGraphic` tool-call ID in the same toolkit and a fresh
+  toolkit saved only revision 6 and one new clip. The restarted session
+  reloaded the saved timeline exactly.
+- A deletion was interrupted with a validated private draft still based on
+  revision 6. The next pass restored that draft and published revision 7,
+  leaving the main title and marker intact, with no error. This was one fourth
+  deliberate verification prompt; recovery added no prompt of its own.
+
+Development uses this branch merged with current main. A temporary integration
+also preserves the already deployed account-consent/deletion and incident
+functions; those unrelated changes are not included in this PR. The target is
+only `majestic-alpaca-541` and `revline-agent-runner-dev`.

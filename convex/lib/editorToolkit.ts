@@ -126,6 +126,8 @@ export type EditorToolkitOptions = {
   planlessEffects?: boolean;
   editMode?: EditorEditMode;
   pendingFastFrames?: number[];
+  segment?:number;
+  draft?:Timeline;
   onPrecise?: () => Promise<void>;
 };
 
@@ -193,7 +195,7 @@ const readLists = (checks: NonNullable<ReturnType<ReadCoverage['sceneCheck']>>[]
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, abortSignal } = options;
-  const receipts = new ToolSaveReceipts(run);
+  const receipts = new ToolSaveReceipts(run,options.segment);
   ctx = receipts.context(ctx);
   let selectedClipIds = options.selectedClipIds;
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
@@ -248,6 +250,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
   }, abortSignal);
+  if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(editMode==='fast')fastReview.changed(before,options.draft);}
   // Approved work (lib/editor/approvals.ts) is refused unless the call passes overrideApproved with the user's reason.
   // The override covers the calls running under it; what it let through is reported back on that call.
   const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
@@ -1767,7 +1770,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const instance = this && typeof this === 'object' ? this : tool;
       const supplied = 'ctx' in instance && instance.ctx && typeof instance.ctx === 'object' ? instance.ctx : {};
       const bound = { ...instance, ctx: { ...supplied, ...ctx } };
-      return receipts.execute(name, () => editSession.revision, () => execute.apply(bound, args), () => editSession.reconcileSaved(() => ctx.runQuery(internal.assistant.getRunTimeline, run)));
+      const call=z.object({toolCallId:z.string().optional()}).parse(args[1]??{});
+      return receipts.execute(name, () => editSession.revision, () => execute.apply(bound, args), async () => {
+        const before=editSession.timeline;
+        await editSession.reconcileSaved(() => ctx.runQuery(internal.assistant.getRunTimeline, run),true);
+        if(editMode==='fast')fastReview.changed(before,editSession.timeline);
+      },call.toolCallId);
     };
     const serialize = tool.toModelOutput;
     if (!serialize) continue;

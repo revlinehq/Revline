@@ -8,7 +8,8 @@ import { toolBehavior, type ToolBehavior } from '../../lib/ai/tool-definitions';
 import type { ToolSaveReceipt } from '../../lib/ai/save-confirmation';
 import type { EditorRun } from './editorToolkit';
 
-type Execution = { name: string; behavior: ToolBehavior; receipt?: ToolSaveReceipt; writeFailed?: string; interrupted?: string; responseLost?: boolean };
+type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; writeFailed?: string; interrupted?: string; responseLost?: boolean };
+class RecoveredWrite extends Error {}
 const object = z.record(z.string(), z.unknown());
 const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string() });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 1000);
@@ -17,7 +18,10 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export class ToolSaveReceipts {
   private active = new AsyncLocalStorage<Execution>();
   private stagedBy?: string;
-  constructor(private run: EditorRun) {}
+  private completed=new Map<string,Promise<unknown>>();
+  constructor(private run: EditorRun,private segment=0) {}
+
+  restoredDraft() { this.stagedBy='restoreTimeline'; }
 
   private stamp(output: unknown, receipt: ToolSaveReceipt) {
     const parsed = object.safeParse(output);
@@ -44,7 +48,7 @@ export class ToolSaveReceipts {
     if (this.active.getStore()) return write();
     const name = this.stagedBy, behavior = name ? toolBehavior(name) : undefined;
     if (!name || !behavior) throw new Error('A timeline publication must have an originating tool.');
-    const execution: Execution = { name, behavior };
+    const execution: Execution = { name, behavior,callId:'publication',writes:new Map() };
     return this.active.run(execution, async () => {
       try { return await write(); }
       catch (error) {
@@ -64,17 +68,27 @@ export class ToolSaveReceipts {
     const runMutation: ActionCtx['runMutation'] = async (ref, ...args) => {
       const execution = this.active.getStore();
       if (!execution || execution.behavior.effect === 'read' || execution.behavior.effect === 'analysis') return ctx.runMutation(ref, ...args);
-      const writeId = crypto.randomUUID();
-      try {
-        const result = await ctx.runMutation(internal.toolWrites.run, { ...this.run, writeId, toolName: execution.name, functionName: getFunctionName(ref), input: args[0] ?? {} });
+      const input=args[0]??{},functionName=getFunctionName(ref);
+      const ordinal=execution.writes.get(functionName)??0;
+      execution.writes.set(functionName,ordinal+1);
+      const writeId = `${this.run.runId}:${execution.callId}:${functionName}:${execution.callId==='publication'&&'expectedRevision' in input?String(input.expectedRevision):ordinal}`;
+      for(let attempt=0; ; attempt++)try {
+        const result = await ctx.runMutation(internal.toolWrites.run, { ...this.run, writeId, toolName: execution.name, functionName, input,segment:this.segment });
         if (result.receipt) this.record(result.receipt);
+        if(result.replayed&&attempt===0&&result.receipt?.kind==='timeline'){
+          execution.responseLost=true;
+          throw new RecoveredWrite('This edit already committed. Inspect the saved state and continue only unfinished work.');
+        }
         // The nested mutation validates this value against the original function's return validator.
         return result.value;
       } catch (error) {
+        if(error instanceof RecoveredWrite)throw error;
         const rejected = writeFailure.safeParse(error instanceof ConvexError ? error.data : undefined);
         if (rejected.success) execution.writeFailed = rejected.data.message;
         else {
-          // Query the committed receipt, never retry a possibly committed mutation.
+          // Give a late acknowledgement time to arrive. Replays carry the same
+          // identity and return the original transaction's result without another write.
+          if(attempt<2){await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));continue;}
           const receipt = await ctx.runQuery(internal.toolWrites.receipt, { ...this.run, writeId }).catch(() => null);
           if (receipt) { this.record(receipt); execution.responseLost = true; }
           else execution.interrupted = message(error);
@@ -85,11 +99,13 @@ export class ToolSaveReceipts {
     return { ...ctx, runMutation };
   }
 
-  async execute(name: string, revision: () => number, execute: () => Promise<unknown>, reconcile: () => Promise<void>) {
+  async execute(name: string, revision: () => number, execute: () => Promise<unknown>, reconcile: () => Promise<void>,callId:string=crypto.randomUUID()) {
     const behavior = toolBehavior(name);
     if (!behavior) throw new Error(`Tool ${name} has no behavior definition.`);
-    const execution: Execution = { name, behavior };
-    return this.active.run(execution, async () => {
+    const key=`${name}:${callId}`,previous=this.completed.get(key);
+    if(previous)return previous;
+    const execution: Execution = { name, behavior,callId,writes:new Map() };
+    const pending=this.active.run(execution, async () => {
       let output: unknown;
       try { output = await execute(); }
       catch (error) {
@@ -97,7 +113,7 @@ export class ToolSaveReceipts {
         output = { success: false, error: message(error) };
       }
       if (behavior.effect === 'read' || behavior.effect === 'analysis') return output;
-      if (execution.receipt?.kind === 'timeline' && execution.receipt.status === 'saved' && execution.receipt.revision > revision()) await reconcile().catch(() => {});
+      if (execution.receipt?.kind === 'timeline' && execution.receipt.status === 'saved' && (execution.responseLost||execution.receipt.revision > revision())) await reconcile();
       if (execution.responseLost && execution.receipt) output = { recovered: true, note: 'The write committed. Its response was interrupted; inspect the saved state before continuing.' };
       const kind = behavior.effect;
       const receipt: ToolSaveReceipt = execution.receipt
@@ -106,5 +122,11 @@ export class ToolSaveReceipts {
             : { kind, status: 'unchanged', revision: revision() });
       return this.stamp(output, receipt);
     });
+    if(behavior.effect!=='read'&&behavior.effect!=='analysis')this.completed.set(key,pending);
+    try {
+      const result=await pending;
+      if(result&&typeof result==='object'&&'success' in result&&result.success===false)this.completed.delete(key);
+      return result;
+    } catch(error) {this.completed.delete(key);throw error;}
   }
 }

@@ -19,6 +19,7 @@ import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
 import type * as assistantMessages from "../assistantMessages.js";
+import type * as assistantTurnRecovery from "../assistantTurnRecovery.js";
 import type * as assistantWorkflow from "../assistantWorkflow.js";
 import type * as billing from "../billing.js";
 import type * as blueprints from "../blueprints.js";
@@ -135,6 +136,7 @@ declare const fullApi: ApiFromModules<{
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
   assistantMessages: typeof assistantMessages;
+  assistantTurnRecovery: typeof assistantTurnRecovery;
   assistantWorkflow: typeof assistantWorkflow;
   billing: typeof billing;
   blueprints: typeof blueprints;
