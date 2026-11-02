@@ -6,19 +6,18 @@
 .assistant-model-picker .inspector-select-trigger:hover,.assistant-model-picker .inspector-select-trigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
 .assistant-model-picker .inspector-select-trigger:focus-visible,.editor-app .assistant-model-picker .inspector-select-trigger:focus-visible{outline:none;box-shadow:none}
 .assistant-model-picker .inspector-select-trigger:disabled{opacity:.5;cursor:default}
-.inspector-select-menu.workspace-menu[aria-label="AI editing model options"]{width:260px}
+.inspector-select-menu.workspace-menu.assistant-picker-menu,.inspector-select-menu.workspace-menu[aria-label="Editing mode options"]{width:max-content;min-width:0}
 @media(pointer:coarse){.assistant-model-picker .inspector-select-trigger{height:44px;min-height:44px}}
 .assistant-model-logo{flex-shrink:0;width:14px;height:14px}
 .assistant-picker-menu .inspector-select-option,.inspector-select-menu[aria-label="Editing mode options"] .inspector-select-option{min-height:38px;padding:8px 32px 8px 12px;font-size:13px;gap:9px}
+.assistant-picker-menu .inspector-select-option-copy small{white-space:nowrap}
 .assistant-picker-menu .inspector-select-option [data-slot$=item-indicator],.inspector-select-menu[aria-label="Editing mode options"] .inspector-select-option [data-slot$=item-indicator]{right:11px;color:var(--ws-text)}
 .assistant-picker-menu [data-slot=dropdown-menu-label]{padding:6px 12px;color:var(--ws-muted);font-size:11px;font-weight:400}
 .assistant-picker-menu [data-slot=dropdown-menu-separator]{margin:5px 0;background:var(--ws-artifact-border,var(--ws-border))}
-.assistant-picker-menu .assistant-effort-subtrigger{min-height:38px;padding:8px 12px;font-size:13px;cursor:pointer;outline:none}
+.assistant-picker-menu .assistant-effort-subtrigger{min-height:38px;padding:8px 12px;font-size:13px;white-space:nowrap;cursor:pointer;outline:none}
 .assistant-effort-subtrigger[data-highlighted],.assistant-effort-subtrigger[data-state=open]{background:var(--ws-hover);color:var(--ws-text)}
 .assistant-effort-value{margin-left:auto;color:var(--ws-muted);font-size:12px}
 .assistant-effort-subtrigger>svg{margin-left:3px}
-.inspector-select-menu.workspace-menu.assistant-effort-menu{width:170px}
-.inspector-select-menu.workspace-menu[aria-label="Editing mode options"]{width:310px}
 .inspector-select-menu[aria-label="Editing mode options"] .inspector-select-option-copy small{font-size:11px;white-space:nowrap}
 html[data-workspace-theme=dark] .assistant-picker-menu.workspace-menu,html[data-workspace-theme=dark] .inspector-select-menu.workspace-menu[aria-label="Editing mode options"]{background:#2a2a2a}
 html[data-workspace-theme=dark] .assistant-model-picker,html[data-workspace-theme=dark] .assistant-picker-menu,html[data-workspace-theme=dark] .inspector-select-menu[aria-label="Editing mode options"]{--ws-hover:#363636;--ws-artifact-border:#3a3a3a}
