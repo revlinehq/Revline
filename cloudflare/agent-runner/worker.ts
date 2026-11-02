@@ -29,7 +29,8 @@ export class EditorTurn extends Agent<Env> {
   /** Accept a run and return at once; a repeated start for the same run is not run twice. */
   async begin(start: RunStart): Promise<{ accepted: boolean }> {
     const { runId } = jsonToConvex(start.args) as EditorTurnArgs;
-    const receipt = await this.startFiber('turn', fiber => this.turn(fiber, { args: start.args, runToken: start.runToken, steps: 0, savedEdits: 0 }), { idempotencyKey: runId });
+    const args=jsonToConvex(start.args) as EditorTurnArgs;
+    const receipt = await this.startFiber('turn', fiber => this.turn(fiber, { args: start.args, runToken: start.runToken, steps: 0, savedEdits: args.continuation?.savedEdits??0 }), { idempotencyKey: `${runId}:${args.continuation?.segment??0}` });
     return { accepted: receipt.accepted };
   }
 

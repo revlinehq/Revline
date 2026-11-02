@@ -43,4 +43,3 @@ export async function branchPR(branch: string) {
   const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', 'url,state,isDraft,headRefName,body,title']);
   return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => pr.headRefName === branch && pr.isDraft && pr.title.startsWith('Incident: '));
 }
-

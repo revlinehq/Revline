@@ -3,6 +3,7 @@ import { internal } from './_generated/api';
 import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import { assistantRunArgs } from './lib/assistant_run';
 import { projectRun } from './lib/project_data';
+import { resumeInterruptedTurn,turnForRun } from './assistantTurnRecovery';
 import { RUNNER_REQUEST_WINDOW_MS, runToken, runnerSignature } from './lib/runner_auth';
 
 // The editor's agent loop runs on Cloudflare (cloudflare/agent-runner, an Agents SDK agent per run), where one
@@ -19,6 +20,8 @@ const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.str
 const MAX_STORAGE_GRANTS = 500;
 
 export async function startRunnerTurn(ctx: MutationCtx, args: ObjectType<typeof assistantRunArgs>) {
+  const previous=await turnRow(ctx,args.runId);
+  if(previous)await ctx.db.delete(previous._id);
   await ctx.db.insert('agentRunnerTurns', { runId: args.runId, projectId: args.projectId, ownerId: args.ownerId, attempts: 0, seenAt: Date.now() });
   await ctx.scheduler.runAfter(0, internal.agentRunner.start, args);
   await ctx.scheduler.runAfter(WATCH_INTERVAL_MS, internal.agentRunner.watch, { runId: args.runId });
@@ -39,7 +42,7 @@ export const start = internalAction({ args: assistantRunArgs, returns: v.null(),
   }
   catch (error) {
     console.error(`[agent-runner] ${JSON.stringify({ event: 'start-failed', projectId: args.projectId, runId: args.runId, error: error instanceof Error ? error.message : 'unknown' })}`);
-    await ctx.runMutation(internal.agentRunner.settle, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: 'The editing service could not start this request. Try again.' });
+    await ctx.runMutation(internal.agentRunner.settle, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId,segment:args.continuation?.segment??0, error: 'The editing service could not start this request. Try again.' });
   }
   return null;
 }});
@@ -66,6 +69,11 @@ const turnRow = (ctx: QueryCtx, runId: string) => ctx.db.query('agentRunnerTurns
 export const claim = internalMutation({ args: { ...runArgs, claimId: v.string() }, returns: v.union(v.null(), v.object({ attempt: v.number(), maxAttempts: v.number() })), handler: async (ctx, args) => {
   const row = await turnRow(ctx, args.runId);
   if (!row || !await isActive(ctx, args)) return null;
+  if(row.claimId===args.claimId)return {attempt:0,maxAttempts:MAX_ATTEMPTS};
+  if(row.attempts>0){
+    if(!await resumeInterruptedTurn(ctx,args.runId,INTERRUPTED))await ctx.runMutation(internal.assistant.finish,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,error:INTERRUPTED});
+    return null;
+  }
   await ctx.db.patch(row._id, { attempts: row.attempts + 1, claimId: args.claimId, seenAt: Date.now() });
   return { attempt: row.attempts, maxAttempts: MAX_ATTEMPTS };
 }});
@@ -114,10 +122,12 @@ export const heartbeat = internalMutation({ args: runArgs, returns: v.boolean(),
 }});
 
 /** The runner ended without finishing the run itself (a crash, or too many restarts). */
-export const settle = internalMutation({ args: { ...runArgs, error: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const settle = internalMutation({ args: { ...runArgs, error: v.optional(v.string()),segment:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+  const turn=await turnForRun(ctx,args.runId);
+  if(args.segment!==undefined&&turn&&turn.segment!==args.segment)return null;
   const row = await turnRow(ctx, args.runId);
   if (row) await ctx.db.delete(row._id);
-  if (await isActive(ctx, args)) await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: args.error ?? INTERRUPTED });
+  if (await isActive(ctx, args)&&!await resumeInterruptedTurn(ctx,args.runId,args.error??INTERRUPTED)) await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: args.error ?? INTERRUPTED });
   return null;
 }});
 
@@ -130,7 +140,7 @@ export const watch = internalMutation({ args: { runId: v.string() }, returns: v.
   if (Date.now() - row.seenAt > HEARTBEAT_STALE_MS) {
     console.error(`[agent-runner] ${JSON.stringify({ event: 'runner-silent', projectId: row.projectId, runId, attempts: row.attempts })}`);
     await ctx.db.delete(row._id);
-    await ctx.runMutation(internal.assistant.finish, { ...run, error: INTERRUPTED });
+    if(!await resumeInterruptedTurn(ctx,runId,INTERRUPTED))await ctx.runMutation(internal.assistant.finish, { ...run, error: INTERRUPTED });
     return null;
   }
   await ctx.scheduler.runAfter(WATCH_INTERVAL_MS, internal.agentRunner.watch, { runId });

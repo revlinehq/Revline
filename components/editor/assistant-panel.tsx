@@ -113,7 +113,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   allowedModels?: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>; hasClips: boolean; demo: boolean;
-  onRetry?: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>;
+  onRetry?: (promptMessageId:string) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
@@ -144,18 +144,19 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
   const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
   const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&availableModels.some(choice=>choice===defaultModelChoice)?defaultModelChoice:availableModels.includes('gpt-6.1-sol')?'gpt-6.1-sol':availableModels[0]??'gpt-6.1-sol');
   const [sending, setSending] = useState(false);
+  const [resumingTurnId,setResumingTurnId]=useState<string|null>(null);
   const [localError, setLocalError] = useState('');
   const [stopState,setStopState]=useState<'stopping'|'stopped'|null>(null);
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
-  const answering = (running && !externalAgent) || sending || !!pendingReply;
+  const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const replyLabel = editingTimeline ? 'Editing…' : 'Replying…';
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
   // A long tool run can fill a page before its user message is loaded.
   // The visible assistant-only prefix is still the active turn, not a failed historical edit.
-  const turnId = optimisticRequest?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
+  const turnId = optimisticRequest?.id ?? resumingTurnId ?? messages.findLast(message=>message.role==='user'&&message.turnState==='running')?.id ?? latestUser?.id ?? messages[0]?.id ?? 'imported';
   const demoNoteMessageId = demo ? messages.findLast(message => message.role === 'assistant')?.id : undefined;
   // The sent message shows at once under a placeholder id; when the saved message replaces it,
   // that turn keeps the placeholder's id so the chat scroller sees one continuous item.
@@ -174,7 +175,7 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
-      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,error:group.id===turnId?(localError||(!waiting?error:null)):null});
+      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
       return {...group,comparison,...presentation};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
@@ -208,14 +209,21 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
     catch (e) { setStopState(null); setLocalError(userError(e, 'Could not stop this edit.')); }
   }
 
-  async function sendRequest(draft: string, retry = false) {
+  async function sendRequest(draft: string) {
     if (!draft.trim() || sendInFlight.current || sending || (!conversationStarted&&running) || pendingReply) return;
     const key=draftKey;sendInFlight.current=true;
-    if (!retry) changePrompt('');
+    changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await (retry && onRetry ? onRetry : onSend)(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
-    catch (e) { if(currentDraftKey.current===key){if(!retry)changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
+    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
+    catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
+  }
+  async function retryRequest(request:ChatMessage) {
+    if(!onRetry||sendInFlight.current||answering)return;
+    sendInFlight.current=true;setResumingTurnId(request.id);setLocalError('');setStopState(null);
+    try { await onRetry(request.sourceId??request.id); }
+    catch(error){setLocalError(userError(error,'Could not resume this request.'));}
+    finally {sendInFlight.current=false;setResumingTurnId(null);}
   }
   async function submit() { await sendRequest(prompt); }
 
@@ -262,9 +270,9 @@ function AssistantPanelBody({ messages, running, editing:editingTimeline=running
               </Fragment>)}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
-                {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => void sendRequest('Finish only the remaining work or checks from my unfinished request. Keep the edits already completed.', true)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
+                {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
               </div>)}</div>}
-              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
+              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&now.label==='Thinking about the next step'?'Resuming…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;
