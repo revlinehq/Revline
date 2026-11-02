@@ -2,6 +2,7 @@ import { ULTRA_OFFERED } from '../../lib/billing/plan';
 import { ConvexError } from 'convex/values';
 import { components } from '../_generated/api';
 import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server';
+import { activeAppleEntitlement } from './apple_entitlements';
 
 export const billingEnabled = () => process.env.BILLING_ENABLED === 'true';
 export const billingConfigured = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_WEBHOOK_SECRET && !!process.env.STRIPE_PRO_PRICE_ID && !!process.env.APP_ORIGIN;
@@ -21,6 +22,7 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
 
 /** Ultra comes from an active Ultra subscription, or an operator grant on an active complimentary entitlement. */
 export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  if ((await activeAppleEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
   if (!!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now())) return true;
   if (!billingEnabled() || !ultraBillingConfigured()) return false;
@@ -29,6 +31,7 @@ export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string)
 
 /** On a free trial: editor access comes only from a trialing subscription (not a paid one or a complimentary grant). */
 export async function onFreeTrial(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  if (await activeAppleEntitlement(ctx, ownerId)) return false;
   if (!billingEnabled() || !billingConfigured() || await hasComplimentaryEditorAccess(ctx, ownerId)) return false;
   const live = (await editorSubscriptions(ctx, ownerId)).filter(hasEditorAccess);
   return live.length > 0 && live.every(sub => sub.status === 'trialing');
@@ -37,6 +40,7 @@ export async function onFreeTrial(ctx: QueryCtx | MutationCtx, ownerId: string) 
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled()) return;
   if (await hasComplimentaryEditorAccess(ctx, ownerId)) return;
+  if (await activeAppleEntitlement(ctx, ownerId)) return;
   if (!billingConfigured()) throw new ConvexError({ code: 'BILLING_UNAVAILABLE', message: 'Billing is temporarily unavailable. Please try again.' });
   if (!(await editorSubscriptions(ctx, ownerId)).some(hasEditorAccess)) {
     throw new ConvexError({ code: 'SUBSCRIPTION_REQUIRED', message: 'Start your free trial or renew your subscription to edit and export.' });

@@ -7,12 +7,14 @@ import { registerAlertWebhooks } from './alertWebhooks';
 import { registerMcpRoutes } from './mcpHttp';
 import { prepare as prepareMcpUpload } from './mcpUploads';
 import { registerAgentRunnerRoutes } from './agentRunnerHttp';
+import { registerAppleBillingRoutes } from './appleBillingHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
 registerAlertWebhooks(http);
 registerMcpRoutes(http);
 http.route({ path: '/mcp/upload', method: 'POST', handler: prepareMcpUpload });
 registerAgentRunnerRoutes(http);
+registerAppleBillingRoutes(http);
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
 // A shared timeline's link preview image (Open Graph / X card), 1200x630 JPEG.
 http.route({ path: "/share-card", method: "GET", handler: httpAction(async (ctx, request) => {

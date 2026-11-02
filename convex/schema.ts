@@ -294,6 +294,15 @@ export default defineSchema({
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
+  appleBillingAccounts: defineTable({ ownerId: v.string(), appAccountToken: v.string(), createdAt: v.number() }).index('by_owner', ['ownerId']).index('by_token', ['appAccountToken']),
+  appleEntitlements: defineTable({
+    ownerId: v.string(), transactionId: v.string(), originalTransactionId: v.string(), productId: v.string(),
+    plan: v.union(v.literal('pro'), v.literal('ultra')), environment: v.union(v.literal('Sandbox'), v.literal('Production')),
+    purchasedAt: v.number(), expiresAt: v.number(), accessUntil: v.number(), eventAt: v.number(),
+    revokedAt: v.optional(v.number()), refundReversedAt: v.optional(v.number()), autoRenew: v.optional(v.boolean()), billingIssue: v.optional(v.boolean()),
+    superwallSequence: v.optional(v.number()), source: v.union(v.literal('apple'), v.literal('superwall')), updatedAt: v.number(),
+  }).index('by_transaction', ['transactionId']).index('by_original', ['originalTransactionId']).index('by_owner_access', ['ownerId', 'accessUntil']),
+  appleBillingEvents: defineTable({ source: v.union(v.literal('apple'), v.literal('superwall')), eventId: v.string(), transactionId: v.string(), receivedAt: v.number() }).index('by_source_event', ['source', 'eventId']),
   timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,openTimelineId:v.optional(v.string()),tabCount:v.optional(v.number()),chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),cardTitle:v.optional(v.string()),cardImage:v.optional(v.string()),cardUpdatedAt:v.optional(v.number()),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
   // Extra tabs of a multi-tab share; the share row keeps the first tab as `timeline` for older links.
   shareTimelines:defineTable({shareId:v.id('timelineShares'),timelineId:v.string(),name:v.string(),position:v.number(),timeline:timelineValidator}).index('by_share',['shareId','position']),
