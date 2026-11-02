@@ -1,4 +1,5 @@
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
+import { generateImagePlates, imageGenerationInput, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest, type PixelTrackReference } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
@@ -164,7 +165,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -681,6 +682,43 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Finish and verify this clip before opening another tab. Never call tab changes in parallel with edits.' };
   };
   const tools = {
+    generateImage: createTool({
+      metadata: EDITOR_TOOL_DEFINITIONS.generateImage,
+      description: 'Generate image plates with OpenAI and save every variant as normal project media. Read motion-design page image-plates first. Use for isolated photoreal or illustrated hands, objects, products and photos; use findIcon for logos, traceShape for hand-made shapes, and code/CSS for drawable graphics. Never generate a reference video frame. PNG preserves transparentBackground alpha. Optional referenceAssetIds edit existing project images. Returns assetIds and previews; inspect them, then bind by name in scene media and animate with GSAP. Each variant is paid; failed requests report the provider error.',
+      inputSchema: imageGenerationInput,
+      execute: async (_ctx, input) => {
+        const references = [];
+        for (const assetId of input.referenceAssetIds ?? []) {
+          const asset = await ctx.runQuery(internal.assistant.getRunAsset, { ...run, assetId });
+          if (asset.kind !== 'image' || !['image/png', 'image/jpeg', 'image/webp'].includes(asset.contentType)) throw new Error(`${asset.fileName} is not a PNG, JPEG or WebP project image.`);
+          if (asset.size > 50_000_000) throw new Error(`${asset.fileName} exceeds OpenAI's 50 MB reference image limit.`);
+          const url = await mediaUrl(ctx, asset);
+          if (!url) throw new Error(`${asset.fileName} has no readable image file.`);
+          references.push(url);
+        }
+        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1 });
+        const generated = await generateImagePlates(input, references, abortSignal), requestId = crypto.randomUUID();
+        const { usage } = generated;
+        console.log(`[ai-cost] ${JSON.stringify({ event: 'image-generation', ...run, requestId, model: IMAGE_MODEL, provider: 'openai.images', count: generated.images.length, ...usage })}`);
+        await ctx.runMutation(internal.aiCosts.record, { projectId: run.projectId, runId: run.runId, ...options.publication, record: { key: `image-${requestId}`, kind: 'model-call', recordedAt: Date.now(), model: IMAGE_MODEL, provider: 'openai.images', reasoningEffort: null, speedMode: null, serviceTier: 'default', estimatedUsd: usage.estimatedUsd, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, reasoningTokens: null, uncachedInputTokens: usage.inputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, toolCallCount: 1, unreportedCall: false } });
+        const uploaded: { r2Key: string; size: number; width: number; height: number }[] = [];
+        try {
+          for (const image of generated.images) {
+            abortSignal.throwIfAborted();
+            const r2Key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+            const size = await putMediaObject(r2Key, image.bytes, 'image/png');
+            uploaded.push({ r2Key, size, width: image.width, height: image.height });
+          }
+          const saved = await ctx.runMutation(internal.generatedImages.save, { ...run, images: uploaded, provenance: { requestId, prompt: input.prompt, model: IMAGE_MODEL, size: imageGenerationSize(input), transparentBackground: input.transparentBackground ?? false, quality: 'medium', referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], usage } });
+          assets.push(...saved);
+          return { assetIds: saved.map(asset => asset._id), assets: saved.map(asset => ({ assetId: asset._id, fileName: asset.fileName, width: asset.width, height: asset.height })), model: IMAGE_MODEL, usage, images: generated.images.map((image, index) => ({ label: `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' })), note: 'Saved to project media. Inspect the previews, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
+        } catch (error) {
+          await ctx.runMutation(internal.generatedImages.cleanup, { ...run, keys: uploaded.map(image => image.r2Key) }).catch(() => {});
+          throw error;
+        }
+      },
+      toModelOutput: (ctx, options) => blueprintImages(ctx, options.output),
+    }),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
       inputSchema: z.object({ toolName: z.string().min(1).max(100), inputSummary: z.string().max(600), happened: z.string().min(1).max(1000), expected: z.string().min(1).max(1000) }),

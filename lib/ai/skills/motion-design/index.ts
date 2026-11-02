@@ -1,5 +1,6 @@
 import type { EditorSkill } from '../index';
 import { blueprintsPage, brandPage } from './pages';
+import { imagePlatesPage } from './image-plates';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
@@ -7,6 +8,8 @@ export const motionDesign: EditorSkill = {
   body: `# Motion design: launch and feature films
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
+
+When a film needs photoreal or illustrative hands, objects, products or photos, read this skill's \`image-plates\` page before generateImage; it covers isolated plates, transparent cut-outs and GSAP compositing.
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
@@ -56,5 +59,5 @@ In a new film, every fact on screen comes from the confirmed product text or the
 - **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
 - **A style reference** (a film or brand they like, not one to recreate): take its look, type, motion and pacing, never its copy, product, logo, characters or exact compositions.
 - The brand kit's fonts and colors always win.`,
-  pages: [brandPage, blueprintsPage],
+  pages: [brandPage, blueprintsPage, imagePlatesPage],
 };

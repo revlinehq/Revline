@@ -175,7 +175,13 @@ const analysisRequestFields = { ownerId: v.string(), projectId: v.id("projects")
 export const analysisRequestDocument = v.object({ _id: v.id("analysisRequests"), _creationTime: v.number(), ...analysisRequestFields });
 export const previewFields = { previewR2Key:v.optional(v.string()), previewSize:v.optional(v.number()), previewWidth:v.optional(v.number()), previewHeight:v.optional(v.number()), previewFps:v.optional(v.number()), previewVersion:v.optional(v.number()) };
 export const previewSegmentUrl = v.object({ start:v.number(), end:v.number(), url:v.string(), size:v.number() });
+export const imageGenerationValidator = v.object({
+  requestId: v.string(), prompt: v.string(), model: v.string(), size: v.string(), transparentBackground: v.boolean(),
+  referenceAssetIds: v.array(v.id('assets')), quality: v.literal('medium'),
+  usage: v.object({ inputTokens: v.union(v.number(), v.null()), outputTokens: v.union(v.number(), v.null()), textTokens: v.union(v.number(), v.null()), imageTokens: v.union(v.number(), v.null()), estimatedUsd: v.union(v.number(), v.null()) }),
+});
 export const assetFields = {
+  imageGeneration: v.optional(imageGenerationValidator),
   importSourceUrl:v.optional(v.string()),importRange:v.optional(v.object({start:v.number(),end:v.number()})),
   previewOriginalPlayable:v.optional(v.boolean()),
   ...previewFields,

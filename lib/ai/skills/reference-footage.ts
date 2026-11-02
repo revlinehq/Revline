@@ -1,4 +1,5 @@
 import type { EditorSkill, EditorSkillPage } from './index';
+import { imagePlatesPage } from './motion-design/image-plates';
 
 const recreation: EditorSkillPage = {
   name: 'recreation',
@@ -8,6 +9,8 @@ const recreation: EditorSkillPage = {
 For edits to an existing recreation, start with scene-engine page \`edit-lanes\`. The inventory, dense reads, comparisons and close-out below apply only in Precise. A new recreation always runs Precise; Fast changes to an existing recreation use local frame checks instead.
 
 The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Keep the reference video itself off the timeline.
+
+For photoreal or illustrative subjects code cannot draw, read page \`image-plates\` before generateImage. Generate fresh isolated subjects from measured framing, palette and material, then animate them with GSAP; never reproduce a reference frame.
 
 ## 1. Map the film, then inventory one section
 Read the whole reference with readFrames count 16 for its moments and holds. Shots alone miss motion inside a shot. Group related moments into named sections, including their incoming and outgoing transitions.
@@ -139,5 +142,5 @@ Then ask, only if the message did not already say: remake it, or borrow which pa
 - For a footage edit or style borrow, copy the edit using the user's material. For an explicitly requested motion-film copy, follow page \`recreation\` for exact visible content.
 - Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact. Transition kinds, camera moves and title styles are the model's reading: when one decides the result, check it with readFrames fps 10 on the reference before building.
 - After building, go through scene-engine page \`checklist\` for scenes, and look at the result with getFrames at the shots that matter.`,
-  pages: [recreation, socialEdit, motivation, borrow],
+  pages: [recreation, socialEdit, motivation, borrow, imagePlatesPage],
 };
