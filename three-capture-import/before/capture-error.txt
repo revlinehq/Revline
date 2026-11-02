@@ -1,0 +1,8 @@
+Actual getFrames result from the throwaway development project, before the fix:
+Frames could not be rendered: Scene "Lit spinning cube": React scenes can import only revline, react, gsap and blueprint:<name>, not "revline/three".
+c (about:srcdoc:149:2927)
+eval (eval at Ad (about:srcdoc:139:3105), <anonymous>:4:1)
+
+The scene saved successfully, using a side-effect import of revline/three and literal requires of revline/three and three.
+
+Desktop and phone editor screenshots could not be taken: T3 preview was blocked by the host's AppArmor policy, and the alternate computer-use provider had no browser available. No page layout or UI controls changed.
