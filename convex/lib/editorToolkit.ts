@@ -603,7 +603,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const shown = (map: MotionMap) => { const { track: _track, ...rest } = map; return { ...rest, elements: rest.elements.slice(0, 20), changes: rest.changes.filter(change => change.area >= 1).slice(0, 20) }; };
     if (!input.assetId) { const { map, revision } = await timelineMotion(input.start, input.start + length, timelineCrop); return { revision, timeline: shown(map) }; }
     if (input.timelineStart === undefined) return { reference: shown(await runMotionRead(ctx, run.ownerId, run.projectId, input.assetId, input.start, input.start + length, abortSignal, referenceCrop, input.referenceCropKeyframes)) };
-    const asset = await loadAsset(input.assetId), region = referenceCropAt(input.start, referenceCrop, input.referenceCropKeyframes);
+    const asset = assets.find(asset => asset._id === input.assetId), region = referenceCropAt(input.start, referenceCrop, input.referenceCropKeyframes);
+    if (!asset) throw new Error('Choose media from this project.');
     if (!asset.width || !asset.height) throw new Error('The reference needs readable video dimensions.');
     const bounds = region ? cropBounds(region, asset.width, asset.height) : { width: asset.width, height: asset.height };
     const [reference, { map: ours, revision }] = await Promise.all([

@@ -20,7 +20,7 @@ export function referenceCropAt(time: number, crop?: ComparisonCrop, keys?: Refe
   return { x: a.crop.x + (b.crop.x - a.crop.x) * u, y: a.crop.y + (b.crop.y - a.crop.y) * u, w: a.crop.w + (b.crop.w - a.crop.w) * u, h: a.crop.h + (b.crop.h - a.crop.h) * u };
 }
 export function cropBounds(crop: ComparisonCrop, width: number, height: number) {
-  const left = Math.min(width - 1, Math.floor(crop.x * width)), top = Math.min(height - 1, Math.floor(crop.y * height));
+  const left = Math.min(width - 1, Math.floor(crop.x * width + 1e-6)), top = Math.min(height - 1, Math.floor(crop.y * height + 1e-6));
   return { left, top, width: Math.max(1, Math.min(width - left, Math.round(crop.w * width))), height: Math.max(1, Math.min(height - top, Math.round(crop.h * height))) };
 }
 const MAX_SAMPLES = 60;
