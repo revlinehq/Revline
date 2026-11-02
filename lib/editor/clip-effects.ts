@@ -1,3 +1,4 @@
+import { DEFAULT_IMPACT, DEFAULT_OVERLAY, validateMontageVfx } from './montage-vfx';
 import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
 import type { Clip } from './types';
@@ -23,10 +24,10 @@ export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lig
 export type BlendMode = typeof BLEND_MODES[number];
 export const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color'] as const;
+export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color', 'impact-frame', 'texture-overlay'] as const;
 export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
 /** Presets offered for new edits; the rest stay renderable in saved projects. */
-export const OFFERED_TIMED_EFFECT_PRESETS = ['punch', 'quick-zoom-in', 'quick-zoom-out', 'solid-color'] as const satisfies readonly TimedEffectPreset[];
+export const OFFERED_TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'zoom-blur', 'quick-zoom-in', 'quick-zoom-out', 'solid-color', 'impact-frame', 'texture-overlay'] as const satisfies readonly TimedEffectPreset[];
 /** Retired presets remain valid for saved projects; new choices use the active catalog. */
 export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
 export type EffectPreset = typeof EFFECT_PRESETS[number];
@@ -78,6 +79,8 @@ export function frameShrinkKeyframes(duration:number,settings:FrameShrinkSetting
     .filter((frame,index,frames)=>index===0||frame.time>frames[index-1].time);
 }
 export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: string; duration: number; keyframes: (duration: number) => MotionKeyframe[] }> = {
+  'impact-frame': { label: 'Impact frame', description: 'Timed inverted, black and white, posterized or manga ink hit with speed lines and flash.', duration: .1, keyframes: () => [] },
+  'texture-overlay': { label: 'Texture overlay', description: 'Procedural light leak, film burn, flare, dust or grain blended over the composition.', duration: .6, keyframes: () => [] },
   crossfade: { label: 'Crossfade', description: "Dissolve between two neighboring clips with complementary opacity weights, retaining transparent/cropped content and original audio timing.", duration: .6, keyframes: () => [] },
   'spin-zoom': { label: 'Spin zoom', description: "Dissolve while the outgoing frame rotates and zooms away and the incoming frame settles from an opposite tilt/zoom. Clockwise or counter-clockwise; rotation of 18 degrees and zoom up to 1.55.", duration: .6, keyframes: () => [] },
   'blur-dissolve': { label: 'Blur dissolve', description: "Dissolve as outgoing footage blurs and incoming footage comes into focus. Blur reaches 20 reference pixels and scales with output resolution.", duration: .6, keyframes: () => [] },
@@ -102,6 +105,7 @@ export function effectClipLabel(clip: Pick<Clip, 'effectPreset'>) { return clip.
 const bounds = { x: [-1, 1], y: [-1, 1], scale: [0.1, CAMERA_ZOOM_RANGE[1]], rotation: [-360, 360], opacity: [0, 1], brightness: [0, 4] } as const;
 
 export function validateClipEffects(clip: Clip) {
+  validateMontageVfx(clip);
   validatePlaybackRate(clip);
   validateVisualEffects(clip);
   validateEffectKeyframes(clip.effectKeyframes);
@@ -193,15 +197,16 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
   const zoom = isZoomPreset(preset) ? { ...zoomSettings(clip), direction: preset === 'quick-zoom-in' ? 'in' as const : 'out' as const } : undefined;
   const propertyClip = { ...clip, effectPreset: preset, ...(clip.effectPreset !== preset ? { motion: undefined, motionOffset: 0 } : {}) };
   const motion = preset === 'none' ? [] : isPropertyEffectPreset(preset) ? propertyEffectMotion(propertyClip)! : zoom ? zoomKeyframes(clip.duration, zoom) : preset === 'cinematic-bars' ? cinematicBarKeyframes(clip.duration, cinematicBarSettings(clip).speed) : preset==='frame-shrink'?frameShrinkKeyframes(clip.duration,frameShrinkSettings(clip)):EFFECT_CATALOG[preset].keyframes(clip.duration);
-  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, flash: preset === 'flash' ? { ...flashSettings(propertyClip) } : undefined, punch: preset === 'punch' ? { ...punchSettings(clip) } : undefined, shake: preset === 'shake' ? { ...shakeSettings(clip) } : undefined, pop: preset === 'pop' ? { ...popSettings(clip) } : undefined, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
+  return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, impact: preset === 'impact-frame' ? {...DEFAULT_IMPACT,...clip.impact} : undefined, overlay: preset === 'texture-overlay' ? {...DEFAULT_OVERLAY,...clip.overlay} : undefined, overlayTiming: preset === 'texture-overlay' ? {duration:clip.duration,offset:0} : undefined, flash: preset === 'flash' ? { ...flashSettings(propertyClip) } : undefined, punch: preset === 'punch' ? { ...punchSettings(clip) } : undefined, shake: preset === 'shake' ? { ...shakeSettings(clip) } : undefined, pop: preset === 'pop' ? { ...popSettings(clip) } : undefined, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */
 export function resizeEffectMotion(clip: Clip, duration: number): Partial<Clip> {
+  if(clip.effectPreset==='texture-overlay')return {overlayTiming:{duration,offset:0}};
   if (isZoomPreset(clip.effectPreset) && clip.zoom) return { motion: zoomKeyframes(duration, clip.zoom), motionOffset: 0 };
   if (clip.effectPreset === 'cinematic-bars') return { motion: cinematicBarKeyframes(duration, cinematicBarSettings(clip).speed), motionOffset: 0 };
   if (isPropertyEffectPreset(clip.effectPreset) && clip[clip.effectPreset]) return { motion: propertyEffectMotion(clip, duration), motionOffset: 0 };

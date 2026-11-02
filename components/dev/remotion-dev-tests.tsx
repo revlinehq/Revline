@@ -269,7 +269,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
       {!visibleCategory ? <p className="rmlab-no-results">No motion experiments match “{query}”. Try cards, tracking, typography or templates.</p> : <>
         <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'explainer' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
         {clipMotionVisited || visibleCategory === 'clip-motion' ? <div hidden={visibleCategory !== 'clip-motion'}><ClipMotionLab active={visibleCategory === 'clip-motion'}/></div> : null}
-        {visibleCategory === 'clip-motion' ? null : visibleCategory === 'tracking' || visibleCategory === 'masking' ? <SubjectToolsLab mode={visibleCategory}/> : <div className="rmlab-editor-grid">
+        {visibleCategory === 'clip-motion' ? null : visibleCategory === 'tracking' ? <SubjectToolsLab/> : <div className="rmlab-editor-grid">
           <div className="rmlab-preview-column">
             <div className="rmlab-preview-toolbar"><span><i/>{visualConfig.scene === 'typography' ? LAB_TEXT_LABELS[config.textPreset] : LAB_SCENES.find(scene => scene.id === config.scene)?.label ?? 'Composition'}</span><span>{config.aspect === 'portrait' ? '540 × 960' : '960 × 540'} · {config.fps} fps</span></div>
             <div className={`rmlab-stage-wrap ${config.aspect === 'portrait' ? 'rmlab-stage-portrait' : ''}`}><Preview config={visualConfig} frame={frame}/></div>

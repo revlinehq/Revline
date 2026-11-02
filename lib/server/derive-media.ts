@@ -2,21 +2,23 @@ import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 import { createFalClient } from '@fal-ai/client';
+import { freezeParallax } from './freeze-parallax';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 
 const run = promisify(execFile);
 const RIFE_ENDPOINT = 'fal-ai/rife/video', VIDEO_UPSCALE_ENDPOINT = 'fal-ai/video-upscaler', IMAGE_UPSCALE_ENDPOINT = 'fal-ai/seedvr/upscale/image';
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
-export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number };
+export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats' | 'parallax'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number; backgroundPrompt?: string };
 export type DerivedFile = { path: string; kind: 'video' | 'image'; contentType: string; width: number; height: number; duration?: number };
 
 /** Make the requested copy of `source` (a video or image file) in `directory`. */
 export async function deriveMedia(source: string, kind: 'video' | 'image', directory: string, request: DeriveRequest, signal: AbortSignal, onProgress: (value: number) => void): Promise<DerivedFile> {
   if (request.op === 'freeze') return freezeStill(source, directory, request.time ?? request.start, signal);
+  if (request.op === 'parallax') return freezeParallax(source, kind, directory, request.time ?? request.start, request.backgroundPrompt, signal, onProgress);
   const key = process.env.FAL_KEY;
   if (!key) throw new AnalysisError('AI video processing is not configured on the media worker.', 503);
   const fal = createFalClient({ credentials: key });
@@ -57,11 +59,10 @@ export async function deriveMedia(source: string, kind: 'video' | 'image', direc
 export function factorPasses(factor: number) {
   const total = Math.max(2, Math.min(8, Math.round(factor)));
   if (total <= 5) return [total];
-  const first = Math.ceil(Math.sqrt(total));
-  return [first, Math.ceil(total / first)];
+  return [2, Math.ceil(total / 2)];
 }
 
-async function freezeStill(source: string, directory: string, time: number, signal: AbortSignal): Promise<DerivedFile> {
+export async function freezeStill(source: string, directory: string, time: number, signal: AbortSignal): Promise<DerivedFile> {
   const probe = await videoInfo(source, signal);
   // Cut-outs keep their transparency as PNG; other footage becomes a high-quality JPEG.
   const alpha = probe.codec === 'vp9' || probe.codec === 'vp8';
@@ -98,7 +99,7 @@ async function falVideo(fal: ReturnType<typeof createFalClient>, endpoint: strin
   return output;
 }
 
-async function subscribe(fal: ReturnType<typeof createFalClient>, endpoint: string, input: Record<string, unknown>, signal: AbortSignal) {
+export async function subscribe(fal: ReturnType<typeof createFalClient>, endpoint: string, input: Record<string, unknown>, signal: AbortSignal) {
   let requestId: string | undefined;
   try {
     const result = await fal.subscribe(endpoint, { input, pollInterval: 3000, abortSignal: signal, onEnqueue: id => { requestId = id; } });
@@ -110,11 +111,13 @@ async function subscribe(fal: ReturnType<typeof createFalClient>, endpoint: stri
   }
 }
 
-async function download(url: string, path: string, signal: AbortSignal) {
+export async function download(url: string, path: string, signal: AbortSignal, maxBytes = MAX_OUTPUT_BYTES) {
   const response = await fetch(url, { signal });
   if (!response.ok || !response.body) throw new AnalysisError(`Could not download the processed media (HTTP ${response.status}).`, 502);
-  if (Number(response.headers.get('content-length') ?? 0) > MAX_OUTPUT_BYTES) throw new AnalysisError('The processed media is too large to store.', 400);
-  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), createWriteStream(path), { signal });
+  if (Number(response.headers.get('content-length') ?? 0) > maxBytes) throw new AnalysisError('The processed media is too large to store.', 400);
+  let bytes = 0;
+  const bounded = new Transform({ transform(chunk: Buffer, _encoding, done) { bytes += chunk.length; done(bytes > maxBytes ? new AnalysisError('The processed media is too large to store.', 400) : null, chunk); } });
+  await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), bounded, createWriteStream(path), { signal });
 }
 
 async function videoInfo(path: string, signal: AbortSignal) {

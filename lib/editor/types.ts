@@ -1,3 +1,4 @@
+import type { ImpactSettings, OverlaySettings, ParallaxSettings } from './montage-vfx';
 import type { TextGradient } from './text-gradient';
 import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
 import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners, Bloom } from './visual-effects';
@@ -53,6 +54,10 @@ export type Clip = {
   visualFade?: VisualFadeSettings;
   visualFadeTiming?: {duration:number;offset:number};
   frameShrink?: FrameShrinkSettings;
+  impact?: ImpactSettings;
+  overlay?: OverlaySettings;
+  overlayTiming?: { duration: number; offset: number };
+  parallax?: ParallaxSettings;
   flash?: FlashSettings;
   punch?: PunchSettings;
   shake?: ShakeSettings;
@@ -126,7 +131,7 @@ export type MediaAsset = {
   /** Set on a background-removed copy (VP9 with alpha) of cutoutOf, on the same source timeline; frames before cutoutStart are transparent. */
   cutoutOf?: string; cutoutStart?: number;
   /** Set on a processed copy of derivedOf: a freeze still, or slow-motion/upscaled video on the same source timeline. */
-  derivedOf?: string; derivedStart?: number; derivation?: 'freeze' | 'slowmo' | 'upscale';
+  derivedOf?: string; derivedStart?: number; derivation?: 'freeze' | 'slowmo' | 'upscale' | 'parallax';
   analysisKinds?: string[];
   preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;
