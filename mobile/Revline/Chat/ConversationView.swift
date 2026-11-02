@@ -15,52 +15,37 @@ struct ConversationView: View {
                         Button {
                             followLatest = false
                             Task { await chat.loadMore(session, projectID: project.id, threadID: project.project?.threadId) }
-                        } label: { if chat.loadingMore { ProgressView() } else { Text("Earlier messages").font(.footnote) } }
-                        .frame(maxWidth: .infinity).padding(.vertical, 8)
+                        } label: { ActionLabel(title: "Earlier messages", busyTitle: "Loading…", busy: chat.loadingMore) }
+                        .buttonStyle(.bordered)
                     }
-                    if chat.loading { ProgressView().frame(maxWidth: .infinity).padding() }
-                    else if chat.messages.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text("What are we making?").font(.title3.weight(.medium))
-                            Text("Ask for a tighter cut, turn a long video into clips, or build a motion film.")
-                                .font(.subheadline).foregroundStyle(.secondary).lineSpacing(4)
-                        }.padding(16)
-                    }
+                    if chat.loading { WorkspaceStateView(title: "Loading conversation…", loading: true) }
+
                     ForEach(chat.messages) { ChatMessageView(message: $0) }
                     if let queue = project.queue, !queue.messages.isEmpty {
-                        VStack(alignment: .leading, spacing: 12) {
-                            Text(queue.paused ? "Queue paused" : "Up next").font(.caption).foregroundStyle(.secondary)
-                            ForEach(queue.messages) { item in
-                                HStack(alignment: .top) {
-                                    Text(item.prompt).font(.footnote).lineLimit(3)
-                                    Spacer()
-                                    Button("Remove queued message", systemImage: "xmark") {
-                                        Task { await project.mutate(session, "assistant:removeQueued", arguments: ["projectId": project.id, "id": item.id]) }
-                                    }.labelStyle(.iconOnly)
-                                }
-                            }
-                            if queue.paused {
-                                Button("Resume queue") { Task { await project.mutate(session, "assistant:resumeQueue", arguments: ["projectId": project.id]) } }
-                                    .font(.footnote)
-                            }
-                        }.padding(16).background(RevlineTheme.surface, in: .rect(cornerRadius: 12))
+                        QueuedMessagesView(queue: queue, project: project)
                     }
                     if project.status?.running == true {
                         VStack(alignment: .leading, spacing: 8) {
                             WorkingLabel()
-                            if let activity = project.status?.activity { Text(activity).font(.caption).foregroundStyle(.secondary) }
+                            if let activity = project.status?.activity { Text(activity).font(.subheadline).foregroundStyle(.secondary) }
                             if let external = project.status?.externalAgent, external.running {
-                                Text("\(external.name) is editing this project.").font(.caption).foregroundStyle(.secondary)
+                                Text("\(external.name) is editing this project.").font(.subheadline).foregroundStyle(.secondary)
                             }
                         }.padding(.horizontal, 16).padding(.bottom, 8)
                     }
                     Color.clear.frame(height: 1).id("latest")
                         .onAppear { followLatest = true }
                         .onDisappear { followLatest = false }
-                }.padding(12)
+                }.padding(.horizontal, 16).padding(.vertical, 16)
+            }
+            .overlay {
+                if !chat.loading && chat.messages.isEmpty && project.status?.running != true && project.queue?.messages.isEmpty != false {
+                    ContentUnavailableView("Start an edit", systemImage: "bubble.left", description: Text("Describe the change you want to make."))
+                }
             }
             .defaultScrollAnchor(.bottom)
             .scrollDismissesKeyboard(.interactively)
+            .scrollIndicators(.hidden)
             .onChange(of: chat.messages.last?.text) { _, _ in if followLatest { reader.scrollTo("latest", anchor: .bottom) } }
             .onChange(of: project.status?.running) { _, _ in if followLatest { reader.scrollTo("latest", anchor: .bottom) } }
         }

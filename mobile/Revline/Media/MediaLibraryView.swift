@@ -12,6 +12,7 @@ struct MediaLibraryView: View {
     @State private var link = ""
     @State private var importingLink = false
     @State private var localError: String?
+    @FocusState private var linkFocused: Bool
 
     var body: some View {
         NavigationStack {
@@ -25,54 +26,48 @@ struct MediaLibraryView: View {
                 }
                 Section {
                     TextField("Paste a video link", text: $link)
-                        .keyboardType(.URL).textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .keyboardType(.URL).textContentType(.URL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled()
+                        .focused($linkFocused).submitLabel(.go).onSubmit(importLinkIfPossible)
                     Button { Task { await importLink() } } label: {
-                        HStack { Label("Import video link", systemImage: "link"); Spacer(); if importingLink { ProgressView() } }
-                    }.disabled(importingLink || link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                } footer: { Text("Imported media is available to the agent. Attach a source below, then describe how you want to use it.") }
+                        if importingLink { ProgressView("Importing…") }
+                        else { Label("Import video link", systemImage: "link") }
+                    }.disabled(!canImportLink)
+                } header: { Text("Video link") } footer: {
+                    Text("Attach a source to your prompt, then describe how to use it.")
+                }
                 if let progress = store.importProgress {
                     Section {
-                        ProgressView(value: progress) { Text(store.importLabel).font(.footnote) }
+                        ProgressView(store.importLabel, value: progress)
                         Button("Cancel upload", role: .destructive) { store.uploadTask?.cancel() }
                     }
                 }
-                if let error = localError ?? store.error {
-                    Section { Text(error).font(.footnote).foregroundStyle(.red) }
-                }
-                let activeTasks = store.mediaTasks.filter(\.active)
-                if !activeTasks.isEmpty {
+                if let error = localError ?? store.error { Section { ErrorBanner(message: error) } }
+                if store.mediaTasks.contains(where: \.active) {
                     Section("Processing") {
-                        ForEach(activeTasks) { task in
+                        ForEach(store.mediaTasks.filter(\.active)) { task in
                             ProgressView(value: task.progress, total: 100) {
-                                Text(task.kind == "import" ? "Importing video…" : "Preparing media…").font(.footnote)
+                                Text(task.kind == "import" ? "Importing video…" : "Preparing media…")
                             }
                         }
                     }
                 }
                 Section("Project media") {
-                    if store.assets.isEmpty { Text("Your imported media will appear here.").foregroundStyle(.secondary).font(.subheadline) }
+                    if store.assets.isEmpty {
+                        ContentUnavailableView("No media yet", systemImage: "photo.on.rectangle", description: Text("Import footage from Photos, Files, or a link."))
+                    }
                     ForEach(store.assets) { asset in
-                        Button {
-                            if store.attachedAssetIDs.contains(asset.id) { store.attachedAssetIDs.removeAll { $0 == asset.id } }
-                            else if store.attachedAssetIDs.count < 20 { store.attachedAssetIDs.append(asset.id) }
-                        } label: {
-                            HStack(spacing: 12) {
-                                MediaThumbnail(url: asset.thumbnailUrl ?? asset.url, kind: asset.thumbnailUrl == nil ? asset.kind : "image")
-                                    .frame(width: 64, height: 48).clipShape(.rect(cornerRadius: 6))
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(asset.fileName).font(.subheadline).lineLimit(1)
-                                    Text(asset.preparation?.message ?? asset.kind.capitalized).font(.caption).foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Image(systemName: store.attachedAssetIDs.contains(asset.id) ? "checkmark.circle.fill" : "plus.circle")
-                            }
-                        }.buttonStyle(.plain)
-                            .accessibilityLabel("\(asset.fileName), \(store.attachedAssetIDs.contains(asset.id) ? "attached" : "attach to prompt")")
+                        Button { toggleAttachment(asset.id) } label: {
+                            MediaAssetRow(asset: asset, attached: store.attachedAssetIDs.contains(asset.id))
+                        }
+                        .foregroundStyle(.primary)
+                        .accessibilityLabel("\(asset.fileName), \(store.attachedAssetIDs.contains(asset.id) ? "attached" : "attach to prompt")")
                     }
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Media").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done", action: dismiss.callAsFunction) } }
             .fileImporter(isPresented: $files, allowedContentTypes: [.movie, .image, .audio], allowsMultipleSelection: true) { result in
                 switch result {
                 case .success(let urls): beginUpload(urls, removeAfter: false)
@@ -85,6 +80,14 @@ struct MediaLibraryView: View {
                 photos = []
             }
         }
+    }
+
+    private var canImportLink: Bool { !importingLink && !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private func importLinkIfPossible() { if canImportLink { Task { await importLink() } } }
+
+    private func toggleAttachment(_ id: String) {
+        if store.attachedAssetIDs.contains(id) { store.attachedAssetIDs.removeAll { $0 == id } }
+        else if store.attachedAssetIDs.count < 20 { store.attachedAssetIDs.append(id) }
     }
 
     private func beginPhotoUpload(_ selection: [PhotosPickerItem]) {

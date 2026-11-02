@@ -20,14 +20,14 @@ struct RevlineApp: App {
         WindowGroup {
             Group {
                 if let session {
-                    RootView().environment(session).environment(Clerk.shared).revlineClerkTheme()
+                    RootView().environment(session).environment(Clerk.shared)
                 } else if case .failure(let error) = configuration {
-                    ContentUnavailableView("Setup required", systemImage: "gearshape",
-                                           description: Text(AppFailure.describe(error)))
+                    WorkspaceStateView(title: "Setup required", description: AppFailure.describe(error), symbol: "gearshape")
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(.background)
             .preferredColorScheme(.dark)
-            .tint(.white)
         }
     }
 }

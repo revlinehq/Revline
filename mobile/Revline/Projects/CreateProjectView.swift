@@ -10,12 +10,15 @@ struct CreateProjectView: View {
     @State private var error: String?
     @FocusState private var titleFocused: Bool
 
+    private var canCreate: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !store.busy }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    TextField("Project name", text: $title).focused($titleFocused)
-                        .submitLabel(.done)
+                    TextField("Project name", text: $title)
+                        .focused($titleFocused).submitLabel(.done)
+                        .onSubmit { if canCreate { Task { await create() } } }
                     Picker("Canvas", selection: $format) {
                         Text("Vertical · 9:16").tag("vertical")
                         Text("Landscape · 16:9").tag("landscape")
@@ -23,28 +26,28 @@ struct CreateProjectView: View {
                         Text("Portrait · 4:5").tag("portrait-feed")
                         Text("Classic · 4:3").tag("classic")
                     }
-                } footer: { Text("Add footage or describe what you want to make after creating your project.") }
-                if let error { Section { Text(error).foregroundStyle(.red) } }
+                } footer: {
+                    Text("Add footage or describe your first idea after creating the project.")
+                }
+                if let error { Section { ErrorBanner(message: error) } }
                 Section {
                     Button { Task { await create() } } label: {
-                        HStack {
-                            Text("Create project").fontWeight(.semibold)
-                            Spacer()
-                            if store.busy { ProgressView() } else { Image(systemName: "arrow.right") }
-                        }
-                    }
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || store.busy)
-                }
+                        ActionLabel(title: "Create project", busyTitle: "Creating…", busy: store.busy)
+                    }.buttonStyle(.borderedProminent).controlSize(.large).disabled(!canCreate)
+                }.listRowBackground(Color.clear).listRowInsets(EdgeInsets())
             }
+            .formStyle(.grouped)
             .navigationTitle("New project").navigationBarTitleDisplayMode(.inline)
-            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction) } }
             .task { titleFocused = true }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
         .interactiveDismissDisabled(store.busy)
     }
 
     private func create() async {
+        guard canCreate else { return }
         do {
             let id = try await store.create(session, title: title, aspectRatio: format)
             onCreated(id)

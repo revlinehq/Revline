@@ -12,39 +12,46 @@ struct SettingsView: View {
         NavigationStack {
             List {
                 Section {
-                    HStack(spacing: 16) {
-                        UserButton().frame(width: 52, height: 52)
-                        VStack(alignment: .leading, spacing: 5) {
+                    HStack {
+                        UserButton().frame(width: 44, height: 44)
+                        VStack(alignment: .leading) {
                             Text(clerk.user?.firstName ?? "Your account").font(.headline)
                             Text("Your workspace, everywhere.").font(.subheadline).foregroundStyle(.secondary)
                         }
-                    }.padding(.vertical, 12)
+                    }
                     Button("Manage account", systemImage: "person.crop.circle") { profile = true }
-                } footer: { Text("Manage your profile, security, connected sign-in methods, or delete your account.") }
-                Section("Preferences") {
-                    Label("Dark appearance", systemImage: "moon")
-                    Label("\(session.connected ? "Connected" : "Reconnecting…")", systemImage: session.connected ? "checkmark.icloud" : "icloud.slash")
+                } footer: {
+                    Text("Manage your profile, sign-in methods, security, or delete your account.")
+                }
+                Section("Workspace") {
+                    LabeledContent("Appearance", value: "Dark")
+                    Label(session.connected ? "Connected" : "Reconnecting…", systemImage: session.connected ? "checkmark.icloud" : "icloud.slash")
                 }
                 Section("Membership") {
                     LabeledContent("Plan", value: session.purchases.status?.plan.capitalized ?? "Loading…")
-                    if session.purchases.status?.complimentary == true { Text("Complimentary membership").font(.footnote).foregroundStyle(.secondary) }
-                    if session.purchases.status?.subscriptionSource == "apple" {
-                        Link("Manage in App Store", destination: URL(string: "https://apps.apple.com/account/subscriptions")!)
+                    if session.purchases.status?.complimentary == true {
+                        Text("Complimentary membership").foregroundStyle(.secondary)
                     }
-                    Button("Restore purchases") { Task { _ = await session.purchases.restorePurchases() } }
-                        .disabled(session.purchases.restoring)
-                    if let message = session.purchases.notice ?? session.purchases.error { Text(message).font(.footnote).foregroundStyle(.secondary) }
+                    if session.purchases.status?.subscriptionSource == "apple",
+                       let url = URL(string: "https://apps.apple.com/account/subscriptions") {
+                        Link("Manage in App Store", destination: url)
+                    }
+                    Button { Task { _ = await session.purchases.restorePurchases() } } label: {
+                        if session.purchases.restoring { ProgressView("Restoring…") }
+                        else { Text("Restore purchases") }
+                    }.disabled(session.purchases.restoring)
+                    if let error = session.purchases.error { ErrorBanner(message: error) }
+                    else if let notice = session.purchases.notice { Text(notice).foregroundStyle(.secondary) }
                 }
                 Section("About") {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-                    Text("Your projects and edits sync with Revline on the web.")
-                        .font(.footnote).foregroundStyle(.secondary)
+                    Text("Your projects and edits sync with Revline on the web.").foregroundStyle(.secondary)
                 }
                 #if DEBUG
                 Section("Development") {
                     LabeledContent("Environment", value: session.configuration.environment)
-                    Text(session.configuration.convexURL.host ?? "").font(.caption).foregroundStyle(.secondary)
-                    Text(session.configuration.webURL.absoluteString).font(.caption).foregroundStyle(.secondary)
+                    Text(session.configuration.convexURL.host ?? "").foregroundStyle(.secondary)
+                    Text(session.configuration.webURL.absoluteString).foregroundStyle(.secondary)
                 }
                 #endif
                 Section {
@@ -54,8 +61,9 @@ struct SettingsView: View {
                         }
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Account")
-            .sheet(isPresented: $profile) { UserProfileView().revlineClerkTheme() }
+            .sheet(isPresented: $profile) { UserProfileView() }
         }
     }
 }

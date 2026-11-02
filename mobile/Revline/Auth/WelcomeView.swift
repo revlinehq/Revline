@@ -3,65 +3,57 @@ import ClerkKit
 import SwiftUI
 
 struct WelcomeView: View {
-    @State private var showAuth = false
     @Environment(Clerk.self) private var clerk
+    @State private var showAuth = false
     @State private var error: String?
     @State private var signingInWithApple = false
+    @State private var introduction = false
 
     var body: some View {
-        GeometryReader { geometry in
-            VStack(alignment: .leading, spacing: 24) {
-                Label("revline", systemImage: "play.rectangle.fill")
-                    .font(.title2.weight(.semibold))
-                Spacer()
-                Image(systemName: "rectangle.stack")
-                    .font(.system(size: 64, weight: .ultraLight))
-                    .foregroundStyle(.secondary)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Every cut.\nYour call.")
-                        .font(.largeTitle.weight(.semibold))
-                        .tracking(-1)
-                    Text("Bring your footage. Find your story.\nMake it yours, in conversation.")
-                        .font(.body).foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    Image("MotionDesign").resizable().scaledToFit()
+                        .clipShape(.rect(cornerRadius: 12))
+                        .accessibilityLabel("A motion film made in Revline")
+                    Text("Every cut. Your call.").font(.largeTitle).bold()
+                    Text("Edit footage, find the best moments, and build motion in conversation.")
+                        .foregroundStyle(.secondary)
+                    Button("Explore Revline") { introduction = true }
+                        .buttonStyle(.borderless).frame(minHeight: 44)
+                    if let error { ErrorBanner(message: error) }
                 }
-                Spacer()
-                UserButton(signedOutContent: {
-                    Button { showAuth = true } label: {
-                        HStack {
-                            Text("Get started").fontWeight(.semibold)
-                            Spacer()
-                            Image(systemName: "arrow.right")
-                        }
-                        .padding(18).foregroundStyle(.black)
-                        .background(.white, in: .rect(cornerRadius: 16))
-                    }
-                })
-                Button {
-                    signingInWithApple = true
-                    Task {
-                        defer { signingInWithApple = false }
-                        do { try await clerk.auth.signInWithApple() }
-                        catch { self.error = AppFailure.describe(error) }
-                    }
-                } label: {
-                    HStack {
-                        Spacer()
-                        Label("Sign in with Apple", systemImage: "apple.logo").fontWeight(.medium)
-                        if signingInWithApple { ProgressView() }
-                        Spacer()
-                    }
-                    .padding(16).background(RevlineTheme.raised, in: .rect(cornerRadius: 16))
-                }.disabled(signingInWithApple)
-                if let error { Text(error).font(.footnote).foregroundStyle(.secondary) }
-                Text("Sign in to your Revline account to pick up where you left off.")
-                    .font(.footnote).foregroundStyle(.secondary)
+                .padding().frame(maxWidth: .infinity)
             }
-            .padding(28)
-            .frame(maxWidth: 540, minHeight: geometry.size.height)
-            .frame(maxWidth: .infinity)
+            .safeAreaInset(edge: .bottom) {
+                VStack(spacing: 12) {
+                    Button { showAuth = true } label: { ActionLabel(title: "Sign in to Revline") }
+                        .buttonStyle(.borderedProminent)
+                    Button(action: signInWithApple) {
+                        if signingInWithApple {
+                            ActionLabel(title: "Sign in with Apple", busyTitle: "Connecting…", busy: true)
+                        } else {
+                            Label("Sign in with Apple", systemImage: "apple.logo").frame(maxWidth: .infinity, minHeight: 28)
+                        }
+                    }.buttonStyle(.bordered).disabled(signingInWithApple)
+                    Text("Your projects stay in sync across iPhone and the web.")
+                        .font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                }
+                .controlSize(.large).padding().frame(maxWidth: .infinity)
+                .background(.bar)
+            }
+            .navigationTitle("Revline")
+            .sheet(isPresented: $showAuth) { AuthView() }
+            .sheet(isPresented: $introduction) { OnboardingView { introduction = false } }
         }
-        .sheet(isPresented: $showAuth) { AuthView().revlineClerkTheme() }
+    }
+
+    private func signInWithApple() {
+        signingInWithApple = true
+        Task {
+            defer { signingInWithApple = false }
+            do { try await clerk.auth.signInWithApple() }
+            catch { self.error = AppFailure.describe(error) }
+        }
     }
 }
