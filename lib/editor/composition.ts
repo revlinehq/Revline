@@ -31,6 +31,8 @@ import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, tra
 export type ExportResolution = 720 | 1080 | 2160;
 export type CompositionOptions = {
   preview?: boolean;
+  /** Keep the authored length when prepared source windows omit unused clips. */
+  duration?: number;
   pixelTrackEndpoint?: string;
   pixelTrackFiles?: Record<string, string>;
   resolution?: ExportResolution;
@@ -108,7 +110,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const trackedSources = pixelTrackingSources(timeline.clips);
   const backend = process.env.NEXT_PUBLIC_CONVEX_URL || process.env.CONVEX_URL;
   const trackEndpoint = options.pixelTrackEndpoint ?? (backend ? pixelTrackEndpoint(backend) : '');
-  const duration = timelineDuration(timeline);
+  const duration = Math.max(timelineDuration(timeline), options.duration ?? 0);
   if (!Number.isFinite(duration)) throw new Error('Timeline duration must be finite.');
   const resolution = options.resolution ?? 1080;
   const { width, height } = dimensions(timeline.aspectRatio, resolution);
