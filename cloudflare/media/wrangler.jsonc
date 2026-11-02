@@ -8,6 +8,6 @@
   "workers_dev": true,
   "preview_urls": false,
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "revline-editor-media" }],
-  "vars": { "ALLOWED_ORIGINS": "http://localhost:3001,http://localhost:3021,https://tryrevline.com,https://www.tryrevline.com" },
+  "vars": { "ALLOWED_ORIGINS": "http://localhost:3001,http://localhost:3005,http://localhost:3006,http://localhost:3007,http://localhost:3008,http://localhost:3021,https://tryrevline.com,https://www.tryrevline.com" },
   "observability": { "enabled": true, "logs": { "enabled": true, "invocation_logs": false }, "redact_query_string": true, "traces": { "enabled": true, "head_sampling_rate": 1, "persist": true } }
 }
