@@ -42,7 +42,7 @@ function editorLoading(projectId: string) {
 export function ConnectedEditor({projectId}: {projectId:string}) {
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId,includeHistory:false,sceneCode:'refs'}:'skip');
-  if(project===null)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild><Link href="/chats">Your projects</Link></Button></div>;
+  if(project===null)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild variant="outline"><Link href="/chats">Your projects</Link></Button></div>;
   if(!project)return editorLoading(projectId);
   return <LoadedEditor key={projectId} projectId={projectId} project={project}/>;
 }
