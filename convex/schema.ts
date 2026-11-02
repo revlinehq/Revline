@@ -15,6 +15,7 @@ import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_vali
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { alertFields } from './lib/discord_alert';
 import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
+import { toolWriteReceipt } from './lib/tool_write_receipt';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -257,6 +258,10 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  toolWriteReceipts: defineTable({
+    projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), writeId: v.string(),
+    toolName: v.string(), functionName: v.string(), receipt: toolWriteReceipt, stagedRevision: v.optional(v.number()), expiresAt: v.number(),
+  }).index('by_write', ['writeId']).index('by_run_stage', ['runId', 'stagedRevision']).index('by_expires', ['expiresAt']),
   // Operational diagnostics only. No editor subscription reads these tables.
   saveIncidentRuns: defineTable({
     runId: v.string(), projectId: v.id('projects'), ownerId: v.string(),

@@ -45,6 +45,20 @@ export class EditSession {
 
   wait() { return this.pending; }
 
+  /** Only used after the tool layer recovered an atomic receipt or a direct mutation's save. */
+  async reconcileSaved(read: () => Promise<{ timeline: Timeline; revision: number }>) {
+    await this.pending;
+    const current = await read();
+    if (current.revision <= this.revision) return;
+    this.timeline = normalizeTimeline(current.timeline);
+    this.revision = current.revision;
+    this.savedEdits++;
+    this.staged = false;
+    this.stagedEdits = 0;
+    this.failed = false;
+    this.needsInspection = false;
+  }
+
   private async publishCurrentTimeline() {
     if (this.failed || this.needsInspection) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');
     if (!this.staged) return;

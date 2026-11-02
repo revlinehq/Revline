@@ -19,6 +19,8 @@ const receiptFailureText=new Set(['Your pending replacement was not saved.','You
 
 /** A turn has one failure surface; saved results and the assistant's actual answer stay visible. */
 export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:readonly ResultCard[],{error,receipt,active=false}:{error?:string|null;receipt?:TimelinePublicationReceipt;active?:boolean}={}) {
+  // A recovered publication can outlive a transport error's stale progress summary.
+  if(receipt?.status==='saved'&&!error&&!cards.some(card=>card.state==='error'))return {replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),cards};
   // A tool rejection is recoverable while the agent is still working. Publish
   // one terminal failure only after the run stops, or the server confirms it.
   if(active&&!error&&receipt?.status!=='failed'&&receipt?.status!=='aborted')return {replies,cards:cards.filter(card=>card.state!=='error')};
@@ -27,9 +29,9 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   const failed=!!error||failures.length>0||summaries.length>0||receipt?.status==='failed'||receipt?.status==='aborted';
   if(!failed)return {replies,cards};
   const summaryDetails=summaries.map(text=>text.replace(/^(?:No timeline changes were saved\.|\d+ (?:edits were saved before the assistant stopped|changes? (?:were|was) saved)\.)\s*/, '').replace(/^Undo restores the state before the latest consecutive group of AI edits\.\s*/, ''));
-  const detailCandidates=[error,...summaryDetails,...failures.map(card=>card.detail)].filter((value):value is string=>!!value);
+  const detailCandidates=[...failures.map(card=>`${card.title}${card.detail ? `. ${card.detail}` : ''}`),error,...summaryDetails].filter((value):value is string=>!!value);
   const conflict=detailCandidates.find(value=>/timeline changed elsewhere|timeline changed while|revision conflict/i.test(value));
-  const savedIds=new Set(replies.flatMap(message=>(message.steps??[]).flatMap((step,index)=>step.state==='done'&&step.output?.saved===true?[step.id??`${message.id}:${index}`]:[])));
+  const savedIds=new Set(replies.flatMap(message=>(message.steps??[]).flatMap((step,index)=>step.output?.saved===true?[step.id??`${message.id}:${index}`]:[])));
   const reportedSaved=summaries.reduce((count,text)=>Math.max(count,Number(/^(\d+) (?:edits|changes?)/.exec(text)?.[1]??0)),0);
   const savedChanges=Math.max(savedIds.size,reportedSaved);
   const hasDraft=!!receipt||replies.some(message=>message.steps?.some(step=>step.staged||step.output?.staged===true));
@@ -40,9 +42,8 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   }
   detail=detail.replace('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.','Some steps remain unfinished. Your saved edits are still here.');
   if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;
-  const unconfirmed=!error&&!summaries.length&&!receipt&&failures.every(card=>card.title==='Save not confirmed');
   return {
     replies:replies.map(message=>({...message,text:message.text.split(/\n\s*\n/).filter(text=>!failureSummary(text)&&!receiptFailureText.has(text.trim())).join('\n\n')})),
-    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':unconfirmed?'Save not confirmed':savedChanges?'Edit partially completed':'Some steps are unfinished',detail,state:'error' as const}],
+    cards:[...cards.filter(card=>card.state!=='error'&&card.state!=='running'),{key:'turn-failure',title:detail.includes('Some footage checks could not complete.')?'Footage check incomplete':savedChanges?'Edit partially completed':'Some steps are unfinished',detail,state:'error' as const}],
   };
 }

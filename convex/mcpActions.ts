@@ -6,6 +6,7 @@ import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit } from './lib/editorToolkit';
+import { toolBehavior } from '../lib/ai/tool-definitions';
 import { mediaDownloadUrl } from './lib/media_storage';
 import { readRunId } from './lib/run_ids';
 import { completeUpload, openUpload, signPartUrl } from './r2';
@@ -16,7 +17,6 @@ import { startLocalUpload } from './mcpUploads';
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
 // An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
 const CALL_LIMIT_MS = 9 * 60_000;
-const RUN_SCOPED_TOOLS = new Set(['usePreciseMode', 'planEffects', 'previewRender', 'getFrames', 'askUser', 'askBrandKit']);
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 
 const PROJECT_TOOLS = {
@@ -56,7 +56,7 @@ type EditorTool = { description?: string; inputSchema: z.ZodType; execute: (inpu
 // Tool definitions are pure closures; only their execution touches ctx or the run.
 function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorToolkit>[1]) {
   const toolkit = createEditorToolkit(ctx, options);
-  return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => !RUN_SCOPED_TOOLS.has(name))) as unknown as Record<string, EditorTool> };
+  return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => toolBehavior(name)?.mcp !== 'hidden')) as unknown as Record<string, EditorTool> };
 }
 
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
@@ -168,12 +168,6 @@ async function startUpload(ctx: ActionCtx, ownerId: string, input: z.infer<typeo
   return { uploadId: upload.uploadId, partCount: upload.partCount, script: lines.join('\n'), next: 'Run the script with sh, then call finishUpload with this uploadId and the JSON array it printed as parts.' };
 }
 
-// Pure reads: they neither stage edits nor start analysis, so they skip the project lock and
-// run alongside in-app or MCP edits. inspectAssetAnalysis can refresh a transcript and
-// inspectVideo/inspectFrames bill analysis to a run, so they still take the lock.
-// Blueprint tools never touch the timeline, so they skip the project lock while the worker renders.
-// Frame readings look at source media only, so they skip the lock too.
-const READ_ONLY_TOOLS = new Set(['compareReference', 'compareMotion', 'motionMap', 'checkPacing', 'getSound', 'checkSound', 'inspectTimeline', 'inspectClip', 'diffScene', 'listRevisions', 'readBrief', 'readSkill', 'listVoices', 'readFrames', 'listenReference', 'trackReference', 'getTrack', 'measureFrame', 'traceShape', 'matchFont', 'findIcon', 'measureScreen', 'compareScreen', 'saveBlueprint', 'listBlueprints', 'getBlueprint']);
 /** A tool output's labeled images become MCP image content after the text. */
 function withImages(output: unknown, isError: boolean): CallResult {
   if (!output || typeof output !== 'object' || !Array.isArray((output as { images?: unknown }).images)) return result(output, isError);
@@ -207,7 +201,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (READ_ONLY_TOOLS.has(name)) return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };
