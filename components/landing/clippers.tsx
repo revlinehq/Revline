@@ -57,7 +57,7 @@ export function LandingClippers() {
           title="Revline for clippers"
           description="Drop in a stream and get vertical clips with the creator on top and the gameplay below, ready to post."
         />
-        <LandingStartButton label="Get started" />
+        <LandingStartButton label="Start clipping" size="sm" />
       </div>
       <Card
         ref={frame}
