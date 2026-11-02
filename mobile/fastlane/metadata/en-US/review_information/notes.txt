@@ -1,0 +1,11 @@
+Revline requires an account because editing projects and cloud media are private and sync across devices. Sign in with Apple is offered alongside the instance's other providers. The owner must provide a dedicated reviewer account and access instructions before submitting for review. Do not use the owner's personal account.
+
+The native app uses production Clerk and Convex. A WKWebView renders only the video preview. Prompts, streaming chat, media import, settings and purchase controls are native. Editing requests run on our backend agent; iPhone uses GPT-6.1 Terra with medium reasoning in both Fast and Precise workflows.
+
+Before the first media import or edit request, an explicit disclosure names the AI recipients and what is shared. Account settings can withdraw that permission. Delete account requires typing DELETE and confirming; it deletes the Clerk account and queues associated workspace/media cleanup. The flow explains that App Store subscriptions must be cancelled separately and links to Apple subscription settings.
+
+The only iPhone product is com.revline.app.monthly: one month at $39.00 USD, with a one-week free introductory trial for eligible new subscribers. Apple displays the local price and trial eligibility before purchase. Restore Purchases, Privacy, Terms and Apple's standard EULA are present. Existing supported Stripe or complimentary subscribers bypass the paywall.
+
+Photos import uses the system picker. Saving an export requests add-only photo-library access. No camera, microphone recording, advertising tracking or public social feed is provided. Video links must be authorized by the user. TikTok delivery uses the standard share sheet, with no TikTok SDK.
+
+Do not submit this draft until production function deployment, provider consent, legal review, real device Sign in with Apple, purchase/restore, deletion with a disposable account, and all evidence in mobile/AppStore/review-checklist.md are complete.

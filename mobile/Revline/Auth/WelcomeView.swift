@@ -36,6 +36,7 @@ struct WelcomeView: View {
                             Label("Sign in with Apple", systemImage: "apple.logo").frame(maxWidth: .infinity, minHeight: 28)
                         }
                     }.buttonStyle(.bordered).disabled(signingInWithApple)
+                    LegalLinks()
                     Text("Your projects stay in sync across iPhone and the web.")
                         .font(.footnote).foregroundStyle(Color.revlineMuted).multilineTextAlignment(.center)
                 }
@@ -44,7 +45,13 @@ struct WelcomeView: View {
             }
             .revlineSurface()
             .navigationTitle("Revline")
-            .sheet(isPresented: $showAuth) { AuthView().presentationBackground(Color.revlinePopover) }
+            .sheet(isPresented: $showAuth) {
+                AuthView()
+                    .safeAreaInset(edge: .bottom) {
+                        LegalLinks().frame(maxWidth: .infinity).background(Color.revlinePopover)
+                    }
+                    .presentationBackground(Color.revlinePopover)
+            }
             .sheet(isPresented: $introduction) { OnboardingView { introduction = false } }
         }
     }
