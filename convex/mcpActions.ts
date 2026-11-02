@@ -2,6 +2,7 @@
 import { v } from 'convex/values';
 import { z } from 'zod';
 import { editorEditModeSchema, PRECISE_MODE_NOTICE, type EditorEditMode } from '../lib/ai/edit-mode';
+import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -83,7 +84,8 @@ const message = (error: unknown) => {
   return (typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : error instanceof Error ? error.message : String(error)).slice(0, 2000);
 };
 
-export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+  const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS) : undefined;
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   // The editor shows the agent as working across its whole request, not only during each call.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
@@ -91,7 +93,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   await touch();
   try {
     if (args.name in PROJECT_TOOLS) return await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input);
-    return await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
+    return await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName, comparisonDeadline);
   } catch (error) { return result(message(error), true); }
   finally { await touch(); }
 }});
@@ -176,21 +178,21 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise'): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise', comparisonDeadline?: number): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, comparisonDeadline });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     return withImages(output, failed(output));
   } catch (error) { return result(message(error), true); }
 }
 
-async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string): Promise<CallResult> {
+async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string, comparisonDeadline?: number): Promise<CallResult> {
   const { projectId: rawProjectId, timelineId: rawTimelineId, editMode: rawEditMode, ...rawInput } = raw;
   const editMode = editorEditModeSchema.default('precise').parse(rawEditMode);
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
@@ -202,7 +204,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode, comparisonDeadline);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };

@@ -98,7 +98,7 @@ import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS 
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
 import { runCompare, runMotionRead } from '../referenceReads';
-import { comparisonCrop, comparisonTimes, referenceComparisonInput, type ComparisonCrop } from '../../lib/ai/reference-comparison';
+import { comparisonCrop, comparisonSamples, referenceComparisonInput, REFERENCE_COMPARISON_BUDGET_MS, type ComparisonCrop } from '../../lib/ai/reference-comparison';
 import { compareMotion, type MotionMap } from '../../lib/inspo-motion/motion-map';
 import type { ActionCtx } from "../_generated/server";
 
@@ -122,6 +122,8 @@ export type EditorToolkitOptions = {
   /** The chat turn a destructive replacement is published to, when there is one. */
   publication?: { threadId: string; promptMessageId: string };
   abortSignal: AbortSignal;
+  /** MCP includes dispatch time in the comparison's four-minute budget. */
+  comparisonDeadline?: number;
   /** MCP clients review their own work (getFrames); effects need no in-turn plan there. */
   planlessEffects?: boolean;
   editMode?: EditorEditMode;
@@ -1185,36 +1187,63 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a reference. Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition, up to 60 samples per call. Include padding before onset and after settle; continue long windows in adjoining calls. crop scores only that normalized region, independently of the background, and magnifies it in the returned pairs. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a reference. Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop and offset. crop scores only that normalized region, independently of the background, and magnifies it in the returned pairs. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+      const deadline = Math.min(options.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS);
       await editSession.wait();
-      const offset = input.offset ?? 0, requested = comparisonTimes(input), timelineId = readRunTab(run.runId);
-      if (requested.some(time => time + offset < 0)) throw new Error('The offset places a reference sample before the timeline starts.');
+      const offset = input.offset ?? 0, requested = comparisonSamples(input), timelineId = readRunTab(run.runId);
+      if (input.times ? input.times.some(time => time + offset < 0) : input.start! + offset < 0) throw new Error('The offset places a reference sample before the timeline starts.');
       const scores: { time: number; difference: number }[] = [], images: { label: string; data: string; mimeType: string }[] = [];
       const snapshots: Id<'frameSnapshots'>[] = [];
-      let revision = project.revision ?? 0;
+      const pending: { times: number[]; snapshotId: Id<'frameSnapshots'> }[] = [];
+      // Leave room for scores and resume arguments below Convex's 16 MiB function return limit.
+      const imageBudget = 8 * 1024 * 1024;
+      let revision: number | null = null, queued = 0, completed = 0, imageBytes = 0;
+      const queueBatch = async () => {
+        if (queued >= requested.count || Date.now() >= deadline) return;
+        if (abortSignal.aborted) throw new Error('Stopped.');
+        const times = requested.batch(queued);
+        const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(snapshots[0] ? { sourceSnapshotId: snapshots[0] } : {}), comparison: input.crop ? { crop: input.crop } : {}, times: times.map(time => time + offset) });
+        snapshots.push(snapshotId);
+        pending.push({ times, snapshotId });
+        queued += times.length;
+      };
       try {
-        for (let first = 0; first < requested.length; first += 6) {
-          const times = requested.slice(first, first + 6);
-          const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(snapshots[0] ? { sourceSnapshotId: snapshots[0] } : {}), comparison: input.crop ? { crop: input.crop } : {}, times: times.map(time => time + offset) });
-          snapshots.push(snapshotId);
-          const deadline = Date.now() + 280_000;
-          for (;;) {
+        // Two render batches in flight match the local worker's default slots. The first freezes the source;
+        // every later batch copies it. Score in order so continueFrom never skips an unfinished sample.
+        await queueBatch();
+        await queueBatch();
+        while (pending.length && Date.now() < deadline) {
+          const { times, snapshotId } = pending.shift()!;
+          let rendered = false;
+          while (Date.now() < deadline) {
             if (abortSignal.aborted) throw new Error('Stopped.');
             const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
+            revision = state.revision;
             if (state.status === 'failed') throw new Error(`Your timeline could not be rendered for the comparison: ${state.error ?? 'unknown error'}`);
-            if (state.status === 'completed') { revision = state.revision; break; }
-            if (Date.now() > deadline) throw new Error(state.started ? 'Rendering the comparison took too long. Use a shorter range at the same fps.' : 'Comparison frames are waiting for a media worker. Try again shortly.');
-            await new Promise(resolve => setTimeout(resolve, 1500));
+            if (state.status === 'completed') { rendered = true; break; }
+            await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
           }
-          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, abortSignal, input.crop);
-          scores.push(...(result.scores ?? []).map(score => ({ time: score.time, difference: Math.round(score.difference * 1000) / 10 })));
-          for (const data of [result.image, ...(result.extraImages ?? [])]) if (data) images.push({ label: `Reference (left) and timeline (right)${input.crop ? ', cropped region' : ''}, ${images.length + 1}`, data, mimeType: 'image/jpeg' });
+          if (!rendered) break;
+          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.crop);
+          if (!result) break;
+          if (result.scores?.length !== times.length) throw new Error('The comparison returned incomplete scores. Retry this window.');
+          scores.push(...result.scores.map((score, index) => ({ time: times[index], difference: Math.round(score.difference * 1000) / 10 })));
+          for (const data of [result.image, ...(result.extraImages ?? [])]) if (data) {
+            images.push({ label: `Reference (left) and timeline (right)${input.crop ? ', cropped region' : ''}, ${images.length + 1}`, data, mimeType: 'image/jpeg' });
+            imageBytes += data.length;
+          }
+          completed += times.length;
+          if (imageBytes >= imageBudget) break;
+          await queueBatch();
         }
       } finally {
         await Promise.all(snapshots.map(snapshotId => ctx.runMutation(internal.mcp.discardFrames, { snapshotId })));
       }
-      return { revision, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.times ? {} : { range: { start: input.start, end: input.end, fps: input.fps ?? 15 } }), samples: scores.length, scores, images,
-        next: 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
+      const continueFrom = completed < requested.count ? requested.batch(completed)[0] : null;
+      const { start, end, fps, times, ...settings } = input;
+      const nextAction = continueFrom === null ? undefined : { tool: 'compareReference', arguments: { projectId: run.projectId, ...(timelineId ? { timelineId } : {}), ...settings, ...(times ? { times: times.slice(completed) } : continueFrom < end! ? { start: continueFrom, end, fps: fps ?? 15 } : { times: [continueFrom] }) } };
+      return { status: nextAction ? 'partial' : 'completed', revision, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.times ? {} : { range: { start, end, fps: fps ?? 15 } }), requestedSamples: requested.count, samples: scores.length, scores, images, continueFrom, ...(nextAction ? { nextAction, reason: imageBytes >= imageBudget ? 'result_size' : 'time_budget' } : {}),
+        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. For existing edits follow scene-engine page edit-lanes for sampling; after builds use it at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreSection or restoreClip.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision }) => {
       await editSession.wait();

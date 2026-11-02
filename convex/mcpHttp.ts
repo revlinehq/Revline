@@ -7,6 +7,7 @@ import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { CLIPPING_SKILL_ROUTING } from '../lib/ai/skills/clipping';
 import { MCP_ORIGIN_HEADER, requestMcpOrigin } from './lib/mcp_origin';
+import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
 // the OAuth 2.1 authorization server MCP clients discover from it.
@@ -52,20 +53,21 @@ let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string) {
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number) {
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: isDevelopment() ? `${MCP_INSTRUCTIONS}\n\n${HARNESS_REPORT}` : MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
     return { tools: await toolCatalog };
   });
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {} });
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
 }
 
 const mcpHandler = httpAction(async (ctx, request) => {
+  const comparisonDeadline = Date.now() + REFERENCE_COMPARISON_BUDGET_MS;
   let body: unknown;
   try { body = await request.json(); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
   // MCP 2025-06-18 removed JSON-RPC batching; one message per request keeps rate limits exact.
@@ -81,7 +83,7 @@ const mcpHandler = httpAction(async (ctx, request) => {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
   }
   // Stateless: a fresh server and transport per request, answering with JSON rather than an event stream.
-  const server = revlineServer(ctx, auth.ownerId, auth.clientName);
+  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
   try {
     await server.connect(transport);

@@ -7,7 +7,7 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { enqueueMediaTask, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
 import type { MotionMap } from '../lib/inspo-motion/motion-map';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult } from './schema';
 
@@ -68,6 +68,7 @@ export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id
 
 export const discard = internalMutation({ args: { readId: v.id('referenceReads') }, returns: v.null(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
+  if (read?.mode === 'compare' && read.status === 'queued' && read.taskId) await cancelMediaTask(ctx, read.taskId);
   if (read) await ctx.db.delete(read._id);
   return null;
 }});
@@ -135,17 +136,17 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, signal?: AbortSignal, compareCrop?: ComparisonCrop): Promise<ReadResult> {
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop): Promise<ReadResult | null> {
+  if (Date.now() >= deadline) return null;
   const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}) });
-  const deadline = Date.now() + 300_000;
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') return state.result as ReadResult;
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
-    throw new Error('The comparison took too long. Try fewer moments.');
+    return null;
   } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
