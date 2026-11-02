@@ -54,9 +54,15 @@ def revline_archive
   auth = ["-allowProvisioningUpdates", "-authenticationKeyPath", File.expand_path(ENV.fetch("ASC_KEY_PATH")),
           "-authenticationKeyID", ENV.fetch("ASC_KEY_ID"), "-authenticationKeyIssuerID", ENV.fetch("ASC_ISSUER_ID"),
           "-jobs", "1", "COMPILER_INDEX_STORE_ENABLE=NO", "CURRENT_PROJECT_VERSION=#{number}"].map(&:shellescape).join(" ")
+  profile = ENV["ASC_DISTRIBUTION_PROFILE"].to_s
+  signing = { method: "app-store-connect", teamID: ENV.fetch("ASC_TEAM_ID"), signingStyle: profile.empty? ? "automatic" : "manual" }
+  unless profile.empty?
+    signing[:signingCertificate] = "Apple Distribution"
+    signing[:provisioningProfiles] = { identifier => profile }
+  end
   build_app(
     project: File.expand_path("../Revline.xcodeproj", __dir__), scheme: "Revline", configuration: "Release",
-    export_method: "app-store", export_options: { signingStyle: "automatic", teamID: ENV.fetch("ASC_TEAM_ID") },
+    export_method: "app-store", export_options: signing,
     xcargs: auth,
     derived_data_path: File.expand_path("../.build/ArchiveDerivedData", __dir__),
     cloned_source_packages_path: File.expand_path("../.build/SourcePackages", __dir__),

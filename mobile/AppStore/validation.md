@@ -4,7 +4,7 @@ November 2, 2026. This is a draft implementation, not an App Store readiness sig
 
 ## Verified so far
 
-- Final Debug and optimized Release Simulator builds passed with signing disabled. After rebasing onto origin/main, npm run typecheck and npm run build passed. No test-only files were added.
+- Final Debug and optimized Release Simulator builds passed with signing disabled. After the final rebase onto origin/main, npm run typecheck and npm run build passed with a 2 GiB Node heap. The first 1.5 GiB attempt exhausted V8 heap; increasing it resolved that resource failure. No test-only files were added.
 - Installed and launched the Release build on the watched Revline iPhone Simulator. Inspected the real onboarding, welcome and live Clerk sign-in screens, including Apple and Google providers, Privacy and Terms, and no development-instance badge. No credentials were entered. The built Info.plist contains `com.zurahq.revline`, device family `[1]`, production Convex `different-gnu-398`, `https://tryrevline.com` and a live Clerk publishable key. No production endpoint was replaced with dev.
 - Production Clerk has the exact paid-team App ID Prefix and bundle registered. Native API reports enabled, the native callback is registered, and the public associated-domain file includes `Z42PHGH527.com.zurahq.revline`.
 - Created one empty disposable dev project through the native app: `Recline iOS validation dev` (`j97cg5w7vkw1pqsk2194kqr8jh8henc7`). The title was autocorrected before autocorrection was disabled. Other projects were not edited or exported.
@@ -12,7 +12,7 @@ November 2, 2026. This is a draft implementation, not an App Store readiness sig
 - Headless Chromium confirmed production `/privacy` and `/terms` return 404 before this change, and the local draft routes return 200 with the correct titles and footer links. The drafts explicitly require legal review.
 - Persistent drawer checks passed on the disposable empty project: collapsed and expanded states, multiline input above the software keyboard, outside-tap dismissal, native Fast/Precise selection, no model picker or clip strip, hidden editor tab bar and restored home bar. No prompt was submitted.
 - The trailing corner plus opens New project; cancellation returns to Projects. Export opens its real destination/captions controls and correctly disables rendering on an empty timeline.
-- The iPhoneOS Release archive passed strict codesign verification with the paid team’s existing Apple Development identity. App Store export failed with cloud-signing permission and missing distribution-profile errors; TestFlight was not uploaded.
+- The iPhoneOS Release archive passed strict codesign verification with the paid team’s existing Apple Development identity. Cloud export failed with signing-permission/profile errors. A local distribution identity and App Store profile were then created; manual export is waiting for owner Keychain authorization. TestFlight was not uploaded.
 - App icon is 1024×1024 without alpha. Privacy manifest and Info.plist pass `plutil`; fastlane Ruby files pass syntax checks.
 - The App Store Connect key authenticates. The single-product plan was checked again and stops because the app record does not exist. No subscription, listing, screenshot or binary upload has occurred. See [actual external changes](asc-changes.md).
 
@@ -48,7 +48,7 @@ No successful edit prompt, Undo, short render, purchase, restore or destructive 
 2. Sign into the watched Release app with a dedicated production demo account. The agent must not enter credentials or use personal projects for proof or marketing.
 3. Supply the legal operator, monitored support address and App Review contact details. Approve the draft legal text and publish it through the normal reviewed web release.
 4. Configure the separate server-only Sign in with Apple revocation key, single-product Superwall placement and billing environment values listed in [README](README.md). The App Store Connect upload key cannot sign Apple login client secrets.
-5. Resolve the distribution-signing permissions in [README](README.md); the Release archive succeeds but App Store export and TestFlight remain blocked.
+5. Complete the codesign Keychain authorization in [README](README.md). The archive succeeds; a local distribution identity/profile are installed, while export is awaiting the owner’s system prompt and TestFlight also needs the app record.
 6. Complete the [review checklist](review-checklist.md), including component/provider retention and real verification that web renewals stop during account deletion. Do not interpret owned application-row cleanup as a promise that legally retained Stripe or provider records are erased.
 
 PR screenshots belong on `pr-assets/mobile-brand-bg/`. App Store production captures belong in `Screenshots/6.9/` and `Screenshots/6.5/`; the empty folders are intentional pending real capture. Designs, errors, old builds and screenshots at other dimensions are not substitutes.

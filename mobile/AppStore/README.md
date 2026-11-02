@@ -11,13 +11,15 @@ This folder contains a draft listing, product configuration, review checklist, a
 5. Review the draft `/privacy` and `/terms` documents, identify the legal operator and monitored support address, and publish them through the normal reviewed web release. The listing privacy URL must return a real policy before submission.
 6. Configure Superwall's `onboarding_paywall` to offer only `com.revline.app.monthly`, matching `subscription.json`. Its copy must disclose the eligible one-week trial and the price after it, plus Restore, Privacy and Terms. The native StoreKit membership screen is also available. The public SDK key belongs in ignored `mobile/Config/Secrets.xcconfig`; never put administrative keys in the app.
 
-## Current distribution-signing block
+## Local distribution signing
 
-The Release archive succeeds, but App Store export returns “Cloud signing permission error” and “No profiles for com.zurahq.revline were found.” The account holder must check App Store Connect → Users and Access → the relevant user → Additional Resources for access to Certificates, Identifiers & Profiles and cloud-managed distribution certificates. Also check Users and Access → Integrations → App Store Connect API → the key’s role; distribution assets require appropriate account permissions. The agent does not grant itself broader access.
+Cloud export initially returned “Cloud signing permission error” and “No profiles for com.zurahq.revline were found.” The authorized API key could create a local Apple Distribution certificate and a matching App Store profile, avoiding cloud signing. Both were installed on this Mac. See [the actual changes](asc-changes.md).
 
-Alternatively, an authorized team member can install an active Apple Distribution identity in this Mac’s keychain and provide the matching App Store distribution profile for `com.zurahq.revline`, or create those signing assets in Xcode → Settings → Accounts → Ivan Kolos → Manage Certificates. Never copy the private signing identity into this repository. Then rerun `fastlane ios archive` and, after the app record exists, `fastlane ios testflight`.
+The new signing private key is outside git at `~/.appstoreconnect/signing/revline/distribution.key`; the original App Store Connect `.p8` was not copied. `ASC_DISTRIBUTION_PROFILE` in the local `asc.env` selects the installed profile and manual App Store export. If that variable is absent, fastlane uses automatic signing. Both paths retain API-key authentication and never submit for review.
 
-See [Apple’s cloud-managed certificate permissions](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/). A successful local archive does not mean App Store distribution signing succeeded.
+The first local export is waiting for macOS Keychain authorization for codesign to use the distribution key. The owner must enter the Mac login password directly in that system dialog and choose Allow or Always Allow. The agent cannot operate SecurityAgent or enter that password. Do not send it in chat. After authorization, rerun `fastlane ios archive`; after the app record exists, use `fastlane ios testflight`.
+
+On another Mac, an authorized team member must provision an Apple Distribution identity and matching profile securely or use Xcode → Settings → Accounts → Ivan Kolos → Manage Certificates. Do not put signing private keys in this repository. See [Apple’s cloud-managed certificate documentation](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/). A development-signed archive is separate from successful App Store distribution export.
 
 ## Commands
 
