@@ -23,23 +23,23 @@ export function cropBounds(crop: ComparisonCrop, width: number, height: number) 
   const left = Math.min(width - 1, Math.floor(crop.x * width + 1e-6)), top = Math.min(height - 1, Math.floor(crop.y * height + 1e-6));
   return { left, top, width: Math.max(1, Math.min(width - left, Math.round(crop.w * width))), height: Math.max(1, Math.min(height - top, Math.round(crop.h * height))) };
 }
-const MAX_SAMPLES = 60;
+export const REFERENCE_COMPARISON_BUDGET_MS = 4 * 60_000;
 const shared = { assetId: z.string().min(1), offset: z.number().optional(), ...comparisonCropFields };
-const times = z.array(z.number().min(0)).min(1).max(MAX_SAMPLES).describe('Reference seconds. Use sparse times only for steady stretches.');
+const times = z.array(z.number().min(0)).min(1).describe('Reference seconds. Use sparse times only for steady stretches.');
 const fps = z.number().min(1).max(30);
 const range = { start: z.number().min(0), end: z.number().min(0), fps: fps.default(15) };
 const samplingInput = z.union([
   z.object({ ...shared, times }).strict(),
-  z.object({ ...shared, ...range }).strict().refine(input => input.end > input.start && Math.ceil((input.end - input.start) * input.fps - 1e-6) + 1 <= MAX_SAMPLES),
+  z.object({ ...shared, ...range }).strict().refine(input => input.end > input.start && Number.isSafeInteger(Math.ceil((input.end - input.start) * input.fps))),
 ]);
 // MCP adds projectId and timelineId to the top-level object. Keep the alternatives inside boundary validation.
-export const referenceComparisonInput = z.object({ ...shared, times: times.optional(), start: range.start.optional(), end: range.end.optional(), fps: fps.optional() }).strict().refine(input => samplingInput.safeParse(input).success, { message: 'Give either times, or an increasing start/end range with optional fps (default 15), up to 60 samples. Split longer transitions into adjoining ranges.' });
+export const referenceComparisonInput = z.object({ ...shared, times: times.optional(), start: range.start.optional(), end: range.end.optional(), fps: fps.optional() }).strict().refine(input => samplingInput.safeParse(input).success, { message: 'Give either times, or an increasing start/end range with optional fps (default 15). Follow nextAction when the time budget returns a partial comparison.' });
 
-export function comparisonTimes(raw: z.infer<typeof referenceComparisonInput>) {
+/** Generate only the next batch, so long windows do not allocate every sample before the budget starts. */
+export function comparisonSamples(raw: z.infer<typeof referenceComparisonInput>) {
   const input = samplingInput.parse(raw);
-  if ('times' in input) return input.times;
+  if ('times' in input) return { count: input.times.length, batch: (first: number) => input.times.slice(first, first + 6) };
   const count = Math.floor((input.end - input.start) * input.fps + 1e-6);
-  const times = Array.from({ length: count + 1 }, (_, index) => input.start + index / input.fps);
-  if (input.end - times[times.length - 1] > 1e-6) times.push(input.end);
-  return times;
+  const samples = count + 1 + (input.end - (input.start + count / input.fps) > 1e-6 ? 1 : 0);
+  return { count: samples, batch: (first: number) => Array.from({ length: Math.min(6, samples - first) }, (_, index) => first + index <= count ? input.start + (first + index) / input.fps : input.end) };
 }
