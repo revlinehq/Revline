@@ -15,6 +15,9 @@ struct MediaLibraryView: View {
     @FocusState private var linkFocused: Bool
 
     var body: some View {
+        if !session.aiConsentGranted {
+            AIConsentView(dismissOnCompletion: false)
+        } else {
         NavigationStack {
             List {
                 Section("Import") {
@@ -83,6 +86,7 @@ struct MediaLibraryView: View {
             }
         }
         .presentationBackground(Color.revlinePopover)
+        }
     }
 
     private var canImportLink: Bool { !importingLink && !link.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

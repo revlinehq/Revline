@@ -17,7 +17,7 @@ struct CreateProjectView: View {
             Form {
                 Section {
                     TextField("Project name", text: $title)
-                        .focused($titleFocused).submitLabel(.done)
+                        .autocorrectionDisabled().focused($titleFocused).submitLabel(.done)
                         .onSubmit { if canCreate { Task { await create() } } }
                     Picker("Canvas", selection: $format) {
                         Text("Vertical · 9:16").tag("vertical")

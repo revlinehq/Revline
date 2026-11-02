@@ -8,6 +8,11 @@ type DatabaseContext = QueryCtx | MutationCtx;
 export async function requireOwner(ctx: DatabaseContext) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new ConvexError("Authentication required");
+  const deletion=await ctx.db.query('accountDeletions').withIndex('by_owner',q=>q.eq('ownerId',identity.subject)).unique();
+  if(deletion)throw new ConvexError('This account is being deleted.');
+  const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(identity.subject))),b=>b.toString(16).padStart(2,'0')).join('');
+  const removed=await ctx.db.query('deletedAccountTokens').withIndex('by_hash',q=>q.eq('subjectHash',hash)).unique();
+  if(removed&&removed.expiresAt>Date.now())throw new ConvexError('This account was deleted.');
   return identity.subject;
 }
 

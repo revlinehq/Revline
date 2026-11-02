@@ -25,20 +25,22 @@ export function appleEnvironmentAllowed(ownerId: string, environment: string) {
     (process.env.APPLE_SANDBOX_REVIEW_USER_IDS ?? '').split(',').map(value => value.trim()).includes(ownerId);
 }
 
-export function appleBillingConfiguration(): { environment: 'Sandbox' | 'Production'; bundleId: string; pro: string; ultra: string } {
+export function appleBillingConfiguration(): { environment: 'Sandbox' | 'Production'; bundleId: string; monthly: string; pro?: string; ultra?: string } {
   const environment = process.env.APPLE_ENVIRONMENT;
   const bundleId = process.env.APPLE_BUNDLE_ID;
+  const monthly = process.env.APPLE_MONTHLY_PRODUCT_ID || 'com.revline.app.monthly';
   const pro = process.env.APPLE_PRO_PRODUCT_ID;
   const ultra = process.env.APPLE_ULTRA_PRODUCT_ID;
-  if ((environment !== 'Sandbox' && environment !== 'Production') || !bundleId || !pro || !ultra || pro === ultra) {
+  if ((environment !== 'Sandbox' && environment !== 'Production') || !bundleId) {
     throw new Error('App Store billing is not configured');
   }
   if (environment === 'Production' && (!process.env.APPLE_APP_ID || !Number.isSafeInteger(Number(process.env.APPLE_APP_ID)) || Number(process.env.APPLE_APP_ID) <= 0)) throw new Error('Production App Store app ID is not configured');
-  return { environment, bundleId, pro, ultra };
+  return { environment, bundleId, monthly, pro, ultra };
 }
 
 export function appleProductPlan(productId: string): 'pro' | 'ultra' {
   const config = appleBillingConfiguration();
+  if (productId === config.monthly) return 'pro';
   if (productId === config.pro) return 'pro';
   if (productId === config.ultra) return 'ultra';
   throw new Error('Unrecognized App Store product');

@@ -50,6 +50,7 @@ import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
 import { sceneCodeSource } from '../lib/editor/scene-code-edits';
 import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
+const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel('gpt-6.1-terra')), 'medium');
 const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
 function configured() {
   try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
@@ -70,7 +71,7 @@ async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string
   const choices = await editorModelChoices(ctx, ownerId);
   return !!choices && (modelChoice === undefined || choices.some(choice => choice === modelChoice));
 }
-export const status = query({ args: { projectId: v.id("projects") }, returns: v.object({ configured: v.boolean(), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), claudeViaMcp: v.optional(v.boolean()), defaultModelChoice:v.optional(claudeModelChoiceValidator), defaultReasoningEffort:v.optional(editorReasoningEffortValidator), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()), effortSwitcher: v.optional(v.boolean()), liveEffort: v.optional(editorReasoningEffortValidator) }), handler: async (ctx, args) => {
+export const status = query({ args: { projectId: v.id("projects"), clientPlatform: v.optional(v.literal("ios")) }, returns: v.object({ configured: v.boolean(), mobileConfigured: v.optional(v.boolean()), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), claudeViaMcp: v.optional(v.boolean()), defaultModelChoice:v.optional(claudeModelChoiceValidator), defaultReasoningEffort:v.optional(editorReasoningEffortValidator), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()), effortSwitcher: v.optional(v.boolean()), liveEffort: v.optional(editorReasoningEffortValidator) }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), project = await projectRun(ctx,args.projectId,ownerId);
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
@@ -78,7 +79,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const source = active ? await ctx.db.get(active.assetId) : null;
   const labels = { facecam:'Finding the facecam…', speakers:'Following active speakers…', transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
   let defaultModelChoice;try{defaultModelChoice=defaultEditorModelChoice();}catch{}
-  const ready=configured();
+  const ready=args.clientPlatform==='ios'?(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})():configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
   // Run-scoped analysis remains evidence of the editing workflow while the
   // model plans its next step; a plain reply never acquires this workflow lock.
@@ -87,7 +88,7 @@ export const status = query({ args: { projectId: v.id("projects") }, returns: v.
   const budgetRow=await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
-  return { configured: ready, ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await editorModelChoices(ctx, ownerId).then(choices => choices ? { modelSwitcher: true, allowedModels: [...choices] } : {})), ...(await claudeInApp(ctx, ownerId) ? {} : { claudeViaMcp: true }), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}), ...(process.env.EDITOR_EFFORT_SWITCHER==='true'&&await canChooseEditorModel(ctx, ownerId)?{effortSwitcher:true}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await editorModelChoices(ctx, ownerId).then(choices => choices ? { modelSwitcher: true, allowedModels: [...choices] } : {})), ...(await claudeInApp(ctx, ownerId) ? {} : { claudeViaMcp: true }), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}), ...(process.env.EDITOR_EFFORT_SWITCHER==='true'&&await canChooseEditorModel(ctx, ownerId)?{effortSwitcher:true}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
@@ -105,12 +106,15 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), clientPlatform: v.optional(v.literal("ios")), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+  const mobile = args.clientPlatform === 'ios';
+  if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
+  if (mobile && (args.modelChoice !== 'gpt-6.1-terra' || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
-  if ((args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
+  if (!mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
   let pinnedModel;
-  try { pinnedModel = withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
@@ -124,7 +128,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if (args.selectedClipIds.some(id => !clipIds.has(id))) throw new ConvexError("Selected clips must belong to this project");
   }
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
-  if (!configured()) throw new ConvexError(providerReason);
+  if (!mobile && !configured()) throw new ConvexError(providerReason);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
   let command: ReturnType<typeof parseEditorCommand>;
   try { command = parseEditorCommand(prompt); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid command.'); }
@@ -219,6 +223,9 @@ export const messages = query({
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
 export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
+  return stopOwnedProject(ctx, project);
+}});
+export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>) {
   if (!project.aiRunning) return null;
   if(project.aiRunId){const turn=await turnForRun(ctx,project.aiRunId);if(turn)await ctx.db.patch(turn._id,{status:'stopped',updatedAt:Date.now()});}
   if (project.threadId) {
@@ -237,7 +244,7 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   if(project.aiRunId)await stopRunnerTurn(ctx,project.aiRunId);
   await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
   return null;
-}});
+}
 /** Begin the timeline lock only when a mutating tool has a real change to make. */
 /** The effort the run is thinking at right now, for the development effort switcher. */
 export const recordEffort = internalMutation({ args: { ...runArgs, effort: editorReasoningEffortValidator }, returns: v.null(), handler: async (ctx, args) => {
@@ -636,7 +643,7 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
     // A queued choice the plan no longer allows (Opus in-app on Pro) falls back to the default.
     const queued=validatePinnedClaudeModel(row.pinnedModel);
     const chosen=queued.modelChoice!==undefined||queued.reasoningEffort!==undefined||queued.speedMode!==undefined;
-    const pinnedModel=chosen&&!await canChooseEditorModel(ctx,args.ownerId,queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
+    const pinnedModel=row.clientPlatform==='ios'?mobileModel():chosen&&!await canChooseEditorModel(ctx,args.ownerId,queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
     const ids=new Set((await requestTimeline(ctx,project,row.timelineId).catch(()=>currentTimeline(project))).clips.map(clip=>clip.id));
