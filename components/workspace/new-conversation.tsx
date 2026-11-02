@@ -17,9 +17,9 @@ import { uploadMediaThumbnail } from '@/lib/editor/upload-thumbnail';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
+import { rememberOpeningRequest } from '@/lib/editor/opening-request';
+import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
-import { FootageStartCard } from './footage-start-card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
@@ -66,14 +66,12 @@ export function NewConversation() {
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
-  // A video to recreate is a reference: it stays in the project's media, off the timeline.
-  const [referenceOnly, setReferenceOnly] = useState(false); // Set from the brief's wording.
   const [startingBlank, setStartingBlank] = useState(false);
-  // Prompt mode starts a blank project; the typed request opens the editor's chat.
-  const [mode, setMode] = useState<'upload' | 'prompt'>('upload');
   const [draft, setDraft] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
-  const busy = processing?.phase !== 'error' && (processing !== null || hasMedia);
+  const busy = startingBlank || processing !== null && processing.phase !== 'error';
+  const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
+  const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
   useEffect(() => {
@@ -86,7 +84,6 @@ export function NewConversation() {
     if (!isLoaded) return;
     try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
     setDraft(brief.current);
-    if (/\b(recreat|remake|reference|clone|copy this|like this)/i.test(brief.current)) setReferenceOnly(true);
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
       session.current = job.session;
@@ -117,7 +114,7 @@ export function NewConversation() {
   }, [isLoaded, userId]);
 
   useEffect(() => {
-    const items = files.map(({ id, file }): FootageProcessingFile => ({ id, name: file.name, kind: file.type.split('/')[0] as FootageProcessingFile['kind'], url: file.type.startsWith('image/') ? URL.createObjectURL(file) : undefined }));
+    const items = files.map(({ id, file }): FootageProcessingFile => ({ id, name: file.name, kind: file.type.startsWith('video/') ? 'video' : file.type.startsWith('audio/') ? 'audio' : 'image', url: URL.createObjectURL(file) }));
     setPreviews(items);
     return () => { for (const item of items) if (item.url) URL.revokeObjectURL(item.url); for (const url of posterUrls.current) URL.revokeObjectURL(url); posterUrls.current.clear(); posters.current.clear(); };
   }, [files]);
@@ -126,18 +123,28 @@ export function NewConversation() {
     if (busy || submitting.current) return;
     const accepted = incoming.map(normalizeMediaFile).filter((file): file is File => !!file);
     if (!accepted.length) { setError('Choose a nonempty video, audio, or image file.'); return; }
-    const unique = accepted.filter((file, index) => accepted.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
-    if (unique.length > 200) { setError('Choose up to 200 media files for this edit.'); return; }
+    const combined = [...files.map(item => item.file), ...accepted];
+    const unique = combined.filter((file, index) => combined.findIndex(other => other.name === file.name && other.size === file.size && other.lastModified === file.lastModified) === index);
+    if (unique.length + cloudIds.length > 200) { setError('Choose up to 200 media files for this edit.'); return; }
     const previousJob = getProjectImportJob(userId ?? undefined);
     if (previousJob) clearProjectImportJob(previousJob);
     session.current = createProjectImportSession();
     draftEpoch.current++;
     setDraftReady(true);
-    setCloudIds([]);
-    setFiles(unique.map(file => ({ id: crypto.randomUUID(), file })));
+    setFiles(unique.map(file => files.find(item => item.file === file) ?? { id: crypto.randomUUID(), file }));
     setError(accepted.length !== incoming.length ? 'Unsupported or empty files were skipped.' : '');
-    setProcessing({ phase: 'connecting', index: 1, total: unique.length, percent: 0 });
+    setProcessing(null);
     void stashFiles(unique).catch(() => { /* The in-memory files can still upload in this page. */ });
+  }
+
+  function removeAttachment(id: string) {
+    if (busy || submitting.current) return;
+    draftEpoch.current++;
+    const remaining = files.filter(item => item.id !== id);
+    const remainingCloud = cloudIds.filter(value => value !== id);
+    setFiles(remaining); setCloudIds(remainingCloud); setError('');
+    try { if (remainingCloud.length) sessionStorage.setItem(cloudKey, JSON.stringify(remainingCloud)); else sessionStorage.removeItem(cloudKey); } catch { /* The selection stays in memory. */ }
+    void stashFiles(remaining.map(item => item.file));
   }
 
   async function processFootage() {
@@ -172,7 +179,7 @@ export function NewConversation() {
       const prompt = brief.current.trim();
       const sourceName = files[0]?.file.name ?? cloudMedia?.[0]?.fileName ?? 'New video';
       const title = (prompt ? prompt.replace(/\s+/g, ' ') : sourceName.replace(/\.[^.]+$/, '')).slice(0, 80) || 'New video';
-      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, placeOnTimeline: !referenceOnly });
+      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, placeOnTimeline: !/\b(recreat|remake|reference|clone|copy this|like this)/i.test(prompt) });
       session.current = job.session;
       const activeJob = job;
       unsubscribe.current?.();
@@ -207,7 +214,7 @@ export function NewConversation() {
       });
       if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
-        if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt);
+        rememberOpeningRequest(projectId, prompt, composerControls.request);
         if (activeJob.input.placeOnTimeline === false) sessionStorage.setItem('revline:brief-reference:' + projectId, '1');
         sessionStorage.removeItem(briefKey);
         sessionStorage.removeItem(cloudKey);
@@ -226,9 +233,9 @@ export function NewConversation() {
   }
 
   useEffect(() => {
-    if (!draftReady || processing?.phase === 'error' || !hasMedia) return;
+    if (!draftReady || !processing || processing.phase === 'error' || !hasMedia) return;
     void processFootage();
-  }, [draftReady, files, cloudIds, cloudMedia, isLoaded, isSignedIn, isAuthenticated, authLoading]);
+  }, [draftReady, files, cloudIds, cloudMedia, isLoaded, isSignedIn, isAuthenticated, authLoading, processing?.phase]);
 
   function reset() {
     const job = getProjectImportJob(userId ?? undefined);
@@ -237,7 +244,7 @@ export function NewConversation() {
     submitting.current = false;
     session.current = createProjectImportSession();
     draftEpoch.current++;
-    setFiles([]); setCloudIds([]); setProcessing(null); setError('');
+    setFiles([]); setCloudIds([]); setProcessing(null); setError(''); setStartingBlank(false);
     brief.current = ''; setDraft('');
     try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
@@ -246,13 +253,16 @@ export function NewConversation() {
     setDraft(value); brief.current = value;
     try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
   }
-  async function startBlank() {
+  async function submit() {
+    if (!draftReady || !settings || busy || submitting.current) return;
+    if (hasMedia) { await processFootage(); return; }
     const prompt = brief.current.trim();
     if (startingBlank || !prompt) return;
     setStartingBlank(true); setError('');
     try {
       const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio: 'landscape' });
-      try { if (prompt) sessionStorage.setItem('revline:brief:' + projectId, prompt); sessionStorage.removeItem(briefKey); } catch { /* The editor opens without the saved request. */ }
+      rememberOpeningRequest(projectId, prompt, composerControls.request);
+      sessionStorage.removeItem(briefKey);
       router.push('/editor/' + projectId);
     } catch (cause) { setError(userError(cause, 'Could not create the project.')); setStartingBlank(false); }
   }
@@ -266,7 +276,7 @@ export function NewConversation() {
   }
   const fileDrop = useMediaFileDrop({ busy, onUpload: async incoming => attach(incoming), onError: setError });
   const dragging = fileDrop.active;
-  const status = processing ?? (hasMedia ? { phase: 'connecting' as const, index: 1, total: files.length + cloudIds.length, percent: 0 } : null);
+  const status = processing;
   const processingFiles = [...cloudIds.map((id): FootageProcessingFile => {
     const asset = cloudMedia?.find(item => item._id === id);
     return { id, name: asset?.fileName ?? 'Saved footage', kind: asset?.kind ?? 'video', url: asset?.url ?? undefined };
@@ -276,22 +286,15 @@ export function NewConversation() {
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>{mode === 'upload' ? 'Start your edit. Add your clips, then tell Revline what to make.' : 'Start from a prompt. Describe the video and Revline builds it, no footage needed.'}</p></div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title">Welcome{firstName ? `, ${firstName}` : ''}.</h1><p>Describe the video you want to make, or add your footage to get started.</p></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <Tabs value={mode} onValueChange={value => setMode(value as 'upload' | 'prompt')} className="gap-0">
-          <TabsList className="new-conversation-modes" aria-label="How to start">
-            <TabsTrigger value="upload">Upload</TabsTrigger>
-            <TabsTrigger value="prompt">Prompt</TabsTrigger>
-          </TabsList>
-          <TabsContent value="upload"><FootageStartCard onAttach={() => picker.current?.click()} disabled={!draftReady} dragging={dragging}/></TabsContent>
-          <TabsContent value="prompt"><EditComposer value={draft} onChange={changeDraft} onSubmit={startBlank} onAttach={() => picker.current?.click()} disabled={!draftReady || startingBlank} placeholder="Describe the video you want to make…" submitLabel="Start editing"/></TabsContent>
-          </Tabs>
+          <EditComposer value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
       </div>
       <RecentProjects/>
     </main>}
-    {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop your footage to start editing'}</div>}
+    {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop to attach your footage'}</div>}
   </div>;
 }

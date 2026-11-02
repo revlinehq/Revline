@@ -10,6 +10,7 @@ import { useSceneCode } from './use-scene-code';
 import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
 import { useClipSceneThumbs, useSceneThumbs } from '@/lib/editor/scene-thumbs-query';
 import { openingFootage } from '@/lib/editor/footage-opening';
+import { openingRequestOptions } from '@/lib/editor/opening-request';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
 import { api } from '@/convex/_generated/api';
@@ -317,7 +318,8 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
       const references=reference?(media??[]).filter(asset=>asset.kind==='video'||asset.kind==='image').map(asset=>asset._id as Id<'assets'>):[];
       // A project started from a prompt has no footage; its brief goes out as the first request.
       const blank=!files.length&&!(media??[]).length;
-      if(prompt&&(timelineRef.current.clips.length||reference||blank)&&!saves.busy){await sendRequest(prompt,references.length?{attachedAssetIds:references}:{});sessionStorage.removeItem('revline:brief:'+projectId);sessionStorage.removeItem('revline:brief-reference:'+projectId);}
+      if(prompt&&(timelineRef.current.clips.length||reference||blank)&&!saves.busy){await sendRequest(prompt,{...openingRequestOptions(projectId),...(references.length?{attachedAssetIds:references}:{})});sessionStorage.removeItem('revline:brief:'+projectId);sessionStorage.removeItem('revline:brief-reference:'+projectId);}
+      sessionStorage.removeItem('revline:brief-options:'+projectId);
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
   if(media===undefined)return editorLoading(projectId);

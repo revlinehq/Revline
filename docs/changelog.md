@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Workspace: Start projects with one composer for prompts and footage, with the editor’s model, effort and mode choices carried into the first request. Why: one place to describe and attach before sending.
 - Landing: Mix three gaming clips with three podcast and interview clips, keeping six caption styles. Why: show clipping for both gaming streams and podcasts.
 - iOS: Match the website’s dark background, cards, elevated sheets, text and borders using shared named colors. Why: Keep the iPhone app consistent with Revline’s brand.
 - Media preparation: Skip Gemini overviews for speech; queue optional visual overviews after transcription and editor opening, with frame-tool fallbacks. Why: transcripts cover speech and Gemini must not block editing.
