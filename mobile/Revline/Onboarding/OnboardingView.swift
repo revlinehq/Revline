@@ -27,8 +27,9 @@ struct OnboardingView: View {
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
                 .padding().frame(maxWidth: .infinity)
-                .background(.bar)
+                .background(Color.revlineCard)
             }
+            .revlineSurface()
             .navigationTitle("Revline").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Skip", action: onComplete) } }
         }

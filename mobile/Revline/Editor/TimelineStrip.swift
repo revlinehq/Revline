@@ -16,7 +16,7 @@ struct TimelineStrip: View {
                                     .font(.subheadline).lineLimit(1)
                                 Text("\(clip.duration, format: .number.precision(.fractionLength(1)))s")
                             }
-                            .font(.subheadline.monospacedDigit()).foregroundStyle(.secondary)
+                            .font(.subheadline.monospacedDigit()).foregroundStyle(Color.revlineMuted)
                             .padding(12).frame(width: min(200, max(124, clip.duration * 12)), alignment: .leading).frame(minHeight: 64)
 
                         }
@@ -25,7 +25,7 @@ struct TimelineStrip: View {
                     }
                 } else {
                     Label("Your timeline is empty", systemImage: "rectangle.split.3x1")
-                        .font(.subheadline).foregroundStyle(.secondary).padding(.vertical, 16)
+                        .font(.subheadline).foregroundStyle(Color.revlineMuted).padding(.vertical, 16)
                 }
             }.padding(.horizontal, 16).padding(.vertical, 4)
         }

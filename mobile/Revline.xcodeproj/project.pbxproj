@@ -35,6 +35,7 @@
 		64A7176BCB15A00098C8D259 /* PurchaseCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 17F2BC68942D5ADFF328A9DC /* PurchaseCoordinator.swift */; };
 		67C40EE7180AC62444334CFC /* SuperwallKit in Frameworks */ = {isa = PBXBuildFile; productRef = C2CB99CF4498ABBD9D47632F /* SuperwallKit */; };
 		6A9426145B00B8AA5844BDC5 /* ConvexMobile in Frameworks */ = {isa = PBXBuildFile; productRef = 5E5B0FC2DCC203BC45167662 /* ConvexMobile */; };
+		6C6675C5A0481EBC41F59F0C /* RevlineSurface.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF51A2A4EA12992EA653C9FE /* RevlineSurface.swift */; };
 		73F0022800A9BC22FC978241 /* AgentComposer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82296A2185332DCA31A4A4AA /* AgentComposer.swift */; };
 		7B79957A6214F94D4124A7AB /* WorkingLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2843F1920BA04EF3E34987C8 /* WorkingLabel.swift */; };
 		7CC1888D451F6E86619A452C /* ChatMessageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 93D863E289CB39DB590A48AD /* ChatMessageView.swift */; };
@@ -45,6 +46,7 @@
 		93C217F7BD1823AE9041FE16 /* Timecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65061BA99751E684F3524B62 /* Timecode.swift */; };
 		95DD061D19FA822635CECDCA /* AssistantStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF94EE39B855B3B65A95D37A /* AssistantStatus.swift */; };
 		96CAC4A258ECAE872DD45B2A /* WelcomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D35196EFBB82C29CCC2A6870 /* WelcomeView.swift */; };
+		98DEF4031EF38C75978869BB /* RevlineColors.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55B5B263EE4E72159984A37C /* RevlineColors.swift */; };
 		9BC970ED4072A9E27B7E56F5 /* MediaAsset.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F4336468CFEDEA223A0A1AC /* MediaAsset.swift */; };
 		9FDB432EBF8FDD39296171AF /* PlayerController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 216B15A021ED82C40CD78011 /* PlayerController.swift */; };
 		A6E75C79CEE0A525D9A8AA8F /* ProjectListRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C80DC2115C7A1DBDC1DE763 /* ProjectListRow.swift */; };
@@ -66,6 +68,7 @@
 		D3A47254BB69D56A7B30E45D /* ProjectPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F957F33B3954C8B09F85DC11 /* ProjectPreview.swift */; };
 		DA5D578C0D4071A21FB4C684 /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 846E42013F30982E663C5589 /* ClerkKit */; };
 		DF7E03913F4BC61302FF3CAF /* BillingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43830715FB0889A53F3A4198 /* BillingStatus.swift */; };
+		E1798C0834663F4DE7D7E84E /* RevlineClerkTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC46B6371D9FEDE7DA82EE5 /* RevlineClerkTheme.swift */; };
 		E84FDE6D247B6DE541208A46 /* JSONValue.swift in Sources */ = {isa = PBXBuildFile; fileRef = CD0CBF704A9C4A2656D6D63C /* JSONValue.swift */; };
 		EE67A6E10BFFBA6327F78769 /* PreviewTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 11676755ABCFC2ACE2B76C5B /* PreviewTransport.swift */; };
 		F59EA2780C7772AA81D2930C /* OnboardingPage.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2ACBC3124ACDA5BD25A52DB /* OnboardingPage.swift */; };
@@ -86,6 +89,7 @@
 		1606D57EF304CAC8FB09C00C /* MediaThumbnail.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaThumbnail.swift; sourceTree = "<group>"; };
 		17F2BC68942D5ADFF328A9DC /* PurchaseCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PurchaseCoordinator.swift; sourceTree = "<group>"; };
 		192D3831A1C52E0703590365 /* ClerkTokenProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClerkTokenProvider.swift; sourceTree = "<group>"; };
+		1CC46B6371D9FEDE7DA82EE5 /* RevlineClerkTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevlineClerkTheme.swift; sourceTree = "<group>"; };
 		1E6A3961F934860178881A18 /* MediaAssetRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaAssetRow.swift; sourceTree = "<group>"; };
 		216B15A021ED82C40CD78011 /* PlayerController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlayerController.swift; sourceTree = "<group>"; };
 		259C047C623D96247BF6B340 /* Revline.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Revline.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -96,6 +100,7 @@
 		4CC098714A6C30969D07361A /* AppFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppFailure.swift; sourceTree = "<group>"; };
 		4F4336468CFEDEA223A0A1AC /* MediaAsset.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaAsset.swift; sourceTree = "<group>"; };
 		5480908AD5ED8486BB2F14DE /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
+		55B5B263EE4E72159984A37C /* RevlineColors.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevlineColors.swift; sourceTree = "<group>"; };
 		58299061C165FB866A558EC1 /* ProjectRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectRow.swift; sourceTree = "<group>"; };
 		62626E45466C22AA18D505FC /* WorkspaceTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTabs.swift; sourceTree = "<group>"; };
 		65061BA99751E684F3524B62 /* Timecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timecode.swift; sourceTree = "<group>"; };
@@ -121,6 +126,7 @@
 		9A3AA6CC22F9537131028CB5 /* AppConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfiguration.swift; sourceTree = "<group>"; };
 		A54C66364369AE7BE5FCEF5C /* ProjectsStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectsStore.swift; sourceTree = "<group>"; };
 		AD08F11D0BC2A4B44375B33A /* ChatMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatMessage.swift; sourceTree = "<group>"; };
+		AF51A2A4EA12992EA653C9FE /* RevlineSurface.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevlineSurface.swift; sourceTree = "<group>"; };
 		B04E92FA11BCFDDC3A922AD0 /* ProjectSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectSummary.swift; sourceTree = "<group>"; };
 		B6290993A9AC381772F38813 /* ActionLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionLabel.swift; sourceTree = "<group>"; };
 		B9386285553D217A7AD72D21 /* ErrorBanner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ErrorBanner.swift; sourceTree = "<group>"; };
@@ -278,6 +284,7 @@
 			children = (
 				1085B98C60814E6955F0C8A0 /* ClerkConnectionView.swift */,
 				192D3831A1C52E0703590365 /* ClerkTokenProvider.swift */,
+				1CC46B6371D9FEDE7DA82EE5 /* RevlineClerkTheme.swift */,
 				D35196EFBB82C29CCC2A6870 /* WelcomeView.swift */,
 			);
 			path = Auth;
@@ -311,6 +318,8 @@
 				4CC098714A6C30969D07361A /* AppFailure.swift */,
 				B9386285553D217A7AD72D21 /* ErrorBanner.swift */,
 				1606D57EF304CAC8FB09C00C /* MediaThumbnail.swift */,
+				55B5B263EE4E72159984A37C /* RevlineColors.swift */,
+				AF51A2A4EA12992EA653C9FE /* RevlineSurface.swift */,
 				65061BA99751E684F3524B62 /* Timecode.swift */,
 				15DCE65378F51B976E3E5285 /* WorkspaceStateView.swift */,
 			);
@@ -523,6 +532,9 @@
 				C963BE330CDF27A4F772244D /* QueuedMessagesView.swift in Sources */,
 				36234244A18E76B90F662F89 /* RenameProjectView.swift in Sources */,
 				44806A2C5519032FA47A9063 /* RevlineApp.swift in Sources */,
+				E1798C0834663F4DE7D7E84E /* RevlineClerkTheme.swift in Sources */,
+				98DEF4031EF38C75978869BB /* RevlineColors.swift in Sources */,
+				6C6675C5A0481EBC41F59F0C /* RevlineSurface.swift in Sources */,
 				8B163281B5916C635B556BEF /* RootView.swift in Sources */,
 				18ACD30C9F422366E1F98045 /* SettingsView.swift in Sources */,
 				54E9F293DEB718E1EBE3F842 /* ShareSheet.swift in Sources */,

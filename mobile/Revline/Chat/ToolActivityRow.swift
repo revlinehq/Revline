@@ -22,14 +22,14 @@ struct ToolActivityRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 8) {
             Image(systemName: failed ? "exclamationmark.circle" : done ? "checkmark.circle" : "circle.dotted")
-                .foregroundStyle(failed ? Color.red : Color.secondary)
+                .foregroundStyle(failed ? Color.red : Color.revlineMuted)
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
                     .font(.subheadline).lineLimit(2)
-                if let detail = tool["errorText"]?.string { Text(detail).font(.subheadline).foregroundStyle(Color.secondary) }
+                if let detail = tool["errorText"]?.string { Text(detail).font(.subheadline).foregroundStyle(Color.revlineMuted) }
             }
             Spacer(minLength: 0)
-            Text(failed ? "Failed" : done ? "Done" : "Working").font(.subheadline).foregroundStyle(Color.secondary)
+            Text(failed ? "Failed" : done ? "Done" : "Working").font(.subheadline).foregroundStyle(Color.revlineMuted)
         }
     }
 }

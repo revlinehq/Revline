@@ -10,14 +10,14 @@ struct ProjectRow: View {
                 .frame(width: 80, height: 60)
                 .clipShape(.rect(cornerRadius: 8))
             VStack(alignment: .leading, spacing: 4) {
-                Text(project.title).font(.headline).foregroundStyle(.primary).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                Text(project.title).font(.headline).foregroundStyle(Color.revlineForeground).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 Text("^[\(project.clipCount) clip](inflect: true)")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Color.revlineMuted)
                 Text(project.updatedDate, style: .relative)
-                    .font(.subheadline).foregroundStyle(.secondary)
+                    .font(.subheadline).foregroundStyle(Color.revlineMuted)
                 if project.aiRunning {
                     Label("Working", systemImage: "circle.dotted")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .font(.subheadline).foregroundStyle(Color.revlineMuted)
                 }
             }
         }
