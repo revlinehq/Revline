@@ -39,7 +39,9 @@ Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `Cler
 
 URLs come from xcconfig and Info.plist. Release validates the exact production backend and website and refuses a test Clerk key. A missing configuration produces a setup screen instead of silently using development. Local networking is allowed for the Simulator renderer; remote services use HTTPS. Override the Debug web URL with this Mac's LAN address for a physical device. Do not point a production build at the development backend.
 
-The `/mobile/player` route must be present on the configured web server. It is available in this worktree on port 3002. The untouched 3001 checkout and the hosted production site will not gain this route until their source is updated through the normal release process. No deployment is required to use the new native screens against the existing development API. New Apple billing functions require a later authorized Convex deployment.
+The `/mobile/player` route must be present on the configured web server. Use this worktree on port 3002 or reuse the existing port 3001 server when its checkout includes that route. The hosted production site receives changes through the normal release process. No deployment is required to use the new native screens against the existing development API. New Apple billing functions require a later authorized Convex deployment.
+
+If the main checkout already includes this route and its development server is running on port 3001, reuse it by adding `REVLINE_WEB_URL = http:/$()/localhost:3001` to the ignored `Debug.local.xcconfig`. This avoids an extra frontend and media worker when making native-only changes on a memory-constrained Mac. Do not edit or restart the main checkout's server. Release configuration is unaffected.
 
 ## Authentication and account deletion
 
@@ -106,7 +108,15 @@ Both sources upsert the same `appleEntitlements` row by transaction ID and recor
 - Complete privacy policy, Terms of Use, support URLs, age rating, export compliance, App Store privacy labels and SDK data-collection audit. The app supplies a UserDefaults required-reason manifest, and the SDKs include their own manifests. PhotosPicker uses system-selected access; saving an export requests add-only access with the supplied purpose string. No camera or microphone access is requested.
 - Add App Review notes covering native editing, existing web memberships, Apple subscriptions, in-app account deletion, the web-only renderer, and a review account with entitlement access.
 
-## Verification from this session
+## Native interface
+
+The interface follows the system appearance in light and dark mode. Projects use an inset grouped List with thumbnails, native navigation rows, search, pull to refresh, swipe actions and context menus. Project creation, renaming, media import, exports and account settings use system Form or List sections. The chat composer uses a native multiline TextField, menu Pickers and system button styles. Focusing the composer reduces the preview height so the conversation and keyboard remain usable.
+
+Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. No custom button style, palette, shadow, gradient, press animation or sheet animation remains. Clerk uses its default adaptive interface. The WKWebView renderer and Superwall paywall presentation are unchanged.
+
+Before/after captures for this change are local in `Screenshots/native-after`, excluded from Git. `before-` images record the previous custom styling; `after-` images record the native interface. Account/profile captures may contain private information and should not be used as public marketing images.
+
+## Verification from the initial implementation
 
 On 2026-11-01, `npm run typecheck`, `npm run build`, signed Debug and optimized Release Simulator builds passed with Xcode 26.1.1 and Swift 6.2.1. The app ran on the iPhone 17 and iPad Pro 11-inch Simulators with iOS 26.1. Onboarding, welcome, and the live Clerk sign-in screen were visually inspected. iPad onboarding and welcome were inspected in landscape, and onboarding in portrait. The onboarding column is capped at 600 points. The Release bundle's URLs were checked for the production deployment and website, and the app was launched on iPad to verify it safely displays Setup required without production Clerk configuration. Use `-jobs 1` on this 8 GB Mac to avoid parallel SDK compilation exhausting memory.
 

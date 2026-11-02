@@ -47,7 +47,6 @@ targets:
           - CFBundleURLSchemes: [com.revline.app]
         UILaunchScreen: {}
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
-        UIUserInterfaceStyle: Dark
         ITSAppUsesNonExemptEncryption: false
         NSPhotoLibraryAddUsageDescription: Save your exported Revline videos to your photo library.
         NSAppTransportSecurity:

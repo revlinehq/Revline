@@ -5,6 +5,7 @@ struct AgentComposer: View {
     let store: ProjectStore
     let player: PlayerController
     let onAttach: () -> Void
+    let onFocusChange: (Bool) -> Void
     @State private var prompt = ""
     @State private var mode = "fast"
     @State private var model = ""
@@ -16,7 +17,7 @@ struct AgentComposer: View {
     }
 
     var body: some View {
-        VStack(spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             if !store.attachedAssetIDs.isEmpty {
                 ScrollView(.horizontal) {
                     HStack {
@@ -25,62 +26,85 @@ struct AgentComposer: View {
                                 store.attachedAssetIDs.removeAll { $0 == id }
                             } label: {
                                 Label(store.assets.first { $0.id == id }?.fileName ?? "Media", systemImage: "xmark.circle")
-                                    .font(.caption).lineLimit(1).padding(8)
-                                    .background(RevlineTheme.raised, in: .capsule)
-                            }
+                                    .lineLimit(1)
+                            }.buttonStyle(.bordered).frame(minHeight: 44)
                         }
                     }
-                }.scrollIndicators(.hidden)
-            }
-            TextField("What would you change next?", text: $prompt, axis: .vertical)
-                .font(.body).lineLimit(1...5).focused($focused)
-                .accessibilityLabel("Describe your next edit")
-                .disabled(store.sending)
-            HStack(spacing: 12) {
-                Button("Add media", systemImage: "plus", action: onAttach)
-                    .labelStyle(.iconOnly).frame(width: 44, height: 44)
-                Menu {
-                    Button("Clip footage") { prompt = "/clip "; focused = true }
-                    Button("Recreate motion") { prompt = "/inspo-motion "; focused = true }
-                } label: { Image(systemName: "slash.circle").frame(width: 36, height: 44) }
-                    .accessibilityLabel("Slash commands")
-                Menu {
-                    Picker("Editing mode", selection: $mode) {
-                        Text("Fast").tag("fast")
-                        Text("Precise").tag("precise")
-                    }
-                } label: { Text(mode == "fast" ? "Fast" : "Precise").font(.caption.weight(.medium)) }
-                if store.status?.modelSwitcher == true {
-                    Menu {
-                        Picker("Model", selection: $model) {
-                            Text("Default").tag("")
-                            ForEach(store.status?.allowedModels ?? [], id: \.self) { Text(modelLabel($0)).tag($0) }
-                        }
-                    } label: {
-                        Text(modelLabel(model.isEmpty ? store.status?.defaultModelChoice ?? "Default" : model))
-                            .font(.caption).lineLimit(1)
-                    }.accessibilityLabel("Choose model")
                 }
-                Spacer(minLength: 0)
+            }
+            HStack(alignment: .bottom) {
+                TextField("What would you change next?", text: $prompt, axis: .vertical)
+                    .textFieldStyle(.roundedBorder).lineLimit(1...5).focused($focused)
+                    .accessibilityLabel("Describe your next edit").disabled(store.sending)
+                    .frame(minHeight: 44)
                 if store.status?.running == true && prompt.isEmpty {
                     Button("Stop", systemImage: "stop.fill") { Task { await store.stop(session) } }
-                        .labelStyle(.iconOnly).frame(width: 44, height: 44)
-                        .background(RevlineTheme.raised, in: .circle)
+                        .labelStyle(.iconOnly).buttonStyle(.bordered).controlSize(.large)
+                        .frame(minWidth: 44, minHeight: 44)
                 } else {
                     Button { Task { await send() } } label: {
-                        Image(systemName: "arrow.up").font(.body.weight(.semibold))
-                            .frame(width: 40, height: 40)
-                            .foregroundStyle(canSend ? .black : .secondary)
-                            .background(canSend ? .white : RevlineTheme.raised, in: .circle)
+                        if store.sending { ProgressView() }
+                        else { Label("Send message", systemImage: "arrow.up").labelStyle(.iconOnly) }
                     }
+                    .buttonStyle(.borderedProminent).controlSize(.large)
+                    .frame(minWidth: 44, minHeight: 44)
                     .accessibilityLabel(store.status?.running == true ? "Queue message" : "Send message")
                     .disabled(!canSend)
                 }
             }
+            ViewThatFits(in: .horizontal) {
+                HStack { mediaControls; modePicker; modelPicker }.fixedSize(horizontal: true, vertical: false)
+                VStack(alignment: .leading) {
+                    HStack { mediaControls; modePicker }
+                    modelPicker
+                }
+            }
+            .font(.subheadline)
         }
-        .padding(16).background(RevlineTheme.surface, in: .rect(cornerRadius: 20))
-        .padding(.horizontal, 12).padding(.bottom, 8)
+        .padding().background(.bar)
+        .toolbar {
+            ToolbarItemGroup(placement: .keyboard) {
+                Spacer()
+                Button("Done") { focused = false }
+            }
+        }
+        .onChange(of: focused) { _, value in onFocusChange(value) }
         .sensoryFeedback(.success, trigger: sent)
+    }
+
+    private var mediaControls: some View {
+        HStack {
+            Button("Add media", systemImage: "plus", action: onAttach)
+                .labelStyle(.iconOnly).buttonStyle(.bordered).frame(minWidth: 44, minHeight: 44)
+            Menu("Slash commands", systemImage: "slash.circle") {
+                Button("Clip footage") { prompt = "/clip "; focused = true }
+                Button("Recreate motion") { prompt = "/inspo-motion "; focused = true }
+            }
+            .labelStyle(.iconOnly).buttonStyle(.bordered).frame(minWidth: 44, minHeight: 44)
+        }
+    }
+
+    private var modePicker: some View {
+        Picker("Editing mode", selection: $mode) {
+            Text("Fast").tag("fast")
+            Text("Precise").tag("precise")
+        }.pickerStyle(.menu).buttonStyle(.bordered).frame(minHeight: 44)
+    }
+
+    @ViewBuilder private var modelPicker: some View {
+        if store.status?.modelSwitcher == true {
+            Menu {
+                Picker("Model", selection: $model) {
+                    Text("Default").tag("")
+                    ForEach(store.status?.allowedModels ?? [], id: \.self) { Text(modelLabel($0)).tag($0) }
+                }
+            } label: {
+                Text(modelLabel(model.isEmpty ? store.status?.defaultModelChoice ?? "Default" : model)).lineLimit(1)
+            }
+            .buttonStyle(.bordered).frame(minHeight: 44)
+            .accessibilityLabel("Model")
+            .accessibilityValue(modelLabel(model.isEmpty ? store.status?.defaultModelChoice ?? "Default" : model))
+        }
     }
 
     private func send() async {
@@ -88,17 +112,5 @@ struct AgentComposer: View {
         if await store.send(session, prompt: prompt, mode: mode, model: model.isEmpty ? nil : model, playhead: player.time) {
             prompt = ""; sent += 1; focused = false
         }
-    }
-}
-
-func modelLabel(_ value: String) -> String {
-    switch value {
-    case "gpt-6.1-sol": "GPT-6.1 Sol"
-    case "gpt-6-astra": "GPT-6 Astra"
-    case "gpt-6.1-terra": "GPT-6.1 Terra"
-    case "sonnet": "Sonnet 5.5"
-    case "opus": "Opus 5.5"
-    case "gemini-4-argon": "Gemini 4 Argon"
-    default: value
     }
 }

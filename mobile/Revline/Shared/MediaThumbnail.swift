@@ -7,8 +7,7 @@ struct MediaThumbnail: View {
     @State private var frame: UIImage?
 
     var body: some View {
-        ZStack {
-            RevlineTheme.raised
+        Rectangle().fill(.quaternary).overlay {
             if let frame {
                 Image(uiImage: frame).resizable().scaledToFill()
             } else if let url, kind != "video" {
@@ -33,6 +32,6 @@ struct MediaThumbnail: View {
 
     private var placeholder: some View {
         Image(systemName: kind == "audio" ? "waveform" : "play.rectangle")
-            .font(.title2.weight(.light)).foregroundStyle(.tertiary)
+            .font(.title2).foregroundStyle(.secondary)
     }
 }

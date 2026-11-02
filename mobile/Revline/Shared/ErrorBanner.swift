@@ -5,13 +5,16 @@ struct ErrorBanner: View {
     var retry: (() -> Void)?
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "exclamationmark.circle").foregroundStyle(.secondary)
-            Text(message).font(.footnote).textSelection(.enabled)
-            Spacer(minLength: 0)
-            if let retry { Button("Retry", action: retry).font(.footnote.weight(.semibold)) }
+        VStack(alignment: .leading) {
+            Label(message, systemImage: "exclamationmark.triangle")
+                .foregroundStyle(.red)
+                .textSelection(.enabled)
+                .fixedSize(horizontal: false, vertical: true)
+            if let retry {
+                Button("Try again", action: retry).buttonStyle(.bordered)
+            }
         }
-        .padding(14).background(RevlineTheme.raised, in: .rect(cornerRadius: 12))
+        .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .contain)
     }
 }

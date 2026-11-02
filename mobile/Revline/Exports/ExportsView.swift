@@ -19,8 +19,8 @@ struct ExportsView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent(store.project?.title ?? "Project", value: timecode(store.timeline?.duration ?? 0))
-                    if store.tabs.count > 1 { Text(store.tabs.first { $0.id == store.timelineID }?.name ?? "Selected timeline").font(.footnote).foregroundStyle(.secondary) }
+                    LabeledContent(store.project?.title ?? "Project") { Text(timecode(store.timeline?.duration ?? 0)).foregroundStyle(.primary).monospacedDigit() }
+                    if store.tabs.count > 1 { Text(store.tabs.first { $0.id == store.timelineID }?.name ?? "Selected timeline").font(.subheadline).foregroundStyle(.secondary) }
                     Picker("Resolution", selection: $resolution) {
                         Text("720p").tag(720.0)
                         Text("1080p").tag(1080.0)
@@ -33,41 +33,45 @@ struct ExportsView: View {
                         Text("Standard").tag("standard")
                         Text("High").tag("high")
                     }
+                }
+                Section {
                     Button { confirming = true } label: {
-                        HStack { Label("Export MP4", systemImage: "arrow.up.right.square"); Spacer(); if busy { ProgressView() } }
-                    }
+                        ActionLabel(title: "Export MP4", busyTitle: "Starting export…", busy: busy)
+                    }.buttonStyle(.borderedProminent).controlSize(.large)
                     .disabled(busy || store.timeline?.clips.isEmpty != false)
                     .confirmationDialog("Start this export?", isPresented: $confirming, titleVisibility: .visible) {
                         Button("Export \(Int(resolution))p MP4") { Task { await start() } }
                     } message: { Text("Revline will render the saved version of this timeline at \(Int(fps)) fps. You can keep editing while it runs.") }
-                } footer: { Text("Exports run in the cloud and stay available here when you return.") }
-                if let error { Section { Text(error).font(.footnote).foregroundStyle(.red) } }
-                if let notice { Section { Text(notice).font(.footnote).foregroundStyle(.secondary) } }
+                } footer: { Text("Exports run in the cloud. You can keep editing while they render.") }
+                .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
+                if let error { Section { ErrorBanner(message: error) }.listRowBackground(Color.clear).listRowInsets(EdgeInsets()) }
+                if let notice { Section { Text(notice).font(.subheadline).foregroundStyle(.secondary) } }
                 Section("Recent exports") {
-                    if store.exports.isEmpty { Text("Your exports will appear here.").foregroundStyle(.secondary) }
+                    if store.exports.isEmpty { ContentUnavailableView("No exports yet", systemImage: "square.and.arrow.up", description: Text("Export a timeline to save or share it.")) }
                     ForEach(store.exports) { job in
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
-                                Text(job.label ?? "\(Int(job.resolution))p · \(Int(job.fps)) fps").font(.subheadline.weight(.medium))
+                                Text(job.label ?? "\(Int(job.resolution))p · \(Int(job.fps)) fps").font(.headline)
                                 Spacer()
-                                Text(job.status.capitalized).font(.caption).foregroundStyle(.secondary)
+                                Text(job.status.capitalized).font(.subheadline).foregroundStyle(.secondary)
                             }
                             if job.active {
                                 ProgressView(value: job.progress, total: 100)
                                 Button("Cancel export", role: .destructive) {
                                     Task { await store.mutate(session, "renders:cancel", arguments: ["jobId": job.id]) }
-                                }.font(.footnote)
+                                }.buttonStyle(.borderless)
                             } else if job.status == "completed" {
-                                HStack(spacing: 24) {
+                                VStack(spacing: 8) {
                                     Button("Share", systemImage: "square.and.arrow.up") { Task { await download(job, saveToPhotos: false) } }
                                     Button("Save to Photos", systemImage: "square.and.arrow.down") { Task { await download(job, saveToPhotos: true) } }
-                                }.font(.footnote).disabled(busy)
+                                }.buttonStyle(.bordered).controlSize(.large).disabled(busy)
                             }
-                            if let error = job.error { Text(error).font(.footnote).foregroundStyle(.secondary) }
-                        }.padding(.vertical, 8).buttonStyle(.borderless)
+                            if let error = job.error { Text(error).font(.subheadline).foregroundStyle(.red) }
+                        }.padding(.vertical, 12)
                     }
                 }
             }
+            .listStyle(.insetGrouped)
             .navigationTitle("Exports").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
             .sheet(item: $share) { ShareSheet(url: $0.url) }
@@ -107,5 +111,3 @@ struct ExportsView: View {
         } catch { self.error = AppFailure.describe(error) }
     }
 }
-
-private struct ExportFile: Identifiable { let url: URL; var id: URL { url } }
