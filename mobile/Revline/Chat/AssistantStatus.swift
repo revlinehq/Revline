@@ -2,6 +2,7 @@ import Foundation
 
 struct AssistantStatus: Decodable, Sendable {
     let configured: Bool
+    let mobileConfigured: Bool?
     let running: Bool
     let editing: Bool
     let error: String?
@@ -12,6 +13,8 @@ struct AssistantStatus: Decodable, Sendable {
     let allowedModels: [String]?
     let defaultModelChoice: String?
     let externalAgent: ExternalAgent?
+
+    var unavailableReason: String? { mobileConfigured == true ? nil : reason }
 
     struct ExternalAgent: Decodable, Sendable {
         let name: String

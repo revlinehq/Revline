@@ -215,6 +215,7 @@ export const r2UploadFields = {
 };
 export const r2UploadDocument = v.object({ _id: v.id("r2Uploads"), _creationTime: v.number(), ...r2UploadFields });
 export const userFields = {
+  aiConsentVersion: v.optional(v.number()), aiConsentAt: v.optional(v.number()),
   clerkId: v.string(), email: v.optional(v.string()), name: v.optional(v.string()), imageUrl: v.optional(v.string()),
   createdAt: v.number(), updatedAt: v.number(),
 };
@@ -279,6 +280,9 @@ export default defineSchema({
     toolName: v.string(), functionName: v.string(), receipt: v.optional(toolWriteReceipt), value:v.optional(v.any()), valueParts:v.optional(v.number()), stagedRevision: v.optional(v.number()), expiresAt: v.number(),
   }).index('by_write', ['writeId']).index('by_run_stage', ['runId', 'stagedRevision']).index('by_expires', ['expiresAt']),
   toolWriteResultParts:defineTable({writeId:v.string(),part:v.number(),value:v.string()}).index('by_write_part',['writeId','part']),
+  accountDeletions: defineTable({ownerId:v.string(),phase:v.union(v.literal('pending'),v.literal('projects'),v.literal('rows')),table:v.number(),cursor:v.union(v.string(),v.null()),changed:v.boolean(),requestedAt:v.number()}).index('by_owner',['ownerId']),
+  deletedAccountTokens: defineTable({subjectHash:v.string(),expiresAt:v.number()}).index('by_hash',['subjectHash']).index('by_expiry',['expiresAt']),
+  accountDeletionRefs: defineTable({ownerId:v.string(),resourceId:v.string()}).index('by_owner_resource',['ownerId','resourceId']),
   // Operational diagnostics only. No editor subscription reads these tables.
   saveIncidentRuns: defineTable({
     runId: v.string(), projectId: v.id('projects'), ownerId: v.string(),
@@ -311,7 +315,7 @@ export default defineSchema({
   agentRunnerNonces:defineTable({nonce:v.string(),expiresAt:v.number()}).index('by_nonce',['nonce']).index('by_expiresAt',['expiresAt']),
   aiBudgets:defineTable({projectId:v.id('projects'),runId:v.string(),used:v.number(),effort:v.optional(storedEditorReasoningEffortValidator),updatedAt:v.number()}).index('by_project',['projectId']),
   aiTimelinePreviews:defineTable({projectId:v.id('projects'),ownerId:v.string(),runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
-  assistantQueue:defineTable({command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,editMode:v.optional(editorEditModeValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),timelineId:v.optional(v.string()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
+  assistantQueue:defineTable({clientPlatform:v.optional(v.literal('ios')),command:v.optional(editorCommandValidator),projectId:v.id('projects'),ownerId:v.string(),prompt:v.string(),pinnedModel:pinnedClaudeModelValidator,editMode:v.optional(editorEditModeValidator),attachedAssetIds:v.optional(v.array(v.id('assets'))),selectedClipId:v.optional(v.string()),selectedClipIds:v.optional(v.array(v.string())),playhead:v.optional(v.number()),timelineId:v.optional(v.string()),error:v.optional(v.string()),createdAt:v.number()}).index('by_project',['projectId']),
   aiRuns:defineTable({projectId:v.id('projects'),ownerId:v.string(),...aiStateFields}).index('by_project',['projectId']),
   // A stored tab's undo history sits apart from its timeline, so reading tab timelines never reads it.
   projectTimelineHistories:defineTable({projectId:v.id('projects'),timelineId:v.string(),history:v.array(timelineValidator)}).index('by_project_timeline',['projectId','timelineId']),

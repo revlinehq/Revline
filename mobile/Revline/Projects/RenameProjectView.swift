@@ -20,7 +20,7 @@ struct RenameProjectView: View {
             Form {
                 Section("Project name") {
                     TextField("Project name", text: $title)
-                        .focused($focused).submitLabel(.done).onSubmit(saveIfPossible)
+                        .autocorrectionDisabled().focused($focused).submitLabel(.done).onSubmit(saveIfPossible)
                 }.revlineRows()
                 if let error = store.error { Section { ErrorBanner(message: error) }.revlineRows() }
                 Section {

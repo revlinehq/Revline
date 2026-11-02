@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as accountDeletion from "../accountDeletion.js";
+import type * as accountDeletionActions from "../accountDeletionActions.js";
 import type * as agentRunner from "../agentRunner.js";
 import type * as agentRunnerHttp from "../agentRunnerHttp.js";
 import type * as aiCosts from "../aiCosts.js";
@@ -43,6 +45,7 @@ import type * as incidentDelivery from "../incidentDelivery.js";
 import type * as incidents from "../incidents.js";
 import type * as lib_account_limits from "../lib/account_limits.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
+import type * as lib_apple_account_revocation from "../lib/apple_account_revocation.js";
 import type * as lib_apple_entitlements from "../lib/apple_entitlements.js";
 import type * as lib_apple_roots from "../lib/apple_roots.js";
 import type * as lib_asset_analysis from "../lib/asset_analysis.js";
@@ -128,6 +131,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  accountDeletion: typeof accountDeletion;
+  accountDeletionActions: typeof accountDeletionActions;
   agentRunner: typeof agentRunner;
   agentRunnerHttp: typeof agentRunnerHttp;
   aiCosts: typeof aiCosts;
@@ -163,6 +168,7 @@ declare const fullApi: ApiFromModules<{
   incidents: typeof incidents;
   "lib/account_limits": typeof lib_account_limits;
   "lib/ai_cost": typeof lib_ai_cost;
+  "lib/apple_account_revocation": typeof lib_apple_account_revocation;
   "lib/apple_entitlements": typeof lib_apple_entitlements;
   "lib/apple_roots": typeof lib_apple_roots;
   "lib/asset_analysis": typeof lib_asset_analysis;

@@ -9,7 +9,7 @@ The app uses the official ConvexMobile client and the existing Clerk instance. P
 Requirements: Xcode 26.1+, Swift 6.2, XcodeGen (`brew install xcodegen`), Node 22 for the web player.
 
 1. Copy `Config/Local.example.xcconfig` to `Config/Debug.local.xcconfig`. Fill in the existing development Clerk publishable key and Frontend API hostname. This file is ignored by Git. Clerk secrets never belong in the app.
-2. Copy `Config/Secrets.example.xcconfig` to `Config/Secrets.xcconfig`. Fill in the Superwall public API key and the two App Store product identifiers when provisioned. Both Debug and Release read this ignored file.
+2. Copy `Config/Secrets.example.xcconfig` to `Config/Secrets.xcconfig`. Fill in the Superwall public API key and the single App Store product identifier when provisioned. Both Debug and Release read this ignored file.
 3. In the repository root, provision the existing development `.env.local`, then run `npm ci` and `PORT=3002 npm run dev`. Wait for both `[web]` and `[worker]` readiness. Do not start or replace the main checkout's server on port 3001.
 4. Run `xcodegen generate --spec mobile/project.yml` from the repository root. The generated `mobile/Revline.xcodeproj` and package resolution are checked in, so XcodeGen is only needed after changing the specification or adding files.
 5. Connect the iPhone, enable Developer Mode, and select it as the Revline run destination in Xcode. In Signing & Capabilities, select the existing development team with automatic signing. The user completes any device trust prompts and signs in in the app.
@@ -53,23 +53,18 @@ In Clerk Dashboard for each instance:
 
 - Keep Native API enabled and register the iOS application with the final App ID Prefix and bundle identifier.
 - Enable Apple alongside Google and email, configure the Apple provider, and register the native app. The current development instance has Native API, Google, email codes, and self-deletion enabled, but Apple is not enabled.
-- Keep self-service account deletion enabled. Account > Manage account opens Clerk's native profile, including the Delete account flow and any required re-verification. It deletes the same Clerk user used by web. The existing web profile has no separate application-level account-deletion API; audit retention and cleanup of owned Convex/media records before submission.
+- Account → Delete account uses the versioned Convex action, stops web renewals, removes the matching Clerk user, and queues owned project, chat, media, export and account-record cleanup. Clerk profile self-deletion is not exposed in the app. Apple-linked deletion also revokes Apple authorization; App Store subscriptions require separate cancellation through Apple. The verified Clerk deletion webhook also queues cleanup. Use a dedicated disposable account to verify this destructive flow.
 - Configure the Associated Domains entitlement as `webcredentials:<Clerk Frontend API hostname>`. Sign in with Apple capability and the `com.revline.app` OAuth callback scheme are included.
 
 ## App Store subscriptions
 
-Convex `billing.status` is authoritative. Active Stripe subscribers and complimentary members bypass the paywall and are marked active in Superwall. Apple subscriptions grant the same access and Ultra limits on both platforms. Native UI contains no Stripe prices or checkout links. Purchase, restore, and transaction-update handling use StoreKit 2 and send Apple's original signed transaction to Convex. Transactions finish only after server verification succeeds.
+Convex `billing.status` is authoritative. Active Stripe subscribers and complimentary members bypass the paywall and are marked active in Superwall. The single mobile subscription grants the existing Pro entitlement on both platforms. Native UI contains no Stripe prices or checkout links. Purchase, restore, and transaction-update handling use StoreKit 2 and send Apple's original signed transaction to Convex. Transactions finish only after server verification succeeds.
 
 Clerk subjects are strings such as `user_...`, while Apple's `appAccountToken` must be a UUID. The authenticated `appleBilling.accountToken` mutation creates a stable UUID-to-Clerk-user mapping. Superwall is identified by the actual Clerk subject; the custom purchase controller supplies the mapped UUID to StoreKit. Restoring a purchase cannot transfer it between Revline accounts.
 
-In App Store Connect, create one auto-renewable subscription group with:
+The iPhone app offers one subscription, `com.revline.app.monthly`: $39.00 USD/month with a one-week free trial for eligible new subscribers. Apple supplies localized pricing and eligibility. Configure only this product in Superwall's **`onboarding_paywall`**, mapped to `pro`, with Restore, Privacy, Terms and the trial-to-recurring-price disclosure. Legacy Pro/Ultra identifiers may remain on the server for existing receipts; they are not sold in the app.
 
-| Product | Suggested identifier | Level |
-| --- | --- | --- |
-| Revline Pro monthly | `com.revline.app.pro.monthly` | Pro |
-| Revline Ultra monthly | `com.revline.app.ultra.monthly` | Higher tier than Pro |
-
-Match the web plans' features and intended monthly pricing in App Store Connect, with localized prices supplied by StoreKit. Configure upgrades and downgrades within this group. Add both products to Superwall, map the `pro` and `ultra` entitlements, and publish a campaign for the **`onboarding_paywall`** placement. Include restore, subscription terms, privacy policy, and Terms of Use in that paywall. Use a calm dark design with neutral surfaces and small brand accents. The paywall design is remotely configured in Superwall and cannot be inspected until a public API key and campaign exist.
+See [App Store setup](AppStore/README.md), [subscription configuration](AppStore/subscription.json), [review checklist](AppStore/review-checklist.md) and [actual external changes](AppStore/asc-changes.md). Fastlane uses the owner's private App Store Connect key directly from its local path. No lane submits for App Review.
 
 ## Backend setup, after an authorized deployment
 
@@ -81,8 +76,9 @@ These changes were prepared for the development deployment first. Do not deploy 
 | `APPLE_ENVIRONMENT` | `Sandbox` in dev; `Production` in production |
 | `APPLE_SANDBOX_REVIEW_USER_IDS` | Optional comma-separated Clerk subjects allowed Sandbox entitlements on the production backend for TestFlight/App Review only |
 | `APPLE_APP_ID` | Numeric App Store Connect application ID, required for Production |
-| `APPLE_PRO_PRODUCT_ID` | Pro product identifier above |
-| `APPLE_ULTRA_PRODUCT_ID` | Ultra product identifier above |
+| `APPLE_MONTHLY_PRODUCT_ID` | `com.revline.app.monthly`, existing Pro entitlement |
+| `CLERK_SECRET_KEY` | Matching instance backend key, server only, for deletion |
+| `CLERK_WEBHOOK_SIGNING_SECRET` | Verified Clerk lifecycle notifications |
 | `SUPERWALL_WEBHOOK_SECRET` | Svix `whsec_...` signing secret from the Superwall webhook |
 | `SUPERWALL_PROJECT_ID` | Superwall V2 webhook `project_id` |
 | `SUPERWALL_APPLE_NOTIFICATIONS_URL` | Secret per-app forwarding URL from Superwall Settings > Revenue Tracking > Through your server |
@@ -112,9 +108,9 @@ Both sources upsert the same `appleEntitlements` row by transaction ID and recor
 
 ## Native interface
 
-The interface uses native system controls in dark appearance, including launch and presented sheets. Projects use an inset grouped List with thumbnails, native navigation rows, search, pull to refresh, swipe actions and context menus. Project creation, renaming, media import, exports and account settings use system Form or List sections. The chat composer uses a native multiline TextField, menu Pickers and system button styles. Focusing the composer reduces the preview height so the conversation and keyboard remain usable.
+The interface uses native system controls in dark appearance, including launch and presented sheets. Projects use an inset grouped List with thumbnails, native navigation rows, search, pull to refresh, swipe actions and context menus. Project creation, renaming, media import, exports and account settings use system Form or List sections. The editor keeps its web renderer and scrubber above a persistent native sheet. Collapsed shows one rounded multiline TextField with attachment and send controls; expanding shows the streaming conversation and Undo. Fast/Precise stays; every iPhone turn pins GPT-6.1 Terra with medium reasoning. There is no model picker or clip-button timeline strip. Export opens a destination sheet with Photos, Files and system sharing for TikTok, captions, real progress and explicit render confirmation.
 
-Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. No custom button style, palette, shadow, gradient, press animation or sheet animation remains. New project lives in the separate trailing tab on iOS 26; iOS 17 and 18 use a standard third tab. Opening and cancelling creation preserves the previous tab. Clerk uses its default adaptive interface. The WKWebView renderer and Superwall paywall presentation are unchanged.
+Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. Shared named assets match the website’s dark tokens; system controls retain native interaction and animation. New project lives in the separate trailing tab on iOS 26; iOS 17 and 18 use a standard third tab. Opening and cancelling creation preserves the previous tab. Clerk uses its default adaptive interface. The WKWebView remains the only web surface. AI-sharing permission is requested before the first edit or import and can be withdrawn in Account.
 
 Before/after captures for this change are local in `Screenshots/native-after`, excluded from Git. `before-` images record the previous custom styling; `after-` images record the native interface. Account/profile captures may contain private information and should not be used as public marketing images.
 
@@ -132,4 +128,4 @@ The old unsigned build lacked that section, so Clerk returned OSStatus -34018 an
 
 On this Mac, the local Debug config points `REVLINE_SIMULATOR_ENTITLEMENTS` at an ignored plist containing the earlier Simulator app's Keychain group. This restores the existing Clerk session through the SDK rather than creating another local identity. The checked-in default has no personal team identifier. Keep the local override and its plist together when cleaning build artifacts.
 
-Current validation: unsigned Debug and optimized Release Simulator builds, `npm run typecheck`, `npm run build`, and `git diff --check` pass. The real development Clerk session restores, Convex projects/media/membership load, and the trailing plus opens the dark create sheet from both tabs. Cancelling returns to the previous tab. Onboarding, native pickers, media and export confirmation were inspected in dark appearance. The development preview showed its existing server-unavailable state, so playback was not verified. No export, purchase, agent turn or account deletion was performed. The watched Revline iPhone Simulator remains running.
+Validation for the current follow-up is recorded in [App Store review checklist](AppStore/review-checklist.md) and the pull request evidence. Earlier build checks are not proof of the new end-to-end editing, deletion or purchase flows. Production legal pages and backend changes still require the normal reviewed release; development deployment never changes the production backend.
