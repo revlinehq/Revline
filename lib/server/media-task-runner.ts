@@ -1,6 +1,6 @@
 import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
-import { MAX_SPEAKER_WINDOW_SECONDS, speakerAnalysis } from '../media-analysis/clipping';
+import { MAX_SPEAKER_WINDOW_SECONDS, SPEAKER_ANALYSIS_VERSION, speakerAnalysis } from '../media-analysis/clipping';
 import { audioNormalizationKey, timelineNormalizationKey } from '../editor/audio-normalization';
 import { normalizeTimelineAudio, enforceNormalizedExportPeak } from './normalize-audio';
 import { detectSourceFacecam, trackSourceSpeakers } from './clipping-analysis';
@@ -143,7 +143,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     // Footage questions read the stored 1280px playback preview when it exists:
     // originals reach hundreds of MB, and downloading and re-encoding one took
     // minutes before Gemini could start. The preview keeps every frame and audio.
-    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference' || task.kind === 'speakers') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    // Speaker cuts must retain native PTS; older previews may have rounded the frame clock.
+    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
     const source = join(directory, 'source'), sourceUrl = download.url;
@@ -239,7 +240,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if(task.kind==='facecam')return {analysis:{facecam:asset.analysis?.facecam??await detectSourceFacecam(source,directory,media.duration,signal,onProgress)}};
       const range=task.speakerRequest??{start:0,end:asset.duration??media.duration},cached=asset.analysis?.speakers;
       if(range.start<0||range.end<=range.start||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS||range.end>(asset.duration??media.duration)+.01)throw new AnalysisError('Active-speaker analysis needs a valid source window of up to 120 seconds.',400);
-      if(cached&&cached.start<=range.start&&cached.end>=range.end)return {analysis:{speakers:cached}};
+      if(cached?.version===SPEAKER_ANALYSIS_VERSION&&cached.start<=range.start&&cached.end>=range.end)return {analysis:{speakers:cached}};
       const window=join(directory,'active-speakers.mp4');
       await extractVideoWindow(source,window,range.start,Math.min(range.end,media.duration),signal);
       const duration=range.end-range.start,saved=asset.analysis?.transcript;
@@ -254,7 +255,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         transcript=await transcribeWithDeepgram(audio,duration,speechKey,signal);
       }
       const local=await trackSourceSpeakers(window,directory,duration,transcript,signal,onProgress);
-      const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start}))});
+      const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start})),...(local.version===2?{framing:local.framing.map(frame=>({...frame,start:frame.start+range.start,end:frame.end+range.start}))}:{})});
       return {analysis:{speakers}};
     }
     if (task.kind === 'transcribe') {

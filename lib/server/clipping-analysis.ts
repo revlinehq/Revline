@@ -2,14 +2,14 @@ import { execFile } from 'node:child_process';
 import { readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { locateFacecam, locateSpeakingFaces } from '../media-analysis/gemini';
-import { facecamAnalysis, speakerAnalysis, speakerFocus, type SpeakerAnalysis } from '../media-analysis/clipping';
+import { locateFacecam } from '../media-analysis/gemini';
+import { facecamAnalysis, speakerAnalysis, type SpeakerAnalysis } from '../media-analysis/clipping';
 import type { Transcript } from '../media-analysis/transcript';
 import { AnalysisError } from '../media-analysis/errors';
 import { scanSourceFaces } from './source-face-evidence';
 import { matchSpeakingFaces } from './match-speaking-faces';
 import { optionalGeminiVision } from './optional-gemini-vision';
-import { trackSourceFace } from './track-source-face';
+import { detectShots } from '../media-analysis/detect-shots';
 
 const run = promisify(execFile);
 export async function detectSourceFacecam(source: string, directory: string, duration: number, signal: AbortSignal, progress: (n: number) => void) {
@@ -47,15 +47,13 @@ export async function detectSourceFacecam(source: string, directory: string, dur
   return facecamAnalysis.parse(analysis);
 }
 
-export async function trackSourceSpeakers(source: string, directory: string, duration: number, transcript: Transcript, signal: AbortSignal, progress: (n: number) => void): Promise<SpeakerAnalysis> {
+export function diarizedSpeakerTurns(transcript: Transcript): SpeakerAnalysis['turns'] {
   const words = transcript.words;
-  if (!words.length) return { version: 1, start: 0, end: duration, identityScope: 'window', turns: [], focus: [] };
   if (words.some(w => w.speaker === undefined)) throw new AnalysisError('Speaker diarization is unavailable. Run transcription with diarization on the updated worker.', 422);
   const turns: {
     start: number;
     end: number;
     speaker: number;
-    text: string;
     confidence: number;
     speechSeconds: number;
   }[] = [];
@@ -66,11 +64,9 @@ export async function trackSourceSpeakers(source: string, directory: string, dur
     if (
       previous &&
       previous.speaker === word.speaker &&
-      word.start - previous.end < 0.7 &&
-      word.end - previous.start < 12
+      word.start - previous.end < 0.7
     ) {
       previous.end = Math.max(previous.end, word.end);
-      previous.text += ` ${word.text}`;
       const seconds = Math.max(0, word.end - word.start);
       previous.confidence = (previous.confidence * previous.speechSeconds + confidence * seconds) / Math.max(.001, previous.speechSeconds + seconds);
       previous.speechSeconds += seconds;
@@ -79,7 +75,6 @@ export async function trackSourceSpeakers(source: string, directory: string, dur
         start: word.start,
         end: word.end,
         speaker: word.speaker,
-        text: word.text,
         confidence,
         speechSeconds: word.end - word.start,
       });
@@ -90,36 +85,28 @@ export async function trackSourceSpeakers(source: string, directory: string, dur
       400,
     );
 
-  const times = Array.from({ length: Math.ceil(duration * 10) }, (_, i) => i / 10);
-  const evidence = await scanSourceFaces(source, times, true, signal, n => progress(15 + n * .75));
-  const matched = matchSpeakingFaces(evidence, transcript, turns.map(t => ({ ...t, face: null })));
-  const missing = matched.turns.filter(t => !t.face && t.end - t.start >= .8);
-  if (missing.length) {
-    const fallback = await optionalGeminiVision(signal, key => locateSpeakingFaces(source, missing.map(t => ({ ...t, text: words.filter(w => w.start >= t.start && w.end <= t.end).map(w => w.text).join(' ') })), duration, key, signal));
-    if (fallback) {
-      matched.turns = matched.turns.map(t => fallback.find(f => f.start === t.start && f.end === t.end && f.speaker === t.speaker && f.face && f.confidence >= .7) ?? t);
-      const anchors = fallback.flatMap(t => t.face && t.confidence >= .7 ? [{ start: t.start, end: t.end, speaker: t.speaker, x: t.face.x + t.face.w / 2, y: t.face.y + t.face.h / 2 }] : []);
-      if (anchors.length) matched.tracked.push(...await trackSourceFace(source, duration, n => progress(90 + n * .09), signal, anchors));
-      matched.tracked.sort((a, b) => a.time - b.time);
-    }
+  return turns.map(turn => ({ start: turn.start, end: turn.end, speaker: turn.speaker, confidence: turn.confidence, face: null }));
+}
+
+export async function trackSourceSpeakers(source: string, _directory: string, duration: number, transcript: Transcript, signal: AbortSignal, progress: (n: number) => void): Promise<SpeakerAnalysis> {
+  const turns = diarizedSpeakerTurns(transcript);
+  const detection = await detectShots(source, duration, signal);
+  progress(15);
+  const sparseTimes = [...new Set([
+    ...Array.from({ length: Math.ceil(duration * 2.5) }, (_, i) => i / 2.5),
+    ...detection.shots.map(shot => shot.start),
+  ])].filter(time => time < duration).sort((a, b) => a - b);
+  const evidence = await scanSourceFaces(source, sparseTimes, true, signal, n => progress(15 + n * .3));
+  const first = matchSpeakingFaces(evidence, detection, [], duration);
+  const multiFaceShots = detection.shots.filter((_, shot) => first.framing.some(frame => frame.shot === shot && frame.method === 'fallback'));
+  const sampled = new Set(sparseTimes);
+  const denseTimes = Array.from({ length: Math.ceil(duration * 10) }, (_, i) => i / 10).filter(time => !sampled.has(time) && multiFaceShots.some(shot => time >= shot.start && time < shot.end));
+  if (denseTimes.length) {
+    const dense = await scanSourceFaces(source, denseTimes, true, signal, n => progress(45 + n * .5));
+    evidence.samples.push(...dense.samples);
+    evidence.samples.sort((a, b) => a.time - b.time);
   }
-  const framingTurns = matched.turns.flatMap(turn => {
-    if (turn.face || turn.end - turn.start < .8) return [turn];
-    const groups: typeof evidence.samples[] = [];
-    for (const sample of evidence.samples.filter(s => s.time >= turn.start && s.time < turn.end)) {
-      if (sample.faces.length !== 1) continue;
-      const previous = groups.at(-1);
-      if (previous && sample.time - previous[previous.length - 1].time < .2) previous.push(sample);
-      else groups.push([sample]);
-    }
-    // Visible-face fallback never changes the saved, unresolved voice match.
-    return groups.filter(group => group.length >= 8).map(group => {
-      const first = group[0].faces[0];
-      for (const sample of group) { const face = sample.faces[0]; matched.tracked.push({ time: sample.time, x: face.x + face.w / 2, y: face.y + face.h / 2 }); }
-      return { ...turn, start: group[0].time, end: Math.min(turn.end, group[group.length - 1].time + .1), face: { x: first.x, y: first.y, w: first.w, h: first.h }, confidence: .75 };
-    });
-  });
-  matched.tracked.sort((a, b) => a.time - b.time);
+  const matched = matchSpeakingFaces(evidence, detection, turns, duration);
   progress(99);
-  return speakerAnalysis.parse({ version: 1, start: 0, end: duration, identityScope: 'window', turns: matched.turns, focus: speakerFocus(framingTurns, duration, matched.tracked) });
+  return speakerAnalysis.parse(matched);
 }

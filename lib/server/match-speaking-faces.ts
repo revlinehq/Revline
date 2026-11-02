@@ -1,88 +1,417 @@
-import type { SpeakerAnalysis } from '../media-analysis/clipping';
-import type { Transcript } from '../media-analysis/transcript';
-import type { SourceFaceEvidence } from './source-face-evidence';
+import {
+  speakerFocus,
+  type SpeakerAnalysis,
+  type SpeakerFraming,
+} from "../media-analysis/clipping";
+import type { ShotDetection } from "../media-analysis/shots";
+import type { SourceFaceEvidence } from "./source-face-evidence";
 
-type Face = Omit<SourceFaceEvidence['samples'][number]['faces'][number], 'mouth'> & { mouth: number };
-type Turn = SpeakerAnalysis['turns'][number];
-type Observation = { id: number; time: number; face: Face; activity: number };
-const mean = (values: number[]) => values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+type Face = SourceFaceEvidence["samples"][number]["faces"][number];
+type Turn = SpeakerAnalysis["turns"][number];
+type Observation = {
+  id: number;
+  time: number;
+  shot: number;
+  face: Face;
+  activity: number;
+};
+type Identity = {
+  id: number;
+  latest: Observation;
+  appearance: number[] | undefined;
+};
+type Association = { id: number; confidence: number };
+const mean = (values: number[]) =>
+  values.reduce((sum, value) => sum + value, 0) / Math.max(1, values.length);
+const median = (values: number[]) =>
+  [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? 0;
+const centerDistance = (a: Face, b: Face) =>
+  Math.hypot(a.x + a.w / 2 - b.x - b.w / 2, a.y + a.h / 2 - b.y - b.h / 2);
+const rect = (rows: Observation[]) => {
+  const x = median(rows.map((o) => o.face.x)),
+    y = median(rows.map((o) => o.face.y));
+  return {
+    x,
+    y,
+    w: Math.min(1 - x, median(rows.map((o) => o.face.w))),
+    h: Math.min(1 - y, median(rows.map((o) => o.face.h))),
+  };
+};
+const appearanceDistance = (a: number[], b: number[]) =>
+  0.7 * Math.sqrt(mean(a.slice(0, 64).map((value, i) => (value - b[i]) ** 2))) +
+  0.3 *
+    Math.sqrt(mean(a.slice(64).map((value, i) => (value - b[i + 64]) ** 2)));
 
-/** Correlate articulation with audio identities, abstaining on weak or competing evidence. */
-export function matchSpeakingFaces(evidence: SourceFaceEvidence, transcript: Transcript, turns: Turn[]): { turns: Turn[]; tracked: SpeakerAnalysis['focus'] } {
-  const observations: Observation[] = [], latest = new Map<number, Observation>();
-  let nextId = 0;
-  for (const sample of evidence.samples) {
-    const used = new Set<number>();
-    for (const face of sample.faces) {
-      if (face.mouth === null) continue;
-      const candidates = [...latest.values()].filter(o => !used.has(o.id) && sample.time - o.time <= .6 && o.face.w / face.w > .5 && o.face.w / face.w < 2)
-        .map(o => ({ observation: o, distance: Math.hypot(o.face.x + o.face.w / 2 - face.x - face.w / 2, o.face.y + o.face.h / 2 - face.y - face.h / 2) })).sort((a, b) => a.distance - b.distance);
-      const previous = candidates[0]?.distance < .12 ? candidates[0].observation : undefined;
-      const id = previous?.id ?? nextId++;
-      used.add(id);
-      const delta = previous && sample.time - previous.time < .25 ? Math.abs(face.mouth - previous.face.mouth) : 0;
-      const observation = { id, time: sample.time, face: { ...face, mouth: face.mouth }, activity: Math.max(0, delta - .01) + Math.max(0, face.mouth - .05) * .15 };
-      observations.push(observation); latest.set(id, observation);
+/** Position continuity inside shots; conservative CPU appearance matching across cuts. */
+function trackIdentities(
+  evidence: SourceFaceEvidence,
+  shots: ShotDetection["shots"],
+) {
+  const identities = new Map<number, Identity>(),
+    observations: Observation[] = [];
+  for (const [shot, bounds] of shots.entries()) {
+    for (const sample of evidence.samples.filter(
+      (sample) => sample.time >= bounds.start && sample.time < bounds.end,
+    )) {
+      const used = new Set<number>();
+      for (const face of [...sample.faces].sort(
+        (a, b) => b.w * b.h - a.w * a.h,
+      )) {
+        const nearby = [...identities.values()]
+          .filter(
+            (identity) =>
+              !used.has(identity.id) &&
+              identity.latest.shot === shot &&
+              sample.time - identity.latest.time <= 0.6 &&
+              identity.latest.face.w / face.w > 0.5 &&
+              identity.latest.face.w / face.w < 2,
+          )
+          .map((identity) => ({
+            identity,
+            distance: centerDistance(identity.latest.face, face),
+          }))
+          .sort((a, b) => a.distance - b.distance);
+        let identity =
+          nearby[0]?.distance < 0.12 ? nearby[0].identity : undefined;
+        if (!identity && face.appearance) {
+          const appearance = face.appearance;
+          const candidates = [...identities.values()]
+            .filter(
+              (candidate) =>
+                !used.has(candidate.id) &&
+                candidate.appearance &&
+                (candidate.latest.shot !== shot ||
+                  sample.time - candidate.latest.time > 0.6),
+            )
+            .flatMap((candidate) =>
+              candidate.appearance
+                ? [
+                    {
+                      identity: candidate,
+                      distance: appearanceDistance(
+                        appearance,
+                        candidate.appearance,
+                      ),
+                    },
+                  ]
+                : [],
+            )
+            .sort((a, b) => a.distance - b.distance);
+          const best = candidates[0];
+          if (
+            best &&
+            best.distance < 0.11 &&
+            (candidates[1]?.distance ?? 1) - best.distance > 0.025
+          )
+            identity = best.identity;
+        }
+        const previous = identity?.latest;
+        const activity =
+          previous &&
+          previous.shot === shot &&
+          sample.time - previous.time < 0.25 &&
+          face.mouth !== null &&
+          previous.face.mouth !== null
+            ? Math.max(0, Math.abs(face.mouth - previous.face.mouth) - 0.008)
+            : 0;
+        const observation = {
+          id: identity?.id ?? identities.size,
+          time: sample.time,
+          shot,
+          face,
+          activity,
+        };
+        if (identity) {
+          identity.latest = observation;
+          if (face.appearance) {
+            const appearance = face.appearance;
+            identity.appearance =
+              identity.appearance?.map(
+                (value, i) => value * 0.9 + appearance[i] * 0.1,
+              ) ?? appearance;
+          }
+        } else {
+          identity = {
+            id: observation.id,
+            latest: observation,
+            appearance: face.appearance,
+          };
+          identities.set(identity.id, identity);
+        }
+        used.add(identity.id);
+        observations.push(observation);
+      }
     }
   }
-  const sustained = turns.filter(t => t.end - t.start >= .8);
-  const words = transcript.words.filter(w => sustained.some(t => t.speaker === w.speaker && w.start >= t.start && w.end <= t.end + .001));
-  const speakers = [...new Set(sustained.map(t => t.speaker))];
-  const scores = speakers.flatMap(speaker => [...latest.keys()].flatMap(id => {
-    const on: number[] = [], off: number[] = [];
-    for (const o of observations.filter(o => o.id === id)) {
-      const aligned = words.filter(w => o.time >= w.start - .05 && o.time <= w.end + .05);
-      if (new Set(aligned.map(w => w.speaker)).size > 1) continue;
-      (aligned[0]?.speaker === speaker ? on : off).push(o.activity);
-    }
-    if (on.length < 8 || off.length < 8) return [];
-    const active = mean(on), quiet = mean(off), contrast = (active - quiet) / (active + quiet + .005);
-    if (active < .008 || contrast < .12) return [];
-    return [{ speaker, id, score: contrast, count: on.length }];
-  }));
-  const matches = new Map<number, { speaker: number; confidence: number; score: number }>();
-  for (const id of latest.keys()) {
-    const ranked = scores.filter(s => s.id === id).sort((a, b) => b.score - a.score);
-    const best = ranked[0];
-    if (!best || best.score - (ranked[1]?.score ?? 0) < .12) continue;
-    matches.set(id, { speaker: best.speaker, confidence: Math.min(.95, .7 + .25 * best.score), score: best.score });
-  }
-  const tracked: SpeakerAnalysis['focus'] = [];
-  const located = turns.map(turn => {
-    if (turn.end - turn.start < .8) return { ...turn, face: null, confidence: 0 };
-    const candidates = [...latest.keys()].flatMap(id => {
-      const visible = observations.filter(o => o.id === id && o.time >= turn.start && o.time < turn.end);
-      if (visible.length < Math.max(4, (turn.end - turn.start) * 4)) return [];
-      const active = visible.filter(o => words.some(w => w.speaker === turn.speaker && o.time >= w.start - .05 && o.time <= w.end + .05));
-      if (active.length < 4) return [];
-      const activity = mean(active.map(o => o.activity)), mouth = active.map(o => o.face.mouth);
-      const variation = Math.sqrt(mean(mouth.map(m => (m - mean(mouth)) ** 2)));
-      const association = matches.get(id);
-      if ((association && association.speaker !== turn.speaker) || activity < .012 || variation < .025) return [];
-      return [{ id, activity, visible, confidence: association?.confidence ?? .75 }];
-    }).sort((a, b) => b.activity - a.activity);
-    const best = candidates[0], other = candidates[1];
-    // Compare co-visible articulation, never face size. A sole face needs word/pause evidence.
-    if (!best || other && best.activity < other.activity * 1.5 || !other && !matches.has(best.id)) return { ...turn, face: null, confidence: 0 };
-    const frames = new Map<number, { observation: Observation; confidence: number; score: number }[]>();
-    for (const o of observations) {
-      const association = matches.get(o.id);
-      if (o.time < turn.start || o.time >= turn.end) continue;
-      if (o.id !== best.id && association?.speaker !== turn.speaker) continue;
-      const row = frames.get(o.time) ?? [];
-      const score = o.id === best.id ? 1 : association?.score ?? 0;
-      row.push({ observation: o, confidence: association?.confidence ?? best.confidence, score }); frames.set(o.time, row);
-    }
-    const visible = [...frames.values()].flatMap(row => {
-      row.sort((a, b) => b.score - a.score);
-      return row[0].score - (row[1]?.score ?? 0) >= .12 ? [row[0]] : [];
-    }).sort((a, b) => a.observation.time - b.observation.time);
-    if (visible.length < Math.max(4, (turn.end - turn.start) * 4)) return { ...turn, face: null, confidence: 0 };
-    const confidence = mean(visible.map(o => o.confidence)) * (.9 + .1 * turn.confidence);
-    if (confidence < .7) return { ...turn, face: null, confidence };
-    for (const { observation: o } of visible) if (!turns.some(t => t.speaker !== turn.speaker && o.time >= t.start && o.time < t.end)) tracked.push({ time: o.time, x: o.face.x + o.face.w / 2, y: o.face.y + o.face.h / 2 });
-    const first = visible[0].observation.face;
-    return { ...turn, face: { x: first.x, y: first.y, w: first.w, h: first.h }, confidence };
+  return observations;
+}
+
+/** Select one anchor per shot, then use complete audio turns for genuinely multi-face shots. */
+export function matchSpeakingFaces(
+  evidence: SourceFaceEvidence,
+  detection: ShotDetection,
+  turns: Turn[],
+  duration: number,
+): Extract<SpeakerAnalysis, { version: 2 }> {
+  const observations = trackIdentities(evidence, detection.shots);
+  const shotEvidence = detection.shots.map((bounds, shot) => {
+    const samples = evidence.samples.filter(
+      (sample) => sample.time >= bounds.start && sample.time < bounds.end,
+    );
+    const rows = observations.filter((o) => o.shot === shot);
+    const faces = [...new Set(rows.map((o) => o.id))]
+      .flatMap((id) => {
+        const visible = rows.filter((o) => o.id === id),
+          coverage = visible.length / Math.max(1, samples.length);
+        if (coverage < 0.6 || visible.length < Math.min(3, samples.length))
+          return [];
+        const face = rect(visible);
+        return [{ id, face, coverage, area: face.w * face.h }];
+      })
+      .sort((a, b) => b.area - a.area);
+    const best = faces[0];
+    // Include intermittent secondary faces in the area comparison, rather than dropping them.
+    const dominance = best
+      ? mean(
+          samples.map((sample) => {
+            const row = rows.filter((o) => o.time === sample.time),
+              visible = row.find((o) => o.id === best.id);
+            return visible
+              ? (visible.face.w * visible.face.h) /
+                  Math.max(
+                    0.00001,
+                    row.reduce((sum, o) => sum + o.face.w * o.face.h, 0),
+                  )
+              : 0;
+          }),
+        )
+      : 0;
+    const dominant =
+      best &&
+      best.coverage >= 0.7 &&
+      dominance >= 0.72 &&
+      (!faces[1] || best.area >= faces[1].area * 2.5)
+        ? { ...best, confidence: Math.min(0.98, 0.7 + 0.28 * dominance) }
+        : null;
+    return { ...bounds, shot, rows, samples, faces, dominant };
   });
-  return { turns: located, tracked: tracked.sort((a, b) => a.time - b.time) };
+  const sustained = turns.filter(
+    (turn) => turn.end - turn.start >= 1.2 && turn.confidence >= 0.4,
+  );
+  const memory = new Map<number, Association>();
+  const decisions = new Map<
+    Turn,
+    Association & { method: "turn-mouth" | "identity-reuse" }
+  >();
+  for (const turn of sustained) {
+    const wide = shotEvidence.filter(
+      (shot) =>
+        !shot.dominant && shot.start < turn.end && shot.end > turn.start,
+    );
+    const rows = wide
+      .flatMap((shot) => shot.rows)
+      .filter(
+        (o) =>
+          o.time >= turn.start &&
+          o.time < turn.end &&
+          !turns.some(
+            (other) =>
+              other.speaker !== turn.speaker &&
+              o.time >= other.start &&
+              o.time < other.end,
+          ),
+      );
+    const sampleCount = new Set(rows.map((o) => o.time)).size;
+    const scores = [...new Set(rows.map((o) => o.id))]
+      .flatMap((id) => {
+        const visible = rows.filter(
+          (o) => o.id === id && o.face.mouth !== null,
+        );
+        if (visible.length < Math.max(8, sampleCount * 0.6)) return [];
+        const mouths = visible.flatMap((o) =>
+          o.face.mouth === null ? [] : [o.face.mouth],
+        );
+        const activity = mean(visible.map((o) => o.activity)),
+          average = mean(mouths),
+          variation = Math.sqrt(
+            mean(mouths.map((value) => (value - average) ** 2)),
+          );
+        const quiet = wide
+          .flatMap((shot) => shot.rows)
+          .filter(
+            (o) =>
+              o.id === id &&
+              sustained.some(
+                (other) =>
+                  other.speaker !== turn.speaker &&
+                  o.time >= other.start &&
+                  o.time < other.end,
+              ),
+          );
+        const baseline = mean(quiet.map((o) => o.activity));
+        if (
+          activity < 0.009 ||
+          variation < 0.02 ||
+          (quiet.length >= 8 && activity < baseline * 1.2)
+        )
+          return [];
+        return [
+          {
+            id,
+            score: activity + variation * 0.2,
+            coverage: visible.length / Math.max(1, sampleCount),
+          },
+        ];
+      })
+      .sort((a, b) => b.score - a.score);
+    const best = scores[0],
+      other = scores[1];
+    // A solitary mouth score in a wide shot is insufficient if the other lips are obscured.
+    const coVisibleIds = new Set(rows.map((o) => o.id));
+    const measuredIds = new Set(
+      [...coVisibleIds].filter(
+        (id) =>
+          rows.filter((o) => o.id === id && o.face.mouth !== null).length >=
+          Math.max(8, sampleCount * 0.6),
+      ),
+    );
+    const confident =
+      best &&
+      coVisibleIds.size >= 2 &&
+      measuredIds.size === coVisibleIds.size &&
+      (!other || best.score >= other.score * 1.5);
+    const remembered = memory.get(turn.speaker);
+    if (confident && best) {
+      const competingVoice = [...memory].some(
+        ([voice, association]) =>
+          voice !== turn.speaker && association.id === best.id,
+      );
+      // Conflicts abstain instead of silently overwriting a previously learned identity.
+      if (competingVoice || (remembered && remembered.id !== best.id)) continue;
+      const separation = other ? 1 - other.score / best.score : 0.5;
+      const confidence =
+        Math.min(0.95, 0.7 + separation * 0.2 + 0.05 * best.coverage) *
+        (0.95 + 0.05 * turn.confidence);
+      const association = { id: best.id, confidence };
+      memory.set(turn.speaker, association);
+      decisions.set(turn, { ...association, method: "turn-mouth" });
+    } else if (remembered) {
+      decisions.set(turn, { ...remembered, method: "identity-reuse" });
+    }
+  }
+  const framing: SpeakerFraming[] = [],
+    located: Turn[] = [];
+  const visibleAssociation = (
+    shot: (typeof shotEvidence)[number],
+    turn: Turn,
+    start: number,
+    end: number,
+  ) => {
+    const decision = decisions.get(turn),
+      face = decision
+        ? shot.faces.find((face) => face.id === decision.id)
+        : undefined;
+    if (!face || !decision) return null;
+    const samples = shot.samples.filter(
+      (sample) => sample.time >= start && sample.time < end,
+    );
+    const visible = shot.rows.filter(
+      (o) => o.id === face.id && o.time >= start && o.time < end,
+    );
+    if (!samples.length || visible.length < samples.length * 0.65) return null;
+    return { face, decision };
+  };
+  for (const shot of shotEvidence) {
+    const start = shot.shot === 0 ? 0 : shot.start,
+      end = Math.min(duration, shot.end);
+    if (end <= start) continue;
+    const edges = [
+      ...new Set([
+        start,
+        end,
+        ...turns
+          .flatMap((turn) => [turn.start, turn.end])
+          .filter((time) => time > start && time < end),
+      ]),
+    ].sort((a, b) => a - b);
+    for (let i = 1; i < edges.length; i++) {
+      const a = edges[i - 1],
+        b = edges[i],
+        active = turns.filter((turn) => turn.start <= a && turn.end >= b);
+      const turn = active.length === 1 ? active[0] : undefined;
+      const association = turn ? visibleAssociation(shot, turn, a, b) : null;
+      const fallback = {
+        start: a,
+        end: b,
+        shot: shot.shot,
+        method: "fallback",
+        confidence: 0,
+        face: null,
+        faceId: null,
+        speaker: turn?.speaker ?? null,
+      } satisfies SpeakerFraming;
+      const frame: SpeakerFraming = shot.dominant
+        ? {
+            ...fallback,
+            method: "shot-dominant",
+            confidence: shot.dominant.confidence,
+            face: shot.dominant.face,
+            faceId: shot.dominant.id,
+          }
+        : association
+          ? {
+              ...fallback,
+              method: association.decision.method,
+              confidence: association.decision.confidence,
+              face: association.face.face,
+              faceId: association.face.id,
+            }
+          : fallback;
+      framing.push(frame);
+    }
+    for (const turn of turns) {
+      const a = Math.max(start, turn.start),
+        b = Math.min(end, turn.end);
+      if (b <= a) continue;
+      const overlaps = turns.some(
+        (other) =>
+          other !== turn &&
+          other.speaker !== turn.speaker &&
+          other.start < b &&
+          other.end > a,
+      );
+      const association = overlaps
+        ? null
+        : visibleAssociation(shot, turn, a, b);
+      located.push({
+        ...turn,
+        start: a,
+        end: b,
+        face: association?.face.face ?? null,
+        confidence: association?.decision.confidence ?? 0,
+      });
+    }
+  }
+  // A container may have a few milliseconds of audio padding beyond its last video frame.
+  const last = framing.at(-1);
+  if (last && last.end < duration)
+    framing.push({
+      ...last,
+      start: last.end,
+      end: duration,
+      method: "fallback",
+      confidence: 0,
+      face: null,
+      faceId: null,
+      speaker: null,
+    });
+  return {
+    version: 2,
+    start: 0,
+    end: duration,
+    identityScope: "window",
+    turns: located.sort((a, b) => a.start - b.start),
+    framing,
+    focus: speakerFocus(framing, duration),
+  };
 }
