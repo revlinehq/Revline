@@ -3,7 +3,8 @@ import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
 import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
-import { activeTabOf, storedTabTimeline } from './timelineTabs';
+import { timelineSourceRanges } from '../lib/editor/preview-segments';
+import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
 import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
@@ -56,14 +57,14 @@ const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineVali
 const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
 // A reading of a source video: a labeled frame sheet (with how much each frame changed), a tracked box, or pixels measured.
 const readWork = v.object({ mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-const workItem = v.object({read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
+const workItem = v.object({previewRanges:v.optional(v.array(v.object({start:v.number(),end:v.number()}))),read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string()})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview: 5, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
 /** Shape tracing (traceShape) came after plain frame reads. */
 export const TRACE_PROCESSOR_VERSION = 14;
 /** Font matching (matchFont) came after shape tracing. */
@@ -103,7 +104,8 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   if (input.assetId && input.kind !== 'speakers' && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive' && input.kind !== 'read') {
     const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
     const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
-    if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
+    if(active&&input.kind==='preview'&&(active.requiredProcessorVersion??0)<(input.requiredProcessorVersion??0))await cancelMediaTask(ctx,active._id);
+    else if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
   }
   const requested = input.kind === 'video' ? input.videoRequest : input.kind === 'frames' ? input.frameRequest : undefined;
   if(input.assetId&&requested){
@@ -245,6 +247,22 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const projectId = args.projectId ?? await createProject(ctx, { ownerId, title: 'Video import', aspectRatio: 'vertical', timeline: { fps: 60, aspectRatio: 'vertical', clips: [], tracks: { visual: 1, overlay: 0, audio: 1 } }, revision: 0, history: [], createdAt: now, updatedAt: now });
   await requireProject(ctx, projectId, ownerId);
+  let imported=await ctx.db.query('assets').withIndex('by_project_import',q=>q.eq('projectId',projectId).eq('importSourceUrl',sourceUrl).eq('importRange.start',importRange?.start).eq('importRange.end',importRange?.end)).first();
+  if(!imported){
+    // Receipts from before source identity was stored on assets remain reusable.
+    const completed=await ctx.db.query('mediaTasks').withIndex('by_project_kind_status',q=>q.eq('projectId',projectId).eq('kind','import').eq('status','completed')).filter(q=>q.and(q.eq(q.field('sourceUrl'),sourceUrl),q.eq(q.field('importRange.start'),importRange?.start),q.eq(q.field('importRange.end'),importRange?.end))).order('desc').take(20);
+    for(const task of completed){
+      const source=task.outputAssetId?await ctx.db.get(task.outputAssetId):null;
+      if(source&&source.ownerId===ownerId&&source.projectId===projectId&&source.kind==='video'){
+        imported=source;await ctx.db.patch(source._id,{importSourceUrl:sourceUrl,...(importRange?{importRange}:{})});break;
+      }
+    }
+  }
+  if(imported&&imported.ownerId===ownerId&&imported.kind==='video'){
+    const taskId=await insertMediaTask(ctx,{ownerId,projectId,kind:'import',sourceUrl,...(importRange?{importRange}:{}),sourcesOnly:args.sourcesOnly??false,assetId:imported._id,outputAssetId:imported._id,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});
+    if(!args.sourcesOnly)await ctx.scheduler.runAfter(0,internal.mediaTasks.placeImport,{taskId,attempt:1});
+    return {projectId,taskId};
+  }
   await initializeMediaCapacity(ctx, ownerId);
   const existing = await ctx.db.query('mediaTaskSlots').withIndex('by_import', q => q.eq('projectId', projectId).eq('kind', 'import').eq('sourceUrl', sourceUrl).eq('importRange.start', importRange?.start).eq('importRange.end', importRange?.end)).collect();
   const matching = existing.find(task => !!task.sourcesOnly === !!args.sourcesOnly);
@@ -320,9 +338,8 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
-  // Frame readings, timeline frames and blueprint checks take seconds and an agent waits on each: they go before
-  // exports and long analysis, so a turn never stalls behind a minutes-long job.
-  for(const kind of ['read','snapshot','blueprint'] as const){
+  // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
+  for(const kind of ['preview','read','snapshot','blueprint'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
     // A frame check an agent waits on goes before scene thumbnails and share covers, which nobody is waiting for.
     if(kind==='snapshot'){const asked=[];for(const row of rows){const snapshot=row.snapshotId?await ctx.db.get(row.snapshotId):null;if(snapshot&&!snapshot.clipId&&!snapshot.shareId)asked.push(row);}if(asked.length)rows=asked;}
@@ -377,6 +394,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   if(task.assetId&&(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId))throw new ConvexError('The source media was removed.');
   const audio=task.kind==='transcribe'&&asset?.kind==='video'&&asset.audioAssetId?await ctx.db.get(asset.audioAssetId):null;
   if(audio&&(audio.kind!=='audio'||audio.ownerId!==task.ownerId||audio.projectId!==task.projectId))throw new ConvexError('The prepared audio does not belong to this source project.');
+  const previewProject=task.kind==='preview'?await readProject(ctx,task.projectId):null;
+  const previewRanges=previewProject&&asset?timelineSourceRanges(await allTabTimelines(ctx,previewProject),asset._id):undefined;
   const transcriptionAsset=audio?{...audio,url:await mediaUrl(ctx,audio)}:undefined;
   let review:Infer<typeof reviewSnapshot>|undefined;
   if(task.reviewId){
@@ -441,7 +460,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
@@ -470,7 +489,7 @@ export const leaseActive = query({ args: mediaTaskCredentials, returns: v.boolea
 }});
 export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v.optional(v.number()),activity:v.optional(mediaTaskActivity) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
-  if (args.progress !== undefined && (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > 99)) throw new ConvexError('Invalid processing progress.');
+  if (args.progress !== undefined && (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > (task.kind==='preview'?100:99))) throw new ConvexError('Invalid processing progress.');
   const progress = Math.max(task.progress, args.progress ?? task.progress);
   const now=Date.now();
   await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
@@ -588,6 +607,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
   import: async (ctx, task) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
+    if(task.sourceUrl)await ctx.db.patch(output._id,{importSourceUrl:task.sourceUrl,...(task.importRange?{importRange:task.importRange}:{})});
     const project = await requireProject(ctx, task.projectId, task.ownerId, false);
     if (output.duration < 1 / currentTimeline(project).fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
     // A new revision would fail an AI edit's staged draft as "changed
@@ -676,7 +696,7 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
   await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
-  await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now(),...(task.kind==='import'&&task.outputAssetId?{assetId:task.outputAssetId}:{}) });
   await signalResult(ctx, task, { success: true, retryable: false });
   await releaseRenderSeat(ctx, task);
   return null;

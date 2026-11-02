@@ -1,3 +1,4 @@
+import { previewSourceAt } from './preview-segments';
 import type { VisualFadeController } from './visual-fades-runtime';
 import { generateComposition } from './composition';
 import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
@@ -69,15 +70,17 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   for(const clip of nextMedia){
     const node=nodes.get(clip.id)!,asset=assetMap.get(clip.assetId!);if(!asset?.url)return false;
     const before=old.get(clip.id);
-    if(node.getAttribute('src')!==asset.url){
-      node.setAttribute('src',asset.url);
+    const playback=previewSourceAt(asset,sourceTimeAt(clip,Math.max(clip.start,Math.min(time,clip.start+clip.duration-1/next.fps))));
+    if(node.getAttribute('src')!==playback.url){
+      node.setAttribute('src',playback.url??asset.url);
       if(clip.kind==='video'||clip.kind==='audio'){
         // Before metadata arrives currentTime becomes the native default start
         // position. Source replacement therefore preserves the live cut's time.
-        (node as HTMLMediaElement).currentTime=Math.max(0,sourceTimeAt(clip,time));
+        (node as HTMLMediaElement).currentTime=Math.max(0,sourceTimeAt(clip,time)-playback.offset);
       }
     }
-    const attrs={start:clip.start,duration:clip.duration,end:clip.start+clip.duration,mediaStart:clip.sourceStart,playbackRate:playbackRateOf(clip),volume:clip.volume??1};
+    node.toggleAttribute('data-preview-pending',playback.pending);
+    const attrs={start:clip.start,duration:clip.duration,end:clip.start+clip.duration,mediaStart:clip.sourceStart-playback.offset,previewOffset:playback.offset,playbackRate:playbackRateOf(clip),volume:clip.volume??1};
     for(const [key,value] of Object.entries(attrs))if(node.dataset[key]!==String(value))node.dataset[key]=String(value);
     if(clip.kind==='video'||clip.kind==='audio'){
       const sound=audioFadeAttributes(clip),envelope=audioVolumeEnvelope(next,clip);

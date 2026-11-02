@@ -87,6 +87,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
       container.start({ image: container.images.processor, instance: ultra ? ULTRA_INSTANCE_TYPE : INSTANCE_TYPE, labels: { profile }, enableInternet: true, env: {
         // Three capture workers and FFmpeg slots use the Ultra slot's four vCPUs.
         ...(ultra ? { MEDIA_LANE: 'ultra', REVLINE_RENDER_WORKERS: '3', REVLINE_RENDER_FFMPEG_SLOTS: '3' } : {}),
+        MEDIA_PREVIEW_CPUS: ultra ? '4' : '2',
         NEXT_PUBLIC_CONVEX_URL: this.env.NEXT_PUBLIC_CONVEX_URL,
         MEDIA_WORKER_URL: this.env.MEDIA_WORKER_URL,
         RENDER_WORKER_SECRET: this.env.RENDER_WORKER_SECRET,

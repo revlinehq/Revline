@@ -1,6 +1,6 @@
 import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
 import { shareAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,readHistoryIndex } from './lib/project_data';
+import { writeProject,createProject,readProject,projectIdentity,readHistoryIndex,projectCoverOf } from './lib/project_data';
 import { loadSceneCode, sceneCodeText } from './lib/scene_code';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
@@ -174,7 +174,8 @@ export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { li
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
     const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
-    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: cover ? await mediaUrl(ctx, cover) : null, coverKind: cover ? cover.kind as "video" | "image" : null, agent: await projectAgent(ctx, project._id, project) };
+    const picture=cover?projectCoverOf(cover):null;
+    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: picture ? await mediaUrl(ctx, {storageId:picture.coverStorageId,r2Key:picture.coverR2Key}) : null, coverKind: picture?.coverKind??null, agent: await projectAgent(ctx, project._id, project) };
   }));
 }
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(projectListItem), handler: async (ctx, args) => listProjectsFor(ctx, await requireOwner(ctx), args) });

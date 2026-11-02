@@ -29,7 +29,7 @@ import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
 import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile, type UploadContext } from './upload-media-file';
-import { preparePreviewVideo,probePreviewVideo,type PreviewVideoMetadata } from './preview-video';
+import { identifyPlayback, prepareTimelinePlayback, publishPlaybackPoster } from './prepare-playback';
 import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
@@ -155,13 +155,18 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
     const source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : join(directory, 'source'), sourceUrl = download.url;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
+    let posterReady=!!asset.thumbnailStorageId;
+    if(task.kind==='preview'){
+      try{await publishPlaybackPoster(sourceUrl,directory,task,uploadContext,signal);posterReady=true;}catch(error){if(signal.aborted)throw error;}
+      try{await identifyPlayback(sourceUrl,task,uploadContext,signal);}catch(error){if(signal.aborted)throw error;}
+    }
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
     const reusedSource = rangeRead ? false : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
-        onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
+        if(task.kind!=='preview')onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
         if (percent - loggedPercent < 10 && now - loggedAt < 5000 && percent < 100) return;
         const seconds = (now - downloadStartedAt) / 1000;
         const rate = seconds >= 1 ? bytes / seconds : 0;
@@ -171,7 +176,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       },
     }));});
     if (reusedSource) logPhase('Source cache', 'reused', downloadStartedAt);
-    onProgress(task.kind === 'extract' ? 45 : 10);
+    if(task.kind!=='preview')onProgress(task.kind === 'extract' ? 45 : 10);
     if (task.kind === 'extract') {
       const audioPath = join(directory, 'audio.m4a');
       const hasAudio = await runPhase('Extracting audio', () => extractSourceAudio(source, audioPath, signal));
@@ -194,13 +199,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'waveform') return { waveform: await measureAudioWaveform(source, signal) };
     if(task.kind==='preview'){
-      if(asset.kind!=='video')throw new AnalysisError('Playback preview preparation needs a video source.',400);
-      const output=join(directory,'preview.mp4');let metadata:PreviewVideoMetadata|undefined;
-      const reused=await reuseMediaFile({identity:cacheIdentity,variant:'preview-v1',target:output,signal},()=>runPhase('Preparing playback preview',async()=>{metadata=await preparePreviewVideo(source,output,signal);}));
-      if(reused)logPhase('Playback preview cache','reused',Date.now());
-      metadata??=await probePreviewVideo(output,signal);onProgress(90);
-      await runPhase('Saving playback preview',()=>uploadMediaFile(output,{...credentials,projectId:task.projectId,purpose:'preview',sourceAssetId:asset._id,previewVersion:1,previewFps:metadata!.fps,kind:'video',contentType:'video/mp4',fileName:`${asset.fileName.replace(/\.[^.]+$/,'').slice(0,230)}.preview.mp4`,duration:metadata!.duration,width:metadata!.width,height:metadata!.height},uploadContext,signal));
-      onProgress(98);return {};
+      if(!posterReady)try{await publishPlaybackPoster(source,directory,task,uploadContext,signal);}catch(error){if(signal.aborted)throw error;console.warn('Could not prepare the footage poster',error instanceof Error?error.message:String(error));}
+      await runPhase('Preparing playback',()=>prepareTimelinePlayback(source,directory,task,uploadContext,signal,onProgress,onActivity));
+      return {};
     }
     if (task.kind === 'derive') {
       if (task.outputAssetId) return {};

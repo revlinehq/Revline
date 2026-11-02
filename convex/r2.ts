@@ -21,7 +21,7 @@ const metadata = { fileName: v.string(), contentType: v.string(), kind: assetKin
 const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string() }));
 const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number() });
 const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optional(v.string()) };
-const previewUpload = { purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
+const previewUpload = { previewRange:v.optional(v.object({start:v.number(),end:v.number()})), purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
 function uprightDimensions(source:Pick<Doc<'assets'>,'width'|'height'>,width:number,height:number) {
   if(!source.width||!source.height||source.width===source.height)return null;
   const swapped=source.height/source.width,displayed=width/height;
@@ -38,13 +38,14 @@ export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('pro
   }
   return repaired;
 }});
-type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
+type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;previewRange?:{start:number;end:number};purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
 async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,task:Doc<'mediaTasks'>|null) {
-  if(!args.purpose){if(args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
+  if(!args.purpose){if(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
   if(!task||task.kind!=='preview'||task.projectId!==args.projectId||task.assetId!==args.sourceAssetId||args.jobId||args.kind!=='video'||args.contentType!=='video/mp4'||args.previewVersion!==PREVIEW_VERSION||!Number.isFinite(args.duration)||args.duration!<=0||!Number.isFinite(args.previewFps)||args.previewFps!<=0||args.previewFps!>240)throw new ConvexError('This task cannot upload that preview');
   const source=task.assetId?await ctx.db.get(task.assetId):null;
   if(!source||source.kind!=='video'||source.ownerId!==task.ownerId||source.projectId!==task.projectId)throw new ConvexError('Preview source is unavailable');
-  if(args.duration!==undefined&&source.duration!==undefined&&Math.abs(args.duration-source.duration)>.1)throw new ConvexError('Preview duration must match the original');
+  if(args.previewRange&&(!Number.isFinite(args.previewRange.start)||!Number.isFinite(args.previewRange.end)||args.previewRange.start<0||args.previewRange.end<=args.previewRange.start||args.previewRange.end>(source.duration??Infinity)+.1||Math.abs((args.duration??0)-(args.previewRange.end-args.previewRange.start))>.1))throw new ConvexError('Invalid preview source range');
+  if(!args.previewRange&&args.duration!==undefined&&source.duration!==undefined&&Math.abs(args.duration-source.duration)>.1)throw new ConvexError('Preview duration must match the original');
   return source;
 }
 
@@ -121,8 +122,8 @@ const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJ
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
 export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
-  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
-  if(!args.purpose&&(args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
+  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
+  if(!args.purpose&&(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
   if (!args.contentType.startsWith(`${args.kind}/`) && !(args.kind === 'audio' && /^video\/(mp4|quicktime|webm)$/.test(args.contentType))) throw new ConvexError('File content type does not match the media');
@@ -137,7 +138,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   const multipartId = created.uploadId;
   try {
-    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
+    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
     return { uploadId, partSize, partCount };
   } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }); throw error; }
 }
@@ -169,7 +170,16 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
     if(!lease.duration||!lease.width||!lease.height)throw new ConvexError('Preview metadata is incomplete');
     const dimensions=uprightDimensions(source,lease.width,lease.height);
     if(dimensions)await ctx.db.patch(source._id,dimensions);
-    if(hasPreview(source)){
+    if(lease.previewRange){
+      const range=lease.previewRange;
+      const saved=await ctx.db.query('previewSegments').withIndex('by_asset',q=>q.eq('assetId',source._id)).collect();
+      if(saved.some(segment=>segment.version===PREVIEW_VERSION&&segment.start===range.start&&segment.end===range.end)){
+        await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:lease.key});
+      }else{
+        await ctx.db.insert('previewSegments',{assetId:source._id,ownerId:source.ownerId,r2Key:lease.key,...range,size:lease.size,version:PREVIEW_VERSION});
+        await recordStorageObject(ctx,{ownerId:source.ownerId,r2Key:lease.key,fileName:`${source.fileName} preview segment`,kind:'video',size:lease.size,createdAt:source.createdAt,auxiliary:true});
+      }
+    }else if(hasPreview(source)){
       await forgetStorageObject(ctx,lease.ownerId,{r2Key:lease.key});
       await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:lease.key});
     }else{

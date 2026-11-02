@@ -15,11 +15,13 @@ const nativeVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O),(t||e.is
 const audibleVolume = 'r.volume=M,cl.set(r,M),e.onElementVolume?.(r,M,O);if(r.tagName==="AUDIO"&&M===0){r.paused||r.pause();ml(r);cl.set(r,M);continue}(t||e.isWebAudioOwned?.(r))';
 const nativeAlignment = 'V=d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
 const resumedAlignment = 'V=r.tagName==="AUDIO"&&r.paused&&e.playing&&ne>.06||d&&ne>.001||r.ended&&h&&ne>.001||j||ne>pl&&(G||Y||U),';
+const nativeMediaOffset = 'function xf(e){return bf(e("data-playback-start"))??bf(e("data-media-start"))??0}';
+const segmentMediaOffset = 'function xf(e){if(Number(e("data-preview-offset"))>0){let t=qt(e("data-media-start"));if(t!==null)return t}return bf(e("data-playback-start"))??bf(e("data-media-start"))??0}';
 const nativePreload = 'Qy=(c,p,y)=>{let S=d.isPlaying();';
 const managedPreload = 'Qy=(c,p,y)=>{if(document.documentElement.dataset.revlineMediaLoading==="managed")return;let S=d.isPlaying();';
 
 export function patchHyperframesPlaybackRuntime(source, version) {
-  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2 || source.split(playingVideo).length !== 2 || source.split(nativeVolume).length !== 2 || source.split(nativeAlignment).length !== 2 || source.split(nativePreload).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
+  if (version !== HYPERFRAMES_PLAYBACK_COMPAT_VERSION || source.split(original).length !== 2 || source.split(audioClockCandidate).length !== 2 || source.split(audioDrift).length !== 2 || source.split(playingVideo).length !== 2 || source.split(nativeVolume).length !== 2 || source.split(nativeAlignment).length !== 2 || source.split(nativePreload).length !== 2 || source.split(nativeMediaOffset).length !== 2) throw new Error('Review the HyperFrames playback compatibility patches for this runtime version.');
   // Play/Pause must not restart an unfinished video seek or seek a starved
   // decoder a few milliseconds ahead of its buffered frame. Match the runtime's
   // 40ms transport tolerance, scaled into source time for accelerated clips.
@@ -46,5 +48,5 @@ export function patchHyperframesPlaybackRuntime(source, version) {
   // Revline's bounded warmup owns preview source preparation. Native visibility
   // deferral otherwise promotes extra streams and discards already prepared cuts.
   // Keep the studio marker for first-frame readiness and lazy image behavior.
-  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift).replace(playingVideo, playingMedia).replace(nativeVolume, audibleVolume).replace(nativeAlignment, resumedAlignment).replace(nativePreload, managedPreload);
+  return source.replace(original, corrected).replace(audioClockCandidate, audibleClockCandidate).replace(audioDrift, scaledAudioDrift).replace(playingVideo, playingMedia).replace(nativeVolume, audibleVolume).replace(nativeAlignment, resumedAlignment).replace(nativePreload, managedPreload).replace(nativeMediaOffset, segmentMediaOffset);
 }

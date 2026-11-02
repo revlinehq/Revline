@@ -16,6 +16,7 @@ export function guardPreviewBuffering(document: Document, player: Playback, read
     return Array.from(document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')).filter(node => {
       const start = Number(node.dataset.start), end = Number(node.dataset.end ?? start + Number(node.dataset.duration));
       // A source deliberately held past its own last frame cannot provide future data.
+      if(node.hasAttribute('data-preview-pending'))return time>=start&&time<end;
       const finished = !node.seeking && (node.ended || Number.isFinite(node.duration) && node.currentTime >= node.duration - .05);
       const silentAudio=node.tagName==='AUDIO'&&Number(node.dataset.volume??1)===0;
       return time >= start && time < end && !finished && !silentAudio && (node.seeking || node.readyState < 3 || held && !previewMediaReady(node,time));
