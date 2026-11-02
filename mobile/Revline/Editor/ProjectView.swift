@@ -2,61 +2,54 @@ import SwiftUI
 
 struct ProjectView: View {
     @Environment(AppSession.self) private var session
+    @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @State private var store: ProjectStore
     @State private var player = PlayerController()
-    @State private var media = false
-    @State private var exports = false
-    @State private var composing = false
+    @State private var drawer = AgentDrawerState()
+    @State private var dismissKeyboard = 0
 
     init(projectID: String) { _store = State(initialValue: ProjectStore(id: projectID)) }
 
     var body: some View {
-        @Bindable var store = store
-        VStack(spacing: 0) {
-            if store.project != nil {
-                ProjectPreview(store: store, player: player)
-                    .frame(height: composing ? 80 : verticalSizeClass == .compact ? 120 : 216)
-                if !composing {
-                    PreviewTransport(store: store, player: player)
-                    TimelineStrip(timeline: store.timeline, player: player)
+        GeometryReader { geometry in
+            VStack(spacing: 0) {
+                if store.project != nil {
+                    ProjectPreview(store: store, player: player)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(.rect)
+                        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard += 1 })
+                    if !drawer.composing { PreviewTransport(store: store, player: player) }
+                } else if let error = store.error {
+                    WorkspaceStateView(title: "Couldn’t open project", description: error, symbol: "wifi.slash", actionTitle: "Try again") { store.refreshID += 1 }
+                } else { WorkspaceStateView(title: "Opening project…", loading: true) }
+            }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Group {
+                    if drawer.exporting { ExportSheet(store: store, onClose: drawer.closeExport) }
+                    else { AgentSheet(store: store, player: player, drawer: drawer, dismissKeyboard: dismissKeyboard) }
                 }
-                Divider()
-                if let error = store.error ?? store.status?.error ?? store.status?.reason {
-                    ErrorBanner(message: error) { store.error = nil; store.refreshID += 1 }.padding()
-                }
-                ConversationView(project: store)
-                if let progress = store.importProgress {
-                    ProgressView(store.importLabel, value: progress).padding(.horizontal)
-                }
-                AgentComposer(store: store, player: player, onAttach: { media = true }, onFocusChange: { composing = $0 })
-            } else if let error = store.error {
-                WorkspaceStateView(title: "Couldn’t open project", description: error, symbol: "wifi.slash", actionTitle: "Try again") { store.refreshID += 1 }
-            } else {
-                WorkspaceStateView(title: "Opening project…", loading: true)
+                .frame(height: drawer.height(in: geometry.size.height))
+                .background(drawer.composing ? Color.revlineBackground : Color.revlineCard)
+                .clipShape(.rect(topLeadingRadius: 32, topTrailingRadius: 32))
             }
         }
-        .frame(maxWidth: .infinity)
-        .revlineSurface()
-        .navigationTitle(store.project?.title ?? "Project").navigationBarTitleDisplayMode(.inline)
+        .background(Color.revlineBackground.ignoresSafeArea())
         .toolbar(.hidden, for: .tabBar)
-        .toolbarBackground(.visible, for: .navigationBar)
+        .toolbarBackground(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden()
+        .navigationBarTitleDisplayMode(.inline)
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Menu("Project actions", systemImage: "ellipsis") {
-                    Button("Media", systemImage: "photo.on.rectangle") { media = true }
-                    Button("Exports", systemImage: "square.and.arrow.up") { exports = true }
-                    if store.tabs.count > 1 {
-                        Picker("Timeline", selection: $store.selectedTab) {
-                            ForEach(store.tabs) { Text($0.name).tag(Optional($0.id)) }
-                        }
-                    }
+            ToolbarItem(placement: .topBarLeading) {
+                Button("Back", systemImage: "chevron.left", action: goBack).labelStyle(.iconOnly)
+            }
+            if !drawer.exporting {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { dismissKeyboard += 1; drawer.showExport() } label: { Text("Export").foregroundStyle(Color.revlineForeground) }
+                        .buttonStyle(.borderedProminent).tint(.revlineAccent)
                 }
             }
         }
-        .sheet(isPresented: $media) { MediaLibraryView(store: store).presentationDetents([.large]).presentationDragIndicator(.visible) }
-        .sheet(isPresented: $exports) { ExportsView(store: store).presentationDetents([.large]).presentationDragIndicator(.visible) }
         .task(id: store.refreshID) { store.observe(session) }
         .onChange(of: store.timelineID) { _, id in player.selectTimeline(id) }
         .onChange(of: scenePhase) { _, phase in
@@ -64,5 +57,10 @@ struct ProjectView: View {
             else { Task { await player.authenticate(session) } }
         }
         .onDisappear { player.pause(); store.disconnect() }
+    }
+
+    private func goBack() {
+        if drawer.exporting { drawer.closeExport() }
+        else { dismiss() }
     }
 }

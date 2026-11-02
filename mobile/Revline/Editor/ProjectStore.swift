@@ -18,6 +18,10 @@ final class ProjectStore {
     var attachedAssetIDs: [String] = []
     var error: String?
     var refreshID = 0
+    var promptDraft = ""
+    var editMode = "fast"
+    var beforeEditDuration: Double?
+    var beforeEditRevision: Double?
     var sending = false
     var importProgress: Double?
     var importLabel = ""
@@ -68,15 +72,28 @@ final class ProjectStore {
             .store(in: &subscriptions)
     }
 
-    func send(_ session: AppSession, prompt: String, mode: String, model: String?, playhead: Double) async -> Bool {
+    func send(_ session: AppSession, prompt: String, mode: String, playhead: Double) async -> Bool {
+        let previousDuration = timeline?.duration
+        let previousRevision = project?.revision
+        error = nil
         sending = true
         defer { sending = false }
         var arguments: ConvexArguments = ["projectId": id, "prompt": prompt, "editMode": mode,
-                                          "timelineId": timelineID, "playhead": playhead]
-        if status?.modelSwitcher == true, let model { arguments["modelChoice"] = model }
+                                          "timelineId": timelineID, "playhead": playhead, "clientPlatform": "ios",
+                                          "modelChoice": "gpt-6.1-terra", "reasoningEffort": "medium"]
         if !attachedAssetIDs.isEmpty { arguments["attachedAssetIds"] = JSONValue.array(attachedAssetIDs.map(JSONValue.string)) }
         do {
-            try await session.client.mutation("assistant:send", with: arguments)
+            try await session.synchronizeAIConsent()
+            do { try await session.client.mutation("assistant:send", with: arguments) }
+            catch {
+                // The web-compatible endpoint predates the fixed iOS policy. Both requests still pin Terra medium explicitly.
+                let message = String(describing: error)
+                guard message.contains("extra field `clientPlatform`") else { throw error }
+                arguments.removeValue(forKey: "clientPlatform")
+                try await session.client.mutation("assistant:send", with: arguments)
+            }
+            beforeEditDuration = previousDuration
+            beforeEditRevision = previousRevision
             attachedAssetIDs = []
             return true
         } catch { self.error = AppFailure.describe(error); return false }
