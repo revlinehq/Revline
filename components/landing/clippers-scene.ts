@@ -13,12 +13,12 @@ type Aperture = {
 /** Original scene choreography, ported from revision 232 without the scene-engine runtime. */
 export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const media = {
-    poster: '/landing/clippers-poster.webp',
-    kai: '/landing/clippers-kai.webp',
-    duke: '/landing/clippers-duke.webp',
-    caseoh: '/landing/clippers-caseoh.webp',
-    xqc: '/landing/clippers-xqc.webp',
-    jynxzi: '/landing/clippers-jynxzi.webp',
+    theo: '/landing/clippers-theo.webp',
+    acquired: '/landing/clippers-acquired.webp',
+    allin: '/landing/clippers-allin.webp',
+    lex: '/landing/clippers-lex.webp',
+    dwarkesh: '/landing/clippers-dwarkesh.webp',
+    lenny: '/landing/clippers-lenny.webp',
   };
   const stage = document.createElement('div');
   stage.style.cssText =
@@ -48,7 +48,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     return found;
   };
   part('project-title').innerHTML =
-    'Stream highlights ' + icon('chevron-down', { size: 14, color: '#888' });
+    'Streams & podcasts ' + icon('chevron-down', { size: 14, color: '#888' });
   const side = part('sidebar');
 
   side
@@ -98,14 +98,14 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   vf.innerHTML = '';
   const portraitEase = CustomEase.create('portrait', '.65,0,.35,1');
   const aperture = { x: 1160, y: 404, width: 1024, height: 576, radius: 0 };
-  const openings: Aperture[] = [
+  const openings = [
     aperture,
     { x: 594, y: 404, width: 0, height: 576, radius: 12 },
     { x: 1326, y: 404, width: 0, height: 576, radius: 12 },
     { x: 592, y: 784, width: 240, height: 0, radius: 12 },
     { x: 960, y: 784, width: 240, height: 0, radius: 12 },
     { x: 1328, y: 784, width: 240, height: 0, radius: 12 },
-  ];
+  ] satisfies [Aperture, Aperture, Aperture, Aperture, Aperture, Aperture];
   const cardFrames: HTMLElement[] = [];
   function holePath(o: Aperture) {
     const l = o.x - o.width / 2,
@@ -204,7 +204,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     .slice(1)
     .forEach((e) => e.remove());
   tab.innerHTML =
-    'Stream highlights <span style="font:500 11px var(--font-inter);color:#777">0:16</span>' +
+    'Streams & podcasts <span style="font:500 11px var(--font-inter);color:#777">0:16</span>' +
     icon('chevron-down', { size: 12, color: '#999' });
   tab.style.cssText =
     'position:absolute;left:12px;top:2px;width:190px;height:32px;border-radius:8px;background:#1f1f1f;display:flex;gap:8px;align-items:center;padding-left:12px;font:500 12.8px var(--font-inter);color:#ededed';
@@ -228,7 +228,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   );
   for (let i = 0; i <= 8; i++)
     make(ruler, 'tick', 'left:' + i * 166 + 'px;top:7px;', String(i * 2) + 's');
-  const gameplayLabel = make(
+  const contentLabel = make(
     tracks,
     'v1',
     'left:14px;top:66px;font:500 12px var(--font-inter);color:#d8d8d8;display:flex;gap:9px;align-items:center',
@@ -247,46 +247,46 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   );
   const sourceTypes = [
     {
-      creator: 'Shroud',
-      content: 'CS2',
-      poster: media.poster,
-      faceSize: '676px 396px',
-      facePosition: '-38px -287px',
+      creator: 'Theo - t3.gg',
+      content: 'Tech stack',
+      poster: media.theo,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
     {
-      creator: 'Kai Cenat',
-      content: 'Live moment',
-      poster: media.kai,
-      faceSize: '266px 199.5px',
-      facePosition: '-110px -60px',
+      creator: 'Lex Fridman',
+      content: 'Early AI',
+      poster: media.lex,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
     {
-      creator: 'Duke Dennis',
-      content: 'Basketball',
-      poster: media.duke,
-      faceSize: '288px 216px',
-      facePosition: '-70px -65px',
+      creator: 'Acquired',
+      content: 'Jensen Huang',
+      poster: media.acquired,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
     {
-      creator: 'CaseOh',
-      content: 'Horror',
-      poster: media.caseoh,
-      faceSize: '336px 252px',
-      facePosition: '-4px -97px',
+      creator: 'All-In Podcast',
+      content: 'Satya Nadella',
+      poster: media.allin,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
     {
-      creator: 'xQc',
-      content: 'Overwatch',
-      poster: media.xqc,
-      faceSize: '336px 252px',
-      facePosition: '10px -52px',
+      creator: 'Dwarkesh Podcast',
+      content: 'AI scaling',
+      poster: media.dwarkesh,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
     {
-      creator: 'Jynxzi',
-      content: 'R6 clutch',
-      poster: media.jynxzi,
-      faceSize: '264px 198px',
-      facePosition: '-71px -33px',
+      creator: "Lenny's Podcast",
+      content: 'Building teams',
+      poster: media.lenny,
+      faceSize: '133px auto',
+      facePosition: 'center 25%',
     },
   ];
   const clipSources = [0, 1, 2, 3, 4, 5, 0, 1, 4, 5].map((i) => sourceTypes[i]);
@@ -299,19 +299,19 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
         'px;top:0;width:132.9px;height:100%;overflow:hidden',
       '<img src="' +
         clipSources[i].poster +
-        '" style="width:100%;height:100%;object-fit:cover;opacity:.82"/>',
+        '" style="width:100%;height:100%;object-fit:cover;object-position:center 28%;opacity:.82"/>',
     );
   const audioLane = make(
     tracks,
     'source-audio',
     'left:170px;top:134px;width:1329px;height:40px;border:1px solid #625084;border-radius:4px;background:#392e4e;font:400 11px/28px var(--font-inter);padding:5px 9px;color:#dfd7ed',
-    'Stream highlights.m4a',
+    'Streams & podcasts.m4a',
   );
   const original = make(
     lane,
     'original-label',
     'left:7px;top:5px;border-radius:3px;padding:3px 6px;background:#111b;font:400 10px var(--font-inter);color:#fff',
-    'Stream highlights.mp4',
+    'Streams & podcasts.mp4',
   );
   const cuts = [];
   for (let i = 1; i <= 9; i++) {
@@ -387,9 +387,9 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     'V3 <span style="margin-left:10px;color:#999">Captions</span>',
   );
   tl.to(lane, { y: 86, height: 44, duration: 0.65, ease: portraitEase }, 1);
-  tl.to(gameplayLabel, { y: 84, duration: 0.65, ease: portraitEase }, 1);
+  tl.to(contentLabel, { y: 84, duration: 0.65, ease: portraitEase }, 1);
   tl.set(
-    gameplayLabel,
+    contentLabel,
     {
       innerHTML: 'V1 <span style="margin-left:10px;color:#999">Content</span>',
     },
@@ -426,7 +426,7 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     lane,
     'scene-label-first',
     'left:7px;top:5px;border-radius:3px;padding:3px 6px;background:#111b;font:400 10px var(--font-inter);color:#fff',
-    '01 CS2',
+    '01 Dev stream',
   );
   const playhead = make(
     tracks,
@@ -550,12 +550,12 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 180"><path fill="red" d="M250.346 28.075A32.18 32.18 0 0 0 227.69 5.418C207.824 0 127.87 0 127.87 0S47.912.164 28.046 5.582A32.18 32.18 0 0 0 5.39 28.24c-6.009 35.298-8.34 89.084.165 122.97a32.18 32.18 0 0 0 22.656 22.657c19.866 5.418 99.822 5.418 99.822 5.418s79.955 0 99.82-5.418a32.18 32.18 0 0 0 22.657-22.657c6.338-35.348 8.291-89.1-.164-123.134"/><path fill="#fff" d="m102.421 128.06l66.328-38.418l-66.328-38.418z"/></svg>';
 
   const styling = [
-    '<span style="background:#7c3aed;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">SHROUD</span>',
-    '<span style="font:700 30px/.95 var(--landing-font-head);letter-spacing:-1px;text-shadow:0 2px 12px #0009">KAI CENAT</span>',
-    '<span style="background:#f4f4f0;color:#111;padding:6px 10px;font:700 19px var(--landing-font-head)">DUKE DENNIS</span>',
-    '<span style="font:500 24px/1 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0008">CASEOH</span>',
-    '<span style="font:700 32px/.95 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0009">xQc</span>',
-    '<span style="font:600 24px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0008">JYNXZI</span>',
+    '<span style="font:700 24px/.95 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0009">THEO</span>',
+    '<span style="background:#7c3aed;padding:5px 8px;border-radius:4px;font:600 15px var(--font-inter)">Lex Fridman</span>',
+    '<span style="background:#f4f4f0;color:#111;padding:6px 10px;font:700 19px var(--landing-font-head)">ACQUIRED</span>',
+    '<span style="background:#7c3aed;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">ALL-IN</span>',
+    '<span style="font:600 21px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">DWARKESH<br>PODCAST</span>',
+    '<span style="font:600 22px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">LENNY’S<br>PODCAST</span>',
   ];
   const targets = [284600, 192400, 87600, 143800, 68100, 216700];
   openings.forEach((o, i) => {
@@ -565,7 +565,13 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
       'card-art',
       'inset:0;overflow:hidden;border:1px solid #ffffff22;border-radius:12px;background:linear-gradient(0deg,#0008,transparent 38%)',
     );
-    make(art, 'style-caption', 'left:16px;right:12px;bottom:20px', styling[i]);
+    make(
+      art,
+      'style-caption',
+      'left:16px;right:12px;bottom:20px' +
+        (i === 4 ? ';background:#111e;padding:6px 8px;border-radius:4px' : ''),
+      styling[i],
+    );
     const metric = make(
       frame,
       'view-badge',
@@ -692,5 +698,5 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   );
   drawAperture();
 
-  return { stage, montage };
+  return { stage, montage, openings };
 }

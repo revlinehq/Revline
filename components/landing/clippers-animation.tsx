@@ -3,10 +3,6 @@
 import { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
-import { calculateVisualRect } from '@/lib/editor/visual-source-geometry';
-import { motionAt } from '@/lib/editor/motion-path';
-import { maskAt } from '@/lib/editor/masks';
-import footage from './clippers-footage.json';
 import { createClippersScene } from './clippers-scene';
 
 const WIDTH = 1920,
@@ -14,6 +10,42 @@ const WIDTH = 1920,
   DURATION = 11.4,
   STILL = 10.8;
 type Playback = { setPlaying: (playing: boolean) => void };
+type PortraitClip = {
+  source: string;
+  card: 0 | 1 | 2 | 3 | 4 | 5;
+  start: number;
+  duration: number;
+  sourceStart: number;
+};
+const portraits: PortraitClip[] = [
+  { source: 'theo', card: 0, start: 1.65, duration: 9.75, sourceStart: 1.65 },
+  { source: 'lex', card: 1, start: 3.65, duration: 7.75, sourceStart: 0 },
+  { source: 'acquired', card: 2, start: 4.7, duration: 6.7, sourceStart: 0 },
+  { source: 'allin', card: 3, start: 6.8, duration: 4.6, sourceStart: 0 },
+  { source: 'dwarkesh', card: 4, start: 6.95, duration: 4.45, sourceStart: 0 },
+  { source: 'lenny', card: 5, start: 7.1, duration: 4.3, sourceStart: 0 },
+  {
+    source: 'lex',
+    card: 0,
+    start: 1.666666667,
+    duration: 0.65,
+    sourceStart: 0,
+  },
+  {
+    source: 'dwarkesh',
+    card: 0,
+    start: 2.316666667,
+    duration: 0.65,
+    sourceStart: 0,
+  },
+];
+const intro = {
+  source: 'theo-source',
+  start: 0,
+  duration: 1.65,
+  sourceStart: 0,
+};
+const clocks = [intro, ...portraits];
 
 export default function ClippersAnimation({ playing }: { playing: boolean }) {
   const host = useRef<HTMLDivElement>(null);
@@ -32,7 +64,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     const context = canvas.getContext('2d');
     if (!context) return;
     const timeline = gsap.timeline({ paused: true, id: 'landing-clippers' });
-    createClippersScene(scene, timeline);
+    const { openings } = createClippersScene(scene, timeline);
     const media = new Map<string, HTMLVideoElement>();
     const starting = new Set<HTMLVideoElement>();
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
@@ -43,10 +75,39 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
       time = 0,
       previous = 0;
 
+    const drawCard = (
+      video: HTMLVideoElement,
+      opening: (typeof openings)[number],
+    ) => {
+      const scale = Math.max(
+        opening.width / video.videoWidth,
+        opening.height / video.videoHeight,
+      );
+      const width = video.videoWidth * scale;
+      const height = video.videoHeight * scale;
+      context.save();
+      context.beginPath();
+      context.rect(
+        opening.x - opening.width / 2,
+        opening.y - opening.height / 2,
+        opening.width,
+        opening.height,
+      );
+      context.clip();
+      context.drawImage(
+        video,
+        opening.x - width / 2,
+        opening.y - height / 2,
+        width,
+        height,
+      );
+      context.restore();
+    };
+
     const draw = () => {
       // Keep the last complete frame during a seek, including across the loop seam.
       if (
-        footage.some(
+        clocks.some(
           (clip) =>
             time >= clip.start &&
             time < clip.start + clip.duration &&
@@ -65,52 +126,14 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
       );
       context.fillStyle = '#111';
       context.fillRect(0, 0, WIDTH, HEIGHT);
-      for (const clip of footage) {
+      const source = media.get(intro.source);
+      if (time < intro.duration && source && source.readyState >= 2)
+        drawCard(source, openings[0]);
+      for (const clip of portraits) {
         if (time < clip.start || time >= clip.start + clip.duration) continue;
         const video = media.get(clip.source);
-        if (!video || video.readyState < 2) continue;
-        const local = time - clip.start;
-        const motion = motionAt(clip.motion, local);
-        const rect = calculateVisualRect(
-          clip.width,
-          clip.height,
-          WIDTH,
-          HEIGHT,
-          clip.crop,
-          undefined,
-          'contain',
-        );
-        context.save();
-        if (clip.mask) {
-          const mask = maskAt(clip.mask.keys, local);
-          context.beginPath();
-          context.rect(
-            (mask.x - mask.width / 2) * WIDTH,
-            (mask.y - mask.height / 2) * HEIGHT,
-            mask.width * WIDTH,
-            mask.height * HEIGHT,
-          );
-          context.clip();
-        }
-        context.translate(
-          WIDTH / 2 + motion.x * WIDTH,
-          HEIGHT / 2 + motion.y * HEIGHT,
-        );
-        context.rotate((motion.rotation * Math.PI) / 180);
-        context.scale(motion.scale, motion.scale);
-        context.translate(-WIDTH / 2, -HEIGHT / 2);
-        context.beginPath();
-        context.rect(
-          rect.window.left,
-          rect.window.top,
-          rect.window.width,
-          rect.window.height,
-        );
-        context.clip();
-        context.globalAlpha = motion.opacity;
-        context.filter = `brightness(${motion.brightness})`;
-        context.drawImage(video, rect.left, rect.top, rect.width, rect.height);
-        context.restore();
+        if (video && video.readyState >= 2)
+          drawCard(video, openings[clip.card]);
       }
       if (!scene.isConnected) container.appendChild(scene);
     };
@@ -118,7 +141,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     // Cropped regions share one decoder and source clock per creator.
     const syncMedia = () => {
       for (const [source, video] of media) {
-        const clip = footage.find(
+        const clip = clocks.find(
           (clip) =>
             clip.source === source &&
             time >= clip.start &&
@@ -126,7 +149,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
         );
         if (!clip) {
           video.pause();
-          const next = footage.find(
+          const next = clocks.find(
             (clip) =>
               clip.source === source &&
               clip.start > time &&
@@ -140,7 +163,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
             video.currentTime = next.sourceStart;
           continue;
         }
-        const target = time - clip.start + clip.sourceStart;
+        const target = (time - clip.start + clip.sourceStart) % video.duration;
         if (!video.seeking && Math.abs(video.currentTime - target) > 0.12)
           video.currentTime = target;
         if (running && video.paused && !starting.has(video)) {
@@ -187,12 +210,13 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     };
     const size = new ResizeObserver(resize);
     size.observe(container);
-    const loads = [...new Set(footage.map((clip) => clip.source))].map(
+    const loads = [...new Set(clocks.map((clip) => clip.source))].map(
       (source) =>
         new Promise<void>((resolve, reject) => {
           const video = document.createElement('video');
           video.muted = true;
           video.playsInline = true;
+          video.loop = true;
           video.preload = 'auto';
           video.onloadeddata = () => resolve();
           video.onerror = () =>
