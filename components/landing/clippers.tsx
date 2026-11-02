@@ -54,8 +54,8 @@ export function LandingClippers() {
       <div className="landing-showcase-copy">
         <LandingHeading
           id="landing-clippers-heading"
-          title="Revline for clippers"
-          description="Turn interviews, podcasts and tech streams into captioned Shorts and Reels, ready to post."
+          title="Revline for clipping"
+          description="Drop in any stream or podcast and get Shorts and Reels ready to post."
         />
         <LandingStartButton label="Start clipping" size="sm" />
       </div>

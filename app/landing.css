@@ -283,13 +283,14 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 /* Apps named in running text by their logos alone, at text height. */
 .landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
-.landing-clippers,.landing-motion-design{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);grid-template-areas:"copy media";align-items:center;gap:64px;padding-block:96px}
-.landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:0}
-.landing-motion-design{grid-template-columns:minmax(0,3fr) minmax(0,2fr);grid-template-areas:"media copy"}
+.landing-clippers,.landing-motion-design{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,13fr);grid-template-areas:"copy media";align-items:center;gap:48px;padding-block:96px}
+.landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:32px}
+.landing-motion-design{grid-template-columns:minmax(0,13fr) minmax(0,7fr);grid-template-areas:"media copy"}
 .landing-showcase-copy{grid-area:copy;display:flex;flex-direction:column;align-items:flex-start;gap:24px;min-width:0}
 .landing-clippers-frame,.landing-motion-design-frame{grid-area:media;min-width:0}
 @media(max-width:760px){
   .landing-clippers,.landing-motion-design{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px;padding-block:64px}
+  .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:0}
 }
 .landing-clippers-frame,.landing-motion-design-frame{position:relative;width:100%;aspect-ratio:16/9;padding:0;overflow:hidden;border:1px solid #0000000f;border-radius:4px;background:#111;box-shadow:none}
 .landing-clippers-still,.landing-clippers-animation{position:absolute;inset:0;width:100%;height:100%;user-select:none}
