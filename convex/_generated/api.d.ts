@@ -49,6 +49,7 @@ import type * as lib_cutout_effect_validator from "../lib/cutout_effect_validato
 import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
+import type * as lib_edit_mode from "../lib/edit_mode.js";
 import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_editorTurn from "../lib/editorTurn.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
@@ -147,6 +148,7 @@ declare const fullApi: ApiFromModules<{
   "lib/discord_alert": typeof lib_discord_alert;
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;
+  "lib/edit_mode": typeof lib_edit_mode;
   "lib/editorToolkit": typeof lib_editorToolkit;
   "lib/editorTurn": typeof lib_editorTurn;
   "lib/effect_plan": typeof lib_effect_plan;
