@@ -36,7 +36,13 @@ export function ChatHistory() {
   const openRename = useCallback((chat: WorkspaceChat) => { dialogRequested.current = true; setRenaming(chat); setName(chat.title); setError(''); }, []);
   const openDelete = useCallback((chat: WorkspaceChat) => { dialogRequested.current = true; setDeleting(chat); setError(''); }, []);
   const filtered = useMemo(() => { const query = search.trim().toLocaleLowerCase(); return chats.filter(chat => chat.title.toLocaleLowerCase().includes(query)); }, [chats, search]);
-  const groups = ['Today', 'Yesterday', 'Earlier'].map(label => ({ label, chats: filtered.filter(chat => { const recency = chatRecency(chat.updatedAt); return label === 'Earlier' ? recency !== 'Today' && recency !== 'Yesterday' : recency === label; }) }));
+  const groups = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    const groups: { label: string; chats: WorkspaceChat[] }[] = ['Today', 'Yesterday', 'Earlier'].map(label => ({ label, chats: [] }));
+    for (const chat of filtered) groups[chat.updatedAt >= today.getTime() ? 0 : chat.updatedAt >= yesterday.getTime() ? 1 : 2].chats.push(chat);
+    return groups;
+  }, [filtered]);
   function closeDialogs() { if (busy) return; setRenaming(null); setDeleting(null); setError(''); }
   async function rename() {
     if (!renaming || renaming.id === 'demo' || !name.trim() || busy) return;
