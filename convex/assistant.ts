@@ -1,3 +1,4 @@
+import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
 import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
@@ -98,7 +99,7 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(editorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   if ((args.modelChoice !== undefined || args.reasoningEffort !== undefined || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
   let pinnedModel;
@@ -131,7 +132,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   await consumeAssistantRequest(ctx,ownerId);
   return beginRequest(ctx,project,prompt,pinnedModel,args);
 }});
-type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'>;
+type QueuedContext=Pick<Doc<'assistantQueue'>,'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'|'editMode'>;
 const sentFromOtherTab=(project:Doc<'projects'>,timelineId?:string)=>!!timelineId&&timelineId!==activeTabOf(project);
 /** The timeline of the tab a request was sent from: the open tab, or another one the user was looking at. */
 async function requestTimeline(ctx:MutationCtx,project:Doc<'projects'>,timelineId?:string){
@@ -154,7 +155,7 @@ async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,p
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
+  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,editMode:request.editMode??'fast',...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
   // Long turns run on the Cloudflare agent runner; without one, inside Convex's ten-minute action limit.
   if (agentRunnerConfigured()) { await startRunnerTurn(ctx, turn); return null; }
   const workflowId=await aiWorkflow.start(ctx, internal.assistantWorkflow.runTurn, turn,{startAsync:true,onComplete:internal.assistantWorkflow.settle,context:{projectId:project._id,ownerId,runId}});

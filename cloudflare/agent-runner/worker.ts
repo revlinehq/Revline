@@ -1,5 +1,5 @@
 import { Agent, getAgentByName, type FiberContext, type FiberRecoveryContext } from 'agents';
-import { jsonToConvex, type JSONValue } from 'convex/values';
+import { convexToJson, jsonToConvex, type JSONValue } from 'convex/values';
 import { internal } from '../../convex/_generated/api';
 import { runEditorTurn, type EditorTurnArgs } from '../../convex/lib/editorTurn';
 import { verifyRunnerRequest } from '../../convex/lib/runner_auth';
@@ -14,7 +14,7 @@ type Env = Cloudflare.Env & BridgeEnv;
 /** What Convex sends to start a run: its arguments and the token that scopes its calls back. */
 type RunStart = { args: JSONValue; runToken: string };
 /** What survives an eviction: the request, and how far the turn had got. */
-type TurnCheckpoint = RunStart & { steps: number; savedEdits: number };
+type TurnCheckpoint = RunStart & { steps: number; savedEdits: number; pendingFastFrames?: number[] };
 const HEARTBEAT_MS = 30_000;
 
 export class EditorTurn extends Agent<Env> {
@@ -65,10 +65,10 @@ export class EditorTurn extends Agent<Env> {
       if (claim.attempt >= claim.maxAttempts) throw new Error(`The turn was interrupted ${claim.attempt} times.`);
       const beat = setInterval(() => { void ctx.runMutation(internal.agentRunner.heartbeat, run).catch(() => {}); }, HEARTBEAT_MS);
       try {
-        await runEditorTurn(ctx, { ...args, ...(claim.attempt ? { continuation: { segment: claim.attempt, savedEdits: checkpoint.savedEdits } } : {}) }, {
+        await runEditorTurn(ctx, { ...args, ...(claim.attempt ? { continuation: { segment: claim.attempt, savedEdits: checkpoint.savedEdits, pendingFastFrames: checkpoint.pendingFastFrames } } : {}) }, {
           signal: fiber.signal,
           // savedEdits already counts the edits saved before this attempt.
-          onStepFinished: progress => fiber.stash({ ...checkpoint, steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits }),
+          onStepFinished: progress => fiber.stash({ ...checkpoint, args: convexToJson({ ...args, editMode: progress.editMode }), steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits, pendingFastFrames: progress.pendingFastFrames }),
         });
       } finally { clearInterval(beat); }
       await ctx.runMutation(internal.agentRunner.release, run).catch(() => {});

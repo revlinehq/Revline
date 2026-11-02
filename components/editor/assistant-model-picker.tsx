@@ -1,43 +1,76 @@
 'use client';
 
+import { useState } from 'react';
+import { ChevronDown } from 'lucide-react';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { ClaudeLogo, GoogleLogo, McpLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { McpConnectorDialog } from '@/components/workspace/mcp-connector-section';
-import { useState } from 'react';
-import { InspectorSelect } from './inspector-select';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
+import './inspector-select.css';
 import './assistant-model-picker.css';
 
 /** The provider's mark beside each model. */
 const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : id.startsWith('gemini') ? <GoogleLogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
-
-/** On Pro these run only through MCP (Claude Code, Claude Desktop), not in the editor chat: picking one opens the MCP connector instead. */
+/** On Pro these run only through MCP (Claude Code, Claude Desktop), not in the editor chat. */
 const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
+const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
 
-export function AssistantModelPicker({ value, onChange, disabled, allowedModels, claudeViaMcp = false }: {
+type EffortSelection = {
+  value?: EditorReasoningEffort;
+  live?: EditorReasoningEffort;
+  onChange: (value: EditorReasoningEffort | undefined) => void;
+};
+
+export function AssistantModelPicker({ value, onChange, disabled, allowedModels, claudeViaMcp = false, effort }: {
   value: ClaudeModelChoice;
   onChange: (value: ClaudeModelChoice) => void;
   disabled: boolean;
   allowedModels: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
+  effort?: EffortSelection;
 }) {
   const [mcpOpen, setMcpOpen] = useState(false);
   const mcpOnly = (id: ClaudeModelChoice) => claudeViaMcp && MCP_ONLY_MODELS.includes(id);
-  const options = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || mcpOnly(model.id)).map(model => mcpOnly(model.id)
-    ? { value: model.id, label: model.label, icon: <McpLogo className="assistant-model-logo" />, description: 'Use it through MCP' }
-    : { value: model.id, label: model.label, ...('shortLabel' in model ? { shortLabel: model.shortLabel } : {}), icon: providerLogo(model.id) });
-  return <div className="assistant-model-picker"><InspectorSelect label="AI editing model" value={value} options={options} onChange={next => mcpOnly(next) ? setMcpOpen(true) : onChange(next)} disabled={disabled}/><McpConnectorDialog open={mcpOpen} onOpenChange={setMcpOpen}/></div>;
-}
-
-const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high', max: 'Max' };
-
-/** Development only: Auto lets the editor pick per request and shows its live pick while a run works. */
-export function AssistantEffortPicker({ value, live, onChange, disabled }: {
-  value?: EditorReasoningEffort;
-  live?: EditorReasoningEffort;
-  onChange: (value: EditorReasoningEffort | undefined) => void;
-  disabled: boolean;
-}) {
-  const options = [{ value: 'auto' as const, label: live ? `Auto · ${effortLabels[live]}` : 'Auto' }, ...EDITOR_REASONING_EFFORTS.map(effort => ({ value: effort, label: effortLabels[effort] }))];
-  return <div className="assistant-model-picker"><InspectorSelect label="AI reasoning effort" value={value ?? 'auto'} options={options} onChange={next => onChange(next === 'auto' ? undefined : next)} disabled={disabled}/></div>;
+  const models = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || mcpOnly(model.id));
+  const selected = EDITOR_MODELS.find(model => model.id === value);
+  const effortLabel = effort?.value ? effortLabels[effort.value] : effort?.live ? `Auto · ${effortLabels[effort.live]}` : 'Auto';
+  return <div className="assistant-model-picker assistant-combined-model-picker">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button type="button" variant="ghost" size="sm" className="inspector-select-trigger" aria-label={`AI editing model${effort ? ' and reasoning effort' : ''}`} disabled={disabled}>
+          {providerLogo(value)}<span className="inspector-select-value">{selected && 'shortLabel' in selected ? selected.shortLabel : selected?.label}</span>{effort && <span className="assistant-model-effort">· {effort.value ? effortLabels[effort.value] : 'Auto'}</span>}<ChevronDown size={13}/>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent className="workspace-menu inspector-select-menu assistant-picker-menu" aria-label="AI editing model options" sideOffset={5}>
+        <DropdownMenuLabel>Model</DropdownMenuLabel>
+        <DropdownMenuRadioGroup value={value} onValueChange={next => {
+          const model = models.find(model => model.id === next);
+          if (model) { if (mcpOnly(model.id)) setMcpOpen(true); else onChange(model.id); }
+        }}>
+          {models.map(model => <DropdownMenuRadioItem key={model.id} value={model.id} className="workspace-menu-item inspector-select-option">
+            {mcpOnly(model.id) ? <McpLogo className="assistant-model-logo"/> : providerLogo(model.id)}
+            <span className="inspector-select-option-copy"><span className="inspector-select-value">{model.label}</span>{mcpOnly(model.id) && <small>Use it through MCP</small>}</span>
+          </DropdownMenuRadioItem>)}
+        </DropdownMenuRadioGroup>
+        {effort && <>
+          <DropdownMenuSeparator/>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger className="workspace-menu-item assistant-effort-subtrigger">Reasoning effort<span className="assistant-effort-value">{effortLabel}</span></DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="workspace-menu inspector-select-menu assistant-picker-menu assistant-effort-menu" aria-label="AI reasoning effort options">
+              <DropdownMenuRadioGroup value={effort.value ?? 'auto'} onValueChange={next => {
+                if (next === 'auto') effort.onChange(undefined);
+                else { const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice) effort.onChange(choice); }
+              }}>
+                <DropdownMenuRadioItem value="auto" className="workspace-menu-item inspector-select-option">{effort.live ? `Auto · ${effortLabels[effort.live]}` : 'Auto'}</DropdownMenuRadioItem>
+                {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} className="workspace-menu-item inspector-select-option">{effortLabels[choice]}</DropdownMenuRadioItem>)}
+              </DropdownMenuRadioGroup>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+        </>}
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <McpConnectorDialog open={mcpOpen} onOpenChange={setMcpOpen}/>
+  </div>;
 }

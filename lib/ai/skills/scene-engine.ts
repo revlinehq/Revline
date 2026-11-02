@@ -7,16 +7,19 @@ const editLanesPage: EditorSkillPage = {
   description: 'Start here for existing footage, caption, scene or film edits: choose quick or full verification before reading transcript or code.',
   body: `# Editing existing footage, captions, scenes or films
 
-Classify the request first:
+Choose verification by mode, then classify the edit:
+
+- **Fast:** short-form edits, small changes, drafts and iteration such as "make it punchier" or "try another b-roll". Use the quick lane: getFrames at each changed spot and one frame either side. No full-video sweeps, reference compares or repeated re-checks.
+- **Precise:** recreations, launch films and work to publish or export as final. Use the full harness, including inventory, 15 fps transition compares, compareReference, checkPacing and close-out where applicable. New films or motion scenes from scratch and reference recreations always run Precise, even when Fast was selected; tell the user in one line. MCP defaults to Precise unless a call passes editMode.
 
 - **Quick lane:** text, label, color, logo, icon or asset swaps, small static style changes, cuts or trims of named passages, trimming to a target length, removing lines, false starts or filler, shortening or swapping one b-roll, and caption text or timing fixes.
-- **Full lane:** building a new edit, restructuring the story, reviewing the whole video, or changing scene motion, timing, camera, transitions, easing or layout over time. Follow the matching implementation skills; for scenes use page \`checklist\`, and for recreations use reference-footage page \`recreation\`.
+- **Full lane (Precise):** building a new edit, restructuring the story, reviewing the whole video, or changing scene motion, timing, camera, transitions, easing or layout over time. Follow the matching implementation skills; for scenes use page \`checklist\`, and for recreations use reference-footage page \`recreation\`.
 
-For quick edits, reuse known project context and loaded skills. Skip whole-video review, re-reading every skill, pacing passes and full frame sweeps.
+In Fast, reuse known project context and loaded skills. Skip whole-video review, re-reading every skill, pacing passes and full frame sweeps. Fast may change existing motion locally; Precise uses the full lane. Neither mode skips rendered frame checks.
 
 **Footage and captions:** read only the transcript around the affected SOURCE range with inspectAssetAnalysis start/end or batched windows. Use the fewest calls: batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup. Ripple the actual removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material and batch moveClips by shared time delta. retainSourceRanges compacts only the linked pair; closeGaps works per layer, so neither alone synchronizes overlays. Preserve unrelated speech and styling. Verify with inspectTimeline: new duration meets the target, no gaps or orphaned captions. Use getFrames at each changed cut point or caption moment and one frame either side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the timeline).
 
-**Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Confirm everything else is unchanged. Skip compareReference, motionMap and checkPacing; switch to the full lane if scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
+**Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Confirm everything else is unchanged. In Fast, skip compareReference, motionMap and checkPacing; in Precise, follow the full lane when scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
 };
 
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
@@ -25,7 +28,7 @@ const checklistPage: EditorSkillPage = {
   description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
 
-For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below for a new build or full-lane edit. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
+For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
