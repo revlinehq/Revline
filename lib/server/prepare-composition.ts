@@ -3,7 +3,7 @@ import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-file
 import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
 import { resolvedAudioTimeline } from '../editor/audio-normalization';
 import { extname, join } from 'node:path';
-import type { MediaAsset, Timeline } from '../editor/types';
+import { timelineDuration, type MediaAsset, type Timeline } from '../editor/types';
 import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
 import { isReactScene, usesSceneThree } from '../editor/scene-modules';
@@ -109,6 +109,7 @@ export async function linkCompositionResources(root:string,directory:string,asse
 }
 export async function writeComposition(directory:string,timeline:Timeline,assets:MediaAsset[],assetUrls:Record<string,string>,resolution:ExportResolution,fps:24|30|60,prefix='./',signal:AbortSignal=AbortSignal.timeout(30_000),audioSourceOffsets:Record<string,number>={}) {
   timeline=resolvedAudioTimeline(timeline);
+  const duration=timelineDuration(timeline);
   timeline={...timeline,clips:timeline.clips.filter(clip=>!clip.assetId||assetUrls[clip.assetId])};
   const audibleVideo=new Set(timeline.clips.filter(clip=>clip.kind==='video'&&clip.volume!==0).map(clip=>clip.assetId));
   const silent=new Set<string>();
@@ -119,21 +120,25 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
   });
   // An unmuted video is also authored as sound by the native producer. Probe
   // the downloaded source rather than assuming every video has an audio stream.
-  const rendered={...timeline,clips:timeline.clips.map(clip=>{
+  const rendered={...timeline,clips:timeline.clips.flatMap(clip=>{
     if(clip.kind==='video'&&clip.assetId&&silent.has(clip.assetId))clip={...clip,volume:0};
     const offset=clip.assetId?audioSourceOffsets[clip.assetId]:undefined;
     if(offset!==undefined&&clip.sourceStart<offset){
       const delta=timelineTimeAtSource(clip,offset)-clip.start;
-      return {...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:Math.max(0,clip.duration-delta),sourceStart:0};
+      const remaining=clip.duration-delta;
+      // A later source window can exhaust earlier splits of the same media.
+      // Do not hand zero-length clips (including round-off residue) to the renderer.
+      if(remaining<1e-7)return [];
+      return [{...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:remaining,sourceStart:0}];
     }
-    return offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip;
+    return [offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip];
   })};
   // HyperFrames dedupes a video's sound by comparing the authored src with the
   // browser's server-relative src ("asset-0.mp4"). A "./" prefix never matches,
   // so it mixed an extra unity-gain, 1x copy of each source's first audible clip.
   // Author media in that same form so every clip's sound is mixed exactly once.
   const mediaSrc=(url:string)=>(prefix+url.slice(2)).replace(/^\.\//,'');
-  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+'scene-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{duration,pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+'scene-runtime.js',fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {
