@@ -5,6 +5,7 @@ import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@model
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
+import { CLIPPING_SKILL_ROUTING } from '../lib/ai/skills/clipping';
 import { MCP_ORIGIN_HEADER, requestMcpOrigin } from './lib/mcp_origin';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
@@ -25,6 +26,7 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 export const MCP_INSTRUCTIONS = `Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
 For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. Default workflow: listProjects -> getProject (read its brief: the user's direction for this project, and follow it) -> inspectTimeline (same projectId) -> edit -> inspectTimeline again to confirm. When the user gives lasting direction, record it with updateBrief. Edits to a film with several sections pass scope, the section the user asked about; every other section is locked. Use getFrames to see the composited result at a few timeline seconds after visual changes (captions, framing, effects). Every editing tool needs projectId. Clip IDs, asset IDs and times come only from inspectTimeline, inspectClip, getProject and inspectAssetAnalysis; never invent them. Timeline times are seconds on the timeline; tools that say SOURCE seconds mean time inside the original media.
+${CLIPPING_SKILL_ROUTING}
 Before speech cuts, captions or take selection, read the relevant SOURCE transcript range with inspectAssetAnalysis (run analyzeMedia mode "transcribe" first if no transcript is saved). Use readSkill for detailed guidance on a kind of edit. Batch known edits when the tool supports it; a failed call saves nothing. If another edit is running on the project, wait and retry.
 Bring in footage with uploadMedia (a local file: run the script it returns, then finishUpload) or importVideoLink (a URL).
 
