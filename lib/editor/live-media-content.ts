@@ -69,7 +69,6 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   }
   for(const clip of nextMedia){
     const node=nodes.get(clip.id)!,asset=assetMap.get(clip.assetId!);if(!asset?.url)return false;
-    const before=old.get(clip.id);
     const playback=previewSourceAt(asset,sourceTimeAt(clip,Math.max(clip.start,Math.min(time,clip.start+clip.duration-1/next.fps))));
     if(node.getAttribute('src')!==playback.url){
       node.setAttribute('src',playback.url??asset.url);

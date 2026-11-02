@@ -25,7 +25,7 @@ async function outOfCredit(response: Response) {
 }
 
 /** A fetch that sends the active key and retries once with the fallback key when the main account is out of credit. */
-export async function openAIFetch(input: RequestInfo | URL, init?: RequestInit) {
+async function openAIFetch(input: RequestInfo | URL, init?: RequestInit) {
   const { primary, fallback } = keys();
   const send = (key: string) => { const headers = new Headers(init?.headers); headers.set('authorization', `Bearer ${key}`); return fetch(input, { ...init, headers }); };
   const key = activeOpenAIKey();

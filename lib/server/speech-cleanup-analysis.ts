@@ -4,7 +4,7 @@ import { analyzeSpeech, MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL, SPEECH_CLEANUP_VER
 
 const SAMPLE_RATE = 16_000;
 /** Mono float PCM for an hour is about 230 MB; longer sources skip the acoustic map. */
-export const MAX_SPEECH_CLEANUP_SECONDS = 3600;
+const MAX_SPEECH_CLEANUP_SECONDS = 3600;
 
 /** The cleanup map for a source in SOURCE seconds: fillers, breaths, pauses and abandoned takes. */
 export async function measureSpeechCleanup(input: string, duration: number, transcript: Transcript, signal: AbortSignal): Promise<SpeechCleanup | undefined> {

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { EDITOR_TOOL_DEFINITIONS, toolBehavior } from './tool-definitions';
 
 const revision = z.number().int().nonnegative();
-export const toolSaveReceiptSchema = z.union([
+const toolSaveReceiptSchema = z.union([
   z.object({ kind: z.literal('timeline'), status: z.enum(['saved', 'staged', 'unchanged']), revision }),
   z.object({ kind: z.literal('resource'), status: z.enum(['saved', 'unchanged']), revision }),
   z.object({ kind: z.literal('job'), status: z.enum(['queued', 'unchanged']), revision }),

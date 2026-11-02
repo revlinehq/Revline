@@ -131,7 +131,7 @@ export function createEditor(root: HTMLElement) {
     `9:16${ic('chevron-down', 12)}`,
     stage,
   );
-  const video = el(
+  el(
     'video-frame',
     `left:${FX}px;top:${FY}px;width:252px;height:448px;transform:scale(${f});transform-origin:0 0;background:#000;overflow:hidden`,
     '',
@@ -202,7 +202,7 @@ export function createEditor(root: HTMLElement) {
   );
   tool('more', 'ellipsis', 'right:47px', '#9a9c9f');
   tool('collapse', 'chevron-down', 'right:15px', '#9a9c9f');
-  const tracks = el(
+  el(
     'timeline',
     `left:401px;top:${H - 250}px;width:${SW}px;height:250px;background:#151515;overflow:hidden`,
   );

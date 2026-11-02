@@ -27,7 +27,7 @@ const defaultFilters:Filters={kind:'all',search:'',sort:'largest',unused:false};
 const categories=[['all','All'],['video','Video'],['audio','Audio'],['image','Images'],['model','Models'],['export','Exports']] as const;
 const icons={video:Film,audio:Music2,image:ImageIcon,model:Box,export:Download};
 const breakdown=[['videoBytes','Video'],['audioBytes','Audio'],['imageBytes','Images'],['modelBytes','Models'],['exportBytes','Exports']] as const;
-export function formatStorageBytes(bytes:number){if(bytes===0)return '0 GB';if(bytes<1_000_000)return `${Math.max(1,Math.round(bytes/1_000))} KB`;if(bytes<1_000_000_000)return `${Math.round(bytes/1_000_000)} MB`;return `${Number((bytes/1_000_000_000).toFixed(1))} GB`;}
+function formatStorageBytes(bytes:number){if(bytes===0)return '0 GB';if(bytes<1_000_000)return `${Math.max(1,Math.round(bytes/1_000))} KB`;if(bytes<1_000_000_000)return `${Math.round(bytes/1_000_000)} MB`;return `${Number((bytes/1_000_000_000).toFixed(1))} GB`;}
 
 export function StoragePage(){
   const {isAuthenticated}=useConvexAuth();
@@ -40,7 +40,7 @@ export function StoragePage(){
   return <div className="workspace-page storage-page"><WorkspaceNav title="Cloud storage" active="storage"/><StorageBrowser summary={summary} files={results} filters={filters} onFilters={setFilters} loading={!isAuthenticated||status==='LoadingFirstPage'||scanning||(filters.unused&&results.length===0&&status==='LoadingMore')} loadingMore={status==='LoadingMore'} hasMore={status==='CanLoadMore'} onLoadMore={()=>loadMore(20)} onDelete={files=>remove({fileIds:files.map(file=>file.id)})}/></div>;
 }
 
-export function StorageBrowser({summary,files,filters,onFilters,loading,loadingMore,hasMore,onLoadMore,onDelete}:{summary?:Summary;files:StorageFile[];filters:Filters;onFilters:(value:Filters)=>void;loading:boolean;loadingMore:boolean;hasMore:boolean;onLoadMore:()=>void;onDelete:(files:StorageFile[])=>Promise<Id<'projects'>[]>}){
+function StorageBrowser({summary,files,filters,onFilters,loading,loadingMore,hasMore,onLoadMore,onDelete}:{summary?:Summary;files:StorageFile[];filters:Filters;onFilters:(value:Filters)=>void;loading:boolean;loadingMore:boolean;hasMore:boolean;onLoadMore:()=>void;onDelete:(files:StorageFile[])=>Promise<Id<'projects'>[]>}){
   const [selected,setSelected]=useState<Set<string>>(()=>new Set()),[confirm,setConfirm]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [deleting,setDeleting]=useState<Id<'projects'>[]|null>(null),[cleanupError,setCleanupError]=useState(''),[retrying,setRetrying]=useState(false);
   const {isAuthenticated}=useConvexAuth();

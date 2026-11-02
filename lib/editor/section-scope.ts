@@ -60,7 +60,7 @@ function sharedCode(scene: Scene, ranges: FilmRange[]) {
 }
 
 /** The locked part of a film a change touched: each out-of-scope Beat whose code changed, and whether shared code changed. */
-export function scopeLeaks(before: Scene, after: Scene, ranges: FilmRange[]) {
+function scopeLeaks(before: Scene, after: Scene, ranges: FilmRange[]) {
   const owned = (scene: Scene, beat: Beat) => reach(scene, [beat.text]).parts.join('\n\u0000\n');
   const was = outermost(timedBeats(before)).filter(beat => !overlaps(beat, ranges)), now = outermost(timedBeats(after)).filter(beat => !overlaps(beat, ranges));
   const left = [...now], changed: FilmRange[] = [];

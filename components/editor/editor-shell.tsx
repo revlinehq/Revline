@@ -40,7 +40,7 @@ import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import type { TimelineTab, TimelineTabActions } from './timeline-tabs';
 import { EditorErrorNotice } from './error-notice';
-import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, formatTime, dimensions, timelineCover } from '@/lib/editor/types';
+import { type Timeline, type MediaAsset, type AspectRatio, type Clip, timelineDuration, dimensions, timelineCover } from '@/lib/editor/types';
 import { addMediaClip, addTextClip, patchClip, frameSeekTime, linkedClipIds } from '@/lib/editor/operations';
 import { textLookPatch, type TextLookId } from '@/lib/editor/text-looks';
 import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';

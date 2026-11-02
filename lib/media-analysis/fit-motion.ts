@@ -13,7 +13,7 @@ const sine = (t: number) => 1 - Math.cos(t * Math.PI / 2);
 const circ = (t: number) => 1 - Math.sqrt(1 - t * t);
 const back = (s: number) => (t: number) => t * t * ((s + 1) * t - s);
 /** GSAP's eases by their GSAP names (power1 is quad, power4 is quint). */
-export const EASES: Record<string, (t: number) => number> = { none: t => t };
+const EASES: Record<string, (t: number) => number> = { none: t => t };
 for (const [name, f] of [['power1', power(2)], ['power2', power(3)], ['power3', power(4)], ['power4', power(5)], ['expo', expo], ['sine', sine], ['circ', circ]] as const) {
   EASES[`${name}.in`] = f; EASES[`${name}.out`] = out(f); EASES[`${name}.inOut`] = inOut(f);
 }

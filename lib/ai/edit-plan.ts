@@ -15,7 +15,7 @@ const effectPlanFields = {
   anchor: z.object({ kind: z.enum(['requested-time', 'observed-event', 'marker', 'cut']), time: z.number().min(0), clipId: z.string().max(100).optional(), markerId: z.string().max(100).optional(), evidenceId: z.string().max(100).optional(), description: z.string().min(1).max(250) }),
   checks: z.object({ returnBy: z.number().min(0).optional(), minPixelChange: z.number().min(0).max(1).optional(), maxPixelChange: z.number().min(0).max(1).optional(), textSafe: z.boolean().optional(), subjectReadable: z.boolean().optional() }).optional(),
 };
-export const EFFECT_PLAN_EFFECTS = {
+const EFFECT_PLAN_EFFECTS = {
   timed: [...TIMED_EFFECT_PRESETS], transition: [...TRANSITION_PRESETS],
   visual: [...Object.keys(VISUAL_EFFECT_GUIDANCE), 'motion'],
   text: [...new Set([...TEXT_ANIMATION_PRESETS, ...TEXT_LOOKS.map(look => look.id), 'appearance', 'stroke', 'shadow', 'glow', 'gradient'])],

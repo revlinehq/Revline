@@ -106,7 +106,7 @@ export async function probePreviewVideo(path: string, signal: AbortSignal): Prom
 }
 
 /** FFmpeg's video packet PTS gives real progress even when copyts makes out_time_us relative to a seek. */
-export async function runPreviewFfmpeg(
+async function runPreviewFfmpeg(
   args: string[],
   signal: AbortSignal,
   onSeconds: (seconds: number) => void,
@@ -147,7 +147,7 @@ export async function runPreviewFfmpeg(
   });
 }
 
-export async function previewEncoder(signal: AbortSignal) {
+async function previewEncoder(signal: AbortSignal) {
   if (platform() === 'darwin' && process.env.MEDIA_PREVIEW_HARDWARE !== '0') {
     // Listing an encoder does not prove that this worker can open a hardware session.
     try {
@@ -208,7 +208,7 @@ export async function extractPreviewPoster(input: string, output: string, signal
 }
 
 /** Scan packet headers only. A long GOP needs a derivative; adding keyframes requires re-encoding. */
-export async function hasScrubbableKeyframes(input: string, signal: AbortSignal, duration: number) {
+async function hasScrubbableKeyframes(input: string, signal: AbortSignal, duration: number) {
   const starts = [...new Set([0, Math.max(0, duration / 2 - 15), Math.max(0, duration - 30)])];
   for (const start of starts) {
     const end = Math.min(duration, start + 30);
@@ -253,7 +253,7 @@ type EncodeOptions = {
   threads: number;
   source: Awaited<ReturnType<typeof inspectPreviewVideo>>;
 };
-export async function encodePreviewRange(
+async function encodePreviewRange(
   input: string,
   output: string,
   range: SourceRange,
@@ -344,7 +344,7 @@ export async function encodePreviewRange(
   }
 }
 
-export async function remuxPreviewVideo(
+async function remuxPreviewVideo(
   input: string,
   output: string,
   signal: AbortSignal,
@@ -373,7 +373,7 @@ export async function remuxPreviewVideo(
 }
 
 /** Exact chunk durations retain VFR PTS. Audio is taken once from the original, avoiding AAC priming at joins. */
-export async function concatenatePreview(
+async function concatenatePreview(
   input: string,
   output: string,
   chunks: (SourceRange & { path: string })[],
