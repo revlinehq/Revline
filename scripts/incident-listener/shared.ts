@@ -1,4 +1,4 @@
-import { execFile, spawn } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { homedir } from 'node:os';
 import { join, dirname, resolve } from 'node:path';
@@ -11,7 +11,7 @@ export const state = join(homedir(), '.revline-incidents');
 export const configFile = join(state, 'config.json');
 export const githubToken = () => readFile(join(state, 'github-token'), 'utf8').then(value => value.trim());
 export const endpointSchema = z.object({ deployment: z.enum(['dev', 'prod']), url: z.enum(['https://majestic-alpaca-541.convex.cloud', 'https://different-gnu-398.convex.cloud']), secret: z.string().min(32) }).refine(value => value.url === (value.deployment === 'dev' ? 'https://majestic-alpaca-541.convex.cloud' : 'https://different-gnu-398.convex.cloud'));
-export const configSchema = z.object({ repoRoot: z.string(), codex: z.string(), endpoints: z.array(endpointSchema).length(2) });
+export const configSchema = z.object({ repoRoot: z.string(), t3ProjectId: z.string(), endpoints: z.array(endpointSchema).min(1).max(2) });
 export const config = () => readFile(configFile, 'utf8').then(text => configSchema.parse(JSON.parse(text)));
 export const incidentSchema = z.object({
   _id: z.string(), fingerprint: z.string().regex(/^incident-v1-[a-f0-9]{64}$/), generation: z.number().int().positive(),
@@ -19,7 +19,7 @@ export const incidentSchema = z.object({
   count: z.number(), firstSeen: z.number(), lastSeen: z.number(), priority: z.number(), prUrl: z.string().optional(),
   samples: z.array(z.object({ at: z.number(), context: z.string(), projectId: z.string().optional(), runId: z.string().optional() })),
 });
-export const jobSchema = z.object({ incident: incidentSchema, claimToken: z.string(), branch: z.string(), directory: z.string(), phase: z.enum(['starting', 'running', 'finished', 'failed']), workerPid: z.number().optional(), codexPid: z.number().optional(), prUrl: z.string().optional() });
+export const jobSchema = z.object({ incident: incidentSchema, claimToken: z.string(), branch: z.string(), directory: z.string().optional(), phase: z.enum(['starting', 'running', 'finished', 'failed']), workerPid: z.number().optional(), codexPid: z.number().optional(), threadId: z.string().optional(), threadLink: z.string().optional(), runId: z.string().optional(), prUrl: z.string().optional() });
 export type Job = z.infer<typeof jobSchema>;
 export type Endpoint = z.infer<typeof endpointSchema>;
 export async function writeJob(path: string, job: Job) {
@@ -44,12 +44,3 @@ export async function branchPR(branch: string) {
   return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => pr.headRefName === branch && pr.isDraft && pr.title.startsWith('Incident: '));
 }
 
-export function launchCodex(binary: string, directory: string, brief: string, logFd: number, token: string) {
-  // Give Sol public build settings and ordinary user tooling. Deployment files stay separate.
-  const env = { ...process.env };
-  for (const key of Object.keys(env)) if (!/^(PATH|HOME|USER|LOGNAME|SHELL|TMPDIR|LANG|TERM|CODEX_HOME)$/.test(key)) delete env[key];
-  env.GH_TOKEN = token;
-  const child = spawn(binary, ['exec', '--dangerously-bypass-approvals-and-sandbox', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=xhigh', '-c', 'features.apps=false', '-c', 'mcp_servers={}', '-C', directory, '-'], { cwd: directory, env, stdio: ['pipe', logFd, logFd], detached: true });
-  child.stdin?.end(brief);
-  return child;
-}

@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Incidents: Run fixers as visible T3 MCP threads at xhigh on the Linux PC, with a disabled-by-default systemd listener and non-defect filtering. Why: avoid Mac swapping and wasted Sol sessions.
 - Incidents: Capture user and agent failures, group repeats, and start local Sol fixes through Convex subscriptions. Why: turn failures into reviewed draft PRs immediately.
 - Storage: Make shared-media deletion and retries idempotent, report project cleanup failures, and handle disappeared projects calmly. Why: a shared project could abort a multi-file cascade.
 - Scenes: Added timeline-driven 3D layers, cameras, lights, models and extruded text beside HTML/GSAP. Why: mix real depth with motion design in preview, frame capture and CPU exports.

@@ -32,3 +32,16 @@ export function incidentNormalized(value: string): string {
     .replace(/\b[\da-f]{12,}\b|\b[\w-]{24,}\b|\b\d+(?:\.\d+)?\b/g, '#')
     .replace(/\s+/g, ' ').trim();
 }
+
+/** Keep diagnostic reports, but do not spend a fixer session on an expected refusal. */
+export function incidentNonDefectReason(message: string, kind: string, contexts: readonly string[] = []): string | null {
+  const happened = contexts.flatMap(context => {
+    try { const value: unknown = JSON.parse(context); return value && typeof value === 'object' && 'happened' in value && typeof value.happened === 'string' ? [value.happened] : []; }
+    catch { return []; }
+  });
+  const evidence = [message, ...happened].join('\n');
+  if (/\b402\b|\bpayment required\b|\binsufficient[ _-](?:credits?|balance|quota)\b|\bcredit balance (?:is )?too low\b|\b(?:billing hard limit|credits? exhausted|out of credits|exceeded (?:your )?current quota)\b/i.test(evidence)) return 'Provider billing or credits require attention';
+  if (/\badd (?:a|at least one) clip before exporting\b|\b(?:intended|expected) validation (?:refusal|failure|error)\b/i.test(evidence)) return 'Intended validation refusal';
+  if (kind === 'agent-report' && /\bno (?:reproducible |actual |confirmed )?(?:product )?(?:defect|bug)(?:s)?\b|\bnot a (?:product )?(?:defect|bug)\b|\bworking as (?:intended|expected)\b/i.test(evidence)) return 'Agent reported no product defect';
+  return null;
+}
