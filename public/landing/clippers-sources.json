@@ -2,7 +2,7 @@
   "projectName": "Landing: podcast clips",
   "projectId": "j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
   "developmentProjectUrl": "http://localhost:3001/editor/j97bb7yr3ebk478zhzbhf5cq8s8hf0v8",
-  "production": "Imported, clipped, reframed, captioned and normalized through Revline development MCP tools using the clipping skill. Active-speaker matching abstained where uncertain; face following or stable framing was retained. Muted 360x640 H.264 previews and WebP posters use Revline’s saved timelines and composition renderer, followed by small-asset compression. The short Acquired preview loops. No exportVideo call or export job was created.",
+  "production": "Imported, clipped, reframed, captioned and normalized through Revline development MCP tools. Each timeline has its own caption identity, styled with native text tools and saved speech timing. Muted 360x640 H.264 previews and WebP posters use the saved timelines, rangeExportTimeline and Revline’s native composition renderer, followed by small-asset compression. The short Acquired preview loops. No exportVideo call or export job was created.",
   "sources": [
     {
       "asset": "theo",
@@ -18,7 +18,16 @@
         51.595001,
         62.995001
       ],
-      "timelineId": "1685f121-9a61-49ef-b940-cefb207b87dc"
+      "timelineId": "1685f121-9a61-49ef-b940-cefb207b87dc",
+      "captionStyle": {
+        "name": "Short lime punch captions",
+        "font": "barlow-condensed",
+        "color": "#A8F575",
+        "positionY": 0.58,
+        "animation": "pop",
+        "fontSize": 150,
+        "maxWords": 3
+      }
     },
     {
       "asset": "lex",
@@ -34,7 +43,16 @@
         288.16,
         296.16
       ],
-      "timelineId": "main"
+      "timelineId": "main",
+      "captionStyle": {
+        "name": "Active-word pop",
+        "font": "montserrat",
+        "color": "#FFFFFF",
+        "accent": "#FFAD42",
+        "positionY": 0.65,
+        "animation": "karaoke",
+        "fontSize": 94
+      }
     },
     {
       "asset": "dwarkesh",
@@ -50,7 +68,17 @@
         82.26,
         86.86
       ],
-      "timelineId": "fc73f5bd-f580-4004-9a9f-ce111f2da436"
+      "timelineId": "fc73f5bd-f580-4004-9a9f-ce111f2da436",
+      "captionStyle": {
+        "name": "Teal mono karaoke",
+        "font": "geist-mono",
+        "color": "#9EF5E6",
+        "accent": "#54F2DD",
+        "background": "#171717E8",
+        "positionY": 0.68,
+        "animation": "karaoke",
+        "fontSize": 88
+      }
     },
     {
       "asset": "lenny",
@@ -66,7 +94,16 @@
         583.845,
         588.445
       ],
-      "timelineId": "138edf91-fe25-4a40-8392-17cf15932c09"
+      "timelineId": "138edf91-fe25-4a40-8392-17cf15932c09",
+      "captionStyle": {
+        "name": "Yellow outlined capitals",
+        "font": "anton",
+        "color": "#FFE147",
+        "outline": "#171717",
+        "positionY": 0.74,
+        "animation": "none",
+        "fontSize": 100
+      }
     },
     {
       "asset": "acquired",
@@ -82,7 +119,16 @@
         1682.337,
         1685.057
       ],
-      "timelineId": "382b0a28-7bd6-486d-88fb-8b0ef5e1d11e"
+      "timelineId": "382b0a28-7bd6-486d-88fb-8b0ef5e1d11e",
+      "captionStyle": {
+        "name": "Cream caption pills",
+        "font": "dm-sans",
+        "color": "#171717",
+        "background": "#FFF2D8",
+        "positionY": 0.71,
+        "animation": "rise",
+        "fontSize": 88
+      }
     },
     {
       "asset": "allin",
@@ -98,7 +144,15 @@
         199.455,
         204.055
       ],
-      "timelineId": "62024abc-699b-4684-b76d-e2e2161485b8"
+      "timelineId": "62024abc-699b-4684-b76d-e2e2161485b8",
+      "captionStyle": {
+        "name": "Serif lower third",
+        "font": "lora",
+        "color": "#FFFFFF",
+        "positionY": 0.75,
+        "animation": "fade",
+        "fontSize": 82
+      }
     }
   ]
 }
