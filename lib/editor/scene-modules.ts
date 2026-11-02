@@ -6,9 +6,14 @@ export type SceneGsapPlugin = typeof SCENE_GSAP_PLUGINS[number];
 export const SCENE_MODULES = new Set<string>(['gsap', 'gsap/all', 'gsap/EasePack', ...SCENE_GSAP_PLUGINS.map(name => `gsap/${name}`)]);
 
 /** Opt-in React scenes: a module that imports from 'revline' (or 'react') is a component tree drawn per frame. */
-export const REACT_SCENE_MODULES = new Set<string>(['revline', 'react', 'react/jsx-runtime']);
-export const REACT_SCENE_PATTERN = /\bfrom\s*['"](?:revline|react)['"]/;
+export const REACT_SCENE_MODULES = new Set<string>(['revline', 'revline/three', 'three', 'react', 'react/jsx-runtime']);
+export const REACT_SCENE_PATTERN = /\bfrom\s*['"](?:revline(?:\/three)?|react)['"]/;
 export const isReactScene = (code: string) => REACT_SCENE_PATTERN.test(code);
+/** Includes kits and transition neighbours when deciding whether to ship the optional renderer. */
+export const THREE_SCENE_PATTERN = /\bfrom\s*['"](?:revline\/three|three)['"]/;
+export function usesSceneThree(scene: { code: string; blueprints?: { code: string }[]; neighbours?: { code: string; blueprints?: { code: string }[] }[] }): boolean {
+  return THREE_SCENE_PATTERN.test(scene.code) || (scene.blueprints ?? []).some(usesSceneThree) || (scene.neighbours ?? []).some(usesSceneThree);
+}
 /** A React scene that joins the beat clips on either side of it (it draws <Transition> or <Neighbour>). */
 export const isSceneTransition = (code: string) => isReactScene(code) && /<(?:Transition|Neighbour)\b/.test(code);
 /** Sucrase options for a scene: React scenes compile as TSX with the automatic JSX runtime. */

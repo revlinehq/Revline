@@ -7,7 +7,7 @@ const MINUTE_MS = 60_000;
  * so the default admits eight sources transferring and preparing at once. */
 export const DEFAULT_MAX_ACTIVE_MEDIA_TASKS = 24;
 /** Fresh preparation tasks queued by one source upload. */
-export const uploadPreparationTasks = (kind: 'video' | 'audio' | 'image') => kind === 'video' ? 3 : kind === 'audio' ? 2 : 0;
+export const uploadPreparationTasks = (kind: 'video' | 'audio' | 'image' | 'model') => kind === 'video' ? 3 : kind === 'audio' ? 2 : 0;
 
 /** An abandoned transfer stops holding capacity after this; its completion still meets the ceiling. */
 export const UPLOAD_RESERVATION_MS = 3600_000;

@@ -38,7 +38,7 @@ export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('pro
   }
   return repaired;
 }});
-type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;previewRange?:{start:number;end:number};purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image';contentType:string;duration?:number };
+type PreviewUploadArgs = { projectId:Id<'projects'>;jobId?:Id<'renderJobs'>;previewRange?:{start:number;end:number};purpose?:'preview';sourceAssetId?:Id<'assets'>;previewFps?:number;previewVersion?:number;kind:'video'|'audio'|'image'|'model';contentType:string;duration?:number };
 async function previewSource(ctx:QueryCtx|MutationCtx,args:PreviewUploadArgs,task:Doc<'mediaTasks'>|null) {
   if(!args.purpose){if(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined||task?.kind==='preview')throw new ConvexError('Preview upload purpose is required');return null;}
   if(!task||task.kind!=='preview'||task.projectId!==args.projectId||task.assetId!==args.sourceAssetId||args.jobId||args.kind!=='video'||args.contentType!=='video/mp4'||args.previewVersion!==PREVIEW_VERSION||!Number.isFinite(args.duration)||args.duration!<=0||!Number.isFinite(args.previewFps)||args.previewFps!<=0||args.previewFps!>240)throw new ConvexError('This task cannot upload that preview');
@@ -129,7 +129,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!args.contentType.startsWith(`${args.kind}/`) && !(args.kind === 'audio' && /^video\/(mp4|quicktime|webm)$/.test(args.contentType))) throw new ConvexError('File content type does not match the media');
   if (!Number.isSafeInteger(args.size) || args.size < 1) throw new ConvexError('This file is empty or has an invalid size');
   if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0)) throw new ConvexError('Invalid media duration');
-  if (args.kind !== 'audio' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
+  if (args.kind !== 'audio' && args.kind !== 'model' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
   const partSize = uploadPartSize(args.size);
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
@@ -204,7 +204,7 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
-  else if (lease.kind !== 'image') {
+  else if (lease.kind !== 'image' && lease.kind !== 'model') {
     // The lease reserved this source's tasks before its bytes moved, so only a
     // lease older than its reservation meets a backstop of twice the limit.
     // Fresh leases skip the read: running tasks heartbeat constantly, and

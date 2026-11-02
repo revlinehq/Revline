@@ -9,7 +9,7 @@ import './footage-processing-card.css';
 export type FootageProcessingFile = {
   id: string;
   name: string;
-  kind: 'video' | 'image' | 'audio';
+  kind: 'video' | 'image' | 'audio' | 'model';
   url?: string;
   thumbnail?: string;
 };
