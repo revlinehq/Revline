@@ -31,11 +31,6 @@ export function LandingSection({ headingId, className, ...props }: ComponentProp
   return <section {...props} className={cn('landing-section', className)} aria-labelledby={headingId} />;
 }
 
-/** Small rounded label, used on use-case tiles and timeline edit notes. */
-export function LandingChip({ tone = 'light', className, ...props }: ComponentProps<'span'> & { tone?: 'light' | 'cut' | 'caption' | 'zoom' }) {
-  return <span {...props} className={cn('landing-chip', className)} data-tone={tone} />;
-}
-
 /** Intro reveal: an outline draws around the content, a shimmer sweeps it, and the content sharpens in. `order` staggers siblings. */
 export function LandingReveal({ as: Tag = 'div', order = 0, className, children, ...props }: { as?: 'h1' | 'p' | 'div'; order?: number; className?: string; children: ReactNode; id?: string }) {
   return <Tag {...props} className={cn('landing-reveal', className)} style={{ '--reveal-order': order } as CSSProperties}><span className="landing-reveal-content">{children}</span></Tag>;
