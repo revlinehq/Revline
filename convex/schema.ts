@@ -134,7 +134,7 @@ export const aiStateFields = {
   aiRequest:v.optional(v.object({prompt:v.string(),messageId:v.string(),startedRevision:v.number()})),aiRecovery:v.optional(assistantRecoveryValidator),
 };
 export const projectFields = {
-  deleting:v.optional(v.boolean()), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
+  deleting:v.optional(v.boolean()), deletionJobId:v.optional(v.id('_scheduled_functions')), title: v.string(), ownerId: v.string(), aspectRatio, createdAt: v.number(), updatedAt: v.number(),
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId:v.optional(v.string()), ...aiStateFields,
   // Timeline tabs: the open tab's timeline is `timeline`; the others live in projectTimelines.
