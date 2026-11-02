@@ -51,7 +51,7 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   const fps = currentTimeline(project).fps;
   const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, fps, mode, ...(effect ? { effect } : {}), status: 'queued', createdAt: Date.now() });
   // Foreground mode requires the current processor; old workers only know person matting.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId, requiredProcessorVersion: 24 });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId, requiredProcessorVersion: 25 });
   await ctx.db.patch(cutoutId, { taskId });
   return { cutoutId, estimatedUsd: estimate(end - start, fps), alreadyRunning: false, reused: false };
 }

@@ -5,7 +5,7 @@ import { dimensions, type AspectRatio, type Clip, type MediaAsset } from './type
 /** A footage camera cannot reveal pixels beyond the retained source window.
  * Constrain in the camera's local space so intentional static placement,
  * rotation, crop and existing contain bars remain unchanged. */
-export function boundedCameraMotion(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, keys: MotionKeyframe[]): MotionKeyframe[] {
+export function boundedCameraMotion(clip: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio, keys: MotionKeyframe[]): MotionKeyframe[] {
   if ((!clip.cameraMotion && !clip.smoothZoom) || !keys.length || !asset.width || !asset.height) return keys;
   const canvas = dimensions(aspectRatio);
   const { window } = calculateVisualRect(asset.width, asset.height, canvas.width, canvas.height, clip.crop, clip.focus?.[0], clip.fit);

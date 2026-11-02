@@ -35,9 +35,9 @@ A word filled with the video, often for titles.
 
 ## Tracked label or sticker
 A name tag, arrow or emoji that follows a person or object.
-1. Footage must have fixed framing (no camera motion, subject-follow or keyframes on it).
+1. Read vfx page tracking. Pixel tracking supports moving-camera footage; choose a distinctive visible point or box.
 2. Add the text or image overlay for the time it should follow.
-3. attachToTrack mode move: target subject for a person; for any other object, inspectFrames boxes give points.
+3. Use trackPoints with one inspectFrames point/box or targetId, or a short noun seed; pass its trackId to attachToTrack mode move. Use target subject for the existing face tracker. Stop at the measured visibility boundary rather than inventing hidden positions.
 4. offsetY about -.12 puts a label above a head; keep it inside the frame.
 
 ## Tracked spotlight or privacy blur

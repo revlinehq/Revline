@@ -12,7 +12,7 @@ const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/edge/clou
 // Read, spawned or copied into the image without a static import.
 const RUNTIME_PREFIXES = [
   'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',
-  'scripts/detect-beats.py', 'scripts/detect-shots.py', 'scripts/install-beat-model.mjs', 'scripts/copy-vendor.mjs',
+  'scripts/track-pixels.py', 'scripts/detect-beats.py', 'scripts/detect-shots.py', 'scripts/install-beat-model.mjs', 'scripts/copy-vendor.mjs',
   'scripts/beat-tracking-requirements.txt', 'scripts/scene-detection-requirements.txt', 'scripts/video-import-requirements.txt',
   'scripts/deploy-production.mjs', 'package.json', 'package-lock.json', 'tsconfig.json',
 ];

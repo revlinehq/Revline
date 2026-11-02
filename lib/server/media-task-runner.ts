@@ -1,3 +1,4 @@
+import { trackSourcePixels } from './track-source-pixels';
 import type { ExportResolution } from '@/lib/editor/composition';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -181,8 +182,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'derive') {
       if (task.outputAssetId) return {};
       if (!task.derive || asset.kind === 'audio') throw new AnalysisError('The processing request is unavailable.', 400);
+      if (task.derive.op === 'pixelTrack') {
+        if (!task.derive.tracking || asset.kind !== 'video') throw new AnalysisError('Pixel tracking request is missing.', 400);
+        return { pixelTrack: await runPhase('Tracking pixels', () => trackSourcePixels(source, task.derive!.tracking!, signal)) };
+      }
       if (task.derive.op === 'stats') return { colorStats: await runPhase('Measuring color', () => measureColor(source, asset.kind as 'video' | 'image', task.derive!.times ?? [task.derive!.start], signal)) };
-      const request = task.derive, label = request.op === 'parallax' ? 'Preparing depth, foreground matte and inpainted background' : request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';
+      const request = { ...task.derive, op: task.derive.op }, label = request.op === 'parallax' ? 'Preparing depth, foreground matte and inpainted background' : request.op === 'freeze' ? 'Capturing freeze frame' : request.op === 'slowmo' ? 'Interpolating slow motion' : 'Upscaling';
       const output = await runPhase(label, () => deriveMedia(source, asset.kind as 'video' | 'image', directory, request, signal, onProgress));
       const base = asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200), suffix = request.op === 'parallax' ? ' (parallax atlas)' : request.op === 'freeze' ? ` (frame ${(request.time ?? 0).toFixed(2)}s)` : request.op === 'slowmo' ? ` (smooth ${request.factor ?? 2}x)` : ' (upscaled)';
       await runPhase('Saving processed media', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${base}${suffix}.${output.contentType.split('/')[1].replace('jpeg', 'jpg')}`, kind: output.kind, contentType: output.contentType, width: output.width, height: output.height, ...(output.duration ? { duration: output.duration } : {}) }, uploadContext, signal));
