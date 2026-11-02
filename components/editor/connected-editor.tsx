@@ -77,7 +77,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const restorePreview=useSceneCode(projectId,[storedPreview?.timeline,storedPreview&&{clips:storedPreview.removedClips}]);
   const livePreview=useMemo(()=>storedPreview&&restorePreview?{...storedPreview,timeline:restorePreview(storedPreview.timeline),removedClips:restorePreview({clips:storedPreview.removedClips}).clips}:storedPreview===null?null:undefined,[storedPreview,restorePreview]);
   const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
-  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
+  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const retryTurn=useMutation(api.assistant.retry);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
   const importVideo=useMutation(api.mediaTasks.importVideo);
   const removeAsset=useMutation(api.assets.remove);
   const registerStockAudio=useMutation(api.assets.registerStockAudio);
@@ -229,10 +229,11 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const waitForSave=()=>saves.wait();
   // The turn works on the tab on screen, even if another agent opens a different tab meanwhile.
   const shownTab=watchedTab??pendingTab?.id??project.activeTimelineId;
-  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retry?:boolean}={})=>{
+  const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retryPromptMessageId?:string}={})=>{
     aiStarting.current=true;
-    const {retry,...requestContext}=context;
-    const attached=retry?[]:[...composerAssetIds];
+    const {retryPromptMessageId,...requestContext}=context;
+    if(retryPromptMessageId){try{await waitForSave();await retryTurn({projectId,promptMessageId:retryPromptMessageId});}finally{aiStarting.current=false;}return;}
+    const attached=[...composerAssetIds];
     try{if(!ai?.running&&!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(shownTab?{timelineId:shownTab}:{}),...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
     finally{aiStarting.current=false;}
   };

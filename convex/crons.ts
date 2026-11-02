@@ -1,6 +1,7 @@
 import { cronJobs } from 'convex/server';
 import { internal } from './_generated/api';
 const crons=cronJobs();
+crons.interval('Prune tool save receipts',{minutes:10},internal.toolWrites.prune,{});
 crons.daily('Prune finished media task history',{hourUTC:9,minuteUTC:15},internal.mediaTasks.pruneFinished,{});
 crons.daily('Prune rendered review snapshots',{hourUTC:9,minuteUTC:20},internal.compositionReview.prune,{});
 crons.daily('Prune delivered Discord alert receipts',{hourUTC:9,minuteUTC:25},internal.discordAlerts.prune,{});
