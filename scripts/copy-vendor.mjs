@@ -28,3 +28,13 @@ await build({ entryPoints: ['lib/editor/scene-runtime.ts'], outfile: 'public/ven
 // React scenes (opt-in) load React and their frame adapter from a second file, so GSAP scene frames stay as small as before.
 await build({ entryPoints: ['lib/editor/scene-react-runtime.tsx'], outfile: 'public/vendor/scene-react.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneReact', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
+
+// Optional 3D scene renderer shares React and scene contexts with scene-react.js.
+await build({ entryPoints: ['lib/editor/scene-three-runtime.tsx'], outfile: 'public/vendor/scene-three.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineSceneThree', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked',
+  plugins: [{ name: 'scene-shared-react', setup(build) {
+    build.onResolve({ filter: /^(react|react\/jsx-runtime)$/ }, args => ({ path: args.path, namespace: 'shared-react' }));
+    build.onLoad({ filter: /.*/, namespace: 'shared-react' }, args => ({ contents: `module.exports = window.__revlineSceneReact.modules[${JSON.stringify(args.path)}];` }));
+    build.onResolve({ filter: /^\.\/scene-react-runtime$/ }, () => ({ path: 'bridge', namespace: 'shared-scene' }));
+    build.onLoad({ filter: /.*/, namespace: 'shared-scene' }, () => ({ contents: 'module.exports = window.__revlineSceneReact.rendererBridge;' }));
+  } }],
+});

@@ -127,7 +127,7 @@ export type TimelineMarker = { id: string; time: number; label?: string };
 export type Timeline = { audioNormalization?: NonNullable<Clip['normalizedAudio']>; clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
-  _id: string; fileName: string; kind: 'video' | 'image' | 'audio';
+  _id: string; fileName: string; kind: 'video' | 'image' | 'audio' | 'model';
   duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   previewOriginalPlayable?: boolean;
@@ -155,7 +155,7 @@ export type MediaAsset = {
 export type SourceEditSuggestion = { label:string;prompt:string;start:number;end:number };
 export const EMPTY_TIMELINE: Timeline = { clips: [], fps: 60, aspectRatio: 'vertical', tracks: { visual: 1, overlay: 0, audio: 1, effects:0 } };
 export function maxTrackCount(group: LayerGroup) { return group === 'visual' || group === 'effects' ? 24 : 12; }
-export function layerGroup(kind: ClipKind): Exclude<LayerGroup,'overlay'> {
+export function layerGroup(kind: ClipKind | 'model'): Exclude<LayerGroup,'overlay'> {
   return kind === 'effect' ? 'effects' : kind === 'audio' ? 'audio' : 'visual';
 }
 function validCount(value: number, maximum = 12) {

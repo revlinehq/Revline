@@ -6,7 +6,7 @@ import { useDeferredValue,useState,useEffect } from 'react';
 import Link from 'next/link';
 import { useConvexAuth,useMutation,usePaginatedQuery,useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { ArrowDown,ArrowUpRight,Download,Film,ImageIcon,LoaderCircle,LockKeyhole,Music2,Search,Trash2,Upload } from 'lucide-react';
+import { ArrowDown,ArrowUpRight,Box,Download,Film,ImageIcon,LoaderCircle,LockKeyhole,Music2,Search,Trash2,Upload } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Dialog,DialogContent,DialogDescription,DialogTitle } from '@/components/ui/dialog';
@@ -22,11 +22,11 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type StorageFile=FunctionReturnType<typeof api.storage.files>['page'][number];
 type Summary=FunctionReturnType<typeof api.storage.summary>;
-type Filters={kind:'all'|'video'|'audio'|'image'|'export';search:string;sort:'largest'|'newest';unused:boolean};
+type Filters={kind:'all'|'video'|'audio'|'image'|'model'|'export';search:string;sort:'largest'|'newest';unused:boolean};
 const defaultFilters:Filters={kind:'all',search:'',sort:'largest',unused:false};
-const categories=[['all','All'],['video','Video'],['audio','Audio'],['image','Images'],['export','Exports']] as const;
-const icons={video:Film,audio:Music2,image:ImageIcon,export:Download};
-const breakdown=[['videoBytes','Video'],['audioBytes','Audio'],['imageBytes','Images'],['exportBytes','Exports']] as const;
+const categories=[['all','All'],['video','Video'],['audio','Audio'],['image','Images'],['model','Models'],['export','Exports']] as const;
+const icons={video:Film,audio:Music2,image:ImageIcon,model:Box,export:Download};
+const breakdown=[['videoBytes','Video'],['audioBytes','Audio'],['imageBytes','Images'],['modelBytes','Models'],['exportBytes','Exports']] as const;
 export function formatStorageBytes(bytes:number){if(bytes===0)return '0 GB';if(bytes<1_000_000)return `${Math.max(1,Math.round(bytes/1_000))} KB`;if(bytes<1_000_000_000)return `${Math.round(bytes/1_000_000)} MB`;return `${Number((bytes/1_000_000_000).toFixed(1))} GB`;}
 
 export function StoragePage(){

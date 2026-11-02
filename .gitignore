@@ -32,3 +32,6 @@ next-env.d.ts
 /dist/
 .vinext/
 .DS_Store
+
+public/vendor/scene-three.js
+public/vendor/scene-three.js.LEGAL.txt

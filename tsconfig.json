@@ -26,6 +26,7 @@
       "@/*": [
         "./*"
       ],
+      "revline/three": ["./lib/editor/scene-three-runtime.tsx"],
       "revline": [
         "./lib/editor/scene-react-runtime.tsx"
       ],
