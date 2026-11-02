@@ -38,11 +38,6 @@ body:has(>.landing),body:has(main.landing){background:#fff}
 .landing-heading[data-size=lg] h2{width:640px;max-width:100%;font-size:52px;letter-spacing:-1.6px;line-height:1.05}
 .landing-heading[data-tone=inverse] h2{color:#f2f2f4}
 .landing-heading[data-tone=inverse] p{font-size:18px;color:#a6a6ae}
-.landing-chip{padding:4px 8px;border-radius:6px;font-size:12px;line-height:16px;color:var(--l-fg);white-space:nowrap}
-.landing-chip[data-tone=light]{background:#fff;font-size:11px;font-weight:500;line-height:14px;color:#121212}
-.landing-chip[data-tone=cut]{background:#fce7e7}
-.landing-chip[data-tone=caption]{background:#e3f6ec}
-.landing-chip[data-tone=zoom]{background:var(--l-brand-tint)}
 /* LandingReveal: generated-in intro (outline draws, shimmer sweeps, content sharpens). Static when motion is reduced. */
 @property --reveal-p{syntax:'<number>';inherits:false;initial-value:0}
 .landing-reveal{--reveal-start:.25s;--reveal-step:90ms;--reveal-duration:.8s;--reveal-at:calc(var(--reveal-start) + var(--reveal-order,0) * var(--reveal-step));--reveal-soft:#a876ff2e;--reveal-mid:#a876ff99;--reveal-edge:#8b5cf6}
@@ -121,32 +116,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-logos>p{font-size:14px;line-height:1.55;color:var(--l-fg-3)}
 .landing-logos ul{display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:20px 72px}
 .landing-logos li{font-size:22px;letter-spacing:-.3px;line-height:1.3;color:#b4b4ba}
-
-/* Use cases */
-.landing-use-cases{display:flex;flex-direction:column;gap:40px;padding-block:96px}
-.landing-carousel{display:flex;flex-direction:column;gap:16px;border-radius:8px;overflow:hidden}
-.landing-marquee{overflow:hidden}
-.landing-marquee-track{display:flex;width:max-content;animation:landing-marquee 55s linear infinite}
-.landing-marquee[data-direction=right] .landing-marquee-track{animation-direction:reverse}
-.landing-carousel:hover .landing-marquee-track{animation-play-state:paused}
-/* `.landing ul` resets padding, so the seam between a set and its looped copy needs the more specific selector. */
-.landing .landing-marquee-set{display:flex;gap:16px;padding-right:16px}
-.landing-tile{--tile-h:220px;position:relative;width:124px;height:var(--tile-h);flex-shrink:0;border-radius:8px;overflow:hidden;background:#17181c}
-.landing-tile-wide{width:391px}
-.landing-tile[data-video]{width:calc(var(--tile-h,220px) * var(--tile-ratio))}
-.landing-tile-credit{position:absolute;left:10px;bottom:8px;padding:2px 6px;border-radius:4px;background:#0b0b0d8c;font-size:10px;line-height:14px;color:#ffffffd9;pointer-events:none}
-.landing-tile :is(img,video){width:100%;height:100%;object-fit:cover;display:block}
-.landing-tile .landing-chip{position:absolute;top:10px;left:10px}
-.landing-tile-play{display:block;width:100%;height:100%;padding:0;border:0;background:none;cursor:pointer}
-.landing-tile-play .landing-chip,.landing-tile:has(.landing-tile-play) .landing-chip{pointer-events:none}
-/* Video modal (components/landing/tile-video.tsx): the film larger, sized to its 16:9 frame, no border or shadow. */
-[data-slot=dialog-overlay]:has(+ .landing-video-modal){background:#0b0b0dd9}
-.landing-video-modal.landing-video-modal{width:min(1200px,calc(100vw - 32px),calc((100dvh - 96px) * var(--video-ratio,16 / 9)));max-width:none;padding:0;gap:0;border:0;border-radius:10px;background:#000;box-shadow:none;--tw-ring-shadow:0 0 #0000;overflow:hidden}
-.landing-video-modal video{display:block;width:100%;aspect-ratio:var(--video-ratio,16 / 9);background:#000}
-.landing-video-modal [data-slot=dialog-close]{top:10px;right:10px;z-index:1;border-radius:999px;background:#0b0b0d99;color:#fff}
-.landing-video-modal [data-slot=dialog-close]:hover{background:#0b0b0dcc;color:#fff}
-@keyframes landing-marquee{to{transform:translateX(-50%)}}
-
 
 /* Revline's Agent is powerful: nested cards, each stage a small mock of its effect. */
 .landing-features{display:flex;flex-direction:column;gap:40px;padding-block:96px}
@@ -296,14 +265,12 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
   .landing-logos li{font-size:18px}
-  .landing-use-cases,.landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
-  .landing-use-cases,.landing-features{gap:32px}
+  .landing-features,.landing-pricing,.landing-faq,.landing-mcp{padding-block:64px}
+  .landing-features{gap:32px}
   .landing-feature-grid{grid-template-columns:minmax(0,1fr)}
   .landing-mcp-agents li{width:48px;height:48px;border-radius:14px}
   .landing-mcp-agents li+li{margin-left:-12px}
   .landing-mcp-agents img{width:34px;height:34px}
-  .landing-tile{--tile-h:180px;width:102px}
-  .landing-tile-wide{width:320px}
   .landing-testimonial{padding-block:72px}
   .landing-testimonial blockquote{font-size:24px}
   .landing-plan{padding:24px}
@@ -313,20 +280,21 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-heading[data-tone=inverse] p{font-size:16px}
   .landing-footer{flex-direction:column;align-items:flex-start}
 }
-@media(prefers-reduced-motion:reduce){
-  .landing-marquee-track{animation:none}
-}
 /* Apps named in running text by their logos alone, at text height. */
 .landing-app-logos{display:inline-flex;align-items:center;gap:.3em;vertical-align:-.2em}
 .landing-app-logos img{width:1.2em;height:1.2em;flex:none}
-.landing-clippers,.landing-motion-design{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);grid-template-areas:"copy media";align-items:center;gap:64px;padding-block:96px}
-.landing-motion-design{grid-template-columns:minmax(0,3fr) minmax(0,2fr);grid-template-areas:"media copy"}
-.landing-clippers>.landing-heading,.landing-motion-design>.landing-heading{grid-area:copy;min-width:0}
+.landing-clippers,.landing-motion-design{padding-block:96px}
+.landing-hero+.landing-clippers{padding-top:0}
+/* The inset sits outside the shared content edges so copy stays aligned with other sections. */
+.landing-showcase-card{--showcase-radius:12px;--showcase-inset:8px;display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);grid-template-areas:"copy media";align-items:center;gap:64px;margin-inline:calc(-1 * (var(--showcase-inset) + 1px));padding:var(--showcase-inset);border:1px solid var(--l-border);border-radius:var(--showcase-radius);background:var(--l-bg-subtle);color:var(--l-fg);box-shadow:none}
+.landing-motion-design>.landing-showcase-card{grid-template-columns:minmax(0,3fr) minmax(0,2fr);grid-template-areas:"media copy"}
+.landing-showcase-card>.landing-heading{grid-area:copy;min-width:0}
 .landing-clippers-frame,.landing-motion-design-frame{grid-area:media;min-width:0}
 @media(max-width:760px){
-  .landing-clippers,.landing-motion-design{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px;padding-block:64px}
+  .landing-clippers,.landing-motion-design{padding-block:64px}
+  .landing-clippers>.landing-showcase-card,.landing-motion-design>.landing-showcase-card{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px}
 }
-.landing-clippers-frame,.landing-motion-design-frame{position:relative;width:100%;aspect-ratio:16/9;overflow:hidden;border:1px solid #0000000f;border-radius:12px;background:#111}
+.landing-clippers-frame,.landing-motion-design-frame{position:relative;width:100%;aspect-ratio:16/9;padding:0;overflow:hidden;border:1px solid #0000000f;border-radius:max(4px,calc(var(--showcase-radius) - var(--showcase-inset)));background:#111;box-shadow:none}
 .landing-clippers-still,.landing-clippers-animation{position:absolute;inset:0;width:100%;height:100%;user-select:none}
 .landing-clippers-still{object-fit:contain;pointer-events:none}
 .landing-clippers-scene{position:absolute;left:0;top:0;width:1920px;height:1080px;transform-origin:0 0;overflow:hidden;background:#111;isolation:isolate}

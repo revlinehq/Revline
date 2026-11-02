@@ -1,6 +1,5 @@
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
-import { LandingUseCases } from '@/components/landing/use-cases';
 import { LandingFeatures } from '@/components/landing/features';
 import { LandingMotionDesign } from '@/components/landing/motion-design';
 import { LandingInspo } from '@/components/landing/inspo';
@@ -17,7 +16,6 @@ export default function Home() {
   return <main className="landing">
     <LandingNav />
     <LandingHero />
-    <LandingUseCases />
     <LandingClippers />
     <LandingMotionDesign />
     <LandingFeatures />
