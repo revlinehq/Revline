@@ -55,7 +55,7 @@ export function LandingClippers() {
         <LandingHeading
           id="landing-clippers-heading"
           title="Revline for clipping"
-          description="Drop in any stream or podcast and get Shorts and Reels ready to post."
+          description="Drop in gaming streams or podcasts and get Shorts and Reels ready to post."
         />
         <LandingStartButton label="Start clipping" size="sm" />
       </div>
@@ -63,7 +63,7 @@ export function LandingClippers() {
         ref={frame}
         className="landing-clippers-frame"
         role="img"
-        aria-label="Revline turns tech interviews, podcasts and streams into vertical clips, then reveals six videos with illustrative view counts."
+        aria-label="Revline turns gaming streams, podcasts and interviews into vertical clips, then reveals three gaming and three podcast or interview videos with distinct caption styles and illustrative view counts."
       >
         <img
           className="landing-clippers-still"

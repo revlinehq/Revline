@@ -15,10 +15,10 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
   const media = {
     theo: '/landing/clippers-theo.webp',
     acquired: '/landing/clippers-acquired.webp',
-    allin: '/landing/clippers-allin.webp',
+    caseoh: '/landing/clippers-caseoh.webp',
     lex: '/landing/clippers-lex.webp',
-    dwarkesh: '/landing/clippers-dwarkesh.webp',
-    lenny: '/landing/clippers-lenny.webp',
+    xqc: '/landing/clippers-xqc.webp',
+    jynxzi: '/landing/clippers-jynxzi.webp',
   };
   const stage = document.createElement('div');
   stage.style.cssText =
@@ -268,23 +268,23 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
       facePosition: 'center 25%',
     },
     {
-      creator: 'All-In Podcast',
-      content: 'Satya Nadella',
-      poster: media.allin,
+      creator: 'CaseOh',
+      content: 'Horror',
+      poster: media.caseoh,
       faceSize: '133px auto',
       facePosition: 'center 25%',
     },
     {
-      creator: 'Dwarkesh Podcast',
-      content: 'AI scaling',
-      poster: media.dwarkesh,
+      creator: 'xQc',
+      content: 'Overwatch',
+      poster: media.xqc,
       faceSize: '133px auto',
       facePosition: 'center 25%',
     },
     {
-      creator: "Lenny's Podcast",
-      content: 'Building teams',
-      poster: media.lenny,
+      creator: 'Jynxzi',
+      content: 'R6 clutch',
+      poster: media.jynxzi,
       faceSize: '133px auto',
       facePosition: 'center 25%',
     },
@@ -553,9 +553,9 @@ export function createClippersScene(root: HTMLElement, tl: gsap.core.Timeline) {
     '<span style="font:700 24px/.95 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0009">THEO</span>',
     '<span style="background:#7c3aed;padding:5px 8px;border-radius:4px;font:600 15px var(--font-inter)">Lex Fridman</span>',
     '<span style="background:#f4f4f0;color:#111;padding:6px 10px;font:700 19px var(--landing-font-head)">ACQUIRED</span>',
-    '<span style="background:#7c3aed;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">ALL-IN</span>',
-    '<span style="font:600 21px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">DWARKESH<br>PODCAST</span>',
-    '<span style="font:600 22px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">LENNY’S<br>PODCAST</span>',
+    '<span style="background:#7c3aed;padding:5px 9px;border-radius:4px;font:600 12px var(--font-inter);letter-spacing:1.3px">CASEOH</span>',
+    '<span style="font:700 32px/.95 var(--landing-font-head);letter-spacing:-.8px;text-shadow:0 2px 12px #0009">xQc</span>',
+    '<span style="font:600 24px/1.05 var(--landing-font-head);letter-spacing:-.6px;text-shadow:0 2px 12px #0009">JYNXZI</span>',
   ];
   const targets = [284600, 192400, 87600, 143800, 68100, 216700];
   openings.forEach((o, i) => {
