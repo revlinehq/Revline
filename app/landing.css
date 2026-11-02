@@ -261,6 +261,9 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-hero h1{font-size:40px;letter-spacing:-1px}
   .landing-hero h1 br,.landing-hero-copy>p br{display:none}
   .landing-hero-copy>p{font-size:16px}
+  div.landing-hero-buttons>.landing-reveal-content{gap:8px}
+  .landing-hero-buttons .landing-button{height:36px;padding-inline:14px;font-size:14px}
+  .landing-hero-buttons .landing-agent-logos{display:none}
   .landing-product-window{border-radius:8px}
   .landing-logos{padding-bottom:56px}
   .landing-logos ul{gap:16px 36px}
