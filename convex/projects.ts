@@ -11,7 +11,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
-import { commitTimeline, currentTimeline, HISTORY_LIMIT, serializedBytes, validateTimeline } from "./lib/timeline";
+import { commitTimeline, currentTimeline, HISTORY_LIMIT, validateTimeline } from "./lib/timeline";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
 import { applyTimelineEdit, TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { normalizeTimeline, type Timeline } from '../lib/editor/types';
