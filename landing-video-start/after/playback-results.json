@@ -1,0 +1,122 @@
+[
+  {
+    "width": 1440,
+    "src": "/landing/revline-launch.mp4",
+    "time": 0.11,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/launch-film-original.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/text-behind-you.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/tracked-labels.mp4",
+    "time": 0.89,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/speed-ramps.mp4",
+    "time": 0.86,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/masks.mp4",
+    "time": 0.88,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/split-screen.mp4",
+    "time": 0.89,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/animated-captions.mp4",
+    "time": 0.95,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/inspo-original.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "src": "/landing/inspo-remake.mp4",
+    "time": 0.11,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/revline-launch.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/launch-film-original.mp4",
+    "time": 0.11,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/text-behind-you.mp4",
+    "time": 0.11,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/tracked-labels.mp4",
+    "time": 0.67,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/speed-ramps.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/masks.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/split-screen.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/animated-captions.mp4",
+    "time": 0.11,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/inspo-original.mp4",
+    "time": 0.12,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "src": "/landing/inspo-remake.mp4",
+    "time": 0.11,
+    "paused": false
+  }
+]

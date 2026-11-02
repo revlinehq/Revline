@@ -1,0 +1,26 @@
+Landing video playback investigation — 2026-11-02
+
+Environment
+Next.js 16.4.3 running locally with npm run dev (web on :3006 and development media worker both ready). Chromium 155, 1440x900 desktop and 390x844 phone viewport. T3 preview could not start because of the host AppArmor sandbox restriction, so Puppeteer drove installed Chromium. No test files, mocks, fixtures, or smoke scripts were added.
+
+Before
+Normal desktop autoplay and scroll-away/reentry worked for all ten embedded films. Muted and playsInline were true before each observed play attempt. No observer-before-mount problem appeared. The hero's reduced-motion pause was intentional, with native controls; Inspo incorrectly kept autoplaying with reduced motion enabled.
+
+With cache disabled, 200 ms latency and 1.5 Mbps download throttling, the phone initially requested ten embedded films plus seven clipping sources. The hero still had readyState 0 and currentTime 0. All MP4 files have their moov atom before mdat; a misplaced metadata atom was ruled out. Slow startup was load contention rather than an invalid file layout.
+
+To reproduce a transient CDN/load failure, abort the initial requests for revline-launch.mp4, text-behind-you.mp4, inspo-remake.mp4 and clippers-lex.mp4 in browser network interception, then allow subsequent requests. Before the change, the hero, Text behind you feature and Inspo remake remained paused with media error 4 after network recovery and scrolling away/back. Repeated play attempts rejected with NotSupportedError: "The element has no supported sources." A failed clipping source rejected Promise.all permanently, leaving the entire montage on its still. The desktop and phone screenshots show the actual running page during this failure scenario.
+
+Cause and fix
+The elements retained failed source state, while callers only retried play() on intersection changes and discarded rejections. Replaying an errored media element does not reload its source. The clipping montage also treated its first load failure as permanent. Shared playback handling now reloads failed sources with two bounded retries, retries readiness/interruption events, pauses hidden media and resumes wanted media on visibility/pageshow. Off-screen embedded films use preload=none. Inspo observes each film separately and follows reduced-motion changes. Policy denial resets the video to its poster and exposes native controls; clipping playback failures reveal the existing still.
+
+After
+The same fail-first-request scenario recovered automatically for all four affected sources at both viewport widths. All ten embedded films showed advancing currentTime and paused=false; both clipping scenes mounted and resumed. Captured per-film readings are in after/playback-results.json. Scroll-away/reentry, actual background-tab switching and live reduced-motion preference changes passed. A fresh desktop load requested only the hero; phone requested the hero and seven nearby clipping sources.
+
+A fresh browser context with no user activation produced a real NotAllowedError when attempting audible autoplay. The fallback had playback=blocked, currentTime=0, paused=true and native controls over the poster. Clicking the native play button produced playback=playing and advancing currentTime. This checks policy-denial handling without replacing play().
+
+Limits
+Phone width is Chromium emulation, not iOS Safari. iOS Safari Low Power Mode cannot be exercised on this Linux host. The normal tab-switch pass also succeeded before the change in Chromium; an OS-forced Safari pause was not reproduced. Local failed-request interception reproduces the CDN error state; it does not establish that the live CDN had an outage.
+
+Verification
+npm run typecheck and REVLINE_DIST_DIR=.next-build npm run build passed. The separate build directory preserves the running development server and worker.
+The built app on :3007 also passed cache-disabled hard loads and scrolling to Inspo at 1440px and 390px under 200 ms latency and 5 Mbps download throttling; currentTime advanced in the hero and visible Inspo films. Captured readings are in after/production-results.json.

@@ -1,0 +1,24 @@
+[
+  {
+    "width": 1440,
+    "scenario": "throttled hard load",
+    "time": 0.119731,
+    "paused": false
+  },
+  {
+    "width": 1440,
+    "scenario": "throttled inspo",
+    "videos": "[{\"src\":\"/landing/inspo-original.mp4\",\"paused\":false,\"ready\":4,\"time\":0.71,\"controls\":false},{\"src\":\"/landing/inspo-remake.mp4\",\"paused\":false,\"ready\":3,\"time\":0.1,\"controls\":false}]"
+  },
+  {
+    "width": 390,
+    "scenario": "throttled hard load",
+    "time": 0.108991,
+    "paused": false
+  },
+  {
+    "width": 390,
+    "scenario": "throttled inspo",
+    "videos": "[{\"src\":\"/landing/inspo-original.mp4\",\"paused\":false,\"ready\":3,\"time\":0.62,\"controls\":false},{\"src\":\"/landing/inspo-remake.mp4\",\"paused\":false,\"ready\":3,\"time\":0.11,\"controls\":false}]"
+  }
+]
