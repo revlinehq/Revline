@@ -112,7 +112,7 @@ jobs:
   deploy-processor:
     needs: [processor-plan, deploy-convex]
     if: needs.processor-plan.outputs.changed == 'true'
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: blacksmith-2vcpu-ubuntu-2404
     environment: production
     concurrency:
       group: production-processor
@@ -121,8 +121,10 @@ jobs:
       contents: read
       actions: write
     env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: 701645e913477e567db69b11343f59d8
+      FLY_API_TOKEN: ${{ secrets.FLY_PROCESSOR_DEPLOY_TOKEN }}
+      DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+      FAL_KEY: ${{ secrets.FAL_KEY }}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
       CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
@@ -132,12 +134,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run agent-runner:install
+      - uses: superfly/flyctl-actions/setup-flyctl@master
       - name: Check production targets
         run: |
           case "$CONVEX_DEPLOY_KEY" in prod:different-gnu-398\|*) ;; *) echo "CONVEX_DEPLOY_KEY must target prod:different-gnu-398"; exit 1;; esac
-          test -n "$CLOUDFLARE_API_TOKEN" || { echo "CLOUDFLARE_API_TOKEN is missing"; exit 1; }
-      - name: Free runner disk for the processor image
-        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
+          test -n "$FLY_API_TOKEN" || { echo "FLY_PROCESSOR_DEPLOY_TOKEN is missing"; exit 1; }
       - name: Restore pinned beat model
         uses: actions/cache@v4
         with:
@@ -151,12 +153,8 @@ jobs:
           model=.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt
           [ -f "$model" ] || gh release download beat-model-final0 -R "$GITHUB_REPOSITORY" -p beat_this-final0.ckpt -D "$(dirname "$model")"
           node scripts/install-beat-model.mjs
-      - uses: docker/setup-buildx-action@v3
-      - name: Expose the Actions cache to Docker
-        uses: crazy-max/ghaction-github-runtime@v3
       - name: Release media processor
         env:
-          REVLINE_DOCKER_CACHE: gha
           RENDER_WORKER_SECRET: ${{ secrets.RENDER_WORKER_SECRET }}
         run: |
           umask 077
@@ -166,4 +164,4 @@ jobs:
             echo "CONVEX_DEPLOY_KEY=$CONVEX_DEPLOY_KEY"
             echo "RENDER_WORKER_SECRET=$RENDER_WORKER_SECRET"
           } > .env.production.local
-          npm run deploy:production -- --processor-only
+          npm run deploy:production -- --processor-only --stage-only

@@ -4,23 +4,30 @@
 //   npm run deploy:fly-exports            → revline-render-dev + Convex dev
 //   npm run deploy:fly-exports -- --prod  → revline-render + Convex production
 import { spawn, execFileSync } from 'node:child_process';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { parseEnv } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 if (args.some(arg => arg !== '--prod')) throw new Error('Usage: npm run deploy:fly-exports [-- --prod]');
 const production = args.includes('--prod');
 const app = production ? 'revline-render' : 'revline-render-dev';
-const convexTarget = production ? ['--prod'] : [];
+const deployment = production ? 'different-gnu-398' : 'majestic-alpaca-541';
+const settings = parseEnv(await readFile(join(root, production ? '.env.production.local' : '.env.local'), 'utf8'));
+if (settings.CONVEX_DEPLOYMENT !== `${production ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== `https://${deployment}.convex.cloud`) throw new Error('Export environment does not match the selected deployment.');
+const env = { ...process.env, ...settings };
+if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
+if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deployment}|`)) throw new Error('Export deploy key targets the wrong environment.');
+const convexTarget = ['--deployment', deployment];
 const context = join(root, '.wrangler/media-processor-build');
 
 function run(command, argv, options = {}) {
   return new Promise((accept, reject) => {
     let output = '';
     // flyctl reports the pushed image on stderr, so read both streams.
-    const child = spawn(command, argv, { cwd: root, stdio: ['ignore', 'pipe', 'pipe'], ...options });
+    const child = spawn(command, argv, { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'], ...options });
     child.stdout.on('data', chunk => { output += chunk; process.stdout.write(chunk); });
     child.stderr.on('data', chunk => { output += chunk; process.stderr.write(chunk); });
     child.on('error', reject);
@@ -29,12 +36,15 @@ function run(command, argv, options = {}) {
 }
 
 console.log(`Target: Fly app ${app}, Convex ${production ? 'production (different-gnu-398)' : 'development (majestic-alpaca-541)'}.`);
-await run(process.execPath, ['infra/media-worker/prepare-context.mjs']);
-await writeFile(join(context, 'fly.toml'), `app = "${app}"\nprimary_region = "iad"\n[build]\n  dockerfile = "infra/media-worker/Dockerfile"\n  build-target = "exports"\n`);
-const label = `exports-${execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root }).toString().trim()}-${Date.now()}`;
-const output = await run('fly', ['deploy', '--build-only', '--push', '--remote-only', '--build-target', 'exports', '--image-label', label, '-a', app], { cwd: context });
-// flyctl may colour or CR-terminate its lines; take the bare image reference.
-const image = /image: (registry\.fly\.io\/[\w.:/-]+)/.exec(output.replace(/\x1b\[[0-9;]*m/g, ''))?.[1];
-if (!image || !image.startsWith(`registry.fly.io/${app}:`)) throw new Error('Fly did not report the pushed image.');
-await run('npx', ['convex', 'env', 'set', 'FLY_RENDER_IMAGE', image, ...convexTarget]);
-console.log(`Exports now use ${image}.`);
+try {
+  await run(process.execPath, ['infra/media-worker/prepare-context.mjs']);
+  await writeFile(join(context, 'fly.toml'), `app = "${app}"\nprimary_region = "iad"\n[build]\n  dockerfile = "infra/media-worker/Dockerfile"\n  build-target = "exports"\n`);
+  const label = `exports-${execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root }).toString().trim()}-${Date.now()}`;
+  const output = await run('flyctl', ['deploy', '--build-only', '--push', '--remote-only', '--build-target', 'exports', '--image-label', label, '-a', app], { cwd: context });
+  // Pin the pushed manifest; a Depot tag can be briefly unavailable after a push.
+  const digest = [...output.matchAll(/pushing manifest for registry\.fly\.io\/[\w.:-]+@(sha256:[a-f0-9]{64})/g)].at(-1)?.[1];
+  if (!digest) throw new Error('Fly did not report a pushed image digest.');
+  const image = `registry.fly.io/${app}@${digest}`;
+  await run('npx', ['convex', 'env', 'set', 'FLY_RENDER_IMAGE', image, ...convexTarget]);
+  console.log(`Exports now use ${image}.`);
+} finally { await rm(context, { recursive: true, force: true }); }

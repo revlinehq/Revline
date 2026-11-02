@@ -47,8 +47,8 @@ STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["sh", "infra/media-worker/fly-entry.sh"]
 
-# The default image: every media task kind (Cloudflare processors).
-FROM runtime
+# Every media task kind, shared by the retained Cloudflare image and Fly.
+FROM runtime AS processor
 COPY scripts/beat-tracking-requirements.txt scripts/scene-detection-requirements.txt scripts/video-import-requirements.txt /opt/requirements/
 RUN python3 -m venv /opt/beat-tracking \
     && /opt/beat-tracking/bin/pip install --no-cache-dir -r /opt/requirements/beat-tracking-requirements.txt \
@@ -76,3 +76,11 @@ EXPOSE 8080
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "--import", "tsx", "infra/media-worker/consumer.ts"]
+
+# Fly prepares scratch as root, then drops privileges through fly-entry.sh.
+FROM processor AS fly-processor
+USER root
+CMD ["sh", "infra/media-worker/fly-entry.sh"]
+
+# Preserve the Cloudflare default target for rollback.
+FROM processor

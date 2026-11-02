@@ -1,3 +1,4 @@
+import { processingThreads } from '../server/processing-resources';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 export { downloadOwnedMedia } from '../server/owned-media';
@@ -38,7 +39,7 @@ export async function extractTranscriptionAudio(input: string, output: string, s
 export async function extractVideoWindow(input: string, output: string, start: number, end: number, signal: AbortSignal) {
   const profile = analysisProfiles.inspection;
   const geometry = `scale=w='min(${profile.maxEdge},iw)':h='min(${profile.maxEdge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
-  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-ss', start.toFixed(6), '-i', input, '-t', (end - start).toFixed(6), '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', String(profile.crf), '-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', start.toFixed(6), '-i', input, '-t', (end - start).toFixed(6), '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-c:v', 'libx264', '-threads', String(processingThreads()), '-preset', 'veryfast', '-crf', String(profile.crf), '-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
 }
 
 export async function prepareVideo(input: string, output: string, signal: AbortSignal, purpose?: AnalysisVideoPurpose) {
@@ -49,5 +50,5 @@ export async function prepareVideo(input: string, output: string, signal: AbortS
   // would erase a real audio/video start offset and shift visual evidence.
   const geometry = `scale=w='min(${profile.maxEdge},iw)':h='min(${profile.maxEdge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
   const bitrate = 'videoKbps' in profile ? ['-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`] : [];
-  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-i', input, '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-c:v', 'libx264', '-threads', '2', '-preset', 'veryfast', '-crf', String(profile.crf), ...bitrate, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: purpose ? 600_000 : 90_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-i', input, '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-c:v', 'libx264', '-threads', String(processingThreads()), '-preset', 'veryfast', '-crf', String(profile.crf), ...bitrate, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: purpose ? 600_000 : 90_000, maxBuffer: 1024 * 1024 });
 }

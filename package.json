@@ -25,7 +25,9 @@
     "typecheck:agent-runner": "tsc -p cloudflare/agent-runner/tsconfig.json",
     "deploy:agent-runner": "npm run agent-runner:install && npm run typecheck:agent-runner && wrangler deploy --config cloudflare/agent-runner/wrangler.jsonc",
     "deploy:agent-runner:production": "npm run agent-runner:install && npm run typecheck:agent-runner && wrangler deploy --config cloudflare/agent-runner/wrangler.production.jsonc",
-    "incidents:fix": "node scripts/fix-save-incidents.mjs"
+    "incidents:fix": "node scripts/fix-save-incidents.mjs",
+    "deploy:fly-processor": "node scripts/deploy-fly-processor.mjs",
+    "typecheck:processor-edge": "tsc -p infra/media-worker/edge/tsconfig.json"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",

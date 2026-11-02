@@ -1,3 +1,4 @@
+import { processingThreads } from './processing-resources';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
@@ -27,10 +28,10 @@ export async function preparePreviewVideo(input:string,output:string,signal:Abor
   // Autorotation produces upright pixels and scale never enlarges the source.
   // Keeping the demuxed time base and passthrough FPS preserves variable frame
   // timestamps. Do not add an FPS filter, output -r, or independently reset PTS.
-  await run('ffmpeg',['-v','error','-threads','2','-copyts','-start_at_zero','-i',input,'-map','0:v:0','-map','0:a:0?',
-    '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-filter_threads','2',
+  await run('ffmpeg',['-v','error','-threads',String(processingThreads()),'-copyts','-start_at_zero','-i',input,'-map','0:v:0','-map','0:a:0?',
+    '-vf',"scale=w='min(1280,iw)':h='min(1280,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2",'-filter_threads',String(processingThreads()),
     '-fps_mode','passthrough','-enc_time_base:v',timeBase.join('/'),'-video_track_timescale',String(timeBase[1]),
-    '-c:v','libx264','-threads','2','-preset','veryfast','-b:v','3000k','-maxrate','3500k','-bufsize','7000k',
+    '-c:v','libx264','-threads',String(processingThreads()),'-preset','veryfast','-b:v','3000k','-maxrate','3500k','-bufsize','7000k',
     '-g',String(Math.max(1,Math.ceil(nominalFps))),'-keyint_min','1','-sc_threshold','0','-force_key_frames','expr:gte(t,n_forced*1)',
     '-pix_fmt','yuv420p',...audio,'-movflags','+faststart','-y',output],{signal,timeout:12*60_000,maxBuffer:1024*1024});
   const result=await probePreviewVideo(output,signal);

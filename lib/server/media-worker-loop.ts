@@ -17,7 +17,7 @@ export type MediaWorkerOptions = {
   workerSecret: string;
   slots: number;
   /** Which tasks this worker claims: an export lane, or Fly's exports only. */
-  claim: { lane?: 'ultra' | 'any'; rendersOnly?: boolean };
+  claim: { lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'fly' | 'cloudflare' | 'local' };
   deadlineMs: number;
   signal: AbortSignal;
   /** A draining worker finishes its current tasks and claims no more. */

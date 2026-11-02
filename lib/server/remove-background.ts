@@ -1,3 +1,4 @@
+import { processingThreads } from './processing-resources';
 import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
@@ -25,7 +26,7 @@ export async function removeBackground(source: string, directory: string, window
   // A constant rate gives every frame a known time, whatever timing fal returns.
   const fps = Math.max(1, Math.min(window.fps ?? 30, Number.isFinite(sourceFps) && sourceFps > 0 ? Math.round(sourceFps) : 30));
   // Accurate seek from the prior keyframe; near-lossless H.264 so edges survive the hand-off.
-  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-ss', window.start.toFixed(6), '-i', source, '-t', (window.end - window.start).toFixed(6), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', window.start.toFixed(6), '-i', source, '-t', (window.end - window.start).toFixed(6), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
   onProgress(20);
   const fal = createFalClient({ credentials: key });
   const url = await fal.storage.upload(new Blob([await readFile(clip)], { type: 'video/mp4' }));

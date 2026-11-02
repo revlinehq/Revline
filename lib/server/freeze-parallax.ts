@@ -1,3 +1,4 @@
+import { processingThreads } from './processing-resources';
 import { execFile } from 'node:child_process';
 import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -58,5 +59,5 @@ export async function freezeParallax(source: string, kind: 'video' | 'image', di
 }
 
 async function ffmpeg(args: string[], signal: AbortSignal) {
-  await run('ffmpeg', ['-v', 'error', '-threads', '2', '-filter_complex_threads', '1', ...args, '-y'], { signal, timeout: 180_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-filter_complex_threads', '1', ...args, '-y'], { signal, timeout: 180_000, maxBuffer: 1024 * 1024 });
 }

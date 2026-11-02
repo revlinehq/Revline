@@ -1,8 +1,13 @@
 import { v } from 'convex/values';
+import { internal } from './_generated/api';
+import { processorBackend } from './lib/processor_backend';
 import { internalAction } from './_generated/server';
 
 /** Optional immediate wake for the hosted processor; its cron recovers missed wakes. */
-export const wake = internalAction({ args: {}, returns: v.null(), handler: async () => {
+export const wake = internalAction({ args: {}, returns: v.null(), handler: async ctx => {
+  const backend = processorBackend();
+  if (backend === 'local') return null;
+  if (backend === 'fly') { await ctx.runAction(internal.flyProcessor.dispatch, {}); return null; }
   const url = process.env?.MEDIA_PROCESSOR_WAKE_URL;
   const secret = process.env?.RENDER_WORKER_SECRET;
   if (!url || !secret) return null;

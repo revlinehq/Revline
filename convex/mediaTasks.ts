@@ -1,3 +1,4 @@
+import { processorBackend } from './lib/processor_backend';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
 import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
@@ -159,7 +160,7 @@ export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTask
   await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
-  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
+  await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   // Each Ultra attempt gets the 4-vCPU slot first, then any slot.
   if (task.lane === 'ultra') await ctx.scheduler.runAfter(ULTRA_FALLBACK_MS, internal.mediaTasks.releaseUltraLane, { taskId: task._id, attempt: args.attempt });
   return true;
@@ -171,7 +172,7 @@ export const releaseUltraLane = internalMutation({ args: { taskId: v.id('mediaTa
   const task = await ctx.db.get(args.taskId);
   if (!task || task.lane !== 'ultra' || task.status !== 'queued' || task.attempt !== args.attempt) return null;
   await patchMediaTask(ctx, task, { lane: undefined, updatedAt: Date.now() });
-  if (globalThis.process.env.MEDIA_PROCESSOR_WAKE_URL) await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
+  await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   return null;
 }});
 async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: Infer<typeof eventResult>) {
@@ -351,8 +352,9 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
   return { processorVersion: MEDIA_PROCESSOR_VERSION };
 } });
 
-export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.string(), handler: async (ctx, args) => {
+export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
   const role=requireMediaWorker(args.workerSecret);
+  if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return '';
   const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');return task?`${task._id}:${task.attempt}`:'';
 }});
 
@@ -440,8 +442,9 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
-export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
+export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
+  if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return null;
   const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
