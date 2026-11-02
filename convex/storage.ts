@@ -13,10 +13,10 @@ import { removeOwnedExport } from './renders';
 import { mediaUrl } from './lib/media_storage';
 import { allTabTimelines } from './timelineTabs';
 
-const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('export'));
+const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('model'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
 const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
-export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
+export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),modelBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
   return {...values,ready};

@@ -1,3 +1,4 @@
+import { threeScenesPage } from './three-scenes';
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
@@ -86,6 +87,9 @@ function Title({ text }: { text: string }) {
 - \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips between standalone scenes (inside a film, a move across a cut is just a tween). \`waitFor(promise)\` holds a frame until it settles.
 - Imports: \`revline\`, \`react\` and \`gsap\` with its plugins (\`gsap/SplitText\` etc.). Fonts, media, icons and the brand work as in GSAP scenes.
 
+## 3D layers
+Import from \`revline/three\` to mix a transparent React Three Fiber layer with HTML and GSAP. Read page \`three-scenes\` before authoring cameras, lights, primitives, 3D text or GLB/glTF models.
+
 ## Performance
 Only components that read time re-render; static parts render once. A useTimeline component does not re-render per frame. Keep heavy static UI in components that never call useBeat, wrap big static subtrees in \`<Still>\`, and prefer \`useBeat(select)\` in hot components.`,
 };
@@ -162,5 +166,5 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [editLanesPage, reactScenesPage, checklistPage],
+  pages: [threeScenesPage, editLanesPage, reactScenesPage, checklistPage],
 };
