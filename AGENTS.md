@@ -25,7 +25,8 @@ Work on your own branch and commit there in coherent, verified batches. Never pu
 The agent that built the change writes its pull request, because it knows what it built:
 - A Markdown description: a one-line title, then what changed (plain words), why, how it looks or works (a Mermaid diagram when it explains a flow or structure), how it was tested, and risks or follow-ups.
 - An entry in `docs/changelog.md` (newest first, under a `## YYYY-MM-DD` heading): `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
-If you were told not to push, hand the description to whoever started you, and they open the draft PR with your text unchanged.
+- Before and after screenshots of every page or screen a change touches visibly (web: desktop and phone width; iOS: the Simulator), taken from the running app, never mocked. Do not commit them to your branch: push them to the `pr-assets` branch under `<your-branch>/before/` and `<your-branch>/after/`, and show them in the description as a before | after table per page, linked as `https://github.com/zuraHQ/revline-editor/blob/pr-assets/<path>?raw=true`.
+If you were told not to push, hand the description and the screenshot folders to whoever started you, and they open the draft PR with your text unchanged.
 
 After the user approves a merge, deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
 
