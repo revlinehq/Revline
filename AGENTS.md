@@ -23,7 +23,20 @@ Start local development with `npm run dev`, which runs the frontend and developm
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
 The agent that built the change writes its pull request, because it knows what it built:
-- A Markdown description: a one-line title, then what changed (plain words), why, how it looks or works (a Mermaid diagram when it explains a flow or structure), how it was tested, and risks or follow-ups.
+- A short description, under 150 words of prose (tables and images do not count). The founder skims it on GitHub, so write like a changelog, not an essay. Use exactly this shape and nothing else:
+  ```
+  <one sentence: what the user will notice>
+
+  **Changed**
+  - <up to 5 bullets, one line each, plain words>
+
+  **Before / after** (only if something is visible)
+  | Before | After |
+
+  **Tested:** <one line>
+  **Risk:** <one line, or "None">
+  ```
+  No background, no restating the request, no file-by-file walkthrough, no headings beyond these. Add a Mermaid diagram only when the change rewires how systems talk to each other.
 - An entry in `docs/changelog.md` (newest first, under a `## YYYY-MM-DD` heading): `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
 - Before and after screenshots of every page or screen a change touches visibly (web: desktop and phone width; iOS: the Simulator), taken from the running app, never mocked. Do not commit them to your branch: push them to the `pr-assets` branch under `<your-branch>/before/` and `<your-branch>/after/`, and show them in the description as a before | after table per page, linked as `https://github.com/zuraHQ/revline-editor/blob/pr-assets/<path>?raw=true`.
 If you were told not to push, hand the description and the screenshot folders to whoever started you, and they open the draft PR with your text unchanged.
