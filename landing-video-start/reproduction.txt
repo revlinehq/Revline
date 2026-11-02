@@ -24,3 +24,7 @@ Phone width is Chromium emulation, not iOS Safari. iOS Safari Low Power Mode can
 Verification
 npm run typecheck and REVLINE_DIST_DIR=.next-build npm run build passed. The separate build directory preserves the running development server and worker.
 The built app on :3007 also passed cache-disabled hard loads and scrolling to Inspo at 1440px and 390px under 200 ms latency and 5 Mbps download throttling; currentTime advanced in the hero and visible Inspo films. Captured readings are in after/production-results.json.
+
+Final branch refresh
+Main changed during the investigation. The branch was rebased onto e0cad9d, retaining the newly merged portrait motion-design film. Before screenshots were refreshed from those current-main components in the running app, with the same failed-initial-request reproduction; all three embedded films again remained in media error 4 at both widths. The fix was restored immediately afterward. After screenshots and per-film readings were refreshed from the final branch: all ten films, including motion-design-study.mp4, advanced at both widths. Typecheck and build passed again after the rebase. The final source commit is 99a38be5e48ca772f8bee3a0e4f3400ff9924616.
+Persistent failure recovery was also checked: three total requests (initial plus two retries), then a stable poster fallback; a real offline/online transition recovered playback. The clipping canvas produced different pixel hashes over 1.7 seconds, confirming rendered motion after recovery.

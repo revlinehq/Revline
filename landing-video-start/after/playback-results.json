@@ -2,121 +2,121 @@
   {
     "width": 1440,
     "src": "/landing/revline-launch.mp4",
-    "time": 0.11,
-    "paused": false
+    "paused": false,
+    "time": 1.129194
   },
   {
     "width": 1440,
-    "src": "/landing/launch-film-original.mp4",
-    "time": 0.12,
-    "paused": false
+    "src": "/landing/motion-design-study.mp4",
+    "paused": false,
+    "time": 0.112907
   },
   {
     "width": 1440,
     "src": "/landing/text-behind-you.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.135762
   },
   {
     "width": 1440,
     "src": "/landing/tracked-labels.mp4",
-    "time": 0.89,
-    "paused": false
+    "paused": false,
+    "time": 0.146128
   },
   {
     "width": 1440,
     "src": "/landing/speed-ramps.mp4",
-    "time": 0.86,
-    "paused": false
+    "paused": false,
+    "time": 0.191945
   },
   {
     "width": 1440,
     "src": "/landing/masks.mp4",
-    "time": 0.88,
-    "paused": false
+    "paused": false,
+    "time": 0.228351
   },
   {
     "width": 1440,
     "src": "/landing/split-screen.mp4",
-    "time": 0.89,
-    "paused": false
+    "paused": false,
+    "time": 0.191761
   },
   {
     "width": 1440,
     "src": "/landing/animated-captions.mp4",
-    "time": 0.95,
-    "paused": false
+    "paused": false,
+    "time": 0.15299
   },
   {
     "width": 1440,
     "src": "/landing/inspo-original.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.11599
   },
   {
     "width": 1440,
     "src": "/landing/inspo-remake.mp4",
-    "time": 0.11,
-    "paused": false
+    "paused": false,
+    "time": 0.130693
   },
   {
     "width": 390,
     "src": "/landing/revline-launch.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 1.224218
   },
   {
     "width": 390,
-    "src": "/landing/launch-film-original.mp4",
-    "time": 0.11,
-    "paused": false
+    "src": "/landing/motion-design-study.mp4",
+    "paused": false,
+    "time": 0.112669
   },
   {
     "width": 390,
     "src": "/landing/text-behind-you.mp4",
-    "time": 0.11,
-    "paused": false
+    "paused": false,
+    "time": 0.119463
   },
   {
     "width": 390,
     "src": "/landing/tracked-labels.mp4",
-    "time": 0.67,
-    "paused": false
+    "paused": false,
+    "time": 0.146308
   },
   {
     "width": 390,
     "src": "/landing/speed-ramps.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.112426
   },
   {
     "width": 390,
     "src": "/landing/masks.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.110614
   },
   {
     "width": 390,
     "src": "/landing/split-screen.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.107831
   },
   {
     "width": 390,
     "src": "/landing/animated-captions.mp4",
-    "time": 0.11,
-    "paused": false
+    "paused": false,
+    "time": 0.112504
   },
   {
     "width": 390,
     "src": "/landing/inspo-original.mp4",
-    "time": 0.12,
-    "paused": false
+    "paused": false,
+    "time": 0.11829
   },
   {
     "width": 390,
     "src": "/landing/inspo-remake.mp4",
-    "time": 0.11,
-    "paused": false
+    "paused": false,
+    "time": 0.120898
   }
 ]
