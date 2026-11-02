@@ -78,3 +78,11 @@ Shared dev deployments must retain the latest main and other active dev integrat
 Optional `INCIDENT_WEBHOOK_URL` delivery remains independent of local claims. A zero-delay action POSTs scrubbed new/regressed incidents with `<incidentId>:<generation>` as its idempotency key; there is no periodic delivery loop.
 
 Production rollout requires the user's merge/deployment approval, its own backend credentials and a separately configured listener endpoint/secret. This installation and verification do not deploy, configure or subscribe to production.
+
+## Verified on development, 2026-11-02
+
+The installed systemd user service claimed synthetic incident `v97athk3mn4zrhe30rmnxndm3h8he2md` and launched one MCP-created T3 thread on this PC. Its `codex` provider used `gpt-6.1-sol` with `reasoningEffort: xhigh`; the matching Codex rollout's turn context independently recorded `"effort":"xhigh"`. The worktree's initial HEAD matched `origin/main` (`58f89dab83d101341fd68a6e485d4eda1bc0867c`). Replaying the launch request retained the same thread and one run. The synthetic Sol was interrupted and its incident resolved after verification; no audit PR was created.
+
+The existing dev HTTP 402 report was explicitly retried through the scoped systemd listener and finished locally without a thread, with its non-defect reason retained on the incident. Direct classifier inspection also confirmed the empty-export validation refusal and an agent's “No product defect” report are skipped, while an application exception remains eligible. Other pending incidents were left queued.
+
+App and agent-runner typechecks and the build passed. `npm run dev -- --port 3005` reported both web and media-worker readiness. The listener was stopped and disabled, its temporary incident scope removed, and the Mac listener and production left untouched. Dev deployment used `.data/incident-dev-deploy`, retaining existing consent fields, the iOS queue field and account-deletion tables; keep that integration checkout when assembling later dev deployments.

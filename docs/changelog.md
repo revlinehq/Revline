@@ -5,6 +5,9 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 ## 2026-11-02
 - Incidents: Run fixers as visible T3 MCP threads at xhigh on the Linux PC, with a disabled-by-default systemd listener and non-defect filtering. Why: avoid Mac swapping and wasted Sol sessions.
 - Incidents: Capture user and agent failures, group repeats, and start local Sol fixes through Convex subscriptions. Why: turn failures into reviewed draft PRs immediately.
+- Scenes: Share import rules and renderer bundles across saving, preview, capture and export; require refreshed workers (contract 32). Why: accepted 3D imports could fail when a renderer omitted its bundle.
+- Skills: Restore the GSAP revline page using the main rules body. Why: documented readSkill calls failed after the duplicate page was removed.
+- Agents: pull request descriptions now say what each change is for and why it was requested, and drop the Tested line. Why: the founder wants to see what each PR is for and what problem it solves at a glance.
 - Editor recovery: Resume interrupted edits automatically within the existing repair budget and retry the same chat turn in place. Why: recovery must preserve saved work without duplicate user bubbles.
 - Editor chat: Confirm tool saves with atomic revision receipts, shared classifications and portable frame output. Why: saved edits, reads and queued jobs must never produce false save failures.
 - Storage: Make shared-media deletion and retries idempotent, report project cleanup failures, and handle disappeared projects calmly. Why: a shared project could abort a multi-file cascade.
