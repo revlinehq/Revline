@@ -20,9 +20,14 @@ Build every new UI component from shadcn (`components/ui/`): tabs, segments, dia
 
 Start local development with `npm run dev`, which runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
 
-Commit and push every completed change automatically in coherent, verified batches. Push each finished batch while continuing larger tasks. The user explicitly requested this as the standing default; honor any later instruction to keep work local.
+Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
-Deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
+The agent that built the change writes its pull request, because it knows what it built:
+- A Markdown description: a one-line title, then what changed (plain words), why, how it looks or works (a Mermaid diagram when it explains a flow or structure), how it was tested, and risks or follow-ups.
+- An entry in `docs/changelog.md` (newest first, under a `## YYYY-MM-DD` heading): `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
+If you were told not to push, hand the description to whoever started you, and they open the draft PR with your text unchanged.
+
+After the user approves a merge, deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
 
 ## Motion films from a coding session
 
