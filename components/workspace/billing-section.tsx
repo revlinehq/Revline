@@ -28,13 +28,14 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState('');
   const inFlight = useRef(false);
+  const paymentIssue = status?.paymentIssue ?? status?.needsPayment;
   const active = !!status?.enabled && status.configured;
 
   async function openBilling(plan: 'pro' | 'ultra' = 'pro') {
     if (!active || status?.complimentary || inFlight.current) return;
     inFlight.current = true; setBusy(plan); setError('');
     try {
-      const result = status?.subscribed || status?.needsPayment ? await portal({}) : await checkout({ plan });
+      const result = status?.subscribed || paymentIssue ? await portal({}) : await checkout({ plan });
       if (!result.url) throw new Error('The billing link could not be opened.');
       window.location.assign(result.url);
     } catch (cause) {
@@ -52,19 +53,23 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
   const ultra = status?.plan === 'ultra';
   const plan = ultra ? ULTRA_PLAN : EDITOR_PLAN;
   // Upgrades apply once Stripe's webhook syncs the new price.
-  const offerUltra = !!status?.ultraAvailable && active && !ultra && !status.complimentary && !status.needsPayment && !upgrading;
+  const offerUltra = !!status?.ultraAvailable && active && !ultra && !status.complimentary && !paymentIssue && !upgrading;
 
   return <section id="billing" className="workspace-profile-section workspace-billing-section" aria-labelledby="profile-billing-title">
     <div className="workspace-section-label"><h2 id="profile-billing-title">Membership & billing</h2><p>Your plan, payments, and invoices.</p></div>
     <div className="workspace-section-content">
-      {!isAuthenticated && !isLoading ? <><p className="workspace-membership-description">Sign in to view your membership and billing.</p><div><Button asChild variant="outline" size="md"><Link href="/sign-in">Sign in</Link></Button></div></> : !status ? <div className="workspace-billing-loading" role="status"><LoaderCircle size={15} className="animate-spin" />Loading your plan…</div> : !active && !status.complimentary && !status.subscribed && !status.needsPayment && !checkoutReturn ? <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p> : <>
+      {!isAuthenticated && !isLoading ? <><p className="workspace-membership-description">Sign in to view your membership and billing.</p><div><Button asChild variant="outline" size="md"><Link href="/sign-in">Sign in</Link></Button></div></> : !status ? <div className="workspace-billing-loading" role="status"><LoaderCircle size={15} className="animate-spin" />Loading your plan…</div> : !active && !status.complimentary && !status.subscribed && !paymentIssue && !checkoutReturn ? <p className="workspace-billing-notice">Membership is coming soon. No payment is required.</p> : status.subscriptionSource === 'apple' ? <>
+        <div className="workspace-membership-line"><strong>{ultra ? 'Revline Ultra' : 'Revline Pro'}</strong><span>App Store subscription</span></div>
+        <p className="workspace-membership-description">Your membership is active on the web and in the iOS app. Manage your plan, renewal, or cancellation in the App Store.</p>
+        <div><Button asChild variant="outline" size="md"><a href="https://apps.apple.com/account/subscriptions" target="_blank" rel="noopener noreferrer">Manage in App Store</a></Button></div>
+      </> : <>
         <div className="workspace-membership-line"><strong>{status.plan === 'ultra' ? 'Revline Ultra' : 'Revline Pro'}</strong><span>{status.complimentary ? 'Complimentary membership' : `$${plan.monthlyPrice} / month · ${plan.currency}`}</span></div>
         <p className="workspace-billing-status">{status.complimentary ? status.complimentaryExpiresAt ? `Free access until ${new Date(status.complimentaryExpiresAt).toLocaleDateString()}` : 'Free access forever' : status.subscribed ? 'Your current plan' : 'No active plan'}</p>
         {upgrading && !ultra && <p className="workspace-billing-notice" role="status">Upgrading to Ultra. This takes a few seconds…</p>}
         {checkoutReturn && <p className="workspace-billing-notice" role="status">{checkoutReturn === 'success' ? status.subscribed ? 'Your membership is ready. You can start editing.' : 'Checkout completed. Waiting for Stripe to confirm your membership…' : 'Checkout was canceled. Your membership has not changed.'}</p>}
         {!status.complimentary && <p className="workspace-membership-description">{status.subscribed ? 'Manage your subscription, payment method, and invoices securely through Stripe.' : status.trialEligible ? `Try it free for ${EDITOR_PLAN.trialDays} days, then $${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime.` : `$${EDITOR_PLAN.monthlyPrice}/month. Cancel anytime. Your free trial has already been used.`}</p>}
         {!status.complimentary && <div className="workspace-billing-actions">
-          <PrimaryButton disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || status.needsPayment ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
+          <PrimaryButton disabled={!active || !!busy} onClick={() => void openBilling()}>{busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}{!active ? 'Coming soon' : status.subscribed || paymentIssue ? 'Manage subscription' : status.trialEligible ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Subscribe to Pro'}</PrimaryButton>
           {offerUltra && <Button variant="outline" size="md" type="button" onClick={() => setUltraOpen(true)}>{status.subscribed ? 'Upgrade to Ultra' : 'See Ultra'}</Button>}
         </div>}
         <Dialog open={offerUltra && ultraOpen} onOpenChange={open => { setUltraOpen(open); if (!open) setConfirmUpgrade(false); }}>

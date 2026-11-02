@@ -6,6 +6,7 @@ import { action, internalMutation, query } from "./_generated/server";
 import { EDITOR_PLAN, ULTRA_OFFERED, ULTRA_PLAN } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
 import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, hasUltraPlan, isEditorSubscription, ultraBillingConfigured } from './lib/billing_access';
+import { activeAppleEntitlement } from './lib/apple_entitlements';
 
 const hasAccess = hasEditorAccess;
 function ready() { return billingEnabled() && billingConfigured(); }
@@ -18,16 +19,23 @@ function requireBilling(plan: 'pro' | 'ultra' = 'pro') {
   return origin.origin;
 }
 export const isSubscribed = query({ args: {}, returns: v.boolean(), handler: async (ctx) => {
-  const identity = await ctx.auth.getUserIdentity(); if (!identity || !ready()) return false;
+  const identity = await ctx.auth.getUserIdentity(); if (!identity) return false;
+  if (await activeAppleEntitlement(ctx, identity.subject)) return true;
+  if (!ready()) return false;
   return (await editorSubscriptions(ctx, identity.subject)).some(hasAccess);
 }});
-export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), ultraAvailable: v.boolean() }), handler: async (ctx) => {
-  const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let needsPayment = false;
+export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), ultraAvailable: v.boolean() }), handler: async (ctx) => {
+  const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let paymentIssue = false;
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
   const ultra = !!identity && await hasUltraPlan(ctx, identity.subject);
-  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasAccess); trialEligible = subs.length === 0; needsPayment = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
+  const apple = identity ? await activeAppleEntitlement(ctx, identity.subject) : null;
+  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasAccess); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
+  const stripeSubscribed = subscribed;
+  const subscriptionSource: 'apple' | 'stripe' | undefined = apple ? 'apple' : stripeSubscribed ? 'stripe' : undefined;
+  subscribed ||= !!apple;
+  const plan: 'ultra' | 'pro' | 'free' = ultra ? 'ultra' : subscribed || complimentary ? 'pro' : 'free';
   const entitlement = complimentary ? await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', identity!.subject)).unique() : null;
-  return { enabled: billingEnabled(), configured: ready(), subscribed, ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary ? false : trialEligible, needsPayment: complimentary ? false : needsPayment, plan: ultra ? "ultra" as const : subscribed || complimentary ? "pro" as const : "free" as const, ultraAvailable: ready() && ultraBillingConfigured() };
+  return { enabled: billingEnabled(), configured: ready() || !!apple, subscribed, ...(subscriptionSource ? { subscriptionSource } : {}), ...(apple ? { appleExpiresAt: apple.accessUntil } : {}), ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary || apple ? false : trialEligible, needsPayment: !!identity && billingEnabled() && !subscribed && !complimentary, paymentIssue: !subscribed && !complimentary && paymentIssue, plan, ultraAvailable: ready() && ultraBillingConfigured() };
 }});
 export const reserveCheckout = internalMutation({
   args: { ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), expiredRequestId: v.optional(v.string()) },
@@ -87,6 +95,7 @@ async function verifiedPrice(client: Stripe, plan: 'pro' | 'ultra') {
 export const createCheckout = action({ args: { plan: v.union(v.literal("pro"), v.literal("ultra")) }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx, { plan }): Promise<{sessionId: string; url: string | null}> => {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
   if (await ctx.runQuery(internal.editorAccess.hasComplimentary, { ownerId: identity.subject })) throw new ConvexError('Your complimentary membership already includes editor access. No payment is required.');
+  if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Your subscription is managed in the App Store.');
   const origin = requireBilling(plan); const stripe = new StripeSubscriptions(components.stripe, {});
   const subscriptions = await editorSubscriptions(ctx, identity.subject);
   if (subscriptions.some(hasAccess)) throw new ConvexError(plan === 'ultra' ? "You already have a subscription. Upgrade it to Ultra from billing." : "You already have a subscription. Manage it in billing.");
@@ -137,6 +146,7 @@ export const createPortal = action({ args: {}, returns: v.object({ url: v.string
  *  difference now and ends any Pro trial, since Ultra has none. The webhook then syncs the plan. */
 export const upgradeToUltra = action({ args: {}, returns: v.null(), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
+  if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Manage or upgrade your subscription in the App Store.');
   requireBilling('ultra');
   const customer = await ctx.runQuery(components.stripe.public.getCustomerByUserId, { userId: identity.subject });
   if (!customer) throw new ConvexError('Start a membership before upgrading.');

@@ -26,7 +26,8 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
 
   if (!status) return loading ?? <div className="editor-access-loading" role="status"><LoaderCircle size={18} className="animate-spin" />Checking your plan…</div>;
   if (!status.enabled || status.subscribed || status.complimentary) return children;
-  if (checkoutPending && !status.needsPayment) return <div className="workspace-page editor-access-page">
+  const paymentIssue = status.paymentIssue ?? status.needsPayment;
+  if (checkoutPending && !paymentIssue) return <div className="workspace-page editor-access-page">
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     <main className="editor-access-main"><section className="editor-access-card" aria-labelledby="editor-access-title">
       <h1 id="editor-access-title">Confirming your subscription…</h1>
@@ -34,13 +35,13 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
       <div><Button asChild variant="outline" size="md"><Link href="/profile#billing">View billing</Link></Button></div>
     </section></main>
   </div>;
-  const trial = status.trialEligible && !status.needsPayment;
+  const trial = status.trialEligible && !paymentIssue;
 
   async function openCheckout(plan: 'pro' | 'ultra' = 'pro') {
     if (!status?.configured || inFlight.current) return;
     inFlight.current = true; setBusy(plan); setError('');
     try {
-      const result = status.needsPayment ? await portal({}) : await checkout({ plan });
+      const result = paymentIssue ? await portal({}) : await checkout({ plan });
       if (!result.url) throw new Error('Could not open checkout. Please try again.');
       window.location.assign(result.url);
     } catch (cause) {
@@ -50,14 +51,14 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
   }
 
   // A member whose payment failed fixes it first; everyone else picks a plan.
-  const offerUltra = status.ultraAvailable && !status.needsPayment;
+  const offerUltra = status.ultraAvailable && !paymentIssue;
   return <div className="workspace-page editor-access-page">
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     <main className="editor-access-main" data-plans={offerUltra || undefined}>
       <section className="editor-access-card" aria-labelledby="editor-access-title">
         <header className="editor-access-heading">
-          <h1 id="editor-access-title">{status.needsPayment ? 'Update your payment method' : offerUltra ? 'Revline Pro' : 'Continue with Revline'}</h1>
-          {status.needsPayment ? <p>Update your payment method to restore editor access.</p> : offerUltra && <p>For creators editing every week.</p>}
+          <h1 id="editor-access-title">{paymentIssue ? 'Update your payment method' : offerUltra ? 'Revline Pro' : 'Continue with Revline'}</h1>
+          {paymentIssue ? <p>Update your payment method to restore editor access.</p> : offerUltra && <p>For creators editing every week.</p>}
         </header>
         <div className="editor-access-offer">
           <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month · {EDITOR_PLAN.currency}</span></div>
@@ -69,7 +70,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
         <div className="editor-access-action">
           <PrimaryButton className="editor-access-start" disabled={!!busy || !status.configured} onClick={() => void openCheckout()}>
             {busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}
-            {status.needsPayment ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
+            {paymentIssue ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
           </PrimaryButton>
         </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}

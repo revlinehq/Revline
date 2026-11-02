@@ -1,0 +1,99 @@
+name: Revline
+options:
+  bundleIdPrefix: com.revline
+  deploymentTarget:
+    iOS: "17.0"
+  xcodeVersion: "26.1"
+  createIntermediateGroups: true
+configs:
+  Debug: debug
+  Release: release
+configFiles:
+  Debug: Config/Debug.xcconfig
+  Release: Config/Release.xcconfig
+packages:
+  Convex:
+    url: https://github.com/get-convex/convex-swift
+    from: 0.8.2
+  Clerk:
+    url: https://github.com/clerk/clerk-ios
+    exactVersion: 1.5.8
+  Superwall:
+    url: https://github.com/superwall/Superwall-iOS
+    from: 4.18.3
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    PRODUCT_BUNDLE_IDENTIFIER: com.revline.app
+    TARGETED_DEVICE_FAMILY: "1,2"
+    MARKETING_VERSION: "1.0.0"
+    CURRENT_PROJECT_VERSION: "1"
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    SWIFT_STRICT_CONCURRENCY: complete
+    GENERATE_INFOPLIST_FILE: NO
+targets:
+  Revline:
+    type: application
+    platform: iOS
+    sources:
+      - path: Revline
+    info:
+      path: Revline/Info.plist
+      properties:
+        CFBundleDisplayName: Revline
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [com.revline.app]
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIUserInterfaceStyle: Dark
+        ITSAppUsesNonExemptEncryption: false
+        NSPhotoLibraryAddUsageDescription: Save your exported Revline videos to your photo library.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+        RevlineEnvironment: $(REVLINE_ENVIRONMENT)
+        RevlineConvexURL: $(REVLINE_CONVEX_URL)
+        RevlineWebURL: $(REVLINE_WEB_URL)
+        RevlineClerkPublishableKey: $(REVLINE_CLERK_PUBLISHABLE_KEY)
+        RevlineClerkDomain: $(REVLINE_CLERK_DOMAIN)
+        RevlineSuperwallKey: $(REVLINE_SUPERWALL_API_KEY)
+        RevlineProProduct: $(REVLINE_PRO_PRODUCT_ID)
+        RevlineUltraProduct: $(REVLINE_ULTRA_PRODUCT_ID)
+    entitlements:
+      path: Revline/Revline.entitlements
+      properties:
+        application-identifier: $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)$(PRODUCT_BUNDLE_IDENTIFIER)
+        com.apple.developer.associated-domains:
+          - webcredentials:$(REVLINE_CLERK_DOMAIN)
+        com.apple.developer.applesignin: [Default]
+    dependencies:
+      - package: Convex
+        product: ConvexMobile
+      - package: Clerk
+        product: ClerkKit
+      - package: Clerk
+        product: ClerkKitUI
+      - package: Superwall
+        product: SuperwallKit
+    postBuildScripts:
+      - name: Apply Revline authentication copy
+        path: Scripts/brand-clerk-copy.sh
+        basedOnDependencyAnalysis: false
+        inputFiles:
+          - $(BUILT_PRODUCTS_DIR)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
+        outputFiles:
+          - $(BUILT_PRODUCTS_DIR)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings
+          - $(DERIVED_FILE_DIR)/revline-auth-copy.stamp
+schemes:
+  Revline:
+    build:
+      targets:
+        Revline: all
+    run:
+      config: Debug
+    archive:
+      config: Release
