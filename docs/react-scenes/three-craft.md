@@ -50,3 +50,7 @@ Source recommendations were checked against [Poly Haven's license](https://polyh
 | Asset-library discovery / license fields | `readSkill(name: "asset-library")` is rejected by the current catalog. Guidance directs agents to check availability, report the gap, reuse project assets and record provenance in the brief with the existing updateBrief tool. It does not invent a library API. |
 
 True camera position/elevation/aim changes are already supported and demonstrated. No general camera engine follow-up is needed for Terra's chess observation; a flat illustration still lacks geometry for a new viewpoint.
+
+## Shared dev deployment
+
+Merged latest `origin/main` (`e0cad9d`) into the craft branch and passed typecheck/build on that merged state. A direct dev push was rejected because existing dev assets contain `imageGeneration`, introduced by [draft PR #39](https://github.com/zuraHQ/revline-editor/pull/39), while main lacks that validator. No data was removed or schema validation bypassed. To preserve the already-live image feature, the dev deployment uses a temporary source snapshot of that branch's `5650421` plus only the craft skill patch. The craft PR does not include that other feature. Production is not a deployment target for this task.
