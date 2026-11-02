@@ -1,7 +1,6 @@
 import { v, ConvexError } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
 import { incidentArgs, incidentDeployment, recordIncident } from './lib/incidents';
-import { incidentText } from '../lib/incidents';
 import { z } from 'zod';
 import { requireOwner, requireProject } from './lib/auth';
 
@@ -97,7 +96,7 @@ export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents')
     const context = z.object({ taskId: z.string().optional() }).catch({}).parse(JSON.parse(sample.context));
     const taskId = context.taskId ? ctx.db.normalizeId('mediaTasks', context.taskId) : null;
     const task = taskId ? await ctx.db.get(taskId) : null;
-    if (task && task.projectId === sample.projectId) lines.push(JSON.stringify({ event: 'media-task-state', taskId, kind: task.kind, status: task.status, attempt: task.attempt, error: task.error ? incidentText(task.error) : undefined, updatedAt: task.updatedAt }));
+    if (task && task.projectId === sample.projectId) lines.push(JSON.stringify({ event: 'media-task-state', taskId, kind: task.kind, status: task.status, attempt: task.attempt, error: task.error ? row.message : undefined, updatedAt: task.updatedAt }));
     const runner = sample.runId ? await ctx.db.query('agentRunnerTurns').withIndex('by_runId', q => q.eq('runId', sample.runId!)).unique() : null;
     if (runner && runner.projectId === sample.projectId) lines.push(JSON.stringify({ event: 'runner-state', runId: sample.runId, attempts: runner.attempts, seenAt: runner.seenAt }));
   }

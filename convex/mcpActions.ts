@@ -83,6 +83,14 @@ const message = (error: unknown) => {
   return (typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : error instanceof Error ? error.message : String(error)).slice(0, 2000);
 };
 
+function toolFailureMessage(text: string): string {
+  let value: unknown;
+  try { value = JSON.parse(text); } catch { return text; }
+  const parsed = z.object({ error: z.union([z.string(), z.object({ message: z.string() })]).optional(), message: z.string().optional(), reason: z.string().optional() }).safeParse(value);
+  if (!parsed.success) return 'Revline tool returned an unsuccessful result';
+  return typeof parsed.data.error === 'string' ? parsed.data.error : parsed.data.error?.message ?? parsed.data.message ?? parsed.data.reason ?? 'Revline tool returned an unsuccessful result';
+}
+
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   // The editor shows the agent as working across its whole request, not only during each call.
@@ -93,7 +101,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
       : await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName);
-    if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: output.text }).catch(() => {});
+    if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: toolFailureMessage(output.text) }).catch(() => {});
     return output;
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   finally { await touch(); }
