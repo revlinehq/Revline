@@ -12,6 +12,8 @@ final class PurchaseCoordinator: PurchaseController {
     private let productIDs: Set<String>
     private var identifiedUser: String?
     private var registeredUser: String?
+    private var hostedPaywallUnavailable = false
+    var hasHostedPaywall: Bool { configured && !hostedPaywallUnavailable }
     var status: BillingStatus?
     var error: String?
     var notice: String?
@@ -53,8 +55,8 @@ final class PurchaseCoordinator: PurchaseController {
         guard status?.needsPayment == true, status?.active != true else { return }
         guard configured else { error = "Subscriptions are unavailable in this build. Please try again later."; return }
         let handler = PaywallPresentationHandler()
-        handler.onError { [weak self] error in Task { @MainActor in self?.error = AppFailure.describe(error) } }
-        handler.onSkip { [weak self] _ in Task { @MainActor in self?.notice = "Choose a membership to start editing, or restore an existing purchase." } }
+        handler.onError { [weak self] error in Task { @MainActor in self?.error = AppFailure.describe(error); self?.hostedPaywallUnavailable = true } }
+        handler.onSkip { [weak self] _ in Task { @MainActor in self?.hostedPaywallUnavailable = true; self?.notice = "Choose a membership to start editing, or restore an existing purchase." } }
         Superwall.shared.register(placement: "onboarding_paywall", handler: handler)
     }
 
@@ -73,8 +75,6 @@ final class PurchaseCoordinator: PurchaseController {
 
     func purchaseMonthly() async {
         guard !purchasing else { return }
-        purchasing = true
-        defer { purchasing = false }
         if monthlyProduct == nil { await loadMonthlyProduct() }
         guard let product = monthlyProduct else { error = "This subscription is currently unavailable from the App Store. Please try again later."; return }
         _ = await purchaseProduct(product)
@@ -86,6 +86,10 @@ final class PurchaseCoordinator: PurchaseController {
     }
 
     private func purchaseProduct(_ storeProduct: StoreKit.Product) async -> PurchaseResult {
+        guard !purchasing else { return .pending }
+        purchasing = true
+        error = nil; notice = nil
+        defer { purchasing = false }
         guard let userID = Clerk.shared.user?.id, userID == identifiedUser, productIDs.contains(storeProduct.id) else {
             return .failed(AppFailure("This subscription is unavailable. Please try again later."))
         }
@@ -134,7 +138,7 @@ final class PurchaseCoordinator: PurchaseController {
     }
 
     func reset() {
-        status = nil; identifiedUser = nil; registeredUser = nil; error = nil; notice = nil
+        status = nil; identifiedUser = nil; registeredUser = nil; error = nil; notice = nil; hostedPaywallUnavailable = false
         if configured { Superwall.shared.reset(); Superwall.shared.subscriptionStatus = .unknown }
     }
 

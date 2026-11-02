@@ -26,9 +26,9 @@ struct ConversationView: View {
                     }
                     if project.status?.running == true {
                         VStack(alignment: .leading, spacing: 8) {
-                            ProgressView(project.status?.activity ?? "Working…").font(.subheadline).tint(.revlineAccent)
+                            ProgressView(project.status?.activity ?? "Working…").font(.subheadline).tint(.accentColor)
                             if let external = project.status?.externalAgent, external.running {
-                                Text("\(external.name) is editing this project.").font(.subheadline).foregroundStyle(Color.revlineMuted)
+                                Text("\(external.name) is editing this project.").font(.subheadline).foregroundStyle(Color.secondary)
                             }
                         }.padding(.horizontal, 16).padding(.bottom, 8)
                     }

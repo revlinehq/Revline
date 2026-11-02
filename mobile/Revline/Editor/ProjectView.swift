@@ -4,6 +4,7 @@ struct ProjectView: View {
     @Environment(AppSession.self) private var session
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var store: ProjectStore
     @State private var player = PlayerController()
     @State private var drawer = AgentDrawerState()
@@ -13,25 +14,27 @@ struct ProjectView: View {
 
     var body: some View {
         GeometryReader { geometry in
-            VStack(spacing: 0) {
-                if store.project != nil {
-                    ProjectPreview(store: store, player: player)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        .contentShape(.rect)
-                        .simultaneousGesture(TapGesture().onEnded { dismissKeyboard += 1 })
-                    if !drawer.composing { PreviewTransport(store: store, player: player) }
-                } else if let error = store.error {
-                    WorkspaceStateView(title: "Couldn’t open project", description: error, symbol: "wifi.slash", actionTitle: "Try again") { store.refreshID += 1 }
-                } else { WorkspaceStateView(title: "Opening project…", loading: true) }
-            }
-            .safeAreaInset(edge: .bottom, spacing: 0) {
+            let sidebar = horizontalSizeClass == .regular && geometry.size.width >= 760
+            let layout = sidebar ? AnyLayout(HStackLayout(spacing: 0)) : AnyLayout(VStackLayout(spacing: 0))
+            layout {
+                ProjectWorkspacePreview(store: store, player: player, showsTransport: !drawer.composing || sidebar) {
+                    dismissKeyboard += 1
+                }
                 Group {
                     if drawer.exporting { ExportSheet(store: store, onClose: drawer.closeExport) }
-                    else { AgentSheet(store: store, player: player, drawer: drawer, dismissKeyboard: dismissKeyboard) }
+                    else {
+                        AgentSheet(store: store, player: player, drawer: drawer, dismissKeyboard: dismissKeyboard, isSidebar: sidebar)
+                    }
                 }
-                .frame(height: drawer.height(in: geometry.size.height))
-                .background(drawer.composing ? Color.revlineBackground : Color.revlineCard)
-                .clipShape(.rect(topLeadingRadius: 32, topTrailingRadius: 32))
+                .frame(
+                    width: sidebar ? min(440, max(320, geometry.size.width * 0.4)) : nil,
+                    height: sidebar ? nil : drawer.height(in: geometry.size.height)
+                )
+                .background(!sidebar && drawer.composing ? Color.revlineBackground : Color.revlineCard)
+                .clipShape(.rect(topLeadingRadius: sidebar ? 0 : 32, topTrailingRadius: sidebar ? 0 : 32))
+                .overlay(alignment: .leading) {
+                    if sidebar { Rectangle().fill(Color.revlineBorder).frame(width: 1) }
+                }
             }
         }
         .background(Color.revlineBackground.ignoresSafeArea())
@@ -45,8 +48,8 @@ struct ProjectView: View {
             }
             if !drawer.exporting {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { dismissKeyboard += 1; drawer.showExport() } label: { Text("Export").foregroundStyle(Color.revlineForeground) }
-                        .buttonStyle(.borderedProminent).tint(.revlineAccent)
+                    Button("Export") { dismissKeyboard += 1; drawer.showExport() }
+                        .buttonStyle(.borderedProminent).tint(.accentColor)
                 }
             }
         }

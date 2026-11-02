@@ -26,12 +26,15 @@ def revline_screenshots
 end
 
 def revline_listing_options
+  key = revline_api_key
+  identifier = ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app")
+  UI.user_error!("Create the #{identifier} app record in App Store Connect → Apps → + → New App before uploading metadata.") unless Spaceship::ConnectAPI::App.find(identifier)
   contacts = { first_name: "ASC_REVIEW_FIRST_NAME", last_name: "ASC_REVIEW_LAST_NAME",
     phone_number: "ASC_REVIEW_PHONE", email_address: "ASC_REVIEW_EMAIL" }.filter_map do |field, variable|
     [field, ENV[variable]] if ENV[variable] && !ENV[variable].empty?
   end.to_h
   {
-    api_key: revline_api_key,
+    api_key: key,
     app_identifier: ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"),
     app_version: "1.0.0",
     metadata_path: File.expand_path("metadata", __dir__),

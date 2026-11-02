@@ -76,3 +76,15 @@ Production screenshots belong in `Screenshots/6.9/` (1320×2868) and `Screenshot
 The listing lane copies these images byte-for-byte into an ignored language staging folder for fastlane. It refuses to upload screenshots when none have been captured. It does not submit for review. A final submission requires completing every unresolved item in [review-checklist.md](review-checklist.md), including legal review, a dedicated reviewer account and real production operation.
 
 Sources: [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/), [Apple app records](https://developer.apple.com/documentation/appstoreconnectapi/apps), [Clerk native Apple setup](https://clerk.com/docs/ios/guides/configure/auth-strategies/sign-in-with-apple), [fastlane API authentication](https://docs.fastlane.tools/app-store-connect-api/), [deliver](https://docs.fastlane.tools/actions/deliver/).
+
+## Latest priority pass
+
+See [current store handoff](current-handoff.md) for the new Superwall resources, paused campaign, snapshot-service error, missing Apple app record, prepared App Privacy answers and Duo SDK requirement. No additional Simulator work is required by this pass. `mobile/superwall` builds the hosted screen independently of the native app.
+
+For the prepared App Privacy answers, the owner can use an authenticated Apple session:
+
+```sh
+fastlane run upload_app_privacy_details_to_app_store app_identifier:com.zurahq.revline json_path:AppStore/app-privacy.json skip_publish:true
+```
+
+This action requires interactive Apple authentication and does not accept the existing `.p8` API key. The agent does not perform the login. Review the uploaded draft before publishing nutrition labels.

@@ -11,10 +11,10 @@ struct MediaAssetRow: View {
             VStack(alignment: .leading) {
                 Text(asset.fileName).lineLimit(2)
                 Text(asset.preparation?.message ?? asset.kind.capitalized)
-                    .font(.subheadline).foregroundStyle(Color.revlineMuted).lineLimit(2)
+                    .font(.subheadline).foregroundStyle(Color.secondary).lineLimit(2)
             }.frame(maxWidth: .infinity, alignment: .leading)
             Image(systemName: attached ? "checkmark.circle.fill" : "circle")
-                .foregroundStyle(attached ? Color.accentColor : Color.revlineMuted)
+                .foregroundStyle(attached ? Color.accentColor : Color.secondary)
                 .accessibilityHidden(true)
         }.padding(.vertical, 4)
     }

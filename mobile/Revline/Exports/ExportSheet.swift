@@ -44,23 +44,23 @@ struct ExportSheet: View {
                             .frame(maxWidth: .infinity, minHeight: 88)
                         }
                         .buttonStyle(.bordered).buttonBorderShape(.roundedRectangle(radius: 20))
-                        .tint(destination == item ? .revlineAccent : .revlineMuted)
+                        .tint(destination == item ? .accentColor : .secondary)
                         .accessibilityAddTraits(destination == item ? .isSelected : [])
                         .disabled(export.busy)
                     }
                 }
-                Toggle("Burn in captions", isOn: $captions).tint(.revlineAccent).disabled(export.busy)
+                Toggle("Burn in captions", isOn: $captions).tint(.accentColor).disabled(export.busy)
                 if export.busy {
                     ProgressView(export.status, value: export.progress, total: 100)
-                    Text("You can keep editing while Revline renders.").font(.footnote).foregroundStyle(Color.revlineMuted)
+                    Text("You can keep editing while Revline renders.").font(.footnote).foregroundStyle(Color.secondary)
                 }
                 if let error = export.error { ErrorBanner(message: error) }
-                if let notice = export.notice { Text(notice).font(.subheadline).foregroundStyle(Color.revlineMuted) }
+                if let notice = export.notice { Text(notice).font(.subheadline).foregroundStyle(Color.secondary) }
                 Button { confirming = true } label: {
                     ActionLabel(title: "Save \(timecode(store.timeline?.duration ?? 0)) video", busyTitle: export.status, busy: export.busy)
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large).buttonBorderShape(.capsule)
-                .tint(.revlineAccent).disabled(export.busy || store.timeline?.clips.isEmpty != false)
+                .tint(.accentColor).disabled(export.busy || store.timeline?.clips.isEmpty != false)
                 .confirmationDialog("Start this export?", isPresented: $confirming, titleVisibility: .visible) {
                     Button("Render and save video") {
                         export.start(session: session, project: store, destination: destination, resolution: resolution, fps: fps, captions: captions)
@@ -70,7 +70,6 @@ struct ExportSheet: View {
             }
             .padding(.horizontal, 18).padding(.top, 20).padding(.bottom, 16)
         }
-        .foregroundStyle(Color.revlineForeground)
         .background(Color.revlineCard)
         .sheet(item: $export.share) { ShareSheet(url: $0.url) }
         .sheet(isPresented: $history) { ExportsView(store: store) }

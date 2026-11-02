@@ -5,9 +5,8 @@ struct RevlineSurface: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            .foregroundStyle(Color.revlineForeground)
             .scrollContentBackground(.hidden)
-            .background(background)
+            .background(background.ignoresSafeArea())
             .toolbarBackground(background, for: .navigationBar, .tabBar)
             .toolbarBackground(.visible, for: .tabBar)
             .toolbarColorScheme(.dark, for: .navigationBar, .tabBar)

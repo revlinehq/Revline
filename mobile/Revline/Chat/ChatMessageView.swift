@@ -20,7 +20,7 @@ struct ChatMessageView: View {
                         }.padding(.top, 8)
                     } label: {
                         Text("\(message.tools.count) steps").frame(minHeight: 44)
-                    }.font(.subheadline).tint(.revlineMuted)
+                    }.font(.subheadline).tint(.accentColor)
                 }
                 if !message.text.isEmpty {
                     Text(LocalizedStringKey(message.text)).font(.body).lineSpacing(4).textSelection(.enabled)
