@@ -1,7 +1,7 @@
 import { Easing, interpolate, spring } from 'remotion';
 import { LAB_TEXT_PRESETS, type LabTextPreset } from './remotion-lab-text-presets';
 
-export type LabCategory = 'explainer' | 'typography' | 'clip-motion' | 'tracking' | 'masking' | 'templates';
+export type LabCategory = 'explainer' | 'typography' | 'clip-motion' | 'tracking' | 'templates';
 export type LabScene = 'block-card' | 'block-arrow' | 'block-label' | 'block-chart' | 'block-counter' | 'block-progress-ring' | 'block-progress-bar' | 'block-stat-badge' | 'block-checklist' | 'block-steps' | 'block-quote' | 'block-comparison' | 'block-marker' | 'block-highlight' | 'block-lower-third' | 'typography';
 export type LabWord = { word: string; start: number; end: number };
 export type LabItem = { label: string; detail: string; value: number; start: number; trigger: string };
@@ -22,7 +22,6 @@ export const LAB_CATEGORIES: { id: LabCategory; label: string; description: stri
   { id: 'typography', label: 'Typography', description: 'Emphasize speech with timed words, kinetic titles and editable type.' },
   { id: 'clip-motion', label: 'Clip animations', description: 'Animate two photo layers with entrance and exit presets, editable timing, placement and easing. Try them over your own local video.' },
   { id: 'tracking', label: 'Tracking', description: 'Track a face in your own clip and attach a label to its motion.' },
-  { id: 'masking', label: 'Masking', description: 'Test cutouts, text behind a subject and selective effects.' },
   { id: 'templates', label: 'Templates', description: 'Try a complete design, make it yours and keep it for another clip.' },
 ];
 export const LAB_SCENES: { id: LabScene; label: string }[] = [

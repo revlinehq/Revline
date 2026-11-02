@@ -11,6 +11,8 @@ export type EffectLibraryEntry = { id: EffectIconName; label: string; descriptio
  * light leak, transitions, the distortions and directional blur) and the Motion
  * and Color tabs stay renderable in saved projects but are not offered here. */
 export const EFFECT_LIBRARY_CATALOG: readonly EffectLibraryEntry[] = [
+  { id:'impact-frame',label:'Impact frame',description:EFFECT_CATALOG['impact-frame'].description,category:'texture',preset:'impact-frame' },
+  { id:'texture-overlay',label:'Light leaks and textures',description:EFFECT_CATALOG['texture-overlay'].description,category:'texture',preset:'texture-overlay' },
   { id: 'filmOverlay', label: 'Film overlay', description: 'Animated film grain, dust and scratches, with adjustable vignette, flicker and warmth. Procedural, with no overlay download required.', category: 'texture', visual: 'filmOverlay' },
   { id: 'vhs', label: 'VHS overlay', description: 'Analog scanlines, tape noise, subtle RGB bleed and rolling tracking distortion. Adjustable strength, components and speed; no overlay download.', category: 'texture', visual: 'vhs' },
   { id: 'glitch', label: 'Digital glitch', description: 'Distort the selected footage', category: 'texture', visual: 'glitch' },

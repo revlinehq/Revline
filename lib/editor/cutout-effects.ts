@@ -8,13 +8,13 @@ export const CUTOUT_EFFECTS = ['text-behind', 'backdrop', 'outline', 'color-pop'
 export type CutoutEffectKind = typeof CUTOUT_EFFECTS[number];
 export type CutoutEffect = { kind: CutoutEffectKind; text?: string; color?: string };
 
-export const CUTOUT_EFFECT_INFO: Record<CutoutEffectKind, { label: string; description: string; target: 'person' | 'object'; defaultSubject?: string }> = {
+export const CUTOUT_EFFECT_INFO: Record<CutoutEffectKind, { label: string; description: string; target: 'person' | 'object' }> = {
   'text-behind': { label: 'Text behind you', description: 'A big title between your background and you.', target: 'person' },
   backdrop: { label: 'Visuals behind you', description: 'Replaces your background with an animated gradient scene.', target: 'person' },
   outline: { label: 'Outline glow', description: 'A neon stroke and glow that follows your silhouette.', target: 'person' },
   'color-pop': { label: 'Colour pop', description: 'Background in black and white, you stay in colour.', target: 'person' },
-  spotlight: { label: 'Spotlight object', description: 'Dims the frame and keeps one object bright.', target: 'object', defaultSubject: 'microphone' },
-  blur: { label: 'Blur object', description: 'Blurs one object, such as a face or logo, and follows it.', target: 'object', defaultSubject: 'face' },
+  spotlight: { label: 'Spotlight object', description: 'Dims the background and keeps the salient foreground bright.', target: 'object' },
+  blur: { label: 'Blur object', description: 'Blurs the salient foreground. For a specific face or logo, use a tracked mask.', target: 'object' },
 };
 
 export function validateCutoutEffect(effect: CutoutEffect) {

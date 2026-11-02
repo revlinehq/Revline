@@ -1,3 +1,4 @@
+import { drawTextureOverlay, DEFAULT_OVERLAY } from './montage-vfx';
 import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
 import { trackOf, type Clip } from './types';
 import { isTransitionClip } from './clip-transitions';
@@ -33,10 +34,17 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const width=Number(composition.dataset.width),height=Number(composition.dataset.height),time=clock.time();
     for(const [id,entry] of entries){
       const clip={...entry.clip,...drafts.get(id)}, motion=adjustmentFrame(clip,time);
-      const bars=clip.effectPreset==='cinematic-bars', solid=clip.effectPreset==='solid-color';
-      entry.node.style.transform=bars||solid||clip.effectPreset==='zoom-blur'?'none':`translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
-      entry.node.style.opacity=String(bars||solid||clip.effectPreset==='zoom-blur'?1:motion.opacity);
-      entry.node.style.filter=bars||solid||clip.effectPreset==='zoom-blur'?'none':`brightness(${motion.brightness})`;
+      const bars=clip.effectPreset==='cinematic-bars', solid=clip.effectPreset==='solid-color', bitmap=clip.effectPreset==='impact-frame'||clip.effectPreset==='texture-overlay';
+      const texture=entry.node.querySelector<HTMLCanvasElement>(':scope > canvas[data-vfx-overlay]');
+      if(texture){
+        const active=time>=clip.start-1e-6&&time<clip.start+clip.duration-1e-6;texture.style.display=active?'block':'none';
+        const fps=Number(composition.dataset.fps)||30,frame=Math.floor((time+1e-6)*fps),settings=clip.overlay??DEFAULT_OVERLAY;
+        const key=JSON.stringify([frame,width,height,clip.start,clip.duration,clip.overlayTiming,settings]);
+        if(active&&texture.dataset.frame!==key){if(texture.width!==width)texture.width=width;if(texture.height!==height)texture.height=height;drawTextureOverlay(texture,settings,Math.max(0,frame/fps-clip.start)+(clip.overlayTiming?.offset??0),clip.overlayTiming?.duration??clip.duration,fps);texture.dataset.frame=key;}
+      }
+      entry.node.style.transform=bars||solid||bitmap||clip.effectPreset==='zoom-blur'?'none':`translate(${motion.x*width}px,${motion.y*height}px) rotate(${motion.rotation}deg) scale(${motion.scale})`;
+      entry.node.style.opacity=String(bars||solid||bitmap||clip.effectPreset==='zoom-blur'?1:motion.opacity);
+      entry.node.style.filter=bars||solid||bitmap||clip.effectPreset==='zoom-blur'?'none':`brightness(${motion.brightness})`;
       if(solid){
         const rectangle=entry.node.querySelector<HTMLElement>(':scope > .solid-color-rectangle')!,settings=solidColorSettings(clip);
         rectangle.style.visibility=time>=clip.start&&time<clip.start+clip.duration?'visible':'hidden';
@@ -60,7 +68,7 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
     const nextSignature=JSON.stringify(sources);if(nextSignature===signature)return;signature=nextSignature;
     const wanted=new Set(sources.map(source=>source.clip.id));
     for(const [id,entry] of entries)if(!wanted.has(id)){
-      for(const child of Array.from(entry.node.children))if(!child.classList.contains('cinematic-bars')&&!child.classList.contains('solid-color-rectangle'))entry.node.parentNode!.insertBefore(child,entry.node);
+      for(const child of Array.from(entry.node.children))if(!child.classList.contains('cinematic-bars')&&!child.classList.contains('solid-color-rectangle')&&!child.hasAttribute('data-vfx-overlay'))entry.node.parentNode!.insertBefore(child,entry.node);
       entry.node.remove();entries.delete(id);drafts.delete(id);
     }
     for(const {clip} of sources){
@@ -79,6 +87,9 @@ export function installAdjustmentLayers(initial: AdjustmentSource[]): Adjustment
       const rectangle=Array.from(entry.node.children).find(node=>node.classList.contains('solid-color-rectangle'));
       if(clip.effectPreset==='solid-color'&&!rectangle){const node=document.createElement('div');node.className='solid-color-rectangle';entry.node.appendChild(node);}
       else if(clip.effectPreset!=='solid-color')rectangle?.remove();
+      const texture=entry.node.querySelector(':scope > canvas[data-vfx-overlay]');
+      if(clip.effectPreset==='texture-overlay'&&!texture){const canvas=document.createElement('canvas');canvas.dataset.vfxOverlay='';Object.assign(canvas.style,{position:'absolute',inset:'0',width:'100%',height:'100%',pointerEvents:'none',zIndex:'2147483647'});entry.node.appendChild(canvas);}
+      else if(clip.effectPreset!=='texture-overlay')texture?.remove();
       entry.node.style.zIndex=String(trackOf(clip)*256-1);
     }
     const ordered=Array.from(entries.values()).sort((a,b)=>trackOf(a.clip)-trackOf(b.clip)||sources.findIndex(source=>source.clip.id===a.clip.id)-sources.findIndex(source=>source.clip.id===b.clip.id));

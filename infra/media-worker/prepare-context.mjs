@@ -15,7 +15,7 @@ for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'lib',
   await mkdir(dirname(join(context, name)), { recursive: true });
   await cp(join(root, name), join(context, name), { recursive: true, dereference: false, filter });
 }
-for (const name of ['render-worker.mjs', 'render-distributed.mjs', 'render-chunk.mjs', 'render-artifacts.mjs', 'render-resources.mjs', 'render-ffmpeg.sh', 'composition-review-worker.mjs', 'detect-shots.py', 'detect-beats.py', 'install-beat-model.mjs', 'copy-vendor.mjs', 'hyperframes-playback-compat.mjs', 'beat-tracking-requirements.txt', 'scene-detection-requirements.txt', 'video-import-requirements.txt']) {
+for (const name of ['render-worker.mjs', 'render-distributed.mjs', 'render-chunk.mjs', 'render-artifacts.mjs', 'render-resources.mjs', 'render-ffmpeg.sh', 'composition-review-worker.mjs', 'track-pixels.py', 'detect-shots.py', 'detect-beats.py', 'install-beat-model.mjs', 'copy-vendor.mjs', 'hyperframes-playback-compat.mjs', 'beat-tracking-requirements.txt', 'scene-detection-requirements.txt', 'video-import-requirements.txt']) {
   await mkdir(join(context, 'scripts'), { recursive: true });
   await cp(join(root, 'scripts', name), join(context, 'scripts', name));
 }

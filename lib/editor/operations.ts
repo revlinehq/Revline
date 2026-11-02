@@ -1,3 +1,4 @@
+import { DEFAULT_PARALLAX } from './montage-vfx';
 import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, resizeEffectMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { textTemplateTimingPatch } from './remotion-text';
@@ -155,16 +156,16 @@ export function setClipSpeedRamp(timeline: Timeline, id: string, anchors: RampAn
   return retimeLinked(next, ids, duration / clip.duration);
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
-export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
+export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind']; duration?: number; audioAssetId?: string; derivation?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
   if(asset.preparation)throw new Error(asset.preparation.message);
   timeline = normalizeTimeline(timeline);
   const group = layerGroup(asset.kind);
   const trackEnd = Math.max(0, ...timeline.clips.filter(c => layerGroup(c.kind) === group && trackOf(c) === track).map(c => c.start + c.duration));
   const start = at ?? trackEnd;
   if (!Number.isFinite(start) || start < 0) throw new Error('Choose a valid timeline position.');
-  const duration = asset.kind === 'image' ? 5 : asset.duration ?? 5;
+  const duration = asset.derivation === 'parallax' ? DEFAULT_PARALLAX.duration : asset.kind === 'image' ? 5 : asset.duration ?? 5;
   if (!Number.isFinite(duration) || duration < 1 / timeline.fps) throw new Error('This source is shorter than one frame. Choose another source.');
-  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1, ...((asset.kind === 'video' || asset.kind === 'image') ? { fit: 'contain' as const } : {}) });
+  const next = placeOnFreeLayer(timeline, { id, kind: asset.kind, assetId: asset._id, track, start, duration, sourceStart: 0, volume: 1, ...(asset.derivation === 'parallax' ? {parallax:{...DEFAULT_PARALLAX}} : {}), ...((asset.kind === 'video' || asset.kind === 'image') ? { fit: 'contain' as const } : {}) });
   return separateVideoClips(next, asset);
 }
 /** Preserve existing cuts and levels when giving a video's sound its own clip. */

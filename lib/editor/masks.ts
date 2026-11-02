@@ -11,7 +11,7 @@ export const MASK_SHAPES = ['rectangle', 'ellipse', 'polygon', 'text'] as const;
 export type MaskShape = typeof MASK_SHAPES[number];
 export type MaskGeometry = { x: number; y: number; width: number; height: number; rotation: number; feather: number };
 export type MaskKey = MaskGeometry & { time: number };
-export type ClipMask = { shape: MaskShape; invert?: boolean; radius?: number; points?: number[][]; text?: string; keys: MaskKey[] };
+export type ClipMask = { shape: MaskShape; invert?: boolean; radius?: number; points?: number[][]; text?: string; active?: { start: number; end: number }; keys: MaskKey[] };
 export type MaskAnchor = MaskKey & { easing?: MotionEasing };
 
 const GEOMETRY = ['x', 'y', 'width', 'height', 'rotation', 'feather'] as const;
@@ -22,7 +22,8 @@ export function validateMask(clip: Pick<Clip, 'kind'> & { mask?: ClipMask }) {
   if (!mask) return;
   if (clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Masks apply to video or image clips.');
   if (!MASK_SHAPES.includes(mask.shape)) throw new Error('Choose a rectangle, ellipse, polygon or text mask.');
-  if (!mask.keys?.length || mask.keys.length > 240) throw new Error('A mask needs 1 to 240 keys.');
+  if (mask.active && (!Number.isFinite(mask.active.start) || !Number.isFinite(mask.active.end) || mask.active.end <= mask.active.start)) throw new Error('The tracked mask needs a finite visible range.');
+  if (!mask.keys?.length || mask.keys.length > 3604) throw new Error('A mask needs 1 to 3604 keys.');
   mask.keys.forEach((key, index) => {
     if (!Number.isFinite(key.time) || index > 0 && key.time <= mask.keys[index - 1].time) throw new Error('Mask keys need increasing times.');
     for (const property of GEOMETRY) { const [min, max] = LIMITS[property]; if (!Number.isFinite(key[property]) || key[property] < min || key[property] > max) throw new Error(`Mask ${property} must be between ${min} and ${max}.`); }
@@ -94,7 +95,9 @@ export function installClipMasks(initial: MaskSource[]): MaskController {
       const node = document.getElementById(`clip-${source.index}-frame`);
       if (!node) continue;
       if (time < source.start || time >= source.start + source.duration) continue;
-      const svg = maskSvg(source.mask, maskAt(source.mask.keys, time - source.start + source.motionOffset), width, height);
+      const local = time - source.start + source.motionOffset;
+      const active = !source.mask.active || local >= source.mask.active.start && local < source.mask.active.end;
+      const svg = active ? maskSvg(source.mask, maskAt(source.mask.keys, local), width, height) : `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"></svg>`;
       if (painted.get(source.id) === svg) continue;
       painted.set(source.id, svg);
       const url = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;

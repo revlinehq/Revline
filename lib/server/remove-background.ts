@@ -9,13 +9,13 @@ import { createFalClient } from '@fal-ai/client';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 
 const run = promisify(execFile);
-// Person matting keeps soft hair edges; SAM 3 masks any named object (hard edges).
-const PERSON_ENDPOINT = 'veed/video-background-removal', OBJECT_ENDPOINT = 'fal-ai/sam-3/video';
+// Person matting keeps soft hair edges; BiRefNet extracts the salient foreground.
+const PERSON_ENDPOINT = 'veed/video-background-removal', FOREGROUND_ENDPOINT = 'fal-ai/birefnet/v2/video';
 const MAX_OUTPUT_BYTES = 2 * 1024 * 1024 * 1024;
 
-/** Cut out the person (or the named `subject`) of source seconds [start, end) with fal.ai; returns a VP9 WebM with alpha.
+/** Cut out the person (or salient foreground) of source seconds [start, end) with fal.ai; returns a VP9 WebM with alpha.
  * Only the window is sent, because fal bills every frame it receives. */
-export async function removeBackground(source: string, directory: string, window: { start: number; end: number; fps?: number; subject?: string }, signal: AbortSignal, onProgress: (value: number) => void) {
+export async function removeBackground(source: string, directory: string, window: { start: number; end: number; fps?: number; mode?: 'person' | 'foreground' }, signal: AbortSignal, onProgress: (value: number) => void) {
   const key = process.env.FAL_KEY;
   if (!key) throw new AnalysisError('Background removal is not configured on the media worker.', 503);
   const clip = join(directory, 'cutout-source.mp4');
@@ -31,9 +31,9 @@ export async function removeBackground(source: string, directory: string, window
   const url = await fal.storage.upload(new Blob([await readFile(clip)], { type: 'video/mp4' }));
   signal.throwIfAborted();
   onProgress(30);
-  const endpoint = window.subject ? OBJECT_ENDPOINT : PERSON_ENDPOINT;
-  const input = window.subject
-    ? { video_url: url, prompt: window.subject, apply_mask: true, video_output_type: 'VP9 (.webm)' }
+  const endpoint = window.mode === 'foreground' ? FOREGROUND_ENDPOINT : PERSON_ENDPOINT;
+  const input = window.mode === 'foreground'
+    ? { video_url: url, model: 'General Use (Light)', refine_foreground: true, video_output_type: 'VP9 (.webm)' }
     : { video_url: url, output_codec: 'vp9', refine_foreground_edges: true, subject_is_person: true };
   let requestId: string | undefined;
   let result;
@@ -48,7 +48,7 @@ export async function removeBackground(source: string, directory: string, window
     if (signal.aborted && requestId) await fal.queue.cancel(endpoint, { requestId }).catch(() => {});
     throw signal.aborted ? error : new AnalysisError(`Background removal failed: ${error instanceof Error ? error.message.slice(0, 300) : 'unknown error'}`, 502);
   }
-  // The person endpoint returns a list of videos, SAM 3 a single one.
+  // Person matting returns a list of videos; foreground matting returns one.
   const video = (result.data as { video?: { url?: string } | { url?: string }[] }).video;
   const output = (Array.isArray(video) ? video[0] : video)?.url;
   if (!output) throw new AnalysisError('Background removal returned no video.', 502);
@@ -59,7 +59,7 @@ export async function removeBackground(source: string, directory: string, window
   if (Number(response.headers.get('content-length') ?? 0) > MAX_OUTPUT_BYTES) throw new AnalysisError('The background-removed video is too large to store.', 400);
   await pipeline(Readable.fromWeb(response.body as import('node:stream/web').ReadableStream), createWriteStream(path), { signal });
   onProgress(84);
-  if (window.subject && !await anyOpaque(path, signal)) throw new AnalysisError(`No ${window.subject.slice(0, 60)} was found in this clip. Try a different word for it.`, 422);
+  if (!await anyOpaque(path, signal)) throw new AnalysisError('No foreground was found in this clip. Use a clearer shot or manual tracked masks.', 422);
   // fal may return different timestamps (or frame count) than it was sent. Output frame i
   // is input frame i, so retime frames onto the input's clock; if the count differs,
   // stretch to the input's exact duration. Then lead with transparent frames so second N
@@ -87,7 +87,7 @@ async function frameCount(path: string, signal: AbortSignal) {
 }
 
 async function anyOpaque(path: string, signal: AbortSignal) {
-  // SAM 3 returns a fully transparent video when nothing matches; a tiny alpha thumbnail per frame is enough to tell.
+  // A tiny alpha thumbnail per frame catches empty mattes before placing the result.
   const { stdout } = await run('ffmpeg', ['-v', 'error', '-c:v', 'libvpx-vp9', '-i', path, '-vf', 'alphaextract,scale=32:32,format=gray', '-f', 'rawvideo', '-'], { signal, timeout: 600_000, maxBuffer: 64 * 1024 * 1024, encoding: 'buffer' });
   return stdout.some(value => value > 128);
 }
