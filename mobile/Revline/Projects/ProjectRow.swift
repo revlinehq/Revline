@@ -13,7 +13,7 @@ struct ProjectRow: View {
                 Text(project.title).font(.headline).foregroundStyle(Color.revlineForeground).lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 Text("^[\(project.clipCount) clip](inflect: true)")
                     .font(.subheadline).foregroundStyle(Color.revlineMuted)
-                Text(project.updatedDate, style: .relative)
+                Text(project.updatedDate, format: .relative(presentation: .named, unitsStyle: .abbreviated))
                     .font(.subheadline).foregroundStyle(Color.revlineMuted)
                 if project.aiRunning {
                     Label("Working", systemImage: "circle.dotted")

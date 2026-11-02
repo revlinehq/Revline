@@ -1,0 +1,13 @@
+{
+  "group": "Revline Membership",
+  "groupDisplayName": "Revline",
+  "productId": "com.revline.app.monthly",
+  "name": "Revline Monthly",
+  "description": "Prompt editing, clipping and motion design.",
+  "period": "ONE_MONTH",
+  "baseTerritory": "USA",
+  "basePrice": "39.00",
+  "equalization": "APPLE_RECOMMENDED",
+  "trial": { "mode": "FREE_TRIAL", "duration": "ONE_WEEK", "periods": 1 },
+  "convexPlan": "pro"
+}

@@ -16,6 +16,9 @@ final class PurchaseCoordinator: PurchaseController {
     var error: String?
     var notice: String?
     var restoring = false
+    var purchasing = false
+    var monthlyProduct: StoreKit.Product?
+    var trialEligible = false
 
     init(client: ConvexClient) {
         self.client = client
@@ -24,7 +27,7 @@ final class PurchaseCoordinator: PurchaseController {
                   !value.isEmpty, !value.contains("$("), !value.hasPrefix("YOUR_") else { return nil }
             return value
         }
-        productIDs = Set([setting("RevlineProProduct"), setting("RevlineUltraProduct")].compactMap { $0 })
+        productIDs = [setting("RevlineSubscriptionProduct") ?? "com.revline.app.monthly"]
         let key = setting("RevlineSuperwallKey")
         configured = key != nil
         if let key { Superwall.configure(apiKey: key, purchaseController: self) }
@@ -56,14 +59,34 @@ final class PurchaseCoordinator: PurchaseController {
     }
 
     func presentOnboardingPaywallIfNeeded() {
-        guard let identifiedUser, registeredUser != identifiedUser, status?.needsPayment == true, status?.active != true else { return }
+        guard configured, let identifiedUser, registeredUser != identifiedUser, status?.needsPayment == true, status?.active != true else { return }
         registeredUser = identifiedUser
         presentPaywall()
     }
 
+    func loadMonthlyProduct() async {
+        do {
+            monthlyProduct = try await StoreKit.Product.products(for: productIDs).first
+            if let subscription = monthlyProduct?.subscription { trialEligible = await subscription.isEligibleForIntroOffer }
+        } catch { self.error = AppFailure.describe(error) }
+    }
+
+    func purchaseMonthly() async {
+        guard !purchasing else { return }
+        purchasing = true
+        defer { purchasing = false }
+        if monthlyProduct == nil { await loadMonthlyProduct() }
+        guard let product = monthlyProduct else { error = "This subscription is currently unavailable from the App Store. Please try again later."; return }
+        _ = await purchaseProduct(product)
+    }
+
     func purchase(product: StoreProduct) async -> PurchaseResult {
-        guard let userID = Clerk.shared.user?.id, userID == identifiedUser,
-              let storeProduct = product.sk2Product, productIDs.contains(storeProduct.id) else {
+        guard let product = product.sk2Product else { return .failed(AppFailure("This subscription is unavailable.")) }
+        return await purchaseProduct(product)
+    }
+
+    private func purchaseProduct(_ storeProduct: StoreKit.Product) async -> PurchaseResult {
+        guard let userID = Clerk.shared.user?.id, userID == identifiedUser, productIDs.contains(storeProduct.id) else {
             return .failed(AppFailure("This subscription is unavailable. Please try again later."))
         }
         if status?.active == true { return .failed(AppFailure("Your Revline membership is already active.")) }

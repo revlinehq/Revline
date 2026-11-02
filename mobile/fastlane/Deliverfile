@@ -1,0 +1,8 @@
+app_identifier(ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"))
+app_version("1.0.0")
+primary_category("PHOTO_AND_VIDEO")
+secondary_category("PRODUCTIVITY")
+metadata_path(File.expand_path("metadata", __dir__))
+submit_for_review(false)
+automatic_release(false)
+run_precheck_before_submit(false)

@@ -8,9 +8,8 @@ import pathlib
 import plistlib
 
 relative = 'Clerk_ClerkKitUI.bundle/en.lproj/Localizable.strings'
-paths = [pathlib.Path(os.environ['BUILT_PRODUCTS_DIR']) / relative,
-         pathlib.Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / relative]
-# SwiftPM can copy its resource bundle before or after the app's build phases.
+paths = [pathlib.Path(os.environ['TARGET_BUILD_DIR']) / os.environ['UNLOCALIZED_RESOURCES_FOLDER_PATH'] / relative]
+# Only brand the app's copied resource. The SwiftPM build product stays untouched.
 for path in paths:
     if not path.exists():
         continue
