@@ -1,0 +1,28 @@
+Every cut. Your call.
+
+Revline is a conversational video editor for iPhone. Import footage, describe what should change, and watch your edit take shape in the preview.
+
+EDIT BY PROMPT
+Ask Revline to trim a moment, tighten a cut, reframe footage or add captions. Keep the conversation beside your video in an expandable sheet. Review the result and undo changes when you want to go back.
+
+FIND THE MOMENTS
+Turn longer footage into focused clips. Import from Photos or Files, or use an authorized video link. Your projects stay in sync with Revline on the web.
+
+BUILD MOTION
+Describe a motion scene or a visual change, then refine it in conversation. Preview the work before you export.
+
+CHOOSE YOUR WORKFLOW
+Fast keeps edits focused. Precise uses the full verification workflow. Both use the same editing model on iPhone.
+
+SAVE AND SHARE
+Choose an export format, include captions, and save to Photos or use the system share sheet for Files and other apps. Exports run in the cloud with progress shown in the app.
+
+YOUR WORKSPACE, WITH YOUR PERMISSION
+Revline asks before sharing your prompts or media with third-party AI processing services. You can review that permission and delete your account in Settings.
+
+MEMBERSHIP
+Eligible new subscribers receive 7 days free, then the subscription is $39.00 USD per month. Local prices and eligibility are shown by Apple before purchase. The subscription renews automatically unless cancelled. Manage or cancel in Apple subscription settings. Existing supported web subscribers and complimentary members can sign in with their existing access. Restore Purchases is available in the app.
+
+Privacy: https://tryrevline.com/privacy
+Terms: https://tryrevline.com/terms
+Apple standard EULA: https://www.apple.com/legal/internet-services/itunes/dev/stdeula/

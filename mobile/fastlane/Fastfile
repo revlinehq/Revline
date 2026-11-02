@@ -1,0 +1,105 @@
+def revline_api_key
+  app_store_connect_api_key(
+    key_id: ENV.fetch("ASC_KEY_ID"),
+    issuer_id: ENV.fetch("ASC_ISSUER_ID"),
+    key_filepath: File.expand_path(ENV.fetch("ASC_KEY_PATH")),
+    duration: 1200,
+    in_house: false
+  )
+end
+
+def revline_screenshots
+  require "fastimage"
+  root = File.expand_path("../AppStore/Screenshots", __dir__)
+  images = []
+  { "6.9" => [1320, 2868], "6.5" => [1284, 2778] }.each do |folder, size|
+    files = Dir[File.join(root, folder, "*.png")].sort
+    UI.user_error!("Capture 5 to 8 production screenshots in #{folder}. See mobile/AppStore/README.md.") unless (5..8).cover?(files.length)
+    files.each { |file| UI.user_error!("Wrong screenshot size: #{File.basename(file)}") unless FastImage.size(file) == size }
+    images.concat(files)
+  end
+  staging = File.expand_path("../.build/AppStoreScreenshots/en-US", __dir__)
+  FileUtils.mkdir_p(staging)
+  Dir[File.join(staging, "*.png")].each { |file| FileUtils.rm(file) }
+  images.each { |file| FileUtils.cp(file, File.join(staging, "#{File.basename(File.dirname(file))}-#{File.basename(file)}")) }
+  File.dirname(staging)
+end
+
+def revline_listing_options
+  contacts = { first_name: "ASC_REVIEW_FIRST_NAME", last_name: "ASC_REVIEW_LAST_NAME",
+    phone_number: "ASC_REVIEW_PHONE", email_address: "ASC_REVIEW_EMAIL" }.filter_map do |field, variable|
+    [field, ENV[variable]] if ENV[variable] && !ENV[variable].empty?
+  end.to_h
+  {
+    api_key: revline_api_key,
+    app_identifier: ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"),
+    app_version: "1.0.0",
+    metadata_path: File.expand_path("metadata", __dir__),
+    skip_binary_upload: true,
+    submit_for_review: false,
+    automatic_release: false,
+    force: true,
+    run_precheck_before_submit: false,
+    app_rating_config_path: File.expand_path("../AppStore/age-rating.json", __dir__),
+    app_review_information: { notes: File.read(File.expand_path("metadata/en-US/review_information/notes.txt", __dir__)) }.merge(contacts)
+  }
+end
+
+def revline_archive
+  key = revline_api_key
+  identifier = ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app")
+  app = Spaceship::ConnectAPI::App.find(identifier)
+  number = app ? latest_testflight_build_number(api_key: key, app_identifier: identifier, initial_build_number: 0) + 1 : 1
+  require "shellwords"
+  auth = ["-allowProvisioningUpdates", "-authenticationKeyPath", File.expand_path(ENV.fetch("ASC_KEY_PATH")),
+          "-authenticationKeyID", ENV.fetch("ASC_KEY_ID"), "-authenticationKeyIssuerID", ENV.fetch("ASC_ISSUER_ID"),
+          "-jobs", "1", "COMPILER_INDEX_STORE_ENABLE=NO", "CURRENT_PROJECT_VERSION=#{number}"].map(&:shellescape).join(" ")
+  build_app(
+    project: File.expand_path("../Revline.xcodeproj", __dir__), scheme: "Revline", configuration: "Release",
+    export_method: "app-store", export_options: { signingStyle: "automatic", teamID: ENV.fetch("ASC_TEAM_ID") },
+    xcargs: auth,
+    derived_data_path: File.expand_path("../.build/ArchiveDerivedData", __dir__),
+    cloned_source_packages_path: File.expand_path("../.build/SourcePackages", __dir__),
+    skip_package_dependencies_resolution: true, disable_package_automatic_updates: true,
+    archive_path: File.expand_path("../.build/Revline.xcarchive", __dir__),
+    output_directory: File.expand_path("../.build", __dir__), output_name: "Revline.ipa",
+    include_symbols: true
+  )
+end
+
+default_platform(:ios)
+platform :ios do
+  desc "Validate the listing without submitting it"
+  lane :precheck do
+    precheck(api_key: revline_api_key, app_identifier: ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"), include_in_app_purchases: false)
+  end
+
+  desc "Upload draft metadata only, without submitting"
+  lane :metadata do
+    upload_to_app_store(**revline_listing_options.merge(skip_screenshots: true))
+  end
+
+  desc "Upload draft metadata and reviewed screenshots, without submitting"
+  lane :listing do
+    upload_to_app_store(**revline_listing_options.merge(screenshots_path: revline_screenshots, skip_screenshots: false, overwrite_screenshots: true))
+  end
+
+  desc "Plan the single subscription; pass apply:true to change App Store Connect"
+  lane :subscriptions do |options|
+    require_relative "subscriptions"
+    RevlineSubscriptions.new(apply: options[:apply] == true || options[:apply] == "true").run
+  end
+
+  desc "Create a signed Release archive without uploading"
+  lane :archive do
+    revline_archive
+  end
+
+  desc "Build Release and upload to TestFlight, without submitting for App Review"
+  lane :testflight do
+    revline_archive
+    upload_to_testflight(api_key: revline_api_key, app_identifier: ENV.fetch("ASC_APP_IDENTIFIER", "com.revline.app"),
+      ipa: File.expand_path("../.build/Revline.ipa", __dir__), skip_waiting_for_build_processing: true,
+      distribute_external: false, skip_submission: true)
+  end
+end
