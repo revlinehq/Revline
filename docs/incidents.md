@@ -1,40 +1,80 @@
 # Incident pipeline
 
-Failures flow into the deployment's `incidents` table. `incidents:reportIncident` is internal; `reportClient` requires a signed-in owner, verifies project access and permits 20 reports per minute per owner. The server chooses deployment identity. Messages, stacks and allowlisted context fields are bounded and scrubbed; input values, media, prompts, headers and credentials must never be supplied. The fingerprint combines normalized message, code location and tool/task kind. Repeats update count, timestamps and four recent contexts. Resolving then reporting the same fingerprint opens a new generation.
+Failures flow into the deployment's `incidents` table. `reportIncident` is internal; `reportClient` requires a signed-in owner, verifies project access and permits 20 reports per minute per owner. The server chooses deployment identity. Messages, stacks and allowlisted context are bounded and scrubbed; do not supply media, prompts, headers or credentials. Fingerprints combine normalized message, code location and tool/task kind. Repeats update count and four recent contexts. A recurrence after resolution opens a new generation.
 
-Capture includes terminal chat cards, iframe preview errors, surfaced Convex mutation/action errors, upload/import/delete errors passed through `userError`, terminal media tasks and exports, assistant turn failures, Cloudflare runner failures and uncaught client exceptions. Save-confirmation observations settle on turn completion or a late tool observation, without a polling timer. The existing save evidence tables remain compatible with the older manual `incidents:fix` command; the new pipeline does not run it.
-
-The shared editing toolkit exposes `reportIssue` on web, Cloudflare and MCP. Agents should report unexpected failures, wrong results and inconsistent contracts once, with tool name, a minimal input summary, observed behavior and expected behavior. Ordinary validation failures and unsupported requests do not qualify. This reports a defect without modifying the timeline.
+Capture covers client errors, terminal media/export failures, assistant/runner failures and the shared editing toolkit's `reportIssue`. Agents should report unexpected failures and incorrect results once, with minimal diagnostic context. The listener classifies provider billing/402 errors, intended validation refusals (including “Add a clip before exporting”), and agent reports that explicitly find no defect before launching. It retains those diagnostics as failed deliveries with a reason and creates no T3 thread. An explicit retry runs the same classification again.
 
 ```mermaid
 flowchart LR
-  failures[User or agent failure] --> report[Authenticated or internal report]
-  report --> incident[Deduplicated incident]
-  incident -->|outbound subscription| mac[Mac LaunchAgent]
-  incident -->|optional immediate action| webhook[Webhook URL]
-  mac --> claim[Atomic claim]
-  claim --> sol[At most two local Sol sessions]
-  sol --> pr[Draft GitHub PR]
-  pr --> link[Record PR on incident]
+  Failure --> Convex[Deduplicated incidents]
+  Convex -->|subscription| PC[Linux systemd listener]
+  PC --> Claim[Atomic claim]
+  Claim -->|OAuth MCP| T3[T3 server on this PC]
+  T3 --> Sol[Codex Sol xhigh in its own worktree]
+  Sol --> PR[Incident: draft PR]
+  PR -->|record-pr.ts or monitor recovery| Convex
 ```
 
-Use Node 22+ and `npm run incidents:install` from this checkout. The installer generates separate 32-byte dev and prod secrets with OpenSSL, saves them in `~/.revline-incidents/config.json` with mode 0600, sets **only dev's** `INCIDENT_LISTENER_SECRET`, and installs `~/Library/LaunchAgents/com.revline.incidents.plist` with RunAtLoad and KeepAlive. It prints the exact command to set the production secret later and also saves that command in `~/.revline-incidents/enable-production.sh`. Reinstallation preserves the secrets. Because launchd cannot reliably read the interactive GitHub keychain, installation also saves the existing `gh auth token` in a separate `github-token` file with mode 0600; only GitHub operations and the Sol child environment receive it. Reinstall after rotating that GitHub credential. Both deployments are subscribed immediately; prod remains unavailable until its functions and secret are deployed. No public Mac endpoint, cron or polling loop is needed.
+## Install on the PC
 
-The listener claims before starting work, skips fingerprints with an open GitHub PR and prioritizes save/turn/export failures, then occurrence count and age. Local job records survive listener restarts; detached workers keep running and file events free capacity. Claims do not expire automatically: a lost process is marked failed instead of firing twice. Inspect failed jobs before explicitly calling `incidents:retry` with the secret, incident ID and generation. The same authenticated operations include `recordPR` and `resolve`; resolution requires the current count and generation so a newer occurrence cannot be silently cleared.
+Use Node 22+, GitHub CLI signed in with repository access, and the existing T3 Code background service. Add the Revline repository as a T3 project and configure provider instance `codex`. Only the development `.env.local` belongs in this checkout; it must target `majestic-alpaca-541`.
 
-Each worker fetches `origin/main`, creates `~/Developer/revline-incident-<slug>`, writes `.data/incident-brief.md`, links only the dev environment and launches `codex exec --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=xhigh -c features.apps=false -c 'mcp_servers={}'`. Apps and configured MCP servers are disabled only for these unattended processes. Initial launches hit command-host negotiation timeouts; this minimal configuration successfully executed local commands during verification. Local commands, Convex CLI and GitHub CLI remain available; normal Codex settings are unchanged. The brief includes the full sanitized incident and related captured application events. It forbids production data and deployments, requires a real root cause, verification on disposable dev projects, a changelog entry, and a draft PR titled `Incident: ...`. `record-pr.ts` verifies the draft, branch and fingerprint through GitHub before recording the URL; the worker also recovers the PR on exit.
+Run `npm run incidents:install`. The installer:
 
-Logs and jobs are private under `~/.revline-incidents/`. Inspect `listener.log`, `listener-error.log`, the per-job worker log and `incident-*-sol.log`. `launchctl print gui/$(id -u)/com.revline.incidents` shows status. To stop automatic launch, run `launchctl bootout gui/$(id -u)/com.revline.incidents`; already detached Sol jobs keep running. A failed listener resumes on the next subscription or job event. Do not manually run a second listener while the LaunchAgent is active.
+- Signs the listener into this PC's `/mcp` endpoint using T3's [outside-agents OAuth flow](https://github.com/pingdotgg/t3code/blob/main/docs/user/outside-agents.md): dynamic registration, PKCE, scoped one-use pairing approval, and a code exchange. It uses the local `t3 auth pairing create` command for approval, never the thread CLI for launches.
+- Grants the documented full-access MCP mode for unattended fixes. Its explicit scopes are `orchestration:read`, `orchestration:operate`, `settings:write`, and `source-control:write`; no general access-management credential is stored.
+- Saves the OAuth credential in `~/.revline-incidents/t3-mcp.json`, the existing GitHub credential in `github-token`, and listener settings in `config.json` (files 0600, directory 0700). Tokens never appear in briefs or logs. T3 sign-ins expire after 30 days: rerun the installer and enable the service again to renew, or revoke the listener in T3's Sharing & access settings.
+- Finds the T3 project by its shared Git repository, generates/preserves the dev listener secret, and sets only dev's `INCIDENT_LISTENER_SECRET`. A new installation subscribes only to dev; production credentials and configuration remain separate.
+- Writes `~/.config/systemd/user/revline-incidents.service`, reloads systemd, and leaves the listener **stopped and disabled**. The optional macOS path only writes its LaunchAgent plist; it does not load it. Leave the existing Mac listener unloaded.
 
-Optional real webhooks use deployment env `INCIDENT_WEBHOOK_URL`. A zero-delay Convex action POSTs the sanitized incident when a fingerprint opens or regresses, using `<incidentId>:<generation>` as its idempotency key. This is independent of the local claim. An HTTP failure appears in Convex action logs; it does not consume the local delivery. No periodic delivery attempts are scheduled.
+After review, enable the PC listener with:
 
-Development deployments must preserve unmerged PR #23 (`origin/scene-3d`): deploy from a temporary merge until that PR is merged. While this pipeline PR is also unmerged, include `origin/incident-pipeline` in that temporary merge; deploying another checkout without it removes the incident functions. If `.data/incident-dev-deploy` exists, include its HEAD as well to preserve the other active dev tests; keep that shared checkout read-only. Never use production credentials for dev verification.
+```sh
+systemctl --user enable --now revline-incidents.service
+```
 
-Verified on dev on 2026-11-02: real missing-clip failures in a disposable project deduplicated into one incident, the subscription claimed it and launched native Sol with `gpt-6.1-sol` and `xhigh`, and `record-pr.ts` wrote [temporary draft #28](https://github.com/zuraHQ/revline-editor/pull/28) back to that incident. The synthetic investigation was stopped, the audit PR closed unmerged and its branch removed. A real MCP `reportIssue` call, resolved-fingerprint regression, existing-PR reuse and rejected unauthorized requests were also verified. App and runner typechecks and the production build passed. Production was not deployed or configured.
+Linger is already enabled on this PC, so the enabled user service starts after reboot without a login. The unit starts after/wants `t3code.service`, restarts a failed listener and writes private logs under `~/.revline-incidents`. Linux uses a kernel-held abstract socket for a single listener per user; crashes leave no stale lock. The optional Mac implementation retains `shlock`.
 
-After user merge approval, production rollout is manual:
+T3's runtime file identifies the server on this machine. When T3 binds only its own VPN address, the client makes a temporary loopback HTTP forward to that local address. OAuth and MCP requests use localhost; no additional network-facing listener or T3 server restart is needed. MCP preserves the server's host header so saved thread links use its stable address. The forward closes with each MCP connection.
 
-1. Deploy the merged Convex code to **production different-gnu-398** with its own credentials (`npx convex deploy --env-file <production-env-file>`). Never substitute the dev backend.
-2. From this configured Mac checkout, run the exact secret command printed by the installer, or `sh ~/.revline-incidents/enable-production.sh` with production CLI selection configured.
-3. Deploy the production frontend and agent runner using the repository's existing release workflow so client capture and runner reporting reach the new functions.
-4. Verify the prod subscription is authorized from local logs. Do not manufacture failures or use real production projects for this task's verification.
+## Threads, claims and recovery
+
+The listener checks GitHub before claiming, reuses existing fingerprint PRs, orders by priority and runs at most two incident jobs. It persists each claim before starting a detached monitor. Claims never expire automatically. Inspect failures before calling the authenticated `incidents:retry` operation; `recordPR` checks generation and claim token, and `resolve` also checks the occurrence count.
+
+For each incident, the monitor fetches `origin/main`, then calls MCP `t3_thread_launch` with:
+
+```json
+{
+  "modelSelection": {
+    "instanceId": "codex",
+    "model": "gpt-6.1-sol",
+    "options": [{ "id": "reasoningEffort", "value": "xhigh" }]
+  },
+  "workspaceStrategy": {
+    "type": "worktree",
+    "baseRef": "origin/main",
+    "startFromOrigin": true,
+    "branch": "incident/<deployment-fingerprint-generation-claim>"
+  }
+}
+```
+
+The initial launch is idle so T3 can prepare and bind its own worktree first. The monitor reads that thread, links and validates only the dev environment, writes `.data/incident-brief.md`, then sends the brief through MCP. Stable claim-derived request IDs protect launch/send retries. Jobs persist the thread link, run ID and actual T3 worktree path. Threads appear in this PC's T3 sidebar and stay accessible from its linked Mac. T3 owns the Sol session; restarting the listener or losing a monitor does not start another Sol or release its concurrency slot. The listener reattaches a monitor to the saved thread.
+
+The brief requires AGENTS.md, installed Next.js docs, typechecks/build, real runtime verification, a changelog entry and a draft `Incident:` PR. It forbids production data, credentials and deployment. `record-pr.ts` independently verifies the draft, branch and fingerprint on GitHub before writing back its URL. The monitor also recovers the draft when the T3 turn finishes. A turn without a matching PR is retained for inspection instead of being automatically repeated.
+
+Use `systemctl --user status revline-incidents.service` and the private `listener.log`, `listener-error.log`, `incident-*.log`, and `jobs/*.json` files for delivery diagnostics; use the saved T3 link for Sol's activity. To stop automatic delivery:
+
+```sh
+systemctl --user disable --now revline-incidents.service
+```
+
+Already-started T3 sessions and detached monitors remain alive; stop an investigation explicitly in T3 when needed. For one scoped manual investigation while the service is stopped, run `npm run incidents:listen -- --incident <incident-id>`; other queued incidents remain pending.
+
+## Development and rollout
+
+Shared dev deployments must retain the latest main and other active dev integrations. If this pipeline is unmerged, include it when assembling the dev deployment; deploying a checkout without it removes the incident API. Preserve `.data/incident-dev-deploy` if one exists. Keep dev and production environment files and credentials separate.
+
+Optional `INCIDENT_WEBHOOK_URL` delivery remains independent of local claims. A zero-delay action POSTs scrubbed new/regressed incidents with `<incidentId>:<generation>` as its idempotency key; there is no periodic delivery loop.
+
+Production rollout requires the user's merge/deployment approval, its own backend credentials and a separately configured listener endpoint/secret. This installation and verification do not deploy, configure or subscribe to production.

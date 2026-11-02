@@ -3,7 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { discoverAuthorizationServerMetadata, exchangeAuthorization, registerClient, startAuthorization } from '@modelcontextprotocol/sdk/client/auth.js';
 import { randomUUID } from 'node:crypto';
 import { readFile, writeFile, chmod } from 'node:fs/promises';
-import { createConnection, createServer } from 'node:net';
+import { createServer, request, type ClientRequest } from 'node:http';
 import { homedir, networkInterfaces } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
@@ -14,26 +14,29 @@ const credentialSchema = z.object({ token: z.string(), expiresAt: z.number() });
 
 // T3 can bind only to this host's VPN address. Keep OAuth and MCP on loopback,
 // without restarting T3 or exposing another listening socket to the network.
-async function localServer<T>(action: (url: URL) => Promise<T>) {
-  const runtime = z.object({ host: z.string(), port: z.number() }).parse(JSON.parse(await readFile(join(process.env.T3CODE_HOME ?? join(homedir(), '.t3'), 'userdata/server-runtime.json'), 'utf8')));
+async function localServer<T>(action: (url: URL) => Promise<T>, preserveOrigin = false) {
+  const runtime = z.object({ host: z.string(), port: z.number(), origin: z.string().url() }).parse(JSON.parse(await readFile(join(process.env.T3CODE_HOME ?? join(homedir(), '.t3'), 'userdata/server-runtime.json'), 'utf8')));
   const addresses = Object.values(networkInterfaces()).flatMap(items => items?.map(item => item.address) ?? []);
   if (!['localhost', '0.0.0.0', '::', ...addresses].includes(runtime.host)) throw new Error('T3 must be running on this machine');
   const host = runtime.host === '0.0.0.0' ? '127.0.0.1' : runtime.host === '::' ? '::1' : runtime.host;
-  const sockets = new Set<ReturnType<typeof createConnection>>();
-  const server = createServer(incoming => {
-    const outgoing = createConnection({ host, port: runtime.port });
-    for (const socket of [incoming, outgoing]) {
-      sockets.add(socket);
-      socket.once('close', () => sockets.delete(socket));
-      socket.once('error', () => { incoming.destroy(); outgoing.destroy(); });
-    }
-    incoming.pipe(outgoing).pipe(incoming);
+  const requests = new Set<ClientRequest>();
+  const server = createServer((incoming, response) => {
+    const outgoing = request({ hostname: host, port: runtime.port, path: incoming.url, method: incoming.method, headers: { ...incoming.headers, ...(preserveOrigin ? { host: new URL(runtime.origin).host } : {}) } }, upstream => {
+      response.writeHead(upstream.statusCode ?? 502, upstream.headers);
+      upstream.pipe(response);
+      response.once('close', () => upstream.destroy());
+    });
+    requests.add(outgoing);
+    outgoing.once('close', () => requests.delete(outgoing));
+    outgoing.once('error', () => { if (!response.headersSent) response.writeHead(502); response.end(); });
+    incoming.once('aborted', () => outgoing.destroy());
+    incoming.pipe(outgoing);
   });
   await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   const address = server.address();
   if (!address || typeof address === 'string') throw new Error('Missing local MCP address');
   try { return await action(new URL(`http://127.0.0.1:${address.port}/mcp`)); }
-  finally { for (const socket of sockets) socket.destroy(); await new Promise<void>(resolve => server.close(() => resolve())); }
+  finally { for (const request of requests) request.destroy(); server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); }
 }
 
 export async function authorizeT3(binary: string) {
@@ -45,7 +48,8 @@ export async function authorizeT3(binary: string) {
     const client = await registerClient(url.origin, { metadata, clientMetadata: { client_name: 'Revline incident listener', redirect_uris: [redirectUri], grant_types: ['authorization_code'], response_types: ['code'], token_endpoint_auth_method: 'none' } });
     const nonce = randomUUID();
     const { authorizationUrl, codeVerifier } = await startAuthorization(url.origin, { metadata, clientInformation: client, redirectUrl: redirectUri, scope: 'orchestration:read orchestration:operate', state: nonce, resource: url.href });
-    const pairing = z.object({ credential: z.string() }).parse(JSON.parse((await run(binary, ['auth', 'pairing', 'create', '--scope', 'orchestration:read', '--scope', 'orchestration:operate', '--scope', 'settings:write', '--scope', 'source-control:write', '--ttl', '5m', '--label', 'Revline incident listener OAuth', '--json'])).stdout));
+    const issued = await run(binary, ['auth', 'pairing', 'create', '--scope', 'orchestration:read', '--scope', 'orchestration:operate', '--scope', 'settings:write', '--scope', 'source-control:write', '--ttl', '5m', '--label', 'Revline incident listener OAuth', '--json']).catch(() => { throw new Error('Could not create the local T3 MCP approval grant'); });
+    const pairing = z.object({ credential: z.string() }).parse(JSON.parse(issued.stdout));
     const response = await fetch(new URL('/oauth/mcp/decision', url), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ authorization: Object.fromEntries(authorizationUrl.searchParams), decision: { _tag: 'pairing-code', code: pairing.credential, access: 'full-access' } }) });
     if (!response.ok) {
       const error = z.object({ message: z.string().optional() }).parse(await response.json());
@@ -68,7 +72,7 @@ export async function withT3<T>(action: (client: Client) => Promise<T>) {
     const transport = new StreamableHTTPClientTransport(url, { requestInit: { headers: { Authorization: `Bearer ${credential.token}` } } });
     try { await client.connect(transport); return await action(client); }
     finally { await client.close(); }
-  });
+  }, true);
 }
 
 export async function callT3(client: Client, name: string, args: Record<string, unknown>) {

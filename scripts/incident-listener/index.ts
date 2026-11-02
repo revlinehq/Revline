@@ -8,6 +8,7 @@ import { parseArgs } from 'node:util';
 import { incidentNonDefectReason, incidentText } from '../../lib/incidents';
 import { api } from '../../convex/_generated/api';
 import { alive, config, incidentSchema, openPRs, readJob, root, run, state, writeJob, type Endpoint, type Job } from './shared';
+import { callT3, withT3 } from './mcp';
 
 // A manual investigation can drain just one incident without consuming the backlog.
 const { values: { incident: onlyIncident } } = parseArgs({ options: { incident: { type: 'string' } } });
@@ -23,6 +24,7 @@ if (linuxLock) {
   try { await run('/usr/bin/shlock', ['-p', String(process.pid), '-f', lock]); } catch { process.exit(0); }
 }
 const settings = await config();
+await withT3(client => callT3(client, 't3_environment_read', {}));
 const clients = settings.endpoints.map(endpoint => ({ endpoint, client: new ConvexClient(endpoint.url) }));
 const pending = new Map<string, { endpoint: Endpoint; incident: Job['incident'] }>();
 let draining = false;
@@ -77,6 +79,8 @@ async function drain() {
       let active = await activeJobs();
       const queue = [...pending.entries()].sort(([, a], [, b]) => b.incident.priority - a.incident.priority || a.incident.firstSeen - b.incident.firstSeen);
       const prs = queue.length ? await openPRs() : [];
+      // An expired/revoked MCP sign-in must not consume new delivery claims.
+      if (queue.some(([, { incident }]) => !incidentNonDefectReason(incident.message, incident.kind, incident.samples.map(sample => sample.context)) && !prs.some(pr => pr.body.includes(incident.fingerprint)))) await withT3(client => callT3(client, 't3_environment_read', {}));
       for (const [key, { endpoint, incident }] of queue) {
         const existing = prs.find(pr => pr.body.includes(incident.fingerprint));
         const nonDefect = incidentNonDefectReason(incident.message, incident.kind, incident.samples.map(sample => sample.context));

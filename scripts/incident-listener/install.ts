@@ -28,7 +28,7 @@ const projectId = await withT3(async client => {
   throw new Error('Add this Revline repository as a project in this PC\'s T3 Code before installing');
 });
 // Background services must not depend on an interactive GitHub credential store.
-const githubToken = (await run('gh', ['auth', 'token', '--hostname', 'github.com'])).stdout.trim();
+const githubToken = (await run('gh', ['auth', 'token', '--hostname', 'github.com']).catch(() => { throw new Error('Sign in to GitHub CLI before installing the incident listener'); })).stdout.trim();
 if (!githubToken) throw new Error('Sign in to GitHub CLI before installing the incident listener');
 await writeFile(join(state, 'github-token'), githubToken, { mode: 0o600 });
 await chmod(join(state, 'github-token'), 0o600);
