@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { gsap } from 'gsap';
 import { CustomEase } from 'gsap/CustomEase';
 import { createClippersScene } from './clippers-scene';
+import { createLandingVideoPlayback } from './video-playback';
 
 const WIDTH = 1920,
   HEIGHT = 1080,
@@ -66,10 +67,12 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     const timeline = gsap.timeline({ paused: true, id: 'landing-clippers' });
     const { openings } = createClippersScene(scene, timeline);
     const media = new Map<string, HTMLVideoElement>();
-    const starting = new Set<HTMLVideoElement>();
+    const players = new Map<HTMLVideoElement, ReturnType<typeof createLandingVideoPlayback>>();
+    const unavailable = new Set<HTMLVideoElement>();
     const reduced = matchMedia('(prefers-reduced-motion: reduce)');
     let disposed = false,
       ready = false,
+      imagesReady = false,
       running = false,
       frame = 0,
       time = 0,
@@ -105,6 +108,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     };
 
     const draw = () => {
+      if (!ready || unavailable.size) return;
       // Keep the last complete frame during a seek, including across the loop seam.
       if (
         clocks.some(
@@ -148,7 +152,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
             time < clip.start + clip.duration,
         );
         if (!clip) {
-          video.pause();
+          players.get(video)?.setPlaying(false);
           const next = clocks.find(
             (clip) =>
               clip.source === source &&
@@ -163,16 +167,11 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
             video.currentTime = next.sourceStart;
           continue;
         }
+        if (!Number.isFinite(video.duration)) continue;
         const target = (time - clip.start + clip.sourceStart) % video.duration;
         if (!video.seeking && Math.abs(video.currentTime - target) > 0.12)
           video.currentTime = target;
-        if (running && video.paused && !starting.has(video)) {
-          starting.add(video);
-          void video
-            .play()
-            .catch(() => {})
-            .finally(() => starting.delete(video));
-        } else if (!running) video.pause();
+        players.get(video)?.setPlaying(running);
       }
     };
     const tick = (now: number) => {
@@ -187,8 +186,12 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     const update = () => {
       cancelAnimationFrame(frame);
       running =
-        ready && visible.current && !document.hidden && !reduced.matches;
-      if (!ready) return;
+        ready && !unavailable.size && visible.current && !document.hidden && !reduced.matches;
+      if (!ready || unavailable.size) {
+        for (const player of players.values()) player.setPlaying(false);
+        scene.remove();
+        return;
+      }
       if (reduced.matches) time = STILL;
       syncMedia();
       draw();
@@ -210,40 +213,40 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
     };
     const size = new ResizeObserver(resize);
     size.observe(container);
-    const loads = [...new Set(clocks.map((clip) => clip.source))].map(
-      (source) =>
-        new Promise<void>((resolve, reject) => {
-          const video = document.createElement('video');
-          video.muted = true;
-          video.playsInline = true;
-          video.loop = true;
-          video.preload = 'auto';
-          video.onloadeddata = () => resolve();
-          video.onerror = () =>
-            reject(new Error('Could not load clippers footage'));
-          video.onseeked = () => {
-            if (ready && !running) draw();
-          };
-          video.src = `/landing/clippers-${source}.mp4`;
-          media.set(source, video);
-        }),
-    );
-    loads.push(
-      ...Array.from(scene.querySelectorAll('img'), (image) =>
+    const sources = [...new Set(clocks.map((clip) => clip.source))];
+    // Recompute after recovery; a rejected Promise.all would permanently strand the still.
+    const updateReadiness = () => {
+      if (disposed) return;
+      ready = imagesReady && media.size === sources.length &&
+        [...media.values()].every((video) => video.readyState >= 2 && !video.error);
+      resize();
+      update();
+    };
+    for (const source of sources) {
+      const video = document.createElement('video');
+      video.loop = true;
+      video.preload = 'auto';
+      media.set(source, video);
+      players.set(video, createLandingVideoPlayback(video, (reason) => {
+        if (reason) unavailable.add(video); else unavailable.delete(video);
+        updateReadiness();
+      }));
+      video.onloadeddata = updateReadiness;
+      video.onseeked = () => {
+        if (ready && !running) draw();
+      };
+      video.src = `/landing/clippers-${source}.mp4`;
+    }
+    void Promise.all(
+      Array.from(scene.querySelectorAll('img'), (image) =>
         image.decode().catch(() => {}),
       ),
-    );
-    void Promise.all(loads)
+    )
       .then(() => {
         if (disposed) return;
         time = reduced.matches ? STILL : 0;
-        ready = true;
-        syncMedia();
-        resize();
-        update();
-      })
-      .catch(() => {
-        /* The still remains visible if a media request fails. */
+        imagesReady = true;
+        updateReadiness();
       });
     playback.current = { setPlaying: update };
     document.addEventListener('visibilitychange', update);
@@ -257,6 +260,7 @@ export default function ClippersAnimation({ playing }: { playing: boolean }) {
       document.removeEventListener('visibilitychange', update);
       reduced.removeEventListener('change', update);
       timeline.kill();
+      for (const player of players.values()) player.dispose();
       for (const video of media.values()) {
         video.pause();
         video.removeAttribute('src');
