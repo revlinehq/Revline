@@ -39,7 +39,7 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   const requests=await ctx.db.query('analysisRequests').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
   if(requests.length){for(const request of requests)await ctx.db.delete(request._id);await again();return null;}
   await deleteProjectMemories(ctx,args.ownerId,project._id);
-  for(const table of ['pixelTrackChunks','derivations','cutouts','referenceReads','frameSnapshots','aiBudgets','compositionReviews','assistantPlans','assistantQueue','projectBriefs'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows)await ctx.db.delete(row._id);await again();return null;}}
+  for(const table of ['pixelTrackChunks','derivations','cutouts','referenceReads','frameSnapshots','aiBudgets','compositionReviews','assistantPlans','assistantQueue','projectBriefs','assistantTurns'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows)await ctx.db.delete(row._id);await again();return null;}}
   const completedUploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',true)).take(50);
   if(completedUploads.length){for(const upload of completedUploads)await ctx.db.delete(upload._id);await again();return null;}
   const uploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',false)).filter(q=>q.neq(q.field('cleanupScheduled'),true)).take(20);

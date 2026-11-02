@@ -5,14 +5,13 @@ the Cloudflare agent runner, and MCP. The browser is not involved. Read-only
 tools, tools that save outside the timeline, explicit tool failures, and
 `unchanged: true` results without staging do not create incidents.
 
-Current examples of missing evidence include `readBrief`/`updateBrief` returning
-brief data without timeline-save fields, and `upscaleClip` or `removeBackground`
-returning a background-job acknowledgement. Those results currently fall
-through the same card classifier as a timeline edit missing its save envelope.
-The pipeline preserves that distinction in the tool name and output shape so a
-fix can correct the tool contract or classification after inspecting the cause.
+The tool layer now supplies atomic write receipts and shared classifications;
+see [the audit and receipt contract](save-receipts.md). Brief reads and saved
+briefs, tracking/analysis results, background-job acknowledgements and unchanged
+edits no longer fall through a convention-only save-envelope check. Legacy
+missing-evidence groups remain historical diagnostics, not proof of lost work.
 
-The terminal conditions match the editor's `Save not confirmed` cards:
+The terminal conditions diagnose missing protocol evidence; the editor does not infer a failed save from a missing field:
 
 - `missing_save_evidence`: a completed editing step has neither `saved: true`
   nor `unchanged: true`.

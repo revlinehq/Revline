@@ -15,6 +15,8 @@ import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_vali
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { alertFields } from './lib/discord_alert';
 import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
+import { toolWriteReceipt } from './lib/tool_write_receipt';
+import { assistantRunArgs, assistantRecoveryValidator } from './lib/assistant_run';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -120,7 +122,7 @@ export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number
 // Legacy: timelines saved while sections existed may still hold them; saving drops them.
 const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
 export const timelineValidator = v.object({ audioNormalization:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number())})), clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)), sections: v.optional(v.array(timelineSectionValidator)), luts: v.optional(v.array(v.object({ id: v.string(), name: v.string(), size: v.number(), data: v.string() }))) });
-export const assistantRecoveryValidator = v.object({requests:v.array(v.string()),runId:v.string(),revision:v.number(),savedEdits:v.optional(v.number()),reason:v.string(),status:v.union(v.literal('failed'),v.literal('stopped')),updatedAt:v.number()});
+export { assistantRecoveryValidator } from './lib/assistant_run';
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
   aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number()})),
@@ -257,6 +259,17 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  assistantTurns: defineTable({
+    projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
+    args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
+    pendingFastFrames:v.array(v.number()),feedback:v.optional(v.string()),
+    status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
+  }).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
+  toolWriteReceipts: defineTable({
+    projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), writeId: v.string(),
+    toolName: v.string(), functionName: v.string(), receipt: v.optional(toolWriteReceipt), value:v.optional(v.any()), valueParts:v.optional(v.number()), stagedRevision: v.optional(v.number()), expiresAt: v.number(),
+  }).index('by_write', ['writeId']).index('by_run_stage', ['runId', 'stagedRevision']).index('by_expires', ['expiresAt']),
+  toolWriteResultParts:defineTable({writeId:v.string(),part:v.number(),value:v.string()}).index('by_write_part',['writeId','part']),
   // Operational diagnostics only. No editor subscription reads these tables.
   saveIncidentRuns: defineTable({
     runId: v.string(), projectId: v.id('projects'), ownerId: v.string(),
