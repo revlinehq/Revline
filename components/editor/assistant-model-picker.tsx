@@ -16,6 +16,8 @@ const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILo
 /** On Pro these run only through MCP (Claude Code, Claude Desktop), not in the editor chat. */
 const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
 const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high' };
+/** X-high shimmers in the brand gradient so the strongest effort reads as powerful. */
+const EffortText = ({ value }: { value: EditorReasoningEffort }) => value === 'xhigh' ? <span className="assistant-effort-xhigh">{effortLabels[value]}</span> : <>{effortLabels[value]}</>;
 
 type EffortSelection = {
   value: EditorReasoningEffort;
@@ -34,7 +36,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
   const mcpOnly = (id: ClaudeModelChoice) => claudeViaMcp && MCP_ONLY_MODELS.includes(id);
   const models = EDITOR_MODELS.filter(model => allowedModels.includes(model.id) || mcpOnly(model.id));
   const selected = EDITOR_MODELS.find(model => model.id === value);
-  const effortLabel = effort ? effortLabels[effort.value] : undefined;
+  const effortLabel = effort ? <EffortText value={effort.value}/> : undefined;
   return <div className="assistant-model-picker assistant-combined-model-picker">
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -61,7 +63,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
               <DropdownMenuRadioGroup value={effort.value} onValueChange={next => {
                 const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice) effort.onChange(choice);
               }}>
-                {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} className="workspace-menu-item inspector-select-option">{effortLabels[choice]}</DropdownMenuRadioItem>)}
+                {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} className="workspace-menu-item inspector-select-option"><EffortText value={choice}/></DropdownMenuRadioItem>)}
               </DropdownMenuRadioGroup>
             </DropdownMenuSubContent>
           </DropdownMenuSub>
