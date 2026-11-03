@@ -36,13 +36,17 @@ async function reservedByUploads(ctx: QueryCtx | MutationCtx, ownerId: string, c
  * cannot race past it. Follow-up tasks of accepted work never call this and are
  * never dropped. `ceiling` widens the limit where an earlier check already
  * applied it; a finishing upload passes `countUploads: false` to skip itself. */
-export async function requireMediaTaskCapacity(ctx: QueryCtx | MutationCtx, ownerId: string, incoming: number, { ceiling = 1, countUploads = true }: { ceiling?: number; countUploads?: boolean } = {}) {
+export async function hasMediaTaskCapacity(ctx: QueryCtx | MutationCtx, ownerId: string, incoming: number, { ceiling = 1, countUploads = true }: { ceiling?: number; countUploads?: boolean } = {}) {
   const limit = activeMediaTaskLimit(), allowed = limit * ceiling;
-  if (incoming <= 0) return;
+  if (incoming <= 0) return true;
   const initialized = await initializeMediaCapacity(ctx, ownerId);
   const legacy = initialized ? 0 : (await Promise.all((['queued', 'running', 'retrying'] as const).map(status => ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(allowed)))).reduce((count, tasks) => count + tasks.length, 0);
   const used = (initialized ? await activeMediaTasks(ctx, ownerId, allowed) : legacy) + (countUploads ? await reservedByUploads(ctx, ownerId, allowed) : 0);
-  if (used + incoming > allowed) throw new ConvexError(`Your account has too many media jobs processing (up to ${limit} at once). Wait for some to finish, then try again.`);
+  return used + incoming <= allowed;
+}
+
+export async function requireMediaTaskCapacity(ctx: QueryCtx | MutationCtx, ownerId: string, incoming: number, options: { ceiling?: number; countUploads?: boolean } = {}) {
+  if (!await hasMediaTaskCapacity(ctx, ownerId, incoming, options)) throw new ConvexError(`Your account has too many media jobs processing (up to ${activeMediaTaskLimit()} at once). Wait for some to finish, then try again.`);
 }
 
 type Quota = { period: number; max: number; message: string };

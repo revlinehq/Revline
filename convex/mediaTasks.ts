@@ -2,7 +2,8 @@ import { processorBackend } from './lib/processor_backend';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
-import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
+import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask, scheduleCapacityAdmission } from './lib/media_task_data';
+import { hasMediaTaskCapacity } from './lib/account_limits';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
@@ -88,7 +89,7 @@ export const RECREATION_PROCESSOR_VERSION = 23;
 /** Interpolated reference crops must never run on workers that ignore keyframes. */
 export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>): Promise<Id<'mediaTasks'>> {
+export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>, waitForCapacity = false): Promise<Id<'mediaTasks'>> {
   const minimum = MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
@@ -136,11 +137,44 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   // only when a fresh task will actually be inserted, in this transaction.
   await beforeEnqueue?.();
   const now = Date.now();
-  const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
+  const earlier = waitForCapacity && await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_waiting', q => q.eq('ownerId', input.ownerId).eq('capacityWaiting', true)).first();
+  const capacityWaiting = waitForCapacity && (!!earlier || !await hasMediaTaskCapacity(ctx, input.ownerId, 1));
+  const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, ...(capacityWaiting ? { capacityWaiting: true, capacityQueued: true } : {}), attempt: 0, progress: 0, createdAt: now, updatedAt: now });
+  if (capacityWaiting) {
+    await scheduleCapacityAdmission(ctx, input.ownerId);
+    await ctx.scheduler.runAfter(120_000, internal.mediaTasks.expireWaiting, { taskId });
+    return taskId;
+  }
   const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId, ...(input.kind==='import'?{resumable:true}:{}) }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
 }
+
+/** FIFO admission for recreation checks only. Waiting jobs hold no active slot and start no workflow. */
+export const admitWaiting = internalMutation({ args: { ownerId: v.string() }, returns: v.null(), handler: async (ctx, { ownerId }) => {
+  const owner = await ctx.db.query('mediaCapacityOwners').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+  if (owner) await ctx.db.patch(owner._id, { admissionScheduled: false });
+  const waiting = await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_waiting', q => q.eq('ownerId', ownerId).eq('capacityWaiting', true)).take(24);
+  for (const task of waiting) {
+    if (task.status !== 'queued') { await ctx.db.patch(task._id, { capacityWaiting: false }); continue; }
+    if (!await hasMediaTaskCapacity(ctx, ownerId, 1)) break;
+    await patchMediaTask(ctx, task, { capacityWaiting: false });
+    const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId: task._id }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId: task._id } });
+    await ctx.db.patch(task._id, { workflowId });
+  }
+  // Reservations can expire without a task completion; keep a bounded fallback wake-up.
+  await scheduleCapacityAdmission(ctx, ownerId, 30_000);
+  return null;
+} });
+
+export const expireWaiting = internalMutation({ args: { taskId: v.id('mediaTasks') }, returns: v.null(), handler: async (ctx, { taskId }) => {
+  const task = await ctx.db.get(taskId);
+  if (task?.capacityWaiting && task.status === 'queued') {
+    await markTerminal(ctx, taskId, 'cancelled', 'Still queued after 120 s; this waiting request expired. Retry in about 30 s. This check has not passed.');
+    await ctx.db.patch(taskId, { capacityWaiting: false });
+  }
+  return null;
+} });
 
 export const process = mediaWorkflow.define({
   args: { taskId: v.id('mediaTasks'), resumable:v.optional(v.boolean()) }, returns: v.null(),
@@ -348,6 +382,19 @@ export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysi
  * indexed read per distinct owner; with no other owner waiting, the oldest
  * task is claimed so a lone account still uses every free slot. */
 async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) {
+  // Worker kind priorities must not let a later capacity-queued read overtake an earlier render.
+  if (candidates.some(task => task.capacityQueued)) {
+    const oldest = new Map<string, string | undefined>();
+    const ordered: Doc<'mediaTasks'>[] = [];
+    for (const task of candidates) {
+      if (task.capacityQueued) {
+        if (!oldest.has(task.ownerId)) oldest.set(task.ownerId, (await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_queue_status', q => q.eq('ownerId', task.ownerId).eq('capacityQueued', true).eq('status', 'queued')).first())?._id);
+        if (oldest.get(task.ownerId) !== task._id) continue;
+      }
+      ordered.push(task);
+    }
+    candidates = ordered;
+  }
   if(new Set(candidates.map(task=>task.ownerId)).size<2)return candidates[0]??null;
   const busy=new Map<string,boolean>();
   for(const task of candidates){

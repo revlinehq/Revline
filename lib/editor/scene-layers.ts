@@ -13,7 +13,7 @@ export type SceneBlueprint = { name: string; code: string; codeRef?: string };
  * its own window: `sourceStart` is where the clip starts in the film, and every clip gets the film's whole
  * duration. So motion flows across clip edges, and an edit to the code changes every beat at once.
  */
-export type SceneFilm = { duration: number };
+export type SceneFilm = { duration: number; builtThrough?: number; referenceAssetId?: string; referenceStart?: number };
 export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.

@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
 
+- Editing agent: Require measured reference motion before building, report revision-bound differences and timed off reasons, and queue recreation checks at the media cap. Why: recreated launch films lost their motion and stopped at refused checks.
+
 - Editor: Typing /clip or /inspo-motion now stays as plain text in the composer instead of turning into a removable badge. Why: the user wanted just the text.
 
 ## 2026-11-02

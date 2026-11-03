@@ -192,6 +192,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
       if(!await ctx.runMutation(internal.assistantTurnRecovery.advance,{...run,segment,expectedPass:pass,feedback:repairFeedback??'Inspect saved work and finish the remaining steps.'}))return null;
       console.info(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
     }
+    const motionCloseOut = await toolkit.motionStatus();
+    if ('motionOff' in motionCloseOut && motionCloseOut.motionOff?.length) await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: `Motion close-out: ${motionCloseOut.motionCheck}` } });
     await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId,segment });
     costLog.finish('completed', progress());
   } catch (error) {

@@ -231,7 +231,8 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode() } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
-    return withImages(published ? toolkit.publicationResult(output) : output, failed(output));
+    const finished = published ? toolkit.publicationResult(output) : output, motion = await toolkit.motionStatus();
+    return withImages(motion.motionCheck ? { ...(finished && typeof finished === 'object' ? finished : { result: finished }), ...motion } : finished, failed(output));
   } catch (error) {
     return result(abortSignal.aborted && !deadline.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
   } finally {

@@ -116,6 +116,7 @@ import type * as projectTransfers from "../projectTransfers.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
 import type * as referenceReads from "../referenceReads.js";
+import type * as referenceMotion from "../referenceMotion.js";
 import type * as renderSnapshotMigration from "../renderSnapshotMigration.js";
 import type * as renders from "../renders.js";
 import type * as saveIncidents from "../saveIncidents.js";
@@ -244,6 +245,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   r2: typeof r2;
   referenceReads: typeof referenceReads;
+  referenceMotion: typeof referenceMotion;
   renderSnapshotMigration: typeof renderSnapshotMigration;
   renders: typeof renders;
   saveIncidents: typeof saveIncidents;

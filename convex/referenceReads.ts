@@ -36,7 +36,7 @@ export const READ_TOOL_DESCRIPTIONS = {
 export type ReadToolName = keyof typeof READ_TOOL_INPUTS;
 type ReadResult = Infer<typeof referenceReadResult>;
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), recreation: v.optional(v.boolean()), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, recreation, ...args }) => {
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
@@ -49,9 +49,9 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);
   if (args.compareCrop) comparisonCrop.parse(args.compareCrop);
   if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
-  await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: still ? MEDIA_PROCESSOR_VERSION : args.referenceCropKeyframes ? REFERENCE_CROP_PROCESSOR_VERSION : RECREATION_PROCESSOR_VERSION });
+  if (!recreation) await requireMediaTaskCapacity(ctx, ownerId, 1);
+  const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, ...(recreation ? { recreation } : {}), status: 'queued', createdAt: Date.now() });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: still ? MEDIA_PROCESSOR_VERSION : args.referenceCropKeyframes ? REFERENCE_CROP_PROCESSOR_VERSION : RECREATION_PROCESSOR_VERSION }, undefined, recreation);
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });
@@ -74,13 +74,18 @@ export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id
 
 export const discard = internalMutation({ args: { readId: v.id('referenceReads') }, returns: v.null(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
-  if (read?.mode === 'compare' && read.status === 'queued' && read.taskId) await cancelMediaTask(ctx, read.taskId);
+  if (read?.status === 'queued' && (read.mode === 'compare' || read.recreation) && read.taskId) await cancelMediaTask(ctx, read.taskId);
   if (read) { if(read.resultStorageId)await ctx.storage.delete(read.resultStorageId); await ctx.db.delete(read._id); }
   return null;
 }});
 
+function throwReadFailure(error: string | undefined, prefix: string): never {
+  if (error?.startsWith('Still queued after')) throw new ConvexError({ status: 'still_queued', retryAfterSeconds: 30, message: error });
+  throw new Error(`${prefix}: ${error ?? 'unknown error'}`);
+}
+
 /** Queue a reading for a read tool's input and wait for the worker; the result carries the sheet image when there is one. */
-export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, name: ReadToolName, input: object, signal?: AbortSignal): Promise<ReadResult> {
+export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, name: ReadToolName, input: object, signal?: AbortSignal, recreation = false): Promise<ReadResult> {
   const mode = name === 'listenReference' ? 'sounds' : name === 'readFrames' ? 'sheet' : name === 'trackReference' ? 'track' : name === 'traceShape' ? 'trace' : name === 'matchFont' ? 'font' : 'measure';
   const { assetId, time, ...rest } = READ_TOOL_INPUTS[name].parse(input) as { assetId: string; time?: number; start?: number; end?: number };
   const start = time ?? rest.start!, end = time ?? rest.end!;
@@ -89,7 +94,7 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   let readId: Id<'referenceReads'> | undefined;
   const queueDeadline = Date.now() + 120_000;
   for (let attempt = 0; !readId; attempt++) {
-    try { readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end }); }
+    try { readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode, ...rest, start, end, ...(recreation ? { recreation } : {}) }); }
     catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (/too many media jobs processing/i.test(message) && Date.now() < queueDeadline && !signal?.aborted) { await new Promise(resolve => setTimeout(resolve, 3000 + Math.random() * 2000)); continue; }
@@ -105,7 +110,7 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status !== 'queued') started = true;
-      if (state.status === 'failed') throw new Error(`The frames could not be read: ${state.error ?? 'unknown error'}`);
+      if (state.status === 'failed') throwReadFailure(state.error, 'The frames could not be read');
       if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
@@ -115,14 +120,14 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
 }
 
 /** How a reference video moves over SOURCE start to end (motionMap), read on the media worker. */
-export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[]): Promise<MotionMap> {
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<MotionMap> {
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end, ...(recreation ? { recreation } : {}), ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   const deadline = Date.now() + 300_000;
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
-      if (state.status === 'failed') throw new Error(`The motion map could not read the reference: ${state.error ?? 'unknown error'}`);
+      if (state.status === 'failed') throwReadFailure(state.error, 'The motion map could not read the reference');
       if (state.status === 'completed') { const result=state.resultStorageId?await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}):state.result;return (result as ReadResult).motion as MotionMap; }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
@@ -142,14 +147,14 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[]): Promise<ReadResult | null> {
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<ReadResult | null> {
   if (Date.now() >= deadline) return null;
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
-      if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
+      if (state.status === 'failed') throwReadFailure(state.error, 'The comparison could not be made');
       if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
