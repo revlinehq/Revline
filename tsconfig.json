@@ -49,6 +49,7 @@
     ".wrangler",
     ".data",
     "infra/media-worker/edge",
-    "cloudflare/agent-runner"
+    "cloudflare/agent-runner",
+    "mobile/superwall"
   ]
 }

@@ -3,7 +3,7 @@ REVLINE_SUBSCRIPTION_PRODUCT_ID = com.revline.app.monthly
 REVLINE_SIMULATOR_ENTITLEMENTS = $(SRCROOT)/Config/Simulator.entitlements
 REVLINE_ENVIRONMENT = development
 REVLINE_CONVEX_URL = https:/$()/majestic-alpaca-541.convex.cloud
-REVLINE_WEB_URL = http:/$()/localhost:3002
+REVLINE_WEB_URL = http:/$()/localhost:3021
 REVLINE_LOCAL_NETWORKING = YES
 #include? "Debug.local.xcconfig"
 #include? "Secrets.xcconfig"

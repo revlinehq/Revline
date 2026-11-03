@@ -10,7 +10,7 @@ struct OnboardingPageView: View {
                     .clipShape(.rect(cornerRadius: 12))
                     .accessibilityLabel(page.caption)
                 Text(page.title).font(.largeTitle).bold()
-                Text(page.description).foregroundStyle(Color.revlineMuted)
+                Text(page.description).foregroundStyle(Color.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .padding().frame(maxWidth: .infinity)

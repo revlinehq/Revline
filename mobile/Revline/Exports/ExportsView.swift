@@ -19,8 +19,8 @@ struct ExportsView: View {
         NavigationStack {
             List {
                 Section {
-                    LabeledContent(store.project?.title ?? "Project") { Text(timecode(store.timeline?.duration ?? 0)).foregroundStyle(Color.revlineForeground).monospacedDigit() }
-                    if store.tabs.count > 1 { Text(store.tabs.first { $0.id == store.timelineID }?.name ?? "Selected timeline").font(.subheadline).foregroundStyle(Color.revlineMuted) }
+                    LabeledContent(store.project?.title ?? "Project") { Text(timecode(store.timeline?.duration ?? 0)).foregroundStyle(Color.primary).monospacedDigit() }
+                    if store.tabs.count > 1 { Text(store.tabs.first { $0.id == store.timelineID }?.name ?? "Selected timeline").font(.subheadline).foregroundStyle(Color.secondary) }
                     Picker("Resolution", selection: $resolution) {
                         Text("720p").tag(720.0)
                         Text("1080p").tag(1080.0)
@@ -45,7 +45,7 @@ struct ExportsView: View {
                 } footer: { Text("Exports run in the cloud. You can keep editing while they render.") }
                 .listRowBackground(Color.clear).listRowInsets(EdgeInsets())
                 if let error { Section { ErrorBanner(message: error) }.listRowBackground(Color.clear).listRowInsets(EdgeInsets()) }
-                if let notice { Section { Text(notice).font(.subheadline).foregroundStyle(Color.revlineMuted) }.revlineRows() }
+                if let notice { Section { Text(notice).font(.subheadline).foregroundStyle(Color.secondary) }.revlineRows() }
                 Section("Recent exports") {
                     if store.exports.isEmpty { ContentUnavailableView("No exports yet", systemImage: "square.and.arrow.up", description: Text("Export a timeline to save or share it.")) }
                     ForEach(store.exports) { job in
@@ -53,7 +53,7 @@ struct ExportsView: View {
                             HStack {
                                 Text(job.label ?? "\(Int(job.resolution))p · \(Int(job.fps)) fps").font(.headline)
                                 Spacer()
-                                Text(job.status.capitalized).font(.subheadline).foregroundStyle(Color.revlineMuted)
+                                Text(job.status.capitalized).font(.subheadline).foregroundStyle(Color.secondary)
                             }
                             if job.active {
                                 ProgressView(value: job.progress, total: 100)

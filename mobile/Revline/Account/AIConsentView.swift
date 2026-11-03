@@ -18,7 +18,7 @@ struct AIConsentView: View {
                 }.revlineRows()
                 Section("Who receives it") {
                     Text("OpenAI, Google Gemini, Anthropic, Deepgram, fal and ElevenLabs, depending on the operation. Revline also uses its own media servers, Convex and Cloudflare R2 for storage and delivery.")
-                    Text("Not every request uses every provider. Their retention and data-use terms apply. Review the privacy policy before sharing sensitive footage.").foregroundStyle(Color.revlineMuted)
+                    Text("Not every request uses every provider. Their retention and data-use terms apply. Review the privacy policy before sharing sensitive footage.").foregroundStyle(Color.secondary)
                 }.revlineRows()
                 Section {
                     if session.aiConsentGranted {

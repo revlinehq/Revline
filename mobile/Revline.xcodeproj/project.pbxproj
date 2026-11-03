@@ -51,6 +51,7 @@
 		82DE61EB304529CC75AE741C /* ClerkKitUI in Frameworks */ = {isa = PBXBuildFile; productRef = 931C325D3F51D153C83E0F71 /* ClerkKitUI */; };
 		830829507919644D0854ED8E /* EditResultRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BECE2CFAE9EE8B77935CEC9C /* EditResultRow.swift */; };
 		8B163281B5916C635B556BEF /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5480908AD5ED8486BB2F14DE /* RootView.swift */; };
+		8C37D3A8A3223B85ECE0B716 /* AgentComposerControls.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B8C999C3EB1F9AECEB205A4 /* AgentComposerControls.swift */; };
 		930FFFB30CFF83B3F61AD61E /* DeleteAccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 63785E25E674B56F20027F17 /* DeleteAccountView.swift */; };
 		93C217F7BD1823AE9041FE16 /* Timecode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65061BA99751E684F3524B62 /* Timecode.swift */; };
 		95DD061D19FA822635CECDCA /* AssistantStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = CF94EE39B855B3B65A95D37A /* AssistantStatus.swift */; };
@@ -75,6 +76,7 @@
 		D25749A36BD08E74E5867E3A /* AppConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A3AA6CC22F9537131028CB5 /* AppConfiguration.swift */; };
 		D39053B6B0861CDC7BB931D1 /* ConvexConcurrency.swift in Sources */ = {isa = PBXBuildFile; fileRef = EFE182F228B1BB2D6AE0C7D4 /* ConvexConcurrency.swift */; };
 		D3A47254BB69D56A7B30E45D /* ProjectPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = F957F33B3954C8B09F85DC11 /* ProjectPreview.swift */; };
+		D3E90B7DC8F46742871E00EE /* ProjectWorkspacePreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = 781BA1CACE0D22BD67DB42FE /* ProjectWorkspacePreview.swift */; };
 		DA5D578C0D4071A21FB4C684 /* ClerkKit in Frameworks */ = {isa = PBXBuildFile; productRef = 846E42013F30982E663C5589 /* ClerkKit */; };
 		DF7E03913F4BC61302FF3CAF /* BillingStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43830715FB0889A53F3A4198 /* BillingStatus.swift */; };
 		E1798C0834663F4DE7D7E84E /* RevlineClerkTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CC46B6371D9FEDE7DA82EE5 /* RevlineClerkTheme.swift */; };
@@ -121,12 +123,14 @@
 		65061BA99751E684F3524B62 /* Timecode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Timecode.swift; sourceTree = "<group>"; };
 		6515EE32DD6C01EB1C9B8BC7 /* StreamingMessage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StreamingMessage.swift; sourceTree = "<group>"; };
 		6577DE25088AB0C468EBFB91 /* ExportsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ExportsView.swift; sourceTree = "<group>"; };
+		6B8C999C3EB1F9AECEB205A4 /* AgentComposerControls.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentComposerControls.swift; sourceTree = "<group>"; };
 		6D636E4138EE717282CEADE1 /* Release.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Release.xcconfig; sourceTree = "<group>"; };
 		72D9C22FF1C2CAE4F4B84137 /* RenameProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RenameProjectView.swift; sourceTree = "<group>"; };
 		72DDA7EB40D372FEDA5D9CFE /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		73034845044E92B8E1BD2D15 /* Revline.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Revline.entitlements; sourceTree = "<group>"; };
 		77BD3E9AE50CC2420A814C67 /* WorkspaceTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceTab.swift; sourceTree = "<group>"; };
 		77FD7A14CDE3F7E2D6E4E776 /* AgentDrawerHandle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AgentDrawerHandle.swift; sourceTree = "<group>"; };
+		781BA1CACE0D22BD67DB42FE /* ProjectWorkspacePreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProjectWorkspacePreview.swift; sourceTree = "<group>"; };
 		795BAA8D5A900021380B7BF3 /* CreateProjectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CreateProjectView.swift; sourceTree = "<group>"; };
 		79745406EA248D19C963F8F0 /* RevlineApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RevlineApp.swift; sourceTree = "<group>"; };
 		7EEFE3A50CCBAE932AEBF32D /* ConvexObservation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConvexObservation.swift; sourceTree = "<group>"; };
@@ -259,6 +263,7 @@
 				F957F33B3954C8B09F85DC11 /* ProjectPreview.swift */,
 				45B21527EFCB46D7086D8B60 /* ProjectStore.swift */,
 				E2E59E65AB17F89C95E0CD2E /* ProjectView.swift */,
+				781BA1CACE0D22BD67DB42FE /* ProjectWorkspacePreview.swift */,
 			);
 			path = Editor;
 			sourceTree = "<group>";
@@ -355,6 +360,7 @@
 			isa = PBXGroup;
 			children = (
 				82296A2185332DCA31A4A4AA /* AgentComposer.swift */,
+				6B8C999C3EB1F9AECEB205A4 /* AgentComposerControls.swift */,
 				CF94EE39B855B3B65A95D37A /* AssistantStatus.swift */,
 				AD08F11D0BC2A4B44375B33A /* ChatMessage.swift */,
 				93D863E289CB39DB590A48AD /* ChatMessageView.swift */,
@@ -516,6 +522,7 @@
 				3C52B38148C5A8285163C010 /* AIConsentView.swift in Sources */,
 				4F0D9470F31C44BE3BCD3C69 /* ActionLabel.swift in Sources */,
 				73F0022800A9BC22FC978241 /* AgentComposer.swift in Sources */,
+				8C37D3A8A3223B85ECE0B716 /* AgentComposerControls.swift in Sources */,
 				1023F2B933988A341AE250D2 /* AgentDrawerHandle.swift in Sources */,
 				080AF44621D5FD8712838283 /* AgentDrawerState.swift in Sources */,
 				2D47B4D0C4E5EC5AAB42D09B /* AgentSheet.swift in Sources */,
@@ -562,6 +569,7 @@
 				4F505454A6BEEE451669C5B4 /* ProjectStore.swift in Sources */,
 				01588C0C595A078AAF5DB0CA /* ProjectSummary.swift in Sources */,
 				308C81AD5A6C202A16071D3A /* ProjectView.swift in Sources */,
+				D3E90B7DC8F46742871E00EE /* ProjectWorkspacePreview.swift in Sources */,
 				05C3C297BAABC75068688C87 /* ProjectsStore.swift in Sources */,
 				46335BB6D72BD2C7EB87236A /* ProjectsView.swift in Sources */,
 				64A7176BCB15A00098C8D259 /* PurchaseCoordinator.swift in Sources */,

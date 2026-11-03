@@ -64,7 +64,7 @@ struct MediaLibraryView: View {
                         Button { toggleAttachment(asset.id) } label: {
                             MediaAssetRow(asset: asset, attached: store.attachedAssetIDs.contains(asset.id))
                         }
-                        .foregroundStyle(Color.revlineForeground)
+                        .foregroundStyle(Color.primary)
                         .accessibilityLabel("\(asset.fileName), \(store.attachedAssetIDs.contains(asset.id) ? "attached" : "attach to prompt")")
                     }
                 }.revlineRows()

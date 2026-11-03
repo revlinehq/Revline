@@ -21,13 +21,13 @@ struct OnboardingView: View {
             }
             .tabViewStyle(.page)
             .indexViewStyle(.page(backgroundDisplayMode: .always))
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 Button(action: advance) {
                     ActionLabel(title: page == pages.count - 1 ? "Get started" : "Continue")
                 }
                 .buttonStyle(.borderedProminent).controlSize(.large)
                 .padding().frame(maxWidth: .infinity)
-                .background(Color.revlineCard)
+                .background(Color.revlineBackground.ignoresSafeArea(edges: .bottom))
             }
             .revlineSurface()
             .navigationTitle("Revline").navigationBarTitleDisplayMode(.inline)

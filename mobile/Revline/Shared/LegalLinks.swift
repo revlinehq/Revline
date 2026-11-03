@@ -7,6 +7,5 @@ struct LegalLinks: View {
             Link("Terms", destination: URL(string: "https://tryrevline.com/terms")!)
         }
         .font(.footnote).frame(minHeight: 44)
-        .foregroundStyle(Color.revlineMuted)
     }
 }

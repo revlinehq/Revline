@@ -63,6 +63,14 @@ Create a signed Release archive without uploading
 
 Build Release and upload to TestFlight, without submitting for App Review
 
+### ios upload_testflight
+
+```sh
+[bundle exec] fastlane ios upload_testflight
+```
+
+Upload an existing signed IPA to TestFlight, without submitting for review
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
