@@ -34,8 +34,8 @@ export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAre
         <ChevronDown size={12} aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
-    <DropdownMenuContent className="aspect-ratio-menu" align="start" collisionPadding={8}>
-      <DropdownMenuLabel className="aspect-ratio-heading">Video format</DropdownMenuLabel>
+    <DropdownMenuContent className="format-menu" align="start" collisionPadding={8}>
+      <DropdownMenuLabel className="format-heading">Video format</DropdownMenuLabel>
       <DropdownMenuRadioGroup value={value} onValueChange={next => {
         const format = FORMATS.find(format => format.value === next);
         if (format && format.value !== value) onChange(format.value);
@@ -43,10 +43,10 @@ export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAre
         {FORMATS.map(format => {
           const { width, height } = dimensions(format.value);
           return <Fragment key={format.value}>
-            <DropdownMenuRadioItem className="aspect-ratio-row" value={format.value} aria-label={`${format.label}, ${format.ratio}, ${width} by ${height} pixels`}>
-              <span className="aspect-ratio-slot" aria-hidden="true"><span className="aspect-ratio-shape" data-ratio={format.value}/></span>
-              <span className="aspect-ratio-copy"><span className="aspect-ratio-name">{format.label}</span><span className="aspect-ratio-dimensions">{width} × {height}</span></span>
-              <span className="aspect-ratio-ratio">{format.ratio}</span>
+            <DropdownMenuRadioItem className="format-row" value={format.value} aria-label={`${format.label}, ${format.ratio}, ${width} by ${height} pixels`}>
+              <span className="format-slot" aria-hidden="true"><span className="format-shape" data-ratio={format.value}/></span>
+              <span className="format-copy"><span className="format-name">{format.label}</span><span className="format-size">{width} × {height}</span></span>
+              <span className="format-ratio">{format.ratio}</span>
             </DropdownMenuRadioItem>
             {format.value === 'vertical' && value === 'vertical' && onSafeAreaChange && <div className="safe-area-panel">
               <span className="safe-area-label">Safe area</span>
