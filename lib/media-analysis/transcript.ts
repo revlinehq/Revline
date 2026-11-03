@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export type TranscriptWord = { start: number; end: number; text: string; speaker?: number; speakerConfidence?: number };
-export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number };
-export const MAX_TRANSCRIPT_WORDS = 5000;
+export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number; chunkCount?: number; wordCount?: number };
+export const MAX_TRANSCRIPT_WORDS = 100000;
 /** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.
  * Whisper transcripts (1, 2) stretched word times over fillers and pauses, so cuts
  * landed mid-word; those transcripts are redone. */

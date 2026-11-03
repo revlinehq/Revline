@@ -1,7 +1,8 @@
 import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
-import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
+import { hydrateAsset,storeAnalysis,compactAnalysis } from './lib/asset_analysis';
+import { readHighlights } from '../lib/media-analysis/highlights';
 import { writeProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
@@ -216,7 +217,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   }
   const validRange = (start: number, end: number) => Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= duration + 0.5;
   if (changes.transcript) {
-    if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 5000) throw new ConvexError("Transcript is too large");
+    if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 100000) throw new ConvexError("Transcript is too large");
     for (const item of changes.transcript.segments) if (!validRange(item.start, item.end) || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
     // A transcriber can measure an instantaneous word. Preserve its timing rather
     // than assigning an invented duration; rendered segments remain positive.
@@ -249,8 +250,9 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');
     try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
   }
-  const analysis = { ...asset.analysis, ...(changes.facecam ? {facecam:changes.facecam}:{}), ...(changes.speakers ? {speakers:changes.speakers}:{}), ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}), ...(changes.reference ? { reference: changes.reference } : {}) };
-  if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
+  if(changes.highlights){const tracks=readHighlights(changes.highlights);if(!tracks||Math.abs(tracks.duration-duration)>.5)throw new ConvexError('Invalid highlight signal tracks.');}
+  const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','chatReplay','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
+  if (serializedBytes(compactAnalysis(analysis)) > 900_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };
   await storeAnalysis(ctx,asset,analysis,now);await ctx.db.patch(asset._id,{analysisUpdatedAt:now,analysisCompletedAt}); return null;

@@ -38,7 +38,7 @@ async function request(path: string, duration: number, key: string, signal: Abor
   const words = (result.data.results.channels[0]?.alternatives[0]?.words ?? [])
     .map(word => ({ text: (word.punctuated_word ?? word.word).trim(), start: Math.min(duration, Math.max(0, word.start)), end: Math.min(duration, Math.max(0, word.end)), ...(word.speaker !== undefined ? { speaker:word.speaker, speakerConfidence:word.speaker_confidence ?? 0 } : {}) }))
     .filter(word => word.text);
-  if (words.length > MAX_TRANSCRIPT_WORDS) throw new AnalysisError('This source exceeds the 5,000-word transcript limit. Transcribe a shorter source.', 400);
+  if (words.length > MAX_TRANSCRIPT_WORDS) throw new AnalysisError('This source exceeds the 100,000-word transcript limit.', 400);
   try { return { ...transcriptFromWords(words, duration), version: TRANSCRIPT_VERSION }; }
   catch (error) { throw new AnalysisError(error instanceof Error ? `Deepgram: ${error.message}` : 'Deepgram returned invalid word timestamps.', 502); }
 }

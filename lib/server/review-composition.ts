@@ -46,12 +46,12 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 }
 
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
-export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['snapshot']>> {
+export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const range=snapshot.pacing??snapshot.sound??snapshot.motion;
-  const windows=range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
+  const windows=contactSheet?[{start:0,end:last+frame}]:range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[],windows);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
@@ -107,6 +107,12 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
       first=next+1;onProgress(20+Math.round(75*first/order.length));
     }
     for(const [index,time] of at.entries())frames.push({time,image:images[index]});
+  }
+  // A finished short is at most 60s: one capture session supplies its whole contact sheet.
+  else if(contactSheet){
+    await runCompositionCapture(directory,{...size,fps:timeline.fps,times:at,start:at[0],end:at.at(-1)!+frame,variants:['edited'],sparse:true},signal);
+    for(const [index,time] of at.entries())frames.push({time,image:(await readFile(join(path,`sample-${index}.png`))).toString('base64')});
+    onProgress(95);
   }
   // With footage, one frame-sized window per time keeps decoding bounded however far apart the times are.
   else for(const [index,time] of at.entries()){

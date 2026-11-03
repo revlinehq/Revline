@@ -2,4 +2,6 @@
  * work, the edge controller reports it, and Convex returns it as the release
  * contract; tasks needing newer features set requiredProcessorVersion. */
 // 32: shared scene bundles. 33: keyframed reference crops. 34: uncapped scene media. 35: still-image reads/comparisons.
-export const MEDIA_PROCESSOR_VERSION = 35;
+export const MEDIA_PROCESSOR_VERSION = 38;
+
+// 38: cached CPU highlight discovery and clip delivery checks (36/37 reserved by frame-cache/worker fixes).

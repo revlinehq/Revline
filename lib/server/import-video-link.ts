@@ -335,7 +335,7 @@ export async function importVideoLink(
     );
   const source = join(directory, "download.mp4");
   let title = "Imported video";
-  if (link.kind === "youtube") {
+  if (link.kind !== "file") {
     const executable = workerToolPath(
       process.env.YT_DLP_PATH,
       ".data/video-import/bin/yt-dlp",
@@ -430,7 +430,7 @@ export async function importVideoLink(
     (stream) => stream.codec_type === "audio",
   );
   // A direct MP4 arrives whole, so its range is cut here; YouTube already downloaded only the range.
-  const cut = range && link.kind !== "youtube" ? range : undefined;
+  const cut = range && link.kind === "file" ? range : undefined;
   const fullDuration = Number(metadata.format?.duration);
   const duration = cut
     ? Math.min(fullDuration, cut.end) - cut.start

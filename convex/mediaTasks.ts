@@ -1,3 +1,5 @@
+import { clipCheckRequestValidator } from './lib/clipping_validator';
+import { recordClipCheck } from './clipping';
 import { processorBackend } from './lib/processor_backend';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
@@ -53,7 +55,7 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const timelineFrames=v.object({normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
+const timelineFrames=v.object({clipCheck:v.optional(clipCheckRequestValidator),normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
 // A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
 const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
@@ -61,12 +63,12 @@ const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('
 const readWork = v.object({ mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
 const workItem = v.object({previewRanges:v.optional(v.array(v.object({start:v.number(),end:v.number()}))),read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string()})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
+export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({clipCheck:v.optional(v.string()),normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string()})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
 export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { highlights:MEDIA_PROCESSOR_VERSION,import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
 /** Shape tracing (traceShape) came after plain frame reads. */
 export const TRACE_PROCESSOR_VERSION = 14;
 /** Font matching (matchFont) came after shape tracing. */
@@ -452,8 +454,8 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(saved.guard){timeline=await loadSceneCode(ctx,saved.guard.candidate);baseline=await loadSceneCode(ctx,saved.guard.baseline);}
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips,...baseline?.clips??[]].flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(sceneMediaAssetIds(timeline),baseline?sceneMediaAssetIds(baseline):[],timeline.audioNormalization?[timeline.audioNormalization.assetId]:[],baseline?.audioNormalization?[baseline.audioNormalization.assetId]:[]))];
-    const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
-    snapshot={timeline,...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
+    const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...(saved.clipCheck?await hydrateAsset(ctx,asset):asset),url:await mediaUrl(ctx,asset)};}));
+    snapshot={timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
   }
   let blueprint:Infer<typeof blueprintWork>|undefined;
   if(task.blueprintCheckId){
@@ -611,6 +613,11 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!result.snapshot) throw new ConvexError('Frame capture completed without images.');
     if (!task.snapshotId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame request is no longer active.');
     const snapshot = (await ctx.db.get(task.snapshotId))!, frames = result.snapshot.frames;
+    if(snapshot.clipCheck){
+      if(!result.snapshot.clipCheck||frames.length!==1||frames[0].image.length>900_000||!/^[A-Za-z0-9+/]+=*$/.test(frames[0].image))throw new ConvexError('Clip check is missing its one framing sheet.');
+      await recordClipCheck(ctx,snapshot,result.snapshot.clipCheck);
+      await ctx.db.patch(snapshot._id,{status:'completed',clipCheckResult:result.snapshot.clipCheck,frames});return;
+    }
     if(snapshot.normalization){
       const normalized=result.snapshot.normalization,output=task.outputAssetId?await ctx.db.get(task.outputAssetId):null;
       if(!normalized||!output||output._id!==normalized.assetId||output.kind!=='audio'||output.ownerId!==task.ownerId||output.projectId!==task.projectId||!Number.isFinite(normalized.outputLufs)||Math.abs(normalized.outputLufs-snapshot.normalization.targetLufs)>.7||!Number.isFinite(normalized.truePeak)||normalized.truePeak>snapshot.normalization.truePeak)throw new ConvexError('Normalized audio failed its loudness or true-peak check.');
@@ -635,10 +642,11 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
     await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now() });
   },
-  import: async (ctx, task) => {
+  import: async (ctx, task, result) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video' || !output.duration) throw new ConvexError('The imported video has not been stored yet.');
     if(task.sourceUrl)await ctx.db.patch(output._id,{importSourceUrl:task.sourceUrl,...(task.importRange?{importRange:task.importRange}:{})});
+    if(result.analysis?.chatReplay)await saveAssetAnalysis(ctx,output,{chatReplay:result.analysis.chatReplay});
     const project = await requireProject(ctx, task.projectId, task.ownerId, false);
     if (output.duration < 1 / currentTimeline(project).fps) throw new ConvexError('The imported video is shorter than one timeline frame. It remains saved in Sources.');
     // A new revision would fail an AI edit's staged draft as "changed
@@ -711,7 +719,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!result.waveform) throw new ConvexError('No waveform was returned.');
     validateWaveform(result.waveform); await ctx.db.patch(asset._id, { waveform: result.waveform });
   },
-  facecam: saveAnalysisResult, speakers: saveAnalysisResult, transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult, reference: saveAnalysisResult,
+  highlights:saveAnalysisResult,facecam: saveAnalysisResult, speakers: saveAnalysisResult, transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult, reference: saveAnalysisResult,
 };
 
 async function completeTask(ctx:MutationCtx,args:{taskId:Id<'mediaTasks'>;leaseToken:string;result:TaskResult},readResultStorageId?:Id<'_storage'>){

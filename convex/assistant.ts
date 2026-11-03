@@ -101,7 +101,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.query('mediaTaskViews').withIndex('by_task',q=>q.eq('taskId',active.taskId!)).unique() : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
-  const labels = { facecam:'Finding the facecam…', speakers:'Following active speakers…', transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
+  const labels = { highlights:'Finding highlights…',facecam:'Finding the facecam…', speakers:'Following active speakers…', transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
   const ready=args.clientPlatform==='ios'?(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})():configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
   // Run-scoped analysis remains evidence of the editing workflow while the

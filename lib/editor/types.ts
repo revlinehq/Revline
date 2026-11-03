@@ -51,7 +51,7 @@ export type Clip = {
   y?: number;
   volume?: number;
   audio?: AudioSettings;
-  normalizedAudio?: {assetId:string;key:string;targetLufs:number;truePeak:number;offset?:number};
+  normalizedAudio?: {assetId:string;key:string;targetLufs:number;truePeak:number;offset?:number;outputLufs?:number;measuredTruePeak?:number};
   audioFadeTiming?: {duration:number;offset:number};
   visualFade?: VisualFadeSettings;
   visualFadeTiming?: {duration:number;offset:number};
@@ -142,6 +142,8 @@ export type MediaAsset = {
   preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;
   analysis?: {
+    highlights?: string;
+    chatReplay?: string;
     facecam?: import('../media-analysis/clipping').FacecamAnalysis;
     speakers?: import('../media-analysis/clipping').SpeakerAnalysis;
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string;speaker?:number;speakerConfidence?:number}[]};

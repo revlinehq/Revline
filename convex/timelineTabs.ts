@@ -153,8 +153,8 @@ export async function renameTabFor(ctx: MutationCtx, ownerId: string, args: { pr
 }
 
 export const remove = mutation({ args: { projectId: v.id('projects'), timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => removeTabFor(ctx, await requireOwner(ctx), args) });
-export async function removeTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }) {
-  const project = await openProject(ctx, args.projectId, ownerId), tabs = tabsOf(project);
+export async function removeTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string },runId?:string) {
+  const project = await openProject(ctx, args.projectId, ownerId,runId), tabs = tabsOf(project);
   const index = tabs.findIndex(tab => tab.id === args.timelineId);
   if (index < 0) throw new ConvexError('That timeline no longer exists');
   if (tabs.length <= 1) throw new ConvexError('A project keeps at least one timeline');

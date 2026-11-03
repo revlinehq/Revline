@@ -1,4 +1,8 @@
+import { checkClipSnapshot } from './check-clip';
 import { importCheckpoint } from './import-checkpoint';
+import { findSourceHighlights } from './find-highlights';
+import { fetchChatReplay } from './chat-replay';
+import { readHighlights } from '../media-analysis/highlights';
 import { ownedMediaUrl } from './owned-media';
 import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
@@ -83,7 +87,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       await uploadMediaFile(path, { ...credentials, projectId: task.projectId, ...metadata, kind: 'video', contentType: 'video/mp4' }, uploadContext, signal);
       completed = true;
       onProgress(98);
-      return {};
+      return {analysis:{chatReplay:await fetchChatReplay(task.sourceUrl,metadata.duration,signal,task.importRange)}};
     }
     if (task.kind === 'render') {
       if (!task.render || !task.renderJobId) throw new AnalysisError('Export snapshot is missing.', 400);
@@ -126,6 +130,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     if(task.kind==='blueprint'){if(!task.blueprint)throw new AnalysisError('The blueprint check is unavailable.',400);return {blueprint:await runBlueprintCheck(task.blueprint,signal,onProgress)};}
+    if(task.kind==='snapshot'&&task.snapshot?.clipCheck)return {snapshot:await runPhase('Checking clip',()=>checkClipSnapshot(task.snapshot!,directory,convexUrl,signal,onProgress))};
     if(task.kind==='snapshot'&&task.snapshot?.normalization){
       const {path,...measurements}=await runPhase('Normalizing loudness',()=>normalizeTimelineAudio(task.snapshot!,directory,convexUrl,signal));
       onProgress(90);
@@ -139,6 +144,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
+    if (task.kind === 'highlights' && readHighlights(asset.analysis?.highlights)) return {analysis:{highlights:asset.analysis!.highlights}};
     if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     // A breakdown saved before moments were measured only needs its moments; the model pass stays.
@@ -265,6 +271,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start})),...(local.version===2?{framing:local.framing.map(frame=>({...frame,start:frame.start+range.start,end:frame.end+range.start}))}:{})});
       return {analysis:{speakers}};
     }
+    if (task.kind === 'highlights') {
+      if (!media.hasAudio) throw new AnalysisError('Highlight discovery requires source audio.', 400);
+      return {analysis:{highlights:JSON.stringify(await runPhase('Finding highlights',()=>findSourceHighlights({source,duration:asset.duration??media.duration,video:media.hasVideo,transcript:asset.analysis?.transcript,chatReplay:asset.analysis?.chatReplay,cacheIdentity},signal,onProgress)))}};
+    }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       // Older whole-file transcripts lost retakes; only a current one is reused.
@@ -273,7 +283,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // the task directory holding that audio is removed once this function returns.
       const measure = async (transcript: Transcript) => {
         const audioActivity = await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript));
-        const speechCleanup = await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal));
+        const speechCleanup = (asset.duration ?? media.duration) <= 600 ? await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal)) : undefined;
         return { analysis: { transcript, audioActivity, ...(speechCleanup ? { speechCleanup } : {}) } };
       };
       if (savedTranscript) return await measure(savedTranscript);
