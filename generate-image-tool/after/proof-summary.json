@@ -1,0 +1,73 @@
+{
+  "projectId": "j978fbjj5j761aq3eydm13ez0d8hge58",
+  "stage": "rough",
+  "generatedImages": 3,
+  "estimatedUsd": 0.036611000000000005,
+  "assetIds": [
+    "j57a97br0cv0ssax5wdf44jm758hgrnp",
+    "j575bdqevfnm37v24tkczty8td8hgtkj",
+    "j57bja6ztpd5495ah2fqpy8yhn8hgq8w"
+  ],
+  "shots": [
+    {
+      "assetId": "j57a97br0cv0ssax5wdf44jm758hgrnp",
+      "assetsNeeded": [
+        "Paper grain texture",
+        "Separate hand-drawn paper scraps",
+        "Editable headline"
+      ],
+      "duration": 4,
+      "idea": "A clear working day is crowded by message noise",
+      "motion": "The headline fades up, then message scraps slide inward and crowd the space",
+      "onScreenText": "Make room for focus",
+      "shotIndex": 1,
+      "transition": "The scraps gather toward the center and become the plan",
+      "visual": "A generous clear central space is squeezed by scattered paper message scraps entering from both edges."
+    },
+    {
+      "assetId": "j575bdqevfnm37v24tkczty8td8hgtkj",
+      "assetsNeeded": [
+        "Paper grain texture",
+        "Stroke-drawn SVG diagram",
+        "Editable benefit labels"
+      ],
+      "duration": 4,
+      "idea": "Relay gathers the noise into a clear plan with three benefits",
+      "motion": "Loose scraps gather, align, then three benefit diagrams draw on in order",
+      "onScreenText": "Less noise. Clear next steps. Room to focus.",
+      "shotIndex": 2,
+      "transition": "The plan shrinks below the final headline as the frame clears",
+      "visual": "Loose message scraps on the left align into one isometric paper plan on the right, with three small diagram marks for less noise, a clear next step and open space."
+    },
+    {
+      "assetId": "j57bja6ztpd5495ah2fqpy8yhn8hgq8w",
+      "assetsNeeded": [
+        "Editable CTA type",
+        "Paper grain texture",
+        "Stroke-drawn plan"
+      ],
+      "duration": 4,
+      "idea": "Hold a clear CTA that also works as a thumbnail",
+      "motion": "The CTA draws in and the small plan settles below it",
+      "onScreenText": "Make room for focus",
+      "shotIndex": 3,
+      "transition": "Hold the final composition cleanly to the end",
+      "visual": "One small outlined daily plan low in frame, centered open space for the CTA and ample paper margins."
+    }
+  ],
+  "approvals": [
+    {
+      "at": 1793668911064,
+      "note": "Authorized throwaway proof selection: concept A, Clear the space. The user requested the Relay storyboard flow end to end.",
+      "stage": "concept"
+    },
+    {
+      "at": 1793669180426,
+      "note": "Proof operator accepted the inspected three-frame pencil board under the user's explicit authorization to run the Relay storyboard flow end to end.",
+      "stage": "rough"
+    }
+  ],
+  "mediaCount": 3,
+  "timelineClips": 0,
+  "allCallsSucceeded": true
+}
