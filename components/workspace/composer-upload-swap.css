@@ -23,6 +23,10 @@
   .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed;overflow-y:hidden}
 }
 
-.composer-input-group>.composer-timeline-header{min-height:36px;justify-content:space-between;gap:8px;padding:3px 8px 3px 14px;border-bottom:1px solid #363636;border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0;color:#aaa;font-size:11px;font-weight:400;cursor:default}
-.composer-timeline-header .aspect-ratio-trigger[data-slot=button]{color:#d4d4d4}
-.composer-timeline-header .aspect-ratio-trigger:hover,.composer-timeline-header .aspect-ratio-trigger[data-state=open]{background:#363636;color:#fff}
+/* The settings card is tucked behind the composer with a 32px inset on both sides. */
+.edit-composer.has-composer-header{padding-top:38px;isolation:isolate}
+.composer-header[data-slot=card]{position:absolute;z-index:-1;top:0;left:32px;right:32px;height:54px;display:flex;flex-direction:row;align-items:flex-start;gap:24px;overflow-x:auto;overflow-y:hidden;white-space:nowrap;padding:8px 14px 16px;border:1px solid #292929;border-radius:10px 10px 0 0;background:#1a1a1a;color:#999;box-shadow:none;scrollbar-width:none}
+.composer-header::-webkit-scrollbar{display:none}
+.composer-header .composer-header-chip{height:24px;flex-shrink:0;gap:7px;padding:0;border:0;border-radius:4px;background:transparent;color:#999;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:400;line-height:20px;box-shadow:none;outline:none}
+.composer-header .composer-header-chip svg{width:12px;height:12px}
+.composer-header .composer-header-chip:hover,.composer-header .composer-header-chip[data-state=open]{background:#222;color:#ccc}
