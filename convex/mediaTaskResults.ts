@@ -4,6 +4,8 @@ import { action, internalAction, internalMutation, internalQuery, type MutationC
 import { internal } from './_generated/api';
 import { mediaTaskCredentials, requireMediaTask } from './lib/media_task_auth';
 import { referenceReadResult } from './schema';
+import { AnalysisError } from '../lib/media-analysis/errors';
+import { retryMediaOperation } from '../lib/media-analysis/network';
 
 export const readLease = internalQuery({ args: mediaTaskCredentials, returns: v.boolean(), handler: async (ctx,args) => {
   const saved=await ctx.db.get(args.taskId);
@@ -39,9 +41,11 @@ export const consumeRead = internalAction({ args: {ownerId:v.string(),readId:v.i
   if(!read.resultStorageId)throw new ConvexError('The reference reading is unavailable.');
   const url=await ctx.storage.getUrl(read.resultStorageId);
   if(!url)throw new ConvexError('The reference reading is unavailable.');
-  const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(30_000)});
-  if(!response.ok)throw new ConvexError('The reference reading could not load.');
-  const result=parse(referenceReadResult,await response.json());
+  const result=await retryMediaOperation(async()=>{
+    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(30_000)});
+    if(!response.ok){await response.body?.cancel();throw new AnalysisError(`The reference reading could not load (HTTP ${response.status}).`,response.status);}
+    return parse(referenceReadResult,await response.json());
+  });
   await ctx.runMutation(internal.referenceReads.discard,{readId:args.readId});
   return result;
 }});

@@ -1,6 +1,7 @@
 """Return source-frame shot boundaries; never transcode or split the uploaded file."""
 import json
 import math
+import signal
 import subprocess
 import sys
 
@@ -24,15 +25,30 @@ class CountingDetector(AdaptiveDetector):
         return super().process_frame(timecode, frame_img)
 
 
+def stop(_signal, _frame):
+    raise SystemExit("Shot detection stopped.")
+
+
+signal.signal(signal.SIGTERM, stop)
 source = sys.argv[1]
-probe = subprocess.run([
+probe = subprocess.Popen([
     "ffprobe", "-v", "error", "-select_streams", "v:0", "-show_frames",
     "-show_entries", "format=start_time:stream=nb_frames:frame=best_effort_timestamp_time,duration_time,pkt_duration_time",
     "-of", "json", source,
-], capture_output=True, text=True, check=True, timeout=60)
-if probe.stderr.strip():
+], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+try:
+    probe_stdout, probe_stderr = probe.communicate()
+finally:
+    # Node cancels Python; stop its decoder too rather than leaving a VOD
+    # decode running after the task's lease ends or the user presses Stop.
+    if probe.poll() is None:
+        probe.kill()
+        probe.wait()
+if probe.returncode:
+    raise RuntimeError("Could not decode video frames for shot detection.")
+if probe_stderr.strip():
     raise RuntimeError("The video has frame decoding errors; complete shot coverage cannot be verified.")
-metadata = json.loads(probe.stdout)
+metadata = json.loads(probe_stdout)
 frames = metadata.get("frames", [])
 if not frames:
     raise RuntimeError("No video frames decoded.")

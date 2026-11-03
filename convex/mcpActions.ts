@@ -1,3 +1,4 @@
+import { snapshotFrames } from '../lib/ai/snapshot-frames';
 "use node";
 import { v } from 'convex/values';
 import { z } from 'zod';
@@ -143,7 +144,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
         if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return result(`Frames could not be rendered: ${state.error ?? 'unknown error'}`, true); }
         if (state.status === 'completed') {
           await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
-          const frames = state.frames as { time: number; image: string }[];
+          const frames = await snapshotFrames(state);
           return { ...result({ revision: state.revision, ...(state.atRevision !== undefined ? { atRevision: state.atRevision } : {}), frames: frames.map(frame => ({ time: frame.time })), note: `Images follow in time order, 720p composited frames of ${state.atRevision !== undefined ? `the timeline as it was at revision ${state.atRevision}` : 'the saved timeline'}.` }), images: frames.map(frame => ({ data: frame.image, mimeType: 'image/jpeg' })) };
         }
         await new Promise(resolve => setTimeout(resolve, 1500));

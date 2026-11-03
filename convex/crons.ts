@@ -10,4 +10,5 @@ crons.daily('Prune MCP tokens, codes and unused clients',{hourUTC:9,minuteUTC:30
 // Exports re-queued by an expired lease or a failed Fly call get a machine within a minute; a no-op unless RENDER_PROVIDER=fly.
 crons.interval('Dispatch waiting exports to Fly',{minutes:1},internal.flyRender.dispatch,{});
 crons.interval('Recover waiting media processing',{minutes:1},internal.flyProcessor.dispatch,{});
+crons.daily('Prune cached timeline frames', {hourUTC:9,minuteUTC:35}, internal.frameCache.prune, {});
 export default crons;

@@ -41,7 +41,7 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
       </button>
       <input ref={input} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event=>{attach(Array.from(event.target.files??[]));event.target.value='';}}/>
       <div className="media-import-divider"><span>or</span></div>
-      {onImportVideo?<VideoLinkImport disabled={busy} onImport={async url=>{
+      {onImportVideo?<VideoLinkImport disabled={busy} onUpload={()=>input.current?.click()} onImport={async url=>{
         setStarting(true);
         try{await onImportVideo(url);onOpenChange(false);}finally{setStarting(false);}
       }}/>:<a className="media-import-link" href={NEW_PROJECT_PATH}><Link2 size={16}/>Import from YouTube or MP4</a>}
