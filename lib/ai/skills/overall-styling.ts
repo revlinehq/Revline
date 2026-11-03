@@ -2,7 +2,7 @@ import type { EditorSkill } from './index';
 
 const example = `# Example: a stacked isometric diagram
 
-A complete scene module in the isometric line diagram style: a base block draws on, a second block drops onto it on support posts, labels wipe in, a dimension line and caption finish it, then it drifts. Adapt the shapes and times to the words; keep the values.
+A complete scene module in the isometric line diagram style: a base block draws on, a second block drops onto it on support posts, labels wipe in, a dimension line and caption finish it, then it holds. This is an example, not a preset: choose shapes, values and timing for the idea.
 
 \`\`\`ts
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
@@ -38,7 +38,7 @@ export default function scene({ root, tl, gsap }) {
   wipe(q('.baseLabel'), 1.5, .55);
   draw(q('.dim'), 1.8, 1.2);
   wipe(q('.caption'), 2.2, .8);
-  tl.to(q('.dia'), { x: -4, y: -6, duration: 2.4, ease: 'sine.inOut' }, 2.6); // never fully still
+  // Hold the completed relationship so it can be read.
 }
 \`\`\`
 
@@ -61,7 +61,7 @@ How everything looks: launch films, motion-design films, explainers over footage
 - The picture carries the eye: few words on screen, never the spoken words repeated as titles.
 - One product look: the Revline editor appears the same in every section of a film (one shared kit or blueprint, not copies).
 - Tip: when a film shows the same product UI in several sections, build it once (a blueprint, or one component in the film) and reuse it, changing only its state and framing. Take it from the real app's look: getBlueprint for the kit's blueprint, or measureScreen and compareScreen against the kit's screen of the real app. A version invented per section drifts: one launch film ended up with three different-looking Revline editors.
-- Something always moves; eased, never abrupt. Use the default unless the user names another look. The page "example" is a complete scene in this style to adapt.
+- Choose motion or stillness for the idea; a locked camera and held frame are valid. For original design and style inspiration, read motion-design page \`taste\`. The page "example" demonstrates technique, not a required composition.
 
 ## Isometric line diagram (default)
 
@@ -71,7 +71,7 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 - Panel background #0C0C0C, or transparent with a dark gradient (transparent to rgba(0,0,0,.65 to .85)) where it sits over footage.
 - Lines #D6D6D6 / #BDBDBD for main edges, #777 for axes and secondary posts, #888 for back edges and dimension lines. No background grids or grid lines: they are clutter.
 - Text #F5F5F5 for figures and labels, #A6A6A6 for kickers and axis labels, #858585 to #999 for notes and captions.
-- ONE accent, used on one edge or line per graphic: the subject's brand color when it has one (NVIDIA green #76B900 in the Jensen film), otherwise a muted single hue. Never a second accent, never gradients or glows.
+- ONE accent, used on one edge or line per graphic: the subject's brand color when it has one (NVIDIA green #76B900 in the Jensen film), otherwise a muted single hue. Keep the diagram strokes flat and avoid glows. Muted film-grain gradients may enrich a quiet background when the brief calls for them.
 
 ### Drawing
 - Isometric blocks: top face, front face and side face as separate paths, stroke 2.5, stroke-linejoin round. Faces get near-black fills (#111 to #202020), never solid color.
@@ -88,7 +88,7 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 - A stacked block drops in from about 38 px above while its clip opens (power3.out, 0.8 s).
 - Build in reading order, keyed to the words: base first, then what it carries, then the label, then the dimension line and caption.
 - Panels change by wiping or sliding (x 600 px, power3.inOut, 0.8 s), never by fading everything out.
-- Something always moves: once built, a graphic drifts a few px (sine.inOut, 2 to 4 s), a dot travels along its line, or a number counts up. No scan lines or sweeping bars.
+- Let a completed graphic hold for recognition. Move a dot or count a value when it communicates change; avoid decorative drift.
 - Counters animate with power3.out and settle on the spoken value.
 
 ### Subtitles

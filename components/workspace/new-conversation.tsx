@@ -19,9 +19,8 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { rememberOpeningRequest } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
-import { Captions, CircleHelp, Clapperboard, Plus, Scissors } from 'lucide-react';
+import { Captions, Clapperboard, Plus, Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
@@ -51,7 +50,6 @@ export function NewConversation() {
   const projects = useQuery(api.projects.list, isAuthenticated ? { limit: 6 } : 'skip');
   const library = useQuery(api.assets.library, isAuthenticated ? { paginationOpts: { numItems: 1, cursor: null } } : 'skip');
   const firstProject = projects?.length === 0;
-  const [tourOpen, setTourOpen] = useState(false);
   const picker=useRef<HTMLInputElement>(null);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
@@ -83,9 +81,7 @@ export function NewConversation() {
   const hasMedia = files.length + cloudIds.length > 0;
   const hasFootage = hasMedia || !!library?.page.length || !!projects?.some(project => project.clipCount > 0);
   const showStartingPoints = draftReady && projects !== undefined && library !== undefined && !hasFootage;
-  const headline = hasFootage
-    ? firstName ? `${firstName}, let’s edit your footage.` : 'Let’s edit your footage.'
-    : 'From an idea to a first cut.';
+  const headline = 'What are we making today?';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
@@ -315,12 +311,10 @@ export function NewConversation() {
             <h2 id="new-conversation-examples-title">Or borrow a starting point</h2>
             <div>{startingPoints.map(({ title, detail, prompt, icon: Icon }) => <Button key={title} variant="outline" className="new-conversation-example" disabled={!draftReady || busy} onClick={() => { changeDraft(prompt); document.querySelector<HTMLTextAreaElement>('.new-conversation-entry textarea')?.focus({ preventScroll: true }); }}><Icon aria-hidden="true"/><span><strong>{title}</strong><span>{detail}</span></span></Button>)}</div>
           </section>}
-          <footer className="new-conversation-help"><Button variant="outline" onClick={() => setTourOpen(true)}><CircleHelp aria-hidden="true"/>Take a quick tour</Button></footer>
+          {!firstProject && <RecentProjects/>}
         </div>
       </div>
-      {!firstProject && <RecentProjects/>}
     </main>}
     {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop to attach your footage'}</div>}
-    <Dialog open={tourOpen} onOpenChange={setTourOpen}><DialogContent className="workspace-dialog new-conversation-tour"><DialogHeader><DialogTitle>Your first edit</DialogTitle><DialogDescription>Start with an idea, your footage, or both.</DialogDescription></DialogHeader><ol><li><strong>Add your footage</strong><p>Use the plus button or drop videos, audio, or images into the page.</p></li><li><strong>Describe what you want</strong><p>Write your direction in the composer, or borrow a starting point.</p></li><li><strong>Make it your own</strong><p>Choose your model, effort and editing mode, then send. Keep refining in the editor.</p></li></ol><Button variant="outline" onClick={() => { setTourOpen(false); }}>Got it</Button></DialogContent></Dialog>
   </div>;
 }

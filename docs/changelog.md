@@ -4,6 +4,14 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 - Agent images: Add art-directed plates and text-first storyboards, sketch previews, style frames and approved animatics. Why: agree on film intent and pacing before building.
+- Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
+- Skills: Add motion taste judgments, reference learning and a short rendered critique anchored in user memory. Why: Zura asked for original design judgment beyond replication.
+- Editor: the new-project headline is now always “What are we making today?”. Why: the user picked it.
+- Editor: removed the gradient behind the new-project page; it is plain dark now. Why: the user asked to remove it.
+- Editor: the new-project composer is centred again, "Your projects" sits 20px below it, and the Pen mesh background is recreated in CSS with no image. Why: the user asked for a centred composer, a closer project list and no background image.
+- Editor: the new-project page rotates its headline once you have footage, and "Your projects" now starts in view. Why: the user disliked the fixed headline and the list sat below the fold.
+- Editor: the new-project gradient is now drawn in CSS with fine grain, so it stays sharp at any size and fades out instead of cutting off. Why: the image version looked low quality and was cropped.
+- Editor: removed the “Take a quick tour” button and dialog from the new-project page. Why: the user didn't want it.
 - Editor: the empty new-project headline is back to “From an idea to a first cut.”; the personal headline shows only once footage exists. Why: the user wanted the original empty-state line.
 - Workspace: Greet users by name and hide starter prompts once footage is attached or saved, or timeline clips exist. Why: Zura wants a useful invitation for each editing state.
 - Assets: Retain the optional generated-image provenance validator already used in development. Why: deploy the composer branch without rejecting existing media.

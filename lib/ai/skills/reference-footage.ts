@@ -121,6 +121,8 @@ export const referenceFootage: EditorSkill = {
 
 The user shares a finished video and wants either a **remake** (the same edit made with their own material) or a **style borrow** (one or more parts of it applied to their edit).
 
+For original work inspired by a reference, read motion-design page \`taste\`: extract the reasons behind its choices and find a new expression. The remake and borrow workflows below apply when the user asks to reproduce or apply specific parts.
+
 ## 1. Break it down
 - Run analyzeMedia with mode reference on the shared video. It measures the cuts and beats, then splits every shot into parts: transition in, camera, look, the screen's parts (background, footage, ui, title, caption, logo, product, person, cursor, shape, emoji, overlay) and title styles. It also writes the five-line style direction and the signatures (the moves that define the style).
 - Measure at full resolution. Read positions, sizes and type from full-size frames (readFrames with crop, and measureFrame for exact colors and edges), never from a downscaled contact sheet: a shrunk sheet makes type and objects look about half their real size.
