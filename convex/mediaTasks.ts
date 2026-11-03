@@ -2,7 +2,7 @@ import { processorBackend } from './lib/processor_backend';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
-import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
+import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
@@ -351,7 +351,7 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   if(new Set(candidates.map(task=>task.ownerId)).size<2)return candidates[0]??null;
   const busy=new Map<string,boolean>();
   for(const task of candidates){
-    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await ctx.db.query('mediaTasks').withIndex('by_owner_status',q=>q.eq('ownerId',task.ownerId).eq('status','running')).take(FAIR_RUNNING_PER_OWNER)).length>=FAIR_RUNNING_PER_OWNER);
+    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await runningMediaTaskCount(ctx,task.ownerId,FAIR_RUNNING_PER_OWNER))>=FAIR_RUNNING_PER_OWNER);
     if(!busy.get(task.ownerId))return task;
   }
   return candidates[0];
@@ -445,7 +445,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(!saved.sourceTimeline&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
     // A share card: the published timeline, as people who open the link will see it.
     let card:{title:string}|undefined;
-    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=share.timeline;card={title:share.cardTitle??share.title};}
+    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=await loadSceneCode(ctx,share.timeline);card={title:share.cardTitle??share.title};}
     // A scene clip's own filmstrip: that clip alone, from its first frame.
     // The visual guard: a proposed change beside the timeline it would replace.
     let baseline:Timeline|undefined;
@@ -628,7 +628,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     await ctx.db.patch(snapshot._id, { status: 'completed', frames });
     if (snapshot.clipId && snapshot.key) await ctx.scheduler.runAfter(0, internal.sceneThumbs.storeImages, { snapshotId: snapshot._id });
     // A share card goes onto its share; the request itself is not kept.
-    if (snapshot.shareId && frames[0]) { const share = await ctx.db.get(snapshot.shareId); if (share?.published) await ctx.db.patch(share._id, { cardImage: frames[0].image, cardUpdatedAt: Date.now() }); await ctx.db.delete(snapshot._id); }
+    if (snapshot.shareId && frames[0]) await ctx.scheduler.runAfter(0, internal.timelineShares.storeCard, { snapshotId: snapshot._id });
   },
   render: async (ctx, task) => {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;

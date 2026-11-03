@@ -1,7 +1,7 @@
 import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
 import { shareAnalysis } from './lib/asset_analysis';
 import { writeProject,createProject,readProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
-import { loadSceneCode, sceneCodeText } from './lib/scene_code';
+import { loadSceneCode, storeSceneCode, sceneCodeText } from './lib/scene_code';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
@@ -106,7 +106,7 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
     return baked;
   };
   const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
-  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline) });
+  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: await storeSceneCode(ctx,remap(row.timeline)) });
   await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
   return copyId;
 }

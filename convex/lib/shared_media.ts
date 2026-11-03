@@ -48,7 +48,7 @@ export async function removeShareTabs(ctx:MutationCtx,shareId:Id<'timelineShares
 }
 export async function removeProjectShares(ctx:MutationCtx,projectId:Id<'projects'>){
   const shares=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).take(2);
-  for(const share of shares){await removeShareAssets(ctx,share._id);await removeShareTabs(ctx,share._id);await ctx.db.delete(share._id);}
+  for(const share of shares){if(share.cardStorageId)await ctx.storage.delete(share.cardStorageId);await removeShareAssets(ctx,share._id);await removeShareTabs(ctx,share._id);await ctx.db.delete(share._id);}
 }
 
 /** The playback fields a shared timeline copies from one source asset; its analysis stays with the source. */

@@ -108,8 +108,11 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const previous:HistoryEntry[]=project.history!==undefined?project.history.map(timeline=>({timeline})):rows.slice(-HISTORY_LIMIT).map(row=>({id:row.id,key:row.key||undefined,bytes:row.bytes,...(row.timeline?{timeline:row.timeline}:{})}));
   // Kept rows must stay in sequence order ahead of every inserted snapshot.
   const order=new Map(rows.map((row,index)=>[row.id,index]));let last=-1,fresh=false;
-  const next:HistoryEntry[]=[];
-  for(const entry of boundedEntries(await plan(previous))){
+  const next:HistoryEntry[]=[],known=storedSceneCode(project.timeline);
+  // Apply the history budget to the bytes actually stored, not hydrated scene code.
+  const planned=await plan(previous);
+  const sized=await Promise.all(planned.map(async entry=>entry.bytes!==undefined||!entry.timeline?entry:{...entry,bytes:serializedBytes(await storeSceneCode(ctx,entry.timeline,known))}));
+  for(const entry of boundedEntries(sized)){
     const index=entry.id===undefined?undefined:order.get(entry.id);
     if(!fresh&&index!==undefined&&index>last){last=index;next.push(entry);continue;}
     // A stored snapshot moved out of order is written again, so read it before its row goes.
@@ -118,7 +121,7 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const kept=new Set(next.flatMap(entry=>entry.id?[entry.id]:[]));
   for(const row of rows)if(!kept.has(row.id))await ctx.db.delete(row.id);
   let sequence=rows.at(-1)?.sequence??0;
-  const byId=new Map(rows.map(row=>[row.id,row])),known=storedSceneCode(project.timeline);
+  const byId=new Map(rows.map(row=>[row.id,row]));
   const entries:IndexedRevision[]=[];
   for(const entry of next){
     const stored=entry.id&&byId.get(entry.id);

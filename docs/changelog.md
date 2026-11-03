@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Scenes and media: Keep stored scene code and share cards out of subscribed rows, retain large-film undo, and isolate worker scheduling from heartbeats. Why: large scenes could hit document limits and queue reads still conflicted with progress updates.
+
 - Security: Restrict remote downloads, pin published thumbnails, check all tabs before deleting media, and throttle paid retries and audio. Why: the audit found privacy, SSRF, data-loss and cost-control gaps.
 
 - Database I/O: Separate numeric task progress, slim chat display rows and turn status, and keep run bookkeeping off timeline and prompt payloads. Why: large subscribed rows and repeated progress writes amplified database reads.

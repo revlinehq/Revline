@@ -3,21 +3,24 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
 const active = (status: Doc<'mediaTasks'>['status']) => status === 'queued' || status === 'running' || status === 'retrying';
-function reservation(task: Pick<Doc<'mediaTasks'>, '_id' | 'ownerId' | 'projectId' | 'kind' | 'sourceUrl' | 'importRange' | 'sourcesOnly'>) {
-  return { taskId: task._id, ownerId: task.ownerId, projectId: task.projectId, kind: task.kind, sourceUrl: task.sourceUrl, importRange: task.importRange, sourcesOnly: task.sourcesOnly };
+function reservation(task: Pick<Doc<'mediaTasks'>, '_id' | 'ownerId' | 'projectId' | 'kind' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'status'>) {
+  return { status: task.status, taskId: task._id, ownerId: task.ownerId, projectId: task.projectId, kind: task.kind, sourceUrl: task.sourceUrl, importRange: task.importRange, sourcesOnly: task.sourcesOnly };
 }
 
 /** Reservations change only when work enters or leaves the queue, never on a worker heartbeat. */
 export async function initializeMediaCapacity(ctx: MutationCtx | QueryCtx, ownerId: string) {
-  if (await ctx.db.query('mediaCapacityOwners').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique()) return true;
+  const state = await ctx.db.query('mediaCapacityOwners').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+  if (state?.schedulingVersion === 1) return true;
   const db = ctx.db;
   if (!('insert' in db)) return false;
   for (const status of ['queued', 'running', 'retrying'] as const) {
     for await (const task of ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status))) {
-      await db.insert('mediaTaskSlots', reservation(task));
+      const slot = await ctx.db.query('mediaTaskSlots').withIndex('by_task', q => q.eq('taskId', task._id)).unique();
+      if (slot) await db.patch(slot._id, reservation(task)); else await db.insert('mediaTaskSlots', reservation(task));
     }
   }
-  await db.insert('mediaCapacityOwners', { ownerId });
+  if (state) await db.patch(state._id, { schedulingVersion: 1 });
+  else await db.insert('mediaCapacityOwners', { ownerId, schedulingVersion: 1 });
   return true;
 }
 
@@ -54,10 +57,13 @@ export async function patchMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, 
     projectId: task.projectId, deployment: incidentDeployment(),
   });
   await ctx.db.patch(task._id, patch);
-  if (patch.status && active(task.status) !== active(patch.status)) {
+  if (patch.status && patch.status !== task.status) {
     await initializeMediaCapacity(ctx, task.ownerId);
     const slot = await ctx.db.query('mediaTaskSlots').withIndex('by_task', q => q.eq('taskId', task._id)).unique();
-    if (active(patch.status)) { if (!slot) await ctx.db.insert('mediaTaskSlots', reservation(task)); }
+    if (active(patch.status)) {
+      const value = reservation({ ...task, ...patch });
+      if (slot) await ctx.db.patch(slot._id, value); else await ctx.db.insert('mediaTaskSlots', value);
+    }
     else if (slot) await ctx.db.delete(slot._id);
   }
   await syncMediaTask(ctx, { ...task, ...patch });
@@ -71,4 +77,17 @@ export async function deleteMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>
   if (view) await ctx.db.delete(view._id);
   if (slot) await ctx.db.delete(slot._id);
   await ctx.db.delete(taskId);
+}
+
+/** Fairness and seat reads depend on status transitions, never lease/progress writes. */
+export async function runningMediaTaskCount(ctx: MutationCtx | QueryCtx, ownerId: string, limit: number, kind?: Doc<'mediaTasks'>['kind']) {
+  if (await initializeMediaCapacity(ctx, ownerId)) {
+    return (await ctx.db.query('mediaTaskSlots').withIndex('by_owner_status_kind', q => {
+      const owner = q.eq('ownerId', ownerId).eq('status', 'running');
+      return kind ? owner.eq('kind', kind) : owner;
+    }).take(limit)).length;
+  }
+  // Legacy owners are upgraded by their next mutation; read-only queries stay compatible.
+  const running = ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', 'running'));
+  return (await (kind ? running.filter(q => q.eq(q.field('kind'), kind)) : running).take(limit)).length;
 }

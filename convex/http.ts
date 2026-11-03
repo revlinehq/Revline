@@ -23,6 +23,7 @@ http.route({ path: "/share-card", method: "GET", handler: httpAction(async (ctx,
   const shareId = new URL(request.url).searchParams.get("share") ?? "";
   const image = shareId ? await ctx.runQuery(api.timelineShares.cardImage, { shareId }) : null;
   if (!image) return new Response("Not found", { status: 404 });
+  if (image.startsWith('https://')) return Response.redirect(image, 302);
   const bytes = Uint8Array.from(atob(image), c => c.charCodeAt(0));
   return new Response(bytes, { headers: { "Content-Type": "image/jpeg", "Cache-Control": "public, max-age=300" } });
 }) });
