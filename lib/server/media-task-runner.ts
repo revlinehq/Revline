@@ -27,7 +27,7 @@ import { runBlueprintCheck } from './blueprint-check';
 import { extractSourceAudio } from './extract-audio';
 import { measureAudioWaveform } from './audio-waveform';
 import { measureAudioActivity } from './measure-audio-activity';
-import { mediaSourceCacheIdentity, reuseMediaFile } from './media-file-cache';
+import { mediaSourceCacheIdentity, reuseCachedMediaFile, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile, type UploadContext } from './upload-media-file';
 import { identifyPlayback, prepareTimelinePlayback, publishPlaybackPoster } from './prepare-playback';
 import { runDistributedRender, runRenderWorker } from './render-worker';
@@ -149,12 +149,19 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     // originals reach hundreds of MB, and downloading and re-encoding one took
     // minutes before Gemini could start. The preview keeps every frame and audio.
     // Speaker cuts must retain native PTS; older previews may have rounded the frame clock.
-    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    // A passthrough preview is the same immutable source, so keep its source
+    // cache identity instead of downloading a second copy for Gemini.
+    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewR2Key !== asset.r2Key && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
     const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
-    const source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : join(directory, 'source'), sourceUrl = download.url;
+    const localSource = join(directory, 'source'), sourceUrl = download.url;
+    let source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : localSource;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
+    // Playback preparation may already hold the whole immutable VOD. Range
+    // reads and audio extraction reuse it rather than stream it from R2 again.
+    const reusedRangeSource = rangeRead && await reuseCachedMediaFile({ identity: cacheIdentity, variant: 'source-v1', target: localSource, signal, expectedBytes: download.size });
+    if (reusedRangeSource) source = localSource;
     let posterReady=!!asset.thumbnailStorageId;
     if(task.kind==='preview'){
       try{await publishPlaybackPoster(sourceUrl,directory,task,uploadContext,signal);posterReady=true;}catch(error){if(signal.aborted)throw error;}
@@ -162,7 +169,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
-    const reusedSource = rangeRead ? false : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
+    const reusedSource = rangeRead ? reusedRangeSource : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
       concurrency: task.kind === 'extract' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();

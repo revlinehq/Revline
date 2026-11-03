@@ -34,7 +34,7 @@ async function measureAudioEnergy(input: string, signal: AbortSignal): Promise<{
     peakDb[frameCount] = 20 * Math.log10(Math.max(1e-6, peak));
     frameCount++; frameSampleCount = 0; sums.fill(0); peaks.fill(0);
   };
-  const child = spawn('ffmpeg', ['-v', 'error', '-copyts', ...mediaInputOptions(input), '-i', input, '-map', '0:a:0', '-vn', '-af', `aresample=${SAMPLE_RATE}:async=1:first_pts=0`, '-acodec', 'pcm_f32le', '-f', 'f32le', '-'], { signal, timeout: 180_000, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('ffmpeg', ['-v', 'error', '-copyts', ...mediaInputOptions(input), '-i', input, '-map', '0:a:0', '-vn', '-af', `aresample=${SAMPLE_RATE}:async=1:first_pts=0`, '-acodec', 'pcm_f32le', '-f', 'f32le', '-'], { signal, timeout: /^https?:\/\//.test(input) ? undefined : 180_000, stdio: ['ignore', 'pipe', 'pipe'] });
   let errorOutput = '', childError: Error | undefined;
   child.stderr.on('data', (chunk: Buffer) => { if (errorOutput.length < 4096) errorOutput += chunk.toString().slice(0, 4096 - errorOutput.length); });
   // Register immediately: spawn errors or aborts can precede stream iteration.

@@ -402,7 +402,7 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
 export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
   const role=requireMediaWorker(args.workerSecret);
   const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
-  if(local&&((args.processorVersion??1)<36||args.excludedKinds===undefined))return '';
+  if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return '';
   if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return '';
   const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports',args.excludedKinds);return task?`${task._id}:${task.attempt}`:'';
 }});
@@ -496,7 +496,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
 export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
   const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
-  if(local&&((args.processorVersion??1)<36||args.excludedKinds===undefined))return null;
+  if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return null;
   if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return null;
   const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports',args.excludedKinds);if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}

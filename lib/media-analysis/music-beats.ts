@@ -12,7 +12,7 @@ export async function detectMusicBeats(source: string, duration: number, signal:
   const directory = await mkdtemp(join(tmpdir(), 'revline-beats-'));
   try {
     const audio = join(directory, 'music.wav');
-    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
+    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio], { signal, timeout: /^https?:\/\//.test(source) ? undefined : 60_000, maxBuffer: 1024 * 1024 });
     const python = workerToolPath(process.env.BEAT_TRACK_PYTHON, '.data/beat-tracking/bin/python');
     const model = workerToolPath(process.env.BEAT_TRACK_MODEL_PATH, '.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt');
     let stdout: string;

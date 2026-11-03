@@ -22,7 +22,7 @@ export async function measureSpeechCleanup(input: string, duration: number, tran
 async function decodeMono(input: string, duration: number, signal: AbortSignal) {
   const capacity = Math.ceil((duration + 1) * SAMPLE_RATE);
   const samples = new Float32Array(capacity);
-  const child = spawn('ffmpeg', ['-v', 'error', '-copyts', ...mediaInputOptions(input), '-i', input, '-map', '0:a:0', '-vn', '-ac', '1', '-af', `aresample=${SAMPLE_RATE}:async=1:first_pts=0`, '-acodec', 'pcm_f32le', '-f', 'f32le', '-'], { signal, timeout: 300_000, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn('ffmpeg', ['-v', 'error', '-copyts', ...mediaInputOptions(input), '-i', input, '-map', '0:a:0', '-vn', '-ac', '1', '-af', `aresample=${SAMPLE_RATE}:async=1:first_pts=0`, '-acodec', 'pcm_f32le', '-f', 'f32le', '-'], { signal, timeout: /^https?:\/\//.test(input) ? undefined : 300_000, stdio: ['ignore', 'pipe', 'pipe'] });
   let errorOutput = '';
   child.stderr.on('data', (chunk: Buffer) => { if (errorOutput.length < 4096) errorOutput += chunk.toString().slice(0, 4096 - errorOutput.length); });
   const completion = new Promise<void>((resolve, reject) => {
