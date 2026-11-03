@@ -19,6 +19,25 @@ export const clipCheckRequestValidator = v.object({
     ),
   ),
 });
+const line = v.object({ start: v.number(), end: v.number(), text: v.string() });
+export const fallbackMoment = v.object({
+  start: v.number(),
+  end: v.number(),
+  title: v.string(),
+  kind: v.union(
+    v.literal("punchline"),
+    v.literal("story"),
+    v.literal("opinion"),
+    v.literal("quote"),
+    v.literal("question-answer"),
+    v.literal("action"),
+  ),
+  hook: line,
+  payoff: line,
+  reactionEnd: v.number(),
+  score: v.number(),
+  reason: v.string(),
+});
 export const clippingChoice = v.object({
   candidateId: v.string(),
   name: v.string(),
@@ -38,8 +57,10 @@ export const clippingManifest = v.object({
   assetId: v.id("assets"),
   createdAt: v.number(),
   delivery: v.boolean(),
+  unavailableReason: v.optional(v.string()),
   candidates: v.string(),
   recommendedCount: v.number(),
+  requestedCount: v.optional(v.number()),
   reviewed: v.boolean(),
   accepted: v.array(clippingChoice),
   dropped: v.array(v.object({ candidateId: v.string(), reason: v.string() })),

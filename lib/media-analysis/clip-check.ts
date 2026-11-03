@@ -144,7 +144,7 @@ export function checkClipData(
   const boundary: string[] = [];
   if (!tracks)
     boundary.push(
-      "Saved Gemini highlight judgment is missing. Run findHighlights first.",
+      "Saved source highlight/helper analysis is missing. Run findHighlights first.",
     );
   if (words.length) {
     if (

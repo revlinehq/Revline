@@ -150,7 +150,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
-    if (task.kind === 'highlights' && readHighlights(asset.analysis?.highlights) && (!task.highlightSourceType || readHighlights(asset.analysis?.highlights)?.sourceType===task.highlightSourceType)) return {analysis:{highlights:asset.analysis!.highlights}};
+    if (task.kind === 'highlights' && readHighlights(asset.analysis?.highlights)?.judge==='gemini' && (!task.highlightSourceType || readHighlights(asset.analysis?.highlights)?.sourceType===task.highlightSourceType)) return {analysis:{highlights:asset.analysis!.highlights}};
     if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     // A breakdown saved before moments were measured only needs its moments; the model pass stays.
@@ -297,7 +297,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'highlights') {
       if (!media.hasVideo) throw new AnalysisError('Highlight discovery requires source video for Gemini to watch.', 400, false);
-      return {analysis:{highlights:JSON.stringify(await runPhase('Finding highlights',()=>findSourceHighlights({source,duration:asset.duration??media.duration,video:media.hasVideo,transcript:asset.analysis?.transcript,sourceType:task.highlightSourceType,cacheIdentity,cache:new FrameCache(convex,credentials,signal)},signal,onProgress,reportGeminiActivity)))}};
+      return {analysis:{highlights:JSON.stringify(await runPhase('Finding highlights',()=>findSourceHighlights({source,duration:asset.duration??media.duration,video:media.hasVideo,transcript:asset.analysis?.transcript,sourceType:task.highlightSourceType,geminiUnavailableReason:task.highlightSkipGemini,sceneCuts:asset.analysis?.shots?.shots.map(s=>s.start),cacheIdentity,cache:new FrameCache(convex,credentials,signal)},signal,onProgress,reportGeminiActivity)))}};
     }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);

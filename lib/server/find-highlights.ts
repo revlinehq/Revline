@@ -66,6 +66,8 @@ export async function findSourceHighlights(
     sourceType?: SourceType;
     cacheIdentity?: string;
     cache?: FrameCache;
+    geminiUnavailableReason?: string;
+    sceneCuts?: number[];
   },
   signal: AbortSignal,
   progress: (n: number) => void,
@@ -78,12 +80,6 @@ export async function findSourceHighlights(
       false,
     );
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  if (!key)
-    throw new AnalysisError(
-      "Gemini highlight discovery is unavailable: video analysis is not configured. No moments were judged or accepted.",
-      503,
-      false,
-    );
   const started = Date.now(),
     directory = await mkdtemp(join(tmpdir(), "revline-highlights-"));
   try {
@@ -100,116 +96,160 @@ export async function findSourceHighlights(
       directory,
       signal,
     );
+    const fallback = (reason: string) =>
+      highlightTracks.parse({
+        version: 3,
+        judge: "fallback",
+        unavailableReason: reason.slice(0, 1000),
+        duration: input.duration,
+        sourceType: input.sourceType ?? "talk",
+        typeReason: input.sourceType
+          ? "User-provided type."
+          : "Fallback: infer type while reading the transcript and source frames.",
+        levelStep: 0.5,
+        ...audio,
+        moments: [],
+        sceneCuts: input.sceneCuts ?? [],
+        warnings: [
+          "Gemini unavailable. Pick moments from the transcript, audio helpers, scene cuts and targeted readFrames, then register them with planClips found.",
+        ],
+        coverage: {
+          audioSeconds: audio.audioSeconds,
+          transcriptWords: input.transcript?.words.length ?? 0,
+          videoWindows: [],
+        },
+        elapsedMs: Date.now() - started,
+      });
+    if (input.geminiUnavailableReason || !key)
+      return fallback(
+        input.geminiUnavailableReason ?? "Gemini is not configured.",
+      );
     progress(15);
     const windows = highlightWindows(input.duration),
       judgments: HighlightJudgment[] = new Array(windows.length);
     let complete = 0;
-    await forEachLimited(windows, 2, async (window, stop) => {
-      const active = AbortSignal.any([signal, stop]),
-        localDuration = window.end - window.start;
-      const transcript = transcriptWindow(
-        input.transcript,
-        window.start,
-        window.end,
-      );
-      const peaks = audio.signals
-        .filter(
-          (s) =>
-            s.kind === "spike" && s.start < window.end && s.end >= window.start,
-        )
-        .sort((a, b) => b.strength - a.strength)
-        .slice(0, 40)
-        .map((s) => ({
-          start: Math.max(0, s.start - window.start),
-          end: Math.min(localDuration, s.end - window.start),
-        }));
-      const produce = async () => {
-        let video = input.source;
-        if (windows.length > 1) {
-          video = join(directory, "window-" + window.start + ".mp4");
-          await reuseMediaFile(
-            {
-              identity: input.cacheIdentity,
-              variant: "highlight-window-v2:" + window.start + ":" + window.end,
-              target: video,
-              signal: active,
-            },
-            () =>
-              extractVideoWindow(
-                input.source,
-                video,
-                window.start,
-                window.end,
-                active,
-              ),
-          );
-        } else {
-          const bytes = (await stat(input.source)).size;
-          if (
-            needsAnalysisVideoProxy({ size: bytes }, input.duration, "overview")
-          ) {
-            video = join(directory, "overview.mp4");
+    try {
+      await forEachLimited(windows, 2, async (window, stop) => {
+        const active = AbortSignal.any([signal, stop]),
+          localDuration = window.end - window.start;
+        const transcript = transcriptWindow(
+          input.transcript,
+          window.start,
+          window.end,
+        );
+        const peaks = audio.signals
+          .filter(
+            (s) =>
+              s.kind === "spike" &&
+              s.start < window.end &&
+              s.end >= window.start,
+          )
+          .sort((a, b) => b.strength - a.strength)
+          .slice(0, 40)
+          .map((s) => ({
+            start: Math.max(0, s.start - window.start),
+            end: Math.min(localDuration, s.end - window.start),
+          }));
+        const produce = async () => {
+          let video = input.source;
+          if (windows.length > 1) {
+            video = join(directory, "window-" + window.start + ".mp4");
             await reuseMediaFile(
               {
                 identity: input.cacheIdentity,
-                variant: "analysis-overview-v1",
+                variant:
+                  "highlight-window-v2:" + window.start + ":" + window.end,
                 target: video,
                 signal: active,
-                maxBytes: bytes - 1,
               },
-              () => prepareVideo(input.source, video, active, "overview"),
+              () =>
+                extractVideoWindow(
+                  input.source,
+                  video,
+                  window.start,
+                  window.end,
+                  active,
+                ),
             );
-            if ((await stat(video)).size >= bytes) video = input.source;
+          } else {
+            const bytes = (await stat(input.source)).size;
+            if (
+              needsAnalysisVideoProxy(
+                { size: bytes },
+                input.duration,
+                "overview",
+              )
+            ) {
+              video = join(directory, "overview.mp4");
+              await reuseMediaFile(
+                {
+                  identity: input.cacheIdentity,
+                  variant: "analysis-overview-v1",
+                  target: video,
+                  signal: active,
+                  maxBytes: bytes - 1,
+                },
+                () => prepareVideo(input.source, video, active, "overview"),
+              );
+              if ((await stat(video)).size >= bytes) video = input.source;
+            }
           }
-        }
-        const actual = await probeMedia(video, active);
-        if (localDuration - actual.duration > 2)
-          throw new AnalysisError(
-            "A Gemini highlight window is incomplete. No partial ranking was accepted.",
-            422,
-            false,
+          const actual = await probeMedia(video, active);
+          if (localDuration - actual.duration > 2)
+            throw new AnalysisError(
+              "A Gemini highlight window is incomplete. No partial ranking was accepted.",
+              422,
+              false,
+            );
+          return findVideoHighlights(
+            video,
+            Math.min(localDuration, actual.duration),
+            {
+              transcript,
+              peaks,
+              sourceType: input.sourceType,
+              sourceOffset: window.start,
+            },
+            key,
+            active,
+            "video/mp4",
+            onActivity,
           );
-        return findVideoHighlights(
-          video,
-          Math.min(localDuration, actual.duration),
-          {
-            transcript,
-            peaks,
-            sourceType: input.sourceType,
-            sourceOffset: window.start,
-          },
-          key,
-          active,
-          "video/mp4",
-          onActivity,
+        };
+        const helperKey = createHash("sha256")
+          .update(JSON.stringify({ transcript, peaks }))
+          .digest("hex");
+        const descriptor = {
+          kind: "highlight-judgment",
+          version: 3,
+          start: window.start,
+          end: window.end,
+          sourceType: input.sourceType,
+          model: process.env.GEMINI_VIDEO_MODEL || "gemini-3.7-flash",
+          helperKey,
+        };
+        judgments[Math.floor(window.start / WINDOW)] = highlightJudgment.parse(
+          input.cache
+            ? await input.cache.json(descriptor, produce)
+            : await produce(),
         );
-      };
-      const helperKey = createHash("sha256")
-        .update(JSON.stringify({ transcript, peaks }))
-        .digest("hex");
-      const descriptor = {
-        kind: "highlight-judgment",
-        version: 2,
-        start: window.start,
-        end: window.end,
-        sourceType: input.sourceType,
-        model: process.env.GEMINI_VIDEO_MODEL || "gemini-3.7-flash",
-        helperKey,
-      };
-      judgments[Math.floor(window.start / WINDOW)] = highlightJudgment.parse(
-        input.cache
-          ? await input.cache.json(descriptor, produce)
-          : await produce(),
+        progress(15 + Math.round((80 * ++complete) / windows.length));
+      });
+    } catch (error) {
+      signal.throwIfAborted();
+      return fallback(
+        error instanceof Error
+          ? error.message
+          : "Gemini video analysis unavailable.",
       );
-      progress(15 + Math.round((80 * ++complete) / windows.length));
-    });
+    }
     const votes = new Map<SourceType, number>();
     for (const judged of judgments)
       votes.set(judged.sourceType, (votes.get(judged.sourceType) ?? 0) + 1);
     const detected =
       input.sourceType ?? [...votes].sort((a, b) => b[1] - a[1])[0][0];
     return highlightTracks.parse({
-      version: 2,
+      version: 3,
       judge: "gemini",
       duration: input.duration,
       sourceType: detected,
@@ -259,16 +299,21 @@ export async function findSourceHighlights(
     });
   } catch (error) {
     signal.throwIfAborted();
-    if (error instanceof AnalysisError)
+    if (error instanceof AnalysisError) {
+      const reason =
+        error.status === 402
+          ? "Gemini native video requires a Google key with active billing (HTTP 402). Restore provider credits before retrying."
+          : error.message;
       throw new AnalysisError(
         "Gemini highlight discovery could not complete: " +
-          error.message +
+          reason +
           " No partial or signal-only ranking was returned.",
         error.status,
         error.retryable,
       );
+    }
     throw new AnalysisError(
-      'Gemini highlight discovery could not complete. No partial or signal-only ranking was returned. Retry after video analysis is available.',
+      "Gemini highlight discovery could not complete. No partial or signal-only ranking was returned. Retry after video analysis is available.",
       502,
       true,
     );

@@ -25,10 +25,12 @@ import {
   HIGHLIGHT_QUALITY_BAR,
   rankHighlights,
   readHighlights,
+  semanticMoment,
   type SourceType,
 } from "../lib/media-analysis/highlights";
 import {
   clippingChoice,
+  fallbackMoment,
   clipCheckRequestValidator,
 } from "./lib/clipping_validator";
 import { timelineDuration, type Timeline } from "../lib/editor/types";
@@ -106,7 +108,9 @@ export const begin = internalMutation({
     const asset = await hydrateAsset(ctx, raw),
       tracks = readHighlights(asset.analysis?.highlights);
     if (!tracks)
-      throw new ConvexError("Highlight discovery has no saved Gemini judgment.");
+      throw new ConvexError(
+        "Highlight discovery has no saved source analysis.",
+      );
     const candidates = rankHighlights(
       tracks,
       asset.analysis?.transcript,
@@ -117,8 +121,11 @@ export const begin = internalMutation({
     }));
     const qualified = candidates.filter((c) => c.qualified).length;
     const recommendedCount = Math.min(
-      args.count ?? defaultClipCount(tracks.duration, qualified),
-      qualified,
+      args.count ??
+        (tracks.judge === "fallback"
+          ? Math.min(10, Math.max(3, Math.round(tracks.duration / 150)))
+          : defaultClipCount(tracks.duration, qualified)),
+      tracks.judge === "fallback" ? 10 : qualified,
       Math.max(0, MAX_TIMELINE_TABS - tabsOf(project).length),
     );
     const previous = await rowFor(ctx, args);
@@ -136,8 +143,12 @@ export const begin = internalMutation({
         assetId: asset._id,
         createdAt: Date.now(),
         delivery: args.delivery,
+        ...(tracks.unavailableReason
+          ? { unavailableReason: tracks.unavailableReason }
+          : {}),
         candidates: JSON.stringify(candidates),
         recommendedCount,
+        ...(args.count ? { requestedCount: args.count } : {}),
         reviewed: false,
         accepted: [],
         dropped: [],
@@ -152,6 +163,9 @@ export const begin = internalMutation({
         delivery: previous.delivery || args.delivery,
         candidates: JSON.stringify(candidates),
         recommendedCount,
+        ...(tracks.unavailableReason
+          ? { unavailableReason: tracks.unavailableReason }
+          : {}),
       });
     else if (args.delivery && !previous.delivery)
       await ctx.db.patch(previous._id, { delivery: true });
@@ -170,6 +184,21 @@ export const begin = internalMutation({
       warnings: tracks.warnings,
       analysisMs: tracks.elapsedMs,
       cacheVersion: tracks.version,
+      discoveryMode: tracks.judge,
+      ...(tracks.judge === "fallback"
+        ? {
+            geminiUnavailableReason: tracks.unavailableReason,
+            transcript: asset.analysis?.transcript?.segments ?? [],
+            peaks: tracks.signals
+              .filter((s) => s.kind === "spike")
+              .sort((a, b) => b.strength - a.strength)
+              .slice(0, 60),
+            sceneCuts:
+              asset.analysis?.shots?.shots.map((s) => s.start) ??
+              tracks.sceneCuts,
+            next: "Gemini unavailable: do not call it again in this run. Read the transcript across the source, inspect shortlisted source frames, then call planClips found with grounded hooks/payoffs, score and evidence. The server returns candidate IDs; accept/drop those IDs in the next planClips call. Never stop at suggestions when clips were requested.",
+          }
+        : {}),
       note: "Review top 8-10. Call planClips with accepted IDs and named tabs; give reasons for rejected reviewed candidates. checkClip each tab, then finishClipping. Never pad to the count.",
     };
   },
@@ -178,16 +207,104 @@ export const begin = internalMutation({
 export const review = internalMutation({
   args: {
     ...runArgs,
-    accepted: v.array(clippingChoice),
+    found: v.optional(v.array(fallbackMoment)),
+    accepted: v.optional(v.array(clippingChoice)),
     editorRunId: v.optional(v.string()),
-    dropped: v.array(v.object({ candidateId: v.string(), reason: v.string() })),
+    dropped: v.optional(
+      v.array(v.object({ candidateId: v.string(), reason: v.string() })),
+    ),
   },
   returns: v.any(),
-  handler: async (ctx, args) => {
+  handler: async (ctx, input) => {
+    const args = {
+      ...input,
+      accepted: input.accepted ?? [],
+      dropped: input.dropped ?? [],
+    };
     const project = await requireProject(ctx, args.projectId, args.ownerId);
     const row = await rowFor(ctx, args);
     if (!row || row.ownerId !== args.ownerId)
       throw new ConvexError("Call findHighlights before planning this batch.");
+    if (args.found) {
+      if (!row.unavailableReason)
+        throw new ConvexError(
+          "Agent-found moments are only used after Gemini is unavailable.",
+        );
+      if (row.reviewed)
+        throw new ConvexError(
+          "Keep the existing reviewed plan; revise accepted/dropped choices instead of resetting found moments.",
+        );
+      if (!args.found.length || args.found.length > 30)
+        throw new ConvexError(
+          "Register 1-30 distinct reviewed fallback moments.",
+        );
+      const raw = await ctx.db.get(row.assetId);
+      if (!raw) throw new ConvexError("The source was removed.");
+      const source = await hydrateAsset(ctx, raw),
+        tracks = readHighlights(source.analysis?.highlights);
+      if (!tracks) throw new ConvexError("Source helper analysis is missing.");
+      const normalize = (text: string) =>
+        text
+          .toLowerCase()
+          .replace(/[^\p{L}\p{N}]+/gu, " ")
+          .trim();
+      const moments = args.found.map((raw) => {
+        const m = semanticMoment.parse(raw);
+        if (
+          m.start < 0 ||
+          m.end > (source.duration ?? 0) ||
+          m.end <= m.start ||
+          m.hook.start < m.start ||
+          m.hook.end > m.end ||
+          m.hook.end < m.hook.start ||
+          m.payoff.start < m.hook.start ||
+          m.payoff.end > m.end ||
+          m.payoff.end < m.payoff.start ||
+          m.reactionEnd < m.payoff.end ||
+          m.reactionEnd > m.end ||
+          m.reason.trim().length < 20
+        )
+          throw new ConvexError(
+            "Fallback moments need an intact hook/payoff/reaction and concrete source evidence.",
+          );
+        for (const line of [m.hook, m.payoff])
+          if (line.text.trim()) {
+            const measured = (source.analysis?.transcript?.words ?? [])
+              .filter(
+                (w) => w.start >= line.start - 0.2 && w.end <= line.end + 0.2,
+              )
+              .map((w) => w.text)
+              .join(" ");
+            if (!normalize(measured).includes(normalize(line.text)))
+              throw new ConvexError(
+                "Fallback hook/payoff quotes must match the saved word timings. Leave non-verbal lines empty and describe checked source frames.",
+              );
+          }
+        return m;
+      });
+      const candidates = rankHighlights(
+        { ...tracks, judge: "fallback", moments },
+        source.analysis?.transcript,
+      );
+      const qualified = candidates.filter((c) => c.qualified).length;
+      const recommendedCount = Math.min(
+        row.requestedCount ?? defaultClipCount(tracks.duration, qualified),
+        qualified,
+        Math.max(0, MAX_TIMELINE_TABS - tabsOf(project).length),
+      );
+      await ctx.db.patch(row._id, {
+        candidates: JSON.stringify(candidates),
+        recommendedCount,
+      });
+      return {
+        found: candidates.length,
+        qualified,
+        recommendedCount,
+        candidates: candidates.slice(0, 10),
+        geminiUnavailableReason: row.unavailableReason,
+        next: "Accept or drop each returned candidate ID with planClips, then build exactly the accepted tabs and run checkClip/finishClipping.",
+      };
+    }
     const candidates = candidatesOf(row),
       ids = new Set<string>();
     if (args.accepted.length > 10)
@@ -309,6 +426,9 @@ export const review = internalMutation({
       }),
     });
     return {
+      ...(row.unavailableReason
+        ? { geminiUnavailableReason: row.unavailableReason }
+        : {}),
       found: candidates.length,
       qualified: candidates.filter((c) => c.qualified).length,
       recommended: row.recommendedCount,
@@ -455,6 +575,9 @@ export const completionState = internalQuery({
       return {
         required: false,
         passed: true,
+        ...(row.unavailableReason
+          ? { geminiUnavailableReason: row.unavailableReason }
+          : {}),
         found: candidatesOf(row).length,
         accepted: 0,
         tabsCreated: 0,
@@ -591,12 +714,15 @@ export const completionState = internalQuery({
         );
     }
     const passed = !errors.length;
-    const finalMessage = passed
-      ? `${tabs.length ? `Created ${tabs.length} clips:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed Gemini judgment and the clean-boundary quality bar." : ""}`
+    const message = passed
+      ? `${tabs.length ? `Created ${tabs.length} clips:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed review and the clean-boundary quality bar." : ""}`
       : undefined;
     return {
       required: true,
       passed,
+      ...(row.unavailableReason
+        ? { geminiUnavailableReason: row.unavailableReason }
+        : {}),
       found: candidates.length,
       qualified: candidates.filter((c) => c.qualified).length,
       recommended: row.recommendedCount,
@@ -605,7 +731,15 @@ export const completionState = internalQuery({
       tabs,
       dropped: row.dropped,
       errors,
-      ...(finalMessage ? { finalMessage } : {}),
+      ...(message
+        ? {
+            finalMessage:
+              message +
+              (row.unavailableReason
+                ? "\nGemini was unavailable; picks used transcript and audio."
+                : ""),
+          }
+        : {}),
     };
   },
 });

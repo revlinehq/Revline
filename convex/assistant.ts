@@ -1,3 +1,4 @@
+import { persistVideoUnavailable } from './lib/video_unavailable';
 import { patchTurn, turnSummaryForRun, settleTurn } from './lib/assistant_turn_data';
 import { recordIncident, incidentDeployment } from './lib/incidents';
 import { MAX_SPEAKER_WINDOW_SECONDS } from '../lib/media-analysis/clipping';
@@ -588,7 +589,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   return null;
 }});
 
-export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, highlightSourceType:v.optional(highlightSourceTypeValidator), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
+export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, highlightSkipGemini:v.optional(v.string()),highlightSourceType:v.optional(highlightSourceTypeValidator), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
   if (args.mode === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
@@ -616,8 +617,8 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     });
     if(repeated)return repeated._id;
   }
-  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + (args.mode === 'highlights' ? 840_000 : args.mode === 'reference' ? 480_000 : 240_000) });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
+  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.highlightSkipGemini?{highlightSkipGemini:args.highlightSkipGemini}:{}),...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + (args.mode === 'highlights' ? 840_000 : args.mode === 'reference' ? 480_000 : 240_000) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.highlightSkipGemini?{highlightSkipGemini:args.highlightSkipGemini}:{}),...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
     // Rows are deleted when callers finish, but the original run's capacity
     // must survive that cleanup and every durable continuation segment.
     const enqueued=project.aiAnalysisUsage?.runId===args.runId?project.aiAnalysisUsage.enqueued:requests.length;
@@ -641,8 +642,7 @@ export const videoUnavailable = internalQuery({ args: runArgs, returns: v.union(
 }});
 export const recordVideoUnavailable = internalMutation({ args: { ...runArgs, reason: v.string() }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireRunState(ctx, args);
-  const usage = project.aiAnalysisUsage?.runId === args.runId ? project.aiAnalysisUsage : { runId: args.runId, enqueued: 0 };
-  await writeProject(ctx, args.projectId, { aiAnalysisUsage: { ...usage, videoUnavailable: args.reason.slice(0, 1000) } });
+  await persistVideoUnavailable(ctx,project,args.runId,args.reason);
   return null;
 }});
 export const clearAnalysis = internalMutation({ args: { ...runArgs, requestId: v.id("analysisRequests") }, returns: v.null(), handler: async (ctx, args) => {

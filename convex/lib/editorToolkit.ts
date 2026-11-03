@@ -1,10 +1,11 @@
+import { forEachLimited } from '../../lib/server/run-limited';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
 import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest, type PixelTrackReference } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
-import { readHighlights, sourceType } from '../../lib/media-analysis/highlights';
+import { readHighlights, sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
@@ -234,6 +235,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   let inspected = false;
   const clippingRun={...run,runId:options.taskId??run.runId};
+  const clippingUnavailableReason=async()=>{const state=await ctx.runQuery(internal.clipping.completionState,clippingRun);return 'geminiUnavailableReason' in state?state.geminiUnavailableReason:undefined;};
   let clippingActive=false;
   let clippingTimelineId=readRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
   let effectPlans:EffectPlan[]=options.initialPlans;
@@ -242,11 +244,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   let videoInspectionUnavailable: string | undefined;
   let videoInspectionQueue = Promise.resolve();
   const optionalVideoInspection = <T,>(work: () => Promise<T>) => {
-    const unavailable = () => ({ available: false as const, analyzed: false as const, optional: true, code: 'VIDEO_ANALYSIS_UNAVAILABLE', reason: videoInspectionUnavailable!, next: 'Do not call inspectVideo or inspectFrames again in this run. Highlight discovery requires a completed Gemini judgment from findHighlights; never replace it with signal-only ranking. If highlights were already judged, use their saved evidence and transcript for review, and local framing tools plus checkClip for delivery. Billing/credits or provider access must be restored before Gemini can be used again.' });
+    const unavailable = () => ({ available: false as const, analyzed: false as const, optional: true, code: 'VIDEO_ANALYSIS_UNAVAILABLE', reason: videoInspectionUnavailable!, next: 'Do not call inspectVideo or inspectFrames again in this run. Continue clipping from the transcript, audio peaks, local scene cuts and targeted readFrames. Register reviewed fallback moments with planClips found, build their accepted tabs and run checkClip/finishClipping. Say briefly that Gemini was unavailable and picks used transcript/audio. Billing/credits or provider access must be restored before Gemini can be used again.' });
     // Concurrent candidate windows share the first failure instead of each
     // uploading another video to an unavailable provider.
     const result = videoInspectionQueue.then(async () => {
-      videoInspectionUnavailable ??= await ctx.runQuery(internal.assistant.videoUnavailable, run) ?? undefined;
+      videoInspectionUnavailable ??= await ctx.runQuery(internal.assistant.videoUnavailable, run) ?? (await clippingUnavailableReason()) ?? undefined;
       if (videoInspectionUnavailable) return unavailable();
       try { return await work(); }
       catch (error) {
@@ -365,7 +367,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const zoomInput=z.object({direction:z.enum(['in','out']).optional(),amount:z.number().min(ZOOM_LIMITS.amount[0]).max(ZOOM_LIMITS.amount[1]).optional(),speed:z.number().min(ZOOM_LIMITS.speed[0]).max(ZOOM_LIMITS.speed[1]).optional(),centerX:z.number().min(0).max(1).optional(),centerY:z.number().min(0).max(1).optional()});
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
-  const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
+  const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
     const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
     try {
       while (true) {
@@ -727,33 +729,37 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       stagedTools.clear();
     }
     inspected = true;clippingTimelineId=result.timelineId;
-    return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Finish and verify this clip before opening another tab. Never call tab changes in parallel with edits.' };
+    return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Publish this tab before opening another. Clipping checks may be batched after the accepted tabs are built. Never call tab changes in parallel with edits.' };
   };
   const tools = {
     findHighlights:createTool({metadata:EDITOR_TOOL_DEFINITIONS.findHighlights,
-      description:'Find ranked 15-60s highlights across the WHOLE source once. Gemini watches the whole source or 30-minute windows with 60s overlap, judging funny/hype/payoff/quotable moments. Transcript and simple RMS peaks only help timing; they never rank moments. Gemini is required: provider failure returns a clear error, never signal-only results. Successful judgments are cached; count changes reuse them. sourceType guides the judge. Returns top 10 with IDs, evidence, hook/payoff quotes, clean source in/out, quality and length-scaled count. delivery clips starts a trusted batch; delivery candidates is read-only discovery. Review 8-10, then planClips; never scan the source with momentsOnly.',
+      description:'Find ranked 15-60s highlights across the WHOLE source once. Gemini watches the whole source or 30-minute windows with 60s overlap, judging funny/hype/payoff/quotable moments. Transcript and simple RMS peaks only help timing; they never rank moments. Gemini is the default judge. On provider unavailability, stop Gemini for the run and return transcript/peaks/scene helpers for agent review via targeted readFrames; register those picks using planClips found and deliver them. Successful judgments are cached; count changes reuse them. sourceType guides the judge. Returns top 10 with IDs, evidence, hook/payoff quotes, clean source in/out, quality and length-scaled count. delivery clips starts a trusted batch; delivery candidates is read-only discovery. Review 8-10, then planClips; never scan the source with momentsOnly.',
       inputSchema:z.object({assetId:z.string(),sourceType:sourceType.optional(),count:z.number().int().min(1).max(10).optional(),delivery:z.enum(['candidates','clips']).default('candidates')}),execute:async(_ctx,input)=>{
-        let asset=await loadAsset(input.assetId);let transcriptionWarning:string|undefined;const saved=readHighlights(asset.analysis?.highlights);const cached=!!saved&&(!input.sourceType||saved.sourceType===input.sourceType);
+        let asset=await loadAsset(input.assetId);let transcriptionWarning:string|undefined;
+        videoInspectionUnavailable ??= await ctx.runQuery(internal.assistant.videoUnavailable,run) ?? (await clippingUnavailableReason()) ?? undefined;
+        const saved=readHighlights(asset.analysis?.highlights),cached=!!saved&&(saved.judge==='gemini'?(!input.sourceType||saved.sourceType===input.sourceType):!!videoInspectionUnavailable);
         if(!cached){
           try {asset=await analyze(input.assetId,'transcribe');}catch(error){abortSignal.throwIfAborted();transcriptionWarning=error instanceof Error?error.message.slice(0,350):'Transcription unavailable';}
-          await withAnalysis(input.assetId,'highlights',async()=>{asset=await loadAsset(input.assetId);return null;},input.sourceType?{highlightSourceType:input.sourceType}:undefined);
+          await withAnalysis(input.assetId,'highlights',async()=>{asset=await loadAsset(input.assetId);return null;},{...(input.sourceType?{highlightSourceType:input.sourceType}:{}),...(videoInspectionUnavailable?{highlightSkipGemini:videoInspectionUnavailable}:{})});
         }
+        const discovery=readHighlights(asset.analysis?.highlights);
+        if(discovery?.judge==='fallback'&&discovery.unavailableReason){videoInspectionUnavailable=discovery.unavailableReason;await ctx.runMutation(internal.assistant.recordVideoUnavailable,{...run,reason:videoInspectionUnavailable});}
         clippingActive=input.delivery==='clips';
         const result=await ctx.runMutation(internal.clipping.begin,{...clippingRun,assetId:asset._id,delivery:clippingActive,...(input.sourceType?{sourceType:input.sourceType}:{}),...(input.count?{count:input.count}:{})});
         return {...result,cached,...(transcriptionWarning?{warnings:[...result.warnings,transcriptionWarning]}:{})};
       }}),
     planClips:createTool({metadata:EDITOR_TOOL_DEFINITIONS.planClips,
-      description:'Record every reviewed top-10 candidate as accepted or dropped with a concrete reason. Accepted candidates each need one unique title, clean SOURCE start/end and their own populated vertical tab. Use candidate IDs from findHighlights. Bind timelineId when known; exact unique tab titles also resolve. Revise this plan if a candidate is dropped after building; restore/remove its abandoned tab. No padding. A persistent server check compares the plan to actual tabs and current checkClip receipts before completion.',
-      inputSchema:z.object({accepted:z.array(z.object({candidateId:z.string(),name:z.string().trim().min(1).max(60),start:z.number().nonnegative(),end:z.number().positive(),timelineId:z.string().optional(),criticalRegions:z.array(z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),w:z.number().positive().max(1),h:z.number().positive().max(1)})).max(12).optional()})).max(10),dropped:z.array(z.object({candidateId:z.string(),reason:z.string().min(8).max(500)})).max(80)}),execute:async(_ctx,input)=>{clippingActive=true;return ctx.runMutation(internal.clipping.review,{...clippingRun,...input,editorRunId:run.runId});}}),
+      description:'If findHighlights fell back, first register found:[{title,start,end,kind,hook,payoff,reactionEnd,score,reason}] after reading transcript/source frames. Quotes must match saved words/times; leave non-verbal quotes empty. It returns server IDs. Then record every reviewed top-10 ID as accepted or dropped with a concrete reason. Accepted candidates each need one unique title, clean SOURCE start/end and their own populated vertical tab. Use candidate IDs from findHighlights. Bind timelineId when known; exact unique tab titles also resolve. Revise this plan if a candidate is dropped after building; restore/remove its abandoned tab. No padding. A persistent server check compares the plan to actual tabs and current checkClip receipts before completion.',
+      inputSchema:z.object({found:z.array(semanticMoment).min(1).max(30).optional(),accepted:z.array(z.object({candidateId:z.string(),name:z.string().trim().min(1).max(60),start:z.number().nonnegative(),end:z.number().positive(),timelineId:z.string().optional(),criticalRegions:z.array(z.object({x:z.number().min(0).max(1),y:z.number().min(0).max(1),w:z.number().positive().max(1),h:z.number().positive().max(1)})).max(12).optional()})).max(10).optional(),dropped:z.array(z.object({candidateId:z.string(),reason:z.string().min(8).max(500)})).max(80).optional()}),execute:async(_ctx,input)=>{clippingActive=true;return ctx.runMutation(internal.clipping.review,{...clippingRun,...input,editorRunId:run.runId});}}),
     checkClip:createTool({metadata:EDITOR_TOOL_DEFINITIONS.checkClip,
       description:'One fast finish check per accepted clip tab, or batch timelineIds. Uses timeline/word/audio data for 15-60s, 9:16, no gaps, complete thought/payoff/reaction boundaries, verified -14 LUFS <=-1dBTP mix and caption/face/HUD geometry. FFmpeg blackdetect/freezedetect and decode diagnostics scan retained source ranges in one pass; no export. Returns pass/fail reasons and ONE labeled framing contact sheet, about 6-12 samples across shots/switches. Glance at that sheet and fix failures; never request 10fps finished-clip sweeps. acceptedFindings may acknowledge an intentional freeze/black with a concrete reviewed reason; decode corruption cannot be dismissed. Any later edit makes the receipt stale.',
       inputSchema:z.object({timelineIds:z.array(z.string()).min(1).max(10).optional(),acceptedFindings:z.array(z.object({kind:z.enum(['freeze','black']),reason:z.string().min(15).max(500)})).max(8).optional()}),execute:async(_ctx,input)=>{
         clippingActive=true;await editSession.wait();
         const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
-        const ids=input.timelineIds??state.tabs?.map((t:{timelineId:string})=>t.timelineId)??[];
+        const ids:string[]=input.timelineIds??('tabs' in state?state.tabs.map((t:{timelineId:string})=>t.timelineId):[]);
         if(!ids.length)throw new Error('Build accepted clip tabs before checkClip.');
         const results:unknown[]=[],images:{label:string;data:string;mimeType:string}[]=[];
-        for(const timelineId of ids){
+        await forEachLimited(ids,2,async(timelineId)=>{
           const prepared=await ctx.runQuery(internal.clipping.prepareCheck,{...clippingRun,timelineId,...(input.acceptedFindings?{acceptedFindings:input.acceptedFindings}:{})});
           const snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,...(editSession.staged?{runId:run.runId}:{}),timelineId,times:[],clipCheck:prepared.request});
           try {
@@ -763,7 +769,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
               await new Promise(resolve=>setTimeout(resolve,1000));
             }
           }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
-        }
+        });
+        results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
         return {results,images,next:'Fix failed checks, glance at the framing sheet, then call finishClipping. Its finalMessage is the exact list of delivered tabs.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration, 9:16 and current passing checkClip receipts. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
@@ -823,8 +830,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       execute: async (_ctx, input) => ({ incidentId: await ctx.runMutation(internal.incidents.reportAgent, { ...run, ...input }) }),
     }),
     listTimelines: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listTimelines, description: "List this project's timeline tabs, each a separate video sharing the project's sources. Editing tools act on the open tab.", inputSchema: z.object({}), execute: async () => ctx.runQuery(internal.assistant.listRunTimelines, run) }),
-    createTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.createTimeline, description: "Create and open a blank timeline tab or duplicate the open tab. For clipping, use blank, vertical and the clip's title. Publishes the current draft first; finish its checks before switching. Never call alongside edits in parallel.", inputSchema: z.object({ from: z.enum(['blank', 'duplicate']), name: z.string().trim().min(1).max(60).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square']).optional() }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.createRunTimeline, { ...run, expectedRevision, ...input })) }),
-    openTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.openTimeline, description: "Open an existing timeline tab by id from listTimelines. Publishes the current draft first; finish its checks before switching. Changes the editor tab the user sees. Never call alongside edits in parallel.", inputSchema: z.object({ timelineId: z.string().min(1) }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.openRunTimeline, { ...run, expectedRevision, ...input })) }),
+    createTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.createTimeline, description: "Create and open a blank timeline tab or duplicate the open tab. For clipping, use blank, vertical and the clip's title. Publishes the current draft first; batch clipping checks after building the accepted tabs. Never call alongside edits in parallel.", inputSchema: z.object({ from: z.enum(['blank', 'duplicate']), name: z.string().trim().min(1).max(60).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square']).optional() }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.createRunTimeline, { ...run, expectedRevision, ...input })) }),
+    openTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.openTimeline, description: "Open an existing timeline tab by id from listTimelines. Publishes the current draft first; batch clipping checks after building the accepted tabs. Changes the editor tab the user sees. Never call alongside edits in parallel.", inputSchema: z.object({ timelineId: z.string().min(1) }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.openRunTimeline, { ...run, expectedRevision, ...input })) }),
     importVideoLink: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.importVideoLink, description: "Import a YouTube or public media-file link into this project's Sources, keeping it off the timeline. Pass start and end in original SOURCE seconds when only a known section is needed; YouTube downloads only that window and the imported file starts at 0. Omit both for a whole-video import or whole-source clipping discovery. Returns taskId; poll getMediaTask until completed, then inspectTimeline to refresh sources. Reuse existing imports on retries.", inputSchema: z.object({ url: z.string().url(), start: z.number().min(0).optional(), end: z.number().positive().optional() }), execute: async (_ctx, input) => ctx.runMutation(internal.assistant.importRunVideo, { ...run, ...input }) }),
     getMediaTask: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getMediaTask, description: "Check an import's status and resulting source assetId. Wait for completed before analysis; then inspectTimeline to refresh project media.", inputSchema: z.object({ taskId: z.string().min(1) }), execute: async (_ctx, { taskId }) => ctx.runQuery(internal.assistant.runMediaTask, { ...run, taskId }) }),
     exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Render a saved timeline to MP4 only when explicitly requested. timelineId selects a tab from listTimelines; omit for the open tab. Call once per requested timeline. Finish all timeline edits before exporting.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }), execute: async (_ctx, input) => {

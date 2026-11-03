@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Transcript, TranscriptWord } from "./transcript";
 
 // A v1 signal-only result is never accepted as a Gemini judgment.
-export const HIGHLIGHT_VERSION = 2;
+export const HIGHLIGHT_VERSION = 3;
 export const sourceTypes = [
   "podcast",
   "gaming",
@@ -53,7 +53,8 @@ export const highlightJudgment = z.object({
 export type HighlightJudgment = z.infer<typeof highlightJudgment>;
 export const highlightTracks = z.object({
   version: z.literal(HIGHLIGHT_VERSION),
-  judge: z.literal("gemini"),
+  judge: z.enum(["gemini", "fallback"]),
+  unavailableReason: z.string().max(1000).optional(),
   duration: z.number().positive().max(86400),
   sourceType,
   typeReason: z.string().max(400),
@@ -225,7 +226,7 @@ export function rankHighlights(
             {
               start: moment.start,
               end: moment.end,
-              kind: "gemini",
+              kind: tracks.judge === "gemini" ? "gemini" : "transcript-audio",
               strength: moment.score / 100,
               detail: moment.reason,
             },
