@@ -174,15 +174,15 @@ try {
   const url = `${env.GITHUB_SERVER_URL || 'https://github.com'}/${repo}/actions/runs/${env.GITHUB_RUN_ID}`;
   const description = `${dry ? 'Dry run' : 'Main release'} failed at **${step}** for ${sha}.\n${redact(error.message)}\nLogs: ${url}\n\n\`\`\`text\n${logTail()}\n\`\`\``;
   console.error(description);
-  // A dry run cannot mutate production, including its notification outbox.
+  // Failure alerts use the already-deployed outbox; dry runs are clearly labelled.
   if (env.GITHUB_RUN_ID) {
     try { await command('gh', ['api', `repos/${repo}/commits/${sha}/comments`, '--input', '-'], { env, input: JSON.stringify({ body: description }), quiet: true }); }
     catch { console.error('Commit comment failed; opening a deployment failure issue.');
       try { await command('gh', ['api', `repos/${repo}/issues`, '--input', '-'], { env, input: JSON.stringify({ title: `Deployment failed: ${step}`, body: description }), quiet: true }); }
       catch { console.error('GitHub notification failed; inspect this workflow log.'); }
     }
-    if (!dry) try {
-      await command(process.execPath, [join(primary, 'node_modules/convex/bin/main.js'), 'run', 'discordAlerts:enqueue', JSON.stringify({ source: 'sentry', eventId: `deploy-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`, title: 'Revline deployment failed', description: `Step: ${step}\nCommit: ${sha}\n${url}` }), '--deployment', 'different-gnu-398'], { env, cwd: primary, quiet: true });
+    try {
+      await command(process.execPath, [join(primary, 'node_modules/convex/bin/main.js'), 'run', 'discordAlerts:enqueue', JSON.stringify({ source: 'sentry', eventId: `deploy-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`, title: dry ? 'Revline deployment dry run failed' : 'Revline deployment failed', description: `Step: ${step}\nCommit: ${sha}\n${url}` }), '--deployment', 'different-gnu-398'], { env, cwd: primary, quiet: true });
     } catch { console.error('Convex Discord notification failed; GitHub remains the alert channel.'); }
     if (env.RUNNER_TEMP) await writeFile(join(env.RUNNER_TEMP, `revline-release-reported-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`), step).catch(() => {});
   }

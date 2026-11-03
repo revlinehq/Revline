@@ -73,9 +73,9 @@ jobs:
           body="Release failed during checkout or runner bootstrap, before the release script could report. Step logs: $url"
           gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="$body" >/dev/null || \
             gh issue create --repo "$GITHUB_REPOSITORY" --title 'Release runner bootstrap failed' --body "$body"
-          if [ "$GITHUB_EVENT_NAME" = push ]; then
-            cd "$HOME/Developer/revline-main"
-            node node_modules/convex/bin/main.js run discordAlerts:enqueue \
-              "{\"source\":\"sentry\",\"eventId\":\"deploy-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\",\"title\":\"Revline deployment failed\",\"description\":\"Checkout or runner bootstrap failed. $url\"}" \
-              --deployment different-gnu-398
-          fi
+          title='Revline deployment failed'
+          if [ "$GITHUB_EVENT_NAME" != push ]; then title='Revline deployment dry run failed'; fi
+          cd "$HOME/Developer/revline-main"
+          node node_modules/convex/bin/main.js run discordAlerts:enqueue \
+            "{\"source\":\"sentry\",\"eventId\":\"deploy-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\",\"title\":\"$title\",\"description\":\"Checkout or runner bootstrap failed. $url\"}" \
+            --deployment different-gnu-398
