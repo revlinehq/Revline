@@ -4,6 +4,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Workspace: Match the approved home composer and compact project list with footage menus and stored posters. Why: the user requested the Pen design.
 - Workspace: Slash commands (/clip, /inspo-motion) now work in the new-project composer, not only in the editor. Why: the user found them missing on the dashboard.
 
 - Landing: Play the motion study inside the shared Revline editor illustration with scene-aligned clips, graphics, a music waveform and a synced playhead. Why: the user requested an editable-film showcase matching the clipping section.
