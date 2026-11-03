@@ -12,7 +12,7 @@ const panelFields = {
   duration: z.number().positive().max(180).optional(),
   idea: shotLine.describe('The shot idea in one line.'),
   visual: z.string().trim().min(1).max(1000).optional().describe('What the shot shows; defaults to the image prompt.'),
-  onScreenText: z.string().max(500).optional().describe('Exact words to draw legibly in the sketch and rebuild as editable type in the final film.'),
+  onScreenText: z.string().max(500).optional().describe('Exact film words, rendered in the real font family/weight and rebuilt as editable type. No production captions or annotations.'),
   motion: shotLine.describe('Plain words, not seconds: headline fades up, cards spin in and stack.'),
   transition: shotLine.optional().describe('How this shot leads into the next.'),
   assetsNeeded: z.array(z.string().trim().min(1).max(160)).max(12).optional(),
@@ -20,7 +20,7 @@ const panelFields = {
 const storyboardInput = z.object({
   name: z.string().trim().min(1).max(60).describe('Shared storyboard label; reuse for every sheet and key frame.'),
   ...panelFields,
-  phase: z.enum(['sheet', 'rough', 'style', 'direction', 'board']).optional().describe('sheet: one ink page, possibly both A/B rows. style: 2–3 full-size key frames after the sheet pick. Other phases preserve older boards.'),
+  phase: z.enum(['sheet', 'rough', 'style', 'direction', 'board']).optional().describe('sheet: one colored motion-design style-frame page, possibly both A/B rows. style: 2–3 full-size key frames after the pick. Other phases preserve older boards.'),
   sheet: z.object({
     rows: z.number().int().min(1).max(4), columns: z.number().int().min(1).max(4),
     panelAspectRatio: z.enum(['landscape', 'vertical', 'square', 'portrait-feed', 'classic']),
@@ -28,9 +28,9 @@ const storyboardInput = z.object({
   }).strict().optional().describe('Required for phase sheet. Rows/columns are 1-based. For combined A/B, row 1 is A and row 2 B; number shots separately per direction. For longer options use separate sheets, at most 8 panels each.'),
 }).strict();
 export const imageGenerationInput = z.object({
-  prompt: z.string().trim().min(1).max(16000).describe('Storyboard: an ink sheet or full-size key frame; read image-direction for the sheet template. Asset: subject, framing, palette, material and use. Keep final film type/logos editable in code.'),
+  prompt: z.string().trim().min(1).max(16000).describe('Storyboard: colored motion-design style frames with the actual palette/hex values, font families/weights, exact film copy, real UI/layout, shapes and 3D materials. Read image-direction for the sheet template. Asset: subject, framing, palette, material and use. Rebuild final film type/logos in code.'),
   purpose: z.enum(['asset', 'storyboard']).optional().describe('Default asset. Storyboard saves a reference sheet or key frame, never a timeline clip; needs storyboard details.'),
-  quality: z.enum(['low', 'medium']).optional().describe('Storyboard defaults low for cheap, fast look development; assets default medium.'),
+  quality: z.enum(['low', 'medium']).optional().describe('Storyboards default low when the real type/UI reads; choose medium for dense UI or small type. Assets default medium. Each call returns its actual estimated cost.'),
   storyboard: storyboardInput.optional(),
   aspectRatio: z.enum(['1:1', '3:2', '2:3', '16:9', '9:16', '4:5', '4:3', '2:1']).optional().describe('Default 1:1 for assets, current timeline ratio for storyboards. Choose aspectRatio or size, not both.'),
   size: z.enum(['1024x1024', '1536x1024', '1024x1536', '1536x864', '864x1536', '1024x1280', '1536x1152', '1536x768']).optional(),
@@ -44,7 +44,6 @@ export const imageGenerationInput = z.object({
   const board = input.storyboard, sheet = board?.sheet;
   if ((board?.phase === 'sheet') !== !!sheet) ctx.addIssue({ code: 'custom', message: 'phase sheet requires sheet layout and panel details; other phases omit sheet.' });
   if (sheet) {
-    if (imageGenerationQuality(input) !== 'low') ctx.addIssue({ code: 'custom', message: 'Sketch sheets use low quality.' });
     if (sheet.rows * sheet.columns !== sheet.panels.length || new Set(sheet.panels.map(p => `${p.row}:${p.column}`)).size !== sheet.panels.length || sheet.panels.some(p => p.row > sheet.rows || p.column > sheet.columns)) ctx.addIssue({ code: 'custom', message: 'Fill every grid cell exactly once, with at most 8 panels.' });
     const directions = new Set(sheet.panels.map(p => p.direction));
     if (directions.size === 2 && (sheet.rows !== 2 || sheet.columns < 2 || sheet.columns > 3 || sheet.panels.some(p => p.row !== (p.direction === 'A' ? 1 : 2)))) ctx.addIssue({ code: 'custom', message: 'Combined A/B sheets have two rows: A above B, each with 2–3 panels. Longer options use separate sheets.' });
@@ -61,10 +60,11 @@ export const imageGenerationQuality = (input: ImageGenerationInput) => input.qua
 /** Resolve a storyboard's format from the selected timeline, while preserving asset defaults. */
 export function resolveImageGeneration(input: ImageGenerationInput, aspectRatio: import('../editor/types').AspectRatio): ImageGenerationInput {
   const target = { landscape: '16:9', vertical: '9:16', square: '1:1', 'portrait-feed': '4:5', classic: '4:3' } as const;
+  if (input.purpose === 'storyboard') input = { ...input, prompt: `${input.prompt}\n\nRender COLORED motion-design style frames matching the actual final film 1:1. Use the exact palette/hex values, font families/weights, approved on-screen text, UI/layout, shapes and 3D objects specified above and in the supplied references. Use flat motion graphics or clean-rendered matte 3D; retain the film's specified materials, lighting and texture. No generic AI gloss, glowing orbs, lens flares, sparkles, purple-blue gradients, bright purple fills or stock futuristic dashboard filler. Muted grain gradients are allowed only when specified as part of the film. No annotations, arrows, production captions, shot numbers or row labels anywhere in the image; only the approved film text appears.` };
   const layout = input.storyboard?.sheet;
   if (layout) {
-    const labels = new Set(layout.panels.map(panel => panel.direction)).size === 2 ? 'Label the top row A and the bottom row B.' : `Direction ${layout.panels[0].direction}.`;
-    input = { ...input, prompt: `${input.prompt}\n\nDraw ONE storyboard sheet, ${layout.rows} rows by ${layout.columns} columns, ${layout.panels.length} panels. Read left to right, top to bottom. Every PANEL is ${target[layout.panelAspectRatio]}; the whole page is not a single film frame. Centre the grid on white paper with thin gutters and outer white margins if needed; never stretch a panel to fill the page. ${labels} Only small panel numbers and A/B labels may sit outside the drawings; no arrows, captions or production notes. Clean black-ink contours, cross-hatching and light diagonal pencil strokes; no colour.\n${[...layout.panels].sort((a, b) => a.row - b.row || a.column - b.column).map(panel => `Row ${panel.row}, column ${panel.column}, ${panel.direction}${panel.shotIndex}: ${panel.visual ?? panel.idea}. Exact on-screen text: ${JSON.stringify(panel.onScreenText ?? '')}.`).join('\n')}` };
+    const directions = new Set(layout.panels.map(panel => panel.direction)).size === 2 ? 'The top row is option A; the bottom row is B. Do not print these labels.' : `This sheet represents direction ${layout.panels[0].direction}; do not print that label.`;
+    input = { ...input, prompt: `${input.prompt}\n\nRender ONE colored style-frame sheet, ${layout.rows} rows by ${layout.columns} columns, ${layout.panels.length} panels. Read left to right, top to bottom. Every PANEL is ${target[layout.panelAspectRatio]}; the whole page is not a single film frame. Centre the grid with thin neutral gutters and outer margins if needed; never stretch a panel to fill the page. ${directions} Row/column/shot identifiers below are layout metadata, never printed annotations. Every panel shows its final colors, type and composition.\n${[...layout.panels].sort((a, b) => a.row - b.row || a.column - b.column).map(panel => `Row ${panel.row}, column ${panel.column}, ${panel.direction}${panel.shotIndex}: ${panel.visual ?? panel.idea}. Exact on-screen text: ${JSON.stringify(panel.onScreenText ?? '')}.`).join('\n')}` };
   }
   if (input.purpose !== 'storyboard' || input.aspectRatio || input.size) return input;
   if (input.storyboard?.sheet) {

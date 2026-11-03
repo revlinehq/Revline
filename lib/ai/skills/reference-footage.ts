@@ -10,7 +10,7 @@ For edits to an existing recreation, start with scene-engine page \`edit-lanes\`
 
 The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Keep the reference video itself off the timeline.
 
-Before a new motion film, read the standalone \`storyboard\` skill: accept an ideation angle before images, then choose A/B ink sketch sheets and approve 2–3 full-size key frames and an animatic before code (skip small edits and "just build it"). Read \`image-direction\` before every generateImage call. During the build, read \`image-plates\` for the icon/trace/code/three.js/generation decision order. Never reproduce a reference frame; the measured recreation inventory still governs the actual remake.
+Before a new motion film, read the standalone \`storyboard\` skill: accept an ideation angle before images, then choose A/B colored style-frame sheets and approve 2–3 full-size key frames and an animatic before code (skip small edits and "just build it"). Read \`image-direction\` before every generateImage call. During the build, read \`image-plates\` for the icon/trace/code/three.js/generation decision order. Never reproduce a reference frame; the measured recreation inventory still governs the actual remake.
 
 ## 1. Map the film, then inventory one section
 Read the whole reference with readFrames count 16 for its moments and holds. Shots alone miss motion inside a shot. Group related moments into named sections, including their incoming and outgoing transitions.
