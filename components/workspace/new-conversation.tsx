@@ -329,7 +329,7 @@ export function NewConversation() {
         </div>
       </div>
     </main>}
-    <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onImport={async url => {
+    <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onUpload={()=>{setLinkOpen(false);picker.current?.click();}} onImport={async url => {
       const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
       await importVideo({ url, projectId });
       rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);

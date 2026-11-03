@@ -1,3 +1,4 @@
+import { frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { processorBackend } from './lib/processor_backend';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
@@ -38,14 +39,14 @@ import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
-import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
+import { MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = MAX_MEDIA_TASK_ATTEMPTS;
 const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 // Fair claiming: an owner already running this many tasks yields to queued work
 // from other owners among the oldest FAIR_CLAIM_SCAN claimable rows.
@@ -53,12 +54,12 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const timelineFrames=v.object({normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
+const timelineFrames=v.object({cacheIdentity:v.optional(v.string()),normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
 const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
 // A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
 const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
 // A reading of a source video: a labeled frame sheet (with how much each frame changed), a tracked box, or pixels measured.
-const readWork = v.object({ mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
+const readWork = v.object({ comparisonIdentity:v.optional(v.string()), renderedUrl: v.optional(v.string()), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
 const workItem = v.object({previewRanges:v.optional(v.array(v.object({start:v.number(),end:v.number()}))),read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
 export type MediaWorkItem = Infer<typeof workItem>;
 export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string()})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
@@ -66,7 +67,7 @@ export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: 13 };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: 3, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: MEDIA_PROCESSOR_VERSION };
 /** Shape tracing (traceShape) came after plain frame reads. */
 export const TRACE_PROCESSOR_VERSION = 14;
 /** Font matching (matchFont) came after shape tracing. */
@@ -137,13 +138,14 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   await beforeEnqueue?.();
   const now = Date.now();
   const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId, ...(input.kind==='import'?{resumable:true}:{}) }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
+  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
 }
 
 export const process = mediaWorkflow.define({
   args: { taskId: v.id('mediaTasks'), resumable:v.optional(v.boolean()) }, returns: v.null(),
+  // Preserve legacy workflow journals; prepareAttempt/failTask enforce their budget.
   handler: async (step, { taskId, resumable }): Promise<null> => {
     for (let attempt = 1; resumable || attempt <= MAX_ATTEMPTS; attempt++) {
       const ready: boolean = await step.runMutation(internal.mediaTasks.prepareAttempt, { taskId, attempt });
@@ -164,6 +166,11 @@ const ULTRA_FALLBACK_MS = 120_000;
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
+  // Also stop legacy resumable workflows that already exceeded the budget.
+  if (args.attempt > MAX_ATTEMPTS) {
+    await markTerminal(ctx, task._id, 'failed', task.error ?? 'Video import could not finish. Upload the file instead.');
+    return false;
+  }
   await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:['import','preview','extract','waveform','transcribe'].includes(task.kind)?task.progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
@@ -190,6 +197,7 @@ async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   if (task.kind === 'render' && flyRendersEnabled()) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
 }
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
+  retryable = retryable && task.attempt < MAX_ATTEMPTS;
   await patchMediaTask(ctx, task, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
@@ -437,12 +445,13 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const saved=await ctx.db.get(task.snapshotId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('The frame request is unavailable.');
     const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
     // Frames of a tab that is not open come from its stored timeline.
-    if(!saved.sourceTimeline&&saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
-    if(saved.sourceTimeline)timeline=await loadSceneCode(ctx,saved.sourceTimeline);
+    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
+    if(saved.cacheIdentity){const payload=await ctx.db.query('frameSnapshotPayloads').withIndex('by_snapshot',q=>q.eq('snapshotId',saved._id)).unique();if(!payload)throw new ConvexError('The frozen frame request is unavailable.');timeline=await loadSceneCode(ctx,payload.timeline);}
+    else if(saved.sourceTimeline)timeline=await loadSceneCode(ctx,saved.sourceTimeline);
     // A turn's staged draft, when the frames were asked for while its changes wait to be saved.
     // An earlier revision of the tab, rebuilt from the revision log (getFrames revision).
-    if(!saved.sourceTimeline&&saved.atRevision!==undefined){const past=await timelineAtRevision(ctx,project._id,saved.timelineId??activeTabOf(project),await loadSceneCode(ctx,timeline),saved.atRevision);if(!past)throw new ConvexError('That revision can no longer be rebuilt.');timeline=past;}
-    if(!saved.sourceTimeline&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
+    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.atRevision!==undefined){const past=await timelineAtRevision(ctx,project._id,saved.timelineId??activeTabOf(project),await loadSceneCode(ctx,timeline),saved.atRevision);if(!past)throw new ConvexError('That revision can no longer be rebuilt.');timeline=past;}
+    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
     // A share card: the published timeline, as people who open the link will see it.
     let card:{title:string}|undefined;
     if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=await loadSceneCode(ctx,share.timeline);card={title:share.cardTitle??share.title};}
@@ -453,7 +462,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips,...baseline?.clips??[]].flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(sceneMediaAssetIds(timeline),baseline?sceneMediaAssetIds(baseline):[],timeline.audioNormalization?[timeline.audioNormalization.assetId]:[],baseline?.audioNormalization?[baseline.audioNormalization.assetId]:[]))];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
-    snapshot={timeline,...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
+    snapshot={...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
   }
   let blueprint:Infer<typeof blueprintWork>|undefined;
   if(task.blueprintCheckId){
@@ -468,8 +477,9 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   const readRow=task.readId?await ctx.db.get(task.readId):null;
   if(task.readId&&(!readRow||readRow.ownerId!==task.ownerId||readRow.projectId!==task.projectId))throw new ConvexError('The frame reading is unavailable.');
   // A comparison carries the timeline frames rendered for it, to set beside the reference's.
-  const rendered=readRow?.snapshotId?(await ctx.db.get(readRow.snapshotId))?.frames:undefined;
-  const read=readRow?{mode:readRow.mode,start:readRow.start,end:readRow.end,...(readRow.times?{times:readRow.times}:{}),...(rendered?{rendered}:{}),...(readRow.compareCrop?{compareCrop:readRow.compareCrop}:{}),...(readRow.referenceCropKeyframes?{referenceCropKeyframes:readRow.referenceCropKeyframes}:{}),...(readRow.count?{count:readRow.count}:{}),...(readRow.fps?{fps:readRow.fps}:{}),...(readRow.momentsOnly?{momentsOnly:true}:{}),...(readRow.crop?{crop:readRow.crop}:{}),...(readRow.box?{box:readRow.box}:{}),...(readRow.points?{points:readRow.points}:{}),...(readRow.lines?{lines:readRow.lines}:{}),...(readRow.color?{color:readRow.color}:{}),...(readRow.tolerance?{tolerance:readRow.tolerance}:{}),...(readRow.text?{text:readRow.text}:{}),...(readRow.categories?{categories:readRow.categories}:{})}:undefined;
+  const compared=readRow?.snapshotId?await ctx.db.get(readRow.snapshotId):null;
+  const rendered=compared?.frames, renderedUrl=compared?.resultR2Key?await mediaUrl(ctx,{r2Key:compared.resultR2Key}):undefined;
+  const read=readRow?{mode:readRow.mode,start:readRow.start,end:readRow.end,...(readRow.times?{times:readRow.times}:{}),...(rendered?{rendered}:{}),...(renderedUrl?{renderedUrl}:{}),...(compared?.cacheIdentity?{comparisonIdentity:compared.cacheIdentity}:{}),...(readRow.compareCrop?{compareCrop:readRow.compareCrop}:{}),...(readRow.referenceCropKeyframes?{referenceCropKeyframes:readRow.referenceCropKeyframes}:{}),...(readRow.count?{count:readRow.count}:{}),...(readRow.fps?{fps:readRow.fps}:{}),...(readRow.momentsOnly?{momentsOnly:true}:{}),...(readRow.crop?{crop:readRow.crop}:{}),...(readRow.box?{box:readRow.box}:{}),...(readRow.points?{points:readRow.points}:{}),...(readRow.lines?{lines:readRow.lines}:{}),...(readRow.color?{color:readRow.color}:{}),...(readRow.tolerance?{tolerance:readRow.tolerance}:{}),...(readRow.text?{text:readRow.text}:{}),...(readRow.categories?{categories:readRow.categories}:{})}:undefined;
   const cutoutRow=task.cutoutId?await ctx.db.get(task.cutoutId):null;
   if(cutoutRow?.subject)throw new ConvexError('This retired cutout request must be recreated with person or foreground mode.');
   if(task.cutoutId&&(!cutoutRow||cutoutRow.ownerId!==task.ownerId||cutoutRow.projectId!==task.projectId))throw new ConvexError('The background removal request is unavailable.');
@@ -625,7 +635,9 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
       await ctx.db.patch(snapshot._id, { status: 'completed', frames, differences }); return;
     }
     if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
-    await ctx.db.patch(snapshot._id, { status: 'completed', frames });
+    const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times)) : undefined;
+    const cached = cacheKey ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',cacheKey)).unique() : null;
+    await ctx.db.patch(snapshot._id, { status: 'completed', ...(cached?.ready ? {resultR2Key:cached.r2Key,frames:undefined} : {frames}) });
     if (snapshot.clipId && snapshot.key) await ctx.scheduler.runAfter(0, internal.sceneThumbs.storeImages, { snapshotId: snapshot._id });
     // A share card goes onto its share; the request itself is not kept.
     if (snapshot.shareId && frames[0]) await ctx.scheduler.runAfter(0, internal.timelineShares.storeCard, { snapshotId: snapshot._id });

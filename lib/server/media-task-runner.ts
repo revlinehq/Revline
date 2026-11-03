@@ -1,3 +1,5 @@
+import { FrameCache } from './frame-cache';
+import { referenceResultDescriptor, snapshotResultDescriptor } from '../media-analysis/frame-cache';
 import { importCheckpoint } from './import-checkpoint';
 import { ownedMediaUrl } from './owned-media';
 import { api as pixelTrackApi } from '../../convex/_generated/api';
@@ -133,7 +135,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if(!assetId)throw new AnalysisError('The normalized audio could not be saved.',500);
       return {snapshot:{frames:[],normalization:{assetId,...measurements}}};
     }
-    if(task.kind==='snapshot'){if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);return {snapshot:await captureTimelineFrames(task.snapshot,directory,convexUrl,signal,onProgress)};}
+    if(task.kind==='snapshot'){
+      if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);
+      const snapshot=task.snapshot,cache=snapshot.cacheIdentity?new FrameCache(convex,credentials,signal):undefined;
+      const produce=()=>captureTimelineFrames(snapshot,directory,convexUrl,signal,onProgress,cache);
+      return {snapshot:cache?await cache.json(snapshotResultDescriptor(snapshot.cacheIdentity!,snapshot.times),produce):await produce()};
+    }
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
@@ -220,8 +227,19 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'read') {
       if (!['video', 'image'].includes(asset.kind) || !task.read) throw new AnalysisError('Reading frames needs a video or image and a window.', 400);
-      if (task.read.mode === 'compare') return { read: await runPhase('Comparing with the reference', () => readCompare(source, directory, task.read!, signal, onProgress, asset.kind === 'image')) };
-      return { read: await runPhase('Reading frames', () => readReference(source, directory, task.read!, signal, onProgress, asset.kind === 'image')) };
+      const cache = new FrameCache(convex, credentials, signal), work = task.read;
+      if (work.renderedUrl) {
+        const response = await fetch(work.renderedUrl, {signal, redirect:'error'});
+        if (!response.ok) throw new AnalysisError('The rendered comparison frames are unavailable.', 500);
+        work.rendered = (await response.json() as NonNullable<MediaTaskResult['snapshot']>).frames;
+      }
+      if (work.mode === 'compare') {
+        const produce = () => runPhase('Comparing with the reference', () => readCompare(source, directory, work, signal, onProgress, asset.kind === 'image', cache));
+        return {read:work.comparisonIdentity?await cache.json(referenceResultDescriptor(work),produce):await produce()};
+      }
+      const produce = () => runPhase('Reading frames', () => readReference(source, directory, work, signal, onProgress, asset.kind === 'image', cache));
+      // Sound descriptions and live font catalogs can change; retain only deterministic readings.
+      return { read: work.mode === 'sounds' || work.mode === 'font' ? await produce() : await cache.json(referenceResultDescriptor(work), produce) };
     }
     const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'cutout') {
