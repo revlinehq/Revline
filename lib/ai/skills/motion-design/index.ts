@@ -11,7 +11,7 @@ export const motionDesign: EditorSkill = {
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
 
-For a new motion film, read page \`ideation\`: agree one message, one audience tension and 3–5 angles, each with "Hooks because …". The user's "do it" accepts that angle to BUILD immediately. Skip small edits and "just build it". Use page \`image-plates\` for real scene assets: icons, traced shapes, code and three.js come before generation. Never approve finished work on the user's behalf.
+For a new motion film, read page \`ideation\`: agree one message, one audience tension and 3–5 angles, each with "Hooks because …". The user's "do it" accepts that angle to BUILD immediately. Skip small edits and "just build it". Use page \`image-plates\` for real scene assets: icons, traced shapes and code come before generation. Never approve finished work on the user's behalf.
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
@@ -31,11 +31,6 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **Edit with patchScene; never retype the film.** Every change after the first build uses small patchScene edits. Read inspectClip with section or lines for short numbered blocks, then patch scoped snippets or line ranges with expectedRevision from that read (scene-engine, page \`react-scenes\`). Keep transitions that span sections on their shared timeline and check both sides when shared-code warnings appear. Never resend the film with editScene or rebuild a section as its own scene.
 - **All motion is GSAP on the frame clock.** Every move, even a single fade, is a GSAP tween in a \`useTimeline\` timeline, one per section: connected parts are the same tween, opens and closes overlap through position parameters (\`"<"\`, \`"-=0.2"\`), staggers come from GSAP, and SplitText, MorphSVG and DrawSVG run in it (read the gsap skill, readSkill name "gsap"). Never hand-time moves with \`progress()\` and \`mix()\` at typed seconds: that is what makes holds freeze, parts drift out of sync and moves jump. Never \`linear\` except for a constant drift.
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
-
-## 3D direction
-Read scene-engine page \`three-craft\` on every 3D build for material identity, lighting, grounding and composition with HTML type.
-
-Use real depth when it helps the subject: a camera push-in, a restrained orbit, or parallax between near and far objects. Mix the 3D object with readable HTML/GSAP titles in the same scene. Read scene-engine page \`three-scenes\` for ThreeLayer, camera/object timelines, lighting, models, type and CPU export limits. Use a soft fill and one directional key, matte materials and the confirmed brand palette; no sparkles or purple brand fills. All 3D motion follows the same paused GSAP timeline as 2D.
 
 ## Motion feel
 Motion has weight: things open, settle and follow through. A shape that just fades in, or slides at one speed and stops dead, reads as a template. In a recreation, the eases trackReference measures win; these rules fill in whatever the reference does not show.

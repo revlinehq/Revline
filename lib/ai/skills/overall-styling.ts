@@ -63,7 +63,7 @@ House defaults apply to invented graphics. Explicit user direction and measured 
 
 ## Isometric line diagram (default)
 
-Technical drawings that build themselves next to the speaker: ideas become outlined 3D blocks, charts and measurements, never filled cartoons or icons.
+Technical drawings that build themselves next to the speaker: ideas become outlined blocks, charts and measurements, never filled cartoons or icons.
 
 ### Palette
 - Panel background #0C0C0C, or transparent with a dark gradient (transparent to rgba(0,0,0,.65 to .85)) where it sits over footage.
