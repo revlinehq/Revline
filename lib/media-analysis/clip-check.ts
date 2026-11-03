@@ -144,7 +144,7 @@ export function checkClipData(
   const boundary: string[] = [];
   if (!tracks)
     boundary.push(
-      "Saved source audio signals are missing. Run findHighlights first.",
+      "Saved Gemini highlight judgment is missing. Run findHighlights first.",
     );
   if (words.length) {
     if (
@@ -185,20 +185,9 @@ export function checkClipData(
     boundary.push(`The payoff continues until ${request.payoffEnd}s.`);
   if (sourceEnd < request.reactionEnd - epsilon)
     boundary.push(
-      `The measured reaction continues until ${request.reactionEnd}s.`,
+      `The observed reaction continues until ${request.reactionEnd}s.`,
     );
-  const activeReaction = tracks?.signals.find(
-    (s) =>
-      ["laughter", "shouting", "cheering", "applause"].includes(s.kind) &&
-      s.strength >= 0.35 &&
-      s.start < sourceEnd &&
-      s.end > sourceEnd + 0.1,
-  );
-  if (activeReaction)
-    boundary.push(
-      `The out point interrupts ${activeReaction.kind} ending at ${activeReaction.end}s.`,
-    );
-  if (!words.length && tracks) {
+  if (!words.length && tracks?.levels.length) {
     const index = Math.floor(sourceEnd / 0.5),
       level = (tracks.levels[index] ?? -1200) / 10,
       before = tracks.levels
@@ -384,9 +373,7 @@ export function clipContactTimes(timeline: Timeline, source?: MediaAsset) {
     cuts.add(Math.max(clip.start, clip.start + clip.duration - frame));
     const sourceCuts =
       source?.analysis?.shots?.shots.map((s) => s.start) ??
-      readHighlights(source?.analysis?.highlights)
-        ?.signals.filter((s) => s.kind === "cut")
-        .map((s) => s.start) ??
+      readHighlights(source?.analysis?.highlights)?.sceneCuts ??
       [];
     const speakers = source?.analysis?.speakers;
     const speakerCuts =

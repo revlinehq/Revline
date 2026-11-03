@@ -143,7 +143,6 @@ export type MediaAsset = {
   waveform?: AudioWaveform;
   analysis?: {
     highlights?: string;
-    chatReplay?: string;
     facecam?: import('../media-analysis/clipping').FacecamAnalysis;
     speakers?: import('../media-analysis/clipping').SpeakerAnalysis;
     transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string;speaker?:number;speakerConfidence?:number}[]};

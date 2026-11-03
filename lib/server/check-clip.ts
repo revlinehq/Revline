@@ -8,6 +8,7 @@ import {
   type ClipCheckResult,
 } from "../media-analysis/clip-check";
 import { sourceEndOf } from "../editor/playback-rate";
+import type { FrameCache } from './frame-cache';
 import { captureTimelineFrames } from "./review-composition";
 import { ownedMediaUrl } from "./owned-media";
 const run = promisify(execFile);
@@ -20,6 +21,7 @@ export async function checkClipSnapshot(
   convexUrl: string,
   signal: AbortSignal,
   progress: (n: number) => void,
+  cache?: FrameCache,
 ): Promise<NonNullable<MediaTaskResult["snapshot"]>> {
   const request = clipCheckRequest.parse(snapshot.clipCheck),
     result = checkClipData(snapshot.timeline, snapshot.assets, request);
@@ -108,7 +110,7 @@ export async function checkClipSnapshot(
     convexUrl,
     signal,
     (n) => progress(30 + n * 0.65),
-    undefined,
+    cache,
     true,
   );
   const sheet = await contactSheet(captured.frames, result);

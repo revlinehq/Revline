@@ -251,7 +251,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
   }
   if(changes.highlights){const tracks=readHighlights(changes.highlights);if(!tracks||Math.abs(tracks.duration-duration)>.5)throw new ConvexError('Invalid highlight signal tracks.');}
-  const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','chatReplay','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
+  const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
   if (serializedBytes(compactAnalysis(analysis)) > 900_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };

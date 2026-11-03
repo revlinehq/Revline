@@ -22,7 +22,6 @@ if (!exportsOnly) {
   execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
   execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', "import scenedetect, cv2; assert hasattr(cv2, 'calcOpticalFlowPyrLK') and hasattr(cv2, 'estimateAffinePartial2D')"], { stdio: 'inherit' });
   execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
-  execFileSync(process.env.HIGHLIGHT_PYTHON, ['-c', 'import cv2, numpy, chat_downloader; from ai_edge_litert.interpreter import Interpreter; m=Interpreter(model_path=__import__("os").environ["HIGHLIGHT_MODEL_PATH"], num_threads=2); m.allocate_tensors(); assert m.get_output_details()[0]["shape"][-1] == 521'], { stdio: 'inherit' });
   if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
 }
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');

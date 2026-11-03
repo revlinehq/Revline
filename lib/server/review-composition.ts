@@ -121,7 +121,11 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     }
     return indices.map(index=>images.get(index)!);
   };
-  const images = cache && snapshot.cacheIdentity ? await cache.batch(at.map(time=>({kind:'timeline-png',identity:snapshot.cacheIdentity,frameIndex:Math.round(time*timeline.fps),width:size.width,height:size.height,format:'png'})),capture) : await capture(at.map((_,index)=>index));
+  const descriptors=at.map(time=>({kind:'timeline-png',identity:snapshot.cacheIdentity,frameIndex:Math.round(time*timeline.fps),width:size.width,height:size.height,format:'png'}));
+  const images:Buffer[]=[];
+  if(cache&&snapshot.cacheIdentity){
+    for(let first=0;first<at.length;first+=30)images.push(...await cache.batch(descriptors.slice(first,first+30),missing=>capture(missing.map(index=>first+index))));
+  }else images.push(...await capture(at.map((_,index)=>index)));
   for(const [index,time] of at.entries())frames.push({time,image:images[index].toString('base64')});
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Keep the existing tool image budget and encoding; cached PNGs are never replaced by these smaller JPEGs.

@@ -3,7 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
-- Clipping: Find whole-source highlights from cached audio, words and audience signals; verify every accepted clip tab with data checks and one framing sheet. Why: the user wanted faster discovery and honest clip delivery without Gemini.
+- Clipping: Let Gemini judge whole-source highlights and verify each accepted clip tab with data checks and one framing sheet. Why: the user wanted faster whole-source discovery and honest delivery where clips found equal tabs made.
 - Landing and editor: Removed Inspo Motion: the landing section, the product-menu link, the /inspo-motion command on web and iOS, and the /sharingan page, which now redirects home. Why: the user retired it; recreation stays a dev-testing capability through the MCP tools.
 - Reference reads: Cache exact frames and deterministic readings in private R2, with revision-scoped timeline renders. Why: agents repeatedly decoded the same moments and filled the media queue.
 - Link imports: Correct the stale five-minute hint, cap retries at three attempts, and add cancellation and file-upload recovery with the last error. Why: agent testing found misleading limits and imports that retried forever.

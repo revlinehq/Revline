@@ -6,8 +6,6 @@ ENV NODE_ENV=production \
     BEAT_TRACK_PYTHON=/opt/beat-tracking/bin/python \
     BEAT_TRACK_MODEL_PATH=/opt/models/beat_this-final0.ckpt \
     SCENE_DETECT_PYTHON=/opt/scene-detection/bin/python \
-    HIGHLIGHT_PYTHON=/opt/highlights/bin/python \
-    HIGHLIGHT_MODEL_PATH=/opt/models/yamnet.tflite \
     YT_DLP_PATH=/opt/video-import/bin/yt-dlp \
     MEDIA_WORKER_CONCURRENCY=1 \
     BEAT_TRACK_THREADS=2 \
@@ -51,13 +49,11 @@ CMD ["sh", "infra/media-worker/fly-entry.sh"]
 
 # Every media task kind, shared by the retained Cloudflare image and Fly.
 FROM runtime AS processor
-COPY scripts/beat-tracking-requirements.txt scripts/scene-detection-requirements.txt scripts/video-import-requirements.txt scripts/highlight-requirements.txt /opt/requirements/
+COPY scripts/beat-tracking-requirements.txt scripts/scene-detection-requirements.txt scripts/video-import-requirements.txt /opt/requirements/
 RUN python3 -m venv /opt/beat-tracking \
     && /opt/beat-tracking/bin/pip install --no-cache-dir -r /opt/requirements/beat-tracking-requirements.txt \
     && python3 -m venv /opt/scene-detection \
     && /opt/scene-detection/bin/pip install --no-cache-dir -r /opt/requirements/scene-detection-requirements.txt \
-    && python3 -m venv /opt/highlights \
-    && /opt/highlights/bin/pip install --no-cache-dir -r /opt/requirements/highlight-requirements.txt \
     && python3 -m venv /opt/video-import \
     && /opt/video-import/bin/pip install --no-cache-dir -r /opt/requirements/video-import-requirements.txt
 
@@ -68,8 +64,7 @@ COPY lib ./lib
 COPY scripts ./scripts
 COPY public ./public
 COPY infra/media-worker ./infra/media-worker
-RUN node scripts/install-highlight-model.mjs \
-    && node scripts/install-beat-model.mjs \
+RUN node scripts/install-beat-model.mjs \
     && node scripts/copy-vendor.mjs \
     && node infra/media-worker/runtime-check.mjs
 

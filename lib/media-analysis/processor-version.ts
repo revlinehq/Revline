@@ -5,4 +5,4 @@
 // 32: shared scene bundles. 33: keyframed reference crops. 34: uncapped scene media. 35: still-image reads/comparisons.
 export const MEDIA_PROCESSOR_VERSION = 38;
 
-// 38: cached CPU highlight discovery and clip delivery checks (36/37 reserved by frame-cache/worker fixes).
+// 38: cached Gemini highlight discovery and clip delivery checks (36/37 reserved by frame-cache/worker fixes).

@@ -22,6 +22,7 @@ import {
 } from "../lib/media-analysis/clip-check";
 import {
   defaultClipCount,
+  HIGHLIGHT_QUALITY_BAR,
   rankHighlights,
   readHighlights,
   type SourceType,
@@ -105,7 +106,7 @@ export const begin = internalMutation({
     const asset = await hydrateAsset(ctx, raw),
       tracks = readHighlights(asset.analysis?.highlights);
     if (!tracks)
-      throw new ConvexError("Highlight discovery has no saved signal tracks.");
+      throw new ConvexError("Highlight discovery has no saved Gemini judgment.");
     const candidates = rankHighlights(
       tracks,
       asset.analysis?.transcript,
@@ -163,7 +164,7 @@ export const begin = internalMutation({
       recommendedCount: previous?.reviewed
         ? previous.recommendedCount
         : recommendedCount,
-      qualityBar: 55,
+      qualityBar: HIGHLIGHT_QUALITY_BAR,
       candidates: candidates.slice(0, Math.max(10, recommendedCount)),
       coverage: tracks.coverage,
       warnings: tracks.warnings,
@@ -347,18 +348,7 @@ export const prepareCheck = internalQuery({
       );
     const raw = await ctx.db.get(row.assetId);
     if (!raw) throw new ConvexError("The accepted source was removed.");
-    const asset = await hydrateAsset(ctx, raw),
-      tracks = readHighlights(asset.analysis?.highlights);
-    let reactionEnd = candidate.payoff.end;
-    for (const s of tracks?.signals
-      .filter(
-        (s) =>
-          ["laughter", "shouting", "cheering", "applause"].includes(s.kind) &&
-          s.strength >= 0.35,
-      )
-      .sort((a, b) => a.start - b.start) ?? [])
-      if (s.start >= candidate.payoff.start && s.start <= reactionEnd + 1.5)
-        reactionEnd = Math.max(reactionEnd, s.end);
+    const reactionEnd = candidate.reactionEnd;
     return {
       timelineId: args.timelineId,
       request: {
@@ -544,7 +534,7 @@ export const completionState = internalQuery({
           start: choice.start,
           end: choice.end,
           payoffEnd: candidate.payoff.end,
-          reactionEnd: candidate.payoff.end,
+          reactionEnd: candidate.reactionEnd,
           criticalRegions: choice.criticalRegions ?? [],
         });
         errors.push(
@@ -602,7 +592,7 @@ export const completionState = internalQuery({
     }
     const passed = !errors.length;
     const finalMessage = passed
-      ? `${tabs.length ? `Created ${tabs.length} clips:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed the source evidence and clean-boundary quality bar." : ""}`
+      ? `${tabs.length ? `Created ${tabs.length} clips:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed Gemini judgment and the clean-boundary quality bar." : ""}`
       : undefined;
     return {
       required: true,

@@ -34,7 +34,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, rejectNewLayerOverlaps, validateTimeline } from "./lib/timeline";
 import { TIMELINE_CONFLICT } from "../lib/editor/timeline-sync";
-import { speakerRequestValidator, analysisMode, analysisRequestDocument, assetDocument, waveformValidator, beatsValidator, transcriptValidator, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
+import { highlightSourceTypeValidator, speakerRequestValidator, analysisMode, analysisRequestDocument, assetDocument, waveformValidator, beatsValidator, transcriptValidator, clipValidator, frameRequestValidator, videoRequestValidator, projectDocument, timelineValidator } from "./schema";
 import { validateFrameInspectionInput } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspection';
 import { normalizeTimeline } from '../lib/editor/types';
@@ -582,12 +582,12 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   return null;
 }});
 
-export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
+export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, highlightSourceType:v.optional(highlightSourceTypeValidator), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
   if (args.mode === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   const project = await requireProject(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
-  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
+  if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === 'highlights' || args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
   if(args.mode==='speakers'){
     const range=args.speakerRequest??{start:0,end:asset.duration??0};
     if(!Number.isFinite(range.start)||!Number.isFinite(range.end)||range.start<0||range.end<=range.start||range.end>(asset.duration??0)+.01||range.end-range.start>MAX_SPEAKER_WINDOW_SECONDS)throw new ConvexError(`Analyze active speakers in a source window of up to ${MAX_SPEAKER_WINDOW_SECONDS} seconds. Use followSubject on a retained clip.`);
@@ -610,8 +610,8 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     });
     if(repeated)return repeated._id;
   }
-  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + (args.mode === 'reference' ? 480_000 : 240_000) });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
+  const requestId = await ctx.db.insert("analysisRequests", { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, aiRunId: args.runId, mode: args.mode, ...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}), status: "pending", createdAt: Date.now(), expiresAt: Date.now() + (args.mode === 'highlights' ? 840_000 : args.mode === 'reference' ? 480_000 : 240_000) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: args.mode, analysisRequestId: requestId, ...(args.highlightSourceType?{highlightSourceType:args.highlightSourceType}:{}),...(args.speakerRequest?{speakerRequest:args.speakerRequest}:{}), ...(args.frameRequest ? { frameRequest: args.frameRequest } : {}), ...(args.videoRequest ? { videoRequest: args.videoRequest } : {}) },async()=>{
     // Rows are deleted when callers finish, but the original run's capacity
     // must survive that cleanup and every durable continuation segment.
     const enqueued=project.aiAnalysisUsage?.runId===args.runId?project.aiAnalysisUsage.enqueued:requests.length;
