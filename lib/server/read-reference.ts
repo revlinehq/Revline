@@ -1,7 +1,7 @@
-import { execFile } from 'node:child_process';
+import type { FrameCache } from './frame-cache';
+import { runMediaCommand as run } from './media-command';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { z } from 'zod';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
@@ -22,14 +22,14 @@ type Result = NonNullable<MediaTaskResult['read']>;
 type Box = { x: number; y: number; w: number; h: number };
 type Source = { width: number; height: number; fps: number; duration: number };
 
-const run = promisify(execFile);
 const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES = 30;
 /** A pixel counts as changed between frames when its gray level moves more than this (of 255). */
 const CHANGE = 24;
 const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
 const sourceProbe = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive(), r_frame_rate: z.string().optional(), side_data_list: z.array(z.object({ rotation: z.number().optional() })).optional(), tags: z.object({ rotate: z.string().optional() }).optional() })).optional(), format: z.object({ duration: z.string().optional() }).optional() });
 
-export async function probe(path: string, signal: AbortSignal): Promise<Source> {
+export async function probe(path: string, signal: AbortSignal, cache?: FrameCache): Promise<Source> {
+  if (cache) return cache.json({kind:'source-probe'}, () => probe(path, signal));
   const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height,r_frame_rate:stream_side_data=rotation:stream_tags=rotate:format=duration', '-of', 'json', path], { signal, timeout: 30_000 });
   const value = sourceProbe.parse(JSON.parse(stdout));
   const stream = value.streams?.[0], [num, den] = (stream?.r_frame_rate ?? '30/1').split('/').map(Number);
@@ -40,7 +40,8 @@ export async function probe(path: string, signal: AbortSignal): Promise<Source> 
 }
 
 /** One frame at a source second, full resolution or cropped to a box, as PNG. */
-export async function frameAt(path: string, directory: string, time: number, crop: Box | undefined, name: string, signal: AbortSignal) {
+export async function frameAt(path: string, directory: string, time: number, crop: Box | undefined, name: string, signal: AbortSignal, cache?: FrameCache): Promise<Buffer> {
+  if (cache) return cache.bytes({ kind: 'reference-png', timeMs: Number(Math.max(0, time).toFixed(3)) * 1000, fallbackMs: [.05,.15,.3,.6,1,2].map(back=>Number(Math.max(0,time-back).toFixed(3))*1000), width: crop?.w ?? 'source', height: crop?.h ?? 'source', crop, format: 'png', decoder: 'ffmpeg-seek' }, 'image/png', () => frameAt(path, directory, time, crop, name, signal));
   const output = join(directory, `${name}.png`);
   // A seek at or near the very end can decode nothing (the container runs a little longer than the video).
   // Step back until a real frame comes out, so a whole-length read never fails on its last frame.
@@ -84,14 +85,14 @@ export async function sheet(tiles: { image: Buffer; label: string; overlay?: str
 }
 
 /** Frames across a window, or a crop of them magnified, with how much each one changed from the frame before. */
-async function readSheet(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+async function readSheet(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   // fps reads consecutive moments (a transition at 10 fps); count spreads frames evenly across the window.
   const span = Math.max(0, work.end - work.start), count = work.fps ? Math.max(2, Math.min(MAX_FRAMES, Math.floor(span * work.fps) + 1)) : Math.max(1, Math.min(MAX_FRAMES, work.count ?? 8));
   const crop = work.crop ? clampBox(work.crop, source) : undefined, times = work.fps ? timesIn(work.start, work.start + (count - 1) / work.fps, count, source) : timesIn(work.start, work.end, count, source);
   const images: Buffer[] = new Array(times.length);
   let done = 0;
   await forEachLimited(times.map((time, index) => ({ time, index })), 4, async ({ time, index }, stop) => {
-    images[index] = await frameAt(path, directory, time, crop, `sheet-${index}`, AbortSignal.any([signal, stop]));
+    images[index] = await frameAt(path, directory, time, crop, `sheet-${index}`, AbortSignal.any([signal, stop]), cache);
     onProgress(10 + 60 * ++done / times.length);
   });
   // Change is measured on a small gray copy; the changed box is mapped back to source pixels.
@@ -111,20 +112,21 @@ async function readSheet(path: string, directory: string, source: Source, work: 
   onProgress(80);
   const tiles = images.map((image, index) => ({ image, label: `${index + 1}  ${times[index].toFixed(2)}s${frames[index].change !== undefined ? `  change ${Math.round(frames[index].change! * 100)}%` : ''}` }));
   const result = await sheet(tiles, area.w / area.h);
-  const { moments } = await findMoments(path, work.start, work.end, source, area, signal).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
+  const { moments } = await findMoments(path, work.start, work.end, source, area, signal, 12, cache).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
   return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames, moments };
 }
 
 /** Only the map of a long window: every moment and every hold, no frames and no image (cheap on a long talking-head clip). */
-async function readMoments(path: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
+async function readMoments(path: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
   const area = work.crop ? clampBox(work.crop, source) : { x: 0, y: 0, w: source.width, h: source.height };
-  const { moments, holds } = await findMoments(path, work.start, work.end, source, area, signal, 80);
+  const { moments, holds } = await findMoments(path, work.start, work.end, source, area, signal, 80, cache);
   return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], moments, holds };
 }
 
 /** Where the picture changes in a window, from every frame at 10 fps (cheap: small gray frames, no images for the model):
  * each moment's start, end, how strong it was, the region that moved, and whether it was a hard cut or motion. */
-async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal, limit = 12) {
+async function findMoments(path: string, start: number, end: number, source: Source, area: Box, signal: AbortSignal, limit = 12, cache?: FrameCache): Promise<{ moments: { start: number; end: number; peak: number; kind: 'cut' | 'motion'; region?: Box }[]; holds: { start: number; end: number }[]; changed: boolean }> {
+  if (cache) return cache.json({ kind: 'moments', start, end, source, area, limit }, () => findMoments(path, start, end, source, area, signal, limit));
   const from = Math.max(0, Math.min(start, source.duration)), to = Math.min(Math.max(end, from), source.duration), rate = 10;
   if (to - from < .2) return { moments: [], holds: [], changed: false };
   // A window up to 30 s is read wide enough that an app icon or one key is several pixels, not one; long maps stay small.
@@ -183,28 +185,28 @@ async function findMoments(path: string, start: number, end: number, source: Sou
 }
 
 /** Exact colors at points and color edges along lines, in source pixels of one frame. */
-async function readMeasure(path: string, directory: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
+async function readMeasure(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
   const [time] = timesIn(work.start, work.start, 1, source);
-  const { data, info } = await sharp(await frameAt(path, directory, time, undefined, 'measure', signal)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const { data, info } = await sharp(await frameAt(path, directory, time, undefined, 'measure', signal, cache)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { colors, edges } = measure({ data, width: info.width, height: info.height }, work);
   return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
 }
 
 /** The Google Fonts closest to the type in a crop, with the crop above each candidate drawn in the crop's colors. */
-async function readFont(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+async function readFont(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   if (!work.crop || !work.text) throw new AnalysisError('Matching a font needs a crop around the text and the text itself.', 400);
   const box = clampBox(work.crop, source), [time] = timesIn(work.start, work.start, 1, source);
-  const crop = await frameAt(path, directory, time, box, 'font', signal);
+  const crop = await frameAt(path, directory, time, box, 'font', signal, cache);
   const found = await matchFont(crop, work.text, { categories: work.categories as FontCategory[] | undefined, signal, onProgress });
   const result = await sheet(found.tiles, found.aspect, 1);
   return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], fonts: found.matches, fontColors: { ink: found.inkColor, background: found.background } };
 }
 
 /** One shape in a box traced to SVG paths; the sheet sets the crop beside the trace drawn over the background. */
-async function readTrace(path: string, directory: string, source: Source, work: Work, signal: AbortSignal): Promise<Result> {
+async function readTrace(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
   if (!work.box) throw new AnalysisError('Tracing needs a box around the shape.', 400);
   const box = clampBox(work.box, source), [time] = timesIn(work.start, work.start, 1, source);
-  const crop = await frameAt(path, directory, time, box, 'trace', signal);
+  const crop = await frameAt(path, directory, time, box, 'trace', signal, cache);
   let traced: Awaited<ReturnType<typeof traceShape>>;
   try { traced = await traceShape(crop, { ...(work.color ? { color: work.color } : {}), ...(work.tolerance ? { tolerance: work.tolerance } : {}) }); }
   catch (error) { throw new AnalysisError((error as Error).message, 400); }
@@ -224,7 +226,7 @@ function strongEdges(changes: { at: number; before: string; after: string }[]) {
 }
 
 /** Follow one box from the first frame: position, size, scale and rotation per frame, plus a sheet with the box drawn. */
-async function readTrack(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+async function readTrack(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   if (!work.box) throw new AnalysisError('Tracking needs a box around the object in the first frame.', 400);
   const box = clampBox(work.box, source), start = Math.min(work.start, Math.max(0, source.duration - .05)), end = Math.min(Math.max(work.end, start + .05), source.duration);
   const step = Math.max(1 / source.fps, (end - start) / 90), width = Math.min(640, source.width) & ~1, k = width / source.width, height = Math.round(source.height * k) & ~1;
@@ -241,7 +243,7 @@ async function readTrack(path: string, directory: string, source: Source, work: 
   });
   // The sheet: up to 8 tracked frames in color with the box drawn where it was found.
   const picks = [...new Set(Array.from({ length: Math.min(8, track.length) }, (_, index) => Math.round(index * (track.length - 1) / Math.max(1, Math.min(8, track.length) - 1))))];
-  const images = await Promise.all(picks.map(index => frameAt(path, directory, track[index].time, undefined, `track-${index}`, signal)));
+  const images = await Promise.all(picks.map(index => frameAt(path, directory, track[index].time, undefined, `track-${index}`, signal, cache)));
   onProgress(90);
   const tiles = picks.map((index, order) => {
     const item = track[index];
@@ -253,7 +255,7 @@ async function readTrack(path: string, directory: string, source: Source, work: 
 
 /** Hear a reference: every sound effect's measured onset, length and level, the picture change it lands on, and what it
  *  sounds like with a prompt to regenerate it (Gemini listens; the timing is measured, never guessed). */
-async function readSounds(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+async function readSounds(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   const from = Math.max(0, Math.min(work.start, source.duration)), to = Math.min(Math.max(work.end, from), source.duration), length = to - from;
   if (length < .3) throw new AnalysisError('Listen to at least 0.3 s.', 400);
   if (length > 60) throw new AnalysisError('Listen to at most 60 s at a time.', 400);
@@ -293,7 +295,7 @@ async function readSounds(path: string, directory: string, source: Source, work:
 
 /** How a reference moves (motionMap): camera keyframes with eases, transitions, element tweens and content changes,
  *  read from small gray frames at 30 fps. The same reading runs on a rendered timeline range, so the two compare. */
-async function readMotion(path: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+async function readMotion(path: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   if (work.end - work.start < .3 || work.end - work.start > 12) throw new AnalysisError('Map 0.3 to 12 s.', 400);
   const fps = 30, from = Math.floor(Math.max(0, work.start - .5) * fps) / fps, to = Math.min(work.end + .5, source.duration);
   const region = referenceCropAt(work.start, work.compareCrop, work.referenceCropKeyframes);
@@ -328,7 +330,7 @@ export async function imageSource(path: string) {
   return { image, width: meta.width!, height: meta.height!, fps: 0, duration: 0 };
 }
 
-export async function readReference(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false): Promise<Result> {
+export async function readReference(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false, cache?: FrameCache): Promise<Result> {
   if (stillImage) {
     signal.throwIfAborted();
     const source = await imageSource(path), crop = work.crop ? clampBox(work.crop, source) : undefined;
@@ -337,17 +339,17 @@ export async function readReference(path: string, directory: string, work: Work,
     onProgress(90);
     return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: 0, frames: [{ time: 0 }] };
   }
-  const source = await probe(path, signal);
+  const source = await probe(path, signal, cache);
   if (work.end < work.start) throw new AnalysisError('The window ends before it starts.', 400);
   onProgress(5);
-  if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal);
-  if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress);
-  if (work.mode === 'trace') return readTrace(path, directory, source, work, signal);
-  if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress);
-  if (work.mode === 'motion') return readMotion(path, source, work, signal, onProgress);
-  if (work.mode === 'sounds') return readSounds(path, directory, source, work, signal, onProgress);
-  if (work.momentsOnly) return readMoments(path, source, work, signal);
-  return readSheet(path, directory, source, work, signal, onProgress);
+  if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal, cache);
+  if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress, cache);
+  if (work.mode === 'trace') return readTrace(path, directory, source, work, signal, cache);
+  if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress, cache);
+  if (work.mode === 'motion') return readMotion(path, source, work, signal, onProgress, cache);
+  if (work.mode === 'sounds') return readSounds(path, directory, source, work, signal, onProgress, cache);
+  if (work.momentsOnly) return readMoments(path, source, work, signal, cache);
+  return readSheet(path, directory, source, work, signal, onProgress, cache);
 }
 
 /** Every moment across a whole video, for the reference breakdown; regions as 0..1 boxes of the frame. */

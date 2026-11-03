@@ -32,7 +32,6 @@ struct AgentComposer: View {
                 Menu("Attachments and commands", systemImage: "paperclip") {
                     Button("Import media", systemImage: "photo.on.rectangle", action: onAttach)
                     Button("Clip footage", systemImage: "scissors") { store.promptDraft = "/clip "; focused = true }
-                    Button("Recreate motion", systemImage: "play.rectangle") { store.promptDraft = "/inspo-motion "; focused = true }
                 }
                 .labelStyle(.iconOnly).buttonStyle(.borderless)
                 .frame(width: 44, height: 44)

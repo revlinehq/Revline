@@ -1,17 +1,15 @@
+import { runMediaCommand as run } from './media-command';
 import { processingThreads } from './processing-resources';
 import type { SubjectSelection } from './subject-segmentation';
-import { execFile } from 'node:child_process';
 import { createWriteStream } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { promisify } from 'node:util';
 import { createFalClient } from '@fal-ai/client';
 import { freezeParallax } from './freeze-parallax';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 
-const run = promisify(execFile);
 const RIFE_ENDPOINT = 'fal-ai/rife/video', VIDEO_UPSCALE_ENDPOINT = 'fal-ai/video-upscaler', IMAGE_UPSCALE_ENDPOINT = 'fal-ai/seedvr/upscale/image';
 const MAX_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
 export type DeriveRequest = { op: 'freeze' | 'slowmo' | 'upscale' | 'stats' | 'parallax'; start: number; end: number; time?: number; times?: number[]; factor?: number; target?: number; backgroundPrompt?: string; selection?: SubjectSelection };

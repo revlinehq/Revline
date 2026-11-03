@@ -11,7 +11,7 @@ export default {
     const origin = request.headers.get('Origin');
     const path = new URL(request.url).pathname;
     const diagnostic = (reason: string, status: number, error?: unknown) => console.warn('[media-storage]', {
-      route: ['/part', '/read', '/control'].includes(path) ? path : '/other', method: request.method, status, reason,
+      route: ['/part', '/read', '/control', '/cache'].includes(path) ? path : '/other', method: request.method, status, reason,
       ...(error instanceof Error ? { errorType: error.name } : {}),
       // Never persist signed URLs, authorization headers, media keys or filenames.
     });
@@ -28,7 +28,14 @@ export default {
     if (download && (typeof grant.fileName !== 'string' || grant.fileName !== safeDownloadFileName(grant.fileName))) return reply({ error: 'Invalid download grant' }, 403);
     let response: Response;
     try {
-      if (url.pathname === '/part' && request.method === 'PUT' && grant.operation === 'part' && validKey(grant.key) && grant.uploadId && Number.isInteger(grant.partNumber) && grant.partNumber! > 0 && grant.partNumber! <= 10000 && grant.size && request.body) {
+      if (url.pathname === '/cache' && request.method === 'PUT' && grant.operation === 'cacheWrite' && validKey(grant.key) && /\/cache-[a-f0-9-]+$/.test(grant.key) && request.body) {
+        const size = Number(request.headers.get('Content-Length'));
+        if (!Number.isSafeInteger(size) || size < 1 || size > 64 * 1024 * 1024) return reply({ error: 'Invalid cache object size' }, 400);
+        const contentType = request.headers.get('Content-Type');
+        if (!contentType || !['image/png', 'application/json', 'application/octet-stream'].includes(contentType)) return reply({ error: 'Invalid cache content type' }, 400);
+        await env.MEDIA.put(grant.key, request.body, { httpMetadata: { contentType } });
+        response = json({ ok: true });
+      } else if (url.pathname === '/part' && request.method === 'PUT' && grant.operation === 'part' && validKey(grant.key) && grant.uploadId && Number.isInteger(grant.partNumber) && grant.partNumber! > 0 && grant.partNumber! <= 10000 && grant.size && request.body) {
         // Upload bodies stream straight to R2; no whole-file buffering in the Worker.
         if (Number(request.headers.get('Content-Length')) !== grant.size || grant.size > 64 * 1024 * 1024) return reply({ error: 'Upload part size does not match' }, 400);
         const upload = env.MEDIA.resumeMultipartUpload(grant.key, grant.uploadId);

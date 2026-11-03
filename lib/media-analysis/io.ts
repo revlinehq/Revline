@@ -1,9 +1,7 @@
+import { runMediaCommand as run } from '../server/media-command';
 import { processingThreads } from '../server/processing-resources';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 export { downloadOwnedMedia } from '../server/owned-media';
 
-const run = promisify(execFile);
 export type AnalysisVideoPurpose = 'overview' | 'inspection';
 const analysisProfiles = {
   overview: { maxEdge: 960, crf: 26, videoKbps: 1500, audioKbps: 96 },
@@ -29,7 +27,7 @@ export async function probeMedia(path: string, signal: AbortSignal) {
 export async function extractTranscriptionAudio(input: string, output: string, signal: AbortSignal, window?: { start: number; end: number }) {
   const seek = window ? ['-ss', window.start.toFixed(6)] : [];
   const length = window ? ['-t', (window.end - window.start).toFixed(6)] : [];
-  await run('ffmpeg', ['-v', 'error', ...seek, '-i', input, ...length, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-y', output], { signal, timeout: 120_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', ...seek, '-i', input, ...length, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-y', output], { signal, timeout: !window && /^https?:\/\//.test(input) ? undefined : 120_000, maxBuffer: 1024 * 1024 });
 }
 
 /** Encode only the asked source window for a video question, at the inspection
