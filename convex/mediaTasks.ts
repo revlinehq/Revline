@@ -526,6 +526,12 @@ export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v
   const progress = Math.max(task.progress, args.progress ?? task.progress);
   const now=Date.now();
   await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
+  // The request budget bounds queue/worker silence, not a healthy source
+  // transfer. Long VOD downloads and their retries can outlast four minutes.
+  if(task.analysisRequestId){
+    const request=await ctx.db.get(task.analysisRequestId);
+    if(request?.taskId===task._id&&request.status==='running'&&request.expiresAt>now&&request.expiresAt<now+120_000)await ctx.db.patch(request._id,{expiresAt:now+240_000});
+  }
   if (task.renderJobId) await ctx.db.patch(task.renderJobId, { progress, updatedAt: Date.now() });
   return null;
 }});
