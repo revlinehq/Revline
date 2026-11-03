@@ -6,12 +6,12 @@ export const colorGrading: EditorSkill = {
   description: 'Color correction and looks: measuring footage (analyzeColor), matching shots (matchColor), the base grade, curves, HSL, LUT looks and bloom, in the right order, and how to keep skin tones natural. Read before any color, grade, look, LUT or "make it cinematic/warmer/cooler" request.',
   body: `# Color grading
 
-Color is two jobs, always in this order: **correct** (make shots look right and match each other), then **style** (the look). Never style uncorrected footage, and never correct after the look; a look on a mismatched edit makes the mismatch louder.
+Use analyzeColor and matchColor before styling: a LUT amplifies shot mismatches. Correct first, then style.
 
 ## The pipeline
 
 1. **Measure: analyzeColor.** Read real numbers before touching anything: exposure (median, shadows, highlights, contrast range), saturation, the light's cast (warmth = red over blue, tint = green over magenta) and the dominant colors. Its notes name problems in plain words ("warm orange cast", "underexposed", "highlights clip"). It measures the source footage, before any grade.
-2. **Match: matchColor.** When an edit cuts between cameras, rooms or lighting, pick the best-looking shot as the reference and match the others to it (strength 1; .6 to .8 keeps some of each shot's character). It writes the clips' red/green/blue curves. Match before any shared grade, because it compares source footage.
+2. **Match: matchColor.** When an edit cuts between cameras, rooms or lighting, use analyzeColor to choose a representative shot without clipping or a strong cast, showing the shared face/object; match others at strength 1, or .6–.8 to retain differences. It writes the clips' red/green/blue curves. Match before any shared grade, because it compares source footage.
 3. **Correct: setVisualEffects colorGrade.** Fix what analyzeColor found, using its suggestedGrade as the starting point: exposure in stops (-2..2), temperature (-100..100, negative cools an orange cast), tint (-100..100, negative removes green), contrast and saturation (1 is neutral, 0..2), vibrance (-100..100, boosts muted colors more than strong ones). Apply the same correction to every clip from one setup in one batch call.
 4. **Shape: setColorCurves.** Tone and contrast after the grade. Master S-curve for punch: [[0,0],[.25,.21],[.75,.8],[1,1]]. Faded film blacks: master [[0,.07],[1,1]]. Teal shadows: blue [[0,.06],[.5,.5],[1,1]]. Keep 2 to 5 points; extreme curves posterize.
 5. **Target: setHSL.** Fix or push single colors without touching the rest. Bands: ${HSL_BANDS.join(', ')}. Hue shifts in degrees (-60..60), saturation and luminance -1..1. Grays are never affected.
@@ -30,11 +30,11 @@ Faces are the first thing viewers judge, and skin lives almost entirely in the *
 - To calm a tungsten orange cast, correct temperature first; use orange saturation -.15 to -.3 only if skin still looks sunburned.
 - teal-orange and golden-hour push skin warmer; cap them at .7 on close-ups of people.
 - Mono and bleach-bypass looks remove or crush skin color on purpose; only use them when the user wants that drama.
-- After any look, check a close-up face with getFrames. Skin should read as skin, not orange, gray or pink.
+- After any look, check a close-up face with getFrames. Compare the same face at identical before/after times; reduce LUT amount if it adds an unwanted cast.
 
 ## Rules
 
-- Grade every clip of one scene identically; matching beats beauty.
+- Correct per camera/lighting setup, then share one creative look per scene; different lighting needs different correction.
 - Text, graphics and solids are never graded, only footage and images.
 - A look on only one clip of a sequence reads as a mistake unless it marks a deliberate shift (a flashback, a dream, a before/after).
 - When a request is vague ("make it look better"), correct only. Add a look only when asked for style, mood or a reference.

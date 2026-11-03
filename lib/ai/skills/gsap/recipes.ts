@@ -16,7 +16,7 @@ function Reveal({ text, at = 0 }: { text: string; at?: number }) {
     tl.from(chars, {
       opacity: 0, yPercent: 60, filter: 'blur(10px)',
       duration: .5, ease: 'expo.out',
-      stagger: { each: .035, from: 'start' },   // total spread = each * chars.length
+      stagger: { each: .035, from: 'start' },   // onset spread = each * (chars.length - 1)
     }, at);
   });
   return <div ref={ref} style={{ font: '500 96px/1 "Source Serif 4"', whiteSpace: 'pre' }}>{text}</div>;
@@ -25,7 +25,7 @@ function Reveal({ text, at = 0 }: { text: string; at?: number }) {
 
 - **Timing:** each letter .35 to .6 s; stagger .02 to .05 s per letter (a 10-letter word spells out in about .3 to .5 s). Words instead of chars: \`type: 'words'\`, stagger .06 to .12 s.
 - **Eases:** \`expo.out\` or \`power3.out\` (fast arrival, soft settle). \`back.out(1.6)\` for playful pops (use scale .6 to 1 with it).
-- **Measure it:** read the reveal with readFrames fps 10 and count the frames between the first and the last letter appearing: that span divided by the letters is \`each\`.
+- **Measure it:** bracket with readFrames fps 10, refine onset with adjacent frames. For N>1, \`each=(last onset-first onset)/(N-1)\`; settle also includes letter duration.
 - **Variants:** from the center \`from: 'center'\`; letters sliding up from a line \`yPercent: 100\` with the element \`overflow: hidden\` (a mask under the baseline); a wordmark revealing behind its logo: \`x: -40, opacity: 0\` from the logo side.
 - Only animate transforms, opacity and short blurs: blur on 30+ letters at 1080p is costly, keep it under .5 s.`);
 
@@ -95,7 +95,7 @@ const ref = useTimeline<HTMLDivElement>((tl, el) => {
 - Vertical travel stretches \`scaleY\` instead. CSS blur is the same in every direction; for a true directional streak put an SVG \`feGaussianBlur stdDeviation="14 0"\` filter on the element (\`filter: 'url(#mb)'\`) and tween its stdDeviation attribute.
 - For many elements moving together (keys flying into a row), stagger the whole recipe .04 to .08 s per element.
 - **Timing:** a fly-in .3 to .6 s, blur 8 to 20 px at the peak; a focus pull .4 to .8 s. Eases: \`expo.out\` for the move, \`power2.out\` for the blur and stretch so they clear before the move ends.
-- Blur is expensive: only on the few moving elements, never the whole frame for long.`);
+- Blur budget and exceptions: ≤8 elements for ≤0.5 s (revline); verify before/mid/settle with getFrames.`);
 
 const morph = recipe('morph', 'Morph: one shape or UI state turning into another, with MorphSVG or a manual FLIP between two layouts.', `# Morph
 
@@ -119,7 +119,7 @@ const ref = useTimeline<HTMLDivElement>((tl, el) => {
     .from(el.children, { opacity: 0, y: 12, duration: .3, stagger: .05, ease: 'power2.out' }, at + .45);
 });
 \`\`\`
-- A width and height tween relayouts, but for one card for under a second it is fine; keep the content in children that fade in after the box is mostly open (about 60% of the way).
+- For one <1 s panel morph, reveal children in the final 40%; keep the frame clipping them (revline).
 - Across a beat cut inside a film the morph is one tween in the film timeline running through the cut; never two clips that each do half.
 - **Timing:** .5 to .9 s; \`expo.inOut\` or \`power3.inOut\`. Contents in .2 to .35 s, staggered .04 to .06 s.`);
 
