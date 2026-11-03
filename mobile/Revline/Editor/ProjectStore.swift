@@ -10,7 +10,15 @@ final class ProjectStore {
     var status: AssistantStatus?
     var assets: [MediaAsset] = []
     var exports: [ExportJob] = []
-    var mediaTasks: [MediaTaskState] = []
+    private var taskHistory: [MediaTaskState] = []
+    private var taskProgress: [MediaTaskProgress] = []
+    var mediaTasks: [MediaTaskState] {
+        taskHistory.map { task in
+            var current = task
+            current.progress = taskProgress.first { $0.taskId == task.id }?.progress ?? task.progress
+            return current
+        }
+    }
     var tabs: [TimelineTab] = []
     var snapshots: [TimelineSnapshot] = []
     var queue: AssistantQueue?
@@ -47,7 +55,8 @@ final class ProjectStore {
         watch(session, "assistant:status", ["projectId": id], AssistantStatus.self) { $0.status = $1 }
         watch(session, "assets:list", ["projectId": id, "limit": 200.0], [MediaAsset].self) { $0.assets = $1 }
         watch(session, "renders:list", ["projectId": id, "limit": 40.0], [ExportJob].self) { $0.exports = $1 }
-        watch(session, "mediaTasks:list", ["projectId": id], [MediaTaskState].self) { $0.mediaTasks = $1 }
+        watch(session, "mediaTasks:list", ["projectId": id, "includeProgress": false], [MediaTaskState].self) { $0.taskHistory = $1 }
+        watch(session, "mediaTasks:progressForProject", ["projectId": id], [MediaTaskProgress].self) { $0.taskProgress = $1 }
         watch(session, "timelineTabs:list", ["projectId": id], [TimelineTab].self) { store, value in
             store.tabs = value
             if let selectedTab = store.selectedTab, !value.contains(where: { $0.id == selectedTab }) { store.selectedTab = nil }

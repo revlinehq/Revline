@@ -61,21 +61,21 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
 export const get = internalQuery({ args: { ownerId: v.string(), readId: v.id('referenceReads') }, returns: v.any(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
   if (!read || read.ownerId !== args.ownerId) throw new ConvexError('Frame reading not found.');
-  return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}) };
+  return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}), ...(read.resultStorageId ? { resultStorageId: read.resultStorageId } : {}) };
 }});
 
 /** get, deleting a finished or failed reading as it is read, so its images are read once instead of again by discard. */
 export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id('referenceReads') }, returns: v.any(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
   if (!read || read.ownerId !== args.ownerId) throw new ConvexError('Frame reading not found.');
-  if (read.status !== 'queued') await ctx.db.delete(read._id);
-  return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}) };
+  if (read.status !== 'queued' && !read.resultStorageId) await ctx.db.delete(read._id);
+  return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}), ...(read.resultStorageId ? { resultStorageId: read.resultStorageId } : {}) };
 }});
 
 export const discard = internalMutation({ args: { readId: v.id('referenceReads') }, returns: v.null(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
   if (read?.mode === 'compare' && read.status === 'queued' && read.taskId) await cancelMediaTask(ctx, read.taskId);
-  if (read) await ctx.db.delete(read._id);
+  if (read) { if(read.resultStorageId)await ctx.storage.delete(read.resultStorageId); await ctx.db.delete(read._id); }
   return null;
 }});
 
@@ -106,7 +106,7 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status !== 'queued') started = true;
       if (state.status === 'failed') throw new Error(`The frames could not be read: ${state.error ?? 'unknown error'}`);
-      if (state.status === 'completed') return state.result as ReadResult;
+      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     // Say which wait it was: a read that never started was stuck behind other media work, not too big.
@@ -123,7 +123,7 @@ export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: 
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status === 'failed') throw new Error(`The motion map could not read the reference: ${state.error ?? 'unknown error'}`);
-      if (state.status === 'completed') return (state.result as ReadResult).motion as MotionMap;
+      if (state.status === 'completed') { const result=state.resultStorageId?await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}):state.result;return (result as ReadResult).motion as MotionMap; }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     throw new Error('Reading the motion took too long. Map a shorter window.');
@@ -150,7 +150,7 @@ export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<
       if (signal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
       if (state.status === 'failed') throw new Error(`The comparison could not be made: ${state.error ?? 'unknown error'}`);
-      if (state.status === 'completed') return state.result as ReadResult;
+      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
     return null;

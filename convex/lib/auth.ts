@@ -22,8 +22,9 @@ export async function requireProject(
   ownerId: string,
   /** Undo history is up to 10 full timelines; load it only where it is read. */
   includeHistory = false,
+  sceneCode = true,
 ) {
-  const project = await readProject(ctx,projectId,includeHistory);
+  const project = await readProject(ctx,projectId,includeHistory,sceneCode);
   if (!project || project.deleting || project.ownerId !== ownerId) {
     throw new ConvexError("Project not found");
   }

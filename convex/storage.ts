@@ -113,7 +113,7 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},ret
           await removeMediaAttachment(ctx,asset);
         }else await removeOwnedAsset(ctx,ownerId,asset._id);
       }
-      for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.delete(shareId);}
+      for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){const share=await ctx.db.get(shareId);await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);if(share?.cardStorageId)await ctx.storage.delete(share.cardStorageId);await ctx.db.delete(shareId);}
     }
   }
   return [...projects];

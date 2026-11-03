@@ -46,8 +46,10 @@ const apiKey = () => {
 const body = (text: string, settings: { speed?: number; stability?: number }) => JSON.stringify({ text, model_id: MODEL, ...(settings.speed !== undefined || settings.stability !== undefined ? { voice_settings: { ...(settings.speed !== undefined ? { speed: settings.speed } : {}), ...(settings.stability !== undefined ? { stability: settings.stability } : {}) } } : {}) });
 const signalOf = (signal?: AbortSignal) => AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(120_000)]);
 /** The account allows a few concurrent ElevenLabs requests across every session; a busy moment waits and retries instead of failing. */
-async function speak(url: string, init: RequestInit) {
+async function speak(url: string, init: RequestInit, reserve: () => Promise<void>) {
   for (let attempt = 0; ; attempt++) {
+    await reserve();
+    init.signal?.throwIfAborted();
     const response = await fetch(url, init);
     if (response.status !== 429 || attempt >= 4) return response;
     await response.body?.cancel();
@@ -57,10 +59,10 @@ async function speak(url: string, init: RequestInit) {
 const failure = async (response: Response) => `ElevenLabs could not generate the voice (${response.status}): ${(await response.text()).slice(0, 300)}`;
 
 /** Speaks a script: mono samples (duplicated to stereo) at their own rate, and when each word starts and ends. */
-export async function generateNarration(request: VoiceRequest, signal?: AbortSignal): Promise<{ samples: Stereo; rate: number; words: SpokenWord[] }> {
+export async function generateNarration(request: VoiceRequest, signal: AbortSignal | undefined, reserve: () => Promise<void>): Promise<{ samples: Stereo; rate: number; words: SpokenWord[] }> {
   const key = apiKey(), payload = body(request.script, request);
   for (const [index, [format, rate]] of FORMATS.entries()) {
-    const response = await speak(`${ENDPOINT}/${encodeURIComponent(request.voiceId)}/with-timestamps?output_format=${format}`, { method: 'POST', headers: { 'xi-api-key': key, 'content-type': 'application/json' }, body: payload, signal: signalOf(signal) });
+    const response = await speak(`${ENDPOINT}/${encodeURIComponent(request.voiceId)}/with-timestamps?output_format=${format}`, { method: 'POST', headers: { 'xi-api-key': key, 'content-type': 'application/json' }, body: payload, signal: signalOf(signal) }, reserve);
     if (!response.ok) {
       const detail = await failure(response);
       if (index < FORMATS.length - 1 && (response.status === 401 || response.status === 403 || response.status === 422) && /tier|plan|subscription|output_format/i.test(detail)) continue;
@@ -78,8 +80,8 @@ export async function generateNarration(request: VoiceRequest, signal?: AbortSig
 }
 
 /** A short spoken sample of one voice as MP3, for the user to listen to before choosing. */
-export async function generateVoiceSample(voiceId: string, text: string, settings: { speed?: number; stability?: number } = {}, signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
-  const response = await speak(`${ENDPOINT}/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, { method: 'POST', headers: { 'xi-api-key': apiKey(), 'content-type': 'application/json' }, body: body(text, settings), signal: signalOf(signal) });
+export async function generateVoiceSample(voiceId: string, text: string, settings: { speed?: number; stability?: number } = {}, signal: AbortSignal | undefined, reserve: () => Promise<void>): Promise<Uint8Array<ArrayBuffer>> {
+  const response = await speak(`${ENDPOINT}/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`, { method: 'POST', headers: { 'xi-api-key': apiKey(), 'content-type': 'application/json' }, body: body(text, settings), signal: signalOf(signal) }, reserve);
   if (!response.ok) throw new Error(await failure(response));
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (!bytes.byteLength) throw new Error('ElevenLabs returned an empty sample.');

@@ -14,7 +14,7 @@ async function forwardToMcp(request: NextRequest) {
   headers.set('x-revline-mcp-origin', request.nextUrl.origin);
   const client = request.headers.get('cf-connecting-ip');
   if (client) headers.set('x-forwarded-for', client);
-  const response = await fetch(target, { method: request.method, headers, redirect: 'manual', ...(['GET', 'HEAD'].includes(request.method) ? {} : { body: await request.arrayBuffer() }) });
+  const response = await fetch(target, { method: request.method, headers, redirect: 'manual', ...(['GET', 'HEAD'].includes(request.method) ? {} : { body: request.body, duplex: 'half' as const }) });
   // fetch already decoded the body.
   const out = new Headers(response.headers);
   for (const name of ['content-encoding', 'content-length', 'transfer-encoding']) out.delete(name);

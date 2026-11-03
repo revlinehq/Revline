@@ -1,3 +1,4 @@
+import { patchTurn } from './lib/assistant_turn_data';
 import { makeFunctionReference } from 'convex/server';
 import { ConvexError, v, convexToJson, jsonToConvex, type Infer } from 'convex/values';
 import {internal} from './_generated/api';
@@ -13,7 +14,7 @@ const mutations = new Set([
   'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',
   'assistant:beginEditing', 'assistant:previewDraft', 'assistant:requestAnalysis', 'assistant:clearAnalysis',
-  'assistant:attachRunStockAudio', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',
+  'assistant:attachRunStockAudio', 'assistant:reserveAudioRequest', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',
   'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:update',
   'compositionReview:savePlan', 'compositionReview:request', 'compositionReview:cancel',
   'cutouts:startFromRun', 'derivations:startFromRun',
@@ -73,7 +74,7 @@ export const run = internalMutation({
     if(turn&&receipt?.kind==='timeline'){
       const review=new FastFrameReview(turn.pendingFastFrames);
       if(beforeProject?.timeline&&afterProject?.timeline)review.changed(beforeProject.timeline,afterProject.timeline);
-      await ctx.db.patch(turn._id,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
+      await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
     }
     return { value, replayed:false,...(receipt ? { receipt } : {}) };
   },

@@ -14,6 +14,8 @@ export type HistoryEntry={timeline?:Timeline;id?:Id<'timelineRevisions'>;key?:st
 type HistoryPlan=(previous:HistoryEntry[])=>Promise<HistoryEntry[]>;
 type IndexedRevision=Doc<'timelineHistoryIndex'>['entries'][number];
 const aiKeys=['aiQueuePaused','aiWorkflowId','aiRunning','aiEditing','aiError','aiRunId','aiUndoRecorded','aiCheckpointRevision','aiAnalysisUsage','aiRequest','aiRecovery','aiAgentName','aiAgentActiveUntil','aiReturnTimelineId'] as const;
+const payloadKeys=['aiRequest','aiRecovery'] as const;
+const runKeys=aiKeys.filter(key=>key!=='aiRequest'&&key!=='aiRecovery');
 type AI=Pick<Doc<'projects'>,typeof aiKeys[number]>;
 function aiFields(project:AI):AI {return Object.fromEntries(aiKeys.filter(key=>project[key]!==undefined).map(key=>[key,project[key]]));}
 
@@ -22,22 +24,55 @@ export async function projectIdentity(ctx:Context,projectId:Id<'projects'>,owner
   const legacy=identity?null:await ctx.db.get(projectId);
   const source=identity??legacy;
   if(!source||source.deleting||(ownerId!==undefined&&source.ownerId!==ownerId))throw new ConvexError('Project not found');
-  return {_id:projectId,ownerId:source.ownerId,threadId:source.threadId};
+  return {_id:projectId,ownerId:source.ownerId,threadId:source.threadId,...(source.timelineTabs!==undefined?{timelineTabs:source.timelineTabs}:{}),...(source.activeTimelineId!==undefined?{activeTimelineId:source.activeTimelineId}:{})};
 }
 export async function projectRun(ctx:Context,projectId:Id<'projects'>,ownerId?:string) {
   const identity=await projectIdentity(ctx,projectId,ownerId);
   const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   return {...identity,...aiFields(run??(await ctx.db.get(projectId))!)};
 }
+/** Only run bookkeeping and a revision number; never a timeline, scene or prompt. */
+export async function projectRunContext(ctx:Context,projectId:Id<'projects'>,ownerId?:string) {
+  const run=await projectRun(ctx,projectId,ownerId);
+  const metadata=await ctx.db.query('projectRunMetadata').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  const legacy=metadata?null:await ctx.db.get(projectId);
+  return {...run,...(legacy?{timelineTabs:legacy.timelineTabs,activeTimelineId:legacy.activeTimelineId}:{}),revision:metadata?.revision??legacy?.revision??0};
+}
+export async function runPayload(ctx:Context,projectId:Id<'projects'>) {
+  return ctx.db.query('aiRunPayloads').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+}
+/** Fast run-only writes leave timelines, history and prompt payloads out of the transaction. */
+export async function writeRunState(ctx:MutationCtx,projectId:Id<'projects'>,patch:AI) {
+  const identity=await projectIdentity(ctx,projectId);
+  const row=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  // Upgrade legacy projects at the established write seam once.
+  const metadata=await ctx.db.query('projectRunMetadata').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  if(!row||!metadata||row.aiRequest!==undefined||row.aiRecovery!==undefined){await writeProject(ctx,projectId,patch);return;}
+  const changes=Object.fromEntries(runKeys.filter(key=>Object.hasOwn(patch,key)).map(key=>[key,patch[key]]));
+  if(Object.keys(changes).length)await ctx.db.patch(row._id,changes);
+  if(payloadKeys.some(key=>Object.hasOwn(patch,key))){
+    const payload=await runPayload(ctx,projectId);
+    const value=Object.fromEntries(payloadKeys.map(key=>[key,Object.hasOwn(patch,key)?patch[key]:payload?.[key]]));
+    if(payload)await ctx.db.patch(payload._id,value);else if(Object.values(value).some(value=>value!==undefined))await ctx.db.insert('aiRunPayloads',{projectId,...value});
+  }
+  const next={...row,...patch};
+  await syncProjectAgent(ctx,projectId,next);
+  if(Object.hasOwn(patch,'aiRunning')){
+    const catalog=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+    if(catalog&&catalog.aiRunning!==!!next.aiRunning)await ctx.db.patch(catalog._id,{aiRunning:!!next.aiRunning});
+  }
+  return identity;
+}
 /** `sceneCode: false` keeps scene code as stored (by hash) for editors that load each code once. */
 export async function readProject(ctx:Context,projectId:Id<'projects'>,includeHistory=false,sceneCode=true):Promise<Doc<'projects'>|null> {
   const project=await ctx.db.get(projectId);if(!project)return null;
   const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  const payload=await runPayload(ctx,projectId);
   const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT):[];
   // Legacy fields support rollout and old saved fixtures until their next write.
   const restore=(timeline:Timeline)=>sceneCode?loadSceneCode(ctx,timeline):timeline;
   const history=includeHistory?await Promise.all((project.history??revisions.reverse().map(row=>row.timeline)).map(restore)):undefined;
-  return {...project,...aiFields(run??{}),...aiFields(project),timeline:project.timeline&&await restore(project.timeline),history};
+  return {...project,...aiFields(run??{}),...aiFields(payload??{}),...aiFields(project),timeline:project.timeline&&await restore(project.timeline),history};
 }
 /** Undo snapshots are up to 10 full timelines; this small row lists them (id, fingerprint, size) so
  * writes and the editor's subscription never re-read every snapshot. */
@@ -73,8 +108,11 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const previous:HistoryEntry[]=project.history!==undefined?project.history.map(timeline=>({timeline})):rows.slice(-HISTORY_LIMIT).map(row=>({id:row.id,key:row.key||undefined,bytes:row.bytes,...(row.timeline?{timeline:row.timeline}:{})}));
   // Kept rows must stay in sequence order ahead of every inserted snapshot.
   const order=new Map(rows.map((row,index)=>[row.id,index]));let last=-1,fresh=false;
-  const next:HistoryEntry[]=[];
-  for(const entry of boundedEntries(await plan(previous))){
+  const next:HistoryEntry[]=[],known=storedSceneCode(project.timeline);
+  // Apply the history budget to the bytes actually stored, not hydrated scene code.
+  const planned=await plan(previous);
+  const sized=await Promise.all(planned.map(async entry=>entry.bytes!==undefined||!entry.timeline?entry:{...entry,bytes:serializedBytes(await storeSceneCode(ctx,entry.timeline,known))}));
+  for(const entry of boundedEntries(sized)){
     const index=entry.id===undefined?undefined:order.get(entry.id);
     if(!fresh&&index!==undefined&&index>last){last=index;next.push(entry);continue;}
     // A stored snapshot moved out of order is written again, so read it before its row goes.
@@ -83,7 +121,7 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const kept=new Set(next.flatMap(entry=>entry.id?[entry.id]:[]));
   for(const row of rows)if(!kept.has(row.id))await ctx.db.delete(row.id);
   let sequence=rows.at(-1)?.sequence??0;
-  const byId=new Map(rows.map(row=>[row.id,row])),known=storedSceneCode(project.timeline);
+  const byId=new Map(rows.map(row=>[row.id,row]));
   const entries:IndexedRevision[]=[];
   for(const entry of next){
     const stored=entry.id&&byId.get(entry.id);
@@ -96,24 +134,41 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const index=await readHistoryIndex(ctx,project._id);
   if(index)await ctx.db.replace(index._id,{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});else await ctx.db.insert('timelineHistoryIndex',{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});
 }
+type AgentState=Pick<Doc<'projects'>,'aiAgentName'|'aiAgentActiveUntil'|'aiRunning'|'aiRunId'>;
+export function projectAgentSummary(project:AgentState) {
+  return project.aiAgentName?{name:project.aiAgentName.replace(/\s*\([^)]*\)\s*$/,'')||project.aiAgentName,until:project.aiAgentActiveUntil??0,running:!!project.aiRunning&&!!project.aiRunId?.startsWith('mcp-')}:null;
+}
+/** The catalog never joins prompt/recovery rows just to show the connected agent. */
+export async function syncProjectAgent(ctx:MutationCtx,projectId:Id<'projects'>,state:AgentState) {
+  const row=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  const agentSummary=projectAgentSummary(state);
+  if(row&&JSON.stringify(row.agentSummary)!==JSON.stringify(agentSummary))await ctx.db.patch(row._id,{agentSummary});
+}
 async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
-  const values={projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
+  const values={agentSummary:projectAgentSummary(project),projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
   if(!existing){await ctx.db.insert('projectCatalog',values);return;}
   // Every open project list re-runs when a catalog row changes. Write only when something the list
   // shows changed; a newer updatedAt alone is written at most once a minute.
   const shown=(['title','aspectRatio','clipCount','aiRunning','deleting'] as const).some(key=>existing[key]!==values[key]);
   const stale=values.updatedAt!==existing.updatedAt&&(values.updatedAt??0)-(existing.updatedAt??0)>=60_000;
-  if(shown||stale||values.ownerId!==existing.ownerId)await ctx.db.patch(existing._id,values);
+  if(shown||stale||values.ownerId!==existing.ownerId||JSON.stringify(existing.agentSummary)!==JSON.stringify(values.agentSummary))await ctx.db.patch(existing._id,values);
 }
 /** One write seam separates run state/history while preserving the public project shape.
  * `planHistory` derives the next history from the stored one without a second read. */
 export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patch:Partial<Omit<Doc<'projects'>,'_id'|'_creationTime'>>,planHistory?:HistoryPlan,note?:RevisionNote) {
   const raw=await ctx.db.get(projectId);if(!raw)throw new ConvexError('Project not found');
   const existing=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
-  const previous={...raw,...aiFields(existing??{}),...aiFields(raw)},next={...previous,...patch};
-  const aiPatch=Object.fromEntries(aiKeys.map(key=>[key,next[key]]));
-  if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...aiFields(next)});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key)))await ctx.db.patch(existing._id,aiPatch);
+  const payload=await runPayload(ctx,projectId);
+  const previous={...raw,...aiFields(existing??{}),...aiFields(payload??{}),...aiFields(raw)},next={...previous,...patch};
+  const aiPatch=Object.fromEntries(aiKeys.map(key=>[key,payloadKeys.some(name=>name===key)?undefined:next[key]]));
+  if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...Object.fromEntries(runKeys.filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key))||payloadKeys.some(key=>Object.hasOwn(existing,key)))await ctx.db.patch(existing._id,aiPatch);
+  if(!payload||payloadKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(existing??{},key)||Object.hasOwn(raw,key))){
+    const value={projectId,aiRequest:next.aiRequest,aiRecovery:next.aiRecovery};
+    if(payload)await ctx.db.patch(payload._id,value);else if(next.aiRequest!==undefined||next.aiRecovery!==undefined)await ctx.db.insert('aiRunPayloads',value);
+  }
+  const metadata=await ctx.db.query('projectRunMetadata').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  if(!metadata)await ctx.db.insert('projectRunMetadata',{projectId,revision:next.revision??0});else if(metadata.revision!==(next.revision??0))await ctx.db.patch(metadata._id,{revision:next.revision??0});
   if(planHistory||Object.hasOwn(patch,'history')||raw.history!==undefined)await writeHistory(ctx,raw,planHistory??replaceHistory(ctx,patch.history??raw.history??[]));
   const plain={...patch,...(patch.timeline?{timeline:await storeSceneCode(ctx,patch.timeline,storedSceneCode(raw.timeline))}:{}),history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
   // Every write to the project document re-runs each open editor's project queries; skip no-op patches

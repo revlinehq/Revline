@@ -2,7 +2,7 @@ import { processorBackend } from './lib/processor_backend';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
-import { initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
+import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask } from './lib/media_task_data';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
@@ -305,9 +305,9 @@ export const get = query({ args: { taskId: v.id('mediaTasks') }, returns: taskSt
   if (!task || task.ownerId !== ownerId) throw new ConvexError('Media task not found.');
   await projectIdentity(ctx, task.projectId, ownerId);
   const { kind, status, progress, attempt, error, assetId,activity,activityStartedAt } = task;
-  return { _id: args.taskId, kind, status, progress, attempt, error, assetId,activity,activityStartedAt };
+  return { _id: args.taskId, kind, status, progress: (await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',args.taskId)).unique())?.progress??progress, attempt, error, assetId,activity,activityStartedAt };
 }});
-export const list = query({ args: { projectId: v.id('projects') }, returns: v.array(taskState), handler: async (ctx, args) => {
+export const list = query({ args: { projectId: v.id('projects'), includeProgress:v.optional(v.boolean()) }, returns: v.array(taskState), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const migration = await ctx.db.query('projectDataMigration').withIndex('by_key', q => q.eq('key', 'io-tasks-v1')).unique();
   if (!migration?.completed) {
@@ -315,7 +315,13 @@ export const list = query({ args: { projectId: v.id('projects') }, returns: v.ar
     return tasks.map(({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }));
   }
   const tasks = await ctx.db.query('mediaTaskViews').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
-  return tasks.map(({ taskId: _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }));
+  return Promise.all(tasks.map(async ({ taskId: _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress:args.includeProgress!==false&&['queued','running','retrying'].includes(status)?(await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',_id)).unique())?.progress??progress:progress, attempt, error, assetId,activity,activityStartedAt })));
+}});
+/** Progress has its own bounded subscription; a percentage never invalidates the task history. */
+export const progressForProject=query({args:{projectId:v.id('projects')},returns:v.array(v.object({taskId:v.id('mediaTasks'),progress:v.number()})),handler:async(ctx,args)=>{
+  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
+  const rows=await ctx.db.query('mediaTaskProgress').withIndex('by_project_createdAt',q=>q.eq('projectId',args.projectId)).order('desc').take(40);
+  return rows.map(({taskId,progress})=>({taskId,progress}));
 }});
 /** Fails an unfinished task permanently and stops its workflow. */
 export async function failMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>, error: string) {
@@ -345,7 +351,7 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   if(new Set(candidates.map(task=>task.ownerId)).size<2)return candidates[0]??null;
   const busy=new Map<string,boolean>();
   for(const task of candidates){
-    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await ctx.db.query('mediaTasks').withIndex('by_owner_status',q=>q.eq('ownerId',task.ownerId).eq('status','running')).take(FAIR_RUNNING_PER_OWNER)).length>=FAIR_RUNNING_PER_OWNER);
+    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await runningMediaTaskCount(ctx,task.ownerId,FAIR_RUNNING_PER_OWNER))>=FAIR_RUNNING_PER_OWNER);
     if(!busy.get(task.ownerId))return task;
   }
   return candidates[0];
@@ -439,7 +445,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(!saved.sourceTimeline&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
     // A share card: the published timeline, as people who open the link will see it.
     let card:{title:string}|undefined;
-    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=share.timeline;card={title:share.cardTitle??share.title};}
+    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=await loadSceneCode(ctx,share.timeline);card={title:share.cardTitle??share.title};}
     // A scene clip's own filmstrip: that clip alone, from its first frame.
     // The visual guard: a proposed change beside the timeline it would replace.
     let baseline:Timeline|undefined;
@@ -597,7 +603,9 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!task.readId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame reading is no longer active.');
     const images = [result.read.image, ...(result.read.extraImages ?? [])].filter((image): image is string => !!image);
     if (images.some(image => !/^[A-Za-z0-9+/]+=*$/.test(image)) || images.reduce((sum, image) => sum + image.length, 0) > 900_000) throw new ConvexError('The frame sheet is too large to return.');
-    await ctx.db.patch(task.readId, { status: 'completed', result: result.read });
+    // Older workers still call this mutation. Hand off once to file storage; the
+    // polling row stays queued and small until publication, never containing image/track arrays.
+    await ctx.scheduler.runAfter(0,internal.mediaTaskResults.publishLegacyRead,{taskId:task._id,leaseToken:task.leaseToken!,result:result.read});
   },
   snapshot: async (ctx, task, result) => {
     if (!result.snapshot) throw new ConvexError('Frame capture completed without images.');
@@ -620,7 +628,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     await ctx.db.patch(snapshot._id, { status: 'completed', frames });
     if (snapshot.clipId && snapshot.key) await ctx.scheduler.runAfter(0, internal.sceneThumbs.storeImages, { snapshotId: snapshot._id });
     // A share card goes onto its share; the request itself is not kept.
-    if (snapshot.shareId && frames[0]) { const share = await ctx.db.get(snapshot.shareId); if (share?.published) await ctx.db.patch(share._id, { cardImage: frames[0].image, cardUpdatedAt: Date.now() }); await ctx.db.delete(snapshot._id); }
+    if (snapshot.shareId && frames[0]) await ctx.scheduler.runAfter(0, internal.timelineShares.storeCard, { snapshotId: snapshot._id });
   },
   render: async (ctx, task) => {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
@@ -706,9 +714,9 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
   facecam: saveAnalysisResult, speakers: saveAnalysisResult, transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult, reference: saveAnalysisResult,
 };
 
-export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {
+async function completeTask(ctx:MutationCtx,args:{taskId:Id<'mediaTasks'>;leaseToken:string;result:TaskResult},readResultStorageId?:Id<'_storage'>){
   const saved = await ctx.db.get(args.taskId);
-  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
+  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) { if(readResultStorageId)await ctx.storage.delete(readResultStorageId); return null; }
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   // Evidence only counts for the task kind that asked for it.
   if (args.result.review && task.kind !== 'review') throw new ConvexError('The composition review is no longer active.');
@@ -716,10 +724,16 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (args.result.read && task.kind !== 'read') throw new ConvexError('The frame reading is no longer active.');
   if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
-  await RESULT_HANDLERS[task.kind](ctx, task, args.result);
+  if(readResultStorageId){
+    if(task.kind!=='read'||!task.readId||!await analysisStillActive(ctx,task))throw new ConvexError('The frame reading is no longer active.');
+    await ctx.db.patch(task.readId,{status:'completed',result:undefined,resultStorageId:readResultStorageId});
+  }else await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
   await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now(),...(task.kind==='import'&&task.outputAssetId?{assetId:task.outputAssetId}:{}) });
   await signalResult(ctx, task, { success: true, retryable: false });
   await releaseRenderSeat(ctx, task);
   return null;
-}});
+}
+export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: completeTask });
+/** Only the storage action can publish a file result, after checking the worker lease. */
+export const completeRead = internalMutation({args:{...mediaTaskCredentials,storageId:v.id('_storage')},returns:v.null(),handler:(ctx,{storageId,...credentials})=>completeTask(ctx,{...credentials,result:{}},storageId)});

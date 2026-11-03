@@ -1,3 +1,4 @@
+import { downloadPublicHttps } from './public-https';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Timeline } from '../editor/types';
@@ -23,23 +24,13 @@ export async function prepareSceneThreeResources(directory: string, timeline: Ti
     if (files[url]) return;
     const target = new URL(url);
     if (target.protocol !== 'https:' || target.username || target.password) throw new Error('3D resources need public HTTPS URLs without credentials.');
-    const response = await fetch(target, { signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]) });
-    if (!response.ok || !response.body) throw new Error(`3D resource could not load (HTTP ${response.status}): ${target.pathname}`);
-    const chunks: Uint8Array[] = [];
-    let size = 0;
-    const reader = response.body.getReader();
-    while (true) {
-      const { done, value: chunk } = await reader.read();
-      if (done) break;
-      size += chunk.length; total += chunk.length;
-      if (size > 32 * 1024 * 1024 || total > 96 * 1024 * 1024) throw new Error('3D resources exceed the CPU scene budget (32 MB each, 96 MB total). Use smaller project GLB models.');
-      chunks.push(chunk);
-    }
-    const bytes = Buffer.concat(chunks);
+    const resource = await downloadPublicHttps(url, { maxBytes: Math.min(32 * 1024 * 1024, 96 * 1024 * 1024 - total), signal });
+    total += resource.data.byteLength;
+    const bytes = Buffer.from(resource.data);
     const name = `scene-3d-resource-${Object.keys(files).length}${/\.[a-z0-9]+$/i.exec(target.pathname)?.[0] ?? '.bin'}`;
     await writeFile(join(directory, name), bytes);
     files[url] = `./${name}`;
-    if (model) for (const uri of modelResourceUris(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))) await save(new URL(uri, target).href, false);
+    if (model) for (const uri of modelResourceUris(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength))) await save(new URL(uri, resource.url).href, false);
   };
   for (const url of urls) await save(url, /\.(?:glb|gltf)$/i.test(new URL(url).pathname));
   return files;

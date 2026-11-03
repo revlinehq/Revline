@@ -21,7 +21,7 @@ export type SoundEffectRequest = z.infer<typeof soundEffectInput>;
 class SilentSoundError extends Error {}
 
 /** Generates one sound effect: stereo samples starting at its first audible sample, peaking with the library. */
-export async function generateSoundEffect(request: SoundEffectRequest, signal?: AbortSignal): Promise<{ samples: Stereo; rate: number }> {
+export async function generateSoundEffect(request: SoundEffectRequest, signal: AbortSignal | undefined, reserve: () => Promise<void>): Promise<{ samples: Stereo; rate: number }> {
   const key = process.env.ELEVENLABS_API_KEY;
   if (!key) throw new Error('Sound generation is not configured (ELEVENLABS_API_KEY is missing).');
   if (request.loop && request.duration !== undefined && request.duration < .5) throw new Error('A seamless loop needs at least 0.5 seconds. For a shorter one-shot effect, set loop to false.');
@@ -33,6 +33,8 @@ export async function generateSoundEffect(request: SoundEffectRequest, signal?: 
     const generatedDuration = attempt && !request.loop ? Math.min(30, Math.max(2, (duration ?? 1) * 2)) : duration;
     const body = JSON.stringify({ text, model_id: MODEL, loop: request.loop ?? false, prompt_influence: request.promptInfluence ?? .3, ...(generatedDuration !== undefined ? { duration_seconds: generatedDuration } : {}) });
     for (; formatIndex < FORMATS.length; formatIndex++) {
+      await reserve();
+      signal?.throwIfAborted();
       const response = await fetch(`${ENDPOINT}?output_format=${FORMATS[formatIndex]}`, { method: 'POST', headers: { 'xi-api-key': key, 'content-type': 'application/json' }, body, signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(90_000)]) });
       if (response.ok) {
         try { return shape(new Uint8Array(await response.arrayBuffer()), request.loop ?? false, request.loop ? undefined : request.duration); }

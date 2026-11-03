@@ -23,21 +23,33 @@ export function inlineFile(value: unknown): value is { type: 'file'; data: { typ
 function hasInlineFile(value: unknown): boolean {
   return inlineFile(value) || (Array.isArray(value) ? value.some(hasInlineFile) : !!value && typeof value === 'object' && Object.values(value).some(hasInlineFile));
 }
-function toolDisplay(value: unknown, key = ''): unknown {
+// The chat renders receipts, errors, choices and reference breakdowns. Full read payloads
+// stay in the agent component for its context; the subscribed copy carries no timeline/media bodies.
+const resultBodies=new Set(['timeline','assets','analysis','transcript','tracks','frames','clips','clip']);
+function toolDisplay(value: unknown, key = '', result = false): unknown {
   if (inlineFile(value)) return { ...value, data: { type: 'data', data: '' } };
   if (typeof value === 'string') {
     if (codeKeys.has(key)) return '';
     if (value.length <= 2048 || /^https:\/\//.test(value)) return value;
-    try { return JSON.stringify(toolDisplay(JSON.parse(value))); } catch { return value.slice(0, 2048); }
+    try { return JSON.stringify(toolDisplay(JSON.parse(value), '', result)); } catch { return value.slice(0, 2048); }
   }
-  if (Array.isArray(value)) return value.map(item => toolDisplay(item));
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, toolDisplay(item, name)]));
+  if (Array.isArray(value)) {
+    if(result&&key==='changedClips')return value.map(item=>{const clip=item as {id?:unknown;kind?:unknown};return {id:clip?.id,kind:clip?.kind};});
+    return value.map(item => toolDisplay(item, '', result));
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).filter(([name])=>!(result&&resultBodies.has(name))).map(([name, item]) => [name, toolDisplay(item, name, result||name==='output')]));
+  }
   return value;
 }
 
 export function displayMessage(doc: MessageDoc): MessageDoc {
   const message = doc.message;
-  const content = message && typeof message.content !== 'string' ? message.content.map(part => part.type === 'tool-call' || part.type === 'tool-result' ? toolDisplay(part) : part) : message?.content;
+  const content = message && typeof message.content !== 'string' ? message.content.map(part => {
+    const {providerOptions:_,providerMetadata,...visible}=part as typeof part&{providerOptions?:unknown;providerMetadata?:{revline?:unknown}};
+    const clean={...visible,...(providerMetadata?.revline?{providerMetadata:{revline:providerMetadata.revline}}:{})};
+    return part.type === 'tool-call' || part.type === 'tool-result' ? toolDisplay(clean,'',part.type==='tool-result') : clean;
+  }) : message?.content;
   return parse(vMessageDoc, { ...doc, providerOptions: undefined, usage: undefined, warnings: undefined, reasoningDetails: undefined,
     providerMetadata: doc.providerMetadata?.revline ? { revline: doc.providerMetadata.revline } : undefined,
     message: message ? { ...message, content } : undefined,
