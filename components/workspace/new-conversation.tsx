@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
+import { useAuth } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -19,8 +19,12 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { rememberOpeningRequest } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
-import { Captions, Clapperboard, Plus, Scissors } from 'lucide-react';
+import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { VideoLinkImport } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
@@ -34,23 +38,15 @@ import './new-conversation.css';
 const briefKey = 'revline:next-brief';
 const cloudKey = 'revline:next-cloud-footage';
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
-const startingPoints = [
-  { title: 'A tighter cut', detail: 'Remove pauses and false starts', prompt: 'Remove pauses and false starts from my footage.', icon: Scissors },
-  { title: 'A captioned clip', detail: 'Make every word easy to follow', prompt: 'Add clear, readable captions to my video.', icon: Captions },
-  { title: 'A launch teaser', detail: 'Start with a product and an idea', prompt: 'Create a 15-second launch teaser for my product.', icon: Clapperboard },
-];
 
 export function NewConversation() {
   const router = useRouter();
-  const { user } = useUser();
-  const firstName = user?.firstName?.trim() || user?.fullName?.trim().split(/\s+/)[0];
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const projects = useQuery(api.projects.list, isAuthenticated ? { limit: 6 } : 'skip');
-  const library = useQuery(api.assets.library, isAuthenticated ? { paginationOpts: { numItems: 1, cursor: null } } : 'skip');
-  const firstProject = projects?.length === 0;
   const picker=useRef<HTMLInputElement>(null);
+  const [linkOpen, setLinkOpen] = useState(false);
+  const importVideo = useMutation(api.mediaTasks.importVideo);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
   const startUpload = useAction(api.r2.start);
@@ -79,8 +75,6 @@ export function NewConversation() {
   const [startingBlank, setStartingBlank] = useState(false);
   const [draft, setDraft] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
-  const hasFootage = hasMedia || !!library?.page.length || !!projects?.some(project => project.clipCount > 0);
-  const showStartingPoints = draftReady && projects !== undefined && library !== undefined && !hasFootage;
   const headline = 'What are we making today?';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
@@ -149,6 +143,17 @@ export function NewConversation() {
     setProcessing(null);
     void stashFiles(unique).catch(() => { /* The in-memory files can still upload in this page. */ });
   }
+
+  useEffect(() => {
+    function paste(event: ClipboardEvent) {
+      const incoming = Array.from(event.clipboardData?.files ?? []);
+      if (!incoming.length) return;
+      event.preventDefault();
+      attach(incoming);
+    }
+    window.addEventListener('paste', paste);
+    return () => window.removeEventListener('paste', paste);
+  }, [files, cloudIds, busy, userId]);
 
   function removeAttachment(id: string) {
     if (busy || submitting.current) return;
@@ -299,22 +304,25 @@ export function NewConversation() {
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
+        <div className="new-conversation-compose-group">
         <div className="new-conversation-intro"><h1 id="new-conversation-title" title={headline}>{headline}</h1></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
+          <EditComposer slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
         <div className="new-conversation-guidance">
-          <div className="new-conversation-footage"><Button variant="outline" onClick={() => picker.current?.click()} disabled={!draftReady || busy}><Plus aria-hidden="true"/>Add footage</Button><span>or drop videos, audio, or images here</span></div>
-          {showStartingPoints && <section className="new-conversation-examples" aria-labelledby="new-conversation-examples-title">
-            <h2 id="new-conversation-examples-title">Or borrow a starting point</h2>
-            <div>{startingPoints.map(({ title, detail, prompt, icon: Icon }) => <Button key={title} variant="outline" className="new-conversation-example" disabled={!draftReady || busy} onClick={() => { changeDraft(prompt); document.querySelector<HTMLTextAreaElement>('.new-conversation-entry textarea')?.focus({ preventScroll: true }); }}><Icon aria-hidden="true"/><span><strong>{title}</strong><span>{detail}</span></span></Button>)}</div>
-          </section>}
-          {!firstProject && <RecentProjects/>}
+          <RecentProjects/>
+        </div>
         </div>
       </div>
     </main>}
-    {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop to attach your footage'}</div>}
+    <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onImport={async url => {
+      const { projectId } = await importVideo({ url });
+      rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);
+      await stashFiles(files.map(item => item.file));
+      setLinkOpen(false);
+      router.push('/editor/' + projectId);
+    }} /></DialogContent></Dialog>
   </div>;
 }

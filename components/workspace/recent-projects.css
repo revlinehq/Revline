@@ -1,21 +1,16 @@
-.recent-projects{width:100%;min-width:0;margin-top:6px;color:var(--ws-text);font-family:var(--font-inter),Inter,sans-serif}
-.recent-projects header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px}
-.recent-projects h2{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;line-height:1.5;font-weight:500}
-.recent-projects-see-all{display:flex;align-items:center;gap:3px;margin-right:-6px;padding:6px;border-radius:5px;color:var(--ws-muted);font-size:11px;text-decoration:none}
-.recent-projects-see-all:hover{background:var(--ws-hover);color:var(--ws-text)}
-.recent-projects-list{list-style:none;margin:0;padding:0;border:1px solid var(--ws-border);border-radius:12px;overflow:hidden}
-.recent-projects-list>li+li{border-top:1px solid var(--ws-border)}
-.recent-project-link{padding:12px 14px;border-radius:0}
-.recent-projects-list>li:first-child>.recent-project-link{border-top-left-radius:11px;border-top-right-radius:11px}
-.recent-projects-list>li:last-child>.recent-project-link{border-bottom-left-radius:11px;border-bottom-right-radius:11px}
-.recent-project-link:focus-visible{outline-offset:-2px}
-.recent-project-link:hover{background:var(--ws-hover)}
-.recent-project-link .workspace-chat-cover{width:42px;height:56px;flex-shrink:0}
-.recent-project-link .workspace-chat-cover img,.recent-project-link .workspace-chat-cover video{width:100%;height:100%;object-fit:cover}
-.recent-project-link .workspace-chat-description strong{font-size:13px;line-height:1.5}
-.recent-project-link .workspace-chat-description>span{font-size:11px;line-height:1.5}
-.recent-project-link time{flex-shrink:0;color:var(--ws-faint);font-size:11px;text-align:right;white-space:nowrap}
-.recent-projects-empty{display:flex;align-items:center;justify-content:center;gap:8px;margin:0;padding:24px 16px;border-radius:12px;background:var(--ws-chip);color:var(--ws-muted);font-size:12px;line-height:1.6;text-align:center}
-@media(max-width:600px){.recent-project-link{gap:12px;padding:10px 12px}.recent-project-link .workspace-chat-cover{width:36px;height:48px}.recent-project-link time{font-size:10px}}
-@media(max-width:360px){.recent-project-link{flex-wrap:wrap}.recent-project-link .workspace-chat-description{flex-basis:calc(100% - 48px)}.recent-project-link time{margin-left:48px}}
-
+.recent-projects{width:100%;min-width:0;margin:0;color:#ddd;font-family:var(--font-geist),sans-serif}
+.recent-projects header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.recent-projects h2{margin:0;font-size:13px;line-height:20px;font-weight:400;color:#ffffff80}
+.recent-projects-see-all{padding:2px 0;border-radius:5px;color:#ffffff80;font-size:12px;text-decoration:none}
+.recent-projects-see-all:hover{color:#eee}
+.recent-projects-list{list-style:none;margin:0;padding:0}
+.recent-project-link{display:flex;align-items:center;gap:12px;min-height:56px;padding:10px 8px;border-radius:8px}
+.recent-project-link:hover{background:#1a1a1a}
+.recent-project-link:focus-visible,.recent-projects-see-all:focus-visible{outline:none;box-shadow:none}
+.recent-project-link .workspace-chat-cover{width:64px;height:36px;flex-shrink:0;border-radius:6px;background:#2a2a2a;color:#ffffff80;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.recent-project-link .workspace-chat-cover svg{width:14px;height:14px}
+.recent-project-link .workspace-chat-cover img{width:100%;height:100%;object-fit:cover}
+.recent-project-link .workspace-chat-description{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.recent-project-link .workspace-chat-description strong{font-size:13px;font-weight:400;line-height:17px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.recent-project-link time{color:#ffffff80;font-size:12px;line-height:16px;text-align:left}
+.recent-projects-empty{margin:0;padding:16px 8px;color:#ffffff80;font-size:12px}
