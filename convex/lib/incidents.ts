@@ -8,7 +8,7 @@ export const incidentArgs = {
   source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()),
   context: v.any(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()), deployment: v.string(),
 };
-export const incidentInput = v.object(incidentArgs);
+const incidentInput = v.object(incidentArgs);
 export function incidentDeployment() { return process.env.CONVEX_CLOUD_URL === 'https://different-gnu-398.convex.cloud' ? 'prod' : 'dev'; }
 
 export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incidentInput>) {

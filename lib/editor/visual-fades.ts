@@ -2,7 +2,7 @@ import type { Clip, Timeline } from './types';
 
 export type VisualFadeSettings = { fadeIn: number; fadeOut: number };
 export const VISUAL_FADE_MAX_SECONDS = 86400;
-export const DEFAULT_VISUAL_FADE: Readonly<VisualFadeSettings> = { fadeIn: 0, fadeOut: 0 };
+const DEFAULT_VISUAL_FADE: Readonly<VisualFadeSettings> = { fadeIn: 0, fadeOut: 0 };
 type FadeClip = Pick<Clip, 'kind' | 'duration' | 'visualFade' | 'visualFadeTiming'>;
 
 export function validateVisualFade(clip: FadeClip) {
@@ -17,7 +17,7 @@ export function validateVisualFade(clip: FadeClip) {
 }
 
 /** Edge controls fit the retained clip. Explicit edits begin a new fade clock. */
-export function visualFadeSettings(clip: Pick<Clip, 'duration' | 'visualFade' | 'visualFadeTiming'>): VisualFadeSettings {
+function visualFadeSettings(clip: Pick<Clip, 'duration' | 'visualFade' | 'visualFadeTiming'>): VisualFadeSettings {
   const settings = clip.visualFade ?? DEFAULT_VISUAL_FADE, total = settings.fadeIn + settings.fadeOut;
   const duration = clip.visualFadeTiming?.duration ?? clip.duration, scale = total > duration && total > 0 ? duration / total : 1;
   const fadeIn = settings.fadeIn * scale, fadeOut = settings.fadeOut * scale;

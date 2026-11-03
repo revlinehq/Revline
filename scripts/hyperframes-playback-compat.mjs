@@ -2,7 +2,7 @@
 // re-seeks pending/starved decoders. Its regular media synchronizer also
 // repeatedly hard-seeks playing secondary audio for ordinary clock drift.
 // Remove this patch after upgrading to a verified upstream fix.
-export const HYPERFRAMES_PLAYBACK_COMPAT_VERSION = '0.8.144';
+const HYPERFRAMES_PLAYBACK_COMPAT_VERSION = '0.8.144';
 const original = 'let L=vt(y),I=c-S+L;if(I>=0)try{y.currentTime=I}catch{}';
 const corrected = 'let L=vt(y),I=(c-S)*$e(y)+L;if(I>=0&&!y.seeking&&(y.tagName!=="VIDEO"||y.readyState>=3)&&Math.abs(y.currentTime-I)>.04*$e(y))try{y.currentTime=I}catch{}';
 const audioClockCandidate = '!pe(S)||!S.isConnected||h(S)||fl(S)';

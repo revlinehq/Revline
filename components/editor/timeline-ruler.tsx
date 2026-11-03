@@ -1,6 +1,6 @@
 import { memo } from 'react';
 
-export function formatRulerLabel(time:number){
+function formatRulerLabel(time:number){
   const value=Math.round(Math.max(0,time)*1000)/1000;
   if(value<60)return `${value}s`;
   if(value>=3600){const hours=Math.floor(value/3600),minutes=Math.floor(value%3600/60);return `${hours}h ${String(minutes).padStart(2,'0')}m`;}

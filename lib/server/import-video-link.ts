@@ -52,7 +52,7 @@ blocked.addSubnet("2002::", 16, "ipv6");
 const globalV6 = new BlockList();
 globalV6.addSubnet("2000::", 3, "ipv6");
 
-export function publicAddress(address: string) {
+function publicAddress(address: string) {
   const family = isIP(address);
   return family === 4
     ? !blocked.check(address, "ipv4")
@@ -62,7 +62,7 @@ export function publicAddress(address: string) {
 }
 
 /** Resolve once and pin the HTTPS socket to the checked address, preventing DNS rebinding. */
-export async function videoResponse(
+async function videoResponse(
   value: string,
   signal: AbortSignal,
   redirects = 0,
@@ -222,7 +222,7 @@ async function downloadMp4(
 
 export type ImportRange = { start: number; end: number };
 /** Any length imports. With a range, only that window downloads, cut on exact frames. */
-export function youtubeArguments(
+function youtubeArguments(
   url: string,
   path: string,
   maxBytes: number,

@@ -19,7 +19,7 @@ export class OpenAiCostsError extends Error {
   constructor(message: string, readonly status = 502) { super(message); }
 }
 
-export function parseConnectionInput(value: unknown) {
+function parseConnectionInput(value: unknown) {
   const body = value as Record<string, unknown> | null;
   if (!body || typeof body.adminKey !== 'string' || !/^sk-admin-[A-Za-z0-9_-]{10,500}$/.test(body.adminKey.trim())) throw new OpenAiCostsError('Enter an OpenAI Admin API key with Usage read access.', 400);
   if (typeof body.projectId !== 'string' || !/^proj_[A-Za-z0-9_-]{5,100}$/.test(body.projectId.trim())) throw new OpenAiCostsError('Enter the Revline API project ID.', 400);
@@ -27,7 +27,7 @@ export function parseConnectionInput(value: unknown) {
 }
 
 // Server routes import this module; neither the credential nor upstream errors are returned to clients.
-export function createOpenAiCostsStore({ directory = join(process.cwd(), '.data', 'openai-costs'), fetcher = fetch, now = Date.now }: { directory?: string; fetcher?: typeof fetch; now?: () => number } = {}) {
+function createOpenAiCostsStore({ directory = join(process.cwd(), '.data', 'openai-costs'), fetcher = fetch, now = Date.now }: { directory?: string; fetcher?: typeof fetch; now?: () => number } = {}) {
   const cache = new Map<string, OpenAiCostReport>();
   const path = join(directory, 'connection.json');
   async function readConnection(ownerId: string): Promise<Connection | null> {

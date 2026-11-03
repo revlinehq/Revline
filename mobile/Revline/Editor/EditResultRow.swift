@@ -9,7 +9,7 @@ struct EditResultRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Text(timecode(before)).foregroundStyle(Color.revlineMuted)
+            Text(timecode(before)).foregroundStyle(Color.secondary)
             Image(systemName: "arrow.right").accessibilityHidden(true)
             Text(timecode(after)).bold()
             Spacer()

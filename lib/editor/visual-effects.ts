@@ -24,22 +24,22 @@ export type VisualEffects = { bloom?: Bloom; colorGrade?: ColorGrade; zoomBlur?:
 export type VisualEffectsPatch = { [K in keyof VisualEffects]?: Partial<NonNullable<VisualEffects[K]>> };
 
 export const DEFAULT_COLOR_GRADE: Readonly<ColorGrade> = Object.freeze({ enabled: false, exposure: 0, contrast: 1, saturation: 1, temperature: 0, tint: 0, vibrance: 0 });
-export const DEFAULT_INVERT: Readonly<InvertColors> = Object.freeze({ enabled: false, amount: 1 });
+const DEFAULT_INVERT: Readonly<InvertColors> = Object.freeze({ enabled: false, amount: 1 });
 export const DEFAULT_DITHER: Readonly<Dither> = Object.freeze({ enabled: false, amount: 1, levels: 4, size: 2 });
 export const DEFAULT_ZOOM_BLUR: Readonly<ZoomBlur> = Object.freeze({ enabled: false, amount: .15, centerX: .5, centerY: .5 });
 /** Pixel values are measured at 1080 output height and scale with rendering resolution. */
-export const DEFAULT_GLITCH: Readonly<Glitch> = Object.freeze({ enabled: false, intensity: .25, blockSize: 32, rgbSplit: 8 });
-export const DEFAULT_FRAME_DISTORTION: Readonly<FrameDistortion> = Object.freeze({ enabled: false, horizontal: 0, vertical: 0, skew: 0, bend: .35 });
-export const DEFAULT_FRAME_CORNERS: Readonly<FrameCorners> = Object.freeze({ enabled: false, amount: 0 });
-export const DEFAULT_SOFT_BLUR: Readonly<SoftBlur> = Object.freeze({ enabled: false, amount: 0 });
-export const DEFAULT_LENS_DISTORTION: Readonly<LensDistortion> = Object.freeze({ enabled: false, amount: .28, centerX: .5, centerY: .5, fringing: 2 });
-export const DEFAULT_FILM_OVERLAY: Readonly<FilmOverlay> = Object.freeze({ enabled: false, amount: .65, grain: .35, dust: .18, scratches: .12, vignette: .25, flicker: .06, warmth: .15 });
-export const DEFAULT_VHS: Readonly<Vhs> = Object.freeze({ enabled: false, amount: .65, scanlines: .35, noise: .22, bleed: .3, tracking: .2, speed: 1 });
-export const DEFAULT_LIGHT_LEAK: Readonly<LightLeak> = Object.freeze({ enabled: false, amount: .55, color: '#ff934f', position: .1, spread: .45, speed: .5 });
-export const DEFAULT_DIRECTIONAL_BLUR: Readonly<DirectionalBlur> = Object.freeze({ enabled: false, amount: 16, angle: 0 });
-export const DEFAULT_TURBULENT_DISPLACE: Readonly<TurbulentDisplace> = Object.freeze({ enabled: false, amount: 18, scale: 120, speed: .6 });
-export const DEFAULT_BLOOM: Readonly<Bloom> = Object.freeze({ enabled: false, amount: .6, threshold: .65, radius: 24 });
-export const DEFAULT_LIGHT_SWEEP: Readonly<LightSweep> = Object.freeze({ enabled: false, amount: .6, color: '#ffffff', angle: -30, position: .5, width: .22, speed: .5 });
+const DEFAULT_GLITCH: Readonly<Glitch> = Object.freeze({ enabled: false, intensity: .25, blockSize: 32, rgbSplit: 8 });
+const DEFAULT_FRAME_DISTORTION: Readonly<FrameDistortion> = Object.freeze({ enabled: false, horizontal: 0, vertical: 0, skew: 0, bend: .35 });
+const DEFAULT_FRAME_CORNERS: Readonly<FrameCorners> = Object.freeze({ enabled: false, amount: 0 });
+const DEFAULT_SOFT_BLUR: Readonly<SoftBlur> = Object.freeze({ enabled: false, amount: 0 });
+const DEFAULT_LENS_DISTORTION: Readonly<LensDistortion> = Object.freeze({ enabled: false, amount: .28, centerX: .5, centerY: .5, fringing: 2 });
+const DEFAULT_FILM_OVERLAY: Readonly<FilmOverlay> = Object.freeze({ enabled: false, amount: .65, grain: .35, dust: .18, scratches: .12, vignette: .25, flicker: .06, warmth: .15 });
+const DEFAULT_VHS: Readonly<Vhs> = Object.freeze({ enabled: false, amount: .65, scanlines: .35, noise: .22, bleed: .3, tracking: .2, speed: 1 });
+const DEFAULT_LIGHT_LEAK: Readonly<LightLeak> = Object.freeze({ enabled: false, amount: .55, color: '#ff934f', position: .1, spread: .45, speed: .5 });
+const DEFAULT_DIRECTIONAL_BLUR: Readonly<DirectionalBlur> = Object.freeze({ enabled: false, amount: 16, angle: 0 });
+const DEFAULT_TURBULENT_DISPLACE: Readonly<TurbulentDisplace> = Object.freeze({ enabled: false, amount: 18, scale: 120, speed: .6 });
+const DEFAULT_BLOOM: Readonly<Bloom> = Object.freeze({ enabled: false, amount: .6, threshold: .65, radius: 24 });
+const DEFAULT_LIGHT_SWEEP: Readonly<LightSweep> = Object.freeze({ enabled: false, amount: .6, color: '#ffffff', angle: -30, position: .5, width: .22, speed: .5 });
 /** Manual controls, drag/drop and agent tools share these defaults. */
 export const VISUAL_EFFECT_DEFAULTS = Object.freeze({
   frameDistortion: DEFAULT_FRAME_DISTORTION, frameCorners: DEFAULT_FRAME_CORNERS, softBlur: DEFAULT_SOFT_BLUR, colorGrade: DEFAULT_COLOR_GRADE, zoomBlur: DEFAULT_ZOOM_BLUR, glitch: DEFAULT_GLITCH,

@@ -48,7 +48,7 @@ export function validateTimelineLuts(luts?: TimelineLut[]) {
 }
 
 /** Monotone cubic interpolation of curve points into 256 values (Fritsch-Carlson, so no overshoot). */
-export function curveTable(points?: CurvePoints) {
+function curveTable(points?: CurvePoints) {
   const table = new Uint8Array(256);
   if (!points?.length) { for (let i = 0; i < 256; i++) table[i] = i; return table; }
   const xs = points.map(point => point[0]), ys = points.map(point => point[1]), n = points.length;
@@ -101,7 +101,7 @@ const LOOKS: Record<LutLook, (r: number, g: number, b: number) => [number, numbe
 };
 
 /** A LUT as RGBA atlas rows: x = blue slice * size + red, y = green. */
-export function lutAtlas(size: number, sample: (r: number, g: number, b: number) => [number, number, number]) {
+function lutAtlas(size: number, sample: (r: number, g: number, b: number) => [number, number, number]) {
   const out = new Uint8Array(size * size * size * 4);
   for (let g = 0; g < size; g++) for (let b = 0; b < size; b++) for (let r = 0; r < size; r++) {
     const [ro, go, bo] = sample(r / (size - 1), g / (size - 1), b / (size - 1)), offset = (g * size * size + b * size + r) * 4;

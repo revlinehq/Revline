@@ -1,0 +1,9 @@
+{
+  "name": "revline-paywall",
+  "private": true,
+  "type": "module",
+  "scripts": { "build": "tsx build.ts", "typecheck": "tsc --noEmit" },
+  "dependencies": { "react": "19.2.0", "react-dom": "19.2.0", "superwall": "2.2.1" },
+  "devDependencies": { "@types/react": "^19.2.0", "@types/react-dom": "^19.2.0", "typescript": "^5.9.0" },
+  "overrides": { "rollup": "4.63.6" }
+}

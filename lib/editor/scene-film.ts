@@ -21,16 +21,30 @@ export function placeFilm(timeline: Timeline, { title, start, duration, sections
   return { timeline: next, clip: { id, title, start, duration }, markers: (next.markers ?? []).filter(marker => marker.time >= start - 1e-6 && marker.time < start + duration).map(({ time, label }) => ({ time, label, filmTime: Math.round((time - start) * 1000) / 1000 })) };
 }
 
-/** Apply exact find/replace edits in order. A snippet that is missing, or appears more than once without `all`, fails the whole call. */
-export function patchCode(code: string, edits: SceneEdit[]) {
-  return edits.reduce((text, { find, replace: given, all, insert }, index) => {
-    const replace = insert === 'before' ? given + find : insert === 'after' ? find + given : given;
-    const label = edits.length > 1 ? `Edit ${index + 1}: ` : '';
-    const count = find ? text.split(find).length - 1 : 0;
-    if (!count) throw new Error(`${label}the snippet was not found. Copy it exactly from the current code (inspectClip), whitespace and quotes included. Nothing was changed.${closestCodeLines(text, find)}${index ? '\nLine numbers above include preceding edits in this failed call. Inspect the saved code before retrying.' : ''}`);
-    if (count > 1 && !all) throw new Error(`${label}the snippet appears ${count} times. Add surrounding code so it is unique, or set all: true to replace every one. Nothing was changed.`);
-    return all ? text.split(find).join(replace) : text.replace(find, () => replace);
-  }, code);
+/** Prefer exact matches; tolerate line indentation and CRLF only when exact matching fails. */
+export function sceneSnippetMatches(code: string, find: string, ranges = [{ from: 0, to: code.length }]) {
+  const matches: { from: number; to: number }[] = [];
+  if (!find) return matches;
+  const keep = (from: number, to: number) => {
+    if (ranges.some(range => range.from <= from && range.to >= to)) matches.push({ from, to });
+  };
+  for (let at = 0; at <= code.length - find.length;) {
+    const from = code.indexOf(find, at);
+    if (from < 0) break;
+    keep(from, from + find.length);
+    at = from + 1;
+  }
+  if (matches.length) return matches;
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const lines = find.replace(/\r\n/g, '\n').split('\n');
+  if (!lines.some(line => line.trim())) return matches;
+  const pattern = lines.map(line => escape(line.replace(/^[\t ]+|[\t ]+$/g, ''))).join('[\\t ]*\\r?\\n[\\t ]*');
+  const regex = new RegExp(`${/^[\t ]/.test(find) ? '^[\\t ]*' : ''}${pattern}${/[\t ]$/.test(find) ? '[\\t ]*' : ''}`, 'gm');
+  for (let match; (match = regex.exec(code));) {
+    keep(match.index, match.index + match[0].length);
+    regex.lastIndex = match.index + 1;
+  }
+  return matches;
 }
 
 /** Nearby exact source, including indentation, so a failed match can be retried directly. */

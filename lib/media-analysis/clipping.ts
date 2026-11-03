@@ -47,7 +47,7 @@ export const speakerTurn = z
   .refine((t) => t.end > t.start);
 export const MAX_SPEAKER_WINDOW_SECONDS = 120;
 export const SPEAKER_ANALYSIS_VERSION = 2;
-export const speakerFraming = z.object({
+const speakerFraming = z.object({
   start: z.number().nonnegative(),
   end: z.number().positive(),
   shot: z.number().int().nonnegative(),

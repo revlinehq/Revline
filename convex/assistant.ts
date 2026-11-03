@@ -8,7 +8,6 @@ import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
-import {aiWorkflow} from './lib/workflows';
 import {cancelTurn} from './assistantWorkflow';
 import {stopRunnerTurn} from './agentRunner';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';

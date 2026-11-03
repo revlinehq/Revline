@@ -1,6 +1,6 @@
 import { v, type Infer } from 'convex/values';
 
-export const alertSource = v.union(v.literal('clerk'), v.literal('stripe'), v.literal('sentry'), v.literal('posthog'));
+const alertSource = v.union(v.literal('clerk'), v.literal('stripe'), v.literal('sentry'), v.literal('posthog'));
 export const alertFields = {
   source: alertSource, eventId: v.string(), title: v.string(), description: v.string(),
 };

@@ -10,7 +10,7 @@ export type RampAnchor = { x: number; rate: number; easing?: MotionEasing };
 export const MIN_RAMP_RATE = .1, MAX_RAMP_RATE = 10, MAX_RAMP_POINTS = 256;
 
 /** CapCut-style curves over the clip's length (x 0..1), matching the playback engine's presets. */
-export const SPEED_RAMP_PRESETS = {
+const SPEED_RAMP_PRESETS = {
   montage: [[0, .9], [.15, .3], [.5, 2.5], [.85, .3], [1, .9]],
   hero: [[0, 1], [.25, 1.6], [.5, .25], [.75, 1.6], [1, 1]],
   bullet: [[0, 3], [.4, 3], [.5, .15], [.6, 3], [1, 3]],
@@ -35,7 +35,7 @@ export function validateSpeedRamp(clip: { kind: string; duration: number; playba
   });
 }
 
-export function rampRateAt(points: RampPoint[], t: number) {
+function rampRateAt(points: RampPoint[], t: number) {
   if (t <= points[0].t) return points[0].v;
   const after = points.findIndex(point => point.t >= t);
   if (after === -1) return points[points.length - 1].v;

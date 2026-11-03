@@ -11,7 +11,7 @@ export function validatePlaybackRate(clip: Pick<Clip, 'kind' | 'playbackRate'> &
 export function playbackRateOf(clip: Pick<Clip, 'playbackRate'>) { return clip.playbackRate ?? 1; }
 type Timed = Pick<Clip, 'playbackRate'> & { speedRamp?: Clip['speedRamp'] };
 /** Source seconds consumed over clip-local `seconds`, through the speed ramp when there is one. */
-export function sourceSpanOf(clip: Timed, seconds: number) { return clip.speedRamp?.length ? rampSpan(clip.speedRamp, seconds) : seconds * playbackRateOf(clip); }
+function sourceSpanOf(clip: Timed, seconds: number) { return clip.speedRamp?.length ? rampSpan(clip.speedRamp, seconds) : seconds * playbackRateOf(clip); }
 export function sourceDurationOf(clip: Pick<Clip, 'duration'> & Timed) { return sourceSpanOf(clip, clip.duration); }
 export function sourceEndOf(clip: Pick<Clip, 'sourceStart' | 'duration'> & Timed) { return clip.sourceStart + sourceDurationOf(clip); }
 export function sourceTimeAt(clip: Pick<Clip, 'start' | 'sourceStart'> & Timed, timelineTime: number) { return clip.sourceStart + sourceSpanOf(clip, timelineTime - clip.start); }

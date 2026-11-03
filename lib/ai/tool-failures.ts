@@ -96,7 +96,7 @@ function reviewUnavailable(part: { toolName?: string; error?: unknown; output?: 
   const output = outputValue(part.output);
   return output.reviewUnavailable === true || REVIEW_UNAVAILABLE.test(String(part.error ?? output.error ?? record(part.output).value ?? ''));
 }
-export function renderReviewUnavailable(steps: ToolSteps) {
+function renderReviewUnavailable(steps: ToolSteps) {
   return steps.some(step => step.content.some(value => { const part = record(value); return (part.type === 'tool-error' || part.type === 'tool-result') && reviewUnavailable(part); }));
 }
 

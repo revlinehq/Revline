@@ -14,7 +14,7 @@ const run = promisify(execFile);
 const frameInfo = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive() })).min(1) });
 const originInfo = z.object({ format: z.object({ start_time: z.coerce.number().finite().optional() }) });
 const grounding = z.object({ results: z.object({ bboxes: z.array(z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), w: z.number().positive(), h: z.number().positive(), label: z.string() })) }) });
-export const OBJECT_GROUNDING_ENDPOINT = 'fal-ai/florence-2-large/open-vocabulary-detection';
+const OBJECT_GROUNDING_ENDPOINT = 'fal-ai/florence-2-large/open-vocabulary-detection';
 
 /** One native frame leaves the processor. Explicit point/box seeds never call a provider. */
 export async function localizeTrackingObject(source: string, directory: string, time: number, noun: string, signal: AbortSignal) {

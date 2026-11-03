@@ -1,6 +1,7 @@
-.mobile-player-shell{position:fixed;inset:0;background:#080808;color:#aaa;color-scheme:dark;overflow:hidden;font:14px system-ui}
+.mobile-player-shell{position:fixed;inset:0;background:var(--background);color:var(--foreground);color-scheme:dark;overflow:hidden;font:14px system-ui}
 .mobile-player-container{width:100%;height:100%;display:flex;align-items:center;justify-content:center;overflow:hidden}
 .mobile-player-frame{position:relative;flex:none;overflow:hidden}
-.mobile-player-frame .preview-canvas{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;border:0;border-radius:0;background:#080808}
+.mobile-player-frame .preview-canvas{position:absolute;inset:0;width:100%;height:100%;max-width:none;max-height:none;border:0;border-radius:0;background:var(--background)}
 .mobile-player-frame .hyperframes-host{position:absolute;inset:0;overflow:hidden}
-.mobile-player-frame .preview-loading{position:absolute;inset:0;display:grid;place-items:center;background:#080808}
+.mobile-player-frame .preview-loading{position:absolute;inset:0;display:grid;place-items:center;background:var(--background)}
+body:has(.mobile-player-shell) nextjs-portal{display:none}

@@ -14,3 +14,5 @@ Only actual Release-build captures from production belong here. Capture a dedica
 | 08 | Keyboard | Native keyboard with the composer visible above it |
 
 Required sets: 6.9-inch, 1320×2868 portrait, and a 1284×2778 set for the requested secondary class when available. Status bar: 9:41, full signal and battery. The owner reviews images before final App Store submission. Draft PR before/after screenshots are stored separately on pr-assets, not substituted for these production captures.
+
+Latest pass: Zura explicitly stopped Simulator and UI testing. All existing pr-assets PNG dimensions were inspected; none match the requested 6.9-inch or 6.5-inch sizes, so no screenshots were uploaded or transformed. The iPhone Duo inner-display set (2007×2853) is also pending Xcode 27.1 and actual capture. Do not treat the adaptive code as tested Duo support.

@@ -18,14 +18,14 @@ struct WelcomeView: View {
                         .accessibilityLabel("A motion film made in Revline")
                     Text("Every cut. Your call.").font(.largeTitle).bold()
                     Text("Edit footage, find the best moments, and build motion in conversation.")
-                        .foregroundStyle(Color.revlineMuted)
+                        .foregroundStyle(Color.secondary)
                     Button("Explore Revline") { introduction = true }
                         .buttonStyle(.borderless).frame(minHeight: 44)
                     if let error { ErrorBanner(message: error) }
                 }
                 .padding().frame(maxWidth: .infinity)
             }
-            .safeAreaInset(edge: .bottom) {
+            .safeAreaInset(edge: .bottom, spacing: 0) {
                 VStack(spacing: 12) {
                     Button { showAuth = true } label: { ActionLabel(title: "Sign in to Revline") }
                         .buttonStyle(.borderedProminent)
@@ -38,19 +38,19 @@ struct WelcomeView: View {
                     }.buttonStyle(.bordered).disabled(signingInWithApple)
                     LegalLinks()
                     Text("Your projects stay in sync across iPhone and the web.")
-                        .font(.footnote).foregroundStyle(Color.revlineMuted).multilineTextAlignment(.center)
+                        .font(.footnote).foregroundStyle(Color.secondary).multilineTextAlignment(.center)
                 }
                 .controlSize(.large).padding().frame(maxWidth: .infinity)
-                .background(Color.revlineCard)
+                .background(Color.revlineBackground.ignoresSafeArea(edges: .bottom))
             }
             .revlineSurface()
             .navigationTitle("Revline")
             .sheet(isPresented: $showAuth) {
                 AuthView()
                     .safeAreaInset(edge: .bottom) {
-                        LegalLinks().frame(maxWidth: .infinity).background(Color.revlinePopover)
+                        LegalLinks().frame(maxWidth: .infinity).background(Color.revlineBackground.ignoresSafeArea(edges: .bottom))
                     }
-                    .presentationBackground(Color.revlinePopover)
+                    .presentationBackground(Color.revlineBackground)
             }
             .sheet(isPresented: $introduction) { OnboardingView { introduction = false } }
         }

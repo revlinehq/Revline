@@ -64,9 +64,3 @@ export const TEXT_ANIMATION_GUIDANCE:Record<TextAnimationPreset,{emphasizes:stri
   'tunnel-zoom':{emphasizes:'A title arriving through concentric depth echoes',cue:'An intentional headline or section entrance',avoid:'Deep repeated outlines on dense paragraphs or over important faces'},
 };
 export const TEXT_APPEARANCE_GUIDANCE={stroke:'Separates letters from a busy background; keep enough interior letter detail.',shadow:'Adds contrast against bright or varied footage; large blur makes letters muddy.',glow:'Makes letters luminous on dark footage; excessive glow lowers edge readability.',color:'Use a deliberate accent for important words and preserve contrast against the actual background.',position:'Keep the whole rendered text inside the safe area and away from important faces/action.',rotation:'A small tilt can emphasize attitude or movement; preserve reading comfort.',background:'A box/highlight protects readability; avoid unnecessarily covering the subject.'};
-export const STYLE_PLAYBOOKS={
-  amv:'Inspect the retained action and requested music. Let movement drive a small push, visible contact drive brief shake, and an energy burst drive flash. Keep calm frames between accents. Prefer one heavy treatment per accent; avoid arbitrary effect stacks.',
-  hype:'Emphasize real reveals, reactions, impacts and measured musical accents. Use short purposeful zoom/blur/text entrances, with readable faces and an ending that settles. Default to no more than one heavy treatment per two seconds unless denser styling is requested.',
-  cinematic:'Use measured pacing, consistent restrained grade and slow framing changes. Reserve transitions for scene changes; protect composition and quiet holds. Bars are deliberate framing choices, not automatic additions.',
-  vlog:'Prioritize speech clarity, clean cuts and readable captions. Use small emphasis on punchlines or key words and gentle section titles; avoid random shake/glitch.',
-};

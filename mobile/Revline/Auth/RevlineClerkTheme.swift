@@ -4,11 +4,13 @@ import SwiftUI
 extension ClerkTheme {
     static var revline: ClerkTheme {
         var theme = ClerkTheme(colors: .init(
-            background: .revlinePopover,
+            primary: .accentColor,
+            background: .revlineBackground,
             input: .revlineCard,
-            foreground: .revlineForeground,
-            mutedForeground: .revlineMuted,
-            inputForeground: .revlineForeground,
+            foreground: .primary,
+            mutedForeground: .secondary,
+            primaryForeground: .primary,
+            inputForeground: .primary,
             muted: .revlinePopover,
             secondaryButtonBackground: .revlineCard
         ))

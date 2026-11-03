@@ -60,6 +60,7 @@ struct DeleteAccountView: View {
             .navigationTitle("Delete account").navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Cancel", action: dismiss.callAsFunction).disabled(busy) } }
         }
+        .presentationBackground(Color.revlinePopover)
         .interactiveDismissDisabled(busy)
     }
 

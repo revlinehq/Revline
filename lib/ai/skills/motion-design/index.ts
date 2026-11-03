@@ -24,6 +24,8 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
 
 ## 3D direction
+Read scene-engine page \`three-craft\` on every 3D build for material identity, lighting, grounding and composition with HTML type.
+
 Use real depth when it helps the subject: a camera push-in, a restrained orbit, or parallax between near and far objects. Mix the 3D object with readable HTML/GSAP titles in the same scene. Read scene-engine page \`three-scenes\` for ThreeLayer, camera/object timelines, lighting, models, type and CPU export limits. Use a soft fill and one directional key, matte materials and the confirmed brand palette; no sparkles or purple brand fills. All 3D motion follows the same paused GSAP timeline as 2D.
 
 ## Motion feel
