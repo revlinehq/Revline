@@ -1,5 +1,5 @@
 import { CustomEase } from 'gsap/CustomEase';
-import { createEditor } from './clippers-editor';
+import { createEditor } from './editor-illustration';
 import { icon, part as editorPart } from './clippers-dom';
 
 type Aperture = {
