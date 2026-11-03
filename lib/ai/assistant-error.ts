@@ -7,6 +7,7 @@ export function assistantFailureReason(error: unknown, provider: 'anthropic' | '
     seen.add(value);
     const item = value as { statusCode?: number; message?: unknown; responseBody?: unknown; cause?: unknown; lastError?: unknown };
     const detail = [item.message, item.responseBody].filter(part => typeof part === 'string').join(' ');
+    if (/Convex AI Gateway unavailable/.test(detail)) return 'Convex AI Gateway is unavailable. Check that this Convex team has a paid plan, Gateway access and available spending allowance. Your saved edits remain.';
     if ((item.statusCode === 400 || item.statusCode === 402 || item.statusCode === 429) && /credit balance|credits are (?:depleted|exhausted)|insufficient (?:credits|funds|quota)|insufficient_quota|billing.*(?:balance|limit)|exceeded your current quota/i.test(detail)) {
       return provider === 'openai' ? 'OpenAI API credits or spending limits are exhausted. Your saved edits remain. Check billing in the OpenAI API platform before continuing.' : provider === 'gateway' ? 'The AI Gateway reached its billing limit. Your saved edits remain. Check the Convex team billing before continuing.' : provider === 'google' ? 'Gemini API credits or spending limits are exhausted. Your saved edits remain. Check billing in Google AI Studio before continuing.' : 'Claude API credits are exhausted. Your saved edits remain. Restore credits in the Claude Console before continuing.';
     }

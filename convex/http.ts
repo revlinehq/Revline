@@ -1,4 +1,5 @@
 import { serve as servePixelTrack } from './pixelTracks';
+import { serve as serveGeminiGateway } from './geminiGateway';
 import { httpRouter } from "convex/server";
 import { httpAction } from "./_generated/server";
 import { processEvent } from "@convex-dev/stripe";
@@ -12,6 +13,7 @@ import { registerAppleBillingRoutes } from './appleBillingHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
 http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
+http.route({ path: '/media/gemini', method: 'POST', handler: serveGeminiGateway });
 registerAlertWebhooks(http);
 registerMcpRoutes(http);
 http.route({ path: '/mcp/upload', method: 'POST', handler: prepareMcpUpload });

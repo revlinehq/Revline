@@ -283,9 +283,9 @@ async function readSounds(path: string, directory: string, source: Source, work:
   // Gemini hears the window as a small clip with its picture, so it can say what each sound accompanies.
   const clip = join(directory, 'listen.mp4');
   await run('ffmpeg', ['-v', 'error', '-y', ...window, '-vf', 'scale=-2:360', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', '-c:a', 'aac', '-b:a', '128k', clip], { signal, timeout: 180_000 });
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
   // The timing stands on its own: when listening fails, the sounds come back measured but undescribed.
-  const heard = key ? await describeSounds(clip, measured.map(sound => sound.time), key, signal).catch(error => { console.warn('[listenReference] describing failed', error instanceof Error ? error.message : error); return undefined; }) : undefined;
+  const heard = await describeSounds(clip, measured.map(sound => sound.time), key, signal).catch(error => { signal.throwIfAborted(); if (error instanceof AnalysisError && error.status === 422) throw error; console.warn('[listenReference] describing failed', error instanceof Error ? error.message : error); return undefined; });
   onProgress(90);
   const sounds = measured.map(sound => {
     const hit = hits.reduce<typeof hits[number] | undefined>((best, item) => Math.abs(item.time - sound.time) <= .15 && (!best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time)) ? item : best, undefined);

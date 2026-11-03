@@ -64,6 +64,7 @@ export class AssistantCostLog {
     this.seen.add(key); this.calls++;
     this.model = event.modelId; this.provider = event.provider;
     const cost = estimateEditorCallCost(event.modelId, event.provider, event.usage, event.providerMetadata);
+    const route = record(event.providerMetadata?.revline).route;
     if (cost.estimatedUsd === null) this.unknownCalls++; else this.knownUsd = rounded(this.knownUsd + cost.estimatedUsd);
     const tools = event.content.map(record).filter(part => part.type === 'tool-call');
     for (const tool of tools) if (typeof tool.toolName === 'string') this.toolNames.add(tool.toolName);
@@ -80,7 +81,7 @@ export class AssistantCostLog {
     if (this.calls === EDITOR_SOFT_STEPS - 3) warnings.push('approaching_progress_continuation_check');
     if (this.calls === EDITOR_HARD_STEPS - 3) warnings.push('approaching_hard_editing_step_limit');
     if (cost.estimatedUsd === null) warnings.push('cost_unknown');
-    this.log({ event: 'model-step', callId: event.callId, model: event.modelId, provider: event.provider, step: event.stepNumber + 1, callCount: this.calls, ...cost, stepEstimatedUsd: cost.estimatedUsd, runEstimatedUsd: this.unknownCalls ? null : this.knownUsd, knownRunEstimatedUsd: this.knownUsd, unknownUsageCalls: this.unknownCalls, toolCallCount: tools.length, runToolCallCount: this.toolCalls, tools: tools.map(tool => tool.toolName), finishReason: event.finishReason, ...progress, warnings });
+    this.log({ event: 'model-step', callId: event.callId, model: event.modelId, provider: event.provider, ...(route === 'direct' || route === 'convex-gateway' ? { route } : {}), step: event.stepNumber + 1, callCount: this.calls, ...cost, stepEstimatedUsd: cost.estimatedUsd, runEstimatedUsd: this.unknownCalls ? null : this.knownUsd, knownRunEstimatedUsd: this.knownUsd, unknownUsageCalls: this.unknownCalls, toolCallCount: tools.length, runToolCallCount: this.toolCalls, tools: tools.map(tool => tool.toolName), finishReason: event.finishReason, ...progress, warnings });
   }
 
   toolsFinished(step: Step) {

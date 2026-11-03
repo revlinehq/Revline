@@ -39,6 +39,10 @@ export function convexBridge(env: BridgeEnv, grant: RunGrant) {
   const storage = (op: 'getUrl' | 'delete' | 'getMetadata') => (storageId: string) =>
     send('/agent-runner/call', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'storage', op, storageId }) }, op === 'delete' ? 1 : 4);
   const ctx = {
+    geminiGatewayFetch: async (body: string, signal?: AbortSignal) => {
+      const url = `${base}/agent-runner/gemini`;
+      return fetch(url, { method: 'POST', body, signal, headers: { 'content-type': 'application/json', ...runHeaders, ...await runnerSignature(env.AGENT_RUNNER_SECRET, 'POST', url, body) } });
+    },
     runQuery: call('query'), runMutation: call('mutation'), runAction: call('action'),
     storage: {
       store: async (blob: Blob) => send('/agent-runner/storage', { method: 'POST', headers: { 'content-type': blob.type || 'application/octet-stream' }, body: await blob.arrayBuffer() }),
@@ -46,5 +50,5 @@ export function convexBridge(env: BridgeEnv, grant: RunGrant) {
     },
     auth: { getUserIdentity: async () => null },
   };
-  return ctx as unknown as ActionCtx;
+  return ctx as unknown as ActionCtx & { geminiGatewayFetch: typeof ctx.geminiGatewayFetch };
 }

@@ -1,6 +1,7 @@
 import { FrameCache } from './frame-cache';
 import { referenceResultDescriptor, snapshotResultDescriptor } from '../media-analysis/frame-cache';
 import { importCheckpoint } from './import-checkpoint';
+import { withMediaGemini } from './gemini-context';
 import { ownedMediaUrl } from './owned-media';
 import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
@@ -47,6 +48,10 @@ import { currentSpeechCleanup } from '@/lib/speech-cleanup';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
+  return withMediaGemini(task, convex, convexUrl, () => processMediaTaskWithGemini(task, convex, convexUrl, signal, onProgress, onActivity, exclusive));
+}
+
+async function processMediaTaskWithGemini(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
   const startedAt = Date.now();
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();
@@ -252,8 +257,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if (task.kind === 'frames') {
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);
-      const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      if (!key) throw new AnalysisError('Gemini frame inspection is not configured on the media worker.', 503);
+      const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
       onActivity?.('preparing-analysis');
       const { sourceFps, images,geometry } = await extractInspectionFrames(source, directory, task.frameRequest, media.duration, signal);
       onProgress(60);
@@ -310,8 +314,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'track') return { analysis: { focus: await runPhase('Tracking subject',()=>trackSourceFace(source, media.duration, onProgress, signal)) } };
     if (task.kind === 'shots') return { analysis: { shots: await runPhase('Detecting shots',()=>detectShots(source, media.duration, signal)) } };
     if (!media.hasVideo) throw new AnalysisError('Footage understanding needs a video source.', 400);
-    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-    if (!key) throw new AnalysisError('Gemini agentic footage understanding is not configured on the media worker.', 503);
+    const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? '';
     const contentType = download.contentType?.split(';')[0].trim().toLowerCase() ?? '';
     const mimeType = contentType === 'video/quicktime' ? 'video/mov' : contentType === 'video/x-msvideo' ? 'video/avi' : contentType;
     const nativeType = ['video/mp4', 'video/mpeg', 'video/mov', 'video/avi', 'video/x-flv', 'video/mpg', 'video/webm', 'video/wmv', 'video/3gpp'].includes(mimeType);

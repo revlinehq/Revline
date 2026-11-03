@@ -81,6 +81,7 @@ export class EditorTurn extends Agent<Env> {
       try {
         await runEditorTurn(ctx, { ...args, ...(claim.attempt ? { continuation: { segment: claim.attempt, savedEdits: checkpoint.savedEdits, pendingFastFrames: checkpoint.pendingFastFrames } } : {}) }, {
           signal: fiber.signal,
+          geminiGatewayFetch: ctx.geminiGatewayFetch,
           // savedEdits already counts the edits saved before this attempt.
           onStepFinished: progress => fiber.stash({ ...checkpoint, args: convexToJson({ ...args, editMode: progress.editMode }), steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits, pendingFastFrames: progress.pendingFastFrames }),
         });

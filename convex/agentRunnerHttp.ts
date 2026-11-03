@@ -4,6 +4,8 @@ import { components, internal } from './_generated/api';
 import { httpAction, type ActionCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner_auth';
+import { fetchGeminiGateway } from './lib/gemini_gateway';
+import { GEMINI_GATEWAY_BODY_LIMIT } from '../lib/ai/gemini-routing';
 
 // The Cloudflare agent runner calls the same internal functions a turn inside Convex would. Every call is signed
 // with AGENT_RUNNER_SECRET under a single-use nonce, carries its run's token (lib/runner_auth.ts) and the id of
@@ -79,6 +81,14 @@ const forbidden = (label: string, runId: string) => {
 const failure = (error: unknown) => json({ error: { message: error instanceof Error ? error.message : 'The call failed.', ...(error instanceof ConvexError ? { data: convexToJson(error.data) } : {}) } });
 
 export function registerAgentRunnerRoutes(http: HttpRouter) {
+  http.route({ path: '/agent-runner/gemini', method: 'POST', handler: httpAction(async (ctx, request) => {
+    const body = await request.arrayBuffer();
+    if (body.byteLength > GEMINI_GATEWAY_BODY_LIMIT) return json({ error: { message: 'Convex AI Gateway accepts at most 16 MiB of JSON.' } }, 413);
+    let run: Run | null;
+    try { run = await authorizedRun(ctx, request, body); } catch { return notRun(); }
+    if (!run) return unauthorized();
+    return fetchGeminiGateway(new TextDecoder().decode(body), request.signal);
+  }) });
   http.route({ path: '/agent-runner/call', method: 'POST', handler: httpAction(async (ctx, request) => {
     const body = await request.arrayBuffer();
     let call: Call;

@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Gemini: Fall back to Convex AI Gateway for supported inputs when direct Google credentials, billing or quota fail, and record the route. Why: the user's direct Gemini key has no billing.
 - Landing and editor: Removed Inspo Motion: the landing section, the product-menu link, the /inspo-motion command on web and iOS, and the /sharingan page, which now redirects home. Why: the user retired it; recreation stays a dev-testing capability through the MCP tools.
 - Reference reads: Cache exact frames and deterministic readings in private R2, with revision-scoped timeline renders. Why: agents repeatedly decoded the same moments and filled the media queue.
 - Link imports: Correct the stale five-minute hint, cap retries at three attempts, and add cancellation and file-upload recovery with the last error. Why: agent testing found misleading limits and imports that retried forever.

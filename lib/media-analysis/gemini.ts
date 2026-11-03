@@ -10,6 +10,8 @@ import type { ReportMediaActivity } from './activity';
 import { parseReference, referenceJsonSchema, referencePrompt, type ReferenceKeyframe } from './reference';
 import type { ShotDetection } from './shots';
 import type { BeatMap } from './beat-map';
+import { geminiFallbackFailure, withGeminiFallback, GEMINI_GATEWAY_BODY_LIMIT, GEMINI_VIDEO_GATEWAY_LIMIT, type GeminiRoute } from '../ai/gemini-routing';
+import { mediaGeminiContext, recordMediaGeminiCost } from '../server/gemini-context';
 
 const BASE = 'https://generativelanguage.googleapis.com';
 const fileSchema = z.object({ name: z.string(), uri: z.string(), state: z.string().optional() });
@@ -51,18 +53,19 @@ async function logProviderError(response: Response, key: string) {
     providerStatus: detail.status && /^[A-Z][A-Z0-9_]{0,63}$/.test(detail.status) ? detail.status : undefined,
     message,
   });
+  return `${detail.status ?? ''} ${message}`;
 }
 
 async function googleResponse(response: Response, key: string) {
   if (!response.ok) {
-    await logProviderError(response, key);
+    const detail = await logProviderError(response, key);
     const retryable = response.status >= 500 || response.status === 408 || response.status === 429;
     const message = response.status === 402 ? 'Gemini rejected analysis (HTTP 402). Check provider billing and credits.'
       : response.status === 401 || response.status === 403 ? 'Media analysis is currently unavailable.'
       : response.status === 429 ? 'Media analysis is temporarily busy. Please try again later.'
       : response.status >= 500 ? 'Media analysis is temporarily unavailable. Please try again later.'
       : 'The media analysis request was rejected.';
-    throw new AnalysisError(message, response.status, retryable);
+    throw Object.assign(new AnalysisError(message, response.status, retryable), { geminiFallback: geminiFallbackFailure(response.status, detail) });
   }
   return response;
 }
@@ -70,6 +73,10 @@ async function googleResponse(response: Response, key: string) {
 function headers(key: string) { return { 'x-goog-api-key': key }; }
 
 async function uploadFile(path: string, mimeType: string, key: string, signal: AbortSignal, onActivity?: ReportMediaActivity) {
+  return withGeminiFallback(key, () => uploadDirectFile(path, mimeType, key, signal, onActivity), async () => { throw new AnalysisError(GEMINI_VIDEO_GATEWAY_LIMIT, 422, false); }, signal);
+}
+
+async function uploadDirectFile(path: string, mimeType: string, key: string, signal: AbortSignal, onActivity?: ReportMediaActivity) {
   onActivity?.('sending-gemini');
   const { size } = await stat(path);
   const initialization = await googleResponse(await fetch(`${BASE}/upload/v1beta/files`, {
@@ -107,9 +114,45 @@ async function deleteFile(name: string, key: string) {
 }
 
 async function interaction(body: Record<string, unknown>, key: string, signal: AbortSignal) {
-  const response = await googleResponse(await fetch(`${BASE}/v1beta/interactions`, { method: 'POST', signal, headers: { ...headers(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, store: false }) }), key);
-  const result = await response.json() as { status?: string; error?: unknown };
-  if (result.error || result.status === 'failed') throw new AnalysisError('The media analysis could not be completed.', 502);
+  let route: GeminiRoute = 'direct';
+  const result = await withGeminiFallback<Record<string, unknown>>(key, async () => {
+    const response = await googleResponse(await fetch(`${BASE}/v1beta/interactions`, { method: 'POST', signal, headers: { ...headers(key), 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, store: false }) }), key);
+    const result = await response.json() as Record<string, unknown>;
+    if (result.error || result.status === 'failed') throw new AnalysisError('The media analysis could not be completed.', 502);
+    return result;
+  }, async () => {
+    route = 'convex-gateway';
+    const inputs = z.array(z.object({ type: z.string(), text: z.string().optional(), data: z.string().optional(), mime_type: z.string().optional() })).parse(body.input);
+    if (inputs.some(input => input.type === 'video' || input.type === 'audio')) throw new AnalysisError(GEMINI_VIDEO_GATEWAY_LIMIT, 422, false);
+    if (inputs.some(input => input.type !== 'text' && !(input.type === 'image' && input.data && input.mime_type))) throw new AnalysisError('Convex AI Gateway fallback supports text and inline images for this tool.', 422, false);
+    const format = body.response_format as { schema: unknown };
+    const payload = JSON.stringify({
+      model: `google/${body.model}`,
+      messages: [{ role: 'user', content: inputs.map(input => input.type === 'text' ? { type: 'text', text: input.text } : { type: 'image_url', image_url: { url: `data:${input.mime_type};base64,${input.data}` } }) }],
+      response_format: { type: 'json_schema', json_schema: { name: 'revline', schema: format.schema } },
+      provider: { require_parameters: true },
+    });
+    if (Buffer.byteLength(payload) > GEMINI_GATEWAY_BODY_LIMIT) throw new AnalysisError('Convex AI Gateway accepts at most 16 MiB of JSON, including base64 images. Request fewer frames or a narrower window; image quality was preserved.', 413, false);
+    const response = await mediaGeminiContext().fetch(payload, signal);
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null) as { error?: { message?: string } } | null;
+      if (detail?.error?.message?.startsWith('Convex AI Gateway')) throw new AnalysisError(detail.error.message, response.status, false);
+      throw new AnalysisError(`Gemini through Convex AI Gateway failed (HTTP ${response.status}). ${response.status === 400 ? 'The Gateway rejected this model or input; it was not retried.' : 'Check Gateway availability and the deployment spending allowance.'}`, response.status, response.status >= 500);
+    }
+    const completion = await response.json() as { choices?: { message?: { content?: string }; finish_reason?: string }[]; usage?: Record<string, unknown> };
+    if (!completion.choices?.[0]?.message?.content) throw new AnalysisError('Gemini through Convex AI Gateway returned no analysis.', 502);
+    return { output_text: completion.choices[0].message.content, usage: completion.usage };
+  }, signal);
+  const usage = (result.usage ?? {}) as Record<string, unknown>;
+  const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const details = (usage.completion_tokens_details ?? {}) as Record<string, unknown>;
+  await recordMediaGeminiCost({
+    key: `gemini-${crypto.randomUUID()}`, kind: 'model-call', recordedAt: Date.now(), model: String(body.model), provider: route === 'direct' ? 'google.interactions' : 'google.convex-gateway', route,
+    reasoningEffort: null, speedMode: null, serviceTier: null,
+    estimatedUsd: typeof usage.cost === 'number' && Number.isFinite(usage.cost) && usage.cost >= 0 ? usage.cost : null,
+    inputTokens: count(usage.total_input_tokens ?? usage.prompt_tokens), outputTokens: count(usage.total_output_tokens ?? usage.completion_tokens), reasoningTokens: count(usage.total_thought_tokens ?? details.reasoning_tokens), toolCallCount: 0, unreportedCall: false,
+  });
+  console.log('[gemini] Analysis completed.', { model: body.model, route });
   return result;
 }
 

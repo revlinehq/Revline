@@ -18,7 +18,7 @@ import { mapMotion, motionWindow } from '../inspo-motion/motion-map';
 import { measureTimelineSound } from './sound-check';
 import { cropBounds } from '../ai/reference-comparison';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
-  const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
+  const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY??'';
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
   const assets=snapshot.assets.filter(asset=>[...edited.clips,...reference.clips].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,edited,assets,convexUrl,signal,[reference]);

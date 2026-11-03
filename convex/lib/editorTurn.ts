@@ -19,7 +19,8 @@ import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTE
 import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
-import { google } from '@ai-sdk/google';
+import { geminiEditingModel, type GeminiGatewayFetch } from '../../lib/ai/gemini-model';
+import { fetchGeminiGateway } from './gemini_gateway';
 import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { type ObjectType } from "convex/values";
@@ -34,7 +35,7 @@ import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
-type EditorTurnHooks={signal?:AbortSignal;onStepFinished?:(progress:{steps:number;savedEdits:number;editMode:EditorEditMode;pendingFastFrames:number[]})=>void};
+type EditorTurnHooks={signal?:AbortSignal;geminiGatewayFetch?:GeminiGatewayFetch;onStepFinished?:(progress:{steps:number;savedEdits:number;editMode:EditorEditMode;pendingFastFrames:number[]})=>void};
 
 /** One chat turn: the model loop with the editor tools. Convex runs it in an action, or the agent runner on
  * Cloudflare runs it with a context that calls these same functions over HTTP, with no time limit. */
@@ -102,7 +103,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
       if(provider==='openai'&&activeOpenAIKey())countInput=openAITokenCounter(modelId,activeOpenAIKey(),measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
     }
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
+    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? geminiEditingModel(modelId, hooks.geminiGatewayFetch ?? fetchGeminiGateway) : editorOpenAI().responses(modelId), middleware: [...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
     const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name === 'clip' ? `${editorCommandInstructions(args.command)}\n${editorSkillInstructions('clipping')}` : ''}

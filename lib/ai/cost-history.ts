@@ -8,6 +8,7 @@ export type EditorCostRecord = {
   recordedAt: number;
   model: string | null;
   provider: string | null;
+  route?: import('./gemini-routing').GeminiRoute;
   reasoningEffort: string | null;
   speedMode: string | null;
   serviceTier: string | null;
@@ -36,6 +37,7 @@ export function costHistoryRecord(event: Record<string, unknown>): EditorCostRec
     key: summary ? 'summary' : `${callId}:${step}`,
     kind: summary ? 'run-summary' : 'model-call', recordedAt,
     model: text(event.model), provider: text(event.provider), reasoningEffort: text(event.reasoningEffort), speedMode: text(event.speedMode), serviceTier: text(event.serviceTier),
+    ...(event.route === 'direct' || event.route === 'convex-gateway' ? { route: event.route } : {}),
     estimatedUsd: !summary && typeof event.stepEstimatedUsd === 'number' && Number.isFinite(event.stepEstimatedUsd) && event.stepEstimatedUsd >= 0 ? event.stepEstimatedUsd : null,
     inputTokens: summary ? null : count(event.inputTokens), outputTokens: summary ? null : count(event.outputTokens), reasoningTokens: summary ? null : count(event.reasoningTokens),
     ...(summary?{}:{uncachedInputTokens:count(event.uncachedInputTokens),cacheReadTokens:count(event.cacheReadTokens),cacheWriteTokens:count(event.cacheWriteTokens)}),
