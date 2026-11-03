@@ -314,9 +314,9 @@ export function NewConversation() {
             <h2 id="new-conversation-examples-title">Or borrow a starting point</h2>
             <div>{startingPoints.map(({ title, detail, prompt, icon: Icon }) => <Button key={title} variant="outline" className="new-conversation-example" disabled={!draftReady || busy} onClick={() => { changeDraft(prompt); document.querySelector<HTMLTextAreaElement>('.new-conversation-entry textarea')?.focus({ preventScroll: true }); }}><Icon aria-hidden="true"/><span><strong>{title}</strong><span>{detail}</span></span></Button>)}</div>
           </section>}
+          {!firstProject && <RecentProjects/>}
         </div>
       </div>
-      {!firstProject && <RecentProjects/>}
     </main>}
     {dragging && <div className="new-conversation-drop-note" role="status">{busy ? 'Your footage is processing…' : 'Drop to attach your footage'}</div>}
   </div>;
