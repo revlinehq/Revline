@@ -3,7 +3,9 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+
 - Agent images: Add art-directed plates and text-first storyboards, sketch previews, style frames and approved animatics. Why: agree on film intent and pacing before building.
+- Editor: New-project composer sits at optical centre, slightly above the middle. Why: exact centre read as low.
 - Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
 - Skills: Add motion taste judgments, reference learning and a short rendered critique anchored in user memory. Why: Zura asked for original design judgment beyond replication.
 - Editor: the new-project headline is now always “What are we making today?”. Why: the user picked it.
