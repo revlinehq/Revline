@@ -1,50 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState, type ComponentType } from 'react';
+import { useLazyIllustration } from './use-lazy-illustration';
 import { Card } from '@/components/ui/card';
 import { LandingStartButton } from './start-button';
 import { LandingHeading, LandingSection } from './ui';
 
+const loadClippers = () => import('./clippers-animation');
+
 /** The film's editor and montage, rendered as a passive, viewport-driven illustration. */
 export function LandingClippers() {
-  const frame = useRef<HTMLDivElement>(null);
-  const [nearby, setNearby] = useState(false);
-  const [playing, setPlaying] = useState(false);
-  const [Animation, setAnimation] = useState<ComponentType<{
-    playing: boolean;
-  }> | null>(null);
-  useEffect(() => {
-    if (!nearby) return;
-    let cancelled = false;
-    void import('./clippers-animation').then((module) => {
-      if (!cancelled) setAnimation(() => module.default);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [nearby]);
-  useEffect(() => {
-    const node = frame.current;
-    if (!node) return;
-    const load = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setNearby(true);
-          load.disconnect();
-        }
-      },
-      { rootMargin: '320px' },
-    );
-    const playback = new IntersectionObserver(([entry]) =>
-      setPlaying(entry.isIntersecting),
-    );
-    load.observe(node);
-    playback.observe(node);
-    return () => {
-      load.disconnect();
-      playback.disconnect();
-    };
-  }, []);
+  const { frame, Animation, playing } = useLazyIllustration(loadClippers);
   return (
     <LandingSection
       id="clippers"

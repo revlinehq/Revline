@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Landing: Play the motion study inside the shared Revline editor illustration with scene-aligned clips, graphics, a music waveform and a synced playhead. Why: the user requested an editable-film showcase matching the clipping section.
+
 - Editor: New-project composer sits at optical centre, slightly above the middle. Why: exact centre read as low.
 - Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
 - Skills: Add motion taste judgments, reference learning and a short rendered critique anchored in user memory. Why: Zura asked for original design judgment beyond replication.
