@@ -30,7 +30,7 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-guidance{position:absolute;top:100%;left:0;width:100%;min-width:0;padding-top:20px}
 .new-conversation-empty .composer-input-group{box-shadow:0 1px 3px #0000001f,0 6px 12px #0000001f,0 12px 24px #0000001a}
 .new-conversation-empty .new-conversation-entry[data-dragging] .composer-input-group{outline:1px dashed #ffffff40;outline-offset:4px}
-.new-conversation-empty .edit-composer-actions{gap:8px}
+.new-conversation-empty .edit-composer-actions{gap:4px}
 .new-conversation-empty .composer-add{color:#aaa;background:transparent}
 .new-conversation-empty .composer-add:hover{background:#2a2a2a;color:#eee}
 .new-conversation-empty :focus-visible{outline:none;box-shadow:none}

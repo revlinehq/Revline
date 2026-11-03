@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Composer: The plus button and model pickers sit closer together, with less padding around the model names. Why: the user found the spacing too wide.
 - Editor: The dark editor uses the same neutral greys and #111 background as the new-project dashboard instead of blue-tinted ones. Why: the user noticed the two looked different.
 - Dashboard: The new-project composer has a lighter, shorter drop shadow. Why: the user found it too heavy.
 - Dashboard: The new-project composer send button is brand purple again instead of grey. Why: the user wanted the purple button back.
