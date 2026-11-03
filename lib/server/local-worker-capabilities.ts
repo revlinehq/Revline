@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
+import puppeteer from 'puppeteer';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { workerToolPath } from './worker-tool-path';
 
@@ -14,6 +15,14 @@ export async function localWorkerCapabilities() {
     catch { missing.push(label); return false; }
   };
   const media = (await Promise.all(['ffmpeg', 'ffprobe'].map(file => available(file, file, ['-version'])))).every(Boolean);
+  let browser = false;
+  try { browser = await available('Chromium', await puppeteer.executablePath(), ['--version']); }
+  catch { missing.push('Chromium'); }
+  if (!browser) for (const kind of ['facecam', 'speakers', 'track', 'snapshot', 'review', 'blueprint', 'render'] as const) excludedKinds.add(kind);
+  if (!['public/vendor/blaze-face.tflite', 'public/vendor/face-landmarker.task', 'public/vendor/mediapipe/vision_wasm_internal.wasm'].every(path => existsSync(path))) {
+    missing.push('MediaPipe models / WASM');
+    for (const kind of ['facecam', 'speakers', 'track'] as const) excludedKinds.add(kind);
+  }
   const scene = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
   if (!await available('scene detection / OpenCV', scene, ['-c', 'import cv2, scenedetect'])) {
     for (const kind of ['facecam', 'speakers', 'shots', 'reference', 'derive'] as const) excludedKinds.add(kind);

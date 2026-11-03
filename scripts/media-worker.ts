@@ -25,7 +25,7 @@ const worker = startMediaWorker({
     if (event === 'media-started') console.log(`${label(fields)}: ${fields.kind} started.`);
     else if (event === 'media-completed') console.log(`${label(fields)}: completed.`);
     else if (event === 'media-interrupted') console.log(`${label(fields)}: ${fields.reason}${fields.error ? ` · ${fields.error}` : ''}; Convex owns recovery.`);
-    else console.error(`Media queue ${fields.operation ?? 'connection'} interrupted: ${fields.error ?? 'transport unavailable'}. Retrying.`);
+    else console.error(`Media queue ${fields.operation ?? 'connection'} interrupted${fields.code ? ` (${fields.code})` : ''}: ${fields.error ?? 'transport unavailable'}. Retrying.`);
   },
 });
 const paused = process.env.MEDIA_WORKER_PAUSED === 'true' || !capabilities.media;
