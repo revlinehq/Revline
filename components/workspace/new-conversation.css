@@ -14,13 +14,9 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 @media(max-width:320px){.new-conversation-intro h1{font-size:28px}}
 
 .new-conversation-empty{isolation:isolate;background:#111;--font-inter:var(--font-geist);--ws-muted:#aaa}
-.new-conversation-empty::before,.new-conversation-empty::after{content:"";position:absolute;z-index:-1;inset:0 0 auto;height:max(560px,72dvh);pointer-events:none;-webkit-mask-image:linear-gradient(#000 50%,transparent);mask-image:linear-gradient(#000 50%,transparent)}
-.new-conversation-empty::before{background:radial-gradient(ellipse min(560px,42vw) min(220px,22dvh) at 50% 38%,#8676b4 0%,rgba(118,96,182,.85) 35%,rgba(70,40,140,.55) 70%,rgba(17,17,17,0) 100%),radial-gradient(ellipse min(900px,70vw) min(420px,48dvh) at 52% 26%,#2b1466 0%,rgba(36,16,84,.7) 45%,rgba(17,17,17,0) 100%)}
-.new-conversation-empty::after{background:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27240%27 height=%27240%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%27.9%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3CfeColorMatrix values=%270 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .55 0%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27/%3E%3C/svg%3E") repeat;opacity:.16;mix-blend-mode:overlay}
 .new-conversation-empty .workspace-nav{background:transparent;border-color:#2a2a2a}
 .new-conversation-empty .new-conversation-main{position:relative;left:50vw;transform:translateX(-50%);width:min(656px,calc(100vw - 32px));margin:-56px 0 0;padding:0}
 .new-conversation-empty .new-conversation-start{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);height:100dvh;margin:0;gap:0}
-.new-conversation-empty:has(.recent-projects) .new-conversation-start{height:max(460px,64dvh)}
 .new-conversation-empty .new-conversation-intro{align-self:end;align-items:center;padding-bottom:24px;text-align:center}
 .new-conversation-empty .new-conversation-intro h1{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--landing-font-head),sans-serif;font-size:36px;font-weight:500;line-height:1.12;color:#f2f2f2}
 .new-conversation-empty .composer-input-group{min-height:112px;border-radius:8px;border-color:#363636;background:#2a2a2a}
@@ -52,3 +48,5 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
   .new-conversation-examples>div{grid-template-columns:1fr}
   .new-conversation-guidance .new-conversation-example{height:68px;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px}
 }
+
+.new-conversation-guidance .recent-projects{margin-top:20px}

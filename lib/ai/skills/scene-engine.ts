@@ -34,6 +34,8 @@ For 3D builds, read page \`three-craft\` and check material identity, highlight/
 
 For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
+For original builds or creative restyling, apply motion-design page \`taste\` to these same rendered frames; it supplies the short critique loop.
+
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
 3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
