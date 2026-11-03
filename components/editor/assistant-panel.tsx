@@ -12,9 +12,8 @@ import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import type { EditorEditModePreference } from '@/lib/ai/edit-mode';
-import { AssistantModelPicker } from './assistant-model-picker';
-import { AssistantModePicker, useAssistantEditMode } from './assistant-mode-picker';
-import { EDITOR_MODELS, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort, type EditorSpeedMode } from '@/lib/ai/claude-model';
+import { useAssistantComposerControls } from './assistant-composer-controls';
+import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
@@ -132,20 +131,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   editSnapshot?:AssistantEditSnapshot;
 }) {
   const [prompt, setPrompt] = useState('');
-  // The server offers the switcher to Ultra accounts and to open (development) deployments.
-  const canChooseModel = !!modelSwitcher;
   const sendInFlight=useRef(false);
   const currentDraftKey=useRef(draftKey);currentDraftKey.current=draftKey;
-  const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
-  const editMode = useAssistantEditMode();
-  // Unset choices follow the current deployment default.
-  const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
-  const effectiveEffort = effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
-  const chosenEffort = effortSwitcher ? effectiveEffort : undefined;
-  const supportedModels=useMemo(()=>allowedModels.filter(choice=>EDITOR_MODELS.some(model=>model.id===choice)),[allowedModels]);
-  const availableModels=supportedModels.length?supportedModels:PRODUCTION_CLAUDE_MODEL_CHOICES;
-  const selectedModelChoice=modelChoice&&availableModels.some(choice=>choice===modelChoice)?modelChoice:undefined;
-  const effectiveModelChoice=selectedModelChoice??(defaultModelChoice&&availableModels.some(choice=>choice===defaultModelChoice)?defaultModelChoice:availableModels.includes('gpt-6.1-sol')?'gpt-6.1-sol':availableModels[0]??'gpt-6.1-sol');
   const [sending, setSending] = useState(false);
   const [resumingTurnId,setResumingTurnId]=useState<string|null>(null);
   const [localError, setLocalError] = useState('');
@@ -153,6 +140,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
+  const composerControls = useAssistantComposerControls({ settings: { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels }, draftKey, disabled: answering });
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
@@ -193,9 +181,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
   useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
-  // The model picked for a project stays picked across reloads, so a long test never quietly switches models.
-  useEffect(() => { try { const saved = draftKey ? localStorage.getItem(`${draftKey}:model`) : null; setModelChoice(EDITOR_MODELS.find(model => model.id === saved)?.id); } catch { /* The default model applies. */ } }, [draftKey]);
-  const chooseModel = useCallback((value: ClaudeModelChoice) => { setModelChoice(value); try { if (draftKey) localStorage.setItem(`${draftKey}:model`, value); } catch { /* The choice holds for this visit. */ } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
     const newUser = latestUser && latestUser.id !== pendingReply.previousUserId;
@@ -216,7 +201,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     const key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSend(draft.trim(), canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
+    try { await onSend(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -233,12 +218,10 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSuggestion(request, suggestions.clipId, canChooseModel ? selectedModelChoice : undefined, chosenEffort, undefined, editMode.value); }
+    try { await onSuggestion(request, suggestions.clipId, composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
-
-  const modelControls = useMemo(() => <div className="assistant-model-controls">{(canChooseModel || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={canChooseModel ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={answering} effort={canChooseModel && effortSwitcher ? { value: effectiveEffort, onChange: setEffortChoice } : undefined}/>}<AssistantModePicker value={editMode.value} onChange={editMode.onChange} disabled={answering}/></div>, [canChooseModel, claudeViaMcp, availableModels, effectiveModelChoice, chooseModel, answering, effortSwitcher, effectiveEffort, editMode.value, editMode.onChange]);
 
   return <div className="assistant-content">
     <MessageScroller><MessageScrollerViewport>
@@ -285,7 +268,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
     <StoryboardStrip media={storyboardMedia}/>
-    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={modelControls} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }
