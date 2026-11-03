@@ -23,6 +23,7 @@ const TURN_FUNCTIONS = new Set([
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',
   'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:normalizeSnapshotId', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
   'mediaTaskResults:consumeRead',
+  'assistant:videoUnavailable', 'assistant:recordVideoUnavailable',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */

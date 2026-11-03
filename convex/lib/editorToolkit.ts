@@ -238,11 +238,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // Concurrent candidate windows share the first failure instead of each
     // uploading another video to an unavailable provider.
     const result = videoInspectionQueue.then(async () => {
+      videoInspectionUnavailable ??= await ctx.runQuery(internal.assistant.videoUnavailable, run) ?? undefined;
       if (videoInspectionUnavailable) return unavailable();
       try { return await work(); }
       catch (error) {
         if (!(error instanceof AnalysisStepError) || abortSignal.aborted) throw error;
         videoInspectionUnavailable = error.message;
+        await ctx.runMutation(internal.assistant.recordVideoUnavailable, { ...run, reason: error.message });
         return unavailable();
       }
     });
