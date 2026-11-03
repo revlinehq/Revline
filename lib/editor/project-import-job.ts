@@ -30,13 +30,13 @@ export class ProjectImportJob {
     if (this.pending) return this.pending;
 
     this.error = null;
-    this.progress = this.preparing();
+    this.progress = { ...this.preparing(), percent: this.progress.percent };
     // Defer execution until the shared promise is stored, including reentrant subscribers.
     this.pending = Promise.resolve().then(() => importProjectSources(
       this.session,
       this.input,
       dependencies,
-      progress => { this.progress = progress; this.publish(); },
+      progress => { this.progress = { ...progress, percent: Math.max(this.progress.percent, progress.percent) }; this.publish(); },
     )).then(projectId => {
       this.result = projectId;
       this.pending = undefined;

@@ -164,7 +164,7 @@ const ULTRA_FALLBACK_MS = 120_000;
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
-  await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
+  await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:['import','preview','extract','waveform','transcribe'].includes(task.kind)?task.progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
   await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});

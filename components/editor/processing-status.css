@@ -11,3 +11,6 @@
 .processing-status-measured progress::-webkit-progress-bar{background:var(--ws-hover,var(--secondary))}.processing-status-measured progress::-webkit-progress-value{background:var(--revline-loading-color)}.processing-status-measured progress::-moz-progress-bar{background:var(--revline-loading-color)}
 @keyframes revline-status-sweep{from{transform:translateX(0)}to{transform:translateX(150%)}}
 @media(prefers-reduced-motion:reduce){.processing-status-sweep::after{animation:none}}
+.processing-status-measured [data-slot=progress]{flex:1;width:0;height:2px;background:var(--ws-hover,var(--secondary))}
+.processing-status-measured [data-slot=progress-indicator]{background:var(--revline-loading-color);transition:transform 200ms linear}
+@media(prefers-reduced-motion:reduce){.processing-status-measured [data-slot=progress-indicator]{transition:none}}

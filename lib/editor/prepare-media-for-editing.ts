@@ -3,13 +3,14 @@ import type { ConvexReactClient } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { api } from '@/convex/_generated/api';
 import { MEDIA_ACTIVITY_LABELS } from '@/lib/media-analysis/activity';
+import { preparedFootageProgress } from './footage-progress';
 import type { MediaAsset } from './types';
 
 type MediaClient = Pick<ConvexReactClient, 'mutation' | 'query'>;
 type PreparationKind = 'extract' | 'waveform' | 'transcribe';
 type TaskState = FunctionReturnType<typeof api.mediaTasks.get>;
 type PreparationTask = { taskId: Id<'mediaTasks'>; completed: boolean; state?: TaskState };
-export type EditingPreparationActivity = { phase: 'processing' | 'watching' | 'listening'; activity: string };
+export type EditingPreparationActivity = { phase: 'processing' | 'watching' | 'listening'; activity: string; percent: number };
 
 const taskOrder: PreparationKind[] = ['extract', 'waveform', 'transcribe'];
 const phases: Record<PreparationKind, EditingPreparationActivity['phase']> = { extract: 'processing', waveform: 'processing', transcribe: 'listening' };
@@ -38,7 +39,7 @@ export async function prepareMediaForEditing(
 
   const readAsset = () => bounded(() => convex.query(api.assets.get, { projectId, assetId }));
   let asset: MediaAsset = await readAsset();
-  if (asset.kind === 'image' || asset.kind === 'model') return asset;
+  if (asset.kind === 'image' || asset.kind === 'model') { onActivity?.({ phase: 'processing', activity: 'Media ready…', percent: preparedFootageProgress(asset) }); return asset; }
 
   function missingTasks(): PreparationKind[] {
     const missing: PreparationKind[] = [];
@@ -58,9 +59,13 @@ export async function prepareMediaForEditing(
       const taskId = await bounded(() => convex.mutation(api.mediaTasks.start, { projectId, assetId, kind }));
       tasks.set(kind, { taskId, completed: false });
     }));
+    asset = await readAsset();
+    const projectTasks = await bounded(() => convex.query(api.mediaTasks.list, { projectId }));
+    const percent = preparedFootageProgress(asset, projectTasks);
     const active = taskOrder.filter(kind => tasks.has(kind) && !tasks.get(kind)!.completed);
     if (!active.length) {
       if (missingTasks().length) throw new Error('Media preparation finished without saved results. Retry to prepare this media again.');
+      onActivity?.({ phase: 'processing', activity: 'Preparing editor…', percent });
       return asset;
     }
     const snapshots = await Promise.all(active.map(kind => bounded(() => convex.query(api.mediaTasks.get, { taskId: tasks.get(kind)!.taskId }))));
@@ -78,9 +83,9 @@ export async function prepareMediaForEditing(
       continue;
     }
     const kind = active[0], state = tasks.get(kind)!.state!;
-    const activity = state.activity ? MEDIA_ACTIVITY_LABELS[state.activity] : state.status === 'retrying' ? 'Retrying media preparation…' : state.status === 'queued' ? `Queued · ${labels[kind]}` : labels[kind];
-    const next = { phase: phases[kind], activity };
-    if (next.phase !== previous?.phase || next.activity !== previous?.activity) { onActivity?.(next); previous = next; }
+    const activity = state.status === 'retrying' ? 'Retrying media preparation…' : state.activity ? MEDIA_ACTIVITY_LABELS[state.activity] : state.status === 'queued' ? `Queued · ${labels[kind]}` : labels[kind];
+    const next = { phase: phases[kind], activity, percent };
+    if (next.phase !== previous?.phase || next.activity !== previous?.activity || next.percent !== previous?.percent) { onActivity?.(next); previous = next; }
     await bounded(() => new Promise<void>(resolve => setTimeout(resolve, 1000)));
   }
 }
