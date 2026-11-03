@@ -22,10 +22,5 @@
 .custom-timeline .timeline-track .timeline-cut-transition.is-compact:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-badge,.custom-timeline .timeline-track .timeline-cut-transition.is-compact:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-handle{opacity:1;pointer-events:none}
 .custom-timeline .timeline-track .timeline-cut-transition.is-compact:is(:has(:focus-visible),.resizing,:has([data-state=open])) .timeline-transition-range{opacity:1}
 
-/* Muted join treatment from the approved clip system. */
-.custom-timeline .timeline-cut-transition{color:#bdae8b}
-.custom-timeline .has-transition .timeline-transition-badge{background:#302d26;border-color:#bdae8b;color:#d5c7a4}
-.custom-timeline .timeline-transition-badge:hover,.custom-timeline .selected .timeline-transition-badge{background:#343633;border-color:#d1d2ca}
-.custom-timeline .has-transition .timeline-transition-range{opacity:1;border-color:#bdae8b70;border-radius:2px;background:linear-gradient(25deg,#bdae8b24,transparent 50%,#bdae8b24),#302d26e8}
-.custom-timeline .timeline-transition-handle::after{background:#d5c7a4}
+.custom-timeline .timeline-transition-range{border-radius:2px}
 .custom-timeline .timeline-cut-transition button:focus-visible{outline:none}

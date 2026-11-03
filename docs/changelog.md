@@ -3,7 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
-- Editor: Apply the approved timeline clip design with persistent labels, muted type rails, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i as the final design.
+- Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
 - Editor: the empty new-project headline is back to “From an idea to a first cut.”; the personal headline shows only once footage exists. Why: the user wanted the original empty-state line.
 - Workspace: Greet users by name and hide starter prompts once footage is attached or saved, or timeline clips exist. Why: Zura wants a useful invitation for each editing state.
 - Assets: Retain the optional generated-image provenance validator already used in development. Why: deploy the composer branch without rejecting existing media.

@@ -28,7 +28,7 @@ export const AudioWaveform = memo(function AudioWaveform({ waveform, sourceStart
       surface.width = Math.ceil(width * ratio); surface.height = Math.ceil(height * ratio);
       const context = surface.getContext('2d');
       if (!context || width <= 0 || height <= 0) return;
-      context.scale(ratio, ratio); context.strokeStyle = '#A7BBAA90'; context.lineWidth = 1;
+      context.scale(ratio, ratio); context.strokeStyle = '#ffffffb3'; context.lineWidth = 1;
       context.beginPath();
       for (const bar of waveformBars(data, timing.sourceStart, timing.duration, clip.width, from, to, gain === 0 ? 1 : gain, playbackRate)) {
         const half = bar.amplitude * (height / 2 - 1);
