@@ -1,3 +1,4 @@
+import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -36,7 +37,7 @@ export async function rememberTurn(
   args: ObjectType<typeof assistantRunArgs>,
   project: Doc<"projects">,
 ): Promise<void> {
-  await ctx.db.insert("assistantTurns", {
+  const id=await ctx.db.insert("assistantTurns", {
     projectId: args.projectId,
     runId: args.runId,
     promptMessageId: args.promptMessageId,
@@ -50,6 +51,7 @@ export async function rememberTurn(
     status: "running",
     updatedAt: Date.now(),
   });
+  await syncTurnView(ctx,(await ctx.db.get(id))!);
 }
 
 export async function dispatchTurn(
@@ -108,7 +110,7 @@ export async function resumeInterruptedTurn(
       streamId: stream.streamId,
       reason: "Resuming the same request.",
     });
-  await ctx.db.patch(turn._id, {
+  await patchTurn(ctx,turn, {
     pass,
     segment,
     feedback,
@@ -142,7 +144,7 @@ export const advance = internalMutation({
       turn.pass >= MAX_REPAIR_PASSES
     )
       return false;
-    await ctx.db.patch(turn._id, {
+    await patchTurn(ctx,turn, {
       pass: turn.pass + 1,
       feedback: args.feedback.slice(0, 14000),
       updatedAt: Date.now(),
@@ -183,7 +185,7 @@ export const checkpoint = internalMutation({
       turn.status === "running" &&
       turn.segment === args.segment
     )
-      await ctx.db.patch(turn._id, {
+      await patchTurn(ctx,turn, {
         savedEdits: Math.max(turn.savedEdits, args.savedEdits),
         pendingFastFrames: args.pendingFastFrames,
         updatedAt: Date.now(),

@@ -1,3 +1,5 @@
+import { displayMessage } from './lib/chat_data';
+import { syncTurnView } from './lib/assistant_turn_data';
 import { projectAgentSummary } from './lib/project_data';
 import { v } from 'convex/values';
 import { internalMutation,internalQuery } from './_generated/server';
@@ -43,5 +45,25 @@ export const agentSummaries=internalMutation({args:{cursor:v.union(v.string(),v.
     const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',row.projectId)).unique();
     await ctx.db.patch(row._id,{agentSummary:projectAgentSummary(run??{})});updated++;
   }
+  return {cursor:page.continueCursor,done:page.isDone,updated};
+}});
+
+/** Explicit bounded pages; these upgrades never dispatch workflows, providers or media work. */
+export const ioViews=internalMutation({args:{table:v.union(v.literal('projects'),v.literal('assistantTurns'),v.literal('assistantMessageViews')),projectId:v.optional(v.id('projects')),cursor:v.union(v.string(),v.null())},returns:v.object({cursor:v.string(),done:v.boolean(),updated:v.number()}),handler:async(ctx,args)=>{
+  if(args.table==='projects'){
+    const page=await ctx.db.query('projects').paginate({cursor:args.cursor,numItems:5});
+    for(const row of page.page)await writeProject(ctx,row._id,{});
+    return {cursor:page.continueCursor,done:page.isDone,updated:page.page.length};
+  }
+  if(args.table==='assistantTurns'){
+    const page=await (args.projectId?ctx.db.query('assistantTurns').withIndex('by_project',q=>q.eq('projectId',args.projectId!)):ctx.db.query('assistantTurns')).paginate({cursor:args.cursor,numItems:5});
+    for(const row of page.page)await syncTurnView(ctx,row);
+    return {cursor:page.continueCursor,done:page.isDone,updated:page.page.length};
+  }
+  const project=args.projectId?await ctx.db.get(args.projectId):null;
+  if(args.projectId&&!project?.threadId)return {cursor:'',done:true,updated:0};
+  const page=await (project?.threadId?ctx.db.query('assistantMessageViews').withIndex('by_thread_order',q=>q.eq('threadId',project.threadId!)):ctx.db.query('assistantMessageViews')).paginate({cursor:args.cursor,numItems:5});
+  let updated=0;
+  for(const row of page.page){const value=displayMessage(row.value);if(JSON.stringify(value)!==JSON.stringify(row.value)){await ctx.db.patch(row._id,{value,version:row.version+1});updated++;}}
   return {cursor:page.continueCursor,done:page.isDone,updated};
 }});

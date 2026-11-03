@@ -305,9 +305,9 @@ export const get = query({ args: { taskId: v.id('mediaTasks') }, returns: taskSt
   if (!task || task.ownerId !== ownerId) throw new ConvexError('Media task not found.');
   await projectIdentity(ctx, task.projectId, ownerId);
   const { kind, status, progress, attempt, error, assetId,activity,activityStartedAt } = task;
-  return { _id: args.taskId, kind, status, progress, attempt, error, assetId,activity,activityStartedAt };
+  return { _id: args.taskId, kind, status, progress: (await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',args.taskId)).unique())?.progress??progress, attempt, error, assetId,activity,activityStartedAt };
 }});
-export const list = query({ args: { projectId: v.id('projects') }, returns: v.array(taskState), handler: async (ctx, args) => {
+export const list = query({ args: { projectId: v.id('projects'), includeProgress:v.optional(v.boolean()) }, returns: v.array(taskState), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const migration = await ctx.db.query('projectDataMigration').withIndex('by_key', q => q.eq('key', 'io-tasks-v1')).unique();
   if (!migration?.completed) {
@@ -315,7 +315,13 @@ export const list = query({ args: { projectId: v.id('projects') }, returns: v.ar
     return tasks.map(({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId, activity, activityStartedAt }));
   }
   const tasks = await ctx.db.query('mediaTaskViews').withIndex('by_project_createdAt', q => q.eq('projectId', args.projectId)).order('desc').take(40);
-  return tasks.map(({ taskId: _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }));
+  return Promise.all(tasks.map(async ({ taskId: _id, kind, status, progress, attempt, error, assetId,activity,activityStartedAt }) => ({ _id, kind, status, progress:args.includeProgress!==false&&['queued','running','retrying'].includes(status)?(await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',_id)).unique())?.progress??progress:progress, attempt, error, assetId,activity,activityStartedAt })));
+}});
+/** Progress has its own bounded subscription; a percentage never invalidates the task history. */
+export const progressForProject=query({args:{projectId:v.id('projects')},returns:v.array(v.object({taskId:v.id('mediaTasks'),progress:v.number()})),handler:async(ctx,args)=>{
+  await projectIdentity(ctx,args.projectId,await requireOwner(ctx));
+  const rows=await ctx.db.query('mediaTaskProgress').withIndex('by_project_createdAt',q=>q.eq('projectId',args.projectId)).order('desc').take(40);
+  return rows.map(({taskId,progress})=>({taskId,progress}));
 }});
 /** Fails an unfinished task permanently and stops its workflow. */
 export async function failMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>, error: string) {
@@ -597,7 +603,9 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!task.readId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame reading is no longer active.');
     const images = [result.read.image, ...(result.read.extraImages ?? [])].filter((image): image is string => !!image);
     if (images.some(image => !/^[A-Za-z0-9+/]+=*$/.test(image)) || images.reduce((sum, image) => sum + image.length, 0) > 900_000) throw new ConvexError('The frame sheet is too large to return.');
-    await ctx.db.patch(task.readId, { status: 'completed', result: result.read });
+    // Older workers still call this mutation. Hand off once to file storage; the
+    // polling row stays queued and small until publication, never containing image/track arrays.
+    await ctx.scheduler.runAfter(0,internal.mediaTaskResults.publishLegacyRead,{taskId:task._id,leaseToken:task.leaseToken!,result:result.read});
   },
   snapshot: async (ctx, task, result) => {
     if (!result.snapshot) throw new ConvexError('Frame capture completed without images.');

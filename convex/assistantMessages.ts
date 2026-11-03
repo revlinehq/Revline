@@ -14,7 +14,7 @@ const addArgs = {
 };
 
 async function refreshPending(ctx: MutationCtx, threadId: string) {
-  const pending = await ctx.db.query('assistantMessageViews').withIndex('by_thread_status', q => q.eq('threadId', threadId).eq('status', 'pending')).collect();
+  const pending = await ctx.db.query('assistantMessageViews').withIndex('by_thread_status', q => q.eq('threadId', threadId).eq('status', 'pending')).order('desc').take(64);
   if (!pending.length) return;
   const docs = await ctx.runQuery(components.agent.messages.getMessagesByIds, { messageIds: pending.map(row => row.messageId) });
   for (const doc of docs) if (doc) await saveMessageView(ctx, doc);
@@ -49,14 +49,16 @@ export const recover = internalMutation({ args: { threadId: v.string(), messageI
 }});
 
 /** The SDK can finalize a disconnected stream inside its component, without calling our write gateway. */
-export const reconcilePending = internalMutation({ args: { messageId: v.string() }, returns: v.null(), handler: async (ctx, args) => {
+export const reconcilePending = internalMutation({ args: { messageId: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const view = await ctx.db.query('assistantMessageViews').withIndex('by_message', q => q.eq('messageId', args.messageId)).unique();
   if (!view || view.status !== 'pending') return null;
   const [doc] = await ctx.runQuery(components.agent.messages.getMessagesByIds, { messageIds: [args.messageId] });
   if (!doc) { await ctx.db.delete(view._id); return null; }
   if (JSON.stringify(displayMessage(doc)) !== JSON.stringify(view.value)) await saveMessageView(ctx, doc);
-  if (doc.status === 'pending') await ctx.scheduler.runAfter(30_000, internal.assistantMessages.reconcilePending, args);
-  else await ctx.scheduler.runAfter(0, internal.assistantMessages.recover, { threadId: doc.threadId, messageId: doc._id, order: doc.order, stepOrder: doc.stepOrder, cursor: null });
+  // SDK finalization normally updates the view immediately. A disconnected pending message
+  // gets at most ten minutes of fallback reconciliation, never an immortal polling chain.
+  if (doc.status === 'pending' && (args.attempt??0)<19) await ctx.scheduler.runAfter(30_000, internal.assistantMessages.reconcilePending, {...args,attempt:(args.attempt??0)+1});
+  else if(doc.status!=='pending') await ctx.scheduler.runAfter(0, internal.assistantMessages.recover, { threadId: doc.threadId, messageId: doc._id, order: doc.order, stepOrder: doc.stepOrder, cursor: null });
   return null;
 }});
 
@@ -145,5 +147,19 @@ export const saveImages = internalMutation({ args: { messageId: v.string(), vers
   if (!view || view.version !== args.version) { for (const id of args.storageIds) await ctx.storage.delete(id); return null; }
   await saveMessageView(ctx, args.message);
   if (args.storageIds.length) await ctx.db.insert('assistantDisplayFiles', { threadId: args.message.threadId, storageIds: args.storageIds });
+  return null;
+}});
+
+/** Finalization may happen inside the SDK after a long turn. Reconcile its display once more,
+ * in bounded pages, rather than leaving an immortal per-message polling chain. */
+export const settleThread=internalMutation({args:{threadId:v.string(),cursor:v.union(v.string(),v.null())},returns:v.null(),handler:async(ctx,args)=>{
+  const page=await ctx.db.query('assistantMessageViews').withIndex('by_thread_status',q=>q.eq('threadId',args.threadId).eq('status','pending')).paginate({cursor:args.cursor,numItems:5});
+  const docs=await ctx.runQuery(components.agent.messages.getMessagesByIds,{messageIds:page.page.map(row=>row.messageId)});
+  for(const doc of docs)if(doc){
+    const row=page.page.find(row=>row.messageId===doc._id);
+    if(row&&JSON.stringify(displayMessage(doc))!==JSON.stringify(row.value))await saveMessageView(ctx,doc);
+    if(doc.status==='pending')await ctx.scheduler.runAfter(30_000,internal.assistantMessages.reconcilePending,{messageId:doc._id});
+  }
+  if(!page.isDone)await ctx.scheduler.runAfter(0,internal.assistantMessages.settleThread,{...args,cursor:page.continueCursor});
   return null;
 }});

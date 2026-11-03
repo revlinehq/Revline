@@ -95,7 +95,9 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const refreshMedia=useAction(api.playback.refresh);
   const preparePlayback=useMutation(api.playback.prepare);
   const handleRefreshMedia=useCallback((assetIds:string[])=>refreshMedia({projectId,assetIds:assetIds as Id<'assets'>[]}),[refreshMedia,projectId]);
-  const mediaTasks=useQuery(api.mediaTasks.list,{projectId});
+  const taskHistory=useQuery(api.mediaTasks.list,{projectId,includeProgress:false});
+  const taskProgress=useQuery(api.mediaTasks.progressForProject,{projectId});
+  const mediaTasks=useMemo(()=>taskHistory?.map(task=>({...task,progress:taskProgress?.find(row=>row.taskId===task._id)?.progress??task.progress})),[taskHistory,taskProgress]);
   const startOverview=useMutation(api.mediaTasks.startOverview);
   const requestedOverviews=useRef(new Set<string>());
   // The app the user connected over MCP most recently (null: none yet, undefined: loading), for the timeline's MCP pill.

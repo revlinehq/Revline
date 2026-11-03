@@ -183,7 +183,7 @@ export const backfillTabSummaries = internalMutation({ args: { cursor: v.optiona
       const row = await stashedRow(ctx, project._id, tab.id);
       return row ? { ...tab, ...summaryOf(row.timeline) } : tab;
     }));
-    await ctx.db.patch(project._id, { timelineTabs: tabs });
+    await writeProject(ctx,project._id, { timelineTabs: tabs });
   }
   if (!page.isDone) await ctx.scheduler.runAfter(0, internal.timelineTabs.backfillTabSummaries, { cursor: page.continueCursor });
   return null;

@@ -1,3 +1,4 @@
+import { patchTurn } from './lib/assistant_turn_data';
 import { makeFunctionReference } from 'convex/server';
 import { ConvexError, v, convexToJson, jsonToConvex, type Infer } from 'convex/values';
 import {internal} from './_generated/api';
@@ -72,7 +73,7 @@ export const run = internalMutation({
     if(turn&&receipt?.kind==='timeline'){
       const review=new FastFrameReview(turn.pendingFastFrames);
       if(beforeProject?.timeline&&afterProject?.timeline)review.changed(beforeProject.timeline,afterProject.timeline);
-      await ctx.db.patch(turn._id,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
+      await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
     }
     return { value, replayed:false,...(receipt ? { receipt } : {}) };
   },

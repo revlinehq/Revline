@@ -22,8 +22,8 @@ export async function initializeMediaCapacity(ctx: MutationCtx | QueryCtx, owner
 }
 
 function display(task: Doc<'mediaTasks'>) {
-  const { ownerId, projectId, createdAt, kind, status, progress, attempt, error, assetId, activity, activityStartedAt } = task;
-  return { taskId: task._id, ownerId, projectId, createdAt, kind, status, progress, attempt, error, assetId, activity, activityStartedAt };
+  const { ownerId, projectId, createdAt, kind, status, progress, attempt, error, assetId, activity, activityStartedAt, attemptStartedAt } = task;
+  return { taskId: task._id, ownerId, projectId, createdAt, kind, status, progress, attempt, error, assetId, activity, activityStartedAt, attemptStartedAt };
 }
 
 /** The editor never reads worker leases, requests or inspection results. */
@@ -31,7 +31,12 @@ export async function syncMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   const row = await ctx.db.query('mediaTaskViews').withIndex('by_task', q => q.eq('taskId', task._id)).unique();
   const value = display(task);
   if (!row) await ctx.db.insert('mediaTaskViews', value);
-  else if (row.kind !== value.kind || row.status !== value.status || row.progress !== value.progress || row.attempt !== value.attempt || row.error !== value.error || row.assetId !== value.assetId || row.activity !== value.activity || row.activityStartedAt !== value.activityStartedAt) await ctx.db.patch(row._id, value);
+  else if (row.kind !== value.kind || row.status !== value.status || row.attempt !== value.attempt || row.error !== value.error || row.assetId !== value.assetId || row.activity !== value.activity || row.activityStartedAt !== value.activityStartedAt || row.attemptStartedAt !== value.attemptStartedAt) await ctx.db.patch(row._id, value);
+  const progress=await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',task._id)).unique();
+  if(active(task.status)){
+    if(!progress)await ctx.db.insert('mediaTaskProgress',{taskId:task._id,projectId:task.projectId,createdAt:task.createdAt,progress:task.progress});
+    else if(progress.progress!==task.progress)await ctx.db.patch(progress._id,{progress:task.progress});
+  }else if(progress)await ctx.db.delete(progress._id);
 }
 
 export async function insertMediaTask(ctx: MutationCtx, value: Omit<Doc<'mediaTasks'>, '_id' | '_creationTime'>) {
@@ -61,6 +66,8 @@ export async function patchMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, 
 export async function deleteMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>) {
   const view = await ctx.db.query('mediaTaskViews').withIndex('by_task', q => q.eq('taskId', taskId)).unique();
   const slot = await ctx.db.query('mediaTaskSlots').withIndex('by_task', q => q.eq('taskId', taskId)).unique();
+  const progress=await ctx.db.query('mediaTaskProgress').withIndex('by_task',q=>q.eq('taskId',taskId)).unique();
+  if(progress)await ctx.db.delete(progress._id);
   if (view) await ctx.db.delete(view._id);
   if (slot) await ctx.db.delete(slot._id);
   await ctx.db.delete(taskId);
