@@ -10,13 +10,18 @@ export const motionDesign: EditorSkill = {
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
 
-Before motion design from scratch, readSkill name "storyboard": agree on the brief and TEXT concepts before any image, then approve the hand-drawn rough board, final-look style frames and paced animatic before scene code. Resume its saved stage with readBrief. Skip small edits and "just build it". ReadSkill name "image-direction" before EVERY generateImage call for concrete art direction and visual self-checks; hand-drawn is a supported final look too. Assets during the build follow \`image-plates\`: choose icons, traced shapes, code or three.js first, then generate subjects, textures, environment maps, backgrounds and cut-outs on demand.
+Before motion design from scratch, readSkill name "storyboard": agree on the brief, then ideate one message, one audience tension and 3–5 angles before concepts or images. Answer questions directly; a request to "show me" gets the timed whole-film walkthrough, not repeated A/B text. Then approve the hand-drawn rough board, final-look style frames and paced animatic before scene code. Resume its saved stage with readBrief. Skip small edits and "just build it". ReadSkill name "image-direction" before EVERY generateImage call for concrete art direction and visual self-checks; hand-drawn is a supported final look too. Assets during the build follow \`image-plates\`: choose icons, traced shapes, code or three.js first, then generate subjects, textures, environment maps, backgrounds and cut-outs on demand.
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
 **Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
 
 For original motion design, creative restyling or learning from a style reference, read page \`taste\` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
+
+## Launch-film length and proof
+1. Default to 30–40 seconds unless the user sets a length; use 35 seconds as a working example. An explicit 12-second or 60-second request wins.
+2. Structure the launch as 0–5 seconds of audience tension, ONE verified product proof in the middle, and the last 4–6 seconds for the payoff line and confirmed wordmark. Example 35-second plan: 0–5 hook, 5–30 proof, 30–35 payoff. Omit the wordmark when the user says "no logo".
+3. Choose the proof that most directly overturns the audience's expectation; compare at least two candidates in ideation. Bad default: typing a prompt, a podcast becomes Shorts, then a motion-design feature. Better example: one existing manual cut survives a verified multi-layer edit around it. Check readBrief and real product screens/tools before promising that operation; show its result, not only the input prompt.
 
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
