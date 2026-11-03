@@ -21,9 +21,14 @@ struct MediaTaskState: Decodable, Identifiable, Sendable {
     let _id: String
     let kind: String
     let status: String
-    let progress: Double
+    var progress: Double
     let error: String?
     let activity: String?
     var id: String { _id }
     var active: Bool { ["queued", "running", "retrying"].contains(status) }
+}
+
+struct MediaTaskProgress: Decodable, Sendable {
+    let taskId: String
+    let progress: Double
 }

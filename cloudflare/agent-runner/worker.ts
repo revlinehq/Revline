@@ -2,7 +2,7 @@ import { Agent, getAgentByName, type FiberContext, type FiberRecoveryContext } f
 import { convexToJson, jsonToConvex, type JSONValue } from 'convex/values';
 import { internal } from '../../convex/_generated/api';
 import { runEditorTurn, type EditorTurnArgs } from '../../convex/lib/editorTurn';
-import { verifyRunnerRequest } from '../../convex/lib/runner_auth';
+import { runnerRequestHeadersValid, verifyRunnerRequest } from '../../convex/lib/runner_auth';
 import { convexBridge, type BridgeEnv } from './convex-bridge';
 
 // Runs the editor's agent loop for one chat turn (convex/lib/editorTurn.ts) outside Convex's ten-minute action
@@ -16,6 +16,19 @@ type RunStart = { args: JSONValue; runToken: string };
 /** What survives an eviction: the request, and how far the turn had got. */
 type TurnCheckpoint = RunStart & { steps: number; savedEdits: number; pendingFastFrames?: number[] };
 const HEARTBEAT_MS = 30_000;
+
+const MAX_START_BYTES=1_000_000;
+async function readStartBody(request:Request):Promise<ArrayBuffer|null>{
+  const reader=request.body?.getReader();
+  if(!reader)return new ArrayBuffer(0);
+  const chunks:Uint8Array[]= [];let size=0;
+  try{
+    while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>MAX_START_BYTES){await reader.cancel();return null;}chunks.push(value);}
+  }finally{reader.releaseLock();}
+  const body=new Uint8Array(size);let offset=0;
+  for(const chunk of chunks){body.set(chunk,offset);offset+=chunk.byteLength;}
+  return body.buffer;
+}
 
 export class EditorTurn extends Agent<Env> {
   /** Convex's signed start and stop requests for this run, each accepted once: a replay is refused. */
@@ -87,7 +100,11 @@ export default {
     const path = new URL(request.url).pathname;
     if (request.method === 'GET' && path === '/health') return Response.json({ ok: true });
     if (request.method !== 'POST' || (path !== '/runs' && path !== '/runs/stop')) return new Response('Not found', { status: 404 });
-    const body = await request.arrayBuffer();
+    if(Number(request.headers.get('content-length'))>MAX_START_BYTES)return new Response('Request is too large',{status:413});
+    if(!env.AGENT_RUNNER_SECRET||!runnerRequestHeadersValid(request))return new Response('Unauthorized',{status:401});
+    let body:ArrayBuffer|null;
+    try{body=await readStartBody(request);}catch{return new Response('Invalid request body',{status:400});}
+    if(!body)return new Response('Request is too large',{status:413});
     const nonce = await verifyRunnerRequest(env.AGENT_RUNNER_SECRET, request, body);
     if (!nonce) return new Response('Unauthorized', { status: 401 });
     let params: { runId?: unknown; args?: { runId?: unknown }; runToken?: unknown } | null = null;

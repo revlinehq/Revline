@@ -15,11 +15,17 @@ export async function runnerSignature(secret: string, method: string, url: strin
   return { 'x-runner-time': time, 'x-runner-nonce': nonce, 'x-runner-signature': hex(signature) };
 }
 
+/** Cheap rejection before a receiver allocates or hashes an untrusted body. */
+export function runnerRequestHeadersValid(request:Request){
+  const time=request.headers.get('x-runner-time')??'',nonce=request.headers.get('x-runner-nonce')??'',signature=request.headers.get('x-runner-signature')??'';
+  return /^\d{1,16}$/.test(time)&&/^[\da-f-]{36}$/.test(nonce)&&/^[\da-f]{64}$/.test(signature)&&Math.abs(Date.now()-Number(time))<=RUNNER_REQUEST_WINDOW_MS;
+}
+
 /** The nonce of a request signed with this secret within the window, or null. Its body must be read as `body`;
  * the caller refuses a nonce it has already seen. */
 export async function verifyRunnerRequest(secret: string | undefined, request: Request, body: ArrayBuffer): Promise<string | null> {
   const time = request.headers.get('x-runner-time') ?? '', nonce = request.headers.get('x-runner-nonce') ?? '', signature = request.headers.get('x-runner-signature') ?? '';
-  if (!secret || !/^\d{1,16}$/.test(time) || !/^[\da-f-]{36}$/.test(nonce) || !/^[\da-f]{64}$/.test(signature) || Math.abs(Date.now() - Number(time)) > RUNNER_REQUEST_WINDOW_MS) return null;
+  if (!secret || !runnerRequestHeadersValid(request)) return null;
   const signed = new Uint8Array(signature.match(/../g)!.map(pair => parseInt(pair, 16)));
   return await crypto.subtle.verify('HMAC', await importKey(secret, 'verify'), signed, await message(time, nonce, request.method, new URL(request.url).pathname, body)) ? nonce : null;
 }

@@ -1,3 +1,4 @@
+import { runningMediaTaskCount } from './media_task_data';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Doc } from '../_generated/dataModel';
 import { accountLimit } from './account_limits';
@@ -21,7 +22,7 @@ const SCAN = 64;
 type Versioned = (q: import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>) => import('convex/server').Expression<boolean>;
 
 async function runningRenders(ctx: MutationCtx | QueryCtx, ownerId: string, limit: number) {
-  return (await ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', 'running')).filter(q => q.eq(q.field('kind'), 'render')).take(limit)).length;
+  return runningMediaTaskCount(ctx, ownerId, limit, 'render');
 }
 
 /** Queued exports of one lane that may start now, oldest first, honoring each owner's seats.

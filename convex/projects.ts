@@ -1,7 +1,7 @@
 import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
 import { shareAnalysis } from './lib/asset_analysis';
 import { writeProject,createProject,readProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
-import { loadSceneCode, sceneCodeText } from './lib/scene_code';
+import { loadSceneCode, storeSceneCode, sceneCodeText } from './lib/scene_code';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
@@ -106,7 +106,7 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
     return baked;
   };
   const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
-  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: remap(row.timeline) });
+  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: await storeSceneCode(ctx,remap(row.timeline)) });
   await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
   return copyId;
 }
@@ -171,7 +171,7 @@ async function projectAgent(ctx: QueryCtx, projectId: Id<"projects">, project?: 
 }
 export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
   const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
-  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:await projectAgent(ctx,row.projectId)})));}
+  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:row.agentSummary===undefined?await projectAgent(ctx,row.projectId):row.agentSummary})));}
   const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
     const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);

@@ -9,6 +9,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { currentTimeline } from './lib/timeline';
 import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
 import type { Timeline } from '../lib/editor/types';
+import { withoutSceneCode } from '../lib/editor/scene-code';
 import { sceneThumbKey } from '../lib/editor/scene-thumb-key';
 
 // Motion clips on the timeline show real frames of themselves: a few frames of the clip alone, rendered by the
@@ -84,9 +85,17 @@ export const forShare = query({ args: { shareId: v.string() }, returns: v.record
   const id = ctx.db.normalizeId('timelineShares', args.shareId), share = id ? await ctx.db.get(id) : null;
   if (!share?.published) return {};
   const rows = share.tabCount ? await ctx.db.query('shareTimelines').withIndex('by_share', q => q.eq('shareId', share._id)).take(20) : [];
-  const ids = [...new Set([share.timeline, ...rows.map(row => row.timeline)].flatMap(timeline => sceneClips(timeline).map(clip => clip.id)))].slice(0, 60);
   const frames: Record<string, { time: number; image: string }[]> = {};
-  for (const clipId of ids) { const found = await clipFrames(ctx, share.projectId, clipId); if (found) frames[clipId] = found; }
+  let checked = 0;
+  for (const published of [share.timeline, ...rows.map(row => row.timeline)]) {
+    // Legacy shares may still have inline code; thumbnail keys use its hash.
+    const { timeline } = await withoutSceneCode(published);
+    for (const clip of sceneClips(timeline)) {
+      if (checked++ >= 60) return frames;
+      const found = await images(ctx, await latest(ctx, share.projectId, sceneThumbKey(clip, timeline)));
+      if (found) frames[clip.id] = found;
+    }
+  }
   return frames;
 }});
 

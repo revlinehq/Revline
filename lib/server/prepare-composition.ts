@@ -1,3 +1,4 @@
+import { downloadPublicHttps } from './public-https';
 import { prepareSceneThreeResources } from './scene-three-resources';
 import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-files';
 import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
@@ -98,10 +99,9 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   const brandFonts=[...new Set(timeline.clips.flatMap(clip=>clip.kind==='scene'?[...clip.scene?.brand?.fonts.map(font=>font.url)??[],...clip.scene?.brand?.screens?.map(screen=>screen.url)??[]]:[]))];
   for(const [index,url] of brandFonts.entries()){
     try{
-      const response=await fetch(url,{signal});
-      if(!response.ok)continue;
-      const type=response.headers.get('content-type')??'',name=`brand-file-${index}.${/woff2/.test(type)?'woff2':/woff/.test(type)?'woff':/otf|opentype/.test(type)?'otf':/png/.test(type)?'png':/jpe?g/.test(type)?'jpg':/webp/.test(type)?'webp':'ttf'}`;
-      await writeFile(join(directory,name),Buffer.from(await response.arrayBuffer()));
+      const response=await downloadPublicHttps(url,{signal,maxBytes:8_000_000});
+      const type=response.type,name=`brand-file-${index}.${/woff2/.test(type)?'woff2':/woff/.test(type)?'woff':/otf|opentype/.test(type)?'otf':/png/.test(type)?'png':/jpe?g/.test(type)?'jpg':/webp/.test(type)?'webp':'ttf'}`;
+      await writeFile(join(directory,name),Buffer.from(response.data));
       assetUrls[url]=`./${name}`;
     }catch(error){if(signal.aborted)throw error;}
   }

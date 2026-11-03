@@ -6,6 +6,17 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 - Audio tools: Restore development sound, narration and music matching, identify rejected tool mutations, and share pinned beat dependencies across dev worktrees. Why: Terra's launch film was blocked by editing failures on shared development.
 
+- HTTP: Bound runner start requests and stream forwarded MCP bodies. Why: unauthenticated uploads could allocate large buffers before rejection.
+
+- Scenes and media: Keep stored scene code and share cards out of subscribed rows, retain large-film undo, and isolate worker scheduling from heartbeats. Why: large scenes could hit document limits and queue reads still conflicted with progress updates.
+
+- Security: Restrict remote downloads, pin published thumbnails, check all tabs before deleting media, and throttle paid retries and audio. Why: the audit found privacy, SSRF, data-loss and cost-control gaps.
+
+- Database I/O: Separate numeric task progress, slim chat display rows and turn status, and keep run bookkeeping off timeline and prompt payloads. Why: large subscribed rows and repeated progress writes amplified database reads.
+
+- Database I/O: Remove scene hydration from run bookkeeping, isolate catalog status and frame cleanup, and publish reference results to file storage. Why: one-user traffic consumed gigabytes of database bandwidth.
+
+- Landing: Removed the “Recreated in Revline from a reel by @hc.prath” caption under the motion design film. Why: the user didn't want it.
 - Editor: The aspect ratio menu is now a compact “Video format” list (YouTube, Reels·TikTok·Shorts, Square, Feed, Classic) with outline shapes, sizes and an inline safe-area toggle. Why: the user called the old picker terrible and approved Pen design eqEih.
 - Editor: The aspect ratio switcher left the editor composer and is back on the preview; the dashboard composer keeps its format header. Why: the user said it made no sense above the editing chat.
 - Editor: The empty preview is now a quiet dashed drop area with “Start with a clip or an idea”, one Add footage button and a drop hint, with no gradient. Why: the user picked Pen design W2tfzE.
