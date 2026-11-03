@@ -11,6 +11,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Skills: Add message-first ideation, direct creative conversation and one-proof 30–40 second launch films. Why: Terra repeated A/B prompts and literalised user feedback.
 
 - Agent images: Add complete ink storyboards, short concrete concepts and inline signed previews beside image plates. Why: the user requested visible shots and personal approval.
+- Skills: Shorten 14 editing skills and replace vague guidance with checks while retaining motion tools and incident fixes. Why: the user requested specific, human instructions without duplicate rules.
+
 - Skills: Add `npm run skills:rank`, which scores each editing skill on numbers, tool checks and examples and lists its vaguest lines. Why: the user wants skills ranked best to worst with reasons.
 
 - Workspace: Match the approved home composer and compact project list with footage menus and stored posters. Why: the user requested the Pen design.

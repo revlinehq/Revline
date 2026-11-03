@@ -10,8 +10,8 @@ For "remove the awkward moments", "cut where I look away", "clean up the dead ai
 ## 1. Find candidates (cheap)
 Do both, then merge them into one list of SOURCE windows:
 - Transcript: inspectAssetAnalysis (analyzeMedia transcribe first if there is none). Note pauses over about 0.7 s, false starts and restarts, "um/uh/so/like" before a restart, and the words around each gap.
-- Picture: one readFrames momentsOnly:true over the whole clip (0 to its source duration). No image comes back, only the map:
-  - holds: a second or more where the picture all but stops. During silence that is dead air or a frozen face; during speech it is usually just a calm speaker, so leave it.
+- Picture: readFrames momentsOnly:true across the source. At the 80-result cap, rescan successive windows until all source time is covered. The map has no image:
+  - holds: a second or more where the picture all but stops. During silence, inspect for dead air/frozen faces; preserve speaking holds.
   - small motion moments in the face or hand region (compare region to where the face is): looking away, at notes, down at the phone, fidgeting, hair or face touching, reaching for the camera.
   - big motion moments that cover most of the frame: standing up, walking out of frame, picking up or moving the camera.
   - cut moments: jumps from an earlier rough cut, flashes, frame drops.
@@ -20,18 +20,18 @@ For a clip under about 20 s you may instead read count 16 over the whole clip; i
 
 ## 2. Confirm each candidate frame by frame
 For every candidate, readFrames fps 10 over it, starting about 0.5 s before and ending about 0.5 s after (up to 3 s per read; split a longer one). Look at the grid yourself and decide:
-- Awkward: eyes leave the lens and come back, the face freezes or goes blank, a hand comes up to the camera or face, the head drops to read, the camera shakes or is being set up, a flash or jump. Note the exact frame it starts and the frame the speaker is back (label times in the grid).
-- Not awkward: a natural blink, a nod, a gesture while talking, a short glance mid-word. Keep it.
+- Awkward: eyes leave the lens for ≥0.5 s during silence and return, the face freezes or goes blank, a hand comes up to the camera or face, the head drops to read, the camera shakes or is being set up, a flash or jump. Bracket onset/recovery at 10 fps, then inspect adjacent native-rate frames in each bracket for final boundaries.
+- Keep blinks, nods, talking gestures and glances <0.5 s unless specifically targeted.
 Several candidates close together can share one read. Never cut on the map alone; it says where the picture moves, not why.
 
 ## 3. Cut, keeping the speech whole
 - Each cut runs from the frame the awkward thing starts to the frame the speaker is back, widened to the nearest word boundaries (word timings from inspectAssetAnalysis with start/end). Never cut inside a word. If the awkward moment happens while the speaker is talking, cut the whole sentence or phrase, or leave it and say so: do not cut words out of a sentence to hide a glance.
 - Apply all cuts at once on the clip: cleanSpeech with keep (the SOURCE ranges between your cuts), or retainSourceRanges with tightenSilence:true. Both also remove pauses and fillers inside the kept ranges, so the transcript-only candidates are handled in the same call. Close gaps if several clips are left.
-- Check: inspectTimeline for the new length, then getFrames at 2 to 4 of the new cut points to see the join reads (no frozen face, no half glance on either side).
+- Check inspectTimeline duration and every changed join with getFrames at t−1/fps, t, t+1/fps; batch ≤6 frames/call. Reject frozen faces/half glances.
 - Tell the user what you removed, by time and what it was ("0:12 looked down at notes, 0:31 reached for the camera, 4.2 s of dead air at the start"), and what you looked at and kept.
 
 ## Long clips
-momentsOnly reads the whole length cheaply, however long. Confirm only the candidates; do not page through a long clip at 10 fps. Use inspectVideo only when the user asks for something you must hear (laughing, a cough, a phone ringing) or search by meaning across a long clip; inspectFrames is for older flows and is not needed when readFrames can show the frames.
+Confirm only momentsOnly candidates; do not page the entire clip at 10 fps. Use inspectVideo only when the user asks for something you must hear (laughing, a cough, a phone ringing) or search by meaning across a long clip; inspectFrames is for older flows and is not needed when readFrames can show the frames.
 
 ## Rules
 - Only cut what the user asked about. "Clean it up" with no visual words is a speech cleanup (cleanSpeech), not this skill.

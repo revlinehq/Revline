@@ -50,18 +50,16 @@ export default function scene({ root, tl, gsap }) {
 
 export const overallStyling: EditorSkill = {
   name: 'overall-styling',
-  description: 'The user\'s house look for everything Revline makes: launch films, motion-design, explainers over footage and motion elements. Product UI stays restrained (near-black, hairlines, one accent, minimal text, no grids, scan lines, shadows or bright purple fills); diagrams, charts and technical graphics use the isometric line diagram (thin white outlined 3D blocks, hatching, one accent edge, dimension lines, few words), with a working code example (page "example"). Read before designing any film, scene or graphic, unless the user asks for a different look.',
+  description: 'House defaults for films, footage overlays and diagrams: near-black UI, one accent, outlined isometric blocks, hatching, dimension lines and subtitles. Includes a working example. User-selected looks and measured recreations override these defaults.',
   body: `# Overall styling
 
-How everything looks: launch films, motion-design films, explainers over footage and motion elements. explainer-scenes and motion-design say what to show and when; this skill says how it looks.
+House defaults apply to invented graphics. Explicit user direction and measured literal references override them; confirmed brand fonts/colors override remaining defaults. Why: copying a reference and inventing a film require different choices.
 
 ## Everywhere
 
-- Restrained: near-black surfaces, thin hairlines, muted text, one accent per piece. No grids, scan lines, drop shadows or bright purple fills.
-- The picture carries the eye: few words on screen, never the spoken words repeated as titles.
-- One product look: the Revline editor appears the same in every section of a film (one shared kit or blueprint, not copies).
-- Tip: when a film shows the same product UI in several sections, build it once (a blueprint, or one component in the film) and reuse it, changing only its state and framing. Take it from the real app's look: getBlueprint for the kit's blueprint, or measureScreen and compareScreen against the kit's screen of the real app. A version invented per section drifts: one launch film ended up with three different-looking Revline editors.
-- Choose motion or stillness for the idea; a locked camera and held frame are valid. For original design and style inspiration, read motion-design page \`taste\`. The page "example" demonstrates technique, not a required composition.
+- Invented UI: surfaces #111–#202020, 1 px dividers, text #F5F5F5/#A6A6A6, one accent hue per shot at 1080-based size. No grids, scan lines or bright purple fills. Panel shadows only for a selected blueprint lift; subtitle shadow is specified below.
+- Reuse one product component or blueprint across sections; vary state/framing. Use getBlueprint or measureScreen/compareScreen against the real app. Separate copies once produced three different Revline editors in one film.
+- Choose a hold or motion that communicates the idea; getFrames/checkPacing verify it. The example demonstrates technique, not a required composition.
 
 ## Isometric line diagram (default)
 
@@ -71,17 +69,17 @@ Technical drawings that build themselves next to the speaker: ideas become outli
 - Panel background #0C0C0C, or transparent with a dark gradient (transparent to rgba(0,0,0,.65 to .85)) where it sits over footage.
 - Lines #D6D6D6 / #BDBDBD for main edges, #777 for axes and secondary posts, #888 for back edges and dimension lines. No background grids or grid lines: they are clutter.
 - Text #F5F5F5 for figures and labels, #A6A6A6 for kickers and axis labels, #858585 to #999 for notes and captions.
-- ONE accent, used on one edge or line per graphic: the subject's brand color when it has one (NVIDIA green #76B900 in the Jensen film), otherwise a muted single hue. Keep the diagram strokes flat and avoid glows. Muted film-grain gradients may enrich a quiet background when the brief calls for them.
+- ONE accent, used on one edge or line per graphic: the subject's brand color when it has one (NVIDIA green #76B900 in the Jensen film), otherwise a muted single hue. Keep the diagram strokes flat and avoid glows. A requested grain gradient is allowed behind the diagram; the footage legibility gradient is also exempt.
 
 ### Drawing
 - Isometric blocks: top face, front face and side face as separate paths, stroke 2.5, stroke-linejoin round. Faces get near-black fills (#111 to #202020), never solid color.
 - Hatching on one face only: an SVG pattern of 45 degree lines, 9 to 10 px apart, stroke #404040 to #555, width 1.
-- The accent sits on one edge, usually the base of the block (stroke 3).
+- The accent sits on one edge, for example the block’s base (stroke 3).
 - Stacked blocks show a relationship ("X carries Y"): the upper block sits on thin support posts (#777, stroke 2) drawn down to the lower one.
 - Dimension lines under or beside a block: a thin line with end ticks (M x y H x2 plus short verticals), #888, stroke 1.5, with a small caption below it.
 - Charts: thin axes (#777, 1.5) and no grid lines, values as 3 px round-capped lines, a small white dot (r 4 to 5) riding the line as it draws, an end label in mono.
 - Labels inside blocks: Inter 25 to 27, weight 500, centered. Numbers in Geist Mono with tabular numerals.
-- The drawing carries the eye, not text. No headings, kickers or explanatory notes on the graphic; at most a short label inside a block or at a line's end, plus one short muted caption (18 to 20 px) when the diagram needs it.
+- No headings/kickers or script repeated as titles. Labels ≤3 words inside a block or at a line’s end; at most one caption, ≤6 words, 18–20 px.
 
 ### Motion
 - Lines draw on with DrawSVGPlugin (drawSVG 0% to 100%, power3.inOut, 0.6 to 1.2 s); blocks and labels reveal with a left-to-right clipPath wipe (inset(0 100% 0 0) to inset(0), power3.inOut, about 0.65 s).
