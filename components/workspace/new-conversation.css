@@ -19,7 +19,7 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-empty .new-conversation-main{position:relative;left:50vw;transform:translateX(-50%);width:min(656px,calc(100vw - 32px));margin:-56px 0 0;padding:0}
 .new-conversation-empty .new-conversation-start{display:grid;grid-template-rows:minmax(0,1fr) auto minmax(0,1fr);height:100dvh;margin:0;gap:0}
 .new-conversation-empty .new-conversation-intro{align-self:end;align-items:center;padding-bottom:24px;text-align:center}
-.new-conversation-empty .new-conversation-intro h1{font-family:var(--landing-font-head),sans-serif;font-size:36px;font-weight:500;line-height:1.12;color:#f2f2f2}
+.new-conversation-empty .new-conversation-intro h1{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--landing-font-head),sans-serif;font-size:36px;font-weight:500;line-height:1.12;color:#f2f2f2}
 .new-conversation-empty .composer-input-group{min-height:112px;border-radius:8px;border-color:#363636;background:#2a2a2a}
 .new-conversation-empty .composer-input-group>[data-slot=input-group-control]{min-height:66px;padding:12px 14px 8px;font-family:var(--font-geist),sans-serif;font-size:14px;line-height:20px}
 .new-conversation-empty .composer-input-group>[data-slot=input-group-control]::placeholder{color:#aaa}
@@ -47,7 +47,7 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-tour ol{display:flex;flex-direction:column;gap:20px;margin:8px 0;padding-left:20px;font-size:14px}
 .new-conversation-tour p{margin-top:5px;color:#aaa;line-height:1.5}
 @media(max-width:600px){
-  .new-conversation-empty .new-conversation-intro h1{font-size:28px}
+  .new-conversation-empty .new-conversation-intro h1{font-size:clamp(20px,6.4vw,28px)}
   .new-conversation-empty .edit-composer-actions{gap:4px}
   .new-conversation-empty .assistant-model-picker .inspector-select-trigger{padding-inline:4px}
   .new-conversation-footage{flex-wrap:wrap;gap:8px 12px}

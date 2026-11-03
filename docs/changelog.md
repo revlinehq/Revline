@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Workspace: Greet users by name and hide starter prompts once footage is attached or saved, or timeline clips exist. Why: Zura wants a useful invitation for each editing state.
 - Assets: Retain the optional generated-image provenance validator already used in development. Why: deploy the composer branch without rejecting existing media.
 - Workspace: Keep the first-project composer at the viewport centre, including with scrollbars, over the chosen violet grain with one headline and starter prompts. Why: make the first edit clear for new users.
 - Workspace: Restore the new-project composer’s shared primary-purple send button and remove local color overrides. Why: small primary actions keep the app’s brand color.

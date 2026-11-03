@@ -48,7 +48,8 @@ export function NewConversation() {
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
-  const projects = useQuery(api.projects.list, isAuthenticated ? { limit: 1 } : 'skip');
+  const projects = useQuery(api.projects.list, isAuthenticated ? { limit: 6 } : 'skip');
+  const library = useQuery(api.assets.library, isAuthenticated ? { paginationOpts: { numItems: 1, cursor: null } } : 'skip');
   const firstProject = projects?.length === 0;
   const [tourOpen, setTourOpen] = useState(false);
   const picker=useRef<HTMLInputElement>(null);
@@ -80,6 +81,11 @@ export function NewConversation() {
   const [startingBlank, setStartingBlank] = useState(false);
   const [draft, setDraft] = useState('');
   const hasMedia = files.length + cloudIds.length > 0;
+  const hasFootage = hasMedia || !!library?.page.length || !!projects?.some(project => project.clipCount > 0);
+  const showStartingPoints = draftReady && projects !== undefined && library !== undefined && !hasFootage;
+  const headline = hasFootage
+    ? firstName ? `${firstName}, let’s edit your footage.` : 'Let’s edit your footage.'
+    : firstName ? `Hi, ${firstName}. Let’s create.` : 'Welcome. Let’s create.';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
@@ -293,24 +299,24 @@ export function NewConversation() {
     return { id, name: asset?.fileName ?? 'Saved footage', kind: asset?.kind ?? 'video', url: asset?.url ?? undefined };
   }), ...previews];
 
-  return <div className={`workspace-page new-conversation${firstProject && !status ? ' new-conversation-empty' : ''}`} {...fileDrop.handlers}>
+  return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}`} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
       <div className="new-conversation-start">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title">{firstProject ? 'From an idea to a first cut.' : `Welcome${firstName ? `, ${firstName}` : ''}.`}</h1>{!firstProject && <p>Describe the video you want to make, or add your footage to get started.</p>}</div>
+        <div className="new-conversation-intro"><h1 id="new-conversation-title" title={headline}>{headline}</h1></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <EditComposer value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
-        {firstProject && <div className="new-conversation-guidance">
+        <div className="new-conversation-guidance">
           <div className="new-conversation-footage"><Button variant="outline" onClick={() => picker.current?.click()} disabled={!draftReady || busy}><Plus aria-hidden="true"/>Add footage</Button><span>or drop videos, audio, or images here</span></div>
-          <section className="new-conversation-examples" aria-labelledby="new-conversation-examples-title">
+          {showStartingPoints && <section className="new-conversation-examples" aria-labelledby="new-conversation-examples-title">
             <h2 id="new-conversation-examples-title">Or borrow a starting point</h2>
             <div>{startingPoints.map(({ title, detail, prompt, icon: Icon }) => <Button key={title} variant="outline" className="new-conversation-example" disabled={!draftReady || busy} onClick={() => { changeDraft(prompt); document.querySelector<HTMLTextAreaElement>('.new-conversation-entry textarea')?.focus({ preventScroll: true }); }}><Icon aria-hidden="true"/><span><strong>{title}</strong><span>{detail}</span></span></Button>)}</div>
-          </section>
+          </section>}
           <footer className="new-conversation-help"><Button variant="outline" onClick={() => setTourOpen(true)}><CircleHelp aria-hidden="true"/>Take a quick tour</Button></footer>
-        </div>}
+        </div>
       </div>
       {!firstProject && <RecentProjects/>}
     </main>}
