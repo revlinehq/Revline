@@ -9,7 +9,7 @@ struct AgentDrawerHandle: View {
             dismissKeyboard()
             drawer.toggleConversation()
         }
-        .labelStyle(.iconOnly).font(.title).foregroundStyle(Color.revlineMuted)
+        .labelStyle(.iconOnly).font(.title).foregroundStyle(Color.secondary)
         .buttonStyle(.plain).frame(maxWidth: .infinity, minHeight: 44)
         .contentShape(.rect)
         .simultaneousGesture(DragGesture().onEnded { value in

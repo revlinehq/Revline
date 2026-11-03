@@ -11,8 +11,9 @@ final class AgentDrawerState {
     var compact: Bool { composing || !expanded }
 
     func height(in available: CGFloat) -> CGFloat {
-        if composing { return composerHeight }
-        let minimum = max(170, composerHeight + 44)
+        let available = max(0, available)
+        if composing { return min(composerHeight, available) }
+        let minimum = min(max(170, composerHeight + 44), available)
         let requested = exporting ? 440 : fullHeight ? available * 0.92 : expanded ? available * 0.52 : minimum
         return min(max(minimum, requested), max(minimum, available - 80))
     }

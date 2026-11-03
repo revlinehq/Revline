@@ -17,7 +17,7 @@ Cloud export initially returned “Cloud signing permission error” and “No p
 
 The new signing private key is outside git at `~/.appstoreconnect/signing/revline/distribution.key`; the original App Store Connect `.p8` was not copied. `ASC_DISTRIBUTION_PROFILE` in the local `asc.env` selects the installed profile and manual App Store export. If that variable is absent, fastlane uses automatic signing. Both paths retain API-key authentication and never submit for review.
 
-The first local export is waiting for macOS Keychain authorization for codesign to use the distribution key. The owner must enter the Mac login password directly in that system dialog and choose Allow or Always Allow. The agent cannot operate SecurityAgent or enter that password. Do not send it in chat. After authorization, rerun `fastlane ios archive`; after the app record exists, use `fastlane ios testflight`.
+Local distribution export succeeded and the IPA passed strict signature verification under the Apple Distribution identity. It is at `mobile/.build/AppStoreExport/Revline.ipa` on this Mac. The existing-IPA TestFlight upload was attempted and stopped because the App Store app record is absent. If a future Keychain prompt appears, the owner must enter the Mac login password directly in the system dialog and choose Allow or Always Allow. The agent cannot operate SecurityAgent or enter that password. Do not send it in chat.
 
 On another Mac, an authorized team member must provision an Apple Distribution identity and matching profile securely or use Xcode → Settings → Accounts → Ivan Kolos → Manage Certificates. Do not put signing private keys in this repository. See [Apple’s cloud-managed certificate documentation](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/). A development-signed archive is separate from successful App Store distribution export.
 
@@ -37,6 +37,7 @@ fastlane ios metadata                  # draft metadata only
 fastlane ios listing                   # draft metadata and reviewed screenshots
 fastlane ios archive                   # signed Release archive only
 fastlane ios testflight                # archive + upload to TestFlight, no external review submission
+ASC_IPA_PATH="$PWD/.build/AppStoreExport/Revline.ipa" fastlane ios upload_testflight # reuse the signed IPA without rebuilding
 ```
 
 `subscription.json` is the source for $39.00 USD/month in the USA, with Apple's recommended equalized price points in other storefronts and a one-week free introductory offer for eligible new subscribers. The script refuses a substitute base price or conflicting introductory offer. It reuses existing resources by product ID and logs successful writes to the ignored `.build/asc-subscription-changes.jsonl`. It never submits products or the app for review. App Store Connect may still require subscription review information, tax/banking details and agreements before products can be sold.
@@ -75,3 +76,15 @@ Production screenshots belong in `Screenshots/6.9/` (1320×2868) and `Screenshot
 The listing lane copies these images byte-for-byte into an ignored language staging folder for fastlane. It refuses to upload screenshots when none have been captured. It does not submit for review. A final submission requires completing every unresolved item in [review-checklist.md](review-checklist.md), including legal review, a dedicated reviewer account and real production operation.
 
 Sources: [Apple App Review Guidelines](https://developer.apple.com/app-store/review/guidelines/), [Apple app records](https://developer.apple.com/documentation/appstoreconnectapi/apps), [Clerk native Apple setup](https://clerk.com/docs/ios/guides/configure/auth-strategies/sign-in-with-apple), [fastlane API authentication](https://docs.fastlane.tools/app-store-connect-api/), [deliver](https://docs.fastlane.tools/actions/deliver/).
+
+## Latest priority pass
+
+See [current store handoff](current-handoff.md) for the new Superwall resources, paused campaign, snapshot-service error, missing Apple app record, prepared App Privacy answers and Duo SDK requirement. No additional Simulator work is required by this pass. `mobile/superwall` builds the hosted screen independently of the native app.
+
+For the prepared App Privacy answers, the owner can use an authenticated Apple session:
+
+```sh
+fastlane run upload_app_privacy_details_to_app_store app_identifier:com.zurahq.revline json_path:AppStore/app-privacy.json skip_publish:true
+```
+
+This action requires interactive Apple authentication and does not accept the existing `.p8` API key. The agent does not perform the login. Review the uploaded draft before publishing nutrition labels.

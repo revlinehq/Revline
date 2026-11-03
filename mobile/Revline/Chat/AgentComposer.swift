@@ -6,6 +6,7 @@ struct AgentComposer: View {
     let player: PlayerController
     let onAttach: () -> Void
     var dismissKeyboard = 0
+    var showsConversationButton = true
     var onConversation: () -> Void = { }
     var onFocusChange: (Bool) -> Void = { _ in }
     var onAccepted: () -> Void = { }
@@ -21,21 +22,12 @@ struct AgentComposer: View {
     var body: some View {
         @Bindable var store = store
         VStack(spacing: 10) {
-            HStack {
-                Picker("Editing mode", selection: $store.editMode) {
-                    Text("Fast").tag("fast")
-                    Text("Precise").tag("precise")
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 180, height: 44)
-                Spacer(minLength: 8)
-                Button("Show conversation", systemImage: "bubble.left", action: onConversation)
-                    .labelStyle(.iconOnly).buttonStyle(.borderless).frame(width: 44, height: 44)
-                if !store.attachedAssetIDs.isEmpty {
-                    Button("\(store.attachedAssetIDs.count) attached", action: onAttach)
-                        .font(.subheadline).buttonStyle(.borderless).frame(minHeight: 44)
-                }
-            }
+            AgentComposerControls(
+                store: store,
+                showsConversationButton: showsConversationButton,
+                onAttach: onAttach,
+                onConversation: onConversation
+            )
             HStack(alignment: .bottom, spacing: 4) {
                 Menu("Attachments and commands", systemImage: "paperclip") {
                     Button("Import media", systemImage: "photo.on.rectangle", action: onAttach)
@@ -57,10 +49,10 @@ struct AgentComposer: View {
                 } else {
                     Button { Task { await send() } } label: {
                         if store.sending { ProgressView().frame(width: 20, height: 20) }
-                        else { Label("Send edit", systemImage: "arrow.up").foregroundStyle(Color.revlineForeground).labelStyle(.iconOnly).frame(width: 20, height: 20) }
+                        else { Label("Send edit", systemImage: "arrow.up").labelStyle(.iconOnly).frame(width: 20, height: 20) }
                     }
                     .buttonStyle(.borderedProminent).buttonBorderShape(.circle)
-                    .tint(.revlineAccent).controlSize(.regular)
+                    .tint(.accentColor).controlSize(.regular)
                     .frame(width: 44, height: 44)
                     .disabled(!canSend)
                     .accessibilityLabel(store.status?.running == true ? "Queue edit" : "Send edit")
@@ -70,7 +62,6 @@ struct AgentComposer: View {
             .background(Color.revlinePopover, in: .rect(cornerRadius: 28))
             .overlay { RoundedRectangle(cornerRadius: 28).stroke(Color.revlineBorder, lineWidth: 1) }
         }
-        .foregroundStyle(Color.revlineForeground)
         .padding(.horizontal, 16).padding(.bottom, 8)
         .fixedSize(horizontal: false, vertical: true)
         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { onHeightChange($0) }

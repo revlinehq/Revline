@@ -32,6 +32,6 @@ struct MediaThumbnail: View {
 
     private var placeholder: some View {
         Image(systemName: kind == "audio" ? "waveform" : "play.rectangle")
-            .font(.title2).foregroundStyle(Color.revlineMuted)
+            .font(.title2).foregroundStyle(Color.secondary)
     }
 }

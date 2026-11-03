@@ -32,7 +32,7 @@ struct WebPlayer: UIViewRepresentable {
     static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
         uiView.stopLoading()
         uiView.configuration.userContentController.removeScriptMessageHandler(forName: "revline")
-        coordinator.controller.webView = nil
+        if coordinator.controller.webView === uiView { coordinator.controller.webView = nil }
     }
 
     @MainActor
@@ -46,7 +46,7 @@ struct WebPlayer: UIViewRepresentable {
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.frameInfo.isMainFrame,
+            guard message.webView === controller.webView, message.frameInfo.isMainFrame,
                   message.frameInfo.securityOrigin.host == playerURL?.host,
                   message.frameInfo.securityOrigin.protocol == playerURL?.scheme,
                   let body = message.body as? [String: Any], let kind = body["kind"] as? String else { return }
@@ -73,10 +73,12 @@ struct WebPlayer: UIViewRepresentable {
         }
 
         func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+            guard webView === controller.webView, (error as NSError).code != NSURLErrorCancelled else { return }
             controller.error = "The preview server is unavailable. Check your connection and retry."
         }
 
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            guard webView === controller.webView else { return }
             controller.error = "The preview needs to reload."
             controller.playing = false
         }

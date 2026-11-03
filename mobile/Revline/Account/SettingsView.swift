@@ -16,7 +16,7 @@ struct SettingsView: View {
                         Image(systemName: "person.crop.circle").font(.largeTitle).frame(width: 44, height: 44).accessibilityHidden(true)
                         VStack(alignment: .leading) {
                             Text(clerk.user?.firstName ?? "Your account").font(.headline)
-                            Text("Your workspace, everywhere.").font(.subheadline).foregroundStyle(Color.revlineMuted)
+                            Text("Your workspace, everywhere.").font(.subheadline).foregroundStyle(Color.secondary)
                         }
                     }
                 } footer: {
@@ -30,7 +30,7 @@ struct SettingsView: View {
                 Section("Membership") {
                     LabeledContent("Plan", value: session.purchases.status?.plan.capitalized ?? "Loading…")
                     if session.purchases.status?.complimentary == true {
-                        Text("Complimentary membership").foregroundStyle(Color.revlineMuted)
+                        Text("Complimentary membership").foregroundStyle(Color.secondary)
                     }
                     if session.purchases.status?.subscriptionSource == "apple",
                        let url = URL(string: "https://apps.apple.com/account/subscriptions") {
@@ -41,7 +41,7 @@ struct SettingsView: View {
                         else { Text("Restore purchases") }
                     }.disabled(session.purchases.restoring)
                     if let error = session.purchases.error { ErrorBanner(message: error) }
-                    else if let notice = session.purchases.notice { Text(notice).foregroundStyle(Color.revlineMuted) }
+                    else if let notice = session.purchases.notice { Text(notice).foregroundStyle(Color.secondary) }
                 }.revlineRows()
                 Section("Privacy and account") {
                     Button("AI data sharing", systemImage: "hand.raised") { consent = true }
@@ -50,13 +50,13 @@ struct SettingsView: View {
                 }.revlineRows()
                 Section("About") {
                     LabeledContent("Version", value: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0")
-                    Text("Your projects and edits sync with Revline on the web.").foregroundStyle(Color.revlineMuted)
+                    Text("Your projects and edits sync with Revline on the web.").foregroundStyle(Color.secondary)
                 }.revlineRows()
                 #if DEBUG
                 Section("Development") {
                     LabeledContent("Environment", value: session.configuration.environment)
-                    Text(session.configuration.convexURL.host ?? "").foregroundStyle(Color.revlineMuted)
-                    Text(session.configuration.webURL.absoluteString).foregroundStyle(Color.revlineMuted)
+                    Text(session.configuration.convexURL.host ?? "").foregroundStyle(Color.secondary)
+                    Text(session.configuration.webURL.absoluteString).foregroundStyle(Color.secondary)
                 }.revlineRows()
                 #endif
                 Section {

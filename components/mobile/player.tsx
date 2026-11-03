@@ -72,7 +72,7 @@ export function MobilePlayer({ projectId }: { projectId: string }) {
     const refresh = setInterval(() => notify({ kind: 'needsAuth' }), 40_000);
     return () => { clearInterval(refresh); delete window.revlinePlayer; void client.close(); };
   }, []);
-  return <main className="mobile-player-shell">{client && <ConvexProvider client={client}>
+  return <main className="mobile-player-shell dark">{client && <ConvexProvider client={client}>
     <PlayerBoundary>{authenticated && <AuthenticatedPlayer projectId={projectId} timelineId={timelineId} controls={controls} />}</PlayerBoundary>
   </ConvexProvider>}</main>;
 }
