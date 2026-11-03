@@ -10,6 +10,7 @@ import { colorGrading } from './color-grading';
 import { sceneEngine } from './scene-engine';
 import { motionDesign } from './motion-design';
 import { storyboard } from './storyboard';
+import { imageDirection } from './image-direction';
 import { referenceFootage } from './reference-footage';
 import { gsapSkill } from './gsap';
 import { footageEditing } from './footage-editing';
@@ -21,7 +22,7 @@ import { vfx } from './vfx';
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const EDITOR_SKILLS: EditorSkill[] = [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, overallStyling, explainer, storyboard, motionDesign, referenceFootage, musicAndSound, visualInspection];
+export const EDITOR_SKILLS: EditorSkill[] = [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, overallStyling, explainer, storyboard, imageDirection, motionDesign, referenceFootage, musicAndSound, visualInspection];
 export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
 
 /** The always-visible index: names and when to read each skill. */

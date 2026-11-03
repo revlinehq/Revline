@@ -19,9 +19,32 @@ async function requireCapacity(ctx: MutationCtx, args: { ownerId: string; projec
 }
 
 /** Check paid access and space before making a provider call. */
-export const prepare = internalMutation({ args: { ...scope, count: v.number() }, returns: v.null(), handler: async (ctx, args) => {
+export const prepare = internalMutation({ args: { ...scope, count: v.number(), storyboardName: v.optional(v.string()), storyboardPhase: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   await requireCapacity(ctx, args, args.count);
+  if (args.storyboardName) {
+    const brief = await ctx.db.query('projectBriefs').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
+    const board = brief?.storyboard;
+    if (!board?.chosenConcept || board.name !== args.storyboardName) throw new ConvexError('Choose and save the approved text concept before generating any storyboard image.');
+    if (args.storyboardPhase === 'style' && !['rough', 'style', 'animatic'].includes(board.stage ?? '')) throw new ConvexError('Approve the rough board before generating final-look style frames.');
+  }
   return null;
+} });
+
+/** Candidate images reach the agent first; only reviewed frames appear in the composer grid. */
+export const present = internalMutation({ args: { ...scope, assetIds: v.array(v.id('assets')), reviewNote: v.string() }, returns: v.array(v.id('assets')), handler: async (ctx, args) => {
+  const project = await projectRun(ctx, args.projectId, args.ownerId);
+  if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  await requireEditorAccess(ctx, args.ownerId);
+  if (!args.assetIds.length || args.assetIds.length > 6 || new Set(args.assetIds).size !== args.assetIds.length) throw new ConvexError('Present 1–6 distinct reviewed frames.');
+  const frames = [];
+  for (const id of args.assetIds) {
+    const asset = await ctx.db.get(id), shot = asset?.imageGeneration?.storyboard;
+    if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.imageGeneration?.purpose !== 'storyboard' || !shot) throw new ConvexError('Choose storyboard frames from this project.');
+    if (frames.length && (shot.name !== frames[0].shot.name || shot.phase !== frames[0].shot.phase)) throw new ConvexError('Present one storyboard stage at a time.');
+    frames.push({ asset, shot });
+  }
+  for (const { asset, shot } of frames) await ctx.db.patch(asset._id, { imageGeneration: { ...asset.imageGeneration!, storyboard: { ...shot, presented: true, reviewNote: args.reviewNote } } });
+  return args.assetIds;
 } });
 
 /** A lost save acknowledgement must never delete an asset that actually committed. */
@@ -46,8 +69,8 @@ export const save = internalMutation({
     const saved = [];
     for (const [index, image] of args.images.entries()) {
       if (!image.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`)) throw new ConvexError('Generated image key is outside this project');
-      const fileName = shot ? `${shot.phase === 'direction' ? 'Direction' : 'Storyboard'} ${shot.name.replace(/[\\/:*?"<>|\r\n]/g, '')} - S${String(shot.shotIndex).padStart(2, '0')} - ${shot.idea.slice(0, 60).replace(/[\\/:*?"<>|]/g, '')}.png` : `Generated plate ${index + 1}.png`;
-      const id = await ctx.db.insert('assets', { ownerId: args.ownerId, projectId: args.projectId, ...image, fileName, contentType: 'image/png', kind: 'image', imageGeneration: args.provenance, createdAt: Date.now() });
+      const fileName = shot ? `${shot.phase === 'style' ? 'Style frame' : shot.phase === 'direction' ? 'Direction' : 'Storyboard'} ${shot.name.replace(/[\\/:*?"<>|\r\n]/g, '')} - S${String(shot.shotIndex).padStart(2, '0')} - ${shot.idea.slice(0, 60).replace(/[\\/:*?"<>|]/g, '')}.png` : `Generated plate ${index + 1}.png`;
+      const id = await ctx.db.insert('assets', { ownerId: args.ownerId, projectId: args.projectId, ...image, fileName, contentType: 'image/png', kind: 'image', imageGeneration: shot ? { ...args.provenance, storyboard: { ...shot, phase: shot.phase ?? 'rough', presented: false } } : args.provenance, createdAt: Date.now() });
       const asset = (await ctx.db.get(id))!;
       await recordAssetStorage(ctx, asset);
       saved.push(await hydrateAsset(ctx, asset));

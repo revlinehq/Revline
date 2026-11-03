@@ -9,7 +9,7 @@ const shotLine = z.string().trim().min(1).max(240).regex(/^[^\r\n]+$/, 'Use one 
 const storyboardInput = z.object({
   name: z.string().trim().min(1).max(60).describe('Shared storyboard label; reuse it for every shot in this board.'),
   shotIndex: z.number().int().min(1).max(24),
-  phase: z.enum(['direction', 'board']).optional().describe('Two contrasting direction frames first; board is the default for the chosen look.'),
+  phase: z.enum(['rough', 'style', 'direction', 'board']).optional().describe('Default rough: hand-drawn storyboard thumbnails after concept selection. style: 2–3 final-look moments. direction/board remain readable for older boards.'),
   start: z.number().nonnegative().optional(),
   duration: z.number().positive().max(180).optional(),
   idea: shotLine.describe('The shot idea in one line.'),

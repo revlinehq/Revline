@@ -2,46 +2,82 @@ import type { EditorSkill } from './index';
 
 export const storyboard: EditorSkill = {
   name: 'storyboard',
-  description: 'Before any motion design from scratch: understand the brief, brainstorm two contrasting looks, develop 3–6 consistent rough key frames, iterate with the user and save the approved handoff. Skip small edits and just build it.',
+  description: 'Before motion design from scratch: brief, text concepts, hand-drawn rough board, final-look style frames, paced animatic, then build. Each stage waits for the user. Skip small edits and just build it.',
   body: `# Storyboard: the brain of the film
 
-Run this BEFORE scene code for any motion design from scratch. Agent and user brainstorm together and settle on rough looks first: a taste before eating, not an unreviewed full build. Skip the whole flow for small edits to existing work and when the user says "just build it". If this project's approved storyboard already covers the current request, read it with readBrief and continue from its handoff instead of restarting.
+Run before motion design from scratch. Plan with the user so they get a taste before the build. Skip the whole flow for small edits or when the user says "just build it". Read readBrief first: resume the saved stage rather than restarting. Each stage ends with the user's OK; END THE TURN at that stop. Tool success, silence and your own visual review are not approval.
 
-## 1. Understand before asking
-Pull what is already known from the user's message, getProject/readBrief, project media, listBrandKits and the matching getBrandKit. Read any supplied site URL: use the client's web reader or Revline's createBrandKit with url to read its real copy, colors and assets. A URL's name is not evidence of what the product does. Review uploaded logos, app screens, photography and footage before deciding what is missing.
+## 1. Brief
+Read the message, getProject/readBrief, uploaded assets and matching brand kit first. Read a supplied site URL with the client's web reader or createBrandKit { url }; learn what the product actually does. In ONE short message ask at most 2–3 questions, only for missing facts, with sensible defaults: who it is for, what it is, why it matters, platform/aspect ratio, length, audio and CTA. Ask for the real logo and product screens in the same message when needed. Real UI beats invented UI: use the supplied screens, or agree to an abstract diagram when screens cannot be had. Never invent the product's interface or claims.
 
-Then ask at most TWO OR THREE questions in ONE message, only for missing information, with sensible defaults. Combine topics rather than interrogating one at a time:
-- Goal (general motion piece or product/startup launch), what the product is/does and the audience.
-- Platform/aspect ratio and rough length (offer the project's current format and a short length when unspecified).
-- Music/voiceover and ending/CTA (offer a restrained instrumental, no voiceover and a simple confirmed CTA when suitable).
+End with a one-sentence promise of the film. Save lasting facts with updateBrief and wait for the brief's OK.
 
-Ask for the real logo and app screenshots in that same message when needed. Real product UI beats invented UI. Use available real screens; if none can be had, agree on an abstract representation or ask for them. Never fabricate the product's interface, features, claims, prices or website. Do not ask the user to repeat facts already present. Save the agreed understanding in the project brief when it will guide later sessions.
+## 2. Ideas first — no images
+Offer TWO concepts that differ in idea, story and composition, not just color; optionally a third wildcard. Use short, scannable text, familiar words and this format for each:
+- Name and one-line idea.
+- What you'll see: 4–6 one-line shot beats.
+- Look: one light hint, not a style selection exercise.
+- Motion: how things move, in one line.
+- Why it works for you: one line.
 
-## 2. Offer two contrasting directions
-Generate ONE frame for each of two genuinely different looks, using generateImage with purpose: "storyboard" and storyboard: { name, phase: "direction", shotIndex: 1 or 2, idea, visual, onScreenText, motion, transition, assetsNeeded }. Reuse the same board name throughout this film. Choose sketch/drawing or rough real visuals according to what communicates the idea best. Vary composition/material/color or visual metaphor, not just a tiny tint.
+For a launch use promise → old way/problem → reveal → three proof moments → CTA that also works as a thumbnail. Group the three proof moments in one beat when needed to keep 4–6 beats. Product claims must come from the agreed brief.
 
-Use GPT Image 2.5 Flare, quality: "low" (default for storyboards), or medium if roughness hides the idea. Use the target aspectRatio; omission follows the selected timeline. Show the two generated images ONLY in chat/composer, numbered 1 and 2. Do not add prose descriptions or a shot table beside them. In-app, the numbered image grid above EditComposer shows them; use askUser with two concise direction choices and END THE TURN. Over MCP, show the returned images and ask for the pick in that client's chat. Wait for the user's actual choice.
+Iterate in text: the user can mix one concept's story with the other's look, change beats or reject both. Revise the words cheaply. Generate NO images until the user picks an idea. End with ONE question: which concept, or what should change? On their choice, saveStoryboard stage: "concept", with both concepts, chosenConcept (1-based), promise, context, aspectRatio and approved: true; quote their choice in approvalNote.
 
-## 3. Develop the board
-Generate 3–6 key frames in the chosen direction. Use purpose: "storyboard", phase: "board", one call per shot, count: 1 and the same board name. Pass the chosen direction image as a reference for frame 1. Frame 1 is then the STYLE ANCHOR: include its assetId in referenceAssetIds for every later frame, together with the brand colors in each prompt. Keep one aspect ratio and a consistent palette, material, lighting, type hierarchy and image treatment across the board. Keep in-image text rough; the real on-screen text is saved in the shot notes and built as live type later.
+### Example message (after the brief is agreed)
+**A — Make room**
+One idea: a crowded day opens into one clear plan.
+What you'll see:
+- A clear space promises a calmer working day.
+- Message scraps crowd that space: the old way.
+- Relay gathers them into one simple plan.
+- Three agreed benefits appear as three clean diagram steps.
+- "Make room for focus" closes on a frame that also works as the thumbnail.
+Look: a quiet paper-and-ink hint.
+Motion: loose pieces gather, align and leave room around the final message.
+Why it works for you: busy small teams see the benefit before the details.
 
-Each shot's metadata holds idea, visual, onScreenText, motion, transition and assetsNeeded. Motion and transition are PLAIN WORDS, not seconds or code: "headline fades up", "cards spin in and stack", "logo snaps in on the beat", "the top card expands into the next shot". A rough overall length belongs in the agreed context, not in these motion notes.
+**B — Pass it on**
+One idea: follow a single task from a noisy handoff to a clear next step.
+What you'll see:
+- One task promises a smoother handoff.
+- It gets passed through a tangle of message threads.
+- Relay turns the tangle into a clear route.
+- Three agreed benefits become three stops along that route.
+- The route ends at "Make room for focus", held as the thumbnail.
+Look: a simple route-diagram hint.
+Motion: one mark travels through the story and carries us between shots.
+Why it works for you: a concrete journey makes the product easy to explain.
 
-Every frame must show something the scene engine can actually build. Read scene-engine (react-scenes and checklist), GSAP's revline page and, for 3D, three-scenes and three-craft before promising the look. Use buildable GSAP/HTML layers, three.js primitives/extrusions and generated plates as assets. Do not promise unsupported refraction, shadows, environment loading or effects merely because an image model can paint them. Follow motion-design page image-plates for the on-demand asset decision order.
+Which idea should we develop, or what would you change?
 
-Frames are project REFERENCE media, with a shared name and frame number; getProject and inspectTimeline expose their shot notes and cost. They never go on the timeline, and they are never bound into the finished film as a screenshot of the whole design. The chat grid displays images and frame numbers only. Keep motion notes and transitions in metadata rather than turning the image review into a prose presentation. Show the board, ask for OK or edits, then END THE TURN. A successful generation is not approval.
+## 3. Rough board: hand-drawn thumbnails
+Honor the user's style, brand kit or reference if supplied. Otherwise choose the final visual direction yourself from the concept and your taste at sketching time; do not ask the user to pick a style. With the sketches state ONE line: "Look: …, because …". The user can override it. Read image-direction before every generateImage call, including its hand-drawn storyboard preset.
 
-## 4. Iterate cheaply
-"Change frame 3" regenerates ONLY frame 3 with the same name, phase and shotIndex, using frame 1 as its style reference. Keep the other approved images and their IDs. The grid uses the newest image at each frame number. Show the changed board and wait for approval again. A broad new direction may need a new anchor, but do not quietly regenerate unaffected shots. Costs stay visible in generateImage's estimatedUsd and usage result; low/medium keeps exploration cheap. null estimatedUsd means the provider did not report enough usage for an estimate.
+Draw 3–6 rough frames, one per shot, at the target aspect ratio. Draw FIRST and LAST first, then fill the middle. Use purpose: "storyboard", quality: "low" (medium only if needed), count: 1, and storyboard { name, phase: "rough", shotIndex, idea, visual, onScreenText, motion, transition, assetsNeeded }. Reuse one board name. Pass frame 1's assetId in referenceAssetIds for ALL later rough frames, including the last. Same paper, pen and hand throughout.
 
-## 5. Save the approved handoff
-Only on the user's OK, call saveStoryboard with the name, chosen direction description and directionAssetId, agreed context, target aspectRatio, the latest approved frameAssetIds (3–6), approved: true and approvalNote quoting the user. Frame 1 becomes styleAnchorAssetId. The tool saves the structured storyboard beside the project brief without replacing its existing rules. It includes every shot's idea, visual, on-screen text, plain-word motion, transition and assets needed. readBrief, getProject and inspectTimeline return it; later sessions read it before building.
+Use pencil or fineliner on off-white paper, loose construction lines, light grey marker shading and at most one accent marker. Include a hand-drawn panel border and shot number, motion arrows/speed lines, camera arrows and small IN/OUT notes. Keep handwritten labels minimal. They must look rough on purpose: never polished, 3D-rendered or glowing. Store accurate text in onScreenText for live type later.
 
-## 6. Hand off to motion design
-After the approved handoff is saved, load motion-design and build editable scene code, GSAP motion, supported three.js geometry and separately sourced/generated assets. Board images remain look references. A plate inside a scene is an asset generated on demand, not a whole storyboard frame pasted over the code.
+Each shot has plain motion notes ("headline fades up", "cards spin in and stack") AND a transition ("the top card expands into the next shot"). These describe actions, not seconds. Timing belongs to the animatic, not these notes.
 
-At the end, read each board frame with readFrames { assetId, start: 0, end: 0, count: 1 }, and compare the built shot with compareReference { assetId, times: [the key moment in the timeline] }, passing the same timelineId as the build. A still reference stays fixed while the timeline is sampled. Judge composition, palette, hierarchy, materials and intent, not pixel tracing or a score threshold. Use getFrames around the start/key/settle and checkPacing for the actual motion; a still image cannot prove motion.
+Promise only buildable frames. Read scene-engine pages react-scenes/checklist and gsap page revline; for 3D read three-scenes/three-craft. GSAP layers, SVG stroke drawing, paper texture and hand-drawn plates can build a hand-drawn FINAL film too; sketch style is not an engine limitation. Follow motion-design page image-plates for the asset decision order. Never generate reproductions of a reference video's frames.
 
-For a supplied reference video, keep using reference-footage's observation/recreation workflow. Never feed extracted video frames into image generation or generate reproductions of its frames. New storyboard imagery communicates buildable intent; measured reference behavior still governs a requested recreation.
+Inspect each candidate using image-direction's self-check. Regenerate a failed frame once with a sharper brief; call presentStoryboard with the accepted assetIds and reviewNote only after looking. The in-app grid above EditComposer shows images and shot numbers only; keep shot notes in saved metadata. Over MCP show the accepted returned images in the client's chat. Apart from the one-line Look and the approval question, let the images carry the presentation. Wait for OK/edits; then saveStoryboard stage: "rough" with frameAssetIds in shot order.
+
+## 4. Style frames: lock the final look
+Render only 2–3 key moments in the FINAL look, using image-direction. Use purpose: "storyboard", phase: "style", the same name and the represented shotIndex. Low or medium Flare quality keeps exploration cheap. The first style frame anchors the rest via referenceAssetIds; use the relevant rough frame too when helpful. Lock palette, type hierarchy and texture; keep in-image lettering approximate and final text editable. A hand-drawn finish is valid: refine the ink, paper and line rhythm, not into a glossy render.
+
+Self-check, presentStoryboard, show the images and wait for the user's approval of the look. SaveStoryboard stage: "style" with the rough frameAssetIds and 2–3 styleAssetIds, first style anchor first. An image model's attractive effect is not evidence the engine supports it.
+
+## 5. Animatic: watch the pace before code
+After style approval, createTimeline for a dedicated animatic. Pass its timelineId explicitly to addMedia: place the approved ROUGH frames in shot order, with real durations matching the intended pace. Add the agreed voiceover or temporary music if there is any, using the music-and-sound skill. A silent brief needs no invented soundtrack. This is the one planning use that deliberately places board images on a timeline; generated candidates otherwise stay reference media. Do not write scene code yet.
+
+Let the user watch in Revline and request timing changes. No export is needed for this review. SaveStoryboard stage: "animatic" with animaticTimelineId and the accepted rough/style IDs only AFTER the user approves pacing. Preserve motion notes, transitions and assetsNeeded in the structured plan. readBrief, getProject and inspectTimeline expose it to later sessions.
+
+## 6. Build and compare
+On approved animatic, hand off to motion-design. Replace the animatic with the real editable film (follow its one-film/one-scene guidance); retain the planning timeline and reference media for later sessions. Build from the saved ideas, text, motion, transitions and asset needs. Check rendered beats against the STYLE frames with compareReference and readFrames/getFrames, and check motion with checkPacing. Style frames express intent and hierarchy, not pixels to trace. Keep board images out of the finished film.
+
+## Cheap changes
+"Change frame 3" regenerates only frame 3, with its existing phase/name/shotIndex and that stage's first-frame reference. Leave other images intact. If changing the anchor itself, use its previous image as reference unless the user changes the whole look. Self-check, present the revision and reapprove the changed stage; revisit later approvals when the change affects them. Keep costs visible from generateImage's estimatedUsd and usage, not invented prices.
 `,
 };

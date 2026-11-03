@@ -3,8 +3,9 @@ import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from
 import type { Id } from './_generated/dataModel';
 import { projectRun } from './lib/project_data';
 import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
-import { approvedStoryboardValidator, aspectRatio } from './schema';
+import { approvedStoryboardValidator, aspectRatio, storyboardConcept, storyboardStage } from './schema';
 import { dimensions } from '../lib/editor/types';
+import { storedTabTimeline } from './timelineTabs';
 
 /**
  * A project's brief: the user's lasting direction for this one project ("the lockup at 6.3 s stays", "no purple
@@ -29,32 +30,66 @@ export async function briefFor(ctx: QueryCtx, projectId: Id<'projects'>) {
 
 /** The approved handoff lives beside the brief, so later sessions read it before building. */
 export const saveStoryboard = internalMutation({
-  args: { ...runArgs, name: v.string(), direction: v.string(), context: v.string(), aspectRatio, directionAssetId: v.id('assets'), frameAssetIds: v.array(v.id('assets')), approved: v.literal(true), approvalNote: v.string() },
+  args: { ...runArgs, name: v.string(), stage: storyboardStage, context: v.string(), promise: v.optional(v.string()), aspectRatio, concepts: v.optional(v.array(storyboardConcept)), chosenConcept: v.optional(v.number()), frameAssetIds: v.optional(v.array(v.id('assets'))), styleAssetIds: v.optional(v.array(v.id('assets'))), animaticTimelineId: v.optional(v.string()), approved: v.literal(true), approvalNote: v.string() },
   returns: approvedStoryboardValidator,
   handler: async (ctx, args) => {
     await requireRun(ctx, args);
-    if (args.frameAssetIds.length < 3 || args.frameAssetIds.length > 6 || new Set(args.frameAssetIds).size !== args.frameAssetIds.length) throw new ConvexError('Save 3–6 distinct storyboard key frames.');
-    const direction = await ctx.db.get(args.directionAssetId);
-    if (!direction || direction.kind !== 'image' || direction.ownerId !== args.ownerId || direction.projectId !== args.projectId || direction.imageGeneration?.storyboard?.phase !== 'direction' || direction.imageGeneration.storyboard.name !== args.name) throw new ConvexError('Choose a direction image from this project and named storyboard.');
-    const frames = [];
-    for (const id of args.frameAssetIds) {
-      const asset = await ctx.db.get(id), shot = asset?.imageGeneration?.storyboard;
-      if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.imageGeneration?.purpose !== 'storyboard' || !shot || shot.phase === 'direction' || shot.name !== args.name) throw new ConvexError('Every frame must belong to this project and named storyboard.');
-      frames.push({ asset, shot });
-    }
-    frames.sort((a, b) => a.shot.shotIndex - b.shot.shotIndex);
-    const anchor = frames[0].asset;
+    const brief = await row(ctx, args.projectId), previous = brief?.storyboard?.name === args.name ? brief.storyboard : undefined;
+    const concepts = args.concepts ?? previous?.concepts, chosenConcept = args.chosenConcept ?? previous?.chosenConcept;
+    if (!concepts || concepts.length < 2 || concepts.length > 3 || !Number.isInteger(chosenConcept) || chosenConcept! < 1 || chosenConcept! > concepts.length) throw new ConvexError('Save 2 concepts (optionally a third wildcard) and the user’s chosen concept number.');
+    if (concepts.some(concept => concept.beats.length < 4 || concept.beats.length > 6)) throw new ConvexError('Keep each concept to 4–6 one-line shot beats.');
+    if (args.stage !== 'concept' && !previous?.chosenConcept) throw new ConvexError('Save the approved text concept before drawing the board.');
+    const promise = args.promise ?? previous?.promise;
+    if (!promise?.trim()) throw new ConvexError('Include the film’s one-sentence promise.');
     const target = dimensions(args.aspectRatio);
-    if (!anchor.width || !anchor.height || Math.abs(anchor.width / anchor.height - target.width / target.height) > .01) throw new ConvexError('The approved frames must match the target aspect ratio.');
-    for (const [index, { asset, shot }] of frames.entries()) {
-      if (shot.shotIndex !== index + 1) throw new ConvexError('Number the approved frames consecutively from 1.');
-      if (index && !asset.imageGeneration!.referenceAssetIds.includes(anchor._id)) throw new ConvexError('Pass frame 1 as a reference when generating every later board frame.');
-      if (asset.width !== anchor.width || asset.height !== anchor.height) throw new ConvexError('Keep one target aspect ratio across the board.');
+    const loadFrames = async (ids: Id<'assets'>[], style: boolean) => {
+      if (new Set(ids).size !== ids.length) throw new ConvexError('Choose distinct frames.');
+      const frames = [];
+      for (const id of ids) {
+        const asset = await ctx.db.get(id), shot = asset?.imageGeneration?.storyboard;
+        if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.imageGeneration?.purpose !== 'storyboard' || !shot || shot.name !== args.name || shot.presented === false || (style ? shot.phase !== 'style' : !['rough', 'board'].includes(shot.phase ?? 'rough'))) throw new ConvexError('Choose reviewed frames from this project and storyboard stage.');
+        if (!asset.width || !asset.height || Math.abs(asset.width / asset.height - target.width / target.height) > .01) throw new ConvexError('Frames must match the target aspect ratio.');
+        frames.push({ asset, shot });
+      }
+      const anchor = frames[0]?.asset;
+      for (const { asset } of frames.slice(1)) if (!asset.imageGeneration!.referenceAssetIds.includes(anchor._id)) throw new ConvexError('Pass the first frame of this stage as a reference for the rest.');
+      return frames;
+    };
+    const roughIds = args.stage === 'concept' ? [] : args.frameAssetIds ?? previous?.shots.map(shot => shot.assetId) ?? [];
+    if (args.stage !== 'concept' && (roughIds.length < 3 || roughIds.length > 6)) throw new ConvexError('Save 3–6 rough board frames.');
+    const rough = await loadFrames(roughIds, false);
+    rough.sort((a, b) => a.shot.shotIndex - b.shot.shotIndex);
+    if (rough.some(({ shot }, index) => shot.shotIndex !== index + 1)) throw new ConvexError('Number rough board frames consecutively from 1.');
+    const styleIds = ['style', 'animatic'].includes(args.stage) ? args.styleAssetIds ?? previous?.styleFrames?.map(frame => frame.assetId) ?? [] : [];
+    if (['style', 'animatic'].includes(args.stage) && (styleIds.length < 2 || styleIds.length > 3)) throw new ConvexError('Approve 2–3 final-look style frames.');
+    const styles = await loadFrames(styleIds, true);
+    if (new Set(styles.map(({ shot }) => shot.shotIndex)).size !== styles.length || styles.some(({ shot }) => shot.shotIndex < 1 || shot.shotIndex > rough.length)) throw new ConvexError('Style frames must identify distinct shots in the rough board.');
+    if (args.stage === 'style' && !['rough', 'style', 'animatic'].includes(previous?.stage ?? '')) throw new ConvexError('Approve the rough board before the style frames.');
+    const durations = new Map<string, number>();
+    if (args.stage === 'animatic') {
+      if (!['style', 'animatic'].includes(previous?.stage ?? '') || !args.animaticTimelineId) throw new ConvexError('Approve the style frames and supply the paced animatic timeline.');
+      const project = (await ctx.db.get(args.projectId))!, timeline = await storedTabTimeline(ctx, project, args.animaticTimelineId);
+      const images = timeline?.clips.filter(clip => clip.kind === 'image').sort((a, b) => a.start - b.start) ?? [];
+      if (!timeline || timeline.aspectRatio !== args.aspectRatio || timeline.clips.some(clip => clip.kind === 'scene' || clip.kind === 'video') || images.length !== rough.length || images.some((clip, index) => clip.assetId !== rough[index].asset._id || clip.duration <= 0 || Math.abs(clip.start - (index ? images[index - 1].start + images[index - 1].duration : 0)) > .001)) throw new ConvexError('The animatic must contain the rough frames in shot order at the target format, with positive durations, no gaps or overlaps, and no scene code or video.');
+      for (const clip of images) durations.set(clip.assetId!, clip.duration);
     }
-    const storyboard = { name: args.name, direction: args.direction, context: args.context, aspectRatio: args.aspectRatio, directionAssetId: direction._id, styleAnchorAssetId: anchor._id, approvalNote: args.approvalNote, approvedAt: Date.now(), shots: frames.map(({ asset, shot }) => ({ shotIndex: shot.shotIndex, assetId: asset._id, idea: shot.idea, visual: shot.visual ?? asset.imageGeneration!.prompt, onScreenText: shot.onScreenText ?? '', motion: shot.motion, transition: shot.transition ?? 'Cut to the next shot', assetsNeeded: shot.assetsNeeded ?? [] })) };
-    const brief = await row(ctx, args.projectId);
-    if (brief) await ctx.db.patch(brief._id, { storyboard, updatedAt: Date.now() });
-    else await ctx.db.insert('projectBriefs', { projectId: args.projectId, ownerId: args.ownerId, rules: [], storyboard, updatedAt: Date.now() });
+    const now = Date.now();
+    const stages = ['concept', 'rough', 'style', 'animatic'];
+    const storyboard = {
+      name: args.name, context: args.context, promise, aspectRatio: args.aspectRatio, stage: args.stage,
+      concepts, chosenConcept: chosenConcept!, direction: concepts[chosenConcept! - 1].look,
+      ...(styles.length ? { styleAnchorAssetId: styles[0].asset._id, styleFrames: styles.map(({ asset, shot }) => ({ assetId: asset._id, shotIndex: shot.shotIndex })) } : {}),
+      ...(args.stage === 'animatic' ? { animaticTimelineId: args.animaticTimelineId } : {}),
+      approvalNote: args.approvalNote, approvedAt: now,
+      approvals: [...(previous?.approvals ?? []).filter(approval => stages.indexOf(approval.stage) < stages.indexOf(args.stage)), { stage: args.stage, note: args.approvalNote, at: now }],
+      shots: rough.map(({ asset, shot }) => ({
+        shotIndex: shot.shotIndex, assetId: asset._id, idea: shot.idea, visual: shot.visual ?? asset.imageGeneration!.prompt,
+        onScreenText: shot.onScreenText ?? '', motion: shot.motion, transition: shot.transition ?? 'Cut to the next shot', assetsNeeded: shot.assetsNeeded ?? [],
+        ...(durations.has(asset._id) || shot.duration !== undefined ? { duration: durations.get(asset._id) ?? shot.duration } : {}),
+      })),
+    };
+    if (brief) await ctx.db.patch(brief._id, { storyboard, updatedAt: now });
+    else await ctx.db.insert('projectBriefs', { projectId: args.projectId, ownerId: args.ownerId, rules: [], storyboard, updatedAt: now });
     return storyboard;
   },
 });

@@ -3,7 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
-- Agent images: Add brainstormed storyboards, numbered chat previews and approved project handoffs beside on-demand image assets. Why: agree on film intent before building.
+- Agent images: Add art-directed plates and text-first storyboards, sketch previews, style frames and approved animatics. Why: agree on film intent and pacing before building.
 - iOS: Prepare the Superwall membership paywall, restore native labels and accents, unify onboarding backgrounds and adapt the editor to resizing. Why: Zura requested App Store payment setup and a consistent native iPhone interface.
 - Agent tools: Remove scene image-binding caps, make patches and inspection recover from routine input drift, and support licensed Noto/Fluent emoji with accurate icon errors. Why: Terra hit repeated tool friction while building a motion film.
 - Skills: Add renderer-proven 3D craft guidance for materials, lighting, grounding, cameras and licensed models. Why: Zura's cursor review exposed mechanics without visual craft.
