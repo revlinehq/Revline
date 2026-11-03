@@ -1,12 +1,10 @@
-import { execFile } from 'node:child_process';
+import { runMediaCommand as run } from './media-command';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { selectInspectionFrames, validateFrameInspectionInput, type FrameInspectionInput } from '../media-analysis/frame-inspection';
 import { AnalysisError } from '../media-analysis/errors';
 import type { ReferenceKeyframe } from '../media-analysis/reference';
 import { forEachLimited } from './run-limited';
-const run = promisify(execFile);
 
 /** Decode real source frame PTS and indices; no invented evenly-spaced timestamps. */
 export async function extractInspectionFrames(path: string, directory: string, input: FrameInspectionInput, duration: number, signal: AbortSignal) {

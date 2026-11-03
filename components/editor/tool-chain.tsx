@@ -6,7 +6,7 @@ import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigg
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
 import { READ_ONLY_TOOLS, toolImages, type ChatTool } from './assistant-results';
 
-type Row = { key: string; tool: string; args: string; state: ChatTool['state']; count: number; span?: [number, number]; images: { label: string; src: string }[] };
+type Row = { key: string; tool: string; args: string; state: ChatTool['state']; detail?: string; count: number; span?: [number, number]; images: { label: string; src: string }[] };
 
 const short = (value: string, length = 32) => value.length > length ? `${value.slice(0, length - 1)}…` : value;
 const seconds = (value: unknown) => typeof value === 'number' && Number.isFinite(value) ? `${Number(value.toFixed(2))}s` : undefined;
@@ -41,8 +41,7 @@ function toolChainRows(steps: ChatTool[]): Row[] {
       previous.span = previous.span && time ? [Math.min(previous.span[0], time[0]), Math.max(previous.span[1], time[1])] : undefined;
       return;
     }
-    // Raw tool errors can carry backend internals; the turn's failure card explains them.
-    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, count: 1, images, ...(time ? { span: time } : {}) });
+    rows.push({ key: step.id ?? `${step.name}-${index}`, tool: step.name, args, state: step.state, detail: step.detail, count: 1, images, ...(time ? { span: time } : {}) });
   });
   return rows.map(row => row.count > 1 && !row.args && row.span ? { ...row, args: `${seconds(row.span[0])}–${seconds(row.span[1])}` } : row);
 }
@@ -92,7 +91,7 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
             <TraceIcon className={mark}><Mark className={`size-3.5${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/></TraceIcon>
             <TraceTitle className={row.state === 'error' ? undefined : 'text-foreground/85'}>{row.tool}</TraceTitle>
             {(row.args || row.count > 1) && <TraceDescription>{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</TraceDescription>}
-            {row.state === 'error' && <TraceDescription>Failed</TraceDescription>}
+            {row.state === 'error' && <TraceDescription title={row.detail}>{short(row.detail ?? 'This step could not finish.', 140)}</TraceDescription>}
           </TraceLine>{row.images.length > 0 && <StepImages images={row.images}/>}</Fragment>;
         })}
       </Trace>

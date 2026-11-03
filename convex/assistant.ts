@@ -244,6 +244,12 @@ export const messages = query({
   },
 });
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
+function settledAnalysisUsage(usage: Doc<'projects'>['aiAnalysisUsage']) {
+  if (!usage?.videoUnavailable) return usage;
+  const next = { ...usage };
+  delete next.videoUnavailable;
+  return next;
+}
 export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
   return stopOwnedProject(ctx, project);
@@ -265,7 +271,7 @@ export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>)
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
   if(project.aiWorkflowId)await cancelTurn(ctx,project.aiWorkflowId as WorkflowId);
   if(project.aiRunId)await stopRunnerTurn(ctx,project.aiRunId);
-  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined });
+  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
   if(project.threadId)await ctx.scheduler.runAfter(10_000,internal.assistantMessages.settleThread,{threadId:project.threadId,cursor:null});
   return null;
 }
@@ -572,7 +578,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     // receipts, not the assistant's prose, to retire the unfinished status.
     const reviews=!error&&project.aiRecovery&&!project.aiUndoRecorded?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(8)).filter(review=>review.ownerId===project.ownerId&&review.runId===args.runId&&review.revision===(project.revision??0)&&review.status==='completed'):[];
     const recoveryChecked=reviews.length>0&&reviews.every(review=>review.result?.revision===(project.revision??0)&&review.result.observations.length>0&&review.result.observations.every(observation=>observation.verdict==='pass')&&review.result.checks.every(check=>check.timingPass&&check.pixelPass!==false&&check.returnPass!==false&&check.textSafe!==false));
-    await writeRunState(ctx,project._id, { aiRunning: false, aiEditing: false, aiReturnTimelineId: undefined, aiError: error?.slice(0, 1000), aiRecovery:error?assistantRecovery(project,'failed',error,args.savedEdits):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined });
+    await writeRunState(ctx,project._id, { aiRunning: false, aiEditing: false, aiReturnTimelineId: undefined, aiError: error?.slice(0, 1000), aiRecovery:error?assistantRecovery(project,'failed',error,args.savedEdits):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
     // An MCP call that borrowed another tab hands the user's tab back.
     const returnTo=project.aiReturnTimelineId;
     if(returnTo&&returnTo!==activeTabOf(project)&&tabsOf(project).some(tab=>tab.id===returnTo))await openTabFor(ctx,project.ownerId,{projectId:project._id,timelineId:returnTo});
@@ -618,7 +624,7 @@ export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v
     if(enqueued>=15)throw new ConvexError('Too many analysis requests in one AI run');
     // An accepted run may analyse beside upload preparation, up to the ceiling.
     await requireMediaTaskCapacity(ctx,args.ownerId,1,{ceiling:2});
-    await writeProject(ctx,project._id,{aiAnalysisUsage:{runId:args.runId,enqueued:enqueued+1}});
+    await writeProject(ctx,project._id,{aiAnalysisUsage:{...(project.aiAnalysisUsage?.runId===args.runId?project.aiAnalysisUsage:{}),runId:args.runId,enqueued:enqueued+1}});
   });
   await ctx.db.patch(requestId, { taskId });
   return requestId;
@@ -627,6 +633,17 @@ export const analysisRequest = internalQuery({ args: { ...runArgs, requestId: v.
   const project = await projectRun(ctx,args.projectId,args.ownerId); const request = await ctx.db.get(args.requestId);
   if (!project.aiRunning || project.aiRunId !== args.runId || !request || request.ownerId !== args.ownerId || request.projectId !== project._id || request.aiRunId !== args.runId) throw new ConvexError("AI analysis request is no longer active");
   return request;
+}});
+/** Remote tool batches and durable continuations share the same optional-provider failure. */
+export const videoUnavailable = internalQuery({ args: runArgs, returns: v.union(v.string(), v.null()), handler: async (ctx, args) => {
+  const project = await requireRunState(ctx, args);
+  return project.aiAnalysisUsage?.runId === args.runId ? project.aiAnalysisUsage.videoUnavailable ?? null : null;
+}});
+export const recordVideoUnavailable = internalMutation({ args: { ...runArgs, reason: v.string() }, returns: v.null(), handler: async (ctx, args) => {
+  const project = await requireRunState(ctx, args);
+  const usage = project.aiAnalysisUsage?.runId === args.runId ? project.aiAnalysisUsage : { runId: args.runId, enqueued: 0 };
+  await writeProject(ctx, args.projectId, { aiAnalysisUsage: { ...usage, videoUnavailable: args.reason.slice(0, 1000) } });
+  return null;
 }});
 export const clearAnalysis = internalMutation({ args: { ...runArgs, requestId: v.id("analysisRequests") }, returns: v.null(), handler: async (ctx, args) => {
   const request = await ctx.db.get(args.requestId);

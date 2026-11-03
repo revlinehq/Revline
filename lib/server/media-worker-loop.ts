@@ -1,9 +1,10 @@
 import type { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from './media-task-runner';
-import { isMediaLeaseLost, isRetryableAnalysisError, MEDIA_TASK_LEASE_MS } from '../media-analysis/errors';
+import { isMediaLeaseLost, isRetryableAnalysisError, mediaErrorMessage, MEDIA_TASK_LEASE_MS } from '../media-analysis/errors';
 import type { MediaTaskActivity } from '../media-analysis/activity';
 import { MEDIA_PROCESSOR_VERSION } from '../media-analysis/processor-version';
+import { retryMediaOperation } from '../media-analysis/network';
 
 const HEARTBEAT_MS = 20_000;
 const CANCEL_CHECK_MS = 3_000;
@@ -17,7 +18,7 @@ export type MediaWorkerOptions = {
   workerSecret: string;
   slots: number;
   /** Which tasks this worker claims: an export lane, or Fly's exports only. */
-  claim: { lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'fly' | 'cloudflare' | 'local' };
+  claim: { lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'fly' | 'cloudflare' | 'local'; excludedKinds?: import('../../convex/mediaTasks').MediaWorkItem['kind'][] };
   deadlineMs: number;
   signal: AbortSignal;
   /** A draining worker finishes its current tasks and claims no more. */
@@ -35,20 +36,36 @@ export function startMediaWorker(options: MediaWorkerOptions) {
   const claimArgs = { workerSecret, processorVersion: MEDIA_PROCESSOR_VERSION, ...options.claim };
   const deadlineMinutes = Math.round(options.deadlineMs / 60_000);
   let revision = 0;
+  const queueError = (operation: string, error: unknown, taskId?: string) => {
+    const detail = error as { code?: string; cause?: { code?: string } };
+    const code = detail?.cause?.code ?? detail?.code;
+    options.log('queue-reconnecting', { operation, error: mediaErrorMessage(error), ...(taskId ? { taskId } : {}), ...(code && /^[A-Z0-9_]+$/.test(code) ? { code } : {}) });
+  };
+  let subscriptionFailed = false;
+  // Slots share claims, but never the HTTP client's mutation queue: a slow
+  // claim/upload for another task must not hold up a live task's lease renewal.
+  let claiming = Promise.resolve();
+  const claimNext = () => {
+    const next = claiming.then(() => client.mutation(api.mediaTasks.claim, { ...claimArgs, compact: true }, { skipQueue: true }));
+    claiming = next.then(() => {}, () => {});
+    return next;
+  };
   const waiters = new Set<() => void>();
   const wake = () => { for (const resolve of waiters) resolve(); };
   const unsubscribe = options.subscriptions.onUpdate(api.mediaTasks.ready, claimArgs, value => {
-    revision++; state.ready = !!value;
+    revision++; state.ready = !!value; subscriptionFailed = false;
     if (state.ready) { state.lastWorkAt = Date.now(); wake(); }
-  }, () => {
+  }, error => {
     state.ready = false;
-    options.log('queue-reconnecting', {});
+    subscriptionFailed = true; wake();
+    queueError('subscription', error);
   });
 
   function waitForWork(observed: number) {
     if (shutdown.aborted || draining() || (revision !== observed && state.ready)) return Promise.resolve();
     return new Promise<void>(resolve => {
-      const done = () => { waiters.delete(done); shutdown.removeEventListener('abort', done); resolve(); };
+      const timer = subscriptionFailed ? setTimeout(() => done(), RECONNECT_MS) : undefined;
+      const done = () => { clearTimeout(timer); waiters.delete(done); shutdown.removeEventListener('abort', done); resolve(); };
       waiters.add(done); shutdown.addEventListener('abort', done, { once: true });
     });
   }
@@ -64,7 +81,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
     while (!shutdown.aborted && !draining()) {
       try {
         const observed = revision, claimedAt = Date.now();
-        const task = await client.mutation(api.mediaTasks.claim, { ...claimArgs, compact: true });
+        const task = await claimNext();
         if (!task) { await waitForWork(observed); continue; }
         state.activeTasks++; state.lastWorkAt = Date.now();
         const controller = new AbortController();
@@ -88,9 +105,12 @@ export function startMediaWorker(options: MediaWorkerOptions) {
             queued = false;
             if (signal.aborted) return;
             const next = progress, sentAt = Date.now();
-            await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next, ...(activity ? { activity } : {}) });
+            await client.mutation(api.mediaTasks.heartbeat, { ...credentials, progress: next, ...(activity ? { activity } : {}) }, { skipQueue: true });
             reported = next; renewedAt = sentAt;
-          }).catch(error => { if (isMediaLeaseLost(error)) controller.abort(); });
+          }).catch(error => {
+            if (isMediaLeaseLost(error)) controller.abort();
+            else queueError('heartbeat', error, task.taskId);
+          });
         };
         // Starting and finishing an upload write the task row too. They take their turn
         // between renewals instead of racing them: a renewal committing mid-mutation made
@@ -110,27 +130,32 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         }, CANCEL_CHECK_MS);
         options.log('media-started', { projectId: task.projectId, kind: task.kind, taskId: task.taskId });
         try {
-          const snapshot = await client.query(api.mediaTasks.work, credentials);
+          const snapshot = await retryMediaOperation(()=>client.query(api.mediaTasks.work, credentials),signal);
           signal.throwIfAborted();
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
             progress = Math.max(progress, Math.min(snapshot.kind==='preview'?100:99, percent));
             if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
-          clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
-          if(snapshot.kind==='read'&&result.read)await client.action(api.mediaTaskResults.completeRead,{...credentials,result:result.read});
-          else await client.mutation(api.mediaTasks.complete, { ...credentials, result });
+          // Publishing a frame sheet can itself need network retries. Renew its
+          // lease until publication finishes, not just until decoding finishes.
+          await heartbeats; signal.throwIfAborted();
+          if(snapshot.kind==='read'&&result.read){const read=result.read;await retryMediaOperation(()=>client.action(api.mediaTaskResults.completeRead,{...credentials,result:read}),signal);}
+          else await retryMediaOperation(()=>exclusive(()=>client.mutation(api.mediaTasks.complete, { ...credentials, result }, { skipQueue: true })),signal);
+          clearInterval(timer); clearInterval(cancelled); await heartbeats;
           options.log('media-completed', { projectId: task.projectId, runId: snapshot.aiRunId, taskId: task.taskId, kind: task.kind });
         } catch (error) {
           clearInterval(timer); clearInterval(cancelled); await heartbeats;
           const timedOut = signal.aborted && deadline.aborted;
           const retryable = task.kind !== 'review' && !(task.kind === 'render' && timedOut) && isRetryableAnalysisError(error);
           if (!shutdown.aborted && !controller.signal.aborted) {
-            await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut && task.kind === 'render' ? `The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.` : error instanceof Error ? error.message.slice(0, 1000) : 'Media processing failed.' }).catch(() => {});
+            await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut && task.kind === 'render' ? `The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.` : mediaErrorMessage(error) }, { skipQueue: true }).catch(failure => {
+              if (!isMediaLeaseLost(failure)) queueError('failure report', failure, task.taskId);
+            });
           }
-          options.log('media-interrupted', { projectId: task.projectId, taskId: task.taskId, kind: task.kind, elapsedMs: Date.now() - startedAt, progress, reason: shutdown.aborted ? 'shutdown' : controller.signal.aborted ? 'lease-ended' : timedOut ? 'timeout' : 'processing-error', retryable });
+          options.log('media-interrupted', { projectId: task.projectId, taskId: task.taskId, kind: task.kind, elapsedMs: Date.now() - startedAt, progress, reason: shutdown.aborted ? 'shutdown' : controller.signal.aborted ? 'lease-ended' : timedOut ? 'timeout' : 'processing-error', error: mediaErrorMessage(error), retryable });
         } finally { state.activeTasks--; state.lastWorkAt = Date.now(); }
-      } catch {
-        if (!shutdown.aborted && !draining()) { state.ready = false; options.log('queue-reconnecting', {}); await pause(); }
+      } catch (error) {
+        if (!shutdown.aborted && !draining()) { state.ready = false; queueError('claim', error); await pause(); }
       }
     }
   }
