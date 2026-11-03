@@ -11,6 +11,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
   'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
+  'briefs:saveStoryboard',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
   'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportRunner',

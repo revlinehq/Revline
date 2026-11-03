@@ -41,10 +41,13 @@ export const save = internalMutation({
   returns: v.array(assetDocument),
   handler: async (ctx, args) => {
     await requireCapacity(ctx, args, args.images.length);
+    const shot = args.provenance.storyboard;
+    if ((args.provenance.purpose === 'storyboard') !== !!shot || shot && args.images.length !== 1) throw new ConvexError('A storyboard frame needs one image and shot details.');
     const saved = [];
     for (const [index, image] of args.images.entries()) {
       if (!image.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`)) throw new ConvexError('Generated image key is outside this project');
-      const id = await ctx.db.insert('assets', { ownerId: args.ownerId, projectId: args.projectId, ...image, fileName: `Generated plate ${index + 1}.png`, contentType: 'image/png', kind: 'image', imageGeneration: args.provenance, createdAt: Date.now() });
+      const fileName = shot ? `${shot.phase === 'direction' ? 'Direction' : 'Storyboard'} ${shot.name.replace(/[\\/:*?"<>|\r\n]/g, '')} - S${String(shot.shotIndex).padStart(2, '0')} - ${shot.idea.slice(0, 60).replace(/[\\/:*?"<>|]/g, '')}.png` : `Generated plate ${index + 1}.png`;
+      const id = await ctx.db.insert('assets', { ownerId: args.ownerId, projectId: args.projectId, ...image, fileName, contentType: 'image/png', kind: 'image', imageGeneration: args.provenance, createdAt: Date.now() });
       const asset = (await ctx.db.get(id))!;
       await recordAssetStorage(ctx, asset);
       saved.push(await hydrateAsset(ctx, asset));

@@ -128,6 +128,8 @@ export type Timeline = { audioNormalization?: NonNullable<Clip['normalizedAudio'
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio' | 'model';
+  createdAt?: number;
+  imageGeneration?: { purpose?: 'asset' | 'storyboard'; storyboard?: { name: string; phase?: 'direction' | 'board'; shotIndex: number } };
   duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   previewOriginalPlayable?: boolean;

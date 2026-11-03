@@ -10,7 +10,7 @@ For edits to an existing recreation, start with scene-engine page \`edit-lanes\`
 
 The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Keep the reference video itself off the timeline.
 
-For photoreal or illustrative subjects code cannot draw, read page \`image-plates\` before generateImage. Generate fresh isolated subjects from measured framing, palette and material, then animate them with GSAP; never reproduce a reference frame.
+Before code for a new launch film or standalone motion piece, read the standalone \`storyboard\` skill for two directions, consistent rough frames and the saved approved handoff (skip small edits and "just build it"). During the build, read \`image-plates\` for the icon/trace/code/three.js/generation decision order and generated subjects, textures, backgrounds and cut-outs. Never reproduce a reference frame; the measured recreation inventory still governs the actual remake.
 
 ## 1. Map the film, then inventory one section
 Read the whole reference with readFrames count 16 for its moments and holds. Shots alone miss motion inside a shot. Group related moments into named sections, including their incoming and outgoing transitions.

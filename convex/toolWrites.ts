@@ -18,7 +18,7 @@ const mutations = new Set([
   'compositionReview:savePlan', 'compositionReview:request', 'compositionReview:cancel',
   'cutouts:startFromRun', 'derivations:startFromRun',
   'mcp:requestFrames', 'mcp:requestGuard', 'mcp:discardFrames', 'mcp:takeFrames',
-  'briefs:update', 'memories:remember', 'memories:forget',
+  'briefs:update', 'briefs:saveStoryboard', 'memories:remember', 'memories:forget',
   'referenceReads:request', 'referenceReads:take', 'referenceReads:discard',
 ]);
 const scope = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };

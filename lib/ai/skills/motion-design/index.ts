@@ -9,7 +9,7 @@ export const motionDesign: EditorSkill = {
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
 
-When a film needs photoreal or illustrative hands, objects, products or photos, read this skill's \`image-plates\` page before generateImage; it covers isolated plates, transparent cut-outs and GSAP compositing.
+Before writing scene code for a new launch film or standalone motion piece, readSkill name "storyboard": understand the brief, offer two contrasting looks, develop 3–6 anchored rough frames, show images only and save the approved structured handoff before code. Skip for small edits and when the user says "just build it". Assets during the build follow \`image-plates\`: choose icons, traced shapes, code or three.js first, then generate subjects, textures, environment maps, backgrounds and cut-outs on demand.
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
