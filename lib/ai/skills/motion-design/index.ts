@@ -1,9 +1,10 @@
 import type { EditorSkill } from '../index';
 import { blueprintsPage, brandPage } from './pages';
+import { tastePage } from './taste';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
-  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and recreating any motion film or reference video the user gives (copied shot for shot from its own frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, and the user\'s rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Explainers and overlays on footage use explainer-scenes. Every film follows overall-styling (the user\'s house look). Scenes themselves: scene-engine.',
+  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page "taste"), and the user\'s rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Explainers and overlays on footage use explainer-scenes. Every film follows overall-styling (the user\'s house look). Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
@@ -11,6 +12,8 @@ For edits to an existing film, start with scene-engine page \`edit-lanes\` and f
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
 **Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
+
+For original motion design, creative restyling or learning from a style reference, read page \`taste\` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
 
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
@@ -35,7 +38,7 @@ Motion has weight: things open, settle and follow through. A shape that just fad
 - **Guides and frame lines are alive.** Camera frame lines, crop corners, selection boxes and scan lines track the element they mark on the same timeline (same start, same ease), and keep moving while it does. Never leave them as a static overlay.
 - **Anticipation on big moves.** Before a large move, a short wind-up (a 2 to 4 percent counter move over 0.1 to 0.15 s) makes it read as intentional.
 - **Pacing is measured, not guessed.** getFrames shows stills, so speed problems slip past it: a picture that changes before it can be read, a zoom with no ease, a click that lingers, a zoom cut off by the next shot. In Precise, after building or changing motion, run checkPacing on the changed range alongside getFrames and fix what it flags (longer holds, eased moves, fewer changes per second), then run it again.
-- **Nothing dead still.** Between beats something always moves: a slow camera push (1 to 3 percent over the hold), a drift, a cursor, a build. A truly frozen frame reads as a bug unless it is a deliberate held beat.
+- **Deliberate holds.** Let an action settle and give the idea time to register. Keep the camera locked or the frame still when that gives the moment weight; add movement only when it reveals something.
 - Recipes for each of these (eases, masks, morphs, staggers): readSkill name "gsap" page "transitions".
 
 ## Recreating a video (clone, remake, copy, "shot for shot")
@@ -53,10 +56,10 @@ In a new film, every fact on screen comes from the confirmed product text or the
 
 ## Direction and feedback
 - **Exact direction from the user:** do exactly that. Never override the user.
-- **Reference first in Precise for builds and full-lane edits.** When the project holds a reference video (one the film is based on), go to it before building or rebuilding any moment it has a counterpart for (a transition, the ending, a price or comparison beat, a logo reveal): readFrames a short window around its matching moment, trackReference its moves and measureFrame its sizes and colors, build from that, then compareReference at that moment and fix the worst differences. Don't fall back on a generic move when the reference shows how it is done.
+- **Reference first for faithful copies in Precise.** When the project holds a reference video (one the film is based on), go to it before building or rebuilding any moment it has a counterpart for (a transition, the ending, a price or comparison beat, a logo reveal): readFrames a short window around its matching moment, trackReference its moves and measureFrame its sizes and colors, build from that, then compareReference at that moment and fix the worst differences. Don't fall back on a generic move when the reference shows how it is done.
 - **Approved work is off-limits.** Clips and film sections inspectTimeline lists as \`approved\` (with the user's note) stay exactly as they are; patchScene, editScene and every other tool refuse to touch them. Rebuild or restyle one only when the user names it in this request, passing \`overrideApproved: true\` with \`overrideReason\` quoting them. When the user approves a section, mark it with approveClip (markerId of its section) and their words as the note.
 - **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
-- **A style reference** (a film or brand they like, not one to recreate): take its look, type, motion and pacing, never its copy, product, logo, characters or exact compositions.
+- **A style reference** (a film or brand they like, not one to recreate): use page \`taste\` to extract why its choices work and express those principles in new imagery and staging.
 - The brand kit's fonts and colors always win.`,
-  pages: [brandPage, blueprintsPage],
+  pages: [tastePage, brandPage, blueprintsPage],
 };
