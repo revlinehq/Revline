@@ -1,0 +1,18 @@
+# Editing lanes
+
+Each folder owns its definition, skill wrappers, explicit tool additions and completion check. Existing skill bodies remain in `lib/ai/skills`; wrappers avoid copying those instructions. `options.ts` is the small client catalog. The recreation lane is hidden in the production picker unless internal details are enabled.
+
+`base-tools.ts` is an explicit shared allowlist. New tools are denied until registered here or in a lane. `readSkill` validates the lane at execution. `analyzeMedia` also checks its mode, so it cannot expose reference analysis through a shared tool.
+
+The shared `runEditorTurn` serves Cloudflare and Convex. `prepareStep` sends only the lane's tools; middleware checks and logs the actual provider list. History filtering removes other lanes' tool and skill results while keeping the user's chat. Task and lane state live in `editingLaneTasks` and `editingLaneTabs`.
+
+`finish` validates each touched timeline, refuses empty visual output and new coverage gaps, renders changed ranges, runs the lane's check, then publishes any checked draft. No model-provided scores or counts are accepted. Failure attempts persist across automatic restarts and lane switches. Three failures end the task with the actual check output. An explicit `/clip` task keeps that lane until a new user request, so missing tools cannot become a switch that bypasses clipping checks. Completion prose is suppressed until checks and publication succeed; questions use `askUser`.
+
+MCP `startTask` selects a lane and stable task ID for one authenticated connection. `setLane` preserves its failure budget. Tool lists are filtered per connection; response SSE emits `notifications/tools/list_changed`. Cached clients receive the lane ownership/switch error before execution.
+
+## Branch integrations
+
+- `find-highlights`: reserve `findHighlights`, `planClips`, `checkClip`, `finishClipping`. Pass server-owned `EditorToolkitOptions.taskId`. Query `clipping:completionState` with `runId:taskId` and explicit `timelineId` when supplying a draft. Both `required:true` and `passed:true` are necessary; missing or candidates-only manifests fail. The upstream persisted candidate ledger and worker receipts supply found/accepted/tab counts.
+- `enforce-motion-matching` (#51): after merge, evaluate `referenceMotion.state` using the film's stored reference/range, current revision, `motionTimelineKey`, full-frame scope and aligned offset. Preserve OFF exceptions separately from a clean match. Until merged, recreate uses real full-frame pixel/motion output with a 20% pixel-difference placeholder limit, >=15 fps contiguous coverage, and pacing checks. Never parse display-only `motionStatus()` as evidence.
+- `reference-frame-cache` (#54): frame reads remain on the existing rendering/reference paths, so the cache plugs in without lane-specific decoding.
+- `fix-clip-run-failures` (#55): worker admission/retry changes remain on that branch. The isolated lane dev worker starts paused and claims no shared tasks.

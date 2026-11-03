@@ -1,3 +1,4 @@
+import type { LaneId } from './lanes/types';
 import { EFFECT_GUIDANCE,VISUAL_EFFECT_GUIDANCE,TEXT_ANIMATION_GUIDANCE,TEXT_APPEARANCE_GUIDANCE } from '../editor/effect-guidance';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES } from '../editor/effect-catalog';
 import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset, type TimedEffectPreset } from '../editor/clip-effects';
@@ -50,14 +51,14 @@ masks:{tool:'setMask',shapes:['rectangle (corner radius)','ellipse','polygon (fr
 
 /** What the model sees on every turn: names only. Guidance, controls and the sound library live in
  *  the effects, vfx-recipes, text-styling, color-grading and music-and-sound skills, read on demand with readSkill. */
-export function editorCapabilityIndex(){
+export function editorCapabilityIndex(lane:LaneId='edit',skills?:{name:string;description:string}[]){
   const catalog=editorCapabilities();
   return {
-    skills:catalog.skills,
+    skills:skills??catalog.skills,
     details:'Names only. Read the effects skill before applying effects, timed FX, transitions, layouts, camera or object motion; vfx for gameplay montages, kill edits, impact frames, procedural overlays, depth parallax and pixel tracking; vfx-recipes for other creative styling and effect combinations; text-styling before adding or styling text and captions; color-grading for any color work; music-and-sound before music or sounds.',
     soundEffects:{skill:catalog.soundEffects.skill,rule:catalog.soundEffects.rule,generated:catalog.soundEffects.generated,libraryTool:catalog.soundEffects.libraryTool},
-    scenes:catalog.scenes,
-    voice:catalog.voice,
+    ...(['motion','recreate','explainer'].includes(lane)?{scenes:catalog.scenes}:{}),
+    ...(lane==='explainer'?{voice:catalog.voice}:{}),
     editing:catalog.editing,
     effects:catalog.effects.map(group=>({category:group.category,items:group.items.map(item=>item.name)})),
     timedFX:catalog.timedFX.map(({preset,name})=>({preset,name})),
