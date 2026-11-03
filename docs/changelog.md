@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Workspace: Slash commands (/clip, /inspo-motion) now work in the new-project composer, not only in the editor. Why: the user found them missing on the dashboard.
+
 - Landing: Play the motion study inside the shared Revline editor illustration with scene-aligned clips, graphics, a music waveform and a synced playhead. Why: the user requested an editable-film showcase matching the clipping section.
 
 - Editor: New-project composer sits at optical centre, slightly above the middle. Why: exact centre read as low.

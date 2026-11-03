@@ -301,7 +301,7 @@ export function NewConversation() {
       <div className="new-conversation-start">
         <div className="new-conversation-intro"><h1 id="new-conversation-title" title={headline}>{headline}</h1></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
+          <EditComposer slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} placeholder="Describe the video you want to make…"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
