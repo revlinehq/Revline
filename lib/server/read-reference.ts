@@ -322,7 +322,21 @@ function boxOverlay(item: { x: number; y: number; w: number; h: number; rotation
   return `<svg viewBox="0 0 ${source.width} ${source.height}" width="{w}" height="{h}" preserveAspectRatio="none"><rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" transform="rotate(${item.rotation} ${cx} ${cy})" fill="none" stroke="#3dd68c" stroke-width="${Math.max(3, source.width / 300)}"/></svg>`;
 }
 
-export async function readReference(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<Result> {
+/** A still uses its displayed pixels once; it has no artificial source duration or frame rate. */
+export async function imageSource(path: string) {
+  const image = await sharp(path).rotate().png().toBuffer(), meta = await sharp(image).metadata();
+  return { image, width: meta.width!, height: meta.height!, fps: 0, duration: 0 };
+}
+
+export async function readReference(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false): Promise<Result> {
+  if (stillImage) {
+    signal.throwIfAborted();
+    const source = await imageSource(path), crop = work.crop ? clampBox(work.crop, source) : undefined;
+    const image = crop ? await sharp(source.image).extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h }).png().toBuffer() : source.image;
+    const result = await sheet([{ image, label: 'Still image reference' }], (crop?.w ?? source.width) / (crop?.h ?? source.height), 1);
+    onProgress(90);
+    return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: 0, frames: [{ time: 0 }] };
+  }
   const source = await probe(path, signal);
   if (work.end < work.start) throw new AnalysisError('The window ends before it starts.', 400);
   onProgress(5);

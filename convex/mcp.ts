@@ -1,4 +1,5 @@
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { generatedImageSummary } from './lib/generated_image_summary';
 import { normalizationRequestValidator } from './lib/normalization_validator';
 import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
@@ -123,7 +124,7 @@ export const projectOverview = internalQuery({ args: { ownerId: v.string(), proj
     brief: await briefFor(ctx, project._id),
     // Lasting preferences the user saved with the editing AI; follow them, and use remember/forget to change them.
     memories: await memoriesFor(ctx, args.ownerId, project._id),
-    media: assets.map(asset => ({ assetId: asset._id, fileName: asset.fileName, kind: asset.kind, duration: asset.duration, width: asset.width, height: asset.height, analysis: asset.analysisKinds ?? [], ...(asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {}) })),
+    media: assets.map(asset => ({ assetId: asset._id, fileName: asset.fileName, kind: asset.kind, duration: asset.duration, width: asset.width, height: asset.height, analysis: asset.analysisKinds ?? [], ...(asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {}), ...generatedImageSummary(asset) })),
   };
 }});
 

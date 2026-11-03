@@ -1,6 +1,6 @@
 import { editorCommandInstructions } from '../../lib/ai/slash-commands';
 import { editorSkillInstructions } from '../../lib/ai/skills';
-import { editorModeForRequest, editModeInstructions, PRECISE_MODE_NOTICE, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
+import { editorModeForRequest, editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
 import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
@@ -80,13 +80,11 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const memories = await ctx.runQuery(internal.memories.forRun, run), brief = await ctx.runQuery(internal.briefs.forRun, run);
     const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
     const initialEditMode = args.command ? 'precise' : editorModeForRequest(currentPrompt, args.editMode);
-    const announcePrecise = () => saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: PRECISE_MODE_NOTICE } }).then(() => {});
-    if (args.editMode === 'fast' && initialEditMode === 'precise' && !args.continuation) await announcePrecise();
     const recovery = args.recovery ?? project.aiRecovery;
     const recovering = recovery !== undefined || !!args.continuation;
     void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort }).catch(() => {});
     const draft=args.continuation?await ctx.runQuery(internal.assistantTurnRecovery.draft,run):null;
-    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, segment,draft:draft?.timeline, editMode: initialEditMode, pendingFastFrames: args.continuation?.pendingFastFrames, onPrecise: announcePrecise, initialPlans: args.continuation && initialEditMode === 'precise' ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
+    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, segment,draft:draft?.timeline, editMode: initialEditMode, pendingFastFrames: args.continuation?.pendingFastFrames, initialPlans: args.continuation && initialEditMode === 'precise' ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
     session = editSession;
     const { provider, modelId } = selection;
@@ -121,7 +119,7 @@ Checking your work is part of the work. The current Editing mode instructions go
 
 # Skills
 ${CLIPPING_SKILL_ROUTING}
-For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. For other work, read the matching skill with readSkill before the work and follow it. footage-editing for any edit of the user's footage or audio (cuts, speech cleanup, takes, subtitles, captions, J and L cuts, tracks, markers, transitions between clips, effects and undo); visual-inspection for awkward moments seen in the picture; text-styling, effects, vfx-recipes and color-grading for looks; music-and-sound for music, beats and sound; motion-design for launch films, standalone motion and recreating a motion video; scene-engine for any scene; explainer-scenes for explainers over footage; explainer for a narrated explainer film made from scratch (script, voice, style, then the film); reference-footage when the user shares an edit to remake or take style from.
+For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. Before motion design from scratch, read motion-design page ideation: agree one message, one audience tension and 3–5 angles. The user’s yes/do it approves that angle to BUILD immediately. Skip ideation for small edits or just build it. Never approve finished work on the user’s behalf. For other work, read the matching skill with readSkill before the work and follow it. footage-editing for any edit of the user's footage or audio (cuts, speech cleanup, takes, subtitles, captions, J and L cuts, tracks, markers, transitions between clips, effects and undo); visual-inspection for awkward moments seen in the picture; text-styling, effects, vfx-recipes and color-grading for looks; music-and-sound for music, beats and sound; motion-design for launch films, standalone motion and recreating a motion video; scene-engine for any scene; explainer-scenes for explainers over footage; explainer for a narrated explainer film made from scratch (script, voice, style, then the film); reference-footage when the user shares an edit to remake or take style from.
 
 # Standing preferences
 No em dashes. Never invent facts: names, features, numbers, claims, quotes and spoken words come from the user, the confirmed brand or product text, or the media. Do not add stock footage or footage of people unless the user asks for it; build visuals as scenes instead. Keep icons neutral: no sparkles or other "AI magic" icons; real brand logos and app icons come from findIcon, never drawn by hand.
@@ -194,7 +192,6 @@ For edit requests, use one brief initial sentence stating the requested action, 
       if(!await ctx.runMutation(internal.assistantTurnRecovery.advance,{...run,segment,expectedPass:pass,feedback:repairFeedback??'Inspect saved work and finish the remaining steps.'}))return null;
       console.info(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
     }
-    if (progress().savedEdits > 0) await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId, promptMessageId: args.promptMessageId, message: { role: 'assistant', content: toolkit.editMode() === 'fast' ? 'Edited in Fast. Precise can double-check it.' : 'Edited in Precise.' } }).catch(()=>console.warn(`[ai-repair] ${JSON.stringify({event:'mode-footer-unavailable',runId:args.runId})}`));
     await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId,segment });
     costLog.finish('completed', progress());
   } catch (error) {
@@ -233,7 +230,7 @@ function memorySection(memories: { memoryId: string; scope: 'user' | 'project'; 
 /** The project's brief: the user's lasting direction for this project, in their words. */
 function briefSection(brief: { rules: { ruleId: string; rule: string; userWords: string }[] }) {
   const lines = brief.rules.map(item => `- [${item.ruleId}] ${item.rule} (user: ${JSON.stringify(item.userWords)})`);
-  return `# Project brief\nThe user's direction for this project. Follow it; when the user gives lasting direction (what to keep, what to avoid, style), update it with updateBrief, replacing the rule it supersedes.\n${lines.join('\n') || '(empty)'}\n`;
+  return `# Project brief\nThe user's direction for this project. Follow it; when the user gives lasting direction (what to keep, what to avoid, style), update it with updateBrief, replacing the rule it supersedes.\n${lines.join('\n') || '(empty)'}`;
 }
 
 /** At most about 1,000 tokens of memory in context; the most-used memories come first. */

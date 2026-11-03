@@ -6,7 +6,7 @@ export const referenceCropKeyframes = z.array(z.object({ time: z.number().nonneg
 export type ReferenceCropKeyframe = z.infer<typeof referenceCropKeyframes>[number];
 export const comparisonCropFields = {
   crop: comparisonCrop.optional().describe('Shorthand crop for both sides. Each explicit side crop overrides it. Normalized displayed-frame coordinates: x/y top-left, w/h size.'),
-  referenceCrop: comparisonCrop.optional().describe('Reference region in normalized displayed-frame coordinates. Use this for a demo sub-panel beside a storyboard. Overrides crop on the reference side.'),
+  referenceCrop: comparisonCrop.optional().describe('Reference region in normalized displayed-frame coordinates. Use this for a demo sub-panel within a larger reference. Overrides crop on the reference side.'),
   timelineCrop: comparisonCrop.optional().describe('Timeline region in normalized displayed-frame coordinates. Omit for the full timeline frame when crop is absent, or use {x:0,y:0,w:1,h:1} to override crop. Scaled to match the reference region.'),
   referenceCropKeyframes: referenceCropKeyframes.optional().describe('Moving reference region: [{time,crop}] in strictly increasing SOURCE seconds, before offset/timelineStart. Linearly interpolate x/y/w/h; hold the nearest endpoint outside the keyed range. Overrides referenceCrop and crop.'),
 };

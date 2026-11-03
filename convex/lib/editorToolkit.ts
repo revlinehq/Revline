@@ -1,4 +1,6 @@
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
+import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
+import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest, type PixelTrackReference } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
@@ -130,7 +132,6 @@ type EditorToolkitOptions = {
   pendingFastFrames?: number[];
   segment?:number;
   draft?:Timeline;
-  onPrecise?: () => Promise<void>;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -164,7 +165,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -207,7 +208,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const requirePrecise = async () => {
     if (editMode === 'precise') return;
     editMode = 'precise';
-    await options.onPrecise?.();
   };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
@@ -700,6 +700,52 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Finish and verify this clip before opening another tab. Never call tab changes in parallel with edits.' };
   };
   const tools = {
+    generateImage: createTool({
+      metadata: EDITOR_TOOL_DEFINITIONS.generateImage,
+      description: 'Generate a real scene asset with GPT Image 2.5 Flare: backgrounds, textures, image fills, photos, isolated objects or transparent cut-outs. Build complete film frames, UI, typography, icons and vector graphics in scene code. Read motion-design page image-plates first. Uses the shared OpenAI key/fallback, saves PNG project media with signed URLs, previews, references, provenance and visible estimated USD cost. Medium quality by default; low for exploration. count 1–4, up to four project-image references, and PNG alpha are supported. Logos/icons use findIcon, hand-made shapes traceShape, and 3D uses three.js or a user-supplied GLB.',
+
+      inputSchema: imageGenerationInput,
+      execute: async (_ctx, request) => {
+        const input = request;
+        const references = [];
+        for (const assetId of input.referenceAssetIds ?? []) {
+          const asset = await ctx.runQuery(internal.assistant.getRunAsset, { ...run, assetId });
+          if (asset.kind !== 'image' || !['image/png', 'image/jpeg', 'image/webp'].includes(asset.contentType)) throw new Error(`${asset.fileName} is not a PNG, JPEG or WebP project image.`);
+          if (asset.size > 50_000_000) throw new Error(`${asset.fileName} exceeds OpenAI's 50 MB reference image limit.`);
+          const url = await mediaUrl(ctx, asset);
+          if (!url) throw new Error(`${asset.fileName} has no readable image file.`);
+          references.push(url);
+        }
+        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1 });
+        const generated = await generateImagePlates(input, references, abortSignal), requestId = crypto.randomUUID();
+        const { usage } = generated;
+        console.log(`[ai-cost] ${JSON.stringify({ event: 'image-generation', ...run, requestId, model: IMAGE_MODEL, provider: 'openai.images', count: generated.images.length, ...usage })}`);
+        await ctx.runMutation(internal.aiCosts.record, { projectId: run.projectId, runId: run.runId, ...options.publication, record: { key: `image-${requestId}`, kind: 'model-call', recordedAt: Date.now(), model: IMAGE_MODEL, provider: 'openai.images', reasoningEffort: null, speedMode: null, serviceTier: 'default', estimatedUsd: usage.estimatedUsd, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, reasoningTokens: null, uncachedInputTokens: usage.inputTokens, cacheReadTokens: 0, cacheWriteTokens: 0, toolCallCount: 1, unreportedCall: false } });
+        const uploaded: { r2Key: string; size: number; width: number; height: number }[] = [];
+        try {
+          for (const image of generated.images) {
+            abortSignal.throwIfAborted();
+            const r2Key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+            const size = await putMediaObject(r2Key, image.bytes, 'image/png');
+            uploaded.push({ r2Key, size, width: image.width, height: image.height });
+          }
+          const saved = await ctx.runMutation(internal.generatedImages.save, { ...run, images: uploaded, provenance: { requestId, prompt: input.prompt, model: IMAGE_MODEL, size: imageGenerationSize(input), transparentBackground: input.transparentBackground ?? false, quality: imageGenerationQuality(input), referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], usage } });
+          assets.push(...saved);
+          // Keep the MCP/action response bounded even for four detailed PNGs. Originals stay untouched in media.
+          let previewBytes = 0;
+          const images = generated.images.flatMap((image, index) => {
+            if (index > 0 && previewBytes + image.data.length > 8_000_000) return [];
+            previewBytes += image.data.length;
+            return [{ label: `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' }];
+          });
+          return { assetIds: saved.map(asset => asset._id), assets: await Promise.all(saved.map(async asset => ({ assetId: asset._id, url: (await mediaUrl(ctx, asset))!, fileName: asset.fileName, width: asset.width, height: asset.height, ...generatedImageSummary(asset) }))), model: IMAGE_MODEL, quality: imageGenerationQuality(input), size: imageGenerationSize(input), estimatedUsd: usage.estimatedUsd, usage, images, ...(images.length < saved.length ? { previewNote: 'Large variants have limited inline previews; all variants are saved in project media.' } : {}), note: 'Saved to project media. Inspect the subject and edges, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
+        } catch (error) {
+          await ctx.runMutation(internal.generatedImages.cleanup, { ...run, keys: uploaded.map(image => image.r2Key) }).catch(() => {});
+          throw error;
+        }
+      },
+      toModelOutput: (ctx, options) => blueprintImages(ctx, options.output),
+    }),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
       inputSchema: z.object({ toolName: z.string().min(1).max(100), inputSummary: z.string().max(600), happened: z.string().min(1).max(1000), expected: z.string().min(1).max(1000) }),
@@ -862,7 +908,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
       }).map(asset=>asset._id);
       const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = readRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
-      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
+      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, imageGeneration }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId, ...generatedImageSummary({ imageGeneration }) })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
     } }),
     inspectClip: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.inspectClip, description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. With no options, returns the full clip as before. For a short scene read, pass section (marker label or id), lines {start,end}, or both; sceneCode.blocks returns exact code and absolute numberedCode, plus the section block index. Line numbers are 1-based and inclusive for this revision; read ranges past either end are clamped and the returned bounds are reported. Scenes without identifiable sections use whole-scene line ranges. kit: true reads the shared film kit instead. search finds a literal string or per-line JavaScript regex with absolute line and column numbers and bounded previews, without returning the full code. Combine it with section, lines or kit; use search.startLine to continue a page. Scoped reads omit full scene and blueprint code. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string(), section: codeSectionInput.optional(), lines: z.object({ start: z.number().int(), end: z.number().int() }).strict().optional().describe('Inclusive read range; endpoints outside the source are clamped to its first or last line.'), kit: z.boolean().optional(), search: z.object({ query: z.string().min(1).max(500), regex: z.boolean().optional(), caseSensitive: z.boolean().optional().describe('Case-insensitive by default; true matches exact case.'), startLine: z.number().int().min(1).optional(), limit: z.number().int().min(1).max(100).optional() }).optional() }), execute: async (_ctx, input) => {
       await editSession.wait();
@@ -1217,7 +1263,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a reference. Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a video or still image reference. For a still image, times are the timeline moments to compare with it (offset defaults 0). Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+      const stillReference = assets.find(asset => asset._id === input.assetId)?.kind === 'image';
       const deadline = Math.min(options.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS);
       await editSession.wait();
       const offset = input.offset ?? 0, requested = comparisonSamples(input), timelineId = readRunTab(run.runId);
@@ -1274,7 +1321,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { start, end, fps, times, ...settings } = input;
       const nextAction = continueFrom === null ? undefined : { tool: 'compareReference', arguments: { projectId: run.projectId, ...(timelineId ? { timelineId } : {}), ...settings, ...(times ? { times: times.slice(completed) } : continueFrom < end! ? { start: continueFrom, end, fps: fps ?? 15 } : { times: [continueFrom] }) } };
       return { status: nextAction ? 'partial' : 'completed', revision, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.referenceCrop ? { referenceCrop: input.referenceCrop } : {}), ...(input.timelineCrop ? { timelineCrop: input.timelineCrop } : {}), ...(input.referenceCropKeyframes ? { referenceCropKeyframes: input.referenceCropKeyframes } : {}), ...(input.times ? {} : { range: { start, end, fps: fps ?? 15 } }), requestedSamples: requested.count, samples: scores.length, scores, images, continueFrom, ...(nextAction ? { nextAction, reason: imageBytes >= imageBudget ? 'result_size' : 'time_budget' } : {}),
-        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
+        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : stillReference ? 'Inspect the reference and built frame for composition, palette, hierarchy, materials and intent. Fix clear departures; exact pixels and a low difference score are not acceptance criteria. Check the planned motion separately with getFrames/checkPacing.' : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. For existing edits follow scene-engine page edit-lanes for sampling; after builds use it at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreSection or restoreClip.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision }) => {
       await editSession.wait();
