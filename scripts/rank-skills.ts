@@ -6,7 +6,7 @@
  * a Revline tool or code identifier, or an example (e.g., quoted text, bad→good, "for example").
  * Vague words are adjectives and hedges that give the agent nothing to check.
  */
-import { EDITOR_SKILLS } from '../lib/ai/skills';
+import { editorSkills } from '../lib/ai/skills';
 
 const args = process.argv.slice(2);
 const withPages = args.includes('--pages');
@@ -19,7 +19,7 @@ const IDENTIFIER = /`[^`]+`|\b[a-z]+[A-Z][A-Za-z0-9]+\b|\b[a-z]+\.[a-z]+\(|\b(gs
 const EXAMPLE = /e\.g\.|for example|for instance|such as|→|->|\bbad\b|\bgood\b|“[^”]{3,}”|"[^"]{3,}"/i;
 
 type Unit = { name: string; body: string };
-const units: Unit[] = EDITOR_SKILLS.flatMap(skill => withPages
+const units: Unit[] = editorSkills().flatMap(skill => withPages
   ? [{ name: skill.name, body: skill.body }, ...(skill.pages ?? []).map(page => ({ name: `${skill.name}/${page.name}`, body: page.body }))]
   : [{ name: skill.name, body: [skill.body, ...(skill.pages ?? []).map(page => page.body)].join('\n') }]);
 

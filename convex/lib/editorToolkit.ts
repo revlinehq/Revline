@@ -1,3 +1,8 @@
+import { LANES, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { LANE_IDS } from '../../lib/ai/lanes/types';
+import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
+import { laneBaseline, LaneFinishError } from '../../lib/ai/lanes/task';
+import { finishLane, type FinishResult, type LaneTask } from './laneFinish';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
@@ -50,7 +55,6 @@ import { placeClip, TIMELINE_ROW } from "./revision_log";
 import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
-import { EDITOR_SKILL_NAMES, editorSkillInstructions } from '../../lib/ai/skills';
 import { SCENE_BLUEPRINT_LIMIT, SCENE_LIMITS } from '../../lib/editor/scene-layers';
 import { checkSceneCode } from '../../lib/editor/scene-compile';
 import { checkFilmKitImports, FILM_KIT, mountFilmKit, prepareFilmKit, timelineFilmKit, withFilmKit } from '../../lib/editor/scene-kit';
@@ -133,6 +137,10 @@ type EditorToolkitOptions = {
   pendingFastFrames?: number[];
   segment?:number;
   draft?:Timeline;
+  lane?: LaneId;
+  taskId?: string;
+  finishRequired?:boolean;
+  laneChosen?:boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -199,11 +207,29 @@ const readLists = (checks: NonNullable<ReturnType<ReadCoverage['sceneCheck']>>[]
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, abortSignal } = options;
+  const laneCtx=ctx;
   const receipts = new ToolSaveReceipts(run,options.segment);
   ctx = receipts.context(ctx);
   let selectedClipIds = options.selectedClipIds;
+  let lane:LaneId=options.lane??'edit';
+  const taskId=options.taskId;
+  let laneChosen=options.laneChosen??true;
+  let finishRequired=options.finishRequired??true;
+  let requiredPersisted=finishRequired;
+  const noteToolIntent=(name:string)=>{if(name==='finish'||EDITOR_TOOL_DEFINITIONS[name as keyof typeof EDITOR_TOOL_DEFINITIONS]?.effect==='timeline')finishRequired=true;};
+  let timelineId=readRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
+  const timelineIdForLane=()=>timelineId;
+  let finishResult:FinishResult|undefined;
+  const taskScope={ownerId:run.ownerId,projectId:run.projectId,taskId:taskId??run.runId};
+  const ensureBaseline=async()=>{
+    if(!taskId)return;
+    const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
+    if(!task?.baselines.some(item=>item.timelineId===timelineId))await laneCtx.runMutation(internal.lanes.baseline,{...taskScope,baseline:await laneBaseline(timelineId,editSession.timeline,summarizeTimeline(editSession.timeline,assets).gaps)});
+  };
+
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
+  const sourceFrameRates=new Map<string,number>();
   let editMode = options.editMode ?? 'precise';
   const fastReview = new FastFrameReview(options.pendingFastFrames);
   const requirePrecise = async () => {
@@ -215,6 +241,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     let acrossCuts: string[] = [];
     if (name === 'readFrames') {
       const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number; crop?: object; momentsOnly?: boolean };
+      if(result.fps)sourceFrameRates.set(args.assetId,result.fps);
       const shots = readReference(assets.find(asset => asset._id === args.assetId)?.analysis?.reference)?.shots ?? [];
       coverage.noteCuts(args.assetId, shots.slice(1).map(shot => shot.start));
       // A map has no frames to look at; a crop or a sheet of one or two frames is a full-size look at its frames.
@@ -553,10 +580,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return (await mediaUrl(ctx, { r2Key: key }))!;
   };
   // Render frames of the saved (or this turn's staged) timeline as base64 JPEGs, as export draws them.
-  const renderFrames = async (times: number[], revision?: number) => {
+  const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string) => {
     await editSession.wait();
-    const timelineId = readRunTab(run.runId);
-    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(revision !== undefined ? { revision } : {}) });
+    const timelineId = targetTimelineId??readRunTab(run.runId);
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(revision !== undefined ? { revision } : {}) });
     const deadline = Date.now() + 280_000;
     let started = false;
     while (Date.now() < deadline) {
@@ -714,6 +741,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const switchTimeline = async (open: (revision: number) => Promise<{ timeline: Timeline; revision: number; timelineId: string }>) => {
     await verifyCurrentTimeline();
     const result = await editSession.switchTimeline(open);
+    timelineId=result.timelineId;
+    finishResult=undefined;
+    if(taskId)await laneCtx.runMutation(internal.lanes.switchLane,{...taskScope,timelineId,lane,reason:'Continuing this task in another timeline'});
+    await ensureBaseline();
     if (result.timelineChanged) {
       selectedClipIds = [];
       effectPlans = [];
@@ -769,6 +800,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       },
       toModelOutput: (ctx, options) => blueprintImages(ctx, options.output),
     }),
+    switchLane:createTool({metadata:EDITOR_TOOL_DEFINITIONS.switchLane,description:'Choose or confirm the lane before working, and say whether this request asks for edits or information only. Switch when the kind of work changes. Attempts and saved checks are preserved.',inputSchema:z.object({lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}),execute:async(_ctx,input)=>{
+      if(!taskId)throw new Error('Start a task first with startTask.');
+      await laneCtx.runMutation(internal.lanes.switchLane,{...taskScope,timelineId,...input});
+      lane=input.lane;laneChosen=true;finishRequired ||= input.taskType==='edit';requiredPersisted=finishRequired;finishResult=undefined;
+      if(['motion','recreate','explainer'].includes(lane))await requirePrecise();
+      return {lane,instructions:laneInstructions(lane),tools:availableToolNames()};
+    }}),
+    finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
+      if(!taskId)throw new Error('Start a task first with startTask.');
+      await editSession.wait();await ensureBaseline();
+      finishResult=await finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      if(finishResult.passed){
+        try{await editSession.publish();}
+        catch(error){finishResult=await laneCtx.runMutation(internal.lanes.recordFinish,{...taskScope,result:{...finishResult,passed:false,failures:[`The checked draft could not be saved: ${error instanceof Error?error.message:String(error)}`]}});}
+      }
+      console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
+      return {...finishResult,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?'Stop. Report these failures honestly; this task is unfinished.':'Repair the listed failures and call finish again.'};
+    }}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
       inputSchema: z.object({ toolName: z.string().min(1).max(100), inputSummary: z.string().max(600), happened: z.string().min(1).max(1000), expected: z.string().min(1).max(1000) }),
@@ -1410,7 +1459,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { result } = await blueprintCheck(checkId);
       return { ...blueprint, images: [{ label: `Preview at ${result.width}x${result.height}`, data: result.image, mimeType: 'image/jpeg' }] };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
-    readSkill: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.readSkill, description: "Load one editing skill or page. For finding moments or making shorts from a longer stream, VOD or podcast, read name clipping. For edits to existing footage, audio, captions, scenes or films, start with name scene-engine and page edit-lanes, which selects the workflow and checks. Read each needed skill or page once per conversation; reuse an earlier read unless that result was shortened. Returns Markdown instructions. No timeline changes.", inputSchema: z.object({ name: z.enum(EDITOR_SKILL_NAMES), page: z.string().max(80).optional().describe('A page listed at the end of the skill, for its deeper material.') }), execute: async (_ctx, { name, page }) => ({ name, ...(page ? { page } : {}), editMode, instructions: `${editModeInstructions(editMode)}\n\n${editorSkillInstructions(name, page)}` }) }),
+    readSkill:createTool({metadata:EDITOR_TOOL_DEFINITIONS.readSkill,description:"Load a skill or page available in the current task lane. Reuse previous reads. Returns instructions without editing the timeline.",inputSchema:z.object({name:z.string().min(1),page:z.string().max(80).optional()}),execute:async(_ctx,{name,page})=>({name,...(page?{page}:{}),lane,instructions:laneSkill(lane,name,page)})}),
     addScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addScene, description: "Add one animated scene: a TypeScript module (code) that builds plain HTML and animates it on a GSAP timeline, rendered full-frame on a free V layer for start..start+duration timeline seconds. Read scene-engine first, plus motion-design for launch and feature films or explainer-scenes for explainers and overlays on footage. Then give it matching sound as that skill says (explainers: one generateSound keyed to its beats in the same turn, right after building it, unless the user wants no sound or speech plays under it; music under the scene is no reason to skip). For a film (a launch film, a recreation, anything longer than one idea), use addFilm instead: one clip, one timeline, sections as markers. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the scene receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional(), kit: filmKitInput.optional() }), execute: async (_ctx, { title, code, brandKitId, media, blueprints, kit, ...timing }) => { checkSceneCode(code); const kitCode = kit === undefined ? undefined : prepareFilmKit(kit); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const mounted = blueprints?.length ? await sceneBlueprints(brandKitId, blueprints) : undefined; return checkpoint(t => placeScene(kitCode ? withFilmKit(t, kitCode).timeline : t, { title, code, ...timing, brand, media: images, blueprints: mounted }, kitCode)); } }),
     editScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editScene, description: "Replace an existing scene clip's code and/or title, or attach or refresh its brand kit, preserving its timing and layer. Read scene-engine (and motion-design or explainer-scenes, whichever made it) and inspectClip for the current code first. If the edit changes the scene's timing or motion, update its existing generated sound with editSound in the same turn (or generate one if it has none). A change to the film kit's shared code goes in kit, once, not into each beat. For a change to part of a film or scene, use patchScene instead of retyping the code; new code on a film's beat clip replaces the whole film in all its beats. Title-only edits need no scope. A code change isolated to one Beat infers scope; shared-code edits need scope for the requested sections. Binding-only refreshes without scope must render every existing section unchanged. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ clipId: z.string(), scope: scopeInput.optional(), title: z.string().trim().min(1).max(SCENE_LIMITS.title).optional(), code: z.string().min(1).optional(), brandKitId: z.string().nullable().optional().describe('Attach or refresh a brand kit on the scene; null removes it.'), media: sceneMediaInput.nullable().optional().describe('Replace the scene\'s images; null removes them all.'), blueprints: sceneBlueprintInput.nullable().optional().describe('Replace the mounted blueprints (refreshing their code from the kit); null removes them.'), kit: filmKitInput.optional().describe("The film kit's whole new code: replaces the shared module in every clip of the film, so a change to shared UI is made once.") }).refine(input => input.title !== undefined || input.code !== undefined || input.brandKitId !== undefined || input.media !== undefined || input.blueprints !== undefined || input.kit !== undefined, { message: 'Specify a title, code, brandKitId, media, blueprints or kit.' }), execute: async (_ctx, { clipId, scope, title, code, brandKitId, media, blueprints, kit }) => { if (code !== undefined) checkSceneCode(code); const kitCode = kit === undefined ? undefined : prepareFilmKit(kit); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const kitId = brandKitId ?? find(editSession.timeline, clipId).scene?.brand?.kitId; const mounted = blueprints?.length ? await sceneBlueprints(kitId, blueprints) : undefined; const change = (timeline: Timeline) => { const t = kitCode ? withFilmKit(timeline, kitCode).timeline : timeline; const clip = find(t, clipId); if (clip.kind !== 'scene' || !clip.scene) throw new Error('Choose a scene clip.'); const { brand: current, media: currentMedia, blueprints: currentBlueprints, ...scene } = clip.scene; const next = brandKitId === null ? undefined : brand ?? current; const nextMedia = media === null ? undefined : images ?? currentMedia; const nextCode = code ?? scene.code, nextBlueprints = mountFilmKit(nextCode, blueprints === null ? undefined : mounted ?? currentBlueprints, kitCode, timelineFilmKit(t)); const shown = (other: Clip['scene'] & {}, own: boolean) => ({ ...(({ brand: _b, media: _m, blueprints: _p, ...rest }) => rest)(other), title: own ? title ?? other.title : other.title, code: nextCode, ...(next ? { brand: next } : {}), ...(nextMedia?.length ? { media: nextMedia } : {}), ...(nextBlueprints?.length ? { blueprints: nextBlueprints } : {}) }); /* A film's beats share one code: its code, brand, media and blueprints change in every beat. */ if (scene.film) return { ...t, clips: t.clips.map(other => other.kind === 'scene' && other.scene?.code === scene.code ? { ...other, scene: shown(other.scene, other.id === clipId) } : other) }; return patchClip(t, clipId, { scene: shown(clip.scene, true) }); }; const scoped = await scopedChange(clipId, scope, change, 'edit'); if ('refusal' in scoped) return scoped.refusal; return { ...await checkpoint(change), ...scoped }; }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     addScenes: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addScenes, description: "Add several separate scene clips in one call, saved together. For a film whose motion runs from beat to beat (launch films, recreations), use addFilm instead. kit is the film's shared code, written once: one React module exporting the product UI components, type helpers, stage and palette, which every beat imports with `import { AppWindow, Title } from 'blueprint:film'`. Each scene is then only its own beat (usually under 6,000 characters). Later addScene and editScene calls reuse the kit already on the timeline; change it with editScene kit. Each scene saves or fails on its own: fix a failed one with addScene. Read scene-engine page react-scenes and motion-design first.", inputSchema: z.object({ kit: filmKitInput.optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo every scene receives as `brand`.'), scenes: z.array(z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() })).min(1).max(8) }), execute: async (_ctx, { kit, brandKitId, scenes }) => {
@@ -1966,5 +2015,39 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
+  const availableToolNames=():string[]=>laneChosen?Object.keys(tools).filter(name=>laneToolAllowed(lane,name)):['switchLane'];
+  for(const [name,tool] of Object.entries(tools) as [string,{execute?:(...args:never[])=>Promise<unknown>}][]){
+    const execute=tool.execute;if(!execute)continue;
+    tool.execute=async function(this:unknown,...args:never[]){
+      if(!laneChosen&&name!=='switchLane')throw new Error('Choose the task lane with switchLane before using editing tools.');
+      if(!laneToolAllowed(lane,name))throw new Error(laneToolError(lane,name));
+      const input=(args[0]??{}) as Record<string,unknown>;
+      if(name==='analyzeMedia'){
+        const mode=String(input.mode),allowed=mode==='transcribe'||mode==='shots'||mode==='beats'||(lane==='clip'||lane==='reel')&&['track','facecam','speakers'].includes(mode)||lane==='recreate'&&mode==='reference';
+        if(!allowed)throw new Error(`Analysis mode ${mode} is unavailable in the ${lane} lane. Use saved transcript/audio/shot signals, or switchLane for reference work.`);
+      }
+      if(name==='readFrames'&&lane==='recreate'&&input.fps!==undefined){
+        const asset=assets.find(asset=>asset._id===input.assetId),fps=sourceFrameRates.get(String(input.assetId))??asset?.analysis?.shots?.fps;
+        if(fps&&Number(input.fps)<fps)throw new Error(`Recreation frame windows require full source fps (${fps}).`);
+      }
+      if(taskId){
+        const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
+        if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
+        if(task?.result?.exhausted)throw new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${task.result.failures.join(' ')}`);
+        await ensureBaseline();
+      }
+      noteToolIntent(name);
+      if(taskId&&finishRequired&&!requiredPersisted){await laneCtx.runMutation(internal.lanes.requireFinish,taskScope);requiredPersisted=true;}
+      const before=await timelineHistoryKey(editSession.timeline);
+      const output=await execute.apply(this??tool,args) as Record<string,unknown>;
+      const after=await timelineHistoryKey(editSession.timeline);
+      if(before!==after||name==='createTimeline'||name==='openTimeline')finishResult=undefined;
+      if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after){
+        const {images:_images,...evidence}=output;
+        await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:{tool:name,timelineId,fingerprint:after,input,output:evidence}});
+      }
+      return output;
+    };
+  }
+  return { tools, editSession, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
 }
