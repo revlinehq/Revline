@@ -21,3 +21,4 @@
 
 @keyframes revline-preparation-breathe{0%,100%{opacity:.35}50%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.footage-preparation .processing-status[data-state=working] .processing-status-sweep::after{width:100%;animation:revline-preparation-breathe 1.8s ease-in-out infinite}.footage-preparation .processing-status[data-state=working] .processing-status-heading>.revline-brand{animation:revline-preparation-breathe 1.8s ease-in-out infinite}}
+.footage-preparation .processing-status-measured{position:absolute;top:0;left:0;width:100%;max-width:100%;margin:0}

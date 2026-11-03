@@ -138,6 +138,7 @@ export type MediaAsset = {
   /** Set on a processed copy of derivedOf: a freeze still, or slow-motion/upscaled video on the same source timeline. */
   derivedOf?: string; derivedStart?: number; derivation?: 'freeze' | 'slowmo' | 'upscale' | 'parallax';
   analysisKinds?: string[];
+  footageProgress?: number;
   preparation?: {status:'processing'|'failed';message:string};
   waveform?: AudioWaveform;
   analysis?: {

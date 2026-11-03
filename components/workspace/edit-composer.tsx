@@ -1,5 +1,6 @@
 'use client';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from '@/components/ui/input-group';
+import { FootageProgressBar } from '@/components/editor/footage-progress-bar';
 import { Card } from '@/components/ui/card';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
@@ -125,7 +126,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     try { await onSubmit(); } catch (e) { setError(userError(e, 'Could not send your edit.')); } finally { sendInFlight.current=false;setSending(false); }
   }
   function chip(attachment: ComposerAttachment) {
-    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' && attachment.kind !== 'model' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
+    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' && attachment.kind !== 'model' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <FootageProgressBar progressKey={`asset:${attachment.id}`} label={`Preparing ${attachment.name}`} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
   }
   const editFields = <>
     <Popover open={menuOpen && !busy && fieldsFocused} onOpenChange={open => { if (!open) setCommandDismissed(true); }}>

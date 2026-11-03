@@ -30,3 +30,5 @@
 .composer-header .composer-header-chip{height:24px;flex-shrink:0;gap:7px;padding:0;border:0;border-radius:4px;background:transparent;color:#999;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:400;line-height:20px;box-shadow:none;outline:none}
 .composer-header .composer-header-chip svg{width:12px;height:12px}
 .composer-header .composer-header-chip:hover,.composer-header .composer-header-chip[data-state=open]{background:#222;color:#ccc}
+.composer-attachment [data-slot=progress]{position:absolute;bottom:0;left:4px;width:calc(100% - 8px);height:2px}
+.composer-attachment [data-slot=progress-indicator]{background:var(--revline-accent)}

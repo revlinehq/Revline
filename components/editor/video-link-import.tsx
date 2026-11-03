@@ -5,8 +5,10 @@ import { Link2, LoaderCircle, X } from 'lucide-react';
 import { ProcessingStatus } from './processing-status';
 import { parseVideoLink } from '@/lib/editor/video-link';
 import './video-link-import.css';
+import { transferProgress } from '@/lib/editor/footage-progress';
+import { useFootageProgress } from '@/lib/editor/footage-progress-store';
 
-export type VideoImportState = { _id: string; status: string; progress: number; error?: string };
+export type VideoImportState = { _id: string; status: string; progress: number; overallProgress?: number; progressKey?: string; error?: string };
 
 export function VideoLinkImport({ onImport, disabled = false }: { onImport: (url: string) => Promise<void>; disabled?: boolean }) {
   const id = useId();
@@ -29,7 +31,8 @@ export function VideoLinkImport({ onImport, disabled = false }: { onImport: (url
   </form>;
 }
 
-export function VideoImportProgress({ task }: { task: VideoImportState }) {
+export function VideoImportProgress({ task, progressKey }: { task: VideoImportState; progressKey?: string }) {
+  const progress = useFootageProgress(progressKey ?? task.progressKey ?? `task:${task._id}`, task.overallProgress ?? transferProgress(task.progress));
   const failed = task.status === 'failed';
   const [dismissed, setDismissed] = useState(false);
   const storageKey = `revline:import-notice:${task._id}`;
@@ -42,7 +45,7 @@ export function VideoImportProgress({ task }: { task: VideoImportState }) {
     ? 'Your video is saved in Sources. Use + beside it to add it to your timeline.'
     : task.error?.replace(/^.*?(?:Uncaught ConvexError:|Server Error)\s*/s, '').split(/\n\s+at /)[0] || 'Try another public video link.';
   return <div className="video-import-progress">
-    <ProcessingStatus state={failed?'error':'working'} label={failed ? 'Video import needs attention' : task.status === 'retrying' ? 'Retrying video import…' : task.status === 'queued' ? 'Video import queued…' : 'Importing your video…'} detail={failed ? message : 'Downloading and preparing your footage. You can leave this page.'} progress={task.status==='running'&&task.progress>0?task.progress:null}/>
+    <ProcessingStatus state={failed?'error':'working'} label={failed ? 'Video import needs attention' : task.status === 'retrying' ? 'Retrying video import…' : task.status === 'queued' ? 'Video import queued…' : task.status === 'preparing' ? 'Preparing your footage…' : 'Importing your video…'} detail={failed ? message : 'Downloading and preparing your footage. You can leave this page.'} progress={progress}/>
     {failed && <button type="button" className="dismiss-import-notice" aria-label="Dismiss import notice" onClick={() => { setDismissed(true); try { localStorage.setItem(storageKey, 'dismissed'); } catch { /* Dismiss still works when storage is unavailable. */ } }}><X size={14}/></button>}
   </div>;
 }
