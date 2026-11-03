@@ -1,20 +1,18 @@
+import { runMediaCommand as run } from '../server/media-command';
 import { workerToolPath } from '../server/worker-tool-path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AnalysisError } from './errors';
 import { BEAT_ANALYSIS_ENGINE, type BeatMap } from './beat-map';
 
-const run = promisify(execFile);
 
 /** Run the pinned music tracker in the background worker, never in a browser. */
 export async function detectMusicBeats(source: string, duration: number, signal: AbortSignal): Promise<BeatMap> {
   const directory = await mkdtemp(join(tmpdir(), 'revline-beats-'));
   try {
     const audio = join(directory, 'music.wav');
-    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
+    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio], { signal, timeout: /^https?:\/\//.test(source) ? undefined : 60_000, maxBuffer: 1024 * 1024 });
     const python = workerToolPath(process.env.BEAT_TRACK_PYTHON, '.data/beat-tracking/bin/python');
     const model = workerToolPath(process.env.BEAT_TRACK_MODEL_PATH, '.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt');
     let stdout: string;

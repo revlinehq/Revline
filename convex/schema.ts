@@ -126,7 +126,7 @@ export const timelineValidator = v.object({ audioNormalization:v.optional(v.obje
 export { assistantRecoveryValidator } from './lib/assistant_run';
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
-  aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number()})),
+  aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number(),videoUnavailable:v.optional(v.string())})),
   // The connected app driving an MCP run (its OAuth client name), shown in the editor's chat.
   aiAgentName:v.optional(v.string()),
   // An MCP agent counts as working until this time; every tool call on the project extends it.
