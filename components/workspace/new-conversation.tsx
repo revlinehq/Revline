@@ -85,7 +85,7 @@ export function NewConversation() {
   const showStartingPoints = draftReady && projects !== undefined && library !== undefined && !hasFootage;
   const headline = hasFootage
     ? firstName ? `${firstName}, let’s edit your footage.` : 'Let’s edit your footage.'
-    : firstName ? `Hi, ${firstName}. Let’s create.` : 'Welcome. Let’s create.';
+    : 'From an idea to a first cut.';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
