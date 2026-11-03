@@ -24,3 +24,6 @@
 .inspector-select-menu[aria-label="Editing mode options"] .inspector-select-option-copy small{font-size:11px;white-space:nowrap}
 html[data-workspace-theme=dark] .assistant-picker-menu.workspace-menu,html[data-workspace-theme=dark] .inspector-select-menu.workspace-menu[aria-label="Editing mode options"]{background:#2a2a2a}
 html[data-workspace-theme=dark] .assistant-model-picker,html[data-workspace-theme=dark] .assistant-picker-menu,html[data-workspace-theme=dark] .inspector-select-menu[aria-label="Editing mode options"]{--ws-hover:#363636;--ws-artifact-border:#3a3a3a}
+.assistant-effort-xhigh{background:linear-gradient(100deg,#7c3aed 0%,#a876ff 35%,#e4d4ff 50%,#a876ff 65%,#7c3aed 100%) 0 0/200% 100%;-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;font-weight:500;animation:assistant-effort-shimmer 2.6s linear infinite}
+@keyframes assistant-effort-shimmer{to{background-position:-200% 0}}
+@media(prefers-reduced-motion:reduce){.assistant-effort-xhigh{animation:none;background-position:30% 0}}
