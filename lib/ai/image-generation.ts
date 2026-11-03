@@ -50,13 +50,21 @@ const tokenDetails = z.object({ textTokens: z.number().int().nonnegative(), imag
 /** Uses the shared key fallback and the SDK's bounded retries; PNG bytes are stored untouched. */
 export async function generateImagePlates(input: ImageGenerationInput, references: string[], abortSignal: AbortSignal) {
   if (!activeOpenAIKey()) throw new Error('Image generation is not configured (OPENAI_API_KEY and OPENAI_API_KEY_FALLBACK are missing).');
+  const signal = AbortSignal.any([abortSignal, AbortSignal.timeout(240_000)]);
   let result;
   try {
+    // These URLs come only from owned project storage. Read them with the runtime's fetch:
+    // the SDK's Node URL downloader dynamically requires undici, absent in Convex actions.
+    const referenceImages = await Promise.all(references.map(async (url, index) => {
+      const response = await fetch(url, { signal });
+      if (!response.ok) throw new Error(`Reference image ${index + 1} could not be read (HTTP ${response.status} ${response.statusText}).`);
+      return new Uint8Array(await response.arrayBuffer());
+    }));
     result = await generateOpenAIImage({
       model: editorOpenAI().image(IMAGE_MODEL),
-      prompt: references.length ? { text: input.prompt, images: references } : input.prompt,
+      prompt: referenceImages.length ? { text: input.prompt, images: referenceImages } : input.prompt,
       n: input.count ?? 1, maxImagesPerCall: 4, size: imageGenerationSize(input), maxRetries: 2,
-      abortSignal: AbortSignal.any([abortSignal, AbortSignal.timeout(240_000)]),
+      abortSignal: signal,
       providerOptions: { openai: { quality: imageGenerationQuality(input), background: input.transparentBackground ? 'transparent' : 'opaque', outputFormat: 'png' } },
     });
   } catch (error) {

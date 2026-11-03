@@ -52,7 +52,9 @@ export const saveStoryboard = internalMutation({
         frames.push({ asset, shot });
       }
       const anchor = frames[0]?.asset;
-      for (const { asset } of frames.slice(1)) if (!asset.imageGeneration!.referenceAssetIds.includes(anchor._id)) throw new ConvexError('Pass the first frame of this stage as a reference for the rest.');
+      const priorAnchor = style ? previous?.styleAnchorAssetId : previous?.shots[0]?.assetId;
+      const anchors = [anchor?._id, priorAnchor].filter((id): id is Id<'assets'> => !!id);
+      for (const { asset } of frames.slice(1)) if (!asset.imageGeneration!.referenceAssetIds.some(id => anchors.includes(id))) throw new ConvexError('Pass the first frame of this stage as a reference for the rest.');
       return frames;
     };
     const roughIds = args.stage === 'concept' ? [] : args.frameAssetIds ?? previous?.shots.map(shot => shot.assetId) ?? [];
