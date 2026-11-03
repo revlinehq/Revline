@@ -1,0 +1,161 @@
+[
+  {
+    "state": "has-video-desktop",
+    "attachments": 1,
+    "centre": [
+      720,
+      500
+    ],
+    "headline": "Test, let’s edit your footage.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 0,
+    "viewport": [
+      1440,
+      1000
+    ]
+  },
+  {
+    "state": "has-video-phone",
+    "attachments": 1,
+    "centre": [
+      195,
+      422
+    ],
+    "headline": "Test, let’s edit your footage.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 0,
+    "viewport": [
+      390,
+      844
+    ]
+  },
+  {
+    "state": "has-video-small-phone",
+    "attachments": 1,
+    "centre": [
+      160,
+      284
+    ],
+    "headline": "Test, let’s edit your footage.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 0,
+    "viewport": [
+      320,
+      568
+    ]
+  },
+  {
+    "state": "empty-desktop",
+    "attachments": 0,
+    "centre": [
+      720,
+      500
+    ],
+    "headline": "Hi, Test. Let’s create.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 1,
+    "viewport": [
+      1440,
+      1000
+    ]
+  },
+  {
+    "state": "empty-phone",
+    "attachments": 0,
+    "centre": [
+      195,
+      422
+    ],
+    "headline": "Hi, Test. Let’s create.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 1,
+    "viewport": [
+      390,
+      844
+    ]
+  },
+  {
+    "state": "empty-small-phone",
+    "attachments": 0,
+    "centre": [
+      160,
+      284
+    ],
+    "headline": "Hi, Test. Let’s create.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 1,
+    "viewport": [
+      320,
+      568
+    ]
+  },
+  {
+    "state": "saved-media-desktop",
+    "attachments": 0,
+    "centre": [
+      720,
+      500
+    ],
+    "headline": "Zura, let’s edit your footage.",
+    "headlineOneLine": true,
+    "horizontalOverflow": false,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 0,
+    "viewport": [
+      1440,
+      1000
+    ]
+  },
+  {
+    "state": "saved-media-phone",
+    "attachments": 0,
+    "centre": [
+      195,
+      422
+    ],
+    "headline": "Zura, let’s edit your footage.",
+    "headlineOneLine": true,
+    "offset": [
+      0,
+      0
+    ],
+    "starters": 0,
+    "viewport": [
+      390,
+      844
+    ]
+  }
+]
