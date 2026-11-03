@@ -1,5 +1,3 @@
-import { threeScenesPage } from './three-scenes';
-import { threeCraftPage } from './three-craft';
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
 import type { EditorSkill, EditorSkillPage } from './index';
@@ -25,8 +23,6 @@ const checklistPage: EditorSkillPage = {
   name: 'checklist',
   description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
-
-For 3D, inspect getFrames for material highlight/dark bands, bevels, contact alignment and title clearance (three-craft).
 
 For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
@@ -87,9 +83,6 @@ function Title({ text }: { text: string }) {
 - \`progress\`, \`mix\`, \`ramp(t, times, values, ease)\`, \`spring(t, { from, to, stiffness, damping })\`, \`ease(name)\`: eases use GSAP names.
 - \`<Transition>\` and \`<Neighbour role="from" | "to">\` for transition clips between standalone scenes (inside a film, a move across a cut is just a tween). \`waitFor(promise)\` holds a frame until it settles.
 - Imports: \`revline\`, \`react\` and \`gsap\` with its plugins (\`gsap/SplitText\` etc.). Fonts, media, icons and the brand work as in GSAP scenes.
-
-## 3D layers
-Import from \`revline/three\` to mix a transparent React Three Fiber layer with HTML and GSAP. Read page \`three-scenes\` before authoring cameras, lights, primitives, 3D text or GLB/glTF models.
 
 ## Performance
 Only components that read time re-render; static parts render once. A useTimeline component does not re-render per frame. Keep heavy static UI in components that never call useBeat, wrap big static subtrees in \`<Still>\`, and prefer \`useBeat(select)\` in hot components.`,
@@ -156,5 +149,5 @@ Real screenshots, screen recordings, photos and logos from the project's media c
 \`\`\`ts
 ${STARTER_SCENE_CODE}\`\`\`
 `,
-  pages: [threeScenesPage, threeCraftPage, editLanesPage, reactScenesPage, checklistPage],
+  pages: [editLanesPage, reactScenesPage, checklistPage],
 };

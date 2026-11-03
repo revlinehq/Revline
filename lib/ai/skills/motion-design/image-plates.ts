@@ -2,20 +2,19 @@ import type { EditorSkillPage } from '../index';
 
 export const imagePlatesPage: EditorSkillPage = {
   name: 'image-plates',
-  description: 'Assets on demand: choose code, icons, traced shapes or three.js before generating subjects, textures, environment maps, backgrounds and cut-outs. New films start with motion-design ideation.',
+  description: 'Assets on demand: choose code, icons, traced shapes before generating subjects, textures, backgrounds and cut-outs. New films start with motion-design ideation.',
   body: `# Image plates
 
 For a new launch film, use motion-design page ideation. The user's accepted angle leads straight to building.
 
-During a build, use generateImage on demand for a photoreal subject, texture, environment map, background plate or transparent cut-out. The tool saves PNGs directly into project media and returns assetIds, signed assets[].url links, previews, quality and estimatedUsd (null means the provider did not report enough usage to estimate it). Each variant costs image tokens; start with one and request alternatives only when useful. Assets default to medium quality; low is cheaper for exploration. A failed call includes its actual cause; correct invalid input or unavailable access before trying again.
+During a build, use generateImage on demand for a photoreal subject, texture, background plate or transparent cut-out. The tool saves PNGs directly into project media and returns assetIds, signed assets[].url links, previews, quality and estimatedUsd (null means the provider did not report enough usage to estimate it). Each variant costs image tokens; start with one and request alternatives only when useful. Assets default to medium quality; low is cheaper for exploration. A failed call includes its actual cause; correct invalid input or unavailable access before trying again.
 
 ## Decision order
 1. Brand logos and app icons: findIcon returns the real artwork. Hand-made shapes from a reference: traceShape, then use its paths.
 2. Anything that reads better as built type, vector or GSAP motion: build it in HTML/CSS/SVG and scene code. Keep UI, cards, gradients, borders and editable graphics as code.
-3. 3D: build it in three.js with primitives and extrusions; read scene-engine pages three-scenes and three-craft. Use a GLB via uploadMedia and <Model> only when the USER supplies one. generateImage can supply texture, environment-map and background plates for a 3D scene; it does not produce geometry. A generated environment-map image is a 2D PNG, not an HDR lighting rig. Follow three-scenes/three-craft for supported texture loading and renderer limits; do not invent an unsupported environment loader.
-4. Otherwise use generateImage: photoreal or illustrated hands, physical objects, products, photos, textures, backgrounds and cut-outs. For an isolated subject, preserve room around its silhouette; for a texture or backdrop, describe its intended coverage and crop.
+3. Otherwise use generateImage: photoreal or illustrated hands, physical objects, products, photos, textures, backgrounds and cut-outs. For an isolated subject, preserve room around its silhouette; for a texture or backdrop, describe its intended coverage and crop.
 
-A reference video supplies framing, palette, material and motion observations. Describe a fresh subject or material from those observations. Never generate, edit or upload reproductions of its frames, whole compositions, UI or typography, and never use an extracted reference-video frame as a reference image. Rebuild those layers in code and generate only the assets they need. Image-to-3D generation is a possible future capability, not an available tool.
+A reference video supplies framing, palette, material and motion observations. Describe a fresh subject or material from those observations. Never generate, edit or upload reproductions of its frames, whole compositions, UI or typography, and never use an extracted reference-video frame as a reference image. Rebuild those layers in code and generate only the assets they need.
 
 ## Prompt and generate
 Give SEVEN concrete prompt items: medium/format, one reference era/discipline, composition/framing, lighting, 2–4 named colours, texture/material and exclusions. Example: "Studio product photograph; 1980s catalogue; one complete beige CRT, three-quarter view; broad softbox left; ivory, charcoal, warm grey; matte plastic and fine grain; no text, logos, flares or extra objects." Use the film's actual palette for backgrounds, textures and image fills.

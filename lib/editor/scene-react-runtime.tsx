@@ -211,7 +211,7 @@ export function useTimeline<T extends object = HTMLDivElement>(build: (tl: gsap.
   latest.current = build;
   useLayoutEffect(() => {
     const el = ref.current;
-    if (!el) throw new Error('useTimeline needs its ref on an HTML element or Three.js object, such as <div ref={ref}> or <group ref={ref}>.');
+    if (!el) throw new Error('useTimeline needs its ref on an element, such as <div ref={ref}>.');
     if (!gsap) throw new Error('GSAP is not loaded in this scene.');
     const engine = gsap;
     let tl!: gsap.core.Timeline;

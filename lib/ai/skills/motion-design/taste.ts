@@ -5,7 +5,7 @@ export const tastePage: EditorSkillPage = {
   description: 'Read before original motion design or learning from a style reference: composition judgments, user taste, and a short rendered critique. Faithful copies use reference-footage recreation.',
   body: `# Taste: choose before choreographing
 
-For original films and creative restyling, use these judgments before choosing GSAP techniques. They are questions to resolve for this subject, not a shot recipe. Explicit direction and the project brief win. Faithful copies stay with reference-footage page \`recreation\`; scene-engine owns rendering and verification, overall-styling owns house styling, and three-craft owns 3D execution.
+For original films and creative restyling, use these judgments before choosing GSAP techniques. They are questions to resolve for this subject, not a shot recipe. Explicit direction and the project brief win. Faithful copies stay with reference-footage page \`recreation\`; scene-engine owns rendering and verification, overall-styling owns house styling.
 
 ## Anchor taste in this user
 Read the memories returned by getProject. Use recallMemory for a relevant saved style's full recipe before applying it. When feedback reveals a lasting preference, use remember with the user's verdict and its scope (what worked or failed, and why if they said); distinguish their words from your inference. One rejected cursor is not a ban on all cursors. Project-only direction belongs in updateBrief. Latest explicit feedback wins over older memory.
