@@ -1,7 +1,7 @@
 // One ordered release on the PC. Dispatch is always read-only; only a push to
 // protected main can reach the mutating commands below.
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readFile, writeFile, mkdir, rename, symlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename, symlink, access } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { parseEnv } from 'node:util';
@@ -12,13 +12,13 @@ const dry = process.argv.includes('--dry-run');
 const repo = 'zuraHQ/revline-editor';
 const state = join(homedir(), '.local/state/revline-deploy');
 const primary = join(homedir(), 'Developer/revline-main');
-const productionFile = join(homedir(), '.config/revline-deploy/production.env');
+const productionFile = join(primary, '.env.production.local');
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 let step = 'Initialize release';
 const sha = git('rev-parse', 'HEAD');
 const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true' };
 // Never inherit a deployment selection or provider token from another session.
-for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN']) delete env[name];
+for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
 const targets = [
   { name: 'production', deployment: 'different-gnu-398', file: productionFile },
   { name: 'dev', deployment: 'majestic-alpaca-541', file: join(primary, '.env.local') },
@@ -67,6 +67,23 @@ async function restartDevelopment() {
 
 try {
   if (!dry && (env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== 'refs/heads/main' || env.GITHUB_REPOSITORY !== repo || env.GITHUB_SHA !== sha)) throw new Error('Live releases require the main push workflow at its exact commit. Use --dry-run for dispatch.');
+  step = 'Check required PC production environment file';
+  let production;
+  try { production = parseEnv(await readFile(productionFile, 'utf8')); }
+  catch (error) {
+    if (error.code === 'ENOENT') throw new Error(`Missing required file: ${productionFile}. The user must place their production environment file on this PC once. The workflow never creates it or copies secrets.`);
+    throw error;
+  }
+  mask(production);
+  if (production.CONVEX_DEPLOYMENT !== 'prod:different-gnu-398' || production.NEXT_PUBLIC_CONVEX_URL !== 'https://different-gnu-398.convex.cloud') throw new Error(`${productionFile} must target prod:different-gnu-398 and https://different-gnu-398.convex.cloud.`);
+  step = 'Check for a manual production release';
+  const manualLock = join(primary, '.data/production-releases/release.lock');
+  try { await access(manualLock); throw new Error(`A manual production release holds ${manualLock}. Wait for it to finish before running this workflow.`); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
+  // The frontend's build helper falls back to committed live public settings only
+  // in a clean checkout. Never expose the primary processor/Convex env file here.
+  try { await access('.env.production.local'); throw new Error('Runner checkout contains .env.production.local. Frontend builds require a clean checkout; do not copy or link the PC production file here.'); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
   await mkdir(state, { recursive: true, mode: 0o700 });
   let base;
   if (dry && env.RELEASE_BASE) base = git('rev-parse', `${env.RELEASE_BASE}^{commit}`);
@@ -83,10 +100,6 @@ try {
   const dev = parseEnv(await readFile(targets[1].file, 'utf8'));
   mask(dev);
   if (dev.CONVEX_DEPLOYMENT !== 'dev:majestic-alpaca-541' || dev.NEXT_PUBLIC_CONVEX_URL !== 'https://majestic-alpaca-541.convex.cloud') throw new Error('PC development env targets the wrong backend.');
-  const publicConfig = JSON.parse(await readFile('wrangler.jsonc', 'utf8')).vars;
-  await mkdir(join(homedir(), '.config/revline-deploy'), { recursive: true, mode: 0o700 });
-  // Public selectors only. Production secrets stay on their existing services.
-  await writeFile(productionFile, Object.entries({ ...publicConfig, CONVEX_DEPLOYMENT: 'prod:different-gnu-398' }).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join('\n'), { mode: 0o600 });
   await symlink(targets[1].file, '.env.local').catch(error => { if (error.code !== 'EEXIST') throw error; });
   await npm('Install dependencies', ['ci']);
   await npm('Install agent runner dependencies', ['run', 'agent-runner:install']);
@@ -140,7 +153,7 @@ try {
     if (!dry) for (const kind of ['processor', 'exports']) if (changed(kind)) await check(`${target.name}: verify Fly ${kind}`, () => verifyFly(target.deployment, kind, env));
   }
   if (changed('frontend')) {
-    const options = { env: { ...env, REVLINE_FRONTEND_ENV_FILE: productionFile } };
+    const options = { env };
     if (dry) {
       await npm('Build production frontend', ['run', 'build:cloudflare'], options);
       await node('Production frontend upload (dry run)', ['node_modules/wrangler/bin/wrangler.js', 'deploy', '--config', 'dist/server/wrangler.json', '--dry-run']);

@@ -35,6 +35,19 @@ jobs:
       RELEASE_BASE: ${{ inputs.base }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
+      - name: Check PC production environment and manual release lock
+        shell: bash
+        run: |
+          file="$HOME/Developer/revline-main/.env.production.local"
+          if [ ! -f "$file" ]; then
+            echo "::error::Missing required file: $file. The user must place their production environment file on this PC once; this workflow never creates it or copies secrets."
+            exit 1
+          fi
+          lock="$HOME/Developer/revline-main/.data/production-releases/release.lock"
+          if [ -e "$lock" ]; then
+            echo "::error::A manual production release holds $lock. Wait for it to finish."
+            exit 1
+          fi
       - uses: actions/checkout@v4
         id: checkout
         with:

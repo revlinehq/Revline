@@ -51,7 +51,7 @@ export async function verifyFly(deployment, kind, env) {
     const machines = JSON.parse(await command('flyctl', ['machine', 'list', '-a', app, '--json'], { env, quiet: true }));
     const old = machines.filter(machine => !['destroyed', 'destroying'].includes(machine.state) && machine.config?.image !== image);
     for (const machine of old.filter(machine => ['stopped', 'failed'].includes(machine.state))) {
-      await command('flyctl', ['machine', 'destroy', machine.id, '--force', '-a', app], { env });
+      await command('flyctl', ['machine', 'destroy', machine.id, '-a', app], { env });
     }
     const active = old.filter(machine => !['stopped', 'failed'].includes(machine.state));
     if (!active.length) { console.log(`Verified Fly ${app}: image ${image}; all remaining machines use it (scale-to-zero allowed).`); return; }
