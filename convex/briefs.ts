@@ -37,7 +37,7 @@ export const saveStoryboard = internalMutation({
     const brief = await row(ctx, args.projectId), previous = brief?.storyboard?.name === args.name ? brief.storyboard : undefined;
     const concepts = args.concepts ?? previous?.concepts, chosenConcept = args.chosenConcept ?? previous?.chosenConcept;
     if (!concepts || concepts.length < 2 || concepts.length > 3 || !Number.isInteger(chosenConcept) || chosenConcept! < 1 || chosenConcept! > concepts.length) throw new ConvexError('Save 2 concepts (optionally a third wildcard) and the user’s chosen concept number.');
-    if (concepts.some(concept => concept.beats.length < 4 || concept.beats.length > 6)) throw new ConvexError('Keep each concept to 4–6 one-line shot beats.');
+    if (concepts.some(concept => 'text' in concept ? !concept.text.trim() || concept.text.trim().split(/\s+/).length > 50 : concept.beats.length < 4 || concept.beats.length > 6)) throw new ConvexError('Keep each concept to a name and at most 50 words of visible actions and exact on-screen text.');
     if (args.stage !== 'concept' && !previous?.chosenConcept) throw new ConvexError('Save the approved text concept before drawing the board.');
     const promise = args.promise ?? previous?.promise;
     if (!promise?.trim()) throw new ConvexError('Include the film’s one-sentence promise.');
@@ -77,9 +77,10 @@ export const saveStoryboard = internalMutation({
     }
     const now = Date.now();
     const stages = ['concept', 'rough', 'style', 'animatic'];
+    const selectedConcept = concepts[chosenConcept! - 1];
     const storyboard = {
       name: args.name, context: args.context, promise, aspectRatio: args.aspectRatio, stage: args.stage,
-      concepts, chosenConcept: chosenConcept!, direction: concepts[chosenConcept! - 1].look,
+      concepts, chosenConcept: chosenConcept!, ...('look' in selectedConcept ? { direction: selectedConcept.look } : {}),
       ...(styles.length ? { styleAnchorAssetId: styles[0].asset._id, styleFrames: styles.map(({ asset, shot }) => ({ assetId: asset._id, shotIndex: shot.shotIndex })) } : {}),
       ...(args.stage === 'animatic' ? { animaticTimelineId: args.animaticTimelineId } : {}),
       approvalNote: args.approvalNote, approvedAt: now,

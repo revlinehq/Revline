@@ -6,6 +6,7 @@ import { internal } from './_generated/api';
 import { requireEditorAccess } from './lib/billing_access';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { hydrateAsset } from './lib/asset_analysis';
+import { mediaUrl } from './lib/media_storage';
 import type { Id } from './_generated/dataModel';
 
 const scope = { ownerId: v.string(), projectId: v.id('projects'), runId: v.string() };
@@ -24,14 +25,14 @@ export const prepare = internalMutation({ args: { ...scope, count: v.number(), s
   if (args.storyboardName) {
     const brief = await ctx.db.query('projectBriefs').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
     const board = brief?.storyboard;
-    if (!board?.chosenConcept || board.name !== args.storyboardName) throw new ConvexError('Choose and save the approved text concept before generating any storyboard image.');
+    if (!board?.chosenConcept || board.name !== args.storyboardName) throw new ConvexError('Choose and save the user-approved text concept before generating any storyboard image. Never invent an approval.');
     if (args.storyboardPhase === 'style' && !['rough', 'style', 'animatic'].includes(board.stage ?? '')) throw new ConvexError('Approve the rough board before generating final-look style frames.');
   }
   return null;
 } });
 
 /** Candidate images reach the agent first; only reviewed frames appear in the composer grid. */
-export const present = internalMutation({ args: { ...scope, assetIds: v.array(v.id('assets')), reviewNote: v.string() }, returns: v.array(v.id('assets')), handler: async (ctx, args) => {
+export const present = internalMutation({ args: { ...scope, assetIds: v.array(v.id('assets')), reviewNote: v.string() }, returns: v.array(v.object({ assetId: v.id('assets'), shotIndex: v.number(), url: v.string() })), handler: async (ctx, args) => {
   const project = await projectRun(ctx, args.projectId, args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
   await requireEditorAccess(ctx, args.ownerId);
@@ -43,8 +44,14 @@ export const present = internalMutation({ args: { ...scope, assetIds: v.array(v.
     if (frames.length && (shot.name !== frames[0].shot.name || shot.phase !== frames[0].shot.phase)) throw new ConvexError('Present one storyboard stage at a time.');
     frames.push({ asset, shot });
   }
-  for (const { asset, shot } of frames) await ctx.db.patch(asset._id, { imageGeneration: { ...asset.imageGeneration!, storyboard: { ...shot, presented: true, reviewNote: args.reviewNote } } });
-  return args.assetIds;
+  const presented = [];
+  for (const { asset, shot } of frames) {
+    const url = await mediaUrl(ctx, asset);
+    if (!url) throw new ConvexError(`${asset.fileName} has no readable image file.`);
+    await ctx.db.patch(asset._id, { imageGeneration: { ...asset.imageGeneration!, storyboard: { ...shot, presented: true, reviewNote: args.reviewNote } } });
+    presented.push({ assetId: asset._id, shotIndex: shot.shotIndex, url });
+  }
+  return presented;
 } });
 
 /** A lost save acknowledgement must never delete an asset that actually committed. */
