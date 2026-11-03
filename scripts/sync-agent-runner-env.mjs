@@ -11,8 +11,9 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.argv[2];
+const dryRun = process.argv.includes('--dry-run');
 if (target !== 'dev' && target !== 'production') throw new Error('Usage: node scripts/sync-agent-runner-env.mjs dev|production');
-const prod = target === 'production' ? ['--prod'] : [];
+const prod = ['--deployment', target === 'production' ? 'different-gnu-398' : 'majestic-alpaca-541'];
 const config = join(root, 'cloudflare/agent-runner', target === 'production' ? 'wrangler.production.jsonc' : 'wrangler.jsonc');
 /** Read by the turn (lib/ai, convex/lib/editorToolkit.ts, convex/lib/media_storage.ts). Add a name when the turn starts reading it. */
 const TURN_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_API_KEY_FALLBACK', 'OPENAI_BASE_URL', 'GOOGLE_GENERATIVE_AI_API_KEY', 'ELEVENLABS_API_KEY', 'GEMINI_VIDEO_MODEL', 'GEMINI_FRAME_MODEL',
@@ -34,10 +35,12 @@ const values = Object.fromEntries(listed.split('\n').flatMap(line => { const at 
 // AGENT_RUNNER_SECRET signs calls both ways; AGENT_RUNNER_RUN_KEY issues run tokens and never leaves Convex.
 for (const name of ['AGENT_RUNNER_SECRET', 'AGENT_RUNNER_RUN_KEY']) {
   if (values[name]) continue;
+  if (dryRun) { console.log(`${name} would be created on ${target}.`); continue; }
   values[name] = randomBytes(32).toString('hex');
   await run('npx', ['convex', 'env', 'set', name, ...prod], values[name]);
 }
 const secrets = Object.fromEntries([...TURN_ENV, 'AGENT_RUNNER_SECRET'].flatMap(name => values[name] ? [[name, values[name]]] : []));
+if (dryRun) { console.log(`Validated ${Object.keys(secrets).length} runner settings on ${target}; no secrets copied or changed.`); process.exit(0); }
 const directory = await mkdtemp(join(tmpdir(), 'agent-runner-env-'));
 try {
   const file = join(directory, 'secrets.json');
