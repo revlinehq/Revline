@@ -6,11 +6,14 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { EDITOR_SLASH_COMMANDS, parseEditorCommand, type EditorCommandName } from '@/lib/ai/slash-commands';
 import { userError } from '@/lib/user-error';
 
-import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import './composer-upload-swap.css';
+
+// Scoped by EditorShell so custom conversation panels share the active timeline control.
+export const EditComposerHeaderContext = createContext<ReactNode>(null);
 
 export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string };
 export type EditComposerProps = {
@@ -22,6 +25,7 @@ export type EditComposerProps = {
 };
 
 export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false }: EditComposerProps) {
+  const header = useContext(EditComposerHeaderContext);
   const commandListId = useId();
   const [commandDismissed, setCommandDismissed] = useState(false);
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
@@ -126,6 +130,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
   const editFields = <>
     <Popover open={menuOpen && !busy && fieldsFocused} onOpenChange={open => { if (!open) setCommandDismissed(true); }}>
     <PopoverAnchor asChild><InputGroup className="composer-input-group border-[#363636] bg-[#2a2a2a]">
+    {header && <InputGroupAddon align="block-start" className="composer-timeline-header"><span>Timeline format</span>{header}</InputGroupAddon>}
     {!!attachments.length && <InputGroupAddon align="block-start" className="composer-attachments">{attachments.slice(0, attachmentLimit).map(chip)}{attachments.length > attachmentLimit && <InputGroupButton variant="secondary" onClick={() => setSheetOpen(true)}>+{attachments.length - attachmentLimit} clips</InputGroupButton>}</InputGroupAddon>}
     {chosenCommand && <InputGroupAddon align="block-start" className="pb-0"><Badge variant="outline" className="gap-1 rounded-md border-[#4a4a4a] bg-[#343434] text-neutral-100">/{chosenCommand}<InputGroupButton size="icon-xs" aria-label={`Remove /${chosenCommand} command`} disabled={busy} onClick={() => { onChange(inputValue); setError(''); textarea.current?.focus(); }}><X /></InputGroupButton></Badge></InputGroupAddon>}
     <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'inspo-motion' ? 'Paste a video link and optional direction…' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={inputValue} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {

@@ -22,3 +22,7 @@
   .edit-composer-compact [data-slot=input-group-control]{height:auto;overflow-y:auto}
   .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed;overflow-y:hidden}
 }
+
+.composer-input-group>.composer-timeline-header{min-height:36px;justify-content:space-between;gap:8px;padding:3px 8px 3px 14px;border-bottom:1px solid #363636;border-radius:inherit;border-bottom-left-radius:0;border-bottom-right-radius:0;color:#aaa;font-size:11px;font-weight:400;cursor:default}
+.composer-timeline-header .aspect-ratio-trigger[data-slot=button]{color:#d4d4d4}
+.composer-timeline-header .aspect-ratio-trigger:hover,.composer-timeline-header .aspect-ratio-trigger[data-state=open]{background:#363636;color:#fff}

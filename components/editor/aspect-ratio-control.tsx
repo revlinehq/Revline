@@ -11,6 +11,8 @@ const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = [
   { value: 'vertical', ratio: '9:16', label: 'Reels/Shorts' },
   { value: 'square', ratio: '1:1', label: 'Square' },
   { value: 'landscape', ratio: '16:9', label: 'Landscape' },
+  { value: 'portrait-feed', ratio: '4:5', label: 'Portrait' },
+  { value: 'classic', ratio: '4:3', label: 'Classic' },
 ];
 
 const RATIOS: Record<AspectRatio, string> = {
@@ -22,7 +24,7 @@ export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAre
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${ratio}`}>
+      <Button type="button" variant="ghost" className="aspect-ratio-trigger focus-visible:ring-0" aria-label={`Aspect ratio: ${ratio}`}>
         <span className="aspect-ratio-value">{ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>
