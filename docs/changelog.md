@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Audio tools: Restore development sound, narration and music matching, identify rejected tool mutations, and share pinned beat dependencies across dev worktrees. Why: Terra's launch film was blocked by editing failures on shared development.
+
 - Editor: The aspect ratio menu is now a compact “Video format” list (YouTube, Reels·TikTok·Shorts, Square, Feed, Classic) with outline shapes, sizes and an inline safe-area toggle. Why: the user called the old picker terrible and approved Pen design eqEih.
 - Editor: The aspect ratio switcher left the editor composer and is back on the preview; the dashboard composer keeps its format header. Why: the user said it made no sense above the editing chat.
 - Editor: The empty preview is now a quiet dashed drop area with “Start with a clip or an idea”, one Add footage button and a drop hint, with no gradient. Why: the user picked Pen design W2tfzE.
