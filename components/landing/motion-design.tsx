@@ -29,12 +29,6 @@ export function LandingMotionDesign() {
           <img className="landing-motion-design-poster" src="/landing/motion-design-study-poster.webp" alt="" loading="lazy" />
           {Animation && <Animation playing={playing} />}
         </Card>
-        <figcaption>
-          Recreated in Revline from a reel by{' '}
-          <a href="https://www.instagram.com/reel/DfMzGyNBdUH/" target="_blank" rel="noreferrer">
-            @hc.prath
-          </a>
-        </figcaption>
       </figure>
     </LandingSection>
   );
