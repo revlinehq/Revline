@@ -133,6 +133,7 @@ type EditorToolkitOptions = {
   segment?:number;
   draft?:Timeline;
   onPrecise?: () => Promise<void>;
+  storyboarding?: boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -205,6 +206,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
   let editMode = options.editMode ?? 'precise';
+  let storyboarding = options.storyboarding ?? false;
   const fastReview = new FastFrameReview(options.pendingFastFrames);
   const requirePrecise = async () => {
     if (editMode === 'precise') return;
@@ -703,24 +705,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const tools = {
     saveStoryboard: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.saveStoryboard,
-      description: 'Save a user-approved studio storyboard stage with the project brief: concept (2 plain-language text ideas, no images yet), rough (3–6 reviewed sketches), style (2–3 reviewed final-look moments), then animatic (rough frames paced on a dedicated timeline, no scene code). Read the storyboard skill. Each stage needs the user’s OK; quote it in approvalNote. Preserves existing brief rules and prior stage approvals. readBrief/getProject/inspectTimeline return the structured plan for later sessions.',
-      inputSchema: z.object({ name: z.string().trim().min(1).max(60), stage: z.enum(['concept', 'rough', 'style', 'animatic']), context: z.string().trim().min(1).max(3000), promise: z.string().trim().min(1).max(400).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square', 'portrait-feed', 'classic']), concepts: z.array(z.object({ name: z.string().trim().min(1).max(80), text: z.string().trim().min(1).max(600).refine(text => text.split(/\s+/).length <= 50, 'Use at most 50 words.') }).strict()).length(2).optional(), chosenConcept: z.number().int().min(1).max(3).optional(), frameAssetIds: z.array(z.string().min(1)).min(3).max(6).optional(), styleAssetIds: z.array(z.string().min(1)).min(2).max(3).optional(), animaticTimelineId: z.string().optional(), approved: z.literal(true), approvalNote: z.string().trim().min(3).max(600) }).strict(),
+      description: 'Save a user-approved studio storyboard stage with the project brief: concept (one accepted angle, including an ideation yes/do it; no extra text A/B), direction (reviewed ink sheet(s), chosenDirection A/B), style (2–3 full-size key frames referenced from the chosen sheet), then animatic (rough frames paced on a dedicated timeline, no scene code). Read the storyboard skill. Each stage needs the user’s OK; quote it in approvalNote. Preserves existing brief rules and prior stage approvals. readBrief/getProject/inspectTimeline return the structured plan for later sessions.',
+      inputSchema: z.object({ name: z.string().trim().min(1).max(60), stage: z.enum(['concept', 'direction', 'rough', 'style', 'animatic']), context: z.string().trim().min(1).max(3000), promise: z.string().trim().min(1).max(400).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square', 'portrait-feed', 'classic']), concepts: z.array(z.object({ name: z.string().trim().min(1).max(80), text: z.string().trim().min(1).max(600).refine(text => text.split(/\s+/).length <= 50, 'Use at most 50 words.') }).strict()).min(1).max(2).optional().describe('Usually one accepted angle. No invented alternative is required.'), chosenConcept: z.number().int().min(1).max(3).optional(), sheetAssetIds: z.array(z.string().min(1)).min(1).max(24).optional().describe('All reviewed A/B sheet IDs; a combined A/B sheet needs one ID. Reuse at later stages.'), chosenDirection: z.enum(['A', 'B']).optional().describe('The user’s actual sheet pick; save at stage direction.'), frameAssetIds: z.array(z.string().min(1)).min(3).max(6).optional(), styleAssetIds: z.array(z.string().min(1)).min(2).max(3).optional().describe('The 2–3 approved full-size key-frame redraws after the sheet pick.'), animaticTimelineId: z.string().optional(), approved: z.literal(true), approvalNote: z.string().trim().min(1).max(600) }).strict(),
       execute: async (_ctx, input) => {
-        const { frameAssetIds, styleAssetIds, ...stage } = input;
-        return { storyboard: await ctx.runMutation(internal.briefs.saveStoryboard, { ...run, ...stage, ...(frameAssetIds ? { frameAssetIds: frameAssetIds as Id<'assets'>[] } : {}), ...(styleAssetIds ? { styleAssetIds: styleAssetIds as Id<'assets'>[] } : {}) }), note: `Approved ${input.stage} stage saved with the project brief. Follow the storyboard skill’s next approval stop; scene code follows the approved animatic.` };
+        const { frameAssetIds, styleAssetIds, sheetAssetIds, ...stage } = input;
+        return { storyboard: await ctx.runMutation(internal.briefs.saveStoryboard, { ...run, ...stage, ...(sheetAssetIds ? { sheetAssetIds: sheetAssetIds as Id<'assets'>[] } : {}), ...(frameAssetIds ? { frameAssetIds: frameAssetIds as Id<'assets'>[] } : {}), ...(styleAssetIds ? { styleAssetIds: styleAssetIds as Id<'assets'>[] } : {}) }), note: `Approved ${input.stage} stage saved with the project brief. Follow the storyboard skill’s next approval stop; scene code follows the approved animatic.` };
       },
     }),
     presentStoryboard: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.presentStoryboard,
-      description: 'After inspecting generated storyboard candidates against image-direction and rejecting slop, publish inspected rough or style frames to the numbered image grid above EditComposer and return a signed URL per frame for inline MCP replies. This is the agent’s visual self-check, NOT user approval. Regenerate a failed frame once with a sharper brief before presenting it. Show one stage at a time, then ask for the user’s OK and end the turn.',
-      inputSchema: z.object({ assetIds: z.array(z.string().min(1)).min(1).max(6), reviewNote: z.string().trim().min(3).max(600) }).strict(),
+      description: 'After inspecting generated storyboard candidates against image-direction and rejecting slop, publish inspected sketch sheets or full-size key frames to the numbered image grid above EditComposer and return a signed URL per frame for inline MCP replies. This is the agent’s visual self-check, NOT user approval. Regenerate a failed frame once with a sharper brief before presenting it. Show one stage at a time, then ask for the user’s OK and end the turn.',
+      inputSchema: z.object({ assetIds: z.array(z.string().min(1)).min(1).max(24), reviewNote: z.string().trim().min(3).max(600) }).strict(),
       execute: async (_ctx, input) => {
         const frames = await ctx.runMutation(internal.generatedImages.present, { ...run, ...input, assetIds: input.assetIds as Id<'assets'>[] });
-        return { assetIds: frames.map(frame => frame.assetId), frames, note: 'Review only: no stage approval saved. In-app frames are visible above EditComposer. Over MCP embed each signed frames[].url as ![Shot N](url), with a caption of at most 12 words. Wait for the user’s verdict.' };
+        return { assetIds: frames.map(frame => frame.assetId), frames, note: 'Review only: no stage approval saved. In-app frames are visible above EditComposer. Over MCP embed every signed frames[].url inline: ![A/B sketch sheet](url) for combined rows, or ![Direction A](url)/![Shot N](url). Add a short caption; each direction gets a Hooks because line. Wait for the user’s verdict.' };
       },
     }),
     generateImage: createTool({
       metadata: EDITOR_TOOL_DEFINITIONS.generateImage,
-      description: 'Generate scene assets or storyboard candidates with GPT Image 2.5 Flare, saved as project media with signed assets[].url links, previews, provenance and estimated USD cost. Read image-direction before EVERY call: give medium, reference era/discipline, composition, lighting, 2–4 named colors, texture and exclusions; inspect for slop. Assets default medium; logos use findIcon, hand-made shapes traceShape, type/vector/motion use code, 3D uses three.js; GLBs only when user supplied. For storyboard purpose, wait for the user’s concept choice and save their actual approval before any image. Never invent approval to enable generation. phase rough defaults low: fully drawn black-ink objects and exact on-screen text, cross-hatching on white paper, no color, borders, shot numbers, arrows or notes; draw first/last first, use frame 1 as reference. phase style is 2–3 final-look moments after rough approval. Candidates stay out of the composer grid until self-checked with presentStoryboard. Generation never places media on a timeline; the approved rough board becomes an animatic later using addMedia. Read the storyboard skill; each stage waits for OK unless just build it. Asset variants still support count 1–4, references and PNG alpha.',
+      description: 'Generate scene assets or storyboard candidates with GPT Image 2.5 Flare, saved as project media with signed assets[].url links, previews, provenance and estimated USD cost. Read image-direction before EVERY call: give medium, reference era/discipline, composition, lighting, 2–4 named colors, texture and exclusions; inspect for slop. Assets default medium; logos use findIcon, hand-made shapes traceShape, type/vector/motion use code, 3D uses three.js; GLBs only when user supplied. For storyboard purpose, save the user-accepted ideation angle as one concept before images; do not demand another text A/B choice. Never invent approval. phase sheet uses low quality, count 1: one ink page of numbered panels in the film ratio, thin gutters, no notes except small numbers/A/B labels. For 2–3 beats per option, one image holds A above B; longer options use separate sheets, at most 8 panels per sheet. Set sheet layout and panel details. After the user picks the sheet direction, phase style redraws only 2–3 full-size key frames using the chosen sheet as a reference, then stops for review. Candidates stay out of the composer grid until self-checked with presentStoryboard. Generation never places media on a timeline; the approved rough board becomes an animatic later using addMedia. Read the storyboard skill; each stage waits for OK unless just build it. Asset variants still support count 1–4, references and PNG alpha.',
       inputSchema: imageGenerationInput,
       execute: async (_ctx, request) => {
         const input = resolveImageGeneration(request, editSession.timeline.aspectRatio);
@@ -733,7 +735,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if (!url) throw new Error(`${asset.fileName} has no readable image file.`);
           references.push(url);
         }
-        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1, ...(input.storyboard ? { storyboardName: input.storyboard.name, storyboardPhase: input.storyboard.phase ?? 'rough' } : {}) });
+        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1, referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], ...(input.storyboard ? { storyboardName: input.storyboard.name, storyboardPhase: input.storyboard.phase ?? 'rough', ...(input.storyboard.sheet ? { panelAspectRatio: input.storyboard.sheet.panelAspectRatio } : {}) } : {}) });
         const generated = await generateImagePlates(input, references, abortSignal), requestId = crypto.randomUUID();
         const { usage } = generated;
         console.log(`[ai-cost] ${JSON.stringify({ event: 'image-generation', ...run, requestId, model: IMAGE_MODEL, provider: 'openai.images', count: generated.images.length, ...usage })}`);
@@ -1899,6 +1901,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const execute = tool.execute;
     if (!execute) continue;
     tool.execute = function (this: unknown, ...args: never[]) {
+      const input = (args[0] ?? {}) as Record<string, unknown>;
+      if (name === 'saveStoryboard' || name === 'presentStoryboard' || name === 'readSkill' && input.name === 'storyboard' || name === 'generateImage' && input.purpose === 'storyboard') storyboarding = true;
+      if (['addFilm', 'addScene', 'addScenes', 'patchScene', 'replaceScene'].includes(name)) storyboarding = false;
       const instance = this && typeof this === 'object' ? this : tool;
       const supplied = 'ctx' in instance && instance.ctx && typeof instance.ctx === 'object' ? instance.ctx : {};
       const bound = { ...instance, ctx: { ...supplied, ...ctx } };
@@ -1961,5 +1966,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, storyboarding: () => storyboarding, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
 }

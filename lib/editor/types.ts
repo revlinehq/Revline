@@ -129,7 +129,7 @@ export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
   _id: string; fileName: string; kind: 'video' | 'image' | 'audio' | 'model';
   createdAt?: number;
-  imageGeneration?: { purpose?: 'asset' | 'storyboard'; storyboard?: { name: string; phase?: 'rough' | 'style' | 'direction' | 'board'; presented?: boolean; shotIndex: number } };
+  imageGeneration?: { purpose?: 'asset' | 'storyboard'; storyboard?: { name: string; phase?: 'sheet' | 'rough' | 'style' | 'direction' | 'board'; presented?: boolean; shotIndex: number } };
   duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   previewOriginalPlayable?: boolean;

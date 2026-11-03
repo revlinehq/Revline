@@ -228,7 +228,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
     const tool = tools[name];
     const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
-    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode(), ...(editMode === 'fast' && toolkit.editMode() === 'precise' ? { modeNotice: PRECISE_MODE_NOTICE } : {}) } : rawOutput;
+    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode(), ...(editMode === 'fast' && toolkit.editMode() === 'precise' && !toolkit.storyboarding() ? { modeNotice: PRECISE_MODE_NOTICE } : {}) } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return withImages(published ? toolkit.publicationResult(output) : output, failed(output));

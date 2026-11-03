@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Skills: Turn accepted angles into scaled A/B ink sheets, then 2–3 key frames; remove storyboard meta footers. Why: Terra repeated concept gates after approval.
+
 - Skills: Add message-first ideation, direct creative conversation and one-proof 30–40 second launch films. Why: Terra repeated A/B prompts and literalised user feedback.
 
 - Agent images: Add complete ink storyboards, short concrete concepts and inline signed previews beside image plates. Why: the user requested visible shots and personal approval.

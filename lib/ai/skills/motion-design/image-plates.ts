@@ -5,7 +5,7 @@ export const imagePlatesPage: EditorSkillPage = {
   description: 'Assets on demand: choose code, icons, traced shapes or three.js before generating subjects, textures, environment maps, backgrounds and cut-outs. New films start with the dedicated storyboard skill.',
   body: `# Image plates
 
-For a new launch film or standalone motion piece, read the standalone storyboard skill BEFORE scene code: agree on the brief and text concepts before any image, then approve hand-drawn rough sketches, final-look style frames and a paced animatic. Skip that planning stop for small edits and "just build it".
+For a new launch film or standalone motion piece, read the standalone storyboard skill BEFORE scene code: agree on the brief/message and accept an angle before any image. Save the accepted angle, choose A/B ink sketch sheets, then approve 2–3 full-size key frames and a paced animatic. Skip that planning stop for small edits and "just build it".
 
 During a build, use generateImage on demand for a photoreal subject, texture, environment map, background plate or transparent cut-out. purpose: "asset" is the default and keeps existing asset calls working. The tool saves PNGs directly into project media and returns assetIds, signed assets[].url links, previews, quality and estimatedUsd (null means the provider did not report enough usage to estimate it). Each variant costs image tokens; start with one and request alternatives only when useful. Assets default to medium quality; low is cheaper for exploration. A failed call includes its actual cause; correct invalid input or unavailable access before trying again.
 
