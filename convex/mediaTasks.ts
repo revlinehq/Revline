@@ -706,9 +706,9 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
   facecam: saveAnalysisResult, speakers: saveAnalysisResult, transcribe: saveAnalysisResult, understand: saveAnalysisResult, shots: saveAnalysisResult, beats: saveAnalysisResult, track: saveAnalysisResult, reference: saveAnalysisResult,
 };
 
-export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: async (ctx, args) => {
+async function completeTask(ctx:MutationCtx,args:{taskId:Id<'mediaTasks'>;leaseToken:string;result:TaskResult},readResultStorageId?:Id<'_storage'>){
   const saved = await ctx.db.get(args.taskId);
-  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) return null;
+  if (saved?.status === 'completed' && saved.leaseToken === args.leaseToken) { if(readResultStorageId)await ctx.storage.delete(readResultStorageId); return null; }
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   // Evidence only counts for the task kind that asked for it.
   if (args.result.review && task.kind !== 'review') throw new ConvexError('The composition review is no longer active.');
@@ -716,10 +716,16 @@ export const complete = mutation({ args: { ...mediaTaskCredentials, result: task
   if (args.result.read && task.kind !== 'read') throw new ConvexError('The frame reading is no longer active.');
   if (args.result.frameInspection && task.kind !== 'frames') throw new ConvexError('Frame evidence belongs to a frame inspection task.');
   if (args.result.videoInspection && task.kind !== 'video') throw new ConvexError('Native video evidence belongs to its question task.');
-  await RESULT_HANDLERS[task.kind](ctx, task, args.result);
+  if(readResultStorageId){
+    if(task.kind!=='read'||!task.readId||!await analysisStillActive(ctx,task))throw new ConvexError('The frame reading is no longer active.');
+    await ctx.db.patch(task.readId,{status:'completed',result:undefined,resultStorageId:readResultStorageId});
+  }else await RESULT_HANDLERS[task.kind](ctx, task, args.result);
   if (task.analysisRequestId && await ctx.db.get(task.analysisRequestId)) await ctx.db.patch(task.analysisRequestId, { status: 'completed', error: undefined });
   await patchMediaTask(ctx, task, { status: 'completed', progress: 100, error: undefined, leaseExpiresAt: undefined, updatedAt: Date.now(),...(task.kind==='import'&&task.outputAssetId?{assetId:task.outputAssetId}:{}) });
   await signalResult(ctx, task, { success: true, retryable: false });
   await releaseRenderSeat(ctx, task);
   return null;
-}});
+}
+export const complete = mutation({ args: { ...mediaTaskCredentials, result: taskResult }, returns: v.null(), handler: completeTask });
+/** Only the storage action can publish a file result, after checking the worker lease. */
+export const completeRead = internalMutation({args:{...mediaTaskCredentials,storageId:v.id('_storage')},returns:v.null(),handler:(ctx,{storageId,...credentials})=>completeTask(ctx,{...credentials,result:{}},storageId)});

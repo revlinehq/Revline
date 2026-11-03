@@ -6,7 +6,7 @@ import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from
 import type { Doc, Id } from './_generated/dataModel';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
-import { projectIdentity, projectRun, writeProject } from './lib/project_data';
+import { syncProjectAgent, projectIdentity, projectRun, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio } from './schema';
@@ -80,14 +80,17 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
   if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
-  if (run) await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+  if (run) {
+    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+AGENT_ACTIVE_MS});
+  }
   else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
   return null;
 }});
 
 export const beginRun = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), timelineId: v.optional(v.string()) }, returns: v.object({ projectId: v.id('projects'), runId: v.string() }), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
+  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false, false);
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
   const started = mcpRunStarted(project.aiRunId), stale = started !== undefined && Date.now() - started > MCP_RUN_LIMIT;
   if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
@@ -101,7 +104,8 @@ export const beginRun = internalMutation({ args: { ownerId: v.string(), projectI
   await clearLivePreview(ctx, project._id);
   await writeProject(ctx, project._id, { aiReturnTimelineId: borrowing || (stale && project.aiReturnTimelineId) ? returnTo : undefined, aiRunning: true, aiEditing: false, aiRunId: runId, aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
   // Releases the lock even if the action is killed; finish ignores a run that already ended.
-  await ctx.scheduler.runAfter(MCP_RUN_LIMIT, internal.assistant.finish, { projectId: project._id, ownerId: args.ownerId, runId });
+  const scheduledId=await ctx.scheduler.runAfter(MCP_RUN_LIMIT, internal.assistant.finish, { projectId: project._id, ownerId: args.ownerId, runId });
+  await ctx.db.insert('mcpRunTimeouts',{projectId:project._id,ownerId:args.ownerId,runId,scheduledId});
   return { projectId: project._id, runId };
 }});
 
@@ -239,6 +243,7 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion });
   await ctx.db.patch(snapshotId, { taskId });
+  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison?{cancelTaskId:taskId}:{})});
   // Measurements are saved verification records, kept until the project is deleted.
   if (!pacing && !sound) await ctx.scheduler.runAfter(10 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
@@ -262,6 +267,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
   await ctx.db.patch(snapshotId, { taskId });
+  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false});
   await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});
@@ -273,16 +279,30 @@ export const frames = internalQuery({ args: { ownerId: v.string(), snapshotId: v
   return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.timelineId ? { timelineId: snapshot.timelineId } : {}), ...(snapshot.sound || snapshot.pacing ? { requestedRange: snapshot.sound ?? snapshot.pacing } : {}), ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
+async function removeFrameControl(ctx:MutationCtx,snapshotId:Id<'frameSnapshots'>){
+  const control=await ctx.db.query('frameSnapshotControls').withIndex('by_snapshot',q=>q.eq('snapshotId',snapshotId)).unique();
+  if(control)await ctx.db.delete(control._id);
+}
+
 /** Consume ephemeral images once; saved sound and pacing measurements remain retrievable. */
 export const takeFrames = internalMutation({ args: { ownerId: v.string(), snapshotId: v.id('frameSnapshots') }, returns: v.any(), handler: async (ctx, args) => {
   const snapshot = await ctx.db.get(args.snapshotId);
   if (!snapshot || snapshot.ownerId !== args.ownerId) throw new ConvexError('Frame request not found.');
   const task = snapshot.status === 'queued' && snapshot.taskId ? await ctx.db.get(snapshot.taskId) : null;
-  if (snapshot.status !== 'queued' && !snapshot.sound && !snapshot.pacing) await ctx.db.delete(snapshot._id);
+  if (snapshot.status !== 'queued' && !snapshot.sound && !snapshot.pacing) { await removeFrameControl(ctx,snapshot._id);await ctx.db.delete(snapshot._id); }
   return { status: snapshot.status, started: snapshot.status !== 'queued' || (!!task && task.status !== 'queued'), revision: snapshot.revision, ...(snapshot.error ? { error: snapshot.error } : {}), ...(snapshot.frames ? { frames: snapshot.frames } : {}), ...(snapshot.differences ? { differences: snapshot.differences, times: snapshot.times } : {}), ...(snapshot.atRevision !== undefined ? { atRevision: snapshot.atRevision } : {}), ...(snapshot.pacingResult ? { pacing: snapshot.pacingResult } : {}), ...(snapshot.motionResult ? { motion: snapshot.motionResult } : {}), ...(snapshot.soundResult ? { sound: snapshot.soundResult } : {}), ...(snapshot.normalizationResult?{normalization:snapshot.normalizationResult}:{}) };
 }});
 
 export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameSnapshots') }, returns: v.null(), handler: async (ctx, args) => {
+  const control=await ctx.db.query('frameSnapshotControls').withIndex('by_snapshot',q=>q.eq('snapshotId',args.snapshotId)).unique();
+  if(control){
+    if(!control.preserve){
+      if(control.cancelTaskId)await cancelMediaTask(ctx,control.cancelTaskId);
+      await ctx.db.delete(args.snapshotId);await ctx.db.delete(control._id);
+    }
+    return null;
+  }
+  // Requests created before the projection keep the legacy cleanup path.
   const snapshot = await ctx.db.get(args.snapshotId);
   if (snapshot && !snapshot.sound && !snapshot.pacing) {
     if (snapshot.comparison && snapshot.status === 'queued' && snapshot.taskId) await cancelMediaTask(ctx, snapshot.taskId);
@@ -297,6 +317,6 @@ export const expireFrames = internalMutation({args:{snapshotId:v.id('frameSnapsh
   const task=snapshot.taskId?await ctx.db.get(snapshot.taskId):null;
   if(snapshot.status==='queued'&&task&&(task.status==='queued'||task.status==='running'||task.status==='retrying')){
     await ctx.scheduler.runAfter(15*60_000,internal.mcp.expireFrames,args);
-  }else await ctx.db.delete(snapshot._id);
+  }else {await removeFrameControl(ctx,snapshot._id);await ctx.db.delete(snapshot._id);}
   return null;
 }});

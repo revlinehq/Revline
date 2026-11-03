@@ -90,6 +90,7 @@ export const batch = internalMutation({ args: { ownerId: v.string() }, returns: 
       }
     }
     if (!owned) continue;
+    if('resultStorageId' in row&&row.resultStorageId)await ctx.storage.delete(row.resultStorageId);
     await remember(ctx, ownerId, row._id);
     for (const key of ['threadId', 'runId']) {
       const value = Reflect.get(row, key);

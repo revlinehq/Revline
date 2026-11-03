@@ -114,7 +114,8 @@ export function startMediaWorker(options: MediaWorkerOptions) {
             if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
           clearInterval(timer); clearInterval(cancelled); await heartbeats; signal.throwIfAborted();
-          await client.mutation(api.mediaTasks.complete, { ...credentials, result });
+          if(snapshot.kind==='read'&&result.read)await client.action(api.mediaTaskResults.completeRead,{...credentials,result:result.read});
+          else await client.mutation(api.mediaTasks.complete, { ...credentials, result });
           options.log('media-completed', { projectId: task.projectId, runId: snapshot.aiRunId, taskId: task.taskId, kind: task.kind });
         } catch (error) {
           clearInterval(timer); clearInterval(cancelled); await heartbeats;

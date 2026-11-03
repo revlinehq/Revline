@@ -517,9 +517,17 @@ export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:
   return null;
 }});
 export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})),segment:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+  const timeout=await ctx.db.query('mcpRunTimeouts').withIndex('by_run',q=>q.eq('runId',args.runId)).unique();
+  if(timeout?.ownerId===args.ownerId&&timeout.projectId===args.projectId){
+    const scheduled=await ctx.db.system.get(timeout.scheduledId);
+    if(scheduled?.state.kind==='pending')await ctx.scheduler.cancel(timeout.scheduledId);
+    await ctx.db.delete(timeout._id);
+  }
   const turn=await turnForRun(ctx,args.runId);
   if(turn&&args.segment!==undefined&&turn.segment!==args.segment)return null;
-  const project = await readProject(ctx,args.projectId);
+  const project = await readProject(ctx,args.projectId,false,false);
+  // The delayed MCP timeout still fires after a successful call; stale timers need no cleanup reads.
+  if(!args.publication&&turn?.status!=='running'&&(!project?.aiRunning||project.aiRunId!==args.runId))return null;
   // A stopped action may finish after a new run starts. Its receipt belongs to
   // the original prompt; it must never stop or overwrite the newer run.
   const publication = args.publication && project?.ownerId === args.ownerId && project.threadId === args.publication.threadId ? args.publication : undefined;
@@ -641,15 +649,15 @@ export const resumeQueue=mutation({args:{projectId:v.id('projects')},returns:v.n
 export const drainQueue=internalMutation({args:{projectId:v.id('projects'),ownerId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const raw=await ctx.db.get(args.projectId);
   if(!raw||raw.deleting||raw.ownerId!==args.ownerId)return null;
-  const project=(await readProject(ctx,args.projectId))!;
-  if(project.aiRunning||project.aiQueuePaused)return null;
+  const run=await projectRun(ctx,args.projectId,args.ownerId);
+  if(run.aiRunning||run.aiQueuePaused)return null;
   const row=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',args.projectId)).first();
   if(!row)return null;
   try{
     await ctx.runMutation(internal.assistant.startQueued,{...args,id:row._id});
   }catch{
     await ctx.db.patch(row._id,{error:'This queued request could not start. Check your access and attached footage, then resume the queue.'});
-    await writeProject(ctx,project._id,{aiQueuePaused:true});
+    await writeProject(ctx,args.projectId,{aiQueuePaused:true});
   }
   return null;
 }});

@@ -1,3 +1,4 @@
+import { projectAgentSummary } from './lib/project_data';
 import { v } from 'convex/values';
 import { internalMutation,internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -31,4 +32,16 @@ export const refreshCovers=internalMutation({args:{cursor:v.union(v.string(),v.n
     if(cover)await ctx.db.patch(row._id,cover);
   }
   if(!page.isDone)await ctx.scheduler.runAfter(0,internal.projectDataMigration.refreshCovers,{cursor:page.continueCursor});return null;
+}});
+
+/** Bounded, operator-driven backfill; no scheduler or media work is started. */
+export const agentSummaries=internalMutation({args:{cursor:v.union(v.string(),v.null())},returns:v.object({cursor:v.string(),done:v.boolean(),updated:v.number()}),handler:async(ctx,args)=>{
+  const page=await ctx.db.query('projectCatalog').paginate({cursor:args.cursor,numItems:25});
+  let updated=0;
+  for(const row of page.page){
+    if(row.agentSummary!==undefined)continue;
+    const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',row.projectId)).unique();
+    await ctx.db.patch(row._id,{agentSummary:projectAgentSummary(run??{})});updated++;
+  }
+  return {cursor:page.continueCursor,done:page.isDone,updated};
 }});

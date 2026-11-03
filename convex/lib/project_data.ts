@@ -96,15 +96,25 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const index=await readHistoryIndex(ctx,project._id);
   if(index)await ctx.db.replace(index._id,{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});else await ctx.db.insert('timelineHistoryIndex',{projectId:project._id,keyVersion:HISTORY_KEY_VERSION,entries});
 }
+type AgentState=Pick<Doc<'projects'>,'aiAgentName'|'aiAgentActiveUntil'|'aiRunning'|'aiRunId'>;
+export function projectAgentSummary(project:AgentState) {
+  return project.aiAgentName?{name:project.aiAgentName.replace(/\s*\([^)]*\)\s*$/,'')||project.aiAgentName,until:project.aiAgentActiveUntil??0,running:!!project.aiRunning&&!!project.aiRunId?.startsWith('mcp-')}:null;
+}
+/** The catalog never joins prompt/recovery rows just to show the connected agent. */
+export async function syncProjectAgent(ctx:MutationCtx,projectId:Id<'projects'>,state:AgentState) {
+  const row=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  const agentSummary=projectAgentSummary(state);
+  if(row&&JSON.stringify(row.agentSummary)!==JSON.stringify(agentSummary))await ctx.db.patch(row._id,{agentSummary});
+}
 async function syncProjectCatalog(ctx:MutationCtx,project:Doc<'projects'>) {
   const existing=await ctx.db.query('projectCatalog').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
-  const values={projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
+  const values={agentSummary:projectAgentSummary(project),projectId:project._id,ownerId:project.ownerId,title:project.title,aspectRatio:project.aspectRatio,createdAt:project.createdAt,updatedAt:project.updatedAt,clipCount:project.timeline?.clips.length??0,aiRunning:!!project.aiRunning,deleting:project.deleting};
   if(!existing){await ctx.db.insert('projectCatalog',values);return;}
   // Every open project list re-runs when a catalog row changes. Write only when something the list
   // shows changed; a newer updatedAt alone is written at most once a minute.
   const shown=(['title','aspectRatio','clipCount','aiRunning','deleting'] as const).some(key=>existing[key]!==values[key]);
   const stale=values.updatedAt!==existing.updatedAt&&(values.updatedAt??0)-(existing.updatedAt??0)>=60_000;
-  if(shown||stale||values.ownerId!==existing.ownerId)await ctx.db.patch(existing._id,values);
+  if(shown||stale||values.ownerId!==existing.ownerId||JSON.stringify(existing.agentSummary)!==JSON.stringify(values.agentSummary))await ctx.db.patch(existing._id,values);
 }
 /** One write seam separates run state/history while preserving the public project shape.
  * `planHistory` derives the next history from the stored one without a second read. */
