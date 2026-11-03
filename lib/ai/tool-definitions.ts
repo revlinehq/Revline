@@ -94,8 +94,6 @@ export const EDITOR_TOOL_DEFINITIONS = {
   traceShape: { effect: 'read', mcp: 'read' },
   findIcon: { effect: 'read', mcp: 'read' },
   generateImage: { effect: 'resource', mcp: 'exclusive', writes: ['generatedImages:save'] },
-  saveStoryboard: { effect: 'resource', mcp: 'exclusive', writes: ['briefs:saveStoryboard'] },
-  presentStoryboard: { effect: 'resource', mcp: 'exclusive', writes: ['generatedImages:present'] },
   saveBlueprint: { effect: 'resource', mcp: 'read', writes: ['blueprints:saveFromCheck'] },
   listBlueprints: { effect: 'read', mcp: 'read' },
   getBlueprint: { effect: 'read', mcp: 'read' },

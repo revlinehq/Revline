@@ -9,7 +9,7 @@ const editLanesPage: EditorSkillPage = {
   description: 'Start here for existing footage, caption, scene or film edits: choose quick or full verification before reading transcript or code.',
   body: `# Editing existing footage, captions, scenes or films
 
-- New scene/film or recreation: Precise full checks, even if Fast was selected; tell the user. MCP defaults to Precise unless editMode is passed.
+- New scene/film or recreation: Precise full checks, even if Fast was selected; keep mode metadata in tool results. MCP defaults to Precise unless editMode is passed.
 - Existing static/text/asset change or named speech cut: local checks in either mode.
 - Existing motion/timing/camera/transition edit: local checks in Fast; full changed-range checks in Precise. Story restructuring and whole-video review also use full checks.
 

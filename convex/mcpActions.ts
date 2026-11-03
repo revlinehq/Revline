@@ -1,7 +1,7 @@
 "use node";
 import { v } from 'convex/values';
 import { z } from 'zod';
-import { editorEditModeSchema, PRECISE_MODE_NOTICE, type EditorEditMode } from '../lib/ai/edit-mode';
+import { editorEditModeSchema, type EditorEditMode } from '../lib/ai/edit-mode';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
@@ -228,7 +228,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode });
     const tool = tools[name];
     const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
-    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode(), ...(editMode === 'fast' && toolkit.editMode() === 'precise' && !toolkit.storyboarding() ? { modeNotice: PRECISE_MODE_NOTICE } : {}) } : rawOutput;
+    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode() } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return withImages(published ? toolkit.publicationResult(output) : output, failed(output));

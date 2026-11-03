@@ -10,8 +10,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // the attempt that claimed the run, and must belong to a run the runner is still working on. Its owner, project, run and chat ids must be
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
-  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'generatedImages:present',
-  'briefs:saveStoryboard',
+  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
   'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportRunner',

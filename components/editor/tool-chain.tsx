@@ -33,8 +33,7 @@ function toolChainRows(steps: ChatTool[]): Row[] {
   const rows: Row[] = [];
   steps.forEach((step, index) => {
     const args = argumentsOf(step), previous = rows.at(-1), time = timeOf(step);
-    // The agent reviews storyboard candidates before presentStoryboard publishes them above the composer.
-    const images = step.name === 'generateImage' && step.output?.purpose === 'storyboard' ? [] : toolImages(step);
+    const images = toolImages(step);
     // Steps with images stay their own row, so every render and diff shows where it was made.
     if (previous && previous.tool === step.name && previous.state === 'done' && step.state === 'done' && !images.length && !previous.images.length) {
       previous.count++;

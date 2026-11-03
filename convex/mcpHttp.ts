@@ -17,14 +17,12 @@ const cors = {
   'Access-Control-Allow-Headers': 'Authorization, Content-Type, Mcp-Protocol-Version, Mcp-Session-Id, Last-Event-ID',
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id',
 };
-/** Development only: agents testing the harness report how each change was made, so gaps and rule
- * conflicts show up. Production agents (customers' clients) never see it. */
-const HARNESS_REPORT = `During storyboarding (brief, ideation, accepted angle, colored style-frame sheets, key frames and animatic review), use zero "How it was made" or mode footers. Explain methods only when the user asks how. For completed edits outside storyboarding, end with a short "How it was made" note: the skills and pages you read (readSkill name and page), the rules from them that shaped this change, and any step you did outside Revline's tools (a script, a download, a web search) with the Revline tool or option that would have covered it. Also name anything that held you back: a tool limit or missing option that forced a worse result, and any place where the user's request conflicted with a skill, these instructions or a tool's rules (say which rule, and which one you followed).`;
-const isDevelopment = () => process.env.APP_ORIGIN?.startsWith('http://localhost') ?? false;
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers } });
 
-export const MCP_INSTRUCTIONS = `If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or contradicts its documented contract, call reportIssue once with its name, a minimal input summary, what happened and what you expected. Never include credentials, tokens, user text or media. Do not report ordinary validation failures or unsupported requests. Continue safely and describe any unresolved limitation honestly.
+export const MCP_INSTRUCTIONS = `Keep mode, cost and method metadata in tool results. User-facing replies have zero "How it was made", "Mode" or cost footers; explain how or cost only when asked. Never approve finished work on the user’s behalf.
+
+If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or contradicts its documented contract, call reportIssue once with its name, a minimal input summary, what happened and what you expected. Never include credentials, tokens, user text or media. Do not report ordinary validation failures or unsupported requests. Continue safely and describe any unresolved limitation honestly.
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
@@ -34,7 +32,7 @@ Before speech cuts, captions or take selection, read the relevant SOURCE transcr
 Bring in footage with uploadMedia (a local file: run the script it returns, then finishUpload) or importVideoLink (a URL).
 
 Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other code of your own to look at, measure or time video or audio: every script means a Revline tool was skipped, and its result never reaches the project.
-- Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges. Every brand logo or app icon comes from findIcon (the official SVG), and hand-made shapes (brush strokes, torn paper) from traceShape; never draw either by hand. After building, compareReference sets the reference beside your timeline at each moment with a difference score; fix the worst first. For a demo sub-panel beside a storyboard, set referenceCrop and leave timelineCrop full-frame; do not reposition your film inside a copy of the reference. Use referenceCropKeyframes in SOURCE seconds when that panel moves. compareMotion accepts the same independent crops.
+- Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges. Every brand logo or app icon comes from findIcon (the official SVG), and hand-made shapes (brush strokes, torn paper) from traceShape; never draw either by hand. After building, compareReference sets the reference beside your timeline at each moment with a difference score; fix the worst first. For a demo sub-panel beside other reference content, set referenceCrop and leave timelineCrop full-frame; do not reposition your film inside a copy of the reference. Use referenceCropKeyframes in SOURCE seconds when that panel moves. compareMotion accepts the same independent crops.
 - Removing awkward moments from footage (dead air, looking away, reaching for the camera): readSkill visual-inspection. readFrames momentsOnly maps the whole clip, then readFrames fps 10 confirms each candidate before you cut.
 - Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
 - Narration: listVoices (with sampleText for playable samples) and generateVoice, which places the voice and returns every word's timeline time. A narrated explainer film follows the explainer skill.
@@ -56,7 +54,7 @@ const withCors = (response: Response) => { const headers = new Headers(response.
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
 function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: isDevelopment() ? `${MCP_INSTRUCTIONS}\n\n${HARNESS_REPORT}` : MCP_INSTRUCTIONS });
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
     return { tools: await toolCatalog };

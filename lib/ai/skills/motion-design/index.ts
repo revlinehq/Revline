@@ -2,6 +2,7 @@ import type { EditorSkill } from '../index';
 import { blueprintsPage, brandPage } from './pages';
 import { imagePlatesPage } from './image-plates';
 import { tastePage } from './taste';
+import { ideationPage } from './ideation';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
@@ -10,7 +11,7 @@ export const motionDesign: EditorSkill = {
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
 
-Before motion design from scratch, readSkill name "storyboard": agree on the brief, then ideate one message, one audience tension and 3–5 angles before images. An accepted angle ("do it") is the concept: save it and render its sheets, with zero extra text A/B round. Answer questions directly; a request to "show me" gets the timed whole-film walkthrough, not repeated A/B text. Then choose between A/B colored style-frame sheets (one combined page for 2–3 beats each), approve 2–3 full-size key frames and the paced animatic before scene code. Resume its saved stage with readBrief. Skip small edits and "just build it". ReadSkill name "image-direction" before EVERY generateImage call for concrete art direction and visual self-checks; panels use the actual palette, type and layout the film will build. Assets during the build follow \`image-plates\`: choose icons, traced shapes, code or three.js first, then generate subjects, textures, environment maps, backgrounds and cut-outs on demand.
+For a new motion film, read page \`ideation\`: agree one message, one audience tension and 3–5 angles, each with "Hooks because …". The user's "do it" accepts that angle to BUILD immediately. Skip small edits and "just build it". Use page \`image-plates\` for real scene assets: icons, traced shapes, code and three.js come before generation. Never approve finished work on the user's behalf.
 
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
@@ -69,5 +70,5 @@ In a new film, every fact on screen comes from the confirmed product text or the
 - **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
 - **A style reference** (a film or brand they like, not one to recreate): use page \`taste\` to extract why its choices work and express those principles in new imagery and staging.
 - The brand kit's fonts and colors always win.`,
-  pages: [tastePage, brandPage, blueprintsPage, imagePlatesPage],
+  pages: [ideationPage, tastePage, brandPage, blueprintsPage, imagePlatesPage],
 };

@@ -1,5 +1,5 @@
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
-import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, resolveImageGeneration, IMAGE_MODEL } from '../../lib/ai/image-generation';
+import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
 import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest, type PixelTrackReference } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
@@ -132,8 +132,6 @@ type EditorToolkitOptions = {
   pendingFastFrames?: number[];
   segment?:number;
   draft?:Timeline;
-  onPrecise?: () => Promise<void>;
-  storyboarding?: boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -167,7 +165,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['presentStoryboard', 'saveStoryboard', 'generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -206,12 +204,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
   let editMode = options.editMode ?? 'precise';
-  let storyboarding = options.storyboarding ?? false;
   const fastReview = new FastFrameReview(options.pendingFastFrames);
   const requirePrecise = async () => {
     if (editMode === 'precise') return;
     editMode = 'precise';
-    await options.onPrecise?.();
   };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
@@ -704,28 +700,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Finish and verify this clip before opening another tab. Never call tab changes in parallel with edits.' };
   };
   const tools = {
-    saveStoryboard: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.saveStoryboard,
-      description: 'Save a user-approved studio storyboard stage with the project brief: concept (one accepted angle, including an ideation yes/do it; no extra text A/B), direction (reviewed colored style-frame sheet(s), chosenDirection A/B), style (2–3 full-size key frames referenced from the chosen sheet), then animatic (approved frames paced on a dedicated timeline, no scene code). Read the storyboard skill. Each stage needs the user’s OK; quote it in approvalNote. Preserves existing brief rules and prior stage approvals. readBrief/getProject/inspectTimeline return the structured plan for later sessions.',
-      inputSchema: z.object({ name: z.string().trim().min(1).max(60), stage: z.enum(['concept', 'direction', 'rough', 'style', 'animatic']), context: z.string().trim().min(1).max(3000), promise: z.string().trim().min(1).max(400).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square', 'portrait-feed', 'classic']), concepts: z.array(z.object({ name: z.string().trim().min(1).max(80), text: z.string().trim().min(1).max(600).refine(text => text.split(/\s+/).length <= 50, 'Use at most 50 words.') }).strict()).min(1).max(2).optional().describe('Usually one accepted angle. No invented alternative is required.'), chosenConcept: z.number().int().min(1).max(3).optional(), sheetAssetIds: z.array(z.string().min(1)).min(1).max(24).optional().describe('All reviewed A/B sheet IDs; a combined A/B sheet needs one ID. Reuse at later stages.'), chosenDirection: z.enum(['A', 'B']).optional().describe('The user’s actual sheet pick; save at stage direction.'), frameAssetIds: z.array(z.string().min(1)).min(3).max(6).optional(), styleAssetIds: z.array(z.string().min(1)).min(2).max(3).optional().describe('The 2–3 approved full-size key-frame redraws after the sheet pick.'), animaticTimelineId: z.string().optional(), approved: z.literal(true), approvalNote: z.string().trim().min(1).max(600) }).strict(),
-      execute: async (_ctx, input) => {
-        const { frameAssetIds, styleAssetIds, sheetAssetIds, ...stage } = input;
-        return { storyboard: await ctx.runMutation(internal.briefs.saveStoryboard, { ...run, ...stage, ...(sheetAssetIds ? { sheetAssetIds: sheetAssetIds as Id<'assets'>[] } : {}), ...(frameAssetIds ? { frameAssetIds: frameAssetIds as Id<'assets'>[] } : {}), ...(styleAssetIds ? { styleAssetIds: styleAssetIds as Id<'assets'>[] } : {}) }), note: `Approved ${input.stage} stage saved with the project brief. Follow the storyboard skill’s next approval stop; scene code follows the approved animatic.` };
-      },
-    }),
-    presentStoryboard: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.presentStoryboard,
-      description: 'After inspecting generated storyboard candidates against image-direction and rejecting slop, publish inspected colored style-frame sheets or full-size key frames to the numbered image grid above EditComposer and return a signed URL per frame for inline MCP replies. This is the agent’s visual self-check, NOT user approval. Regenerate a failed frame once with a sharper brief before presenting it. Show one stage at a time, then ask for the user’s OK and end the turn.',
-      inputSchema: z.object({ assetIds: z.array(z.string().min(1)).min(1).max(24), reviewNote: z.string().trim().min(3).max(600) }).strict(),
-      execute: async (_ctx, input) => {
-        const frames = await ctx.runMutation(internal.generatedImages.present, { ...run, ...input, assetIds: input.assetIds as Id<'assets'>[] });
-        return { assetIds: frames.map(frame => frame.assetId), frames, note: 'Review only: no stage approval saved. In-app frames are visible above EditComposer. Over MCP embed every signed frames[].url inline: ![A/B style-frame sheet](url) for combined rows, or ![Direction A](url)/![Shot N](url). Add a short caption; each direction gets a Hooks because line. Wait for the user’s verdict.' };
-      },
-    }),
     generateImage: createTool({
       metadata: EDITOR_TOOL_DEFINITIONS.generateImage,
-      description: 'Generate scene assets or storyboard candidates with GPT Image 2.5 Flare, saved as project media with signed assets[].url links, previews, provenance and estimated USD cost. Read image-direction before EVERY call: give medium, reference era/discipline, composition, lighting, 2–4 named colors, texture and exclusions; inspect for slop. Assets default medium; logos use findIcon, hand-made shapes traceShape, type/vector/motion use code, 3D uses three.js; GLBs only when user supplied. For storyboard purpose, save the user-accepted ideation angle as one concept before images; do not demand another text A/B choice. Never invent approval. phase sheet uses count 1: one colored style-frame page in the film ratio, actual palette/hex values, real font families/weights and exact film text, actual UI/layout, shapes and clean 3D. Use low if readable, otherwise medium. No annotations, arrows, captions, shot numbers or row labels inside the image; keep identifiers in metadata/chat. Reject generic AI gloss, glowing orbs, lens flares, sparkles, purple-blue gradients, bright purple fills and stock futuristic dashboards. Muted grain gradients are allowed when part of the film. For 2–3 beats per option, one image holds A above B; longer options use separate sheets, at most 8 panels per sheet. Set sheet layout and panel details. After the user picks the sheet direction, phase style redraws only 2–3 full-size key frames using the chosen sheet as a reference, then stops for review. Candidates stay out of the composer grid until self-checked with presentStoryboard. Generation never places media on a timeline; the approved frames become an animatic later using addMedia. Read the storyboard skill; each stage waits for OK unless just build it. Asset variants still support count 1–4, references and PNG alpha.',
+      description: 'Generate a real scene asset with GPT Image 2.5 Flare: backgrounds, textures, image fills, photos, isolated objects or transparent cut-outs. Build complete film frames, UI, typography, icons and vector graphics in scene code. Read motion-design page image-plates first. Uses the shared OpenAI key/fallback, saves PNG project media with signed URLs, previews, references, provenance and visible estimated USD cost. Medium quality by default; low for exploration. count 1–4, up to four project-image references, and PNG alpha are supported. Logos/icons use findIcon, hand-made shapes traceShape, and 3D uses three.js or a user-supplied GLB.',
+
       inputSchema: imageGenerationInput,
       execute: async (_ctx, request) => {
-        const input = resolveImageGeneration(request, editSession.timeline.aspectRatio);
+        const input = request;
         const references = [];
         for (const assetId of input.referenceAssetIds ?? []) {
           const asset = await ctx.runQuery(internal.assistant.getRunAsset, { ...run, assetId });
@@ -735,7 +716,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if (!url) throw new Error(`${asset.fileName} has no readable image file.`);
           references.push(url);
         }
-        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1, referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], ...(input.storyboard ? { storyboardName: input.storyboard.name, storyboardPhase: input.storyboard.phase ?? 'rough', ...(input.storyboard.sheet ? { panelAspectRatio: input.storyboard.sheet.panelAspectRatio } : {}) } : {}) });
+        await ctx.runMutation(internal.generatedImages.prepare, { ...run, count: input.count ?? 1 });
         const generated = await generateImagePlates(input, references, abortSignal), requestId = crypto.randomUUID();
         const { usage } = generated;
         console.log(`[ai-cost] ${JSON.stringify({ event: 'image-generation', ...run, requestId, model: IMAGE_MODEL, provider: 'openai.images', count: generated.images.length, ...usage })}`);
@@ -748,17 +729,16 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             const size = await putMediaObject(r2Key, image.bytes, 'image/png');
             uploaded.push({ r2Key, size, width: image.width, height: image.height });
           }
-          const saved = await ctx.runMutation(internal.generatedImages.save, { ...run, images: uploaded, provenance: { requestId, prompt: input.prompt, model: IMAGE_MODEL, size: imageGenerationSize(input), transparentBackground: input.transparentBackground ?? false, quality: imageGenerationQuality(input), purpose: input.purpose ?? 'asset', ...(input.storyboard ? { storyboard: input.storyboard } : {}), referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], usage } });
+          const saved = await ctx.runMutation(internal.generatedImages.save, { ...run, images: uploaded, provenance: { requestId, prompt: input.prompt, model: IMAGE_MODEL, size: imageGenerationSize(input), transparentBackground: input.transparentBackground ?? false, quality: imageGenerationQuality(input), referenceAssetIds: (input.referenceAssetIds ?? []) as Id<'assets'>[], usage } });
           assets.push(...saved);
           // Keep the MCP/action response bounded even for four detailed PNGs. Originals stay untouched in media.
           let previewBytes = 0;
           const images = generated.images.flatMap((image, index) => {
             if (index > 0 && previewBytes + image.data.length > 8_000_000) return [];
             previewBytes += image.data.length;
-            const shot = generatedImageSummary(saved[index]).storyboard;
-            return [{ label: shot ? `${shot.name} / ${shot.line}` : `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' }];
+            return [{ label: `Generated plate ${index + 1}: ${saved[index]._id}`, data: image.data, mimeType: 'image/png' }];
           });
-          return { assetIds: saved.map(asset => asset._id), assets: await Promise.all(saved.map(async asset => ({ assetId: asset._id, url: (await mediaUrl(ctx, asset))!, fileName: asset.fileName, width: asset.width, height: asset.height, ...generatedImageSummary(asset) }))), purpose: input.purpose ?? 'asset', model: IMAGE_MODEL, quality: imageGenerationQuality(input), size: imageGenerationSize(input), estimatedUsd: usage.estimatedUsd, usage, images, ...(images.length < saved.length ? { previewNote: 'Large variants have limited inline previews; all variants are saved in project media.' } : {}), note: input.purpose === 'storyboard' ? 'Candidate saved off the timeline. Inspect it using image-direction; reject slop and retry once with a sharper brief. Call presentStoryboard only after the visual self-check, then wait for user approval of this stage.' : 'Saved to project media. Inspect the art direction and preview, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
+          return { assetIds: saved.map(asset => asset._id), assets: await Promise.all(saved.map(async asset => ({ assetId: asset._id, url: (await mediaUrl(ctx, asset))!, fileName: asset.fileName, width: asset.width, height: asset.height, ...generatedImageSummary(asset) }))), model: IMAGE_MODEL, quality: imageGenerationQuality(input), size: imageGenerationSize(input), estimatedUsd: usage.estimatedUsd, usage, images, ...(images.length < saved.length ? { previewNote: 'Large variants have limited inline previews; all variants are saved in project media.' } : {}), note: 'Saved to project media. Inspect the subject and edges, bind the chosen asset by name in scene media, and animate its wrapper with GSAP.' };
         } catch (error) {
           await ctx.runMutation(internal.generatedImages.cleanup, { ...run, keys: uploaded.map(image => image.r2Key) }).catch(() => {});
           throw error;
@@ -1283,7 +1263,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a video or still image reference. For a storyboard image, times are the built timeline moments (offset defaults 0): compare each render with that fixed key frame for composition, palette, hierarchy and material intent, never a pixel-match target. Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a video or still image reference. For a still image, times are the timeline moments to compare with it (offset defaults 0). Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
       const stillReference = assets.find(asset => asset._id === input.assetId)?.kind === 'image';
       const deadline = Math.min(options.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS);
       await editSession.wait();
@@ -1341,7 +1321,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { start, end, fps, times, ...settings } = input;
       const nextAction = continueFrom === null ? undefined : { tool: 'compareReference', arguments: { projectId: run.projectId, ...(timelineId ? { timelineId } : {}), ...settings, ...(times ? { times: times.slice(completed) } : continueFrom < end! ? { start: continueFrom, end, fps: fps ?? 15 } : { times: [continueFrom] }) } };
       return { status: nextAction ? 'partial' : 'completed', revision, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.referenceCrop ? { referenceCrop: input.referenceCrop } : {}), ...(input.timelineCrop ? { timelineCrop: input.timelineCrop } : {}), ...(input.referenceCropKeyframes ? { referenceCropKeyframes: input.referenceCropKeyframes } : {}), ...(input.times ? {} : { range: { start, end, fps: fps ?? 15 } }), requestedSamples: requested.count, samples: scores.length, scores, images, continueFrom, ...(nextAction ? { nextAction, reason: imageBytes >= imageBudget ? 'result_size' : 'time_budget' } : {}),
-        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : stillReference ? 'Inspect the storyboard and built frame for composition, palette, hierarchy, materials and shot intent. Fix clear departures; exact pixels and a low difference score are not acceptance criteria. Check the planned motion separately with getFrames/checkPacing.' : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
+        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : stillReference ? 'Inspect the reference and built frame for composition, palette, hierarchy, materials and intent. Fix clear departures; exact pixels and a low difference score are not acceptance criteria. Check the planned motion separately with getFrames/checkPacing.' : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. For existing edits follow scene-engine page edit-lanes for sampling; after builds use it at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreSection or restoreClip.", inputSchema: z.object({ times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision }) => {
       await editSession.wait();
@@ -1901,9 +1881,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const execute = tool.execute;
     if (!execute) continue;
     tool.execute = function (this: unknown, ...args: never[]) {
-      const input = (args[0] ?? {}) as Record<string, unknown>;
-      if (name === 'saveStoryboard' || name === 'presentStoryboard' || name === 'readSkill' && input.name === 'storyboard' || name === 'generateImage' && input.purpose === 'storyboard') storyboarding = true;
-      if (['addFilm', 'addScene', 'addScenes', 'patchScene', 'replaceScene'].includes(name)) storyboarding = false;
       const instance = this && typeof this === 'object' ? this : tool;
       const supplied = 'ctx' in instance && instance.ctx && typeof instance.ctx === 'object' ? instance.ctx : {};
       const bound = { ...instance, ctx: { ...supplied, ...ctx } };
@@ -1966,5 +1943,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, storyboarding: () => storyboarding, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
 }

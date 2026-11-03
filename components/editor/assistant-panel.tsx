@@ -1,7 +1,5 @@
 'use client';
 import { ThinkingBlock, ToolChain } from './tool-chain';
-import { StoryboardStrip } from './storyboard-strip';
-import type { MediaAsset } from '@/lib/editor/types';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { ReferenceCard, referenceOf, type ReferenceMedia } from './reference-card';
 import { reportClientIncident } from '@/lib/incident-client';
@@ -104,7 +102,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia,storyboardMedia=[] }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   modelSwitcher?: boolean;
@@ -119,7 +117,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
   referenceMedia?: (assetId: string) => ReferenceMedia | undefined;
-  storyboardMedia?: readonly MediaAsset[];
   conversationStarted?: boolean;queued?:QueuedMessage[];queuePaused?:boolean;onRemoveQueued?:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue?:()=>Promise<unknown>;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   /** Share of this request's token cap used; the working block warns from 70%. */
@@ -267,7 +264,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <StoryboardStrip media={storyboardMedia}/>
     <EditComposer slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;

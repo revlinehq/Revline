@@ -10,7 +10,7 @@ import {FastFrameReview} from '../lib/ai/fast-frame-review';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
-  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'generatedImages:present', 'aiCosts:record',
+  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',
   'assistant:beginEditing', 'assistant:previewDraft', 'assistant:requestAnalysis', 'assistant:clearAnalysis',
   'assistant:attachRunStockAudio', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',
@@ -18,7 +18,7 @@ const mutations = new Set([
   'compositionReview:savePlan', 'compositionReview:request', 'compositionReview:cancel',
   'cutouts:startFromRun', 'derivations:startFromRun',
   'mcp:requestFrames', 'mcp:requestGuard', 'mcp:discardFrames', 'mcp:takeFrames',
-  'briefs:update', 'briefs:saveStoryboard', 'memories:remember', 'memories:forget',
+  'briefs:update', 'memories:remember', 'memories:forget',
   'referenceReads:request', 'referenceReads:take', 'referenceReads:discard',
 ]);
 const scope = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };

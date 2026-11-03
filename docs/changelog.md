@@ -4,13 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
-- Skills: Pitch storyboards as colored motion-design style frames with real palette, type and layout; allow readable low or medium quality. Why: the user wants the final look before building.
+- Agent assets: Keep asset-only image generation and short ideation that goes straight to building; remove board workflows and chat meta footers. Why: the user rejected the intermediate planning stages.
 
-- Skills: Turn accepted angles into scaled A/B ink sheets, then 2–3 key frames; remove storyboard meta footers. Why: Terra repeated concept gates after approval.
-
-- Skills: Add message-first ideation, direct creative conversation and one-proof 30–40 second launch films. Why: Terra repeated A/B prompts and literalised user feedback.
-
-- Agent images: Add complete ink storyboards, short concrete concepts and inline signed previews beside image plates. Why: the user requested visible shots and personal approval.
 - Skills: Shorten 14 editing skills and replace vague guidance with checks while retaining motion tools and incident fixes. Why: the user requested specific, human instructions without duplicate rules.
 
 - Skills: Add `npm run skills:rank`, which scores each editing skill on numbers, tool checks and examples and lists its vaguest lines. Why: the user wants skills ranked best to worst with reasons.

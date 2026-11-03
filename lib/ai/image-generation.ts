@@ -5,79 +5,20 @@ import { activeOpenAIKey, editorOpenAI } from './openai-keys';
 // GPT Image 2 rejects transparent backgrounds; Flare supports both plates and cut-outs.
 export const IMAGE_MODEL = 'gpt-image-2.5-flare';
 const sizes = { '1:1': '1024x1024', '3:2': '1536x1024', '2:3': '1024x1536', '16:9': '1536x864', '9:16': '864x1536', '4:5': '1024x1280', '4:3': '1536x1152', '2:1': '1536x768' } as const;
-const shotLine = z.string().trim().min(1).max(240).regex(/^[^\r\n]+$/, 'Use one line.');
-const panelFields = {
-  shotIndex: z.number().int().min(1).max(24).describe('Shot number within a direction. On a sheet’s outer storyboard metadata, use a sheet index unique across A/B pages; reuse it only for a corrected version of that sheet.'),
-  start: z.number().nonnegative().optional(),
-  duration: z.number().positive().max(180).optional(),
-  idea: shotLine.describe('The shot idea in one line.'),
-  visual: z.string().trim().min(1).max(1000).optional().describe('What the shot shows; defaults to the image prompt.'),
-  onScreenText: z.string().max(500).optional().describe('Exact film words, rendered in the real font family/weight and rebuilt as editable type. No production captions or annotations.'),
-  motion: shotLine.describe('Plain words, not seconds: headline fades up, cards spin in and stack.'),
-  transition: shotLine.optional().describe('How this shot leads into the next.'),
-  assetsNeeded: z.array(z.string().trim().min(1).max(160)).max(12).optional(),
-};
-const storyboardInput = z.object({
-  name: z.string().trim().min(1).max(60).describe('Shared storyboard label; reuse for every sheet and key frame.'),
-  ...panelFields,
-  phase: z.enum(['sheet', 'rough', 'style', 'direction', 'board']).optional().describe('sheet: one colored motion-design style-frame page, possibly both A/B rows. style: 2–3 full-size key frames after the pick. Other phases preserve older boards.'),
-  sheet: z.object({
-    rows: z.number().int().min(1).max(4), columns: z.number().int().min(1).max(4),
-    panelAspectRatio: z.enum(['landscape', 'vertical', 'square', 'portrait-feed', 'classic']),
-    panels: z.array(z.object({ ...panelFields, row: z.number().int().min(1).max(4), column: z.number().int().min(1).max(4), direction: z.enum(['A', 'B']) }).strict()).min(2).max(8),
-  }).strict().optional().describe('Required for phase sheet. Rows/columns are 1-based. For combined A/B, row 1 is A and row 2 B; number shots separately per direction. For longer options use separate sheets, at most 8 panels each.'),
-}).strict();
 export const imageGenerationInput = z.object({
-  prompt: z.string().trim().min(1).max(16000).describe('Storyboard: colored motion-design style frames with the actual palette/hex values, font families/weights, exact film copy, real UI/layout, shapes and 3D materials. Read image-direction for the sheet template. Asset: subject, framing, palette, material and use. Rebuild final film type/logos in code.'),
-  purpose: z.enum(['asset', 'storyboard']).optional().describe('Default asset. Storyboard saves a reference sheet or key frame, never a timeline clip; needs storyboard details.'),
-  quality: z.enum(['low', 'medium']).optional().describe('Storyboards default low when the real type/UI reads; choose medium for dense UI or small type. Assets default medium. Each call returns its actual estimated cost.'),
-  storyboard: storyboardInput.optional(),
-  aspectRatio: z.enum(['1:1', '3:2', '2:3', '16:9', '9:16', '4:5', '4:3', '2:1']).optional().describe('Default 1:1 for assets, current timeline ratio for storyboards. Choose aspectRatio or size, not both.'),
+  prompt: z.string().trim().min(1).max(16000).describe('One real scene asset: background, texture, image fill, photograph, subject or transparent cut-out. Specify medium, framing, palette, material, lighting and exclusions. Build complete frames, typography, UI and vector shapes in scene code.'),
+  quality: z.enum(['low', 'medium']).optional().describe('Default medium. Low for inexpensive asset exploration. Each call returns estimated cost.'),
+  aspectRatio: z.enum(['1:1', '3:2', '2:3', '16:9', '9:16', '4:5', '4:3', '2:1']).optional().describe('Default 1:1. Choose aspectRatio or size, not both.'),
   size: z.enum(['1024x1024', '1536x1024', '1024x1536', '1536x864', '864x1536', '1024x1280', '1536x1152', '1536x768']).optional(),
   transparentBackground: z.boolean().optional().describe('Default false. True requests a PNG cut-out with alpha.'),
   referenceAssetIds: z.array(z.string().min(1)).min(1).max(4).optional().describe('Project image asset IDs to edit or use as subject references; never reference-video frames.'),
   count: z.number().int().min(1).max(4).optional().describe('Number of variants, default 1. Each variant is a paid image.'),
 }).strict().superRefine((input, ctx) => {
   if (input.aspectRatio && input.size) ctx.addIssue({ code: 'custom', message: 'Choose aspectRatio or size, not both.' });
-  if ((input.purpose === 'storyboard') !== !!input.storyboard) ctx.addIssue({ code: 'custom', message: 'purpose storyboard needs storyboard shot details; asset generation omits them.' });
-  if (input.purpose === 'storyboard' && (input.count ?? 1) !== 1) ctx.addIssue({ code: 'custom', message: 'Generate one sheet or key frame per call. A/B with 2–3 panels per option shares one sheet.' });
-  const board = input.storyboard, sheet = board?.sheet;
-  if ((board?.phase === 'sheet') !== !!sheet) ctx.addIssue({ code: 'custom', message: 'phase sheet requires sheet layout and panel details; other phases omit sheet.' });
-  if (sheet) {
-    if (sheet.rows * sheet.columns !== sheet.panels.length || new Set(sheet.panels.map(p => `${p.row}:${p.column}`)).size !== sheet.panels.length || sheet.panels.some(p => p.row > sheet.rows || p.column > sheet.columns)) ctx.addIssue({ code: 'custom', message: 'Fill every grid cell exactly once, with at most 8 panels.' });
-    const directions = new Set(sheet.panels.map(p => p.direction));
-    if (directions.size === 2 && (sheet.rows !== 2 || sheet.columns < 2 || sheet.columns > 3 || sheet.panels.some(p => p.row !== (p.direction === 'A' ? 1 : 2)))) ctx.addIssue({ code: 'custom', message: 'Combined A/B sheets have two rows: A above B, each with 2–3 panels. Longer options use separate sheets.' });
-    for (const direction of directions) {
-      const panels = sheet.panels.filter(p => p.direction === direction).sort((a, b) => a.row - b.row || a.column - b.column);
-      if (panels.some((p, i) => i > 0 && p.shotIndex !== panels[i - 1].shotIndex + 1)) ctx.addIssue({ code: 'custom', message: 'Order each direction’s panels left to right, top to bottom, with consecutive shot indices.' });
-    }
-  }
 });
 export type ImageGenerationInput = z.infer<typeof imageGenerationInput>;
 export const imageGenerationSize = (input: ImageGenerationInput) => input.size ?? sizes[input.aspectRatio ?? '1:1'];
-export const imageGenerationQuality = (input: ImageGenerationInput) => input.quality ?? (input.purpose === 'storyboard' ? 'low' : 'medium');
-
-/** Resolve a storyboard's format from the selected timeline, while preserving asset defaults. */
-export function resolveImageGeneration(input: ImageGenerationInput, aspectRatio: import('../editor/types').AspectRatio): ImageGenerationInput {
-  const target = { landscape: '16:9', vertical: '9:16', square: '1:1', 'portrait-feed': '4:5', classic: '4:3' } as const;
-  if (input.purpose === 'storyboard') input = { ...input, prompt: `${input.prompt}\n\nRender COLORED motion-design style frames matching the actual final film 1:1. Use the exact palette/hex values, font families/weights, approved on-screen text, UI/layout, shapes and 3D objects specified above and in the supplied references. Use flat motion graphics or clean-rendered matte 3D; retain the film's specified materials, lighting and texture. No generic AI gloss, glowing orbs, lens flares, sparkles, purple-blue gradients, bright purple fills or stock futuristic dashboard filler. Muted grain gradients are allowed only when specified as part of the film. No annotations, arrows, production captions, shot numbers or row labels anywhere in the image; only the approved film text appears.` };
-  const layout = input.storyboard?.sheet;
-  if (layout) {
-    const directions = new Set(layout.panels.map(panel => panel.direction)).size === 2 ? 'The top row is option A; the bottom row is B. Do not print these labels.' : `This sheet represents direction ${layout.panels[0].direction}; do not print that label.`;
-    input = { ...input, prompt: `${input.prompt}\n\nRender ONE colored style-frame sheet, ${layout.rows} rows by ${layout.columns} columns, ${layout.panels.length} panels. Read left to right, top to bottom. Every PANEL is ${target[layout.panelAspectRatio]}; the whole page is not a single film frame. Centre the grid with thin neutral gutters and outer margins if needed; never stretch a panel to fill the page. ${directions} Row/column/shot identifiers below are layout metadata, never printed annotations. Every panel shows its final colors, type and composition.\n${[...layout.panels].sort((a, b) => a.row - b.row || a.column - b.column).map(panel => `Row ${panel.row}, column ${panel.column}, ${panel.direction}${panel.shotIndex}: ${panel.visual ?? panel.idea}. Exact on-screen text: ${JSON.stringify(panel.onScreenText ?? '')}.`).join('\n')}` };
-  }
-  if (input.purpose !== 'storyboard' || input.aspectRatio || input.size) return input;
-  if (input.storyboard?.sheet) {
-    const sheet = input.storyboard.sheet, [width, height] = target[sheet.panelAspectRatio].split(':').map(Number);
-    const ratio = width / height * sheet.columns / sheet.rows;
-    const nearest = (Object.keys(sizes) as (keyof typeof sizes)[]).sort((a, b) => {
-      const [aw, ah] = a.split(':').map(Number), [bw, bh] = b.split(':').map(Number);
-      return Math.abs(Math.log(aw / ah / ratio)) - Math.abs(Math.log(bw / bh / ratio));
-    })[0];
-    return { ...input, aspectRatio: nearest };
-  }
-  return { ...input, aspectRatio: target[aspectRatio] };
-}
+export const imageGenerationQuality = (input: ImageGenerationInput) => input.quality ?? 'medium';
 
 const tokenDetails = z.object({ textTokens: z.number().int().nonnegative(), imageTokens: z.number().int().nonnegative() });
 
