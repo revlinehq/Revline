@@ -33,6 +33,7 @@ export async function releaseMediaObjects(ctx:MutationCtx,asset:StoredMedia){
   }
 }
 export async function removeMediaAttachment(ctx:MutationCtx,asset:Doc<'assets'>){
+  await ctx.scheduler.runAfter(0, internal.frameCache.removeAsset, {projectId:asset.projectId,assetId:asset._id});
   const segments=await ctx.db.query('previewSegments').withIndex('by_asset',q=>q.eq('assetId',asset._id)).collect();
   for(const segment of segments){await ctx.db.delete(segment._id);await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:segment.r2Key});await releaseAccountStorage(ctx,asset.ownerId,{r2Key:segment.r2Key},'preview');}
   await ctx.db.delete(asset._id);

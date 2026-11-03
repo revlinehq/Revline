@@ -1,3 +1,4 @@
+import type { FrameCache } from './frame-cache';
 import { mkdir,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
@@ -46,7 +47,7 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 }
 
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
-export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
+export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,cache?:FrameCache,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
@@ -95,33 +96,35 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   }
   const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
   const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);
-  if(!timeline.clips.some(clip=>clip.kind==='video')){
-    // Nothing to decode (scenes, text, images): the times within each 3 s span (the capture's limit) share one capture
-    // session, instead of a browser start per frame.
-    const order=at.map((time,index)=>({time,index})).sort((a,b)=>a.time-b.time),images=new Array<string>(at.length);
-    for(let first=0;first<order.length;){
-      let next=first;while(next+1<order.length&&order[next+1].time+frame-order[first].time<=3)next++;
-      const group=order.slice(first,next+1);
-      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited']},signal);
-      for(const [sample,item] of group.entries())images[item.index]=(await readFile(join(path,`sample-${sample}.png`))).toString('base64');
-      first=next+1;onProgress(20+Math.round(75*first/order.length));
+  const capture = async (indices:number[]):Promise<Buffer[]> => {
+    const images = new Map<number,Buffer>();
+    if(contactSheet){
+      const group=indices.map(index=>({time:at[index],index})).sort((a,b)=>a.time-b.time);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group.at(-1)!.time+frame,variants:['edited'],sparse:true},signal);
+      for(const [sample,item] of group.entries())images.set(item.index,await readFile(join(path,`sample-${sample}.png`)));
+      onProgress(95);
+    }else if(!timeline.clips.some(clip=>clip.kind==='video')){
+      // Scene samples within three seconds share the same capture, just as uncached requests do.
+      const order=indices.map(index=>({time:at[index],index})).sort((a,b)=>a.time-b.time);
+      for(let first=0;first<order.length;){
+        let next=first;while(next+1<order.length&&order[next+1].time+frame-order[first].time<=3)next++;
+        const group=order.slice(first,next+1);
+        await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited']},signal);
+        for(const [sample,item] of group.entries())images.set(item.index,await readFile(join(path,`sample-${sample}.png`)));
+        first=next+1;onProgress(20+Math.round(75*first/order.length));
+      }
+    }else for(const [done,index] of indices.entries()){
+      const time=at[index];
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
+      images.set(index,await readFile(join(path,'sample-0.png')));
+      onProgress(20+Math.round(75*(done+1)/indices.length));
     }
-    for(const [index,time] of at.entries())frames.push({time,image:images[index]});
-  }
-  // A finished short is at most 60s: one capture session supplies its whole contact sheet.
-  else if(contactSheet){
-    await runCompositionCapture(directory,{...size,fps:timeline.fps,times:at,start:at[0],end:at.at(-1)!+frame,variants:['edited'],sparse:true},signal);
-    for(const [index,time] of at.entries())frames.push({time,image:(await readFile(join(path,`sample-${index}.png`))).toString('base64')});
-    onProgress(95);
-  }
-  // With footage, one frame-sized window per time keeps decoding bounded however far apart the times are.
-  else for(const [index,time] of at.entries()){
-    await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
-    frames.push({time,image:(await readFile(join(path,'sample-0.png'))).toString('base64')});
-    onProgress(20+Math.round(75*(index+1)/times.length));
-  }
+    return indices.map(index=>images.get(index)!);
+  };
+  const images = cache && snapshot.cacheIdentity ? await cache.batch(at.map(time=>({kind:'timeline-png',identity:snapshot.cacheIdentity,frameIndex:Math.round(time*timeline.fps),width:size.width,height:size.height,format:'png'})),capture) : await capture(at.map((_,index)=>index));
+  for(const [index,time] of at.entries())frames.push({time,image:images[index].toString('base64')});
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
-  // Results travel in one Convex document (1 MiB); shrink until every frame fits.
+  // Keep the existing tool image budget and encoding; cached PNGs are never replaced by these smaller JPEGs.
   const pngs=await Promise.all(frames.map(async frame=>{
     const image=Buffer.from(frame.image,'base64'),crop=snapshot.comparison?.crop;
     if(!crop)return image;

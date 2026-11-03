@@ -8,7 +8,6 @@ const sections = [
   { label: 'Clipping', note: 'Turn streams into vertical clips', href: '/#clippers' },
   { label: 'Motion design', note: 'Launch films, explainers and motion graphics', href: '/#motion-design' },
   { label: 'Features', note: 'Effects done by asking', href: '/#features' },
-  { label: 'Inspo Motion', note: 'Recreate a launch video from a link', href: '/#inspo', fresh: true },
 ];
 
 export function LandingProductMenu() {
@@ -17,7 +16,7 @@ export function LandingProductMenu() {
     <DropdownMenuContent align="center" sideOffset={10} className="landing-product-menu w-72 p-1.5">
       {sections.map(section => <DropdownMenuItem key={section.href} asChild className="flex-col items-start gap-0.5 px-3 py-2">
         <a href={section.href}>
-          <span className="landing-product-menu-label">{section.label}{section.fresh && <span className="landing-product-menu-new">New</span>}</span>
+          <span className="landing-product-menu-label">{section.label}</span>
           <span className="landing-product-menu-note">{section.note}</span>
         </a>
       </DropdownMenuItem>)}

@@ -40,6 +40,7 @@ import type * as editorAccess from "../editorAccess.js";
 import type * as flyProcessor from "../flyProcessor.js";
 import type * as flyRender from "../flyRender.js";
 import type * as fpsMigration from "../fpsMigration.js";
+import type * as frameCache from "../frameCache.js";
 import type * as generatedImages from "../generatedImages.js";
 import type * as http from "../http.js";
 import type * as iconCache from "../iconCache.js";
@@ -170,6 +171,7 @@ declare const fullApi: ApiFromModules<{
   flyProcessor: typeof flyProcessor;
   flyRender: typeof flyRender;
   fpsMigration: typeof fpsMigration;
+  frameCache: typeof frameCache;
   generatedImages: typeof generatedImages;
   http: typeof http;
   iconCache: typeof iconCache;

@@ -108,6 +108,7 @@ export async function checkClipSnapshot(
     convexUrl,
     signal,
     (n) => progress(30 + n * 0.65),
+    undefined,
     true,
   );
   const sheet = await contactSheet(captured.frames, result);
