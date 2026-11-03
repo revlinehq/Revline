@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Editor: The dark editor uses the same neutral greys as the dashboard instead of blue-tinted ones. Why: the user noticed the two looked different.
 - Dashboard: The new-project composer has a lighter, shorter drop shadow. Why: the user found it too heavy.
 - Dashboard: The new-project composer send button is brand purple again instead of grey. Why: the user wanted the purple button back.
 

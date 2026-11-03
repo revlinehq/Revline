@@ -1,19 +1,19 @@
-.timeline-tabs{display:flex;flex:none;align-items:center;gap:4px;min-height:38px;padding:0 12px;background:var(--ed-bg,var(--background,#0b0c0e));border-bottom:1px solid var(--timeline-divider,var(--ws-artifact-border,#25272d));overflow-x:auto;scrollbar-width:none}
+.timeline-tabs{display:flex;flex:none;align-items:center;gap:4px;min-height:38px;padding:0 12px;background:var(--ed-bg,var(--background,#101010));border-bottom:1px solid var(--timeline-divider,var(--ws-artifact-border,#2d2d2d));overflow-x:auto;scrollbar-width:none}
 .timeline-tab{position:relative;display:flex;align-items:center;flex:none;height:28px;border-radius:7px;background:#ffffff08;color:var(--ws-muted,#a1a3ab)}
-.timeline-tab[data-active]{background:#ffffff17;color:var(--ws-text,#ededef)}
+.timeline-tab[data-active]{background:#ffffff17;color:var(--ws-text,#ededed)}
 .timeline-tab-main{display:flex;align-items:center;gap:8px;height:100%;padding:0 4px 0 12px;border:0;background:none;color:inherit;font-size:12px;font-weight:500;cursor:pointer}
 .timeline-tab[data-active] .timeline-tab-main{cursor:default}
-.timeline-tab:not([data-active]):hover{background:#ffffff0f;color:var(--ws-text,#ededef)}
+.timeline-tab:not([data-active]):hover{background:#ffffff0f;color:var(--ws-text,#ededed)}
 .timeline-tab-main:disabled{cursor:not-allowed;opacity:.55}
 .timeline-tab-name{max-width:160px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
-.timeline-tab-length{font:10px var(--font-geist-mono,ui-monospace),monospace;color:var(--ws-muted,#666872);opacity:.8}
+.timeline-tab-length{font:10px var(--font-geist-mono,ui-monospace),monospace;color:var(--ws-muted,#686868);opacity:.8}
 .timeline-tab-agent{display:grid;place-items:center;flex:none;width:14px;height:14px}
 .timeline-tab-agent>*{width:13px;height:13px}
 .timeline-tab-agent .revline-mark{width:14px;height:14px}
 .timeline-tab-menu{display:grid;place-items:center;width:22px;height:22px;margin-right:6px;border:0;border-radius:5px;background:none;color:var(--ws-muted,#a1a3ab);cursor:pointer}
-.timeline-tab-menu:hover{background:var(--ws-hover,#ffffff0f);color:var(--ws-text,#ededef)}
+.timeline-tab-menu:hover{background:var(--ws-hover,#ffffff0f);color:var(--ws-text,#ededed)}
 .timeline-tab-add{display:grid;place-items:center;flex:none;width:28px;height:28px;margin-left:2px;border:0;border-radius:6px;background:#ffffff0a;color:var(--ws-muted,#a1a3ab);cursor:pointer}
-.timeline-tab-add:hover{background:#ffffff14;color:var(--ws-text,#ededef)}
+.timeline-tab-add:hover{background:#ffffff14;color:var(--ws-text,#ededed)}
 .timeline-tab-add:disabled{cursor:not-allowed;opacity:.5}
 /* The preview/timeline handle sits on the tabs' bottom divider, so the line under the tabs resizes the tracks. */
 .editor-app:has(.timeline-tabs) .timeline-resize-handle{background:transparent!important;transform:translateY(38px);z-index:30;cursor:row-resize}
