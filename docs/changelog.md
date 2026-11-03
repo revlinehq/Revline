@@ -3,16 +3,13 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
-<<<<<<< HEAD
+
+- Editor: New-project composer sits at optical centre, slightly above the middle. Why: exact centre read as low.
 - Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
-=======
-<<<<<<< HEAD
 - Skills: Add motion taste judgments, reference learning and a short rendered critique anchored in user memory. Why: Zura asked for original design judgment beyond replication.
-=======
 - Editor: the new-project headline is now always “What are we making today?”. Why: the user picked it.
 - Editor: removed the gradient behind the new-project page; it is plain dark now. Why: the user asked to remove it.
 - Editor: the new-project composer is centred again, "Your projects" sits 20px below it, and the Pen mesh background is recreated in CSS with no image. Why: the user asked for a centred composer, a closer project list and no background image.
->>>>>>> origin/main
 - Editor: the new-project page rotates its headline once you have footage, and "Your projects" now starts in view. Why: the user disliked the fixed headline and the list sat below the fold.
 - Editor: the new-project gradient is now drawn in CSS with fine grain, so it stays sharp at any size and fades out instead of cutting off. Why: the image version looked low quality and was cropped.
 - Editor: removed the “Take a quick tour” button and dialog from the new-project page. Why: the user didn't want it.
@@ -22,7 +19,6 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Workspace: Keep the first-project composer at the viewport centre, including with scrollbars, over the chosen violet grain with one headline and starter prompts. Why: make the first edit clear for new users.
 - Workspace: Restore the new-project composer’s shared primary-purple send button and remove local color overrides. Why: small primary actions keep the app’s brand color.
 - Workspace: Start projects with one composer for prompts and footage, with the editor’s model, effort and mode choices carried into the first request. Why: one place to describe and attach before sending.
->>>>>>> origin/main
 - iOS: Prepare the Superwall membership paywall, restore native labels and accents, unify onboarding backgrounds and adapt the editor to resizing. Why: Zura requested App Store payment setup and a consistent native iPhone interface.
 - Agent tools: Remove scene image-binding caps, make patches and inspection recover from routine input drift, and support licensed Noto/Fluent emoji with accurate icon errors. Why: Terra hit repeated tool friction while building a motion film.
 - Skills: Add renderer-proven 3D craft guidance for materials, lighting, grounding, cameras and licensed models. Why: Zura's cursor review exposed mechanics without visual craft.
