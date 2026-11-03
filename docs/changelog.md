@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Security: Restrict remote downloads, pin published thumbnails, check all tabs before deleting media, and throttle paid retries and audio. Why: the audit found privacy, SSRF, data-loss and cost-control gaps.
+
 - Database I/O: Separate numeric task progress, slim chat display rows and turn status, and keep run bookkeeping off timeline and prompt payloads. Why: large subscribed rows and repeated progress writes amplified database reads.
 
 - Database I/O: Remove scene hydration from run bookkeeping, isolate catalog status and frame cleanup, and publish reference results to file storage. Why: one-user traffic consumed gigabytes of database bandwidth.

@@ -75,3 +75,9 @@ export async function consumeAssistantRequest(ctx: MutationCtx, ownerId: string)
   const perMinute = accountLimit('AI_REQUESTS_PER_MINUTE_PER_ACCOUNT', 20, 1, 120);
   await consumeAccountQuota(ctx, ownerId, 'assistantRequest', [{ period: MINUTE_MS, max: perMinute, message: 'You are sending AI requests too quickly. Wait a minute, then try again.' }]);
 }
+
+/** Shared by narration, voice samples and sound effects, including provider retries. */
+export async function consumeAudioRequest(ctx: MutationCtx, ownerId: string) {
+  const perMinute = accountLimit('AUDIO_REQUESTS_PER_MINUTE_PER_ACCOUNT', 12, 1, 120);
+  await consumeAccountQuota(ctx, ownerId, 'audioRequest', [{ period: MINUTE_MS, max: perMinute, message: 'You are generating audio too quickly. Wait a minute, then try again.' }]);
+}

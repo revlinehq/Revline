@@ -126,10 +126,11 @@ export const selected = query({
 export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id<'assets'>) {
   const asset = await ctx.db.get(assetId);
   if (!asset || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  const project = await requireProject(ctx, asset.projectId, ownerId, true);
+  const project = await requireProject(ctx, asset.projectId, ownerId, true, false);
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
-  if((await allTabTimelines(ctx,project)).some(t=>normalizationAssetIds(t).includes(asset._id)))throw new ConvexError('Remove this media from loudness normalization first');
-  if (project.timeline?.clips.some(clip => clip.assetId === asset._id) || (project.timeline && sceneMediaAssetIds(project.timeline).includes(asset._id))) throw new ConvexError("Remove this media from the timeline first");
+  const timelines = await allTabTimelines(ctx,project);
+  if(timelines.some(t=>normalizationAssetIds(t).includes(asset._id)))throw new ConvexError('Remove this media from loudness normalization first');
+  if (timelines.some(timeline => timeline.clips.some(clip => clip.assetId === asset._id) || sceneMediaAssetIds(timeline).includes(asset._id))) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
   await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)&&!normalizationAssetIds(t).includes(asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;

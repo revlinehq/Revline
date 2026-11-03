@@ -6,7 +6,7 @@ import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { CLIPPING_SKILL_ROUTING } from '../lib/ai/skills/clipping';
-import { MCP_ORIGIN_HEADER, requestMcpOrigin } from './lib/mcp_origin';
+import { requestMcpOrigin } from './lib/mcp_origin';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
@@ -122,10 +122,9 @@ export function registerMcpRoutes(http: HttpRouter) {
     if (text.length > 20_000) return json({ error: 'invalid_client_metadata', error_description: 'Client metadata is too large.' }, 400);
     try { metadata = JSON.parse(text); } catch { return json({ error: 'invalid_client_metadata', error_description: 'Send client metadata as JSON.' }, 400); }
     const redirectUris = Array.isArray(metadata.redirect_uris) ? metadata.redirect_uris.filter((uri): uri is string => typeof uri === 'string') : [];
-    // Through the website's proxy every request shares its egress address, so the proxy
-    // forwards the caller's address in X-Forwarded-For.
-    const forwarded = request.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-    const source = (request.headers.has(MCP_ORIGIN_HEADER) ? forwarded : request.headers.get('cf-connecting-ip') ?? forwarded) ?? 'unknown';
+    // Convex's ingress supplies this header. Caller-provided forwarding and
+    // origin headers must never choose the registration quota bucket.
+    const source = request.headers.get('cf-connecting-ip') ?? 'unknown';
     const client = await ctx.runMutation(internal.mcpAuth.registerClient, { clientName: typeof metadata.client_name === 'string' ? metadata.client_name : 'MCP client', redirectUris, source });
     if ('error' in client) return client.error === 'rate_limited' ? json({ error: 'slow_down', error_description: 'Too many registrations. Try again in a minute.' }, 429, { 'Retry-After': '60' }) : json({ error: 'invalid_redirect_uri', error_description: 'Use https, loopback http or an app scheme redirect, up to 10.' }, 400);
     return json({ client_id: client.clientId, client_id_issued_at: Math.floor(client.createdAt / 1000), client_name: typeof metadata.client_name === 'string' ? metadata.client_name.slice(0, 100) : 'MCP client', redirect_uris: redirectUris, grant_types: ['authorization_code', 'refresh_token'], response_types: ['code'], token_endpoint_auth_method: 'none' }, 201);

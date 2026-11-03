@@ -514,8 +514,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...result, clipId: id, gain, overlapsAudio: overlapping };
   };
   // Generate with ElevenLabs, upload to the project's R2 media like an upload, and register an ordinary audio asset holding its request.
+  const reserveAudio = async () => { abortSignal.throwIfAborted(); await ctx.runMutation(internal.assistant.reserveAudioRequest, run); abortSignal.throwIfAborted(); };
   const createGeneratedSound = async (request: SoundEffectRequest, name?: string) => {
-    const { samples, rate } = await generateSoundEffect(request, abortSignal), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+    const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
     const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
     try {
       const asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? 'Generated sound').replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration: samples[0].length / rate, waveform: soundWaveform(samples, rate), recipe: JSON.stringify(request) });
@@ -1457,12 +1458,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const samples = [];
       for (const voiceId of voiceIds) {
         const known = NARRATION_VOICES.find(voice => voice.voiceId === voiceId);
-        samples.push({ voiceId, name: known?.name ?? voiceId, ...(known ? { description: known.description } : {}), sample: await publishPreview(await generateVoiceSample(voiceId, sampleText, { speed }, abortSignal), 'audio/mpeg') });
+        samples.push({ voiceId, name: known?.name ?? voiceId, ...(known ? { description: known.description } : {}), sample: await publishPreview(await generateVoiceSample(voiceId, sampleText, { speed }, abortSignal, reserveAudio), 'audio/mpeg') });
       }
       return { sampleText, samples };
     } }),
     generateVoice: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.generateVoice, description: "Speak a narration script with an ElevenLabs voice (listVoices) and place it as one voice clip on a free A layer at timeline seconds at (frame-snapped); save immediately. The words are saved as the clip's transcript (inspectAssetAnalysis, addSubtitlesFromTranscript). Returns its duration and every word's timeline start and end: time the film's beats to these, so each visual lands on its spoken word. Write the script exactly as it should be read. To change the wording or voice, delete the clip and generate again. If generation fails nothing is placed: say so.", inputSchema: voiceInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional().describe('Clip volume 0..2, default 1.'), name: z.string().trim().min(1).max(60).optional() }).strict(), execute: async (_ctx, { at, gain = 1, name, ...request }) => {
-      const { samples, rate, words } = await generateNarration(request, abortSignal), duration = samples[0].length / rate;
+      const { samples, rate, words } = await generateNarration(request, abortSignal, reserveAudio), duration = samples[0].length / rate;
       const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
       const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
       let asset: (typeof assets)[number];

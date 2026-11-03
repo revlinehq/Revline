@@ -1,3 +1,4 @@
+import { downloadPublicHttps } from './public-https';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
@@ -15,9 +16,8 @@ const TOLERANCE = 24;
 const hex = (pixels: Pixels, x: number, y: number) => { const i = (y * pixels.width + x) * 3; return '#' + [0, 1, 2].map(c => pixels.data[i + c].toString(16).padStart(2, '0')).join(''); };
 
 async function download(url: string, signal: AbortSignal) {
-  const response = await fetch(url, { signal });
-  if (!response.ok) throw new AnalysisError(`A kit file could not be downloaded (${response.status}).`, 502);
-  return { type: response.headers.get('content-type') ?? 'application/octet-stream', data: Buffer.from(await response.arrayBuffer()) };
+  const response = await downloadPublicHttps(url, { signal, maxBytes: 8_000_000 });
+  return { type: response.type || 'application/octet-stream', data: Buffer.from(response.data) };
 }
 const pixelsOf = async (image: Buffer, width?: number, height?: number): Promise<Pixels> => {
   const { data, info } = await sharp(image).removeAlpha().resize(width && height ? { width, height, fit: 'fill' } : undefined).raw().toBuffer({ resolveWithObject: true });

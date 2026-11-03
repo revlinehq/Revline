@@ -40,6 +40,9 @@ export function startMediaWorker(options: MediaWorkerOptions) {
   const unsubscribe = options.subscriptions.onUpdate(api.mediaTasks.ready, claimArgs, value => {
     revision++; state.ready = !!value;
     if (state.ready) { state.lastWorkAt = Date.now(); wake(); }
+  }, () => {
+    state.ready = false;
+    options.log('queue-reconnecting', {});
   });
 
   function waitForWork(observed: number) {

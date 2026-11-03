@@ -16,6 +16,8 @@ const label = (fields: Record<string, unknown>) => `[${new Date().toISOString()}
 const worker = startMediaWorker({
   client: new ConvexHttpClient(convexUrl), subscriptions, convexUrl, workerSecret, slots, claim: { lane: 'any' },
   deadlineMs: 15 * 60_000, signal: shutdown.signal,
+  // Read-only sessions can keep both development services up without claiming paid work.
+  draining: () => process.env.MEDIA_WORKER_PAUSED === 'true',
   log: (event, fields) => {
     if (event === 'media-started') console.log(`${label(fields)}: ${fields.kind} started.`);
     else if (event === 'media-completed') console.log(`${label(fields)}: completed.`);
@@ -23,5 +25,7 @@ const worker = startMediaWorker({
     else console.error('Media queue connection interrupted. Retrying.');
   },
 });
-console.log(`Revline media worker ready (${slots} slots).`);
-void worker.done.catch(() => { console.error('Media worker stopped unexpectedly.'); process.exitCode = 1; }).finally(() => subscriptions.close());
+console.log(`Revline media worker ready (${slots} slots${process.env.MEDIA_WORKER_PAUSED === 'true' ? ', paused: no tasks will be claimed' : ''}).`);
+const pausedTimer = process.env.MEDIA_WORKER_PAUSED === 'true' ? setInterval(() => {}, 60_000) : undefined;
+const lifetime = process.env.MEDIA_WORKER_PAUSED === 'true' ? new Promise<void>(resolve => { if (shutdown.signal.aborted) resolve(); else shutdown.signal.addEventListener('abort', () => resolve(), { once: true }); }) : worker.done;
+void lifetime.catch(() => { console.error('Media worker stopped unexpectedly.'); process.exitCode = 1; }).finally(() => { clearInterval(pausedTimer); return subscriptions.close(); });

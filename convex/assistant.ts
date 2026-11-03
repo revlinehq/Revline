@@ -41,7 +41,7 @@ import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
-import { consumeAssistantRequest, requireMediaTaskCapacity } from './lib/account_limits';
+import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, ANTHROPIC_EDIT_CHOICES, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
@@ -177,6 +177,7 @@ export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:
   const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',args.promptMessageId)).unique();
   if(project.aiRunning){if(turn?.runId===project.aiRunId)return null;throw new ConvexError('Wait for the current request before resuming this one.');}
   if(turn?.status==='completed')return null;
+  await consumeAssistantRequest(ctx,ownerId);
   const runId=crypto.randomUUID(),text=prompt.text??'';
   const recovery:Doc<'projects'>['aiRecovery']=turn?{requests:[text],runId:turn.runId,revision:project.revision??0,savedEdits:turn.savedEdits,status:'failed',reason:turn.feedback??project.aiError??'Resume the unfinished request.',updatedAt:Date.now()}:project.aiRecovery;
   const sameUndoGroup=turn?.runId===project.aiRunId&&project.aiCheckpointRevision===project.revision;
@@ -440,6 +441,14 @@ export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},ret
 export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   return hydrateAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId));
+}});
+/** Reserve before each paid audio HTTP request, from either MCP or an editor turn. */
+export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null(),handler:async(ctx,args)=>{
+  const run=await projectRun(ctx,args.projectId,args.ownerId);
+  if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  await requireEditorAccess(ctx,args.ownerId);
+  await consumeAudioRequest(ctx,args.ownerId);
+  return null;
 }});
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
