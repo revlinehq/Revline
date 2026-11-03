@@ -1,3 +1,4 @@
+import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
 import { generatedImageSummary } from './generated_image_summary';
@@ -563,7 +564,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
       if (state.started) started = true;
       if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
-      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), frames: (state.frames as { time: number; image: string }[]).map(frame => ({ time: frame.time, image: frame.image })) }; }
+      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), frames: (await snapshotFrames(state)).map(frame => ({ time: frame.time, image: frame.image })) }; }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
