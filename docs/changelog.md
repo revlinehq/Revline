@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- AI: Revline uses a single OpenAI key; the backup key that took over when the main account ran out of credit is removed. Why: the user replaced both with one funded key.
 - Editor: The timeline tab row scrolls sideways with a normal mouse wheel, and the open tab scrolls into view. Why: after /clip makes many tabs, the extra ones were unreachable without a trackpad.
 - Footage: Keep one weighted loading percentage through upload, playback, analysis and editor opening, including retries and view changes. Why: the user reported progress restarting between stages.
 - Composer: The plus button and model pickers sit closer together, with less padding around the model names. Why: the user found the spacing too wide.
