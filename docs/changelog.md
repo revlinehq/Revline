@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Workspace: Match the approved home composer and compact project list with footage menus and stored posters. Why: the user requested the Pen design.
+
 - Editor: New-project composer sits at optical centre, slightly above the middle. Why: exact centre read as low.
 - Editor: Apply the approved timeline clip design with persistent labels, current track colours, text previews and compact identities, without clip keyframes. Why: the user approved Pen mTG6i’s structure and requested the existing app colours.
 - Skills: Add motion taste judgments, reference learning and a short rendered critique anchored in user memory. Why: Zura asked for original design judgment beyond replication.
