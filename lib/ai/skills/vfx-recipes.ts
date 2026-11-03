@@ -6,7 +6,7 @@ export const vfxRecipes: EditorSkill = {
   get body() {
     return `# VFX recipes
 
-Each recipe is a sequence of tools. Inspect the footage first (inspectAssetAnalysis, readFrames) so every effect lands on a real moment, then check the result with getFrames. One hero effect per moment; a stack of effects reads as noise.
+Inspect inspectAssetAnalysis/readFrames to anchor each effect to observed action; verify with getFrames. Choose one primary treatment per hit, plus at most one flash/shake. A labeled freeze with a push is one coordinated treatment; list its parts.
 
 ## Freeze-frame callout
 The classic "that's me" or punchline beat.
@@ -26,8 +26,8 @@ For action: a jump, a trick, a pour, a punch.
 Words between the subject and the background.
 1. duplicateClips the footage clip to the same time, so the copy sits on a V layer above it.
 2. removeBackground on the TOP copy (person cut-out; Ultra plan, background job).
-3. The text on the V layer between the two copies: big, bold, placed where the person partly covers it (behind the head or shoulders).
-The cut-out switches in after the turn, so tell the user the layering finishes in a minute or two.
+3. The text on the V layer between the two copies: headline height 8–12% of frame height; overlap shoulders, keeping every keyword readable at maximum occlusion.
+Report pending until getMediaTask completes; inspect the mask/composition with getFrames before reporting success.
 
 ## Footage through text
 A word filled with the video, often for titles.

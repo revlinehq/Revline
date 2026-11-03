@@ -9,7 +9,7 @@ import { useAuth } from '@clerk/nextjs';
 import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { aspectRatioForSize } from '@/lib/editor/types';
+import type { AspectRatio } from '@/lib/editor/types';
 import { createProjectImportSession, type ImportFile, type ProjectImportProgress } from '@/lib/editor/project-import';
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
@@ -26,6 +26,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { VideoLinkImport } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
+import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
@@ -36,6 +37,7 @@ import './shared.css';
 import './new-conversation.css';
 
 const briefKey = 'revline:next-brief';
+const ratioKey = 'revline:next-aspect-ratio';
 const cloudKey = 'revline:next-cloud-footage';
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
@@ -74,6 +76,7 @@ export function NewConversation() {
   const [error, setError] = useState('');
   const [startingBlank, setStartingBlank] = useState(false);
   const [draft, setDraft] = useState('');
+  const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
   const headline = 'What are we making today?';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
@@ -91,9 +94,14 @@ export function NewConversation() {
     if (!isLoaded) return;
     try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
     setDraft(brief.current);
+    try {
+      const saved = sessionStorage.getItem(ratioKey);
+      if (saved === 'landscape' || saved === 'vertical' || saved === 'square' || saved === 'portrait-feed' || saved === 'classic') setAspectRatio(saved);
+    } catch { /* Format selection also works without draft storage. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
       session.current = job.session;
+      if (job.input.aspectRatio) setAspectRatio(job.input.aspectRatio);
       setFiles(job.input.files);
       setCloudIds(job.input.assetIds);
       setProcessing(job.progress);
@@ -197,7 +205,7 @@ export function NewConversation() {
       const prompt = brief.current.trim();
       const sourceName = files[0]?.file.name ?? cloudMedia?.[0]?.fileName ?? 'New video';
       const title = (prompt ? prompt.replace(/\s+/g, ' ') : sourceName.replace(/\.[^.]+$/, '')).slice(0, 80) || 'New video';
-      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, placeOnTimeline: !/\b(recreat|remake|reference|clone|copy this|like this)/i.test(prompt) });
+      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, aspectRatio, placeOnTimeline: !/\b(recreat|remake|reference|clone|copy this|like this)/i.test(prompt) });
       session.current = job.session;
       const activeJob = job;
       unsubscribe.current?.();
@@ -207,7 +215,7 @@ export function NewConversation() {
       setProcessing(activeJob.progress);
       const projectId = await activeJob.start({
         stage: stashFiles,
-        create: (value, assetIds) => { const picture = cloudMedia?.find(asset => (asset.kind === 'video' || asset.kind === 'image') && asset.width && asset.height); return createProject({ title: value, aspectRatio: picture ? aspectRatioForSize(picture.width!, picture.height!) : 'vertical', ...(assetIds.length ? { assetIds } : {}), ...(activeJob.input.placeOnTimeline === false ? { placeOnTimeline: false } : {}) }); },
+        create: (value, assetIds) => createProject({ title: value, aspectRatio: activeJob.input.aspectRatio ?? aspectRatio, ...(assetIds.length ? { assetIds } : {}), ...(activeJob.input.placeOnTimeline === false ? { placeOnTimeline: false } : {}) }),
         project: async projectId => { const project = await convex.query(api.projects.get, { projectId }); if (!project) throw new Error('This project is no longer available. Start a new project to retry.'); return { timeline: project.timeline, revision: project.revision ?? 0 }; },
         upload: (projectId, file, progress) => uploadSourceFile(file, {
           start: metadata => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...metadata }),
@@ -263,9 +271,13 @@ export function NewConversation() {
     session.current = createProjectImportSession();
     draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError(''); setStartingBlank(false);
-    brief.current = ''; setDraft('');
-    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* The current selection is cleared in memory. */ }
+    brief.current = ''; setDraft(''); setAspectRatio('landscape');
+    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); sessionStorage.removeItem(ratioKey); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
+  }
+  function changeAspectRatio(value: AspectRatio) {
+    setAspectRatio(value);
+    try { sessionStorage.setItem(ratioKey, value); } catch { /* Keep the selection in memory. */ }
   }
   function changeDraft(value: string) {
     setDraft(value); brief.current = value;
@@ -278,7 +290,7 @@ export function NewConversation() {
     if (startingBlank || !prompt) return;
     setStartingBlank(true); setError('');
     try {
-      const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio: 'landscape' });
+      const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio });
       rememberOpeningRequest(projectId, prompt, composerControls.request);
       sessionStorage.removeItem(briefKey);
       router.push('/editor/' + projectId);
@@ -287,7 +299,7 @@ export function NewConversation() {
   async function openPartialProject() {
     if (!session.current.projectId) return;
     await stashFiles(files.filter(item => !session.current.uploaded.has(item.id)).map(item => item.file));
-    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); } catch { /* Opening does not need draft storage. */ }
+    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); sessionStorage.removeItem(ratioKey); } catch { /* Opening does not need draft storage. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) clearProjectImportJob(job);
     router.push('/editor/' + session.current.projectId);
@@ -307,7 +319,7 @@ export function NewConversation() {
         <div className="new-conversation-compose-group">
         <div className="new-conversation-intro"><h1 id="new-conversation-title" title={headline}>{headline}</h1></div>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
+          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
@@ -318,7 +330,8 @@ export function NewConversation() {
       </div>
     </main>}
     <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onImport={async url => {
-      const { projectId } = await importVideo({ url });
+      const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
+      await importVideo({ url, projectId });
       rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);
       await stashFiles(files.map(item => item.file));
       setLinkOpen(false);

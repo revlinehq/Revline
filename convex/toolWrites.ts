@@ -11,6 +11,7 @@ import {FastFrameReview} from '../lib/ai/fast-frame-review';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
+  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',
   'assistant:beginEditing', 'assistant:previewDraft', 'assistant:requestAnalysis', 'assistant:clearAnalysis',
   'assistant:attachRunStockAudio', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',

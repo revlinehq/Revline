@@ -14,6 +14,15 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 - Database I/O: Remove scene hydration from run bookkeeping, isolate catalog status and frame cleanup, and publish reference results to file storage. Why: one-user traffic consumed gigabytes of database bandwidth.
 
+- Editor: The aspect ratio menu is now a compact “Video format” list (YouTube, Reels·TikTok·Shorts, Square, Feed, Classic) with outline shapes, sizes and an inline safe-area toggle. Why: the user called the old picker terrible and approved Pen design eqEih.
+- Editor: The aspect ratio switcher left the editor composer and is back on the preview; the dashboard composer keeps its format header. Why: the user said it made no sense above the editing chat.
+- Editor: The empty preview is now a quiet dashed drop area with “Start with a clip or an idea”, one Add footage button and a drop hint, with no gradient. Why: the user picked Pen design W2tfzE.
+- Editor: The X-high reasoning effort label now shimmers in a light moving rainbow, like Claude Code's ultrathink, in the composer and effort menu. Why: the user wanted the strongest effort to feel powerful.
+- Agent assets: Keep asset-only image generation and short ideation that goes straight to building; remove board workflows and chat meta footers. Why: the user rejected the intermediate planning stages.
+
+- Workspace: Add the reference’s tucked format header to new-project and editor composers; keep the chosen ratio through creation and import. Why: the user requested the Kino header design.
+- Skills: Shorten 14 editing skills and replace vague guidance with checks while retaining motion tools and incident fixes. Why: the user requested specific, human instructions without duplicate rules.
+
 - Skills: Add `npm run skills:rank`, which scores each editing skill on numbers, tool checks and examples and lists its vaguest lines. Why: the user wants skills ranked best to worst with reasons.
 
 - Workspace: Match the approved home composer and compact project list with footage menus and stored posters. Why: the user requested the Pen design.

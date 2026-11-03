@@ -9,11 +9,11 @@ Read with scene-engine page \`three-scenes\` for mechanics. Design for DPR 1, no
 
 Snippets use React's \`useMemo\`, \`useTimeline\` from \`revline\`, and runtime \`import * as THREE from 'three'\` where needed.
 
-The dev cursor study showed why adding depth alone is insufficient: a nearly uniform white face, a thin dark bevel, little visible side surface and no contact cue made an extruded object read as a cutout. More ambient light or metalness would not fix that. Shape the light, expose useful depth and establish where the object sits before adding movement.
+A dev cursor looked like a cutout: uniform white face, thin bevel, no visible side/contact. Expose a side face and contact cue before movement; raising ambient/metalness cannot fix missing form.
 
 ## Give each material an identity
 
-Judge a material by its highlight width, dark-to-light range and edge response, not its base color. Give important edges a small physical bevel wide enough to catch several output pixels. Smooth normals remove faceting; they do not antialias silhouettes. Keep some dark surface beside a highlight so the highlight describes curvature.
+Judge a material by its highlight width, dark-to-light range and edge response, not its base color. At the closest 1080p pose, target a 2–4 px projected bevel; inspect a source-pixel export crop with readFrames/measureFrame. Smooth normals remove faceting; they do not antialias silhouettes. Keep some dark surface beside a highlight so the highlight describes curvature.
 
 | Surface | Useful starting range | What makes it read |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Move the key until its highlight reveals the important face and bevel; then add 
 
 - **Product lighting:** favor a key above and off-axis, subdued fill, and a weaker rear/side rim when the silhouette needs separation. The key should reveal the material rather than wash every face white.
 - **Dark studio:** reduce fill relative to key, retain dark bands on metal, and separate the silhouette from the background with the rim. Do not turn the entire outline into a white wire.
-- **Soft daylight:** increase hemisphere fill relative to key and reduce rim contrast. Use moderate-to-high roughness for broad response. It approximates open-sky fill, not an HDR window reflection. All three choices use the same ordinary lights, within four per layer; tune ratios by the image, not fixed intensities.
+- **Soft daylight:** increase hemisphere fill relative to key and reduce rim contrast. Use moderate-to-high roughness for broad response. It approximates open-sky fill, not an HDR window reflection. All three choices use the same ordinary lights, within four per layer; inspect key/fill/rim separately at first/mid/last poses; if faces merge, lower fill before raising metalness.
 
 **Contact shadows / fake AO:** a small dark core at contact plus a wider faint falloff makes weight legible without a shadow pass. Paint a radial alpha texture once; place it on a horizontal world-space plane just above the receiving surface, underneath the object. Keep it in the same world as the model so a camera move preserves perspective. Tight patches at seams fake local occlusion; do not darken the whole scene with ambient light. This is an authored contact cue, not light-dependent AO or a cast silhouette.
 
@@ -88,7 +88,7 @@ const contact = useMemo(() => {
 
 ## Compose the camera with the type
 
-Reserve type space before placing the hero. ThreeLayer is transparent: HTML before it sits behind GL; an HTML Layer after it sits in front. DOM order cannot put letters halfway through a mesh. Put titles over a quiet region or a restrained backing, not over highlights or the moving silhouette. Start with 5–8% frame margins and check the entire camera path. Judge title size at phone viewing size; small decorative labels must not carry the message.
+Reserve type space before placing the hero. ThreeLayer is transparent: HTML before it sits behind GL; an HTML Layer after it sits in front. DOM order cannot put letters halfway through a mesh. Keep moving silhouettes ≥24 output px from titles; inspect camera extremes and text contrast ≥4.5:1 with measureFrame. Start with 5–8% frame margins and check the entire camera path. Judge title size at phone viewing size; small decorative labels must not carry the message.
 
 ThreeLayer's perspective \`fov\` is vertical degrees. For product detail, try a narrower 25–40° field and move back to fit; wider fields exaggerate near/far size differences. A lens in mm is meaningless without a sensor size: \`fov = 2 * atan(sensorHeight / (2 * focalLength))\`, converted to degrees. At distance d along the viewing axis, visible height is \`2 * d * tan(fov / 2)\` (radians here), width is that times aspect ratio. Use these to frame the bounding box, including bevels and the final pose. Changing fov alone is a zoom, not a new camera angle.
 
@@ -104,7 +104,7 @@ const ref = useTimeline<THREE.Group>((tl) => {
     duration: 6, ease: 'power2.inOut', onUpdate: aim }, 1);
 }); // attach ref to a group; initial pose and callbacks assign absolute values
 \`\`\`
-Terra's chess limitation is not a general camera restriction: use this camera path for genuine viewpoint changes. It cannot reveal absent geometry in a flat chess illustration. Genuine refractive chess pieces remain unsupported.
+Camera paths reveal only existing geometry; test requested start/end viewpoints. Flat illustrations have no hidden sides. Refractive chess pieces remain unsupported.
 
 ## Source models with provenance
 

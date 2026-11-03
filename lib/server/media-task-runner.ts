@@ -218,12 +218,12 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       onProgress(98);
       return {};
     }
-    const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'read') {
-      if (!media.hasVideo || !task.read) throw new AnalysisError('Reading frames needs a video and a window.', 400);
-      if (task.read.mode === 'compare') return { read: await runPhase('Comparing with the reference', () => readCompare(source, directory, task.read!, signal, onProgress)) };
-      return { read: await runPhase('Reading frames', () => readReference(source, directory, task.read!, signal, onProgress)) };
+      if (!['video', 'image'].includes(asset.kind) || !task.read) throw new AnalysisError('Reading frames needs a video or image and a window.', 400);
+      if (task.read.mode === 'compare') return { read: await runPhase('Comparing with the reference', () => readCompare(source, directory, task.read!, signal, onProgress, asset.kind === 'image')) };
+      return { read: await runPhase('Reading frames', () => readReference(source, directory, task.read!, signal, onProgress, asset.kind === 'image')) };
     }
+    const media = await runPhase('Reading media information',()=>probeMedia(source, signal));
     if (task.kind === 'cutout') {
       if (task.outputAssetId) return {};
       if (!task.cutout || !media.hasVideo) throw new AnalysisError('The background removal request is unavailable.', 400);

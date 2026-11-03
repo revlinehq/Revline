@@ -177,7 +177,7 @@ export const previewFields = { previewR2Key:v.optional(v.string()), previewSize:
 export const previewSegmentUrl = v.object({ start:v.number(), end:v.number(), url:v.string(), size:v.number() });
 export const imageGenerationValidator = v.object({
   requestId: v.string(), prompt: v.string(), model: v.string(), size: v.string(), transparentBackground: v.boolean(),
-  referenceAssetIds: v.array(v.id('assets')), quality: v.literal('medium'),
+  referenceAssetIds: v.array(v.id('assets')), quality: v.union(v.literal('low'), v.literal('medium')),
   usage: v.object({ inputTokens: v.union(v.number(), v.null()), outputTokens: v.union(v.number(), v.null()), textTokens: v.union(v.number(), v.null()), imageTokens: v.union(v.number(), v.null()), estimatedUsd: v.union(v.number(), v.null()) }),
 });
 export const assetFields = {

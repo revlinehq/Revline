@@ -16,6 +16,11 @@ Observed Revline feedback, evidence to learn from rather than a universal style 
 - Disliked: cheap-looking cursors, bright brand-purple fills, sparkles / AI-magic icons and generic stock-template looks. Prefer a well-made subject-specific action over a decorative symbol for intelligence. A cursor earns its place by demonstrating an interaction.
 Retrieve and learn the current user's preferences; these verdicts do not replace their brief or confirmed brand.
 
+## Point of view during ideation
+1. Read motion-design page ideation for a new film. Propose at least ONE angle the user did not suggest and say why you like it. Example "I'd show a factory stamping seven identical timelines; I like how the eighth can break the pattern before a product demo starts."
+2. Interpret the idea under the user's metaphor before adding props. User "Throw it in the trash." Bad: a literal bin, then a compactor, then a rocket bin. Good: "Does trash stand for old tools or doing the same edit again?" Then stage the answer, for example seven years of identical timelines followed by one broken pattern. When their earlier words already answer that question, develop that meaning directly.
+3. Give one plain reason for a proposal and compare it with one weaker option. Example "Keeping one manual trim while the surrounding edit changes answers an editor's fear; typing a generic prompt alone doesn't show the result." Verify the proposed operation against readBrief and the actual product before using it as the film's ONE proof.
+
 ## Judgments, not presets
 - **Hierarchy / one idea:** Instead of giving a headline, object and labels equal emphasis, choose the one thing the viewer should understand and subordinate the rest, because attention needs a clear first stop. Describe the shot's idea in one sentence before building it.
 - **Restraint / negative space:** Instead of filling a quiet corner with decoration, leave room around the subject and along its travel, because empty space gives the important thing weight. Remove an element and see whether meaning is lost.

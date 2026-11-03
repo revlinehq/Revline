@@ -2,7 +2,7 @@ import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
-import { frameAt, probe, sheet } from './read-reference';
+import { frameAt, imageSource, probe, sheet } from './read-reference';
 
 type Work = NonNullable<MediaWorkItem['read']>;
 const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
@@ -37,13 +37,15 @@ async function difference(a: Buffer, b: Buffer) {
 }
 
 /** The reference beside the recreation at the same moments, each pair labeled with how far apart it is. */
-export async function readCompare(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void): Promise<NonNullable<MediaTaskResult['read']>> {
+export async function readCompare(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false): Promise<NonNullable<MediaTaskResult['read']>> {
   const rendered = work.rendered ?? [], times = work.times ?? rendered.map(frame => frame.time);
   if (!rendered.length || rendered.length !== times.length) throw new AnalysisError('There are no timeline frames to compare with.', 400);
-  const source = await probe(path, signal), last = Math.max(0, source.duration - 1 / source.fps);
+  const still = stillImage ? await imageSource(path) : undefined;
+  const source = still ?? await probe(path, signal), last = source.fps ? Math.max(0, source.duration - 1 / source.fps) : 0;
   const tiles: { image: Buffer; label: string }[] = [], scores: { time: number; difference: number }[] = [];
   for (const [index, time] of times.entries()) {
-    const full = await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
+    signal.throwIfAborted();
+    const full = still?.image ?? await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
     const crop = referenceCropAt(time, work.compareCrop, work.referenceCropKeyframes);
     const reference = crop ? await sharp(full).extract(cropBounds(crop, source.width, source.height)).png().toBuffer() : full;
     // Comparison snapshots crop the render before compression; the reference is cropped here on its displayed axes.
