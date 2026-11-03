@@ -34,13 +34,14 @@ function stop(code = 0) {
   force.unref();
 }
 
-function start(name, command, { required = true, filter } = {}) {
+function start(name, command, { required = true, filter, onLine } = {}) {
   const child = spawn(process.execPath, command, { cwd: directory, stdio: ['inherit', 'pipe', 'pipe'], env: process.env });
   children.add(child);
   for (const stream of [child.stdout, child.stderr]) {
     const lines = createInterface({ input: stream });
     lines.on('line', line => {
       for (const output of filter ? filter(line) : [line]) console.log(`[${name}] ${new Date().toISOString()} ${output}`);
+      onLine?.(line);
     });
   }
   child.on('error', error => { console.error(`[${name}] ${error.message}`); if (required) stop(1); });
@@ -56,7 +57,16 @@ function start(name, command, { required = true, filter } = {}) {
 process.on('SIGINT', () => stop());
 process.on('SIGTERM', () => stop());
 console.log(`Starting frontend${hasPort ? '' : ` at http://localhost:${port}`} and the development media worker. Ctrl+C stops both.`);
-start('web', ['node_modules/next/dist/bin/next', 'dev', '--hostname', 'localhost', ...(!hasPort ? ['--port', port] : []), ...args]);
-start('worker', ['--env-file=.env.local', '--import', 'tsx', 'scripts/media-worker.ts']);
+let workerStarted = false;
+start('web', ['node_modules/next/dist/bin/next', 'dev', '--hostname', 'localhost', ...(!hasPort ? ['--port', port] : []), ...args], {
+  onLine: line => {
+    // A duplicate port or dev-directory lock must never leave a claimed task
+    // behind when its frontend immediately exits and stops the worker.
+    if (!stopping && !workerStarted && line.includes('Ready in ')) {
+      workerStarted = true;
+      start('worker', ['--env-file=.env.local', '--import', 'tsx', 'scripts/media-worker.ts']);
+    }
+  },
+});
 console.log('[ai] Watching structured AI cost logs from the Convex development deployment (read only).');
 start('ai', ['node_modules/convex/bin/main.js', 'logs', '--deployment', 'dev', '--history', '0', '--jsonl'], { required: false, filter: aiCostLines });
