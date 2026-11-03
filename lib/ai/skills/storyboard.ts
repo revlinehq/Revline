@@ -8,7 +8,7 @@ export const storyboard: EditorSkill = {
 Run before motion design from scratch. Plan with the user so they get a taste before the build. Skip the whole flow for small edits or when the user says "just build it". Read readBrief first: resume the saved stage rather than restarting. Each stage ends with the user's OK; END THE TURN at that stop. Tool success, silence and your own visual review are not approval.
 
 ## 1. Brief
-Read the message, getProject/readBrief, uploaded assets and matching brand kit first. Read a supplied site URL with the client's web reader or createBrandKit { url }; learn what the product actually does. In ONE short message ask at most 2–3 questions, only for missing facts, with sensible defaults: who it is for, what it is, why it matters, platform/aspect ratio, length, audio and CTA. Ask for the real logo and product screens in the same message when needed. Real UI beats invented UI: use the supplied screens, or agree to an abstract diagram when screens cannot be had. Never invent the product's interface or claims.
+Read the message, inspectTimeline/readBrief, uploaded assets and matching brand kit first. Read a supplied site URL with createBrandKit { url }; learn what the product actually does. In ONE short message ask at most 2–3 questions, only for missing facts, with sensible defaults: who it is for, what it is, why it matters, platform/aspect ratio, length, audio and CTA. Ask for the real logo and product screens in the same message when needed. Real UI beats invented UI: use the supplied screens, or agree to an abstract diagram when screens cannot be had. Never invent the product's interface or claims.
 
 End with a one-sentence promise of the film. Save lasting facts with updateBrief and wait for the brief's OK.
 
