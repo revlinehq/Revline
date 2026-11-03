@@ -142,7 +142,7 @@ html { scroll-behavior: smooth; }
 /* Shared Revline design tokens; product screens are designed in Pencil first. */
 .dark {
   color-scheme: dark;
-  --background: #0B0C0E;
+  --background: #111111;
   --foreground: #F4F4F0;
   --card: #121417;
   --card-foreground: #F4F4F0;
