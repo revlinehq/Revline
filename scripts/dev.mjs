@@ -1,9 +1,24 @@
-import { spawn } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { aiCostLines } from './ai-cost-log-filter.mjs';
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
+// Worktree workers share the primary checkout's pinned beat runtime and model.
+// Otherwise any worker without its own installation can claim and fail music jobs.
+const commonGitDirectory = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: directory, encoding: 'utf8' }).trim();
+const primaryDirectory = dirname(commonGitDirectory);
+if (primaryDirectory !== directory) {
+  for (const name of ['beat-tracking', 'beat-tracking-models']) {
+    const source = join(primaryDirectory, '.data', name), target = join(directory, '.data', name);
+    if (!existsSync(target) && existsSync(source)) {
+      mkdirSync(dirname(target), { recursive: true });
+      symlinkSync(source, target, 'dir');
+    }
+  }
+}
 const args = process.argv.slice(2);
 const hasPort = args.some(arg => arg === '--port' || arg === '-p' || arg.startsWith('--port='));
 const port = process.env.PORT || '3001';

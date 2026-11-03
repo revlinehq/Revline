@@ -9,8 +9,6 @@ What ships today, for marketing copy: [Features](features.md). Planned product d
 ```bash
 npm install
 npm run dev -- --port 3001
-# In a separate terminal, for durable processing and exports:
-npm run worker
 ```
 
 Open http://localhost:3001. `/chat` starts a new project; creating or reopening a project opens `/editor/[projectId]` with its conversation, preview, and editable timeline together. Existing `/chat/[projectId]` links redirect to the matching editor. The retired `/editor/demo` and `/chat/demo` routes return 404. `/chats` shows your saved conversations, `/profile` is the account page, and `/projects` redirects to `/chat`. Saved projects and their data require Clerk sign-in and ownership checks.
@@ -125,6 +123,6 @@ uv pip sync --python .data/beat-tracking/bin/python --index-strategy unsafe-best
 node scripts/install-beat-model.mjs
 ```
 
-The installation script verifies the pinned model checksum; processing jobs do not download model weights. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Local inference uses two CPU threads and no CUDA runtime; hosted Fly processors use their full CPU budget.
+The installation script verifies the pinned model checksum; processing jobs do not download model weights. `npm run dev` starts both the frontend and media worker. Git worktrees reuse the primary checkout's installed beat runtime and model automatically. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Local inference uses two CPU threads and no CUDA runtime; hosted Fly processors use their full CPU budget.
 
 GitHub Actions deploys production from `main` (`.github/workflows/ci.yml`). After checks pass it deploys Convex, then the frontend (`npm run deploy:frontend:ci`, which builds `dist/` before uploading it) and the media processor release independently, so site changes never wait for a processor image. The processor releases (`npm run deploy:production -- --processor-only --stage-only`, with Fly remote builds and the pinned beat model mirrored as the `beat-model-final0` release asset) only when `scripts/processor-changes.mjs` finds a difference since the last released processor commit in a file its entry points import or a runtime file it reads. CI preserves the selected processor backend while staging new images; the initial Fly cutover is explicit. Each service releases one run at a time. Production credentials live in the repository's `production` environment secrets (`CONVEX_DEPLOY_KEY`, `CLOUDFLARE_API_TOKEN`, `FLY_PROCESSOR_DEPLOY_TOKEN`, `RENDER_WORKER_SECRET`, and processor provider keys); Clerk secrets remain on the Worker. Cloudflare Workers Builds is disabled so the frontend never deploys ahead of its backend. Production serves `tryrevline.com` and `editor.tryrevline.com`; the temporary preview domain is retired.

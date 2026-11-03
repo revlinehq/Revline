@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+- Audio tools: Restore development sound, narration and music matching, identify rejected tool mutations, and share pinned beat dependencies across dev worktrees. Why: Terra's launch film was blocked by editing failures on shared development.
+
 - HTTP: Bound runner start requests and stream forwarded MCP bodies. Why: unauthenticated uploads could allocate large buffers before rejection.
 
 - Scenes and media: Keep stored scene code and share cards out of subscribed rows, retain large-film undo, and isolate worker scheduling from heartbeats. Why: large scenes could hit document limits and queue reads still conflicted with progress updates.
