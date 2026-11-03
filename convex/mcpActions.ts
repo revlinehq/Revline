@@ -138,6 +138,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   if(!projectTool&&!session)return result('Call startTask with projectId, timelineId and the user request before using editing tools.',true);
   if(session&&typeof input.projectId==='string'&&input.projectId!==session.projectId&&(!projectTool||['createTimeline','openTimeline','renameTimeline','deleteTimeline','getFrames','exportVideo'].includes(args.name)))return result('This call targets another project. Call startTask for that project first.',true);
   if(session){input.projectId??=session.projectId;if(!projectTool)input.timelineId??=session.timelineId;}
+  if(session&&['createTimeline','renameTimeline','deleteTimeline'].includes(args.name))await ctx.runMutation(internal.lanes.requireFinish,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId});
   // The editor shows the agent as working across its whole request, not only during each call.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
   const touch = () => projectId ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, ...(args.agentName ? { agentName: args.agentName } : {}) }).catch(() => null) : null;
@@ -242,6 +243,12 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
+async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mcpLaneSessions'>) {
+  if (!session) return {};
+  const task = await ctx.runQuery(internal.lanes.task, { ownerId, projectId: session.projectId, taskId: session.taskId }) as LaneTask | null;
+  return { lane: session.lane, laneChosen: session.laneChosen, taskId: session.taskId, finishRequired: task?.required ?? true };
+}
+
 async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise', comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
@@ -249,7 +256,7 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, comparisonDeadline, lane:laneSession?.lane,laneChosen:laneSession?.laneChosen,taskId:laneSession?.taskId });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, comparisonDeadline, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     return withImages(output, failed(output));
@@ -278,7 +285,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, lane:laneSession?.lane,laneChosen:laneSession?.laneChosen,taskId:laneSession?.taskId });
+    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     if(name==='switchLane'&&laneSession)await ctx.runMutation(internal.lanes.setMcpSession,{ownerId,connectionId:laneSession.connectionId,projectId,taskId:laneSession.taskId,timelineId:laneSession.timelineId,lane:toolkit.lane(),laneChosen:toolkit.laneChosen()});
