@@ -6,6 +6,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 - Agent assets: Keep asset-only image generation and short ideation that goes straight to building; remove board workflows and chat meta footers. Why: the user rejected the intermediate planning stages.
 
+- Workspace: Add the reference’s tucked format header to new-project and editor composers; keep the chosen ratio through creation and import. Why: the user requested the Kino header design.
 - Skills: Shorten 14 editing skills and replace vague guidance with checks while retaining motion tools and incident fixes. Why: the user requested specific, human instructions without duplicate rules.
 
 - Skills: Add `npm run skills:rank`, which scores each editing skill on numbers, tool checks and examples and lists its vaguest lines. Why: the user wants skills ranked best to worst with reasons.
