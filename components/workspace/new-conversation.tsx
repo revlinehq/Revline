@@ -81,10 +81,7 @@ export function NewConversation() {
   const hasMedia = files.length + cloudIds.length > 0;
   const hasFootage = hasMedia || !!library?.page.length || !!projects?.some(project => project.clipCount > 0);
   const showStartingPoints = draftReady && projects !== undefined && library !== undefined && !hasFootage;
-  const [headlineIndex, setHeadlineIndex] = useState(0);
-  useEffect(() => { setHeadlineIndex(Math.floor(Math.random() * 1000)); }, []);
-  const footageHeadlines = ['What are we making today?', 'What should we cut next?', 'What’s the story?', 'Pick up where you left off.', firstName ? `Ready when you are, ${firstName}.` : 'Ready when you are.'];
-  const headline = hasFootage ? footageHeadlines[headlineIndex % footageHeadlines.length] : 'From an idea to a first cut.';
+  const headline = 'What are we making today?';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
