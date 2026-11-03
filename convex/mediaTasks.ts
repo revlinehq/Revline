@@ -39,14 +39,14 @@ import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
-import { MEDIA_TASK_LEASE_MS } from '../lib/media-analysis/errors';
+import { MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
-const MAX_ATTEMPTS = 3;
+const MAX_ATTEMPTS = MAX_MEDIA_TASK_ATTEMPTS;
 const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 // Fair claiming: an owner already running this many tasks yields to queued work
 // from other owners among the oldest FAIR_CLAIM_SCAN claimable rows.
@@ -138,13 +138,14 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   await beforeEnqueue?.();
   const now = Date.now();
   const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId, ...(input.kind==='import'?{resumable:true}:{}) }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
+  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
   await ctx.db.patch(taskId, { workflowId });
   return taskId;
 }
 
 export const process = mediaWorkflow.define({
   args: { taskId: v.id('mediaTasks'), resumable:v.optional(v.boolean()) }, returns: v.null(),
+  // Preserve legacy workflow journals; prepareAttempt/failTask enforce their budget.
   handler: async (step, { taskId, resumable }): Promise<null> => {
     for (let attempt = 1; resumable || attempt <= MAX_ATTEMPTS; attempt++) {
       const ready: boolean = await step.runMutation(internal.mediaTasks.prepareAttempt, { taskId, attempt });
@@ -165,6 +166,11 @@ const ULTRA_FALLBACK_MS = 120_000;
 export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTasks'), attempt: v.number() }, returns: v.boolean(), handler: async (ctx, args) => {
   const task = await ctx.db.get(args.taskId);
   if (!task || ['completed', 'cancelled', 'failed'].includes(task.status)) return false;
+  // Also stop legacy resumable workflows that already exceeded the budget.
+  if (args.attempt > MAX_ATTEMPTS) {
+    await markTerminal(ctx, task._id, 'failed', task.error ?? 'Video import could not finish. Upload the file instead.');
+    return false;
+  }
   await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:['import','preview','extract','waveform','transcribe'].includes(task.kind)?task.progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
   if (task.kind === 'render' && flyRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {}); return true; }
@@ -191,6 +197,7 @@ async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   if (task.kind === 'render' && flyRendersEnabled()) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
 }
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
+  retryable = retryable && task.attempt < MAX_ATTEMPTS;
   await patchMediaTask(ctx, task, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
