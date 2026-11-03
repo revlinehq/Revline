@@ -9,19 +9,15 @@ const editLanesPage: EditorSkillPage = {
   description: 'Start here for existing footage, caption, scene or film edits: choose quick or full verification before reading transcript or code.',
   body: `# Editing existing footage, captions, scenes or films
 
-Choose verification by mode, then classify the edit:
+- New scene/film or recreation: Precise full checks, even if Fast was selected; tell the user. MCP defaults to Precise unless editMode is passed.
+- Existing static/text/asset change or named speech cut: local checks in either mode.
+- Existing motion/timing/camera/transition edit: local checks in Fast; full changed-range checks in Precise. Story restructuring and whole-video review also use full checks.
 
-- **Fast:** short-form edits, small changes, drafts and iteration such as "make it punchier" or "try another b-roll". Use the quick lane: getFrames at each changed spot and one frame either side. No full-video sweeps, reference compares or repeated re-checks.
-- **Precise:** recreations, launch films and work to publish or export as final. Use the full harness, including inventory, 15 fps transition compares, compareReference, checkPacing and close-out where applicable. New films or motion scenes from scratch and reference recreations always run Precise, even when Fast was selected; tell the user in one line. MCP defaults to Precise unless a call passes editMode.
-
-- **Quick lane:** text, label, color, logo, icon or asset swaps, small static style changes, cuts or trims of named passages, trimming to a target length, removing lines, false starts or filler, shortening or swapping one b-roll, and caption text or timing fixes.
-- **Full lane (Precise):** building a new edit, restructuring the story, reviewing the whole video, or changing scene motion, timing, camera, transitions, easing or layout over time. Follow the matching implementation skills; for scenes use page \`checklist\`, and for recreations use reference-footage page \`recreation\`.
-
-In Fast, reuse known project context and loaded skills. Skip whole-video review, re-reading every skill, pacing passes and full frame sweeps. Fast may change existing motion locally; Precise uses the full lane. Neither mode skips rendered frame checks.
+Local checks use getFrames at each changed moment and ±1/fps; no full sweeps, reference compares or repeated finishing passes. Reuse loaded skills and project context. Full checks use checklist and, for copies, reference-footage/recreation. Rendered checks are required in both modes because code cannot prove the pixels.
 
 **Footage and captions:** read only the transcript around the affected SOURCE range with inspectAssetAnalysis start/end or batched windows. Use the fewest calls: batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup. Ripple the actual removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material and batch moveClips by shared time delta. retainSourceRanges compacts only the linked pair; closeGaps works per layer, so neither alone synchronizes overlays. Preserve unrelated speech and styling. Verify with inspectTimeline: new duration meets the target, no gaps or orphaned captions. Use getFrames at each changed cut point or caption moment and one frame either side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the timeline).
 
-**Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Confirm everything else is unchanged. In Fast, skip compareReference, motionMap and checkPacing; in Precise, follow the full lane when scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
+**Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Review diffScene for edits outside scope and shared-component consumers; inspect adjacent boundaries. Report sampled scope, not whole-film visual equivalence. In Fast, skip compareReference, motionMap and checkPacing; in Precise, follow the full lane when scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
 };
 
 /** The one list of checks before a scene or film goes back to the user. Other skills point here. */
@@ -30,17 +26,17 @@ const checklistPage: EditorSkillPage = {
   description: 'Full checks for builds and full-lane edits. Existing edits start with edit-lanes. First frames, cuts, beats, pacing, details, measurements, scope, limits and preview speed.',
   body: `# Checklist: before you hand it back
 
-For 3D builds, read page \`three-craft\` and check material identity, highlight/edge quality, contact cues, camera purpose and type clearance in rendered frames.
+For 3D, inspect getFrames for material highlight/dark bands, bevels, contact alignment and title clearance (three-craft).
 
 For an existing scene or film edit, follow page \`edit-lanes\` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
-For original builds or creative restyling, apply motion-design page \`taste\` to these same rendered frames; it supplies the short critique loop.
+For original/restyled work, report timestamp, visible defect, correction and recheck on these frames (motion-design/taste).
 
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page \`react-scenes\`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
-3. **Every beat.** One frame at each beat's key moment. Text sits inside the frame and is readable at the platform's size (a phone for vertical and feed formats); nothing overlaps by accident; one idea per shot.
-4. **Pacing.** checkPacing on the changed range. For a recreation, preserve measured reference pacing and use compareMotion to resolve flags. For a new film, fix every flag in the code: every visible change (a new headline, a panel filling in, a menu opening) needs about 1 s of hold before the next one, no more than two changes in a second, one place changing at a time (the eye cannot follow a headline, a timeline and a menu changing together), zooms and pans ease in and out and settle before a cut, no one-sample jumps or flashes. Run it again until the range comes back clean; a flag you keep on purpose needs a reason you can name.
-5. **Details, edge by edge.** For every window, card, button and frame you built or changed, look at a frame mid-move (opening, closing, transition) and one after it settles, and go over its edges: exactly one border (no outer stroke, glow or leftover outline an effect leaves behind, no double border), the same corner radius on every corner, no missing or extra lines (frame corners, dividers), nothing clipped or spilling out of its container, text readable against what is behind it (measureFrame both and compare), and no element still on screen after the thing that owns it has closed. Name each one you checked; a frame that only looks fine at a glance is not checked.
+3. **Every beat.** One frame at each beat's key moment. Inspect vertical output at 360×640: essential text ≥16 displayed px, settled hold ≥max(1 s, words/3), excluding entrance/exit. Increase size/hold if inspection fails. Keep text inside frame without unintended overlaps; one claim per shot.
+4. **Pacing.** checkPacing on the changed range. For a recreation, preserve measured reference pacing and use compareMotion to resolve flags. For a new film, fix every flag in the code: a completed message/UI state is one attention event (a 40–90 ms stagger counts as one group); hold ≥1 s before the next unrelated event, with one focal region changing at a time, zooms and pans ease in and out and settle before a cut, no one-sample jumps or flashes. Run it again until the range comes back clean; a flag you keep on purpose needs a reason you can name.
+5. **Details, edge by edge.** For every window, card, button and frame you built or changed, look at a frame mid-move (opening, closing, transition) and one after it settles, and go over its edges: exactly one border (no outer stroke, glow or leftover outline an effect leaves behind, no double border), the same corner radius on every corner, no missing or extra lines (frame corners, dividers), nothing clipped or spilling out of its container, text/background contrast ≥4.5:1 using measureFrame samples and relative luminance at settled and lowest-contrast frames, and no element still on screen after the thing that owns it has closed. Name each one you checked; a frame that only looks fine at a glance is not checked.
 6. **Measurements.** Product UI compared with its screenshot at full size (compareScreen), and every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
 7. **Only what was asked.** On feedback, everything outside the named part is unchanged: same shots, titles, timings, moves, colors and sound. Say what else had to move.
 8. **Limits.** Each scene under 120,000 characters and the timeline under 400,000 (shared code counts once), clips up to 120 s.
@@ -134,18 +130,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 
 ## GSAP technique
 
-For choreography, read the gsap skill (readSkill name "gsap"): GreenSock's official guidance under Revline's rules for seeked timelines.
-
-- Choreograph with the position parameter: absolute times (\`2.4\`), relative to the previous step (\`'<0.2'\`, \`'-=0.3'\`), or labels (\`tl.addLabel('reveal', 3)\`, then \`'reveal+=0.4'\`).
-- A custom curve is one line: \`CustomEase.create('brand', 'M0,0 C0.4,0 0.2,1 1,1')\`.
-- \`stagger\` builds lists, grids, words and characters: \`tl.from(items, { y: 20, opacity: 0, stagger: 0.06 }, 1)\`.
-- Text: \`new SplitText(el, { type: 'lines,words,chars' })\` splits for line, word or character reveals; ScrambleTextPlugin decodes text; TextPlugin types it.
-- Lines and shapes: DrawSVGPlugin draws strokes (\`drawSVG: '0%'\` to \`'100%'\`), MorphSVGPlugin morphs paths, MotionPathPlugin moves along a path.
-- Counting numbers: tween a plain object and write it out in \`onUpdate\`.
-- Loops: \`repeat: -1\` with \`yoyo: true\` for drifts, pulses and backgrounds; they stay frame-exact.
-- Instant changes (a swap, a hard cut inside a scene, a stepped frame rate): \`tl.set(...)\` at a time, or \`ease: 'steps(n)'\`.
-- Rebuild product UI as real HTML (cards, rows, buttons, charts) rather than describing it; it stays sharp at any resolution and every part can move.
-- Blur, masks and 3D work: \`filter: blur()\`, \`mask-image\` gradients, and \`perspective\` with rotateX/rotateY on a parent.
+Build motion on tl/useTimeline with explicit positions, e.g. \`tl.from(el, {y:20, opacity:0, stagger:.06}, 1)\`. Use gsap’s core/plugins/recipes for easing, text, SVG, blur/masks and perspective. Counters write derived text in onUpdate; loops use repeat:-1/yoyo:true; instant changes use tl.set at explicit times or ease:steps(n). Rebuild interacting UI as HTML parts; measure against the real screen with compareScreen.
 
 ## Fonts and images
 
