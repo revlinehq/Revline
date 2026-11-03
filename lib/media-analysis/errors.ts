@@ -9,6 +9,8 @@ export function isRetryableAnalysisError(error: unknown) {
 
 /** Convex task leases last this long from each claim or heartbeat. */
 export const MEDIA_TASK_LEASE_MS = 60_000;
+/** Includes the initial attempt; imports resume saved downloads within this budget. */
+export const MAX_MEDIA_TASK_ATTEMPTS = 3;
 /** Convex rejects a renewal once the attempt's lease expired or was replaced. */
 export const MEDIA_LEASE_LOST = 'Media task lease is no longer active';
 export function isMediaLeaseLost(error: unknown) {

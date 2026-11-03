@@ -7,7 +7,7 @@ export const EDITOR_SLASH_COMMANDS = [
 export type EditorCommandName = typeof EDITOR_SLASH_COMMANDS[number]['name'];
 export type EditorCommand = { name: 'clip'; link?: string; words: string };
 
-/** Parse the explicit clipping command. All other text remains a plain prompt. */
+/** Parse only the explicit /clip command. All other text, including the retired /inspo-motion, remains a plain prompt. */
 export function parseEditorCommand(prompt: string): EditorCommand | undefined {
   const match = /^\/(clip)(?:\s+([\s\S]*))?$/.exec(prompt.trim());
   if (!match) return undefined;

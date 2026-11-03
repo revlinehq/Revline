@@ -23,7 +23,7 @@ const TURN_FUNCTIONS = new Set([
   'brandScrape:scrape', 'brandScrape:fonts',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck', 'brandKits:create', 'brandKits:get', 'brandKits:list', 'brandKits:update',
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',
-  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'mcp:discardFrames', 'mcp:frames', 'mcp:normalizeSnapshotId', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
+  'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'frameCache:readResult', 'mcp:discardFrames', 'mcp:frames', 'mcp:normalizeSnapshotId', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
   'mediaTaskResults:consumeRead',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
