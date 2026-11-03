@@ -1,16 +1,20 @@
 'use client';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from '@/components/ui/input-group';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { EDITOR_SLASH_COMMANDS, parseEditorCommand, type EditorCommandName } from '@/lib/ai/slash-commands';
 import { userError } from '@/lib/user-error';
 
-import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import './composer-upload-swap.css';
+
+// Scoped by EditorShell so custom conversation panels share the active timeline control.
+export const EditComposerHeaderContext = createContext<ReactNode>(null);
 
 export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string };
 export type EditComposerProps = {
@@ -18,10 +22,12 @@ export type EditComposerProps = {
   attachControl?: ReactNode; onAttach?: () => void; attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void;
   placeholder?: string; disabled?: boolean; running?: boolean; allowQueue?:boolean; onStop?: () => void | Promise<void>; stopping?: boolean;
   className?: string; variant?: 'landing' | 'studio' | 'compact'; attachmentLimit?: number; emptyHint?: string;
-  slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
+  header?: ReactNode; slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
 };
 
-export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false }: EditComposerProps) {
+export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header: suppliedHeader }: EditComposerProps) {
+  const timelineHeader = useContext(EditComposerHeaderContext);
+  const header = suppliedHeader ?? timelineHeader;
   const commandListId = useId();
   const [commandDismissed, setCommandDismissed] = useState(false);
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
@@ -145,7 +151,8 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     </PopoverContent></Popover>
     {(error || attachmentError) && <p className="composer-error" role="alert">{error || `${attachmentError!.name}: ${attachmentError!.error}`}</p>}
   </>;
-  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', uploadOnHover && 'composer-height-transition', className)} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
+  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', header && 'has-composer-header', uploadOnHover && 'composer-height-transition', className)} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
+    {header && <Card className="composer-header" role="group" aria-label="Video settings">{header}</Card>}
     <div ref={fields} className="composer-edit-fields" aria-hidden={showUpload || undefined} inert={showUpload} onFocusCapture={() => setFieldsFocused(true)} onBlurCapture={e => { if (!fields.current?.contains(e.relatedTarget as Node | null)) setFieldsFocused(false); }}>{editFields}</div>
     <div className="composer-upload-swap" aria-hidden={!showUpload} inert={!showUpload}>
       <button type="button" className="composer-new-video" onClick={() => { setEditing(true); onAttach?.(); }} disabled={busy} aria-label="New video: add footage">

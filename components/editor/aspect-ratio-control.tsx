@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, RectangleHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SAFE_AREAS, type SafeAreaPlatform } from '@/lib/editor/safe-areas';
@@ -11,19 +11,22 @@ const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = [
   { value: 'vertical', ratio: '9:16', label: 'Reels/Shorts' },
   { value: 'square', ratio: '1:1', label: 'Square' },
   { value: 'landscape', ratio: '16:9', label: 'Landscape' },
+  { value: 'portrait-feed', ratio: '4:5', label: 'Portrait' },
+  { value: 'classic', ratio: '4:3', label: 'Classic' },
 ];
 
 const RATIOS: Record<AspectRatio, string> = {
   vertical: '9:16', 'portrait-feed': '4:5', square: '1:1', classic: '4:3', landscape: '16:9',
 };
 
-export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange }: { value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
+export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange, appearance = 'preview', disabled = false }: { appearance?: 'preview' | 'composer'; disabled?: boolean; value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
   const ratio = RATIOS[value];
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <Button variant="ghost" className="aspect-ratio-trigger" aria-label={`Aspect ratio: ${ratio}`}>
-        <span className="aspect-ratio-value">{ratio}</span>
+      <Button type="button" variant="ghost" disabled={disabled} className={`aspect-ratio-trigger focus-visible:ring-0${appearance === 'composer' ? ' composer-header-chip' : ''}`} aria-label={`Aspect ratio: ${ratio}`}>
+        {appearance === 'composer' && <RectangleHorizontal size={12} aria-hidden="true" />}
+        <span className="aspect-ratio-value">{appearance === 'composer' ? `Aspect ratio · ${ratio}` : ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>

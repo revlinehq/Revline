@@ -1,5 +1,5 @@
 .aspect-ratio-trigger[data-slot=button]{height:28px;flex-shrink:0;gap:7px;padding:0 8px;border:0;border-radius:7px;background:transparent;color:var(--ws-muted,var(--muted-foreground));font-size:11px;box-shadow:none}
-.canvas-toolbar .aspect-ratio-trigger:hover,.canvas-toolbar .aspect-ratio-trigger[data-state=open]{background:var(--ws-hover,var(--accent));color:var(--ws-text,var(--foreground))}
+.aspect-ratio-trigger:hover,.aspect-ratio-trigger[data-state=open]{background:var(--ws-hover,var(--accent));color:var(--ws-text,var(--foreground))}
 .aspect-ratio-label{font-weight:500}
 .aspect-ratio-value{font-variant-numeric:tabular-nums}
 .aspect-ratio-menu{width:300px;min-width:300px;background:var(--ws-bg,var(--background));color:var(--ws-text,var(--foreground));font-family:var(--font-inter),Inter,sans-serif}
@@ -20,3 +20,6 @@
 .safe-area-menu-label{padding:6px 8px 4px;color:var(--ws-muted,#a1a3ab);font-size:11px;font-weight:500}
 .safe-area-options{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px}
 .safe-area-options [role=menuitemradio]{justify-content:center;font-size:12px;white-space:nowrap}
+
+.aspect-ratio-shape[data-ratio=portrait-feed]{width:60px;height:75px}
+.aspect-ratio-shape[data-ratio=classic]{width:80px;height:60px}
