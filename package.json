@@ -18,6 +18,7 @@
     "preworker:production": "node scripts/copy-vendor.mjs",
     "worker:production": "node --env-file=.env.production.local --import tsx scripts/media-worker.ts",
     "check": "npm run typecheck && npm run build",
+    "skills:rank": "node --import tsx scripts/rank-skills.ts",
     "build:cloudflare": "node scripts/cloudflare-frontend.mjs build",
     "preview:cloudflare": "node scripts/cloudflare-frontend.mjs preview",
     "deploy:frontend": "node scripts/cloudflare-frontend.mjs deploy",
