@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
+- Editor: the new-project page rotates its headline once you have footage, and "Your projects" now starts in view. Why: the user disliked the fixed headline and the list sat below the fold.
 - Editor: the new-project gradient is now drawn in CSS with fine grain, so it stays sharp at any size and fades out instead of cutting off. Why: the image version looked low quality and was cropped.
 - Editor: removed the “Take a quick tour” button and dialog from the new-project page. Why: the user didn't want it.
 - Editor: the empty new-project headline is back to “From an idea to a first cut.”; the personal headline shows only once footage exists. Why: the user wanted the original empty-state line.
