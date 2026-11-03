@@ -36,6 +36,7 @@ jobs:
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
+        id: checkout
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -53,5 +54,15 @@ jobs:
         run: |
           # The release script reports the exact step and bounded log tail. This
           # fallback also covers a checkout failure before that script can start.
-          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" \
-            -f body="Release workflow failed. See the failing step and log tail at $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" >/dev/null
+          marker="$RUNNER_TEMP/revline-release-reported-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -f "$marker" ]; then exit 0; fi
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="Release failed during checkout or runner bootstrap, before the release script could report. Step logs: $url"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="$body" >/dev/null || \
+            gh issue create --repo "$GITHUB_REPOSITORY" --title 'Release runner bootstrap failed' --body "$body"
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            cd "$HOME/Developer/revline-main"
+            node node_modules/convex/bin/main.js run discordAlerts:enqueue \
+              "{\"source\":\"sentry\",\"eventId\":\"deploy-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\",\"title\":\"Revline deployment failed\",\"description\":\"Checkout or runner bootstrap failed. $url\"}" \
+              --deployment different-gnu-398
+          fi

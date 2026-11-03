@@ -52,6 +52,6 @@ export function releasePlan(base) {
   }
   // Raising the processor contract always includes a backend release, even if the
   // dependency resolver changes or the import moves in a future refactor.
-  if (plan.processor.changed) plan.convex.changed = true;
+  if (files.includes('lib/media-analysis/processor-version.ts')) plan.convex.changed = true;
   return { base: base || null, files, services: plan };
 }

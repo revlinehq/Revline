@@ -169,8 +169,9 @@ try {
       catch { console.error('GitHub notification failed; inspect this workflow log.'); }
     }
     if (!dry) try {
-      await command(process.execPath, [...convexArgs, 'run', 'discordAlerts:enqueue', JSON.stringify({ source: 'sentry', eventId: `deploy-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`, title: 'Revline deployment failed', description: `Step: ${step}\nCommit: ${sha}\n${url}` }), '--deployment', 'different-gnu-398'], { env, quiet: true });
+      await command(process.execPath, [join(primary, 'node_modules/convex/bin/main.js'), 'run', 'discordAlerts:enqueue', JSON.stringify({ source: 'sentry', eventId: `deploy-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`, title: 'Revline deployment failed', description: `Step: ${step}\nCommit: ${sha}\n${url}` }), '--deployment', 'different-gnu-398'], { env, cwd: primary, quiet: true });
     } catch { console.error('Convex Discord notification failed; GitHub remains the alert channel.'); }
+    if (env.RUNNER_TEMP) await writeFile(join(env.RUNNER_TEMP, `revline-release-reported-${env.GITHUB_RUN_ID}-${env.GITHUB_RUN_ATTEMPT}`), step).catch(() => {});
   }
   process.exitCode = 1;
 }
