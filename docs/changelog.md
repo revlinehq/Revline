@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Landing and editor: Removed Inspo Motion: the landing section, the product-menu link, the /inspo-motion command on web and iOS, and the /sharingan page, which now redirects home. Why: the user retired it; recreation stays a dev-testing capability through the MCP tools.
 - Reference reads: Cache exact frames and deterministic readings in private R2, with revision-scoped timeline renders. Why: agents repeatedly decoded the same moments and filled the media queue.
 - Link imports: Correct the stale five-minute hint, cap retries at three attempts, and add cancellation and file-upload recovery with the last error. Why: agent testing found misleading limits and imports that retried forever.
 - Editor: The timeline tab row scrolls sideways with a normal mouse wheel, and the open tab scrolls into view. Why: after /clip makes many tabs, the extra ones were unreachable without a trackpad.
