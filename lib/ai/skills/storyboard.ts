@@ -29,7 +29,7 @@ Scissors cut a streamer’s filmstrip into three phone-sized clips. A typed prom
 A or B? Or tell me what to change.
 
 8. End the concept stage with exactly "A or B? Or tell me what to change." Revise the text first when the user changes A or B. Generate zero images and make zero saveStoryboard calls until the user chooses. A request to run a proof is not approval; post the two concepts and END THE TURN.
-9. After an actual user choice, saveStoryboard stage: "concept" with concepts: [{ name, text }, { name, text }], chosenConcept: 1 or 2 and their quoted words in approvalNote. Never select/approve on the user's behalf. The launch build template (promise → problem → reveal → three proofs → CTA) belongs to the build, not these two text concepts.
+9. After an actual user choice, saveStoryboard stage: "concept" with concepts: [{ name, text }, { name, text }], chosenConcept: 1 or 2 and their quoted words in approvalNote. Never select/approve on the user's behalf.
 
 ## 3. Black-ink board
 10. Read image-direction before generateImage. Honor a supplied style/brand/reference; otherwise choose one look and state it once with the sketches. Example "Look: black ink and cross-hatching; colour comes in the style frames." Do not ask for a separate style pick.
@@ -48,7 +48,7 @@ A or B? Or tell me what to change.
 19. After style approval, createTimeline for a dedicated animatic. Add the approved rough images in shot order with addMedia, explicit timelineId, start and duration; add agreed voiceover/temp music only if the brief includes it. Write zero scene code at this stage. Let the user watch in Revline; no export is needed. After their pacing approval, save stage: "animatic" with animaticTimelineId and the rough/style asset IDs.
 
 ## 6. Build and edits
-20. After animatic approval, use motion-design to build the editable film on a new createTimeline tab; retain the animatic. Replace each planned shot with the real scene inside its one-film/one-scene structure. Compare built frames with STYLE frames using compareReference/readFrames/getFrames and check motion with checkPacing. Treat the board as the objects/composition target; keep its images off the finished film.
+20. After animatic approval, use motion-design to build the editable film on a new createTimeline tab; retain the animatic. For a product launch build, arrange the approved shots as one promise, one problem, one reveal, three proof moments and a CTA thumbnail. Replace each planned shot with the real scene inside its one-film/one-scene structure. Compare built frames with STYLE frames using compareReference/readFrames/getFrames and check motion with checkPacing. Treat the board as the objects/composition target; keep its images off the finished film.
 21. "Change frame 3" regenerates only frame 3 with its phase/name/shotIndex and frame 1 reference. Self-check, present it and wait again. Changing an approved anchor or shot requires renewed user approval for the changed stage; never manufacture that approval to unlock a tool. Read estimatedUsd/usage from each generation; null is unknown, not zero.
 `,
 };
