@@ -1,7 +1,6 @@
 'use client';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from '@/components/ui/input-group';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
 import { EDITOR_SLASH_COMMANDS, parseEditorCommand, type EditorCommandName } from '@/lib/ai/slash-commands';
@@ -33,7 +32,6 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
   const commandPrefix = slashCommands ? /^\/(clip|inspo-motion)\s+/.exec(value) : null;
   const chosenCommand = commandPrefix?.[1];
-  const inputValue = commandPrefix ? value.slice(commandPrefix[0].length) : value;
   const commandQuery = slashCommands && !chosenCommand && /^\/[^\s]*$/.test(value) ? value.slice(1).toLowerCase() : null;
   const commands = commandQuery === null ? [] : EDITOR_SLASH_COMMANDS.filter(command => command.name.startsWith(commandQuery));
   const highlightedCommand = commands.find(command => command.name === activeCommand) ?? commands[0];
@@ -42,7 +40,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     setCommandDismissed(false);
     if (next === '/') setActiveCommand('clip');
     setError('');
-    onChange(chosenCommand ? `/${chosenCommand} ${next}` : next);
+    onChange(next);
   }
   function chooseCommand(name: EditorCommandName) {
     onChange(`/${name} `);
@@ -133,14 +131,12 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     <Popover open={menuOpen && !busy && fieldsFocused} onOpenChange={open => { if (!open) setCommandDismissed(true); }}>
     <PopoverAnchor asChild><InputGroup className="composer-input-group border-[#363636] bg-[#2a2a2a]">
     {!!attachments.length && <InputGroupAddon align="block-start" className="composer-attachments">{attachments.slice(0, attachmentLimit).map(chip)}{attachments.length > attachmentLimit && <InputGroupButton variant="secondary" onClick={() => setSheetOpen(true)}>+{attachments.length - attachmentLimit} clips</InputGroupButton>}</InputGroupAddon>}
-    {chosenCommand && <InputGroupAddon align="block-start" className="pb-0"><Badge variant="outline" className="gap-1 rounded-md border-[#4a4a4a] bg-[#343434] text-neutral-100">/{chosenCommand}<InputGroupButton size="icon-xs" aria-label={`Remove /${chosenCommand} command`} disabled={busy} onClick={() => { onChange(inputValue); setError(''); textarea.current?.focus(); }}><X /></InputGroupButton></Badge></InputGroupAddon>}
-    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'inspo-motion' ? 'Paste a video link and optional direction…' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={inputValue} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
+    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'inspo-motion' ? 'Paste a video link and optional direction…' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
       if (menuOpen && highlightedCommand && !e.nativeEvent.isComposing) {
         if (e.key === 'Escape') { e.preventDefault(); setCommandDismissed(true); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const index = commands.indexOf(highlightedCommand); setActiveCommand(commands[(index + (e.key === 'ArrowDown' ? 1 : commands.length - 1)) % commands.length].name); return; }
         if (e.key === 'Tab' || e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chooseCommand(highlightedCommand.name); return; }
       }
-      if (e.key === 'Backspace' && chosenCommand && !inputValue) { e.preventDefault(); onChange(''); return; }
       if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); if (mediaMissing) onAttach?.(); else void submit(); } }} />
     <InputGroupAddon align="block-end" className="edit-composer-actions pt-1 pl-1.5 pr-2">{attachControl ?? (statusLabel ? <InputGroupText className="composer-status">{statusLabel}</InputGroupText> : emptyHint && !attachments.length ? <InputGroupButton size="sm" className="composer-empty-hint" onClick={onAttach}>{emptyHint}</InputGroupButton> : <InputGroupButton size="icon-sm" className="composer-add" aria-label="Add footage" onClick={onAttach} disabled={!onAttach || busy}><Plus /></InputGroupButton>)}{actions}{running && onStop && (!allowQueue||!value.trim()) ? <InputGroupButton variant="default" size="icon-sm" className="revline-primary composer-submit ml-auto" disabled={stopping} onClick={event => { event.preventDefault(); void stop(); }} aria-label={stopping ? 'Stopping edit' : 'Stop editing'}><Square /></InputGroupButton> : <InputGroupButton variant="default" type="submit" size={submitLabel ? 'sm' : 'icon-sm'} className="revline-primary composer-submit ml-auto" disabled={busy || (running&&!allowQueue) || mediaMissing || mediaInvalid || (variant !== 'landing' && !value.trim() && !attachments.length)} aria-label={running&&allowQueue?'Queue message':submitLabel ?? 'Start edit'}>{submitLabel}{sending ? <LoaderCircle className="animate-spin" /> : <ArrowUp />}</InputGroupButton>}</InputGroupAddon>
     </InputGroup></PopoverAnchor>

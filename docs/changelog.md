@@ -2,6 +2,10 @@
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
+## 2026-11-03
+
+- Editor: Typing /clip or /inspo-motion now stays as plain text in the composer instead of turning into a removable badge. Why: the user wanted just the text.
+
 ## 2026-11-02
 
 - Audio tools: Restore development sound, narration and music matching, identify rejected tool mutations, and share pinned beat dependencies across dev worktrees. Why: Terra's launch film was blocked by editing failures on shared development.
