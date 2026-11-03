@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Dashboard: The new-project composer send button is brand purple again instead of grey. Why: the user wanted the purple button back.
 
 - Editor: Typing /clip or /inspo-motion now stays as plain text in the composer instead of turning into a removable badge. Why: the user wanted just the text.
 
