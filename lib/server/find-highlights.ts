@@ -267,7 +267,11 @@ export async function findSourceHighlights(
         error.status,
         error.retryable,
       );
-    throw error;
+    throw new AnalysisError(
+      'Gemini highlight discovery could not complete. No partial or signal-only ranking was returned. Retry after video analysis is available.',
+      502,
+      true,
+    );
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

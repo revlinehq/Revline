@@ -735,7 +735,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       inputSchema:z.object({assetId:z.string(),sourceType:sourceType.optional(),count:z.number().int().min(1).max(10).optional(),delivery:z.enum(['candidates','clips']).default('candidates')}),execute:async(_ctx,input)=>{
         let asset=await loadAsset(input.assetId);let transcriptionWarning:string|undefined;const saved=readHighlights(asset.analysis?.highlights);const cached=!!saved&&(!input.sourceType||saved.sourceType===input.sourceType);
         if(!cached){
-          try {asset=await analyze(input.assetId,'transcribe');}catch(error){abortSignal.throwIfAborted();if(error instanceof Error&&/no audio/i.test(error.message))throw error;transcriptionWarning=error instanceof Error?error.message.slice(0,350):'Transcription unavailable';}
+          try {asset=await analyze(input.assetId,'transcribe');}catch(error){abortSignal.throwIfAborted();transcriptionWarning=error instanceof Error?error.message.slice(0,350):'Transcription unavailable';}
           await withAnalysis(input.assetId,'highlights',async()=>{asset=await loadAsset(input.assetId);return null;},input.sourceType?{highlightSourceType:input.sourceType}:undefined);
         }
         clippingActive=input.delivery==='clips';
