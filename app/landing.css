@@ -280,9 +280,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-showcase-copy{grid-area:copy;display:flex;flex-direction:column;align-items:flex-start;gap:24px;min-width:0}
 .landing-clippers-frame,.landing-motion-design-film{grid-area:media;min-width:0}
 .landing-motion-design-film{width:100%;justify-self:center;margin:0;container-type:inline-size}
-.landing-motion-design-film figcaption{margin-top:12px;font-size:13px;line-height:1.5;color:#666;text-align:center;text-wrap:balance}
-.landing-motion-design-film figcaption a:hover{color:#111}
-.landing-motion-design-film figcaption a:focus-visible{outline:none}
 @media(max-width:760px){
   .landing-clippers,.landing-motion-design{grid-template-columns:minmax(0,1fr);grid-template-areas:"copy" "media";gap:32px;padding-block:64px}
   .landing-hero+.landing-clippers,.landing-clippers+.landing-motion-design{padding-top:0}
