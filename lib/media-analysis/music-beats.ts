@@ -1,13 +1,11 @@
+import { runMediaCommand as run } from '../server/media-command';
 import { workerToolPath } from '../server/worker-tool-path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { AnalysisError } from './errors';
 import { BEAT_ANALYSIS_ENGINE, type BeatMap } from './beat-map';
 
-const run = promisify(execFile);
 
 /** Run the pinned music tracker in the background worker, never in a browser. */
 export async function detectMusicBeats(source: string, duration: number, signal: AbortSignal): Promise<BeatMap> {

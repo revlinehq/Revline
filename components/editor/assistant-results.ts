@@ -4,6 +4,7 @@ import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
 import { SAVED_ELSEWHERE, hasSaveEvidence, toolSaveReceipt, needsSaveConfirmation } from '@/lib/ai/save-confirmation';
+import { mediaErrorMessage } from '@/lib/media-analysis/errors';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
@@ -102,7 +103,7 @@ function chatToolFromPart(value: unknown): ChatTool | null {
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
   const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || !!error || (part.state === 'output-available' && !output);
-  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(String(part.errorText || error || 'This step could not finish.')).slice(0, 240) } : {}) };
+  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || 'This step could not finish.')))).slice(0, 240) } : {}) };
 }
 
 /** What the agent is doing right now, from the newest part of its reply: a running tool (scene code is named while it is

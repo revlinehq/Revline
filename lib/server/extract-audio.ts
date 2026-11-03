@@ -1,7 +1,5 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { runMediaCommand as run } from './media-command';
 
-const run = promisify(execFile);
 /** Copy AAC without quality loss; convert other codecs to browser-playable AAC. */
 export async function extractSourceAudio(input: string, output: string, signal: AbortSignal) {
   const { stdout } = await run('ffprobe', ['-v', 'error', '-select_streams', 'a:0', '-show_entries', 'stream=codec_name', '-of', 'json', input], { signal, timeout: 30_000, maxBuffer: 1024 * 1024 });

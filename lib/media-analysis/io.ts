@@ -1,9 +1,7 @@
+import { runMediaCommand as run } from '../server/media-command';
 import { processingThreads } from '../server/processing-resources';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 export { downloadOwnedMedia } from '../server/owned-media';
 
-const run = promisify(execFile);
 export type AnalysisVideoPurpose = 'overview' | 'inspection';
 const analysisProfiles = {
   overview: { maxEdge: 960, crf: 26, videoKbps: 1500, audioKbps: 96 },

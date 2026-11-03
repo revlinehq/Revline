@@ -1,8 +1,6 @@
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { runMediaCommand as run } from './media-command';
 import type { AudioWaveform } from '@/lib/editor/types';
 
-const run = promisify(execFile);
 /** Peak amplitude across every channel, in bounded source-time buckets. */
 export async function measureAudioWaveform(input: string, signal: AbortSignal): Promise<AudioWaveform> {
   const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=duration', '-of', 'json', input], { signal, timeout: 30_000 });

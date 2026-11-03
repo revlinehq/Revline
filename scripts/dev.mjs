@@ -6,12 +6,12 @@ import { createInterface } from 'node:readline';
 import { aiCostLines } from './ai-cost-log-filter.mjs';
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
-// Worktree workers share the primary checkout's pinned beat runtime and model.
-// Otherwise any worker without its own installation can claim and fail music jobs.
+// Share every pinned local runtime, not task data or credentials. A worker in
+// any worktree can receive another checkout's jobs from the shared dev queue.
 const commonGitDirectory = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: directory, encoding: 'utf8' }).trim();
 const primaryDirectory = dirname(commonGitDirectory);
 if (primaryDirectory !== directory) {
-  for (const name of ['beat-tracking', 'beat-tracking-models']) {
+  for (const name of ['beat-tracking', 'beat-tracking-models', 'scene-detection', 'video-import']) {
     const source = join(primaryDirectory, '.data', name), target = join(directory, '.data', name);
     if (!existsSync(target) && existsSync(source)) {
       mkdirSync(dirname(target), { recursive: true });
