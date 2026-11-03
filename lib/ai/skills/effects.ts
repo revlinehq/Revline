@@ -9,7 +9,7 @@ export const effects: EditorSkill = {
     const { skills: _skills, soundEffects: _sound, text: _text, captions: _captions, ...catalog } = editorCapabilities();
     return `# Effects
 
-Effects serve a moment the viewer already sees: a reaction, an impact, a reveal, a beat. Inspect the footage first, use the gentlest strength that reads, and keep faces and text readable. For proven combinations (freeze callouts, ramps, text behind a person, tracked labels, beat pulses, choosing transitions) read vfx-recipes; for any color work read color-grading.
+Anchor effects to an observed reaction, impact, reveal or measured beat. Start at the catalog’s subtle value; inspect before/peak/after with getFrames. Increase once only if the event remains unmarked and faces/text stay visible. Combine tools with vfx-recipes; measure color with analyzeColor before grading (color-grading).
 
 ## Camera and object motion
 

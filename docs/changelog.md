@@ -4,7 +4,11 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-02
 
+<<<<<<< HEAD
 - Workspace: Add the reference’s tucked format header to new-project and editor composers; keep the chosen ratio through creation and import. Why: the user requested the Kino header design.
+=======
+- Skills: Shorten 14 editing skills and replace vague guidance with checks while retaining motion tools and incident fixes. Why: the user requested specific, human instructions without duplicate rules.
+>>>>>>> origin/main
 
 - Skills: Add `npm run skills:rank`, which scores each editing skill on numbers, tool checks and examples and lists its vaguest lines. Why: the user wants skills ranked best to worst with reasons.
 

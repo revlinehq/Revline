@@ -28,20 +28,20 @@ Beat This measures beats, downbeats and accents in a background media worker (an
 
 **Cutting to music.** alignCutsToBeat snaps the cuts between consecutive clips (footage, images and motion scenes) and the sequence's end to the nearest beats. Use it for any cut, scene change or ending on the beat, even for one clip; never resize clips by hand to reach a beat. Cut on downbeats for a steady rhythm; on accents for punch; every beat only for fast montages (cuts under about 0.4 s blur together). Follow the song's energy: longer shots in quiet parts, faster cutting into a chorus or drop. Keep speech intact: never move a cut into the middle of a word.
 
-**Matching a reference's music** (a recreation, a remake, "music like this"). Never put the reference's own audio in the edit. Call \`matchMusic\` with the reference video: it measures the reference's tempo, beat grid (Beat This) and energy curve, then picks the closest track from the Mixkit library below by tempo (half and double time count; up to 8% of speed change, pitch kept), feel and any \`style\` words you pass (the genre or mood you hear, from inspectVideo or the tags). It starts the track at the downbeat whose stretch best follows the reference's energy, so its downbeats land on the reference's downbeats (or on the main \`moments\` you pass, reference seconds; a film that recreates only an excerpt passes \`referenceStart\`, the reference second it starts at; \`momentFit\` says how far each moment is from its nearest downbeat). The track is copied into the project with its measured beat map and its credit in the clip name; \`alternatives\` lists the next best, and \`trackId\` swaps to one. Only when no track is within reach does it render a synthesized bed at the reference's tempo (or ask for one with \`synth: true\`). For separate clips, call \`alignCutsToBeat\` with its \`musicAssetId\` when cuts should land on the beat; a film from addFilm is one clip with section markers, already on the downbeats, so skip it there (it would only trim the film's end), and key the generated effects to the motion as usual, 0.2 to 0.3 louder than the music. Name the track and artist when you report, and say it was picked by measurement, not listened to.
+**Matching a reference's music** (a recreation, a remake, "music like this"). Never put the reference's own audio in the edit. Call \`matchMusic\` with the reference video: it measures the reference's tempo, beat grid (Beat This) and energy curve, then picks the closest track from the Mixkit library below by tempo (half/double time count; ≤8% speed change, pitch kept), energy and \`style\` words you pass (the genre or mood you hear, from inspectVideo or the tags). It starts the track at the downbeat whose stretch best follows the reference's energy, so its downbeats land on the reference's downbeats (or on the main \`moments\` you pass, reference seconds; a film that recreates only an excerpt passes \`referenceStart\`, the reference second it starts at; \`momentFit\` says how far each moment is from its nearest downbeat). The track is copied into the project with its measured beat map and its credit in the clip name; \`alternatives\` lists the next best, and \`trackId\` swaps to one. Only when no track is within reach does it render a synthesized bed at the reference's tempo (or ask for one with \`synth: true\`). For separate clips, call \`alignCutsToBeat\` with its \`musicAssetId\` when cuts should land on the beat; a film from addFilm is one clip with section markers, already on the downbeats, so skip it there (it would only trim the film's end), and key the generated effects to the motion as usual, starting at gain 0.6 against music 0.3; verify with getSound/checkSound. Name the track and artist when you report, and say it was picked by measurement, not listened to.
 
 **Visuals on the beat.** setAudioReactive makes footage or text pulse with the music (scale, shake, rotate, or any effect control such as glitch.intensity or colorGrade.exposure) from beats, downbeats, accents or loudness. Keep it subtle: scale .04 to .08 on beats, glitch or exposure only on accents. For a single hit, a timed effect at a marker reads cleaner than a constant pulse.
 
 ## Sound effects
 
-Sound effects make edits feel deliberate: each one marks a visual event the viewer already sees. **Generate every sound by default** with \`generateSound\`: you describe the sound in words and ElevenLabs generates real sound design, which is placed so its first audible sample lands on \`at\`. Change one with \`editSound\`. If generation fails, nothing is placed: say so and leave the moment silent. No sound is better than a wrong one, and there is no other generator to fall back to.
+Sound effects mark visible events; their audible onset must match the rendered hit. **Generate every sound by default** with \`generateSound\`: you describe the sound in words and ElevenLabs generates real sound design, which is placed so its first audible sample lands on \`at\`. Change one with \`editSound\`. If generation fails, nothing is placed: say so and leave the moment silent. No sound is better than a wrong one, and there is no other generator to fall back to.
 
 The recorded library (listed under Library at the end of this skill, placed with \`addSoundEffect\`) is **only** for when the user explicitly asks for a recording it has (a camera shutter, a phone, a clock, ambience like a city or the ocean) or names a library sound. Never add a library sound on your own initiative.
 
 ### Writing the prompt
 
-Brief it like a sound designer, in one line: the source, the texture, the motion and the tail. Name the feel of the product (clean, soft, premium UI) rather than genre words.
-- Good: "Soft airy whoosh sweeping left to right, clean, short tail", "Crisp glass UI tick, high and dry", "Deep cinematic boom with a long sub tail", "Rising synth swell building tension, ends abruptly".
+Name source, attack, movement and decay in one line.
+- Example: "UI tick: one high-frequency transient, no voice/music, decay ≤0.1 s in a 0.5 s clip"; "Air whoosh left to right, 0.4 s, tail ≤0.1 s"; "Low boom, 1 s sub tail"; "Synth riser, 2 s, abrupt stop".
 - Avoid music and speech, brand names, and stacking several events in one prompt: one prompt is one sound.
 - Set \`duration\` (${SOUND_EFFECT_LIMITS.minDuration} to ${SOUND_EFFECT_LIMITS.maxDuration} s) to the motion it scores: a whoosh as long as the slide, a riser as long as the build. Short UI sounds: 0.5 to 1 s. \`loop: true\` only for ambience under a long shot.
 - \`promptInfluence\` (default 0.3) higher, about 0.6, when the result must be literal; lower for more variety.
@@ -52,17 +52,17 @@ Motion design comes with sound. When you add a scene, or change a scene's choreo
 
 - One generateSound per key beat (an entrance, a reveal, a hit), not one per tween. Two to five sounds carry most scenes.
 - When patchScene or editScene changes a scene's timing, move its sounds to the new beats (\`move\`), or \`editSound\` one whose length must change. Leave other scenes' sounds alone.
-- Skip it only if the user asked for silence, or speech plays under the scene. Music is no reason to skip: mix the sounds beneath it.
+- Skip for requested silence. In narrated scenes, fit the full audible cue inside a transcript gap or omit it. Music alone does not block effects.
 
 ### Timing
 
 - When the user gives a time ("at 3.2 s"), place the sound at exactly that timeline time; tools snap it to the nearest frame.
-- When the user says "when X happens", find that moment: read the scene code (inspectClip) for its beat times, or the timeline and transcript for cuts and words.
+- For “when X happens”, inspectClip/transcript for candidate times, then confirm visible onset with getFrames.
 - Otherwise key every sound to the motion's beats as below.
 
 ### Find the beats
 
-Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the clip's first frame, so a tween at position \`t\` happens at timeline \`clip.start + t\`. Resolve relative positions (\`'<0.2'\`, \`'-=0.3'\`, labels) to absolute times first.
+Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the clip's first frame, so timeline time = \`clip.start + enclosing Beat start + tween onset\` (omit Beat offset for a top-level timeline). Resolve relative positions (\`'<0.2'\`, \`'-=0.3'\`, labels) to absolute times first.
 
 - \`expo.out\` / \`power*.out\` entrances: a whoosh starting with the tween, as long as it.
 - \`*.inOut\` moves and draws: a whoosh or swell spanning the tween.
@@ -75,12 +75,12 @@ Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the 
 
 - One sound per beat. Never stack two sounds on the same moment.
 - Leave space. Skip small beats quicker than about 0.5 s apart. Not every cut needs a whoosh.
-- Nothing under speech. Check transcript word times (inspectAssetAnalysis) and place sounds in pauses. If a tool result's \`overlapsAudio\` lists a voice clip with a word spoken there, move the sound to the nearest pause or drop it.
+- Check inspectAssetAnalysis word times and overlapsAudio: the full audible cue must fit a pause. Move it to a fitting gap or omit it; checkSound verifies overlaps.
 - Add sounds when the user asks for sound, authorizes creative styling, or asks for motion design (see Scenes). Otherwise do not decorate. Say which sounds you placed and where.
 
 ### Gain
 
-Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (clip volume) sets the level: ticks and pops near speech 0.3–0.5; whooshes, chimes and risers with no speech 0.6–0.8; hits and a riser into a big reveal 0.7–1.0; ambience 0.15–0.3. Never exceed 1.2.
+Generated and library sounds both peak near -3 dBFS, so the tool's \`gain\` (clip volume) sets the level: ticks/pops in speech gaps 0.3–0.5; whooshes, chimes and risers with no speech 0.6–0.8; hits and a riser into a big reveal 0.7–1.0; ambience 0.15–0.3. Never exceed 1.2.
 
 ### Library sounds on request
 
