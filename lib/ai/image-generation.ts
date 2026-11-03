@@ -22,9 +22,9 @@ export const imageGenerationQuality = (input: ImageGenerationInput) => input.qua
 
 const tokenDetails = z.object({ textTokens: z.number().int().nonnegative(), imageTokens: z.number().int().nonnegative() });
 
-/** Uses the shared key fallback and the SDK's bounded retries; PNG bytes are stored untouched. */
+/** Uses the SDK's bounded retries; PNG bytes are stored untouched. */
 export async function generateImagePlates(input: ImageGenerationInput, references: string[], abortSignal: AbortSignal) {
-  if (!activeOpenAIKey()) throw new Error('Image generation is not configured (OPENAI_API_KEY and OPENAI_API_KEY_FALLBACK are missing).');
+  if (!activeOpenAIKey()) throw new Error('Image generation is not configured (OPENAI_API_KEY is missing).');
   const signal = AbortSignal.any([abortSignal, AbortSignal.timeout(240_000)]);
   let result;
   try {

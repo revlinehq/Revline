@@ -1,8 +1,7 @@
 import type { FrameCache } from './frame-cache';
-import { execFile } from 'node:child_process';
+import { runMediaCommand as run } from './media-command';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import sharp from 'sharp';
 import { z } from 'zod';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
@@ -23,7 +22,6 @@ type Result = NonNullable<MediaTaskResult['read']>;
 type Box = { x: number; y: number; w: number; h: number };
 type Source = { width: number; height: number; fps: number; duration: number };
 
-const run = promisify(execFile);
 const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES = 30;
 /** A pixel counts as changed between frames when its gray level moves more than this (of 255). */
 const CHANGE = 24;

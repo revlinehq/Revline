@@ -364,8 +364,8 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   }
   return candidates[0];
 }
-async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any',rendersOnly=false) {
-  const versioned=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion));
+async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any',rendersOnly=false,excludedKinds:Doc<'mediaTasks'>['kind'][]=[]) {
+  const versioned=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>q.and(q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)),...excludedKinds.map(kind=>q.neq(q.field('kind'),kind)));
   // Fly export machines take only their lane's exports, within each owner's seats.
   if(rendersOnly)return (await seatedRenders(ctx,lane==='ultra'?'ultra':undefined,versioned))[0]??null;
   // With Fly exports, the regular processors leave every export to Fly.
@@ -387,7 +387,7 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   if(renders.length)return fairest(ctx,renders);
   const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
-  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
 }
 export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
   const task=await ctx.db.get(args.taskId);if(!task||task.ownerId!==await requireOwner(ctx))throw new ConvexError('Media task not found.');
@@ -407,10 +407,12 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
   return { processorVersion: MEDIA_PROCESSOR_VERSION };
 } });
 
-export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
+export const ready = query({ args: { workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
   const role=requireMediaWorker(args.workerSecret);
+  const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
+  if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return '';
   if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return '';
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');return task?`${task._id}:${task.attempt}`:'';
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports',args.excludedKinds);return task?`${task._id}:${task.attempt}`:'';
 }});
 
 async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|MutationCtx,task:Doc<'mediaTasks'>) {
@@ -433,11 +435,11 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   if(audio&&(audio.kind!=='audio'||audio.ownerId!==task.ownerId||audio.projectId!==task.projectId))throw new ConvexError('The prepared audio does not belong to this source project.');
   const previewProject=task.kind==='preview'?await readProject(ctx,task.projectId):null;
   const previewRanges=previewProject&&asset?timelineSourceRanges(await allTabTimelines(ctx,previewProject),asset._id):undefined;
-  const transcriptionAsset=audio?{...audio,url:await mediaUrl(ctx,audio)}:undefined;
+  const transcriptionAsset=audio?{...audio,url:await mediaUrl(ctx,audio,true)}:undefined;
   let review:Infer<typeof reviewSnapshot>|undefined;
   if(task.reviewId){
     const saved=await ctx.db.get(task.reviewId);if(!saved||saved.ownerId!==task.ownerId||saved.projectId!==task.projectId)throw new ConvexError('Composition review is unavailable.');
-    const assets=await Promise.all(saved.assetIds.map(async id=>{const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Review source is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
+    const assets=await Promise.all(saved.assetIds.map(async id=>{const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Review source is unavailable.');return {...asset,url:await mediaUrl(ctx,asset,true)};}));
     review={timeline:saved.timeline,reference:saved.reference,plans:saved.plans,assets,revision:saved.revision,start:saved.start,end:saved.end};
   }
   let snapshot:Infer<typeof timelineFrames>|undefined;
@@ -461,7 +463,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(saved.guard){timeline=await loadSceneCode(ctx,saved.guard.candidate);baseline=await loadSceneCode(ctx,saved.guard.baseline);}
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
     const ids=[...new Set([...timeline.clips,...baseline?.clips??[]].flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(sceneMediaAssetIds(timeline),baseline?sceneMediaAssetIds(baseline):[],timeline.audioNormalization?[timeline.audioNormalization.assetId]:[],baseline?.audioNormalization?[baseline.audioNormalization.assetId]:[]))];
-    const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset)};}));
+    const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...asset,url:await mediaUrl(ctx,asset,true)};}));
     snapshot={...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
   }
   let blueprint:Infer<typeof blueprintWork>|undefined;
@@ -493,18 +495,20 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     outputStored = !!job.outputR2Key;
     const assets = await Promise.all((job.assetIds ?? []).map(async id => {
       const item = await ctx.db.get(id);
-      return item && item.ownerId === task.ownerId && item.projectId === task.projectId ? { ...item, url: await mediaUrl(ctx, item) } : null;
+      return item && item.ownerId === task.ownerId && item.projectId === task.projectId ? { ...item, url: await mediaUrl(ctx, item, true) } : null;
     }));
     if (assets.some(item => !item?.url)) { throw new ConvexError('Export source media is unavailable.'); }
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset), ...await previewUrl(ctx, asset) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
-export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
+export const claim = mutation({ args: { workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
+  const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
+  if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return null;
   if(role!=='exports'&&!args.rendersOnly&&(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))!==processorBackend())return null;
-  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports');if(!task)return null;
+  const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports',args.excludedKinds);if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
   const leaseToken=crypto.randomUUID(),now=Date.now();
@@ -532,6 +536,12 @@ export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v
   const progress = Math.max(task.progress, args.progress ?? task.progress);
   const now=Date.now();
   await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
+  // The request budget bounds queue/worker silence, not a healthy source
+  // transfer. Long VOD downloads and their retries can outlast four minutes.
+  if(task.analysisRequestId){
+    const request=await ctx.db.get(task.analysisRequestId);
+    if(request?.taskId===task._id&&request.status==='running'&&request.expiresAt>now&&request.expiresAt<now+120_000)await ctx.db.patch(request._id,{expiresAt:now+240_000});
+  }
   if (task.renderJobId) await ctx.db.patch(task.renderJobId, { progress, updatedAt: Date.now() });
   return null;
 }});
@@ -545,7 +555,8 @@ export const expire = internalMutation({ args: mediaTaskCredentials, returns: v.
 }});
 export const fail = mutation({ args: { ...mediaTaskCredentials, error: v.string(), retryable: v.boolean() }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
-  await failTask(ctx, task, args.error, args.retryable); return null;
+  // Billing cannot recover through retries, including reports from older workers.
+  await failTask(ctx, task, args.error, args.retryable && !/Gemini.*HTTP 402/i.test(args.error)); return null;
 }});
 async function placeImportedVideo(ctx: MutationCtx, project: Doc<'projects'>, taskId: Id<'mediaTasks'>, output: Doc<'assets'> & { duration: number }) {
   const timeline = currentTimeline(project), clipId = `import-${taskId}`;

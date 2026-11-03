@@ -5,7 +5,8 @@ import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@model
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
-import { CLIPPING_SKILL_ROUTING } from '../lib/ai/skills/clipping';
+import { type LaneId } from '../lib/ai/lanes';
+import { laneDescriptions } from '../lib/ai/lanes/selection';
 import { requestMcpOrigin } from './lib/mcp_origin';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
@@ -26,18 +27,13 @@ If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or 
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
-For edits to existing footage, audio, captions, scenes or films, start with readSkill name "scene-engine" page "edit-lanes" and follow its workflow. Default workflow: listProjects -> getProject (read its brief: the user's direction for this project, and follow it) -> inspectTimeline (same projectId) -> edit -> inspectTimeline again to confirm. When the user gives lasting direction, record it with updateBrief. Edits to a film with several sections pass scope, the section the user asked about; every other section is locked. Use getFrames to see the composited result at a few timeline seconds after visual changes (captions, framing, effects). Every editing tool needs projectId. Clip IDs, asset IDs and times come only from inspectTimeline, inspectClip, getProject and inspectAssetAnalysis; never invent them. Timeline times are seconds on the timeline; tools that say SOURCE seconds mean time inside the original media.
-${CLIPPING_SKILL_ROUTING}
-Before speech cuts, captions or take selection, read the relevant SOURCE transcript range with inspectAssetAnalysis (run analyzeMedia mode "transcribe" first if no transcript is saved). Use readSkill for detailed guidance on a kind of edit. Batch known edits when the tool supports it; a failed call saves nothing. If another edit is running on the project, wait and retry.
-Bring in footage with uploadMedia (a local file: run the script it returns, then finishUpload) or importVideoLink (a URL).
-
-Use Revline's tools, not your own scripts. Never run ffmpeg, Python or other code of your own to look at, measure or time video or audio: every script means a Revline tool was skipped, and its result never reaches the project.
-- Recreating or learning from a reference video: uploadMedia it into the project (it need not go on the timeline), then readFrames (the whole video in 16 frames, then short windows around each move, then crops to read type and icons), trackReference for each moving object (it returns each move as a GSAP tween with its timing and ease), and measureFrame for exact colors, sizes and edges. Every brand logo or app icon comes from findIcon (the official SVG), and hand-made shapes (brush strokes, torn paper) from traceShape; never draw either by hand. After building, compareReference sets the reference beside your timeline at each moment with a difference score; fix the worst first. For a demo sub-panel beside other reference content, set referenceCrop and leave timelineCrop full-frame; do not reposition your film inside a copy of the reference. Use referenceCropKeyframes in SOURCE seconds when that panel moves. compareMotion accepts the same independent crops.
-- Removing awkward moments from footage (dead air, looking away, reaching for the camera): readSkill visual-inspection. readFrames momentsOnly maps the whole clip, then readFrames fps 10 confirms each candidate before you cut.
-- Music and timing: markMusicBeats for beats, downbeats and drops, and alignCutsToBeat to cut on them. Sound effects: generateSound, keyed to the motion.
-- Narration: listVoices (with sampleText for playable samples) and generateVoice, which places the voice and returns every word's timeline time. A narrated explainer film follows the explainer skill.
-- Before building motion, readSkill the matching skill (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers over footage, scene-engine for any scene) and follow it. Check your work with getFrames, and run checkPacing on the range for builds or full-lane motion edits: stills cannot show speed. For builds or full-lane sound edits, run checkSound on that range (getSound to hear what plays where).
-Share the editorUrl from getProject so the user can watch. Export with exportVideo and poll getExport for the download link. For several separate videos in one project, use timeline tabs (listTimelines, createTimeline, openTimeline; editing tools act on the open tab) and export each with exportVideo timelineId. Exports queue, and listExports shows them all.
+Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Choose the lane yourself using the request, brief and attached media. No classifier chooses for you. Without an explicit lane, startTask exposes only selection controls; call setLane(lane, reason, taskType: edit|question) before any editing tools are offered. Use edit for any request to create or change a video, including a request phrased as a question. Use question only for information without edits. A follow-up keeps the current timeline lane unless the kind of work changed. /clip and manual composer selections win.
+Lanes:
+${laneDescriptions()}
+A recreation is an explicit dev/MCP capability. tools/list returns only shared tools and the chosen lane’s tools. setLane emits notifications/tools/list_changed. Clients that ignore list changes receive an actionable error before an unavailable tool executes.
+Follow the skill list returned by startTask or setLane. readSkill only returns the current lane’s pages. inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for source transcripts and clipping signals, and getFrames for rendered timeline evidence. Keep reference media off the timeline when recreating.
+Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
+Use Revline’s tools to measure media; all tool edits save immediately and are undoable. Share the editorUrl from getProject.
 
 Editing quality rules:
 ${EDITOR_STYLE_RULES}`;
@@ -49,18 +45,21 @@ const oauthMetadata = (site: string) => ({
 });
 const resourceMetadata = (site: string) => ({ resource: `${site}/mcp`, authorization_servers: [site], bearer_methods_supported: ['header'], scopes_supported: ['revline'], resource_name: 'Revline video editor' });
 
-let toolCatalog: Promise<Tool[]> | undefined;
+const toolCatalog=new Map<LaneId|'selection',Promise<Tool[]>>();
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: false } }, instructions: MCP_INSTRUCTIONS });
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId:string) {
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: true } }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    toolCatalog ??= ctx.runAction(internal.mcpActions.listTools, {}).then(tools => tools as Tool[]).catch(error => { toolCatalog = undefined; throw error; });
-    return { tools: await toolCatalog };
+    const session=await ctx.runQuery(internal.lanes.mcpSession,{ownerId,connectionId});
+    const selecting=!session||session.laneChosen===false,key=selecting?'selection':session.lane;
+    if(!toolCatalog.has(key))toolCatalog.set(key,ctx.runAction(internal.mcpActions.listTools,{lane:session?.lane,selecting}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog.delete(key);throw error;}));
+    return {tools:await toolCatalog.get(key)!};
   });
-  server.setRequestHandler(CallToolRequestSchema, async request => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
+  server.setRequestHandler(CallToolRequestSchema, async (request,extra) => {
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, connectionId, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
+    if(!outcome.isError&&['startTask','setLane','switchLane'].includes(request.params.name))await extra.sendNotification({method:'notifications/tools/list_changed'});
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
@@ -83,12 +82,16 @@ const mcpHandler = httpAction(async (ctx, request) => {
     return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
   }
   // Stateless: a fresh server and transport per request, answering with JSON rather than an event stream.
-  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline);
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline,auth.connectionId);
+  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: false });
   try {
     await server.connect(transport);
-    return withCors(await transport.handleRequest(request, { parsedBody: body }));
-  } finally { await server.close(); }
+    const response=await transport.handleRequest(request,{parsedBody:body});
+    if(!response.body){await server.close();return withCors(response);}
+    const reader=response.body.getReader();
+    const stream=new ReadableStream<Uint8Array>({async pull(controller){try{const {done,value}=await reader.read();if(done){controller.close();await server.close();}else controller.enqueue(value);}catch(error){controller.error(error);await server.close();}},async cancel(){await reader.cancel();await server.close();}});
+    return withCors(new Response(stream,{status:response.status,headers:response.headers}));
+  } catch(error){await server.close();throw error;}
 });
 
 function formValues(text: string, contentType: string | null): Record<string, string> {

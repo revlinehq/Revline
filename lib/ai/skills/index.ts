@@ -20,17 +20,16 @@ import { vfx } from './vfx';
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const EDITOR_SKILLS: EditorSkill[] = [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, overallStyling, explainer, motionDesign, referenceFootage, musicAndSound, visualInspection];
-export const EDITOR_SKILL_NAMES = EDITOR_SKILLS.map(skill => skill.name) as [string, ...string[]];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, overallStyling, explainer, motionDesign, referenceFootage, musicAndSound, visualInspection];
 
 /** The always-visible index: names and when to read each skill. */
 export function editorSkillIndex() {
-  return EDITOR_SKILLS.map(({ name, description }) => ({ name, description }));
+  return editorSkills().map(({ name, description }) => ({ name, description }));
 }
 
 export function editorSkill(name: string) {
-  const skill = EDITOR_SKILLS.find(item => item.name === name);
-  if (!skill) throw new Error(`Unknown skill "${name}". Available: ${EDITOR_SKILL_NAMES.join(', ')}.`);
+  const skill = editorSkills().find(item => item.name === name);
+  if (!skill) throw new Error(`Unknown skill "${name}". Available: ${editorSkills().map(skill=>skill.name).join(', ')}.`);
   return skill;
 }
 

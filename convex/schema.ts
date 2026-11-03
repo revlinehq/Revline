@@ -1,3 +1,4 @@
+import { laneValidator, laneEvidenceValidator, laneBaselineValidator, laneResultValidator } from './lib/lane_validators';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator, pixelTrackHeaderValidator, pixelTrackSampleValidator, pixelTrackBindingValidator } from './lib/pixel_track_validator';
 import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
@@ -125,7 +126,7 @@ export const timelineValidator = v.object({ audioNormalization:v.optional(v.obje
 export { assistantRecoveryValidator } from './lib/assistant_run';
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
-  aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number()})),
+  aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number(),videoUnavailable:v.optional(v.string())})),
   // The connected app driving an MCP run (its OAuth client name), shown in the editor's chat.
   aiAgentName:v.optional(v.string()),
   // An MCP agent counts as working until this time; every tool call on the project extends it.
@@ -397,6 +398,9 @@ export default defineSchema({
   }).index("by_token", ["token"]).index("by_storageId", ["storageId"]).index("by_projectId", ["projectId"]),
   // MCP: OAuth clients registered dynamically (RFC 7591), one-time authorization
   // codes, and hashed bearer tokens. Token values are never stored.
+  editingLaneTabs: defineTable({ownerId:v.string(),projectId:v.id('projects'),timelineId:v.string(),lane:laneValidator,manual:v.boolean(),reason:v.string()}).index('by_project_tab',['projectId','timelineId']).index('by_project',['projectId']),
+  editingLaneTasks: defineTable({ownerId:v.string(),projectId:v.id('projects'),taskId:v.string(),lane:laneValidator,laneChosen:v.optional(v.boolean()),manual:v.optional(v.boolean()),lockedLane:v.optional(laneValidator),attempts:v.number(),exportConfirmed:v.optional(v.boolean()),required:v.boolean(),initialTabIds:v.array(v.string()),baselines:v.array(laneBaselineValidator),evidence:v.array(laneEvidenceValidator),result:v.optional(laneResultValidator),createdAt:v.number()}).index('by_task',['taskId']).index('by_project',['projectId']),
+  mcpLaneSessions: defineTable({ownerId:v.string(),connectionId:v.string(),projectId:v.id('projects'),timelineId:v.string(),taskId:v.string(),lane:laneValidator,laneChosen:v.optional(v.boolean())}).index('by_connection',['ownerId','connectionId']).index('by_project',['projectId']),
   mcpClients: defineTable({ clientId: v.string(), clientName: v.string(), redirectUris: v.array(v.string()), createdAt: v.number() }).index("by_clientId", ["clientId"]).index("by_createdAt", ["createdAt"]),
   // A redeemed code stays as a tombstone naming its grant, so a replayed code can revoke it.
   mcpAuthCodes: defineTable({ codeHash: v.string(), clientId: v.string(), ownerId: v.string(), redirectUri: v.string(), codeChallenge: v.string(), resource: v.optional(v.string()), expiresAt: v.number(), redeemedGrantId: v.optional(v.string()) }).index("by_codeHash", ["codeHash"]).index("by_expiresAt", ["expiresAt"]),

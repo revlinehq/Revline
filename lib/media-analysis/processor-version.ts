@@ -3,4 +3,5 @@
  * contract; tasks needing newer features set requiredProcessorVersion. */
 // 36: persistent frame and analysis caching.
 // 32: shared scene bundles. 33: keyframed reference crops. 34: uncapped scene media. 35: still-image reads/comparisons.
-export const MEDIA_PROCESSOR_VERSION = 36;
+// 37: local runtime capabilities, resilient remote inputs and shared source reads.
+export const MEDIA_PROCESSOR_VERSION = 37;

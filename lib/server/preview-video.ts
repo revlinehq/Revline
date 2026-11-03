@@ -1,15 +1,15 @@
-import { execFile, spawn } from 'node:child_process';
+import { mediaInputOptions } from './media-command';
+import { runMediaCommand as run } from './media-command';
+import { spawn } from 'node:child_process';
 import { platform } from 'node:os';
 import { previewResources } from './processing-resources';
 import { previewChunkBoundaries } from './preview-chunks';
 import { resolve } from 'node:path';
 import { readFile, writeFile, rm } from 'node:fs/promises';
-import { promisify } from 'node:util';
 import { z } from 'zod';
 import { forEachLimited } from './run-limited';
 import { previewChunks, type SourceRange } from '../editor/preview-segments';
 
-const run = promisify(execFile);
 const streamSchema = z.object({
   codec_type: z.string().optional(),
   codec_name: z.string().optional(),
@@ -116,7 +116,7 @@ async function runPreviewFfmpeg(
     const stats = encoding
       ? ['-stats_enc_post:v', 'pipe:1', '-stats_enc_post_fmt', '{t}']
       : ['-progress', 'pipe:1', '-stats_period', '0.5'];
-    const child = spawn('ffmpeg', ['-v', 'error', '-nostdin', ...args.slice(0, -1), ...stats, args.at(-1)!], {
+    const child = spawn('ffmpeg', ['-v', 'error', '-nostdin', ...args.slice(0, -1).flatMap((arg, i) => arg === '-i' ? [...mediaInputOptions(args[i + 1]), arg] : [arg]), ...stats, args.at(-1)!], {
       signal,
       stdio: ['ignore', 'pipe', 'pipe'],
     });
@@ -246,7 +246,6 @@ async function hasScrubbableKeyframes(input: string, signal: AbortSignal, durati
   }
   return true;
 }
-
 
 type EncodeOptions = {
   encoder: string;

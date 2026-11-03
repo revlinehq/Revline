@@ -10,6 +10,8 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // the attempt that claimed the run, and must belong to a run the runner is still working on. Its owner, project, run and chat ids must be
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
+  'lanes:requireFinish','lanes:forRun','lanes:begin','lanes:task','lanes:switchLane','lanes:baseline','lanes:evidence','lanes:validate','lanes:timelines','lanes:recordFinish',
+  'clipping:completionState',
   'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
@@ -23,6 +25,7 @@ const TURN_FUNCTIONS = new Set([
   'compositionReview:cancel', 'compositionReview:completionState', 'compositionReview:get', 'compositionReview:readPlan', 'compositionReview:request', 'compositionReview:savePlan',
   'cutouts:startFromRun', 'derivations:runStatus', 'derivations:startFromRun', 'frameCache:readResult', 'mcp:discardFrames', 'mcp:frames', 'mcp:normalizeSnapshotId', 'mcp:requestFrames', 'mcp:requestGuard', 'mcp:takeFrames', 'briefs:forRun', 'briefs:update', 'memories:forRun', 'memories:forget', 'memories:recall', 'memories:remember',
   'mediaTaskResults:consumeRead',
+  'assistant:videoUnavailable', 'assistant:recordVideoUnavailable',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */
@@ -99,7 +102,7 @@ export function registerAgentRunnerRoutes(http: HttpRouter) {
       const target = resolve(call.address);
       if (!target) return forbidden(call.address?.name ?? call.address?.reference ?? 'unknown', run.runId);
       const args = jsonToConvex(call.args) as never;
-      if (outOfScope(args, run)) return forbidden(target.label, run.runId);
+      if (outOfScope(args, run) || target.label.startsWith('lanes:') && args && typeof args==='object' && 'taskId' in args && (args as Record<string,unknown>).taskId!==run.runId) return forbidden(target.label, run.runId);
       const ref = target.ref as never;
       const value = call.kind === 'query' ? await ctx.runQuery(ref, args) : call.kind === 'mutation' ? await ctx.runMutation(ref, args) : await ctx.runAction(ref, args);
       if (target.files) { const granted = fileStorageIds(value); if (granted.length) await ctx.runMutation(internal.agentRunner.grantStorage, { runId: run.runId, storageIds: granted }); }
