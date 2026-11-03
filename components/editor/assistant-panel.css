@@ -22,9 +22,6 @@
   .assistant-source-suggestions button,.assistant-content :is(.composer-more,.load-more){min-height:44px}
 }
 
-.assistant-model-controls{display:flex;flex-wrap:nowrap;align-items:center;gap:2px;min-width:0;max-width:100%;flex:1 1 auto}
-.assistant-model-controls>.assistant-model-picker{flex:0 1 auto;min-width:0}
-.assistant-model-controls>.assistant-mode-picker{flex:0 0 auto}
 
 
 

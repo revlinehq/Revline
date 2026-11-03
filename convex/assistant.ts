@@ -71,14 +71,36 @@ async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string
   const choices = await editorModelChoices(ctx, ownerId);
   return !!choices && (modelChoice === undefined || choices.some(choice => choice === modelChoice));
 }
-export const status = query({ args: { projectId: v.id("projects"), clientPlatform: v.optional(v.literal("ios")) }, returns: v.object({ configured: v.boolean(), mobileConfigured: v.optional(v.boolean()), modelSwitcher: v.optional(v.boolean()), allowedModels: v.optional(v.array(claudeModelChoiceValidator)), claudeViaMcp: v.optional(v.boolean()), defaultModelChoice:v.optional(claudeModelChoiceValidator), defaultReasoningEffort:v.optional(editorReasoningEffortValidator), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()), effortSwitcher: v.optional(v.boolean()), liveEffort: v.optional(editorReasoningEffortValidator) }), handler: async (ctx, args) => {
+const composerSettingsFields = {
+  modelSwitcher: v.optional(v.boolean()),
+  allowedModels: v.optional(v.array(claudeModelChoiceValidator)),
+  claudeViaMcp: v.optional(v.boolean()),
+  defaultModelChoice: v.optional(claudeModelChoiceValidator),
+  defaultReasoningEffort: v.optional(editorReasoningEffortValidator),
+  effortSwitcher: v.optional(v.boolean()),
+};
+async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
+  let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
+  const choices = await editorModelChoices(ctx, ownerId);
+  return {
+    ...(defaultModelChoice ? { defaultModelChoice } : {}),
+    defaultReasoningEffort: defaultEditorReasoningEffort(),
+    ...(choices ? { modelSwitcher: true, allowedModels: [...choices] } : {}),
+    ...(await claudeInApp(ctx, ownerId) ? {} : { claudeViaMcp: true }),
+    ...(process.env.EDITOR_EFFORT_SWITCHER === 'true' && choices ? { effortSwitcher: true } : {}),
+  };
+}
+export const composerSettings = query({
+  args: {}, returns: v.object(composerSettingsFields),
+  handler: async ctx => editorComposerSettings(ctx, await requireOwner(ctx)),
+});
+export const status = query({ args: { projectId: v.id("projects"), clientPlatform: v.optional(v.literal("ios")) }, returns: v.object({ ...composerSettingsFields, configured: v.boolean(), mobileConfigured: v.optional(v.boolean()), running: v.boolean(), externalAgent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), editing: v.boolean(), workflowActive: v.boolean(), error: v.union(v.string(), v.null()), reason: v.union(v.string(), v.null()), activity: v.union(v.string(), v.null()), activitySource: v.union(v.string(), v.null()), activityProgress: v.union(v.number(), v.null()), activityStartedAt: v.union(v.number(), v.null()), budgetUsed: v.optional(v.number()), liveEffort: v.optional(editorReasoningEffortValidator) }), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), project = await projectRun(ctx,args.projectId,ownerId);
   const requests = project.aiRunning && project.aiRunId ? await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).take(16) : [];
   const active = requests.find(request => request.status === 'pending' || request.status === 'running');
   const task = active?.taskId ? await ctx.db.get(active.taskId) : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
   const labels = { facecam:'Finding the facecam…', speakers:'Following active speakers…', transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
-  let defaultModelChoice;try{defaultModelChoice=defaultEditorModelChoice();}catch{}
   const ready=args.clientPlatform==='ios'?(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})():configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
   // Run-scoped analysis remains evidence of the editing workflow while the
@@ -88,7 +110,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budgetRow=await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task?.activity?MEDIA_ACTIVITY_LABELS[task.activity]:labels[active.mode]:editing?'Applying edits…':null;
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...(defaultModelChoice?{defaultModelChoice}:{}), defaultReasoningEffort: defaultEditorReasoningEffort(), ...(await editorModelChoices(ctx, ownerId).then(choices => choices ? { modelSwitcher: true, allowedModels: [...choices] } : {})), ...(await claudeInApp(ctx, ownerId) ? {} : { claudeViaMcp: true }), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}), ...(process.env.EDITOR_EFFORT_SWITCHER==='true'&&await canChooseEditorModel(ctx, ownerId)?{effortSwitcher:true}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...await editorComposerSettings(ctx, ownerId), running: project.aiRunning ?? false, externalAgent: project.aiAgentName && (project.aiRunning && project.aiRunId?.startsWith('mcp-') || (project.aiAgentActiveUntil ?? 0) > Date.now()) ? { name: project.aiAgentName, until: project.aiAgentActiveUntil ?? 0, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: active ? task?.activityStartedAt ?? task?.attemptStartedAt ?? active.createdAt : null, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
