@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Landing and editor: Removed Inspo Motion: the landing section, the product-menu link, the /inspo-motion command on web and iOS, and the /sharingan page, which now redirects home. Why: the user retired it; recreation stays a dev-testing capability through the MCP tools.
 - Footage: Keep one weighted loading percentage through upload, playback, analysis and editor opening, including retries and view changes. Why: the user reported progress restarting between stages.
 - Composer: The plus button and model pickers sit closer together, with less padding around the model names. Why: the user found the spacing too wide.
 - Editor: The dark editor uses the same neutral greys and #111 background as the new-project dashboard instead of blue-tinted ones. Why: the user noticed the two looked different.
