@@ -43,5 +43,5 @@ export function laneSkill(lane: LaneId, name: string, page?: string) {
 export const laneInstructions = (lane: LaneId) => `# Task lane: ${lane}
 ${LANES[lane].instructions}
 Skills available here: ${LANES[lane].skills.map((skill) => skill.name).join(', ')}.
-Only this lane's tools are available. Use switchLane with a reason when the request changes.
+Only this lane's tools are available. Use switchLane with a reason and taskType (edit or question) when the request changes.
 Call finish before reporting an editing task complete. Its server checks must pass on the current timeline. After three failed checks stop and report their actual output; never claim completion. Ask a user question with askUser when you need an answer.`;

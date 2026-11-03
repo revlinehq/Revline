@@ -1,5 +1,5 @@
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
-import { laneToolAllowed, type LaneId } from './index';
+import { type LaneId } from './index';
 import type { Timeline } from '../../editor/types';
 import { timelineHistoryKey } from '../../editor/timeline-history-key';
 import type { LanguageModelMiddleware } from 'ai';
@@ -80,19 +80,21 @@ export function laneReplyGate(
   lane: () => LaneId,
   scope: { projectId: string; runId: string },
   noteToolIntent: (name: string) => void,
+  availableTools: () => string[],
+  chosen: () => boolean,
 ): LanguageModelMiddleware {
   return {
     transformParams: async ({ params }) => {
       const tools = (params.tools ?? [])
         .filter((tool) => tool.type === 'function')
         .map((tool) => tool.name);
-      const forbidden = tools.filter((tool) => !laneToolAllowed(lane(), tool));
+      const forbidden = tools.filter((tool) => !availableTools().includes(tool));
       if (forbidden.length)
         throw new LaneFinishError(
           `Model tool exposure crossed the ${lane()} lane: ${forbidden.join(', ')}`,
         );
       console.info(
-        `[ai-lane-tools] ${JSON.stringify({ ...scope, lane: lane(), tools })}`,
+        `[ai-lane-tools] ${JSON.stringify({ ...scope, lane: chosen()?lane():null, phase:chosen()?'working':'selection', tools })}`,
       );
       return params;
     },

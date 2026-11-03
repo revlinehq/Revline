@@ -140,6 +140,7 @@ type EditorToolkitOptions = {
   lane?: LaneId;
   taskId?: string;
   finishRequired?:boolean;
+  laneChosen?:boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -212,6 +213,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   let selectedClipIds = options.selectedClipIds;
   let lane:LaneId=options.lane??'edit';
   const taskId=options.taskId;
+  let laneChosen=options.laneChosen??true;
   let finishRequired=options.finishRequired??true;
   let requiredPersisted=finishRequired;
   const noteToolIntent=(name:string)=>{if(name==='finish'||EDITOR_TOOL_DEFINITIONS[name as keyof typeof EDITOR_TOOL_DEFINITIONS]?.effect==='timeline')finishRequired=true;};
@@ -777,10 +779,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       },
       toModelOutput: (ctx, options) => blueprintImages(ctx, options.output),
     }),
-    switchLane:createTool({metadata:EDITOR_TOOL_DEFINITIONS.switchLane,description:'Switch the task lane when the user clearly changes the kind of work. Give the new lane and a concrete reason. Attempts and saved checks are preserved.',inputSchema:z.object({lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300)}),execute:async(_ctx,input)=>{
+    switchLane:createTool({metadata:EDITOR_TOOL_DEFINITIONS.switchLane,description:'Choose or confirm the lane before working, and say whether this request asks for edits or information only. Switch when the kind of work changes. Attempts and saved checks are preserved.',inputSchema:z.object({lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}),execute:async(_ctx,input)=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await laneCtx.runMutation(internal.lanes.switchLane,{...taskScope,timelineId,...input});
-      lane=input.lane;finishResult=undefined;
+      lane=input.lane;laneChosen=true;finishRequired ||= input.taskType==='edit';requiredPersisted=finishRequired;finishResult=undefined;
+      if(['motion','recreate','explainer'].includes(lane))await requirePrecise();
       return {lane,instructions:laneInstructions(lane),tools:availableToolNames()};
     }}),
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
@@ -1991,10 +1994,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  const availableToolNames=():string[]=>Object.keys(tools).filter(name=>laneToolAllowed(lane,name));
+  const availableToolNames=():string[]=>laneChosen?Object.keys(tools).filter(name=>laneToolAllowed(lane,name)):['switchLane'];
   for(const [name,tool] of Object.entries(tools) as [string,{execute?:(...args:never[])=>Promise<unknown>}][]){
     const execute=tool.execute;if(!execute)continue;
     tool.execute=async function(this:unknown,...args:never[]){
+      if(!laneChosen&&name!=='switchLane')throw new Error('Choose the task lane with switchLane before using editing tools.');
       if(!laneToolAllowed(lane,name))throw new Error(laneToolError(lane,name));
       const input=(args[0]??{}) as Record<string,unknown>;
       if(name==='analyzeMedia'){
@@ -2024,5 +2028,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, lane:()=>lane, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), fastReviewFeedback: () => editMode === 'fast' ? fastReview.feedback() : undefined };
 }

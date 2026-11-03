@@ -178,6 +178,8 @@ export const begin = internalMutation({
     ...taskScope,
     lane: laneValidator,
     lockedLane: v.optional(laneValidator),
+    laneChosen: v.optional(v.boolean()),
+    manual: v.optional(v.boolean()),
     reason: v.string(),
     exportConfirmed: v.boolean(),
     required: v.boolean(),
@@ -207,20 +209,22 @@ export const begin = internalMutation({
         q.eq('ownerId', args.ownerId).eq('projectId', args.projectId),
       )
       .take(400);
-    await saveTab(
+    if (args.laneChosen !== false) await saveTab(
       ctx,
       args.ownerId,
       args.projectId,
       timelineId,
       args.lane,
       args.reason,
-      args.reason === 'User-selected lane for this timeline',
+      args.manual ?? false,
     );
     await ctx.db.insert('editingLaneTasks', {
       ownerId: args.ownerId,
       projectId: args.projectId,
       taskId: args.taskId,
       lane: args.lane,
+      laneChosen: args.laneChosen ?? true,
+      manual: args.manual ?? false,
       ...(args.lockedLane ? { lockedLane: args.lockedLane } : {}),
       attempts: 0,
       exportConfirmed: args.exportConfirmed,
@@ -245,6 +249,7 @@ export const switchLane = internalMutation({
     timelineId: v.string(),
     lane: laneValidator,
     reason: v.string(),
+    taskType: v.optional(v.union(v.literal('edit'), v.literal('question'))),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -259,6 +264,8 @@ export const switchLane = internalMutation({
       row.projectId !== args.projectId
     )
       throw new ConvexError('Start a task first.');
+    if (row.laneChosen === false && !args.taskType)
+      throw new ConvexError('Choose taskType edit or question with the lane.');
     if (row.lockedLane && args.lane !== row.lockedLane)
       throw new ConvexError(
         `This task was explicitly selected for the ${row.lockedLane} lane. Start a new user request to change the work; missing tools are not a lane change.`,
@@ -274,9 +281,10 @@ export const switchLane = internalMutation({
       args.timelineId,
       args.lane,
       args.reason,
+      row.manual ?? false,
     );
     // Switching never resets attempts or manufactures completion evidence.
-    await ctx.db.patch(row._id, { lane: args.lane, result: undefined });
+    await ctx.db.patch(row._id, { lane: args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
     return null;
   },
 });
@@ -398,6 +406,7 @@ export const setMcpSession = internalMutation({
     connectionId: v.string(),
     timelineId: v.string(),
     lane: laneValidator,
+    laneChosen: v.optional(v.boolean()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {

@@ -5,6 +5,7 @@ import { LANES, laneToolAllowed, type LaneId } from './index';
 export function laneHistory(
   messages: ModelMessage[],
   lane: LaneId,
+  selecting = false,
 ): ModelMessage[] {
   const blocked = new Set<string>(),
     skills = new Set(LANES[lane].skills.map((skill) => skill.name));
@@ -37,7 +38,7 @@ export function laneHistory(
       };
       if (part.type !== 'tool-call' && part.type !== 'tool-result') return true;
       return (
-        laneToolAllowed(lane, part.toolName ?? '') &&
+        !selecting && laneToolAllowed(lane, part.toolName ?? '') &&
         (!part.toolCallId || !blocked.has(part.toolCallId))
       );
     });

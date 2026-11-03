@@ -6,6 +6,7 @@ import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { type LaneId } from '../lib/ai/lanes';
+import { laneDescriptions } from '../lib/ai/lanes/selection';
 import { requestMcpOrigin } from './lib/mcp_origin';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
@@ -26,7 +27,10 @@ If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or 
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
-Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?). The task chooses an editing lane. tools/list returns only shared tools and that lane’s tools. /clip is the only slash command. A recreation is an explicit dev/MCP capability; use lane recreate. setLane(lane, reason) switches the task and emits notifications/tools/list_changed. Clients that ignore list changes receive an actionable error on tools from another lane.
+Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Choose the lane yourself using the request, brief and attached media. No classifier chooses for you. Without an explicit lane, startTask exposes only selection controls; call setLane(lane, reason, taskType: edit|question) before any editing tools are offered. Use edit for any request to create or change a video, including a request phrased as a question. Use question only for information without edits. A follow-up keeps the current timeline lane unless the kind of work changed. /clip and manual composer selections win.
+Lanes:
+${laneDescriptions()}
+A recreation is an explicit dev/MCP capability. tools/list returns only shared tools and the chosen lane’s tools. setLane emits notifications/tools/list_changed. Clients that ignore list changes receive an actionable error before an unavailable tool executes.
 Follow the skill list returned by startTask or setLane. readSkill only returns the current lane’s pages. inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for source transcripts and clipping signals, and getFrames for rendered timeline evidence. Keep reference media off the timeline when recreating.
 Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
 Use Revline’s tools to measure media; all tool edits save immediately and are undoable. Share the editorUrl from getProject.
@@ -41,7 +45,7 @@ const oauthMetadata = (site: string) => ({
 });
 const resourceMetadata = (site: string) => ({ resource: `${site}/mcp`, authorization_servers: [site], bearer_methods_supported: ['header'], scopes_supported: ['revline'], resource_name: 'Revline video editor' });
 
-const toolCatalog=new Map<LaneId,Promise<Tool[]>>();
+const toolCatalog=new Map<LaneId|'selection',Promise<Tool[]>>();
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
@@ -49,9 +53,9 @@ function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, compa
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: true } }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     const session=await ctx.runQuery(internal.lanes.mcpSession,{ownerId,connectionId});
-    const lane:LaneId=session?.lane??'edit';
-    if(!toolCatalog.has(lane))toolCatalog.set(lane,ctx.runAction(internal.mcpActions.listTools,{lane}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog.delete(lane);throw error;}));
-    return {tools:await toolCatalog.get(lane)!};
+    const selecting=!session||session.laneChosen===false,key=selecting?'selection':session.lane;
+    if(!toolCatalog.has(key))toolCatalog.set(key,ctx.runAction(internal.mcpActions.listTools,{lane:session?.lane,selecting}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog.delete(key);throw error;}));
+    return {tools:await toolCatalog.get(key)!};
   });
   server.setRequestHandler(CallToolRequestSchema, async (request,extra) => {
     const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, connectionId, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
