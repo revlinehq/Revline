@@ -70,3 +70,75 @@ development deployment.
 After rollout, compare daily DB reads and `convex insights` with the reported
 baseline. Until then, the actual billing reduction and live OCC rate remain
 unverified.
+
+## Reference frame cache (2026-11-03)
+
+Reference reads now check R2 before reserving a media-task slot. The cache retains
+native decoded PNG bytes and complete deterministic results, including motion maps,
+tracking JSON and comparison sheets. Overlapping reads share individual PNGs; a
+partly cached read decodes only its missing PNGs. Window-specific motion/moment
+analysis retains its original sampling and is cached by window and parameters.
+Sound descriptions and live font-catalog matches remain fresh; their source PNGs
+can still be reused.
+
+Keys hash the owner/project, asset and immutable source identity, exact seek times
+(including end-of-file fallback seeks), dimensions, crop, encoding parameters and
+`MEDIA_PROCESSOR_VERSION`. Timeline keys additionally include the tab, rendered
+revision and frozen timeline fingerprint, so staged edits and historical revisions
+cannot alias current renders. Full-request results retain the existing JPEG budget;
+a small cached sheet is never substituted for a native PNG or a different crop.
+
+`mediaFrameCache` holds only keys, ownership, expiry and short-lived writer leases.
+Workers upload bytes directly to the existing media Worker using an exact-key
+write grant; reads use the existing signed `/read` URLs. Frozen timeline payloads
+live in `frameSnapshotPayloads`, outside polling rows. New cached snapshots carry
+an R2 pointer instead of base64 frames. Atomic batch reservations preserve grouped
+scene captures and prevent overlapping workers from waiting on each other's frames.
+
+Reference objects remain until their asset is deleted. Asset removal clears its
+cache and project render/comparison caches; project deletion drains all entries in
+bounded batches. Timeline renders and comparison results expire after 14 days and
+are deleted by a daily indexed cleanup. Pending uploads also receive a delayed
+delete after their upload grant/task deadline, covering deletion during a PUT.
+
+### Local verification
+
+A throwaway duplicate of the real **Clone 06** project supplied its scene and media.
+The worktree ran `npm run dev -- --port 3021`, an isolated local Convex backend on
+3216/3217, and the actual media Worker with a local R2 binding on 8796. Both web and
+worker readiness were observed. Port 3001 and the original clone were untouched.
+No shared backend, media Worker or Fly code was deployed. These are local timings,
+not measurements of Cloudflare network latency or Fly cold starts; some samples
+overlapped a production build.
+
+| Tool/request | Cold | Repeat | New tasks on repeat |
+| --- | ---: | ---: | ---: |
+| readFrames, 4–4.2 s at 30 fps, 7 frames | 5,817 ms | 377 ms | 0 |
+| compareReference, three moments | 12,102 ms | 1,578 ms | 0 |
+| compareReference after an edit | 13,898 ms | 571 ms | 0 |
+| getFrames, three moments | 3,436 ms | 258 ms | 0 |
+| trackReference | 5,073 ms | 221 ms | 0 |
+| reference motionMap | 2,232 ms | 670 ms | 0 |
+
+All six warmed cases hit without creating a media task. The overlapping 30 fps
+window reused **4/7 PNGs (57%)**, decoding three missing PNGs. Comparison reused
+**3/3 reference PNGs (100%)**, including after an edit. That edit created a new
+snapshot task and new rendered bytes; its subsequent repeat created no task.
+Two concurrent overlapping timeline requests completed and returned identical
+bytes for their shared frame. Direct signed reads of the local R2 result took
+5.8–11.5 ms (median 6.8 ms).
+
+The repeated read and an independent uncached decode produced the same sheet
+SHA-256: `fe2dd5ab0458f0588be4264620ccdb5e8550bd9b6db51431a1b1c44161b13539`.
+Tracking image hashes and motion-map JSON hashes also matched between cold and
+warm calls. Wrong-owner cache reads and unsigned R2 reads/writes were refused.
+Verification used typecheck, build and direct runtime calls, without test files.
+
+### Release
+
+This is processor contract **36**. Release the media Worker, Convex backend and
+media processors together; restart development workers too. Frame writers reject
+processor/backend version mismatches. Bump the contract whenever decoding,
+encoding, deterministic analysis or its toolchain changes. No backfill is needed
+for this cache: entries populate on demand. Deploy to the intended environment
+only after merge approval, with that environment's own storage credentials.
