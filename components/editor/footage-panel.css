@@ -88,3 +88,6 @@
 .footage-content-library .source-tile .source-asset-menu{position:absolute;top:4px;right:4px;background:#000000a6;color:#fff;opacity:0;transition:opacity 120ms}
 .source-tile:is(:hover,:focus-within) .source-asset-menu,.source-tile .source-asset-menu[data-state=open]{opacity:1}
 .footage-content-library .source-tile .source-asset-menu:hover{background:#000000d9;color:#fff}
+.source-asset>[data-slot=progress]{height:2px;margin-top:5px}
+.source-asset>[data-slot=progress] [data-slot=progress-indicator]{background:var(--revline-accent)}
+.upload-status>[data-slot=progress]{height:2px}

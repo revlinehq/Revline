@@ -73,7 +73,6 @@ div.landing-reveal,div.landing-reveal>.landing-reveal-content{display:inline-blo
 .landing-nav[data-tone=dark] .landing-nav-menu:is(:hover,[data-state=open]){color:#fff}
 .landing-product-menu-label{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:500;color:#121212}
 .landing-product-menu-note{font-size:12.5px;color:#8a8a8a}
-.landing-product-menu-new{padding:1px 6px;border:1px solid #e4e4e7;border-radius:999px;font-size:11px;font-weight:500;color:#5e5e5e}
 .landing-nav-right{display:flex;align-items:center;justify-self:end;gap:16px}
 .landing-nav-account{display:flex;align-items:center;gap:12px}
 .landing-nav-login{font-size:14px;font-weight:500;color:var(--l-fg-2);transition:color 140ms ease}
@@ -200,39 +199,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-legal-dialog{background:#fff;color:#292929;color-scheme:light}
 .landing-legal-dialog [data-slot=dialog-description]{color:#737373;line-height:1.65}
 
-/* Inspo Motion: components/landing/inspo.tsx */
-.landing-inspo{display:flex;flex-direction:column;align-items:center;gap:32px;padding-block:120px;background:#0b0b0d;position:relative}
-/* A full-width hairline separates it from the Motion section above. */
-.landing-inspo::before{content:"";position:absolute;top:0;inset-inline:0;height:1px;background:#ffffff1f}
-.landing-inspo .landing-heading h2{width:760px;letter-spacing:-1.6px}
-.landing-inspo .landing-heading h2 b{font-weight:400;color:#a78bfa}
-/* Glitch on "Inspo Motion": two offset copies flicker through thin slices in short bursts. */
-.landing-glitch{position:relative;display:inline-block}
-.landing-glitch::before,.landing-glitch::after{content:attr(data-text);position:absolute;inset:0;clip-path:inset(50% 0 50% 0);pointer-events:none}
-.landing-glitch::before{color:#5eead4;translate:-2px 0}
-.landing-glitch::after{color:#f472b6;translate:2px 0}
-@media(prefers-reduced-motion:no-preference){
-  .landing-glitch{animation:landing-glitch-shake 4s steps(1) infinite}
-  .landing-glitch::before{animation:landing-glitch-a 4s steps(1) infinite}
-  .landing-glitch::after{animation:landing-glitch-b 4s steps(1) infinite}
-}
-@keyframes landing-glitch-shake{0%,86%,100%{translate:0}88%{translate:1px 0}91%{translate:-2px 0}94%{translate:1px 0}}
-@keyframes landing-glitch-a{0%,85%,100%{clip-path:inset(50% 0 50% 0)}86%{clip-path:inset(12% 0 70% 0);translate:-4px 0}89%{clip-path:inset(60% 0 18% 0);translate:3px 0}92%{clip-path:inset(34% 0 52% 0);translate:-3px 0}95%{clip-path:inset(78% 0 6% 0);translate:2px 0}}
-@keyframes landing-glitch-b{0%,85%,100%{clip-path:inset(50% 0 50% 0)}87%{clip-path:inset(70% 0 10% 0);translate:4px 0}90%{clip-path:inset(20% 0 62% 0);translate:-3px 0}93%{clip-path:inset(48% 0 30% 0);translate:3px 0}96%{clip-path:inset(4% 0 84% 0);translate:-2px 0}}
-.landing-inspo .landing-heading p{width:600px;max-width:100%}
-.landing-inspo-prompt{display:flex;align-items:center;gap:10px;width:560px;max-width:100%;padding:8px 8px 8px 10px;border:1px solid #2c2c34;border-radius:14px;background:#2a2a2a;color:#f2f2f4;font-size:15px}
-.landing-inspo-link{display:inline-flex;align-items:center;gap:6px;flex:none;padding:6px 10px;border-radius:8px;background:#3a3a3e;color:#d4d4d8;font-size:13px}
-.landing-inspo-ask{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.landing-inspo-send{display:grid;place-items:center;flex:none;width:32px;height:32px;border-radius:9px;background:#f2f2f4;color:#121212}
-.landing-inspo-films{display:grid;grid-template-columns:1fr 1fr;gap:20px;width:100%}
-.landing-inspo-card{display:flex;flex-direction:column;gap:12px}
-.landing-inspo-frame{position:relative;aspect-ratio:16/9;overflow:hidden;border:1px solid #ffffff14;border-radius:12px;background:#17181c}
-.landing-inspo-frame video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.landing-inspo-pending{position:absolute;inset:0;display:grid;place-items:center;color:#ffffff59;font-size:14px}
-.landing-inspo-card figcaption{display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-inline:2px;font-size:14px;color:#a6a6ae}
-.landing-inspo-card figcaption b{font-weight:500;color:#f2f2f4}
-.landing-inspo-card figcaption a:hover{color:#f2f2f4}
-@media(max-width:800px){.landing-inspo{padding-block:80px}.landing-inspo-films{grid-template-columns:1fr}.landing-inspo .landing-heading h2{font-size:36px;letter-spacing:-1px}}
 
 @media(max-width:1100px){
   .landing{--l-gutter:40px}

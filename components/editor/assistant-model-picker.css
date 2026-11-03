@@ -1,6 +1,7 @@
 .assistant-model-controls{display:flex;flex-wrap:nowrap;align-items:center;gap:2px;min-width:0;max-width:100%;flex:1 1 auto}
 .assistant-model-controls>.assistant-model-picker{flex:0 1 auto;min-width:0}
 .assistant-model-controls>.assistant-mode-picker{flex:0 0 auto}
+.assistant-model-controls>.assistant-model-picker>*{padding-inline:6px}
 .assistant-model-picker{min-width:0;max-width:150px}
 .assistant-combined-model-picker{max-width:260px}
 .assistant-model-effort{flex-shrink:0}

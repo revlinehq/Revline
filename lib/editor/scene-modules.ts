@@ -6,6 +6,7 @@ export type SceneGsapPlugin = typeof SCENE_GSAP_PLUGINS[number];
  * Optional renderers precede the core runtime, which posts the frame's ready message. */
 export const SCENE_RUNTIME_BUNDLES = {
   react: { file: 'scene-react.js', entry: 'lib/editor/scene-react-runtime.tsx', global: '__revlineSceneReact', label: 'React scene renderer', modules: ['revline', 'react', 'react/jsx-runtime'] },
+  // Playback compatibility for saved scenes; authoring is rejected before compilation.
   three: { file: 'scene-three.js', entry: 'lib/editor/scene-three-runtime.tsx', global: '__revlineSceneThree', label: '3D scene renderer', modules: ['revline/three', 'three'] },
   gsap: { file: 'scene-runtime.js', entry: 'lib/editor/scene-runtime.ts', global: '__revlineSceneRuntime', label: 'scene renderer', modules: ['gsap', 'gsap/all', 'gsap/EasePack', ...SCENE_GSAP_PLUGINS.map(name => `gsap/${name}` as const)] },
 } as const;
@@ -21,15 +22,23 @@ function sceneModuleRuntime(name: string): SceneRuntimeName | undefined {
 export function assertSceneImport(name: string, react: boolean) {
   const runtime = sceneModuleRuntime(name);
   if (runtime === 'gsap' || (react && (runtime || name.startsWith('blueprint:')))) return runtime;
-  const allowed = Object.values(SCENE_RUNTIME_BUNDLES).filter(bundle => react || bundle === SCENE_RUNTIME_BUNDLES.gsap).flatMap(bundle => [...bundle.modules]);
+  const allowed = Object.values(SCENE_RUNTIME_BUNDLES).filter(bundle => bundle !== SCENE_RUNTIME_BUNDLES.three && (react || bundle === SCENE_RUNTIME_BUNDLES.gsap)).flatMap(bundle => [...bundle.modules]);
   throw new Error(`${react ? 'React scenes' : 'Scenes'} can import only ${allowed.join(', ')}${react ? ' and blueprint:<name>' : ''}, not "${name}".`);
 }
 
 /** Recognise all literal import forms accepted by compilation, including side effects and require. */
 function sceneImports(code: string) {
   const gap = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*(?:\n|$))*`;
-  const pattern = new RegExp(String.raw`\b(?:from${gap}|import${gap}|require${gap}\(${gap})['"]([^'"]+)['"]`, 'g');
+  const pattern = new RegExp(String.raw`\b(?:from${gap}|import${gap}(?:\(${gap})?|require${gap}\(${gap})['"]([^'"]+)['"]`, 'g');
   return [...code.matchAll(pattern)].map(match => match[1]);
+}
+/** Authoring policy is separate from the import policy used to play saved scenes. */
+export function assertSceneAuthoringImports(code: string) {
+  for (const name of sceneImports(code)) {
+    if (name === 'three' || name.startsWith('three/') || name === '@react-three' || name.startsWith('@react-three/') || name === 'revline/three' || name.startsWith('revline/three/')) {
+      throw new Error('3D scenes are turned off; build it in 2D with GSAP');
+    }
+  }
 }
 /** React-only modules and component kits opt into TSX, including a scene importing only three. */
 export const isReactScene = (code: string) => sceneImports(code).some(name => {

@@ -1,10 +1,11 @@
 import { parse, type AnyNode, type Node } from 'acorn';
 import globals from 'globals';
 import { transform } from 'sucrase';
-import { assertSceneImport, isReactScene, usesSceneThree, sceneTransformOptions, splitExportDeclarations } from './scene-modules';
+import { assertSceneImport, isReactScene, assertSceneAuthoringImports, sceneTransformOptions, splitExportDeclarations } from './scene-modules';
 
 /** Catch syntax and import mistakes before a scene is saved; build and render errors surface in the preview. */
 export function checkSceneCode(code: string) {
+  assertSceneAuthoringImports(code);
   let compiled: string;
   const react = isReactScene(code);
   try {
@@ -17,11 +18,6 @@ export function checkSceneCode(code: string) {
     assertSceneImport(match[1], react);
   }
   if (!/exports\.default\s*=|exports,\s*["']default["']/.test(compiled)) throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
-  if (usesSceneThree({ code })) {
-    for (const pattern of [/\b(?:requestAnimationFrame|setInterval|setTimeout|useFrame|useAnimations)\s*\(/, /\b(?:Date\.now|performance\.now|clock\.getDelta|clock\.getElapsedTime)\s*\(/, /\bframeloop\s*[:=]\s*['"](?:always|demand)['"]/, /\bnew\s+(?:THREE\.)?Clock\s*\(/]) {
-      if (pattern.test(code)) throw new Error('3D scenes must follow timeline time. Use useTimeline on Three.js refs; no free-running clocks, useFrame, timers or interactive controls. Read scene-engine page three-scenes.');
-    }
-  }
   if (react) {
     const missing = undefinedComponents(code);
     if (missing.length) throw new Error(`${missing.map(name => `<${name}>`).join(', ')} ${missing.length === 1 ? 'is' : 'are'} used but never defined or imported in this scene, so the preview would crash. Define ${missing.length === 1 ? 'it' : 'them'} in the same call, or remove the tag.`);

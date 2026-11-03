@@ -10,7 +10,9 @@ export async function detectShots(path: string, duration: number, signal: AbortS
   const python = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
   let stdout: string;
   try {
-    ({ stdout } = await run(python, [join(process.cwd(), 'scripts/detect-shots.py'), path], { signal, timeout: 90_000, maxBuffer: 2 * 1024 * 1024 }));
+    // Inspecting every source frame can take longer than a fixed short-clip
+    // budget. Cancellation and the worker lease govern this finite local scan.
+    ({ stdout } = await run(python, [join(process.cwd(), 'scripts/detect-shots.py'), path], { signal, maxBuffer: 2 * 1024 * 1024 }));
   } catch (error) {
     if (signal.aborted) throw error;
     const detail = error as { code?: string; stderr?: string };

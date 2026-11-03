@@ -3,6 +3,8 @@ import { open, statfs } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { Readable, Transform } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import { AnalysisError } from '../media-analysis/errors';
+import { retryMediaOperation } from '../media-analysis/network';
 
 type DownloadOptions = { concurrency?: 1 | 2 | 3; onProgress?: (downloaded: number, total: number) => void };
 
@@ -25,16 +27,19 @@ export async function downloadOwnedMedia(url: string, path: string, origin: stri
   // Keep room for the export and other concurrent jobs; capacity follows the host disk.
   if (expectedSize > disk.bavail * disk.bsize / 3) throw new Error('The render server needs more temporary disk space for this source.');
   const concurrency = fromR2 && expectedSize >= 64 * 1024 * 1024 ? options.concurrency ?? 1 : 1;
-  if (concurrency > 1) {
-    await downloadRanges(parsed, path, expectedSize, concurrency, signal, options.onProgress);
-    return;
-  }
-  const response = await fetch(parsed, { signal, redirect: 'error' });
-  await writeResponse(response, path, expectedSize, signal, bytes => options.onProgress?.(bytes, expectedSize));
+  await retryMediaOperation(async () => {
+    const attemptSignal = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
+    if (concurrency > 1) return downloadRanges(parsed, path, expectedSize, concurrency, attemptSignal, options.onProgress);
+    const response = await fetch(parsed, { signal: attemptSignal, redirect: 'error' });
+    await writeResponse(response, path, expectedSize, attemptSignal, bytes => options.onProgress?.(bytes, expectedSize));
+  }, signal);
 }
 
 async function writeResponse(response: Response, path: string, expectedSize: number, signal: AbortSignal, onProgress: (bytes: number) => void, start?: number) {
-  if (!response.ok || !response.body) throw new Error(`Could not download render media (HTTP ${response.status}).`);
+  if (!response.ok || !response.body) {
+    await response.body?.cancel().catch(() => {});
+    throw new AnalysisError(`Could not download source media (HTTP ${response.status}).`, response.status);
+  }
   let bytes = 0;
   const limit = new Transform({ transform(chunk: Buffer, _encoding, callback) {
     bytes += chunk.length;
@@ -54,6 +59,7 @@ async function downloadRanges(url: URL, path: string, size: number, concurrency:
   // Check support before starting siblings: a server ignoring Range sends one
   // full response, which can be consumed directly without duplicate downloads.
   const first = await fetch(url, { headers: { Range: `bytes=${firstRange.start}-${firstRange.end}` }, signal: combined, redirect: 'error' });
+  if (!first.ok) { await first.body?.cancel().catch(() => {}); throw new AnalysisError(`Could not download source media (HTTP ${first.status}).`, first.status); }
   if (first.status === 200) {
     await writeResponse(first, path, size, combined, bytes => onProgress?.(bytes, size));
     return;
@@ -61,6 +67,7 @@ async function downloadRanges(url: URL, path: string, size: number, concurrency:
   let downloaded = 0, failure: unknown;
   const etag = first.headers.get('ETag');
   const validate = (response: Response, range: typeof firstRange) => {
+    if (!response.ok) throw new AnalysisError(`Could not download source media (HTTP ${response.status}).`, response.status);
     if (response.status !== 206 || response.headers.get('Content-Range') !== `bytes ${range.start}-${range.end}/${size}` || !response.body || !etag || response.headers.get('ETag') !== etag) {
       throw new Error('The source download returned an invalid byte range. Please retry.');
     }

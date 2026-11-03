@@ -4,6 +4,7 @@ const nullableNumber = v.union(v.number(), v.null());
 export const aiCostRecordFields = {
   key: v.string(), kind: v.union(v.literal('model-call'), v.literal('run-summary')), recordedAt: v.number(),
   model: nullableText, provider: nullableText, reasoningEffort: nullableText, speedMode: nullableText, serviceTier: nullableText,
+  route: v.optional(v.union(v.literal('direct'), v.literal('convex-gateway'))),
   estimatedUsd: nullableNumber, inputTokens: nullableNumber, outputTokens: nullableNumber, reasoningTokens: nullableNumber,
   uncachedInputTokens:v.optional(nullableNumber),cacheReadTokens:v.optional(nullableNumber),cacheWriteTokens:v.optional(nullableNumber),
   toolCallCount: v.number(), unreportedCall: v.boolean(),

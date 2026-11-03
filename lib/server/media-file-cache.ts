@@ -18,6 +18,12 @@ function cacheBudget(raw: string | undefined, fallback: number) {
 }
 
 type SourceIdentity = { _id: string; ownerId?: string; size: number; contentType: string; r2Key?: string; storageId?: string; duration?: number; width?: number; height?: number };
+type CachedFileInput = { identity?: string; variant: string; target: string; signal: AbortSignal; expectedBytes?: number; maxBytes?: number };
+function cacheLocation(input: Pick<CachedFileInput, 'identity' | 'variant'>) {
+  const directory = process.env.MEDIA_ANALYSIS_CACHE_DIR || join(tmpdir(), 'revline-worker-media-v1');
+  const key = createHash('sha256').update(JSON.stringify([input.identity, input.variant])).digest('hex');
+  return { directory, cached: join(directory, `${key}.cache`) };
+}
 /** Only fresh, lease-authorized task snapshots supply this identity. Never key on signed URLs. */
 export function mediaSourceCacheIdentity(backend: string, projectId: string, source: SourceIdentity): string | undefined {
   if (!source.ownerId || !Number.isSafeInteger(source.size) || source.size <= 0) return undefined;
@@ -43,24 +49,32 @@ async function prune(directory: string, freeSpace = false) {
 }
 
 /** Retain completed immutable files; hard links keep active tasks safe during eviction. */
-export async function reuseMediaFile(input: { identity?: string; variant: string; target: string; signal: AbortSignal; expectedBytes?: number; maxBytes?: number }, produce: () => Promise<unknown>): Promise<boolean> {
+export async function reuseCachedMediaFile(input: CachedFileInput): Promise<boolean> {
+  input.signal.throwIfAborted();
+  const limit = Math.min(MAX_BYTES, input.maxBytes ?? MAX_BYTES);
+  if (!input.identity || limit <= 0 || (input.expectedBytes !== undefined && input.expectedBytes > limit)) return false;
+  const { cached } = cacheLocation(input);
+  try {
+    const info = await stat(cached);
+    if (!info.isFile() || info.size <= 0 || info.size > limit || Date.now() - info.mtimeMs > TTL_MS || (input.expectedBytes !== undefined && info.size !== input.expectedBytes)) return false;
+    await link(cached, input.target);
+    input.signal.throwIfAborted();
+    await utimes(cached, new Date(), new Date()).catch(() => {});
+    return true;
+  } catch { input.signal.throwIfAborted(); return false; }
+}
+
+export async function reuseMediaFile(input: CachedFileInput, produce: () => Promise<unknown>): Promise<boolean> {
   input.signal.throwIfAborted();
   const limit = Math.min(MAX_BYTES, input.maxBytes ?? MAX_BYTES);
   if (!input.identity || limit <= 0 || (input.expectedBytes !== undefined && input.expectedBytes > limit)) { await produce(); return false; }
-  const directory = process.env.MEDIA_ANALYSIS_CACHE_DIR || join(tmpdir(), 'revline-worker-media-v1');
-  const key = createHash('sha256').update(JSON.stringify([input.identity, input.variant])).digest('hex');
-  const cached = join(directory, `${key}.cache`);
+  const { directory, cached } = cacheLocation(input);
   let available = false;
   try {
     await mkdir(directory, { recursive: true, mode: 0o700 });
     await prune(directory);
+    if (await reuseCachedMediaFile(input)) return true;
     const info = await stat(cached).catch(() => null);
-    if (info?.isFile() && info.size > 0 && info.size <= limit && (input.expectedBytes === undefined || info.size === input.expectedBytes)) {
-      await link(cached, input.target);
-      input.signal.throwIfAborted();
-      await utimes(cached, new Date(), new Date()).catch(() => {});
-      return true;
-    }
     if (info?.isFile()) await rm(cached, { force: true });
     await prune(directory, true);
     available = true;

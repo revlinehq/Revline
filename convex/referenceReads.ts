@@ -8,7 +8,7 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { cancelMediaTask, enqueueMediaTask, RECREATION_PROCESSOR_VERSION, REFERENCE_CROP_PROCESSOR_VERSION } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
 import type { MotionMap } from '../lib/inspo-motion/motion-map';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult, referenceCropKeyframesValidator } from './schema';
 
@@ -51,7 +51,7 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
   if (!recreation) await requireMediaTaskCapacity(ctx, ownerId, 1);
   const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, ...(recreation ? { recreation } : {}), status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: still ? MEDIA_PROCESSOR_VERSION : args.referenceCropKeyframes ? REFERENCE_CROP_PROCESSOR_VERSION : RECREATION_PROCESSOR_VERSION }, undefined, recreation);
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION }, undefined, recreation);
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });
@@ -89,6 +89,10 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
   const mode = name === 'listenReference' ? 'sounds' : name === 'readFrames' ? 'sheet' : name === 'trackReference' ? 'track' : name === 'traceShape' ? 'trace' : name === 'matchFont' ? 'font' : 'measure';
   const { assetId, time, ...rest } = READ_TOOL_INPUTS[name].parse(input) as { assetId: string; time?: number; start?: number; end?: number };
   const start = time ?? rest.start!, end = time ?? rest.end!;
+  if (mode !== 'sounds' && mode !== 'font') {
+    const cached = await ctx.runAction(internal.frameCache.readResult, { ownerId, projectId, assetId, work: {mode, ...rest, start, end} });
+    if (cached) return cached as ReadResult;
+  }
   // Many reads started at once contend with the worker claiming and heartbeating media tasks; a write conflict is retried, not returned.
   // A full account queue (other edits' renders) frees up in seconds: wait for a slot instead of failing the read.
   let readId: Id<'referenceReads'> | undefined;
@@ -121,6 +125,8 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
 
 /** How a reference video moves over SOURCE start to end (motionMap), read on the media worker. */
 export async function runMotionRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, start: number, end: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<MotionMap> {
+  const cached = await ctx.runAction(internal.frameCache.readResult, { ownerId, projectId, assetId, work: { mode: 'motion', start, end, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) } });
+  if (cached) return (cached as ReadResult).motion as MotionMap;
   const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'motion', start, end, ...(recreation ? { recreation } : {}), ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   const deadline = Date.now() + 300_000;
   try {
@@ -149,6 +155,8 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
 export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<ReadResult | null> {
   if (Date.now() >= deadline) return null;
+  const cached = await ctx.runAction(internal.frameCache.readResult, {ownerId,projectId,assetId,snapshotId,work:{mode:'compare',start:Math.min(...times),end:Math.max(...times),times,...(compareCrop?{compareCrop}:{}),...(cropKeyframes?{referenceCropKeyframes:cropKeyframes}:{})}});
+  if (cached) return cached as ReadResult;
   const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
   try {
     while (Date.now() < deadline) {

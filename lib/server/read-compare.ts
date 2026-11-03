@@ -1,3 +1,4 @@
+import type { FrameCache } from './frame-cache';
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -37,15 +38,15 @@ async function difference(a: Buffer, b: Buffer) {
 }
 
 /** The reference beside the recreation at the same moments, each pair labeled with how far apart it is. */
-export async function readCompare(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false): Promise<NonNullable<MediaTaskResult['read']>> {
+export async function readCompare(path: string, directory: string, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, stillImage = false, cache?: FrameCache): Promise<NonNullable<MediaTaskResult['read']>> {
   const rendered = work.rendered ?? [], times = work.times ?? rendered.map(frame => frame.time);
   if (!rendered.length || rendered.length !== times.length) throw new AnalysisError('There are no timeline frames to compare with.', 400);
   const still = stillImage ? await imageSource(path) : undefined;
-  const source = still ?? await probe(path, signal), last = source.fps ? Math.max(0, source.duration - 1 / source.fps) : 0;
+  const source = still ?? await probe(path, signal, cache), last = source.fps ? Math.max(0, source.duration - 1 / source.fps) : 0;
   const tiles: { image: Buffer; label: string }[] = [], scores: { time: number; difference: number }[] = [];
   for (const [index, time] of times.entries()) {
     signal.throwIfAborted();
-    const full = still?.image ?? await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal);
+    const full = still?.image ?? await frameAt(path, directory, Math.min(Math.max(0, time), last), undefined, `compare-${index}`, signal, cache);
     const crop = referenceCropAt(time, work.compareCrop, work.referenceCropKeyframes);
     const reference = crop ? await sharp(full).extract(cropBounds(crop, source.width, source.height)).png().toBuffer() : full;
     // Comparison snapshots crop the render before compression; the reference is cropped here on its displayed axes.

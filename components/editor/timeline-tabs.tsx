@@ -42,8 +42,20 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
     doneTimer.current = setTimeout(() => setDoneId(current => current === finished ? null : current), 2000);
   }, [workingId]);
   useEffect(() => () => clearTimeout(doneTimer.current), []);
-  return <div className="timeline-tabs" role="tablist" aria-label="Timelines">
-    {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
+  // A mouse wheel scrolls the tab row sideways once there are more tabs than fit.
+  const strip = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = strip.current; if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      if (Math.abs(event.deltaX) >= Math.abs(event.deltaY) || element.scrollWidth <= element.clientWidth) return;
+      event.preventDefault(); element.scrollLeft += event.deltaY;
+    };
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, []);
+  useEffect(() => { if (shown) strip.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(shown)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [shown, tabs.length]);
+  return <div ref={strip} className="timeline-tabs" role="tablist" aria-label="Timelines">
+    {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" data-tab-id={tab.id} role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
       <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
         {tab.id === workingId && <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span>}
         <span className="timeline-tab-name">{tab.name}</span>

@@ -1,5 +1,5 @@
 export type MediaToken = {
-  operation: 'read' | 'download' | 'part' | 'control' | 'prepareUpload';
+  operation: 'read' | 'download' | 'part' | 'control' | 'prepareUpload' | 'cacheWrite';
   expires: number;
   key?: string;
   uploadId?: string;

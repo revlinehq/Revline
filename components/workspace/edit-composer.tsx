@@ -1,5 +1,6 @@
 'use client';
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupText, InputGroupTextarea } from '@/components/ui/input-group';
+import { FootageProgressBar } from '@/components/editor/footage-progress-bar';
 import { Card } from '@/components/ui/card';
 import { Command, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover';
@@ -30,7 +31,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
   const commandListId = useId();
   const [commandDismissed, setCommandDismissed] = useState(false);
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
-  const commandPrefix = slashCommands ? /^\/(clip|inspo-motion)\s+/.exec(value) : null;
+  const commandPrefix = slashCommands ? /^\/(clip)\s+/.exec(value) : null;
   const chosenCommand = commandPrefix?.[1];
   const commandQuery = slashCommands && !chosenCommand && /^\/[^\s]*$/.test(value) ? value.slice(1).toLowerCase() : null;
   const commands = commandQuery === null ? [] : EDITOR_SLASH_COMMANDS.filter(command => command.name.startsWith(commandQuery));
@@ -125,13 +126,13 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     try { await onSubmit(); } catch (e) { setError(userError(e, 'Could not send your edit.')); } finally { sendInFlight.current=false;setSending(false); }
   }
   function chip(attachment: ComposerAttachment) {
-    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' && attachment.kind !== 'model' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <progress aria-label={`Uploading ${attachment.name}`} max={100} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
+    return <div className="composer-attachment" key={attachment.id} data-error={!!attachment.error || undefined}>{attachment.url && attachment.kind !== 'audio' && attachment.kind !== 'model' ? attachment.kind === 'video' ? <video src={attachment.url} muted preload="metadata" aria-hidden="true" /> : <img src={attachment.url} alt="" /> : attachment.kind === 'audio' ? <Music2 size={17} /> : <Film size={17} />}<span>{attachment.name}</span>{attachment.progress !== undefined && <FootageProgressBar progressKey={`asset:${attachment.id}`} label={`Preparing ${attachment.name}`} value={attachment.progress} />}{onRemoveAttachment && <InputGroupButton size="icon-xs" onClick={() => onRemoveAttachment(attachment.id)} aria-label={`Remove ${attachment.name}`} disabled={busy || (running&&!allowQueue)}><X /></InputGroupButton>}</div>;
   }
   const editFields = <>
     <Popover open={menuOpen && !busy && fieldsFocused} onOpenChange={open => { if (!open) setCommandDismissed(true); }}>
     <PopoverAnchor asChild><InputGroup className="composer-input-group border-[#363636] bg-[#2a2a2a]">
     {!!attachments.length && <InputGroupAddon align="block-start" className="composer-attachments">{attachments.slice(0, attachmentLimit).map(chip)}{attachments.length > attachmentLimit && <InputGroupButton variant="secondary" onClick={() => setSheetOpen(true)}>+{attachments.length - attachmentLimit} clips</InputGroupButton>}</InputGroupAddon>}
-    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'inspo-motion' ? 'Paste a video link and optional direction…' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
+    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
       if (menuOpen && highlightedCommand && !e.nativeEvent.isComposing) {
         if (e.key === 'Escape') { e.preventDefault(); setCommandDismissed(true); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const index = commands.indexOf(highlightedCommand); setActiveCommand(commands[(index + (e.key === 'ArrowDown' ? 1 : commands.length - 1)) % commands.length].name); return; }

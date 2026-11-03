@@ -41,7 +41,7 @@ Existing tools:
 const parallax: EditorSkillPage = {
   name: 'parallax',
   description: 'Prepare a depth and foreground atlas, inpaint the background, then move a 2.5D camera in the shared preview/export renderer.',
-  body: `# 3D freeze-frame parallax
+  body: `# Freeze-frame parallax
 
 freezeFrameParallax accepts an optional seed at the freeze instant (the same seeds as trackPoints), clipId, TIMELINE at, duration .2..10 seconds and mode insert or hold. Insert moves later clips and markers; hold keeps audio playing and skips the held picture interval. It reuses the existing freeze extraction and placement. The original clip's framing and look are retained.
 

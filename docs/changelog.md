@@ -3,6 +3,19 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Editing agent: Preserve R2 frame caching and media recovery alongside motion recreation gates when updating PR #51. Why: main advanced while the recreation changes waited for merge.
+- Scenes: Temporarily retire Three.js authoring and guide the agent toward GSAP scenes. Why: the user has no current use case and the agent chose it unnecessarily.
+- AI: Revline uses a single OpenAI key; the backup key that took over when the main account ran out of credit is removed. Why: the user replaced both with one funded key.
+- Clipping and media: Check shared runtimes, retry transfers, keep healthy analysis and leases alive, persist Gemini fallback, clarify overlay audio links and show tool reasons. Why: mixed dev workers, timeouts and an outdated agent runner broke gaming clipping during storage interruptions and a provider outage.
+- Landing and editor: Removed Inspo Motion: the landing section, the product-menu link, the /inspo-motion command on web and iOS, and the /sharingan page, which now redirects home. Why: the user retired it; recreation stays a dev-testing capability through the MCP tools.
+- Reference reads: Cache exact frames and deterministic readings in private R2, with revision-scoped timeline renders. Why: agents repeatedly decoded the same moments and filled the media queue.
+- Link imports: Correct the stale five-minute hint, cap retries at three attempts, and add cancellation and file-upload recovery with the last error. Why: agent testing found misleading limits and imports that retried forever.
+- Editor: The timeline tab row scrolls sideways with a normal mouse wheel, and the open tab scrolls into view. Why: after /clip makes many tabs, the extra ones were unreachable without a trackpad.
+- Footage: Keep one weighted loading percentage through upload, playback, analysis and editor opening, including retries and view changes. Why: the user reported progress restarting between stages.
+- Composer: The plus button and model pickers sit closer together, with less padding around the model names. Why: the user found the spacing too wide.
+- Editor: The dark editor uses the same neutral greys and #111 background as the new-project dashboard instead of blue-tinted ones. Why: the user noticed the two looked different.
+- Dashboard: The new-project composer has a lighter, shorter drop shadow. Why: the user found it too heavy.
+- Dashboard: The new-project composer send button is brand purple again instead of grey. Why: the user wanted the purple button back.
 
 - Editing agent: Require measured reference motion before building, report revision-bound differences and timed off reasons, and queue recreation checks at the media cap. Why: recreated launch films lost their motion and stopped at refused checks.
 
