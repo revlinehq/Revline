@@ -22,12 +22,14 @@ import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbP
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './workspace-pages.css';
+import type { WorkingAgent } from '@/lib/mcp/agent-identity';
 
 export type WorkspaceChat = {
   id: Id<'projects'> | 'demo'; title: string; updatedAt: number; clipCount: number;
   coverUrl: string | null; coverKind: 'video' | 'image' | null; running: boolean;
   /** The MCP app editing this chat; it counts as working while `running` or until `until`. */
   agent: { name: string; until: number; running: boolean } | null;
+  agents: WorkingAgent[];
 };
 
 export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
@@ -38,7 +40,7 @@ export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
   const chats = useMemo<WorkspaceChat[]>(() => connected ? (projects ?? []).map(project => ({
     id: project._id, title: project.title, updatedAt: project.updatedAt,
     clipCount: project.clipCount, coverUrl: project.coverUrl,
-    coverKind: project.coverKind, running: !!project.aiRunning, agent: project.agent,
+    coverKind: project.coverKind, running: !!project.aiRunning, agent: project.agent, agents: project.agents??[],
   })) : [], [connected, projects]);
   return { chats, loading: enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined)))), connected };
 }
