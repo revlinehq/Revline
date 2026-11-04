@@ -1,11 +1,18 @@
 name: Validate
 on:
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Dry-run comparison commit'
+        type: string
+        default: ''
   push:
   pull_request:
 permissions:
   contents: read
 jobs:
   checks:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       PUPPETEER_SKIP_DOWNLOAD: 'true'
@@ -26,142 +33,13 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
 
-  # Jobs run on Blacksmith runners (native x64, billed to Blacksmith, not GitHub Actions minutes).
-  # Production releases run only after checks pass on main. Convex goes first;
-  # the frontend and the media processor then release independently, so site
-  # changes never wait for a processor image build.
-  processor-plan:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
+  # Dispatch bridge: ci.yml already exists on main, allowing the branch's new
+  # reusable release workflow to be exercised before it is merged.
+  release-dry-run:
+    if: github.event_name == 'workflow_dispatch'
     permissions:
-      contents: read
-      actions: read
-    outputs:
-      changed: ${{ steps.plan.outputs.changed }}
-    env:
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci --ignore-scripts
-      - name: Compare with the last released processor
-        id: plan
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # Compare with the commit the processor was last released from, not the
-          # previous push: a cancelled queued release must not hide its changes.
-          base=''
-          for run in $(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?branch=main&event=push&status=completed&per_page=60" --jq '.workflow_runs[].id'); do
-            base=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs?per_page=50" --jq '[.jobs[] | select((.name == "deploy-processor" and .conclusion == "success") or (.name == "deploy-backend" and any(.steps[]; .name == "Release media processor and Convex" and .conclusion == "success")))] | if length > 0 then .[0].head_sha else empty end')
-            [ -n "$base" ] && break
-          done
-          node scripts/processor-changes.mjs "$base"
-
-  deploy-convex:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: checks
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    environment: production
-    concurrency:
-      group: production-convex
-      cancel-in-progress: false
-    env:
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - name: Check production target
-        run: |
-          case "$CONVEX_DEPLOY_KEY" in prod:different-gnu-398\|*) ;; *) echo "CONVEX_DEPLOY_KEY must target prod:different-gnu-398"; exit 1;; esac
-      - run: npx convex deploy --yes --typecheck enable --message "${{ github.sha }}"
-
-  deploy-frontend:
-    needs: deploy-convex
-    runs-on: blacksmith-4vcpu-ubuntu-2404
-    environment: production
-    concurrency:
-      group: production-frontend
-      cancel-in-progress: false
-    env:
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: 701645e913477e567db69b11343f59d8
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      # Uses committed public settings from wrangler.jsonc; Clerk and Sentry
-      # secrets stay on the Worker and are preserved by wrangler deploy.
-      - run: npm run deploy:frontend:ci
-
-  deploy-processor:
-    needs: [processor-plan, deploy-convex]
-    if: needs.processor-plan.outputs.changed == 'true'
-    runs-on: blacksmith-2vcpu-ubuntu-2404
-    environment: production
-    concurrency:
-      group: production-processor
-      cancel-in-progress: false
-    permissions:
-      contents: read
-      actions: write
-    env:
-      FLY_API_TOKEN: ${{ secrets.FLY_PROCESSOR_DEPLOY_TOKEN }}
-      DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
-      FAL_KEY: ${{ secrets.FAL_KEY }}
-      GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
-      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run agent-runner:install
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - name: Check production targets
-        run: |
-          case "$CONVEX_DEPLOY_KEY" in prod:different-gnu-398\|*) ;; *) echo "CONVEX_DEPLOY_KEY must target prod:different-gnu-398"; exit 1;; esac
-          test -n "$FLY_API_TOKEN" || { echo "FLY_PROCESSOR_DEPLOY_TOKEN is missing"; exit 1; }
-      - name: Restore pinned beat model
-        uses: actions/cache@v4
-        with:
-          path: .data/beat-tracking-models
-          key: beat-this-final0-8c328b45f59d8dd3dff219253ff6a8d6482be57d0133a29140e2febbf8eb8331
-      - name: Install pinned beat model
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          # The upstream model host returns intermittent 503s; use the repository's mirrored copy.
-          model=.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt
-          [ -f "$model" ] || gh release download beat-model-final0 -R "$GITHUB_REPOSITORY" -p beat_this-final0.ckpt -D "$(dirname "$model")"
-          node scripts/install-beat-model.mjs
-      - name: Release media processor
-        env:
-          RENDER_WORKER_SECRET: ${{ secrets.RENDER_WORKER_SECRET }}
-        run: |
-          umask 077
-          {
-            echo 'CONVEX_DEPLOYMENT=prod:different-gnu-398'
-            echo 'NEXT_PUBLIC_CONVEX_URL=https://different-gnu-398.convex.cloud'
-            echo "CONVEX_DEPLOY_KEY=$CONVEX_DEPLOY_KEY"
-            echo "RENDER_WORKER_SECRET=$RENDER_WORKER_SECRET"
-          } > .env.production.local
-          npm run deploy:production -- --processor-only --stage-only
+      contents: write
+      issues: write
+    uses: ./.github/workflows/deploy-main.yml
+    with:
+      base: ${{ inputs.base }}
