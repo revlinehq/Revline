@@ -4,6 +4,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
 - Agent context: Project numeric highlight helpers by source window and let non-Claude turns compact superseded results. Why: the full-podcast run repeatedly carried large source payloads.
+
+- Clipping: Preserve speaker crops in extracted review windows and reuse passing checks without resending raw RMS tracks. Why: the full-podcast rehearsal exposed bad framing sheets and repeated work.
 - MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
 - Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
 - Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
