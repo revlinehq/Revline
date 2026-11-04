@@ -1,3 +1,7 @@
+## 2026-11-04
+
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
