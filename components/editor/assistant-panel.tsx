@@ -103,10 +103,13 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ laneProjectId, laneTimelineId, messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ laneProjectId, laneTimelineId, messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, catalogModels, modelAccessNeedsSync, paidModelAccess, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   laneProjectId?:Id<'projects'>;laneTimelineId?:string;
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
+  catalogModels?: readonly ClaudeModelChoice[];
+  modelAccessNeedsSync?: boolean;
+  paidModelAccess?: boolean;
   modelSwitcher?: boolean;
   /** Development only: choose a fixed effort for each request. */
   effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort; defaultReasoningEffort?: EditorReasoningEffort;
@@ -139,7 +142,7 @@ function AssistantPanelBody({ laneProjectId, laneTimelineId, messages, running, 
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
-  const composerControls = useAssistantComposerControls({ settings: { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels }, draftKey, disabled: answering });
+  const composerControls = useAssistantComposerControls({ settings: { catalogModels, modelAccessNeedsSync, paidModelAccess, modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels }, draftKey, disabled: answering });
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;

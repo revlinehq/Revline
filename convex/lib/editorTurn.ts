@@ -25,7 +25,7 @@ import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistan
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from '@ai-sdk/google';
-import { assertEditorModelConfigured, resolveClaudeModel, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
+import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { type ObjectType } from "convex/values";
 import { internal } from "../_generated/api";
@@ -74,7 +74,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     }).catch(() => {}).finally(() => { checking = false; });
   }, 2000);
   try {
-    const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
+    const selection = validatePinnedClaudeModel(await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: args.pinnedModel }));
     selectedProvider = selection.provider;
     costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort, selection.speedMode ?? 'standard');
     assertEditorModelConfigured(selection);
@@ -161,6 +161,9 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
           prepareStep: async ({ steps: current, messages }) => {
+            const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
+            if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
+
             const completedSteps = [...steps, ...current];
             if (!hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
             // A failed finish is repaired by finish itself after the edits pass.
