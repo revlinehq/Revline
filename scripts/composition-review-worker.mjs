@@ -28,7 +28,8 @@ try{
       const start=Math.max(settings.start,video.start),end=Math.min(settings.end,video.end);
       // A speed ramp (a rate lane) is cut to the window with the engine's own source-time mapping.
       const rate=video.playbackRate??1,skipped=start-video.start;
-      return {...video,start,end,mediaStart:video.mediaStart+sourceTimeAt(rate,skipped),playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
+      // Composition attributes use microseconds; avoid scientific-notation seeks FFmpeg rejects.
+      return {...video,start,end,mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
     });
     let extracted;
     if(settings.sparse){
@@ -40,16 +41,17 @@ try{
         for(const [index,time] of settings.times.entries()){
           if(time<video.start-tolerance||time>=video.end-tolerance)continue;
           const rate=video.playbackRate??1,skipped=time-video.start;
-          const local={...video,start:time,end:Math.min(video.end,time+1/settings.fps),mediaStart:video.mediaStart+sourceTimeAt(rate,skipped),playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
+          const local={...video,start:time,end:Math.min(video.end,time+1/settings.fps),mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
           const part=await extractAllVideoFrames([local],dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames',String(index)),format:'png',toneMapHdrToSdr:true,timelineEnd:local.end},controller.signal);
-          if(part.errors?.length||!part.extracted[0]?.framePaths.size)throw new Error('A requested clipping-sheet source frame could not be decoded.');
+          if(part.errors?.length)throw new Error(`Clipping-sheet source frame could not be decoded: ${part.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
+          if(!part.extracted[0]?.framePaths.size)throw new Error('A requested clipping-sheet source frame could not be decoded.');
           template=part.extracted[0];paths.set(Math.floor(sourceTimeAt(rate,skipped)*settings.fps+1e-9),template.framePaths.values().next().value);
         }
         if(template)sparse.push({...template,videoId:video.id,fps:settings.fps,totalFrames:Math.ceil(sourceTimeAt(video.playbackRate??1,video.end-video.start)*settings.fps),framePaths:paths});
       }
       extracted={extracted:sparse};
     }else extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
-    if(extracted.errors?.length)throw new Error('Video frames could not be decoded for review.');
+    if(extracted.errors?.length)throw new Error(`Video frames could not be decoded for review: ${extracted.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
     const injector=createVideoFrameInjector(createFrameLookupTable(videos,extracted.extracted,settings.fps));
     const server=await createFileServer({projectDir:dir,fps:{num:settings.fps,den:1}});
     const origin=server.url;

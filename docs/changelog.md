@@ -9,6 +9,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
 - Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
 - Clipping: Let Gemini judge whole-source highlights and verify each accepted clip tab with data checks and one framing sheet. Why: the user wanted faster whole-source discovery and honest delivery where clips found equal tabs made.
+- Snapshots: Align decoder seeks to composition precision and handle failed cache captures without stopping the worker. Why: PR verification exposed a rejected FFmpeg seek and worker crash.
 - MCP identity: Distinguish Antigravity from Gemini using initialized client identity and Google’s official app mark. Why: the user requested accurate app badges for shared-token sessions.
 - MCP presence: Show each active agent’s company on project cards and timeline tabs, using initialized client identity. Why: personal-token agents appeared as generic MCP and concurrent agents hid one another.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
