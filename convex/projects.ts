@@ -19,6 +19,7 @@ import { aspectRatio, projectDocument, timelineValidator } from "./schema";
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from '../lib/editor/timeline-history-key';
+import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 const createProjectForArgs = { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))), placeOnTimeline: v.optional(v.boolean()) };
 export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createProjectForArgs>) {
@@ -160,24 +161,24 @@ export const sceneCode=query({args:{projectId:v.string(),hash:v.string()},return
   await projectIdentity(ctx,projectId,await requireOwner(ctx));
   return /^[a-f0-9]{64}$/.test(args.hash)?await sceneCodeText(ctx,args.hash):null;
 }});
-export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()), agent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()) });
-/** The MCP app working in a project, if any; the client compares `until` against its own clock. */
-async function projectAgent(ctx: QueryCtx, projectId: Id<"projects">, project?: { aiAgentName?: string; aiAgentActiveUntil?: number; aiRunning?: boolean; aiRunId?: string }) {
-  const run = await ctx.db.query("aiRuns").withIndex("by_project", q => q.eq("projectId", projectId)).unique();
-  const state = run ?? project;
-  if (!state?.aiAgentName) return null;
-  const running = !!state.aiRunning && !!state.aiRunId?.startsWith("mcp-");
-  return { name: state.aiAgentName.replace(/\s*\([^)]*\)\s*$/, "") || state.aiAgentName, until: state.aiAgentActiveUntil ?? 0, running };
-}
+export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()), agent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), agents: v.array(workingAgentValidator) });
 export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
   const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
-  if(migration?.completed){const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));return Promise.all(rows.map(async row=>({_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl:await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:row.agentSummary===undefined?await projectAgent(ctx,row.projectId):row.agentSummary})));}
+  if(migration?.completed){
+    const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));
+    return Promise.all(rows.map(async row=>{
+      const [coverUrl,agents]=await Promise.all([mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),projectWorkingAgents(ctx,ownerId,row.projectId)]);
+      const agent=agents[0];
+      return {_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl,coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:agent?{name:agent.name,until:agent.until,running:false}:null,agents};
+    }));
+  }
   const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
   return await Promise.all(projects.map(async project => {
-    const media = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
+    const [media,agents] = await Promise.all([ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5),projectWorkingAgents(ctx,ownerId,project._id)]);
     const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
     const picture=cover?projectCoverOf(cover):null;
-    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: picture ? await mediaUrl(ctx, {storageId:picture.coverStorageId,r2Key:picture.coverR2Key}) : null, coverKind: picture?.coverKind??null, agent: await projectAgent(ctx, project._id, project) };
+    const agent=agents[0];
+    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: picture ? await mediaUrl(ctx, {storageId:picture.coverStorageId,r2Key:picture.coverR2Key}) : null, coverKind: picture?.coverKind??null, agent: agent?{name:agent.name,until:agent.until,running:false}:null, agents };
   }));
 }
 export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(projectListItem), handler: async (ctx, args) => listProjectsFor(ctx, await requireOwner(ctx), args) });

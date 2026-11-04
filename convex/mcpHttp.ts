@@ -1,9 +1,10 @@
 import type { HttpRouter } from 'convex/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, InitializeRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { laneDescriptions } from '../lib/ai/lanes/selection';
 import { requestMcpOrigin } from './lib/mcp_origin';
@@ -48,14 +49,14 @@ let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId?:string) {
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId?:string,agentClientId?:Id<'mcpConnections'>) {
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools,{}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog=undefined;throw error;});
     return {tools:await toolCatalog};
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
@@ -82,7 +83,16 @@ const mcpHandler = httpAction(async (ctx, request) => {
   const sessionId = method === 'initialize' ? crypto.randomUUID() : request.headers.get('Mcp-Session-Id');
   if (sessionId && !/^[\x21-\x7e]{1,256}$/.test(sessionId)) return json({jsonrpc:'2.0',id:null,error:{code:-32600,message:'Invalid Mcp-Session-Id.'}},400);
   const connectionId = sessionId ? `${auth.grantId}:${sessionId}` : undefined;
-  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline,connectionId);
+  if (connectionId && method === 'initialize') {
+    const initialized=InitializeRequestSchema.safeParse(body);
+    if(initialized.success){
+      const {name,title,version}=initialized.data.params.clientInfo;
+      await ctx.runMutation(internal.mcpConnections.initialize,{ownerId:auth.ownerId,connectionId,clientInfo:{name,version,...(title?{title}:{})},fallbackName:auth.clientName});
+    }
+  }
+  const identity=connectionId?await ctx.runQuery(internal.mcpConnections.identity,{ownerId:auth.ownerId,connectionId}):null;
+  if(identity?.closed)return json({jsonrpc:'2.0',id:null,error:{code:-32000,message:'This MCP session ended. Initialize a new session.'}},404);
+  const server = revlineServer(ctx, auth.ownerId, identity?.agentName??auth.clientName, comparisonDeadline,connectionId,identity?.clientId);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: false });
   try {
     await server.connect(transport);
@@ -93,6 +103,15 @@ const mcpHandler = httpAction(async (ctx, request) => {
     const stream=new ReadableStream<Uint8Array>({async pull(controller){try{const {done,value}=await reader.read();if(done){controller.close();await server.close();}else controller.enqueue(value);}catch(error){controller.error(error);await server.close();}},async cancel(){await reader.cancel();await server.close();}});
     return withCors(new Response(stream,{status:response.status,headers:response.headers}));
   } catch(error){await server.close();throw error;}
+});
+
+const mcpCloseHandler = httpAction(async (ctx, request) => {
+  const token=/^Bearer\s+(\S+)$/i.exec(request.headers.get('Authorization')??'')?.[1];
+  const auth=token?await ctx.runMutation(internal.mcpAuth.authenticate,{token,calls:0}):null;
+  if(!auth||'error' in auth)return json({error:'Sign in to Revline to close this MCP session.'},auth&&auth.error==='plan'?403:401);
+  const sessionId=request.headers.get('Mcp-Session-Id');
+  if(sessionId)await ctx.runMutation(internal.mcpConnections.close,{ownerId:auth.ownerId,connectionId:`${auth.grantId}:${sessionId}`});
+  return new Response(null,{status:204,headers:cors});
 });
 
 function formValues(text: string, contentType: string | null): Record<string, string> {
@@ -106,7 +125,7 @@ export function registerMcpRoutes(http: HttpRouter) {
   const notStreaming = httpAction(async () => new Response(null, { status: 405, headers: { ...cors, Allow: 'POST' } }));
   http.route({ path: '/mcp', method: 'POST', handler: mcpHandler });
   http.route({ path: '/mcp', method: 'GET', handler: notStreaming });
-  http.route({ path: '/mcp', method: 'DELETE', handler: notStreaming });
+  http.route({ path: '/mcp', method: 'DELETE', handler: mcpCloseHandler });
 
   for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp']) {
     http.route({ path, method: 'GET', handler: httpAction(async (_ctx, request) => json(resourceMetadata(requestMcpOrigin(request)))) });

@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- MCP presence: Show each active agent’s company on project cards and timeline tabs, using initialized client identity. Why: personal-token agents appeared as generic MCP and concurrent agents hid one another.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - MCP: Isolate conversations and task targets; list all lane-labeled tools with call-time checks. Why: parallel Codex agents shared task context and could not discover lane tools.
 - Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.

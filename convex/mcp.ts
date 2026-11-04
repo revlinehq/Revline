@@ -28,6 +28,8 @@ import { soundRequestValidator } from './lib/sound_validator';
 import { pacingRequestValidator } from './lib/pacing_validator';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
+import { touchTaskAgent } from './mcpConnections';
+import { MCP_AGENT_IDLE_MS } from '../lib/mcp/agent-identity';
 
 // Project-level work for the MCP server. Every function receives the owner the
 // bearer token resolved to; nothing here trusts a client-supplied identity.
@@ -74,14 +76,15 @@ export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v
 /** How long the editor keeps showing an MCP agent as working after its last call. Agents
  * think between calls, and writing a film part for patchScene or addFilm can take several
  * minutes, so a short window drops the status mid-request and invites the user to edit over it. */
-export const AGENT_ACTIVE_MS = 10 * 60_000;
+export const AGENT_ACTIVE_MS = MCP_AGENT_IDLE_MS;
 /** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
  * and rewrites the marker only once it is half spent. */
-export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), taskId: v.optional(v.string()), agentClientId: v.optional(v.id('mcpConnections')), startedAt: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('projects', args.projectId);
   if (!id) return null;
   try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
+  if(args.taskId)await touchTaskAgent(ctx,args.ownerId,args.taskId,name,args.agentClientId,args.startedAt);
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
   if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
   if (run) {

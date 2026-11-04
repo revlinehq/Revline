@@ -95,8 +95,8 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
   ];
 }});
 
-const callResult = v.object({ text: v.string(), isError: v.boolean(), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
-type CallResult = { text: string; isError: boolean; images?: { data: string; mimeType: string }[] };
+const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
+type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[] };
 const result = (value: unknown, isError = false): CallResult => ({ text: typeof value === 'string' ? value : JSON.stringify(value), isError });
 const failed = (value: unknown) => !!value && typeof value === 'object' && (value as { success?: unknown }).success === false;
 const message = (error: unknown) => {
@@ -112,7 +112,8 @@ function toolFailureMessage(text: string): string {
   return typeof parsed.data.error === 'string' ? parsed.data.error : parsed.data.error?.message ?? parsed.data.message ?? parsed.data.reason ?? 'Revline tool returned an unsuccessful result';
 }
 
-export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+  const startedAt=Date.now();
   const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS) : undefined;
   try {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
@@ -131,6 +132,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   // Only an explicit task ID may supply omitted targets. A connection's last
   // task must never choose the project or timeline of an edit.
   if(taskScoped&&input.taskId&&session){input.projectId??=session.projectId;input.timelineId??=session.timelineId;}
+  const agentName=(args.agentClientId?args.agentName:session?.agentName??args.agentName)??'MCP client';
+  const agentClientId=args.agentClientId??session?.agentClientId;
   const lane=session?.lane??'edit';
   if((!session||session.laneChosen===false)&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Choose a task lane for this target: call startTask with projectId and timelineId, then setLane with its taskId, lane, reason and taskType. No tools/list refresh is needed.',true);
   if(!laneToolAllowed(lane,args.name))return result(laneToolError(lane,args.name),true);
@@ -145,6 +148,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const laneChosen=!!request.lane;
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:laneChosen?request.reason!:selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',exportConfirmed:exportConfirmed(request.request)});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
+    await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
     return result({projectId,taskId,timelineId,lane:laneChosen?selection.lane:null,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:false,...(laneChosen?{skills:LANES[selection.lane].skills.map(skill=>({name:skill.name,description:skill.description})),next:'Pass projectId and taskId on subsequent calls. Tools are already listed. Call finish before reporting an edit complete.'}:{instructions:laneChoiceInstructions(selection.lane,selection.lockedLane),next:'Reason about the request, then call setLane with this taskId, lane, reason and taskType. Tools are already listed; lane access is enforced on each call.'})});
   }
   if(args.name==='setLane'){
@@ -153,6 +157,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const timelineId=parsed.data.timelineId??session.timelineId;
     await ctx.runMutation(internal.lanes.switchLane,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,reason:parsed.data.reason,taskType:parsed.data.taskType});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,laneChosen:true});
+    await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
     return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,toolsChanged:false,skills:LANES[parsed.data.lane].skills.map(skill=>({name:skill.name,description:skill.description})),next:'Tools are already listed. Pass projectId and taskId on subsequent calls; read the lane skills and call finish before reporting an edit complete.'});
   }
   if(args.name==='exportVideo'){
@@ -165,12 +170,21 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   if(session&&['createTimeline','renameTimeline','deleteTimeline'].includes(args.name))await ctx.runMutation(internal.lanes.requireFinish,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId});
   // The editor shows the agent as working across its whole request, not only during each call.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
-  const touch = () => projectId ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, ...(args.agentName ? { agentName: args.agentName } : {}) }).catch(() => null) : null;
+  let taskEnded=false;
+  const touch = () => projectId&&!taskEnded ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, agentName, startedAt, ...(session?{taskId:session.taskId}:{}), ...(agentClientId?{agentClientId}:{}) }).catch(() => null) : null;
   await touch();
   try {
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
-      : await callEditorTool(ctx, args.ownerId, args.name, input, args.agentName, comparisonDeadline, args.name==='reportIssue'?undefined:session??undefined);
+      : await callEditorTool(ctx, args.ownerId, args.name, input, agentName, comparisonDeadline, args.name==='reportIssue'?undefined:session??undefined);
+    if(session&&(args.name==='finish'||output.ended)){
+      let completion: {passed?:boolean;exhausted?:boolean}|undefined;
+      try{completion=JSON.parse(output.text);}catch{/* A tool failure keeps its ordinary idle lease. */}
+      if(output.ended||completion?.passed||completion?.exhausted){
+        taskEnded=true;
+        await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:session.taskId});
+      }
+    }
     if(session&&!output.isError&&['createTimeline','openTimeline'].includes(args.name)){
       const opened=JSON.parse(output.text) as {timelineId?:string;opened?:string|boolean};
       const target=opened.timelineId??(typeof opened.opened==='string'?opened.opened:undefined);
@@ -319,7 +333,8 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return withImages(published ? await toolkit.publicationResult(output) : output, failed(output));
   } catch (error) {
-    return result(abortSignal.aborted && !deadline.aborted ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true);
+    const stopped=abortSignal.aborted&&!deadline.aborted;
+    return {...result(stopped ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true), ...(stopped?{ended:true}:{})};
   } finally {
     clearInterval(watch);
     await ctx.runMutation(internal.assistant.finish, run);
