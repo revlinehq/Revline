@@ -2,6 +2,9 @@
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
+## 2026-11-04
+- Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
+
 ## 2026-11-03
 - Assistant: Measure elapsed work from the persisted user turn across phases, retries and reconnects. Why: the user saw the full-podcast timer repeatedly reset.
 - MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
