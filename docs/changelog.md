@@ -1,3 +1,7 @@
+## 2026-11-04
+
+- Frame reads: Round whole-source motion-scan timeouts to integer milliseconds. Why: Fractional media durations must produce valid Node process deadlines.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
