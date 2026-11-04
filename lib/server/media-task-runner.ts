@@ -153,6 +153,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
     if (task.kind === 'highlights' && readHighlights(asset.analysis?.highlights)?.judge==='gemini' && (!task.highlightSourceType || readHighlights(asset.analysis?.highlights)?.sourceType===task.highlightSourceType)) return {analysis:{highlights:asset.analysis!.highlights}};
+    if (task.kind === 'transcribe' && asset.kind === 'video' && asset.audioExtracted && !asset.audioAssetId) throw new AnalysisError('This source has no audio to transcribe.', 400);
     if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     // A breakdown saved before moments were measured only needs its moments; the model pass stays.
@@ -168,7 +169,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const preview = (task.kind === 'highlights' || task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewR2Key !== asset.r2Key && asset.previewVersion === 1 && (task.kind !== 'highlights' || asset.previewSize! < sourceAsset.size) && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
-    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
+    const audioOnly = ['extract', 'waveform', 'transcribe', 'beats'].includes(task.kind);
+    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout'));
     const localSource = join(directory, 'source'), sourceUrl = download.url;
     let source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : localSource;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);
@@ -184,7 +186,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
     const reusedSource = rangeRead ? reusedRangeSource : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
-      concurrency: task.kind === 'extract' || task.kind === 'highlights' ? 3 : 1,
+      concurrency: audioOnly || task.kind === 'highlights' ? 3 : 1,
+      ...(audioOnly ? { reserveBytes: 256 * 1024 * 1024 + Math.min(download.size, Math.ceil((sourceAsset.duration ?? 3600) * 256000)) } : {}),
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
         if(task.kind!=='preview')onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
@@ -200,6 +203,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind!=='preview')onProgress(task.kind === 'extract' ? 45 : 10);
     if (task.kind === 'extract') {
       const audioPath = join(directory, 'audio.m4a');
+      onActivity?.('preparing-analysis');
       const hasAudio = await runPhase('Extracting audio', () => extractSourceAudio(source, audioPath, signal));
       if (!hasAudio) return {};
       onProgress(60);
@@ -308,6 +312,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // The cleanup map is measured from the same source audio as the quiet intervals. Await it:
       // the task directory holding that audio is removed once this function returns.
       const measure = async (transcript: Transcript) => {
+        onActivity?.('analyzing'); onProgress(75);
         const audioActivity = await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript));
         const speechCleanup = (asset.duration ?? media.duration) <= 600 ? await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal)) : undefined;
         return { analysis: { transcript, audioActivity, ...(speechCleanup ? { speechCleanup } : {}) } };
@@ -316,9 +321,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const key = process.env.DEEPGRAM_API_KEY;
       if (!key) throw new AnalysisError('Deepgram transcription is not configured on the media worker.', 503);
       const audio = join(directory, 'speech.mp3');
+      onActivity?.('preparing-analysis'); onProgress(20);
       await runPhase('Preparing transcription audio',()=>extractTranscriptionAudio(source, audio, signal));
-      onProgress(30);
-      const transcript = await runPhase('Transcribing speech',()=>transcribeWithDeepgram(audio, asset.duration ?? media.duration, key, signal));
+      onProgress(35); onActivity?.('analyzing');
+      const transcript = await runPhase('Transcribing speech',()=>transcribeWithDeepgram(audio, asset.duration ?? media.duration, key, signal, attempt => onActivity?.(attempt > 1 ? 'retrying-analysis' : 'analyzing')));
       return await measure(transcript);
     }
     if (task.kind === 'beats') {

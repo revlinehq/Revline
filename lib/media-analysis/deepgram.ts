@@ -1,3 +1,4 @@
+import { setTimeout as delay } from 'node:timers/promises';
 import { openAsBlob } from 'node:fs';
 import { z } from 'zod';
 import { AnalysisError, isRetryableAnalysisError } from './errors';
@@ -11,15 +12,29 @@ const resultSchema = z.object({ results: z.object({ channels: z.array(z.object({
 
 /** Deepgram's measured word timestamps drive captions and speech cuts; Gemini still understands video.
  * `path` is the compressed speech audio of the whole source. */
-export async function transcribeWithDeepgram(path: string, duration: number, key: string, signal: AbortSignal): Promise<Transcript> {
+/** Total provider budget covers upload, response body and all bounded retries. */
+export function transcriptionDeadlineMs(duration: number) {
+  return Math.min(600_000, Math.max(90_000, Math.ceil(duration * 500)));
+}
+export async function transcribeWithDeepgram(path: string, duration: number, key: string, signal: AbortSignal, onAttempt?: (attempt: number) => void): Promise<Transcript> {
   if (!Number.isFinite(duration) || duration <= 0) throw new AnalysisError('The source has no valid transcription duration.', 400);
-  for (let attempt = 1; ; attempt++) {
-    signal.throwIfAborted();
-    try { return await request(path, duration, key, signal); }
-    catch (error) {
-      if (signal.aborted || !isRetryableAnalysisError(error) || attempt >= ATTEMPTS) throw error;
-      await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** (attempt - 1)));
+  signal.throwIfAborted();
+  const budget = transcriptionDeadlineMs(duration), timeout = AbortSignal.timeout(budget);
+  const bounded = AbortSignal.any([signal, timeout]);
+  try {
+    for (let attempt = 1; ; attempt++) {
+      bounded.throwIfAborted(); onAttempt?.(attempt);
+      try { return await request(path, duration, key, bounded); }
+      catch (error) {
+        bounded.throwIfAborted();
+        if (!isRetryableAnalysisError(error) || attempt >= ATTEMPTS) throw error;
+        await delay(1000 * 2 ** (attempt - 1), undefined, { signal: bounded });
+      }
     }
+  } catch (error) {
+    if (signal.aborted) throw signal.reason;
+    if (timeout.aborted) throw new AnalysisError(`Speech transcription timed out after ${Math.ceil(budget / 1000)} seconds, including upload and retries. The provider did not finish; no transcript was saved. Retry explicitly when the connection or provider recovers.`, 504, false);
+    throw error;
   }
 }
 
