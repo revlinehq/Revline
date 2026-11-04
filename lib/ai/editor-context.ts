@@ -3,6 +3,7 @@ import type { LanguageModelV4Prompt, LanguageModelV4ToolResultOutput } from '@ai
 import type { ModelMessage } from 'ai';
 import type { Timeline, MediaAsset } from '../editor/types';
 import { summarizeSpeakerFraming } from '../media-analysis/clipping';
+import { readHighlights } from '../media-analysis/highlights';
 
 export const EDITOR_CONTEXT_NOTICE = 'Context loads the latest 100 saved messages plus associated steps needed to complete their tool calls. Older messages or superseded timeline snapshots may be omitted. Omission is not evidence that an event or edit is absent. Preserve recent user constraints and use the current timeline. Visual observations and images in this context remain intact. Before a creative decision needing absent visual evidence, inspect the relevant source window again (saved analysis may be reused). Read inspectClip for omitted motion/focus samples; never reconstruct source trims from a summary.';
 export const EDITOR_CONTEXT_BOUNDARY = '\nCURRENT EDIT CONTEXT:\n';
@@ -38,12 +39,25 @@ export function modelTimeline(timeline: Timeline, selectedClipIds: readonly stri
   }) };
 }
 
+/** Preserve every editorial moment; dense RMS/quiet data is read by source window. */
+function modelHighlightAnalysis(value: string, windows: readonly { start: number; end: number }[] = []) {
+  const tracks = readHighlights(value);
+  if (!tracks) return value;
+  const { levels, signals, ...evidence } = tracks;
+  return { ...evidence, audioHelpers: { levelStep: tracks.levelStep, levelCount: levels.length, signalCount: signals.length,
+    readTool: 'inspectAssetAnalysis with start/end or windows in SOURCE seconds' },
+    ...(windows.length ? { signals: signals.filter(s => windows.some(w => s.end >= w.start && s.start <= w.end)),
+      levelWindows: windows.map(w => { const first = Math.floor(w.start / tracks.levelStep), last = Math.ceil(w.end / tracks.levelStep);
+        return { start: first * tracks.levelStep, step: tracks.levelStep, levels: levels.slice(first, last + 1) }; }) } : {}) };
+}
+
 /** Keep verbal/visual evidence. Dense numerical maps can be read by source range. */
 export function modelAssetAnalysis(analysis: NonNullable<MediaAsset['analysis']>, window?: { start: number; end: number }) {
-  const { focus, beats, transcript, audioActivity, shots, speechCleanup, speakers, facecam, ...observations } = analysis;
+  const { focus, beats, transcript, audioActivity, shots, speechCleanup, speakers, facecam, highlights, ...observations } = analysis;
   const inRange = (time: number) => !window || (time >= window.start && time <= window.end);
   const denseRead = (count: number) => ({ sampleCount: count, detailsOmitted: true, readTool: 'inspectAssetAnalysis with start/end SOURCE seconds' });
   return { ...observations,
+    ...(highlights ? { highlights: modelHighlightAnalysis(highlights, window ? [window] : []) } : {}),
     ...(!analysis.understanding ? { understandingNote: OPTIONAL_UNDERSTANDING_NOTE } : {}),
     ...(facecam?{facecam:{...facecam,samples:window?facecam.samples.filter(s=>s.time>=window.start&&s.time<=window.end):facecam.samples}}:{}),
     ...(speakers?{speakers:{version:speakers.version,start:speakers.start,end:speakers.end,identityScope:speakers.identityScope,framingSummary:summarizeSpeakerFraming(speakers,window?.start,window?.end),...(window?{turns:speakers.turns.filter(t=>t.end>=window.start&&t.start<=window.end)}:{turnCount:speakers.turns.length,speakerIds:[...new Set(speakers.turns.map(t=>t.speaker))],turnSamples:denseRead(speakers.turns.length)}),focusSummary:denseRead(speakers.focus.length),...(window?{focus:speakers.focus.filter(s=>inRange(s.time)),...(speakers.version===2?{framing:speakers.framing.filter(frame=>frame.end>window.start&&frame.start<window.end)}:{})}:{})}}:{}),
@@ -77,7 +91,7 @@ export function modelAssetAnalysisWindows(analysis: NonNullable<MediaAsset['anal
   const reads = windows.map(window => modelAssetAnalysis(analysis, window));
   const { sourceWindow: _window, transcript: _transcript, audioActivity, focus: _focus, beats: _beats, ...shared } = reads[0] as Record<string, unknown> & { audioActivity?: { quiet?: unknown } };
   const { quiet: _quiet, ...audioLevels } = audioActivity ?? {};
-  return { ...shared, ...(audioActivity ? { audioActivity: audioLevels } : {}),
+  return { ...shared, ...(analysis.highlights ? { highlights: modelHighlightAnalysis(analysis.highlights, windows) } : {}), ...(audioActivity ? { audioActivity: audioLevels } : {}),
     windows: reads.map(read => { const { sourceWindow, transcript, audioActivity: activity, focus, beats } = read as Record<string, unknown> & { audioActivity?: { quiet?: unknown } };
       return { sourceWindow, ...(transcript ? { transcript } : {}), ...(activity?.quiet ? { quiet: activity.quiet } : {}), ...(focus ? { focus } : {}), ...(beats ? { beats } : {}) }; }),
   };
@@ -178,6 +192,13 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
             return { ...times, observationIndex };
           }) };
         }) };
+      }
+      if (part.toolName === 'inspectAssetAnalysis' && typeof value.highlights === 'string') {
+        const input = toolInputs.get(part.toolCallId);
+        const windows = object(input) && Array.isArray(input.windows) ? input.windows
+          : object(input) && typeof input.start === 'number' && typeof input.end === 'number' ? [input] : [];
+        const ranges = windows.filter((w): w is { start: number; end: number } => object(w) && typeof w.start === 'number' && typeof w.end === 'number');
+        projected = { ...projected, highlights: modelHighlightAnalysis(value.highlights, ranges) };
       }
       if (part.toolName === 'inspectAssetAnalysis' && part.toolCallId !== latestRead.get(readKey(part.toolName, part.toolCallId, value))) {
         projected = { assetId: value.assetId, start: value.start, end: value.end, question: value.question,
