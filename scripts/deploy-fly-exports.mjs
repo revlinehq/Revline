@@ -8,6 +8,7 @@ import { readFile, writeFile, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
+import { FLY_WORKER_GUEST } from '../lib/fly-worker-resources.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -36,7 +37,7 @@ function run(command, argv, options = {}) {
 }
 
 console.log(`Target: Fly app ${app}, Convex ${production ? 'production (different-gnu-398)' : 'development (majestic-alpaca-541)'}.`);
-if (args.includes('--dry-run')) { console.log('Validated export target. No image built or deployment changed.'); process.exit(0); }
+if (args.includes('--dry-run')) { console.log(`Validated export target. Export and chunk machines: ${FLY_WORKER_GUEST.cpus} CPUs / ${FLY_WORKER_GUEST.memory_mb} MB. No image built or deployment changed.`); process.exit(0); }
 try {
   await run(process.execPath, ['infra/media-worker/prepare-context.mjs']);
   await writeFile(join(context, 'fly.toml'), `app = "${app}"\nprimary_region = "iad"\n[build]\n  dockerfile = "infra/media-worker/Dockerfile"\n  build-target = "exports"\n`);
