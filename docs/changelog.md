@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Prototype: Add an isolated, replayable /clip recording flow using the real dashboard and editor. Why: the user needs repeatable marketing Reels without live AI runs.
 - Scenes: Temporarily retire Three.js authoring and guide the agent toward GSAP scenes. Why: the user has no current use case and the agent chose it unnecessarily.
 - AI: Revline uses a single OpenAI key; the backup key that took over when the main account ran out of credit is removed. Why: the user replaced both with one funded key.
 - Clipping and media: Check shared runtimes, retry transfers, keep healthy analysis and leases alive, persist Gemini fallback, clarify overlay audio links and show tool reasons. Why: mixed dev workers, timeouts and an outdated agent runner broke gaming clipping during storage interruptions and a provider outage.

@@ -35,3 +35,5 @@ next-env.d.ts
 
 public/vendor/scene-three.js
 public/vendor/scene-three.js.LEGAL.txt
+
+/public/prototype/
