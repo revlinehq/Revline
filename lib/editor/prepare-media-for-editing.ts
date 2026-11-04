@@ -83,7 +83,7 @@ export async function prepareMediaForEditing(
       continue;
     }
     const kind = active[0], state = tasks.get(kind)!.state!;
-    const activity = state.status === 'retrying' ? 'Retrying media preparation…' : state.activity ? mediaTaskActivityLabel({...state,kind}) : state.status === 'queued' ? `Queued · ${labels[kind]}` : labels[kind];
+    const activity = state.status === 'retrying' ? 'Retrying media preparation…' : state.activity || kind === 'transcribe' ? mediaTaskActivityLabel({...state,kind}) : state.status === 'queued' ? `Queued · ${labels[kind]}` : labels[kind];
     const next = { phase: phases[kind], activity, percent };
     if (next.phase !== previous?.phase || next.activity !== previous?.activity || next.percent !== previous?.percent) { onActivity?.(next); previous = next; }
     await bounded(() => new Promise<void>(resolve => setTimeout(resolve, 1000)));

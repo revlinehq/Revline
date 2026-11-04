@@ -164,7 +164,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
     const analysis=mediaTasks?.find(task=>task.assetId===asset._id&&task.kind==='transcribe'&&!asset.analysisKinds?.includes('transcribe')&&!asset.analysis?.transcript);
     if(analysis&&analysis.status!=='completed'){
       const failed=analysis.status==='failed'||analysis.status==='cancelled';
-      return {...asset,footageProgress:progress,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':analysis.activity?mediaTaskActivityLabel(analysis):'Listening to your footage…'}};
+      return {...asset,footageProgress:progress,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':mediaTaskActivityLabel(analysis)}};
     }
     if(asset.kind!=='video'||asset.audioExtracted||asset.audioAssetId)return {...asset,footageProgress:progress};
     const task=mediaTasks?.find(task=>task.kind==='extract'&&task.assetId===asset._id);
