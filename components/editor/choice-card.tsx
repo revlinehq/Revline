@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Pause, Play } from 'lucide-react';
 import { AspectRatio } from '@/components/ui/aspect-ratio';
 import { Button } from '@/components/ui/button';
@@ -26,6 +26,7 @@ export function choiceOf(step: ChatTool): { question: string; choices: Choice[] 
 
 /** shadcn choice cards for the assistant's question; the pick is sent as the user's reply. */
 export function ChoiceCard({ question, choices, onChoose, disabled }: { question: string; choices: Choice[]; onChoose?: (reply: string) => void; disabled: boolean }) {
+  const id = useId();
   const [value, setValue] = useState('');
   const [playing, setPlaying] = useState('');
   const player = useRef<HTMLAudioElement | null>(null);
@@ -44,7 +45,7 @@ export function ChoiceCard({ question, choices, onChoose, disabled }: { question
   return <FieldSet className="choice-card" data-pictures={choices.some(choice => choice.image) || undefined}>
     <FieldLegend variant="label">{question}</FieldLegend>
     <RadioGroup value={value} onValueChange={setValue} disabled={disabled || !onChoose}>
-      {choices.map(choice => <FieldLabel key={choice.value} htmlFor={`choice-${choice.value}`}>
+      {choices.map(choice => <FieldLabel key={choice.value} htmlFor={`${id}-${choice.value}`} onClick={() => { if (!disabled && onChoose) setValue(choice.value); }}>
         {choice.image && <AspectRatio ratio={16 / 9} className="choice-card-image"><img src={choice.image} alt={choice.title} loading="lazy" onError={event => { event.currentTarget.hidden = true; }} /></AspectRatio>}
         <Field orientation="horizontal">
           {choice.logo && <span className="choice-card-logo" style={{ maskImage: `url("${choice.logo}")`, WebkitMaskImage: `url("${choice.logo}")` }} aria-hidden="true" />}
@@ -53,7 +54,7 @@ export function ChoiceCard({ question, choices, onChoose, disabled }: { question
             <FieldTitle>{choice.title}</FieldTitle>
             {choice.description && <FieldDescription>{choice.description}</FieldDescription>}
           </FieldContent>
-          <RadioGroupItem value={choice.value} id={`choice-${choice.value}`} />
+          <RadioGroupItem value={choice.value} id={`${id}-${choice.value}`} />
         </Field>
       </FieldLabel>)}
     </RadioGroup>
