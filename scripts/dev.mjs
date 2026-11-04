@@ -1,13 +1,21 @@
 import { execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, symlinkSync, writeFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createInterface } from 'node:readline';
 import { aiCostLines } from './ai-cost-log-filter.mjs';
+import { root, primary, git, isolatedRuntime, runningDev, devPidPath } from './isolated-common.mjs';
+
+if (root !== primary || git('branch', '--show-current') !== 'main') {
+  if (runningDev()) throw new Error('This worktree’s development services are already running.');
+  // Secrets are loaded into child-process memory, never copied into worktree env files.
+  Object.assign(process.env, await isolatedRuntime());
+  writeFileSync(devPidPath, String(process.pid), { mode: 0o600 });
+  process.on('exit', () => rmSync(devPidPath, { force: true }));
+}
 
 const directory = fileURLToPath(new URL('..', import.meta.url));
-// Share every pinned local runtime, not task data or credentials. A worker in
-// any worktree can receive another checkout's jobs from the shared dev queue.
+// Share pinned local runtimes; every worktree has its own queue and task data.
 const commonGitDirectory = execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: directory, encoding: 'utf8' }).trim();
 const primaryDirectory = dirname(commonGitDirectory);
 if (primaryDirectory !== directory) {
@@ -69,4 +77,4 @@ start('web', ['node_modules/next/dist/bin/next', 'dev', '--hostname', 'localhost
   },
 });
 console.log('[ai] Watching structured AI cost logs from the Convex development deployment (read only).');
-start('ai', ['node_modules/convex/bin/main.js', 'logs', '--deployment', 'dev', '--history', '0', '--jsonl'], { required: false, filter: aiCostLines });
+start('ai', ['node_modules/convex/bin/main.js', 'logs', '--history', '0', '--jsonl'], { required: false, filter: aiCostLines });

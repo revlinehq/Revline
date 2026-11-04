@@ -6,6 +6,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Landing: Added the short-form editing section with a real agent-edited talking-head Reel and a viewport-driven cut, caption and zoom illustration. Why: the user requested a short-form showcase after clipping.
+- Development: Give each agent worktree an expiring Convex backend, seeded footage and private Workers. Why: the user reported agents overwriting shared dev functions and schema.
+- Editor: Read rendered frames without following redirects in Cloudflare Workers. Why: isolated verification exposed an unsupported fetch mode that stopped editor turns.
 - Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.
 - Deployments: Release changed production and development services in order on the PC after main merges, then restart the main dev server. Why: the user kept finding merged main changes undeployed.
 - Editing agent: Integrate persisted motion evidence and timed off exits into recreate and bound-reference motion lane checks. Why: the lane registry merged while PR #51 awaited approval.
