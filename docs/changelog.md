@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
 - Reel and captions: Clean one-take rough cuts at their natural duration and default new subtitles to minimal text without a background. Why: fixed duration, forced normalization and boxed subtitles distorted the intended edit.

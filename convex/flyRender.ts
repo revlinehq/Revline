@@ -32,7 +32,12 @@ const ORPHAN_VOLUME_MS = 10 * 60_000;
 const ACTIVE_STATES = new Set(['created', 'starting', 'started', 'replacing', 'updating']);
 type Mount = { volume: string; path: string };
 type FlyMachine = { id: string; state: string; instance_id: string; config?: { image?: string; guest?: { cpu_kind?: string; cpus?: number; memory_mb?: number }; mounts?: Mount[]; metadata?: Record<string, string> } };
-const current = (config: Config, lane: Lane, machine: FlyMachine) => machine.config?.guest?.cpu_kind === FLY_WORKER_GUEST.cpu_kind && machine.config.guest.cpus === FLY_WORKER_GUEST.cpus && machine.config.guest.memory_mb === FLY_WORKER_GUEST.memory_mb && machine.config?.metadata?.revline_config === machineConfig(config, lane, 'warm', []).metadata.revline_config;
+const current = (config: Config, lane: Lane, machine: FlyMachine) => {
+  const existingConfig = machine.config;
+  if (!existingConfig) return false;
+  const guest = existingConfig.guest;
+  return guest !== undefined && guest.cpu_kind === FLY_WORKER_GUEST.cpu_kind && guest.cpus === FLY_WORKER_GUEST.cpus && guest.memory_mb === FLY_WORKER_GUEST.memory_mb && existingConfig.metadata?.revline_config === machineConfig(config, lane, 'warm', []).metadata.revline_config;
+};
 type FlyVolume = { id: string; name: string; state: string; attached_machine_id?: string | null; created_at?: string };
 type Config = NonNullable<ReturnType<typeof flyConfig>>;
 
