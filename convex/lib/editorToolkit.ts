@@ -878,7 +878,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
         });
         results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
-        return {results,images,reusedTimelineIds,next:'Fix failed checks, glance at the framing sheet, then call finishClipping. Its finalMessage is the exact list of delivered tabs.'};
+        const failedTimelineIds=results.filter(result=>!(result as {passed:boolean}).passed).map(result=>(result as {timelineId:string}).timelineId);
+        return {results,images,reusedTimelineIds,failedTimelineIds,next:failedTimelineIds.length?'Review the failed tabs on these sheets. Do not retry an unchanged failure: fix its timeline, or for an intentional static shot/fade recheck only those IDs with acceptedFindings:[{kind:"freeze" or "black",reason:"specific observed source event and times"}]. Decode corruption cannot be waived. Reuse passing tabs; then finishClipping.':'Glance at these framing sheets, fix any bad crop, then call finishClipping and finish. Its finalMessage is the exact delivered tab list. Do not repeat passing checks.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration, 9:16 and current passing checkClip receipts. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
       await editSession.wait();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
