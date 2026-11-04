@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Landing: Added the short-form editing section with a real agent-edited talking-head Reel and a viewport-driven cut, caption and zoom illustration. Why: the user requested a short-form showcase after clipping.
 - Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.

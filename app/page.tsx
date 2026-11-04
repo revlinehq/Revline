@@ -44,8 +44,8 @@ export default function Home() {
     <LandingNav />
     <LandingHero />
     <LandingClippers />
-    <LandingShortForm />
     <LandingMotionDesign />
+    <LandingShortForm />
     <LandingFeatures />
     <LandingMcp />
     <LandingPricing />

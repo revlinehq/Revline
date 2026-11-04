@@ -14,7 +14,7 @@ export function LandingShortForm() {
       <div className="landing-showcase-copy">
         <LandingHeading id="landing-short-form-heading" title="Revline for short-form editing"
           description="Drop in a talking head or raw footage and get a 30–60 s Reel with cuts, captions and zooms." />
-        <LandingStartButton label="Start editing" size="sm" variant="dark" />
+        <LandingStartButton label="Start editing" size="sm" variant="secondary" />
       </div>
       <Card ref={frame} className="landing-short-form-frame" role="img"
         aria-label="Raw talking-head footage drops into Revline. Pauses are removed, captions follow each word, and a punch-in leads into a finished vertical Reel ready to post.">
