@@ -248,6 +248,8 @@ function youtubeArguments(
     "2",
     "--fragment-retries",
     "2",
+    "--concurrent-fragments",
+    "4",
     "--extractor-retries",
     "2",
     "--retry-sleep",
