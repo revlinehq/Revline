@@ -324,7 +324,7 @@ function projectRegion(
   time: number,
 ) {
   const frame = dimensions("vertical", 1080),
-    focus = clip.focus?.findLast((p) => p.time <= time),
+    focus = [...(clip.focus ?? [])].reverse().find((p) => p.time <= time),
     r = calculateVisualRect(
       source.width!,
       source.height!,
