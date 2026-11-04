@@ -7,4 +7,5 @@
 // 38: cached Gemini highlight discovery and clip delivery checks.
 // 39: full-resolution reference elements, calibrated opacity, shared joint timing/ease fitter.
 // 40: integrated highlight/clip checks with the reference motion runtime.
-export const MEDIA_PROCESSOR_VERSION = 40;
+// 41: lossless chunked transcript transport across worker and agent RPC boundaries.
+export const MEDIA_PROCESSOR_VERSION = 41;

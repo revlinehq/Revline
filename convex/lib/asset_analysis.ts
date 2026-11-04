@@ -1,3 +1,4 @@
+import { transportTranscript } from '../../lib/media-analysis/transcript';
 import { ConvexError } from 'convex/values';
 import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx,QueryCtx } from '../_generated/server';
@@ -40,4 +41,10 @@ export async function storeAnalysis(ctx:MutationCtx,asset:Doc<'assets'>,analysis
 /** A copied attachment shares source observations instead of duplicating them. */
 export async function shareAnalysis(ctx:MutationCtx,asset:Doc<'assets'>) {
   return asset.analysis?storeAnalysis(ctx,asset,asset.analysis,asset.analysisUpdatedAt??0):asset;
+}
+
+/** Only RPC boundaries pack words; server-side editing keeps the full hydrated list. */
+export async function transportAsset(ctx:MutationCtx|QueryCtx,asset:Doc<'assets'>):Promise<Doc<'assets'>> {
+  const hydrated=await hydrateAsset(ctx,asset);
+  return hydrated.analysis?.transcript?{...hydrated,analysis:{...hydrated.analysis,transcript:transportTranscript(hydrated.analysis.transcript)}}:hydrated;
 }

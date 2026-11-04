@@ -1,3 +1,4 @@
+import { materializeTranscript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
@@ -452,12 +453,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
     } finally { await ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId }); }
   };
-  const loadAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
+  const loadAsset=async(assetId:string)=>{const asset=materializeTranscript(await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId}));const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
   const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
   // Processed copies (freeze stills, smooth slow motion, upscales) come from the media worker.
   type DeriveInput={clipId:string;assetId:string;op:'freeze'|'slowmo'|'upscale'|'stats'|'parallax'|'pixelTrack';selection?:Pick<PixelTrackRequest,'time'|'seed'>;tracking?:PixelTrackRequest;start:number;end:number;backgroundPrompt?:string;time?:number;times?:number[];factor?:number;target?:number;fps?:number;placeLater:boolean};
   const derive=(input:DeriveInput)=>ctx.runMutation(internal.derivations.startFromRun,{...run,...input});
-  const adoptAsset=async(assetId:string)=>{const asset=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});const index=assets.findIndex(item=>item._id===asset._id);if(index<0)assets.push(asset);else assets[index]=asset;return asset;};
+  const adoptAsset=async(assetId:string)=>{const asset=materializeTranscript(await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId}));const index=assets.findIndex(item=>item._id===asset._id);if(index<0)assets.push(asset);else assets[index]=asset;return asset;};
   // Color measured on the worker from a clip's source frames at timeline moments (default: three across the clip).
   const measureClip=async(clip:Timeline['clips'][number],times?:number[]):Promise<ColorStats[]>=>{
     if((clip.kind!=='video'&&clip.kind!=='image')||!clip.assetId)throw new Error('Measure color on a video or image clip.');
@@ -546,7 +547,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (mode === 'reference' ? readReference(saved.analysis?.reference)?.moments : currentTranscript(saved.analysis?.transcript) && (!requireAudioActivity || saved.analysis?.audioActivity?.version === AUDIO_ACTIVITY_VERSION)) return saved;
     }
     const request = () => withAnalysis(assetId, mode, async request => {
-      let next=await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId});
+      let next=materializeTranscript(await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId}));
       if(mode==='speakers'&&request.speakerInspection)next={...next,analysis:{...next.analysis,speakers:request.speakerInspection}};
       if (!next?.analysis) throw new Error("Media analysis completed without saved results");
       if (mode === 'beats' && next.analysis.beats?.engine !== BEAT_ANALYSIS_ENGINE) throw new Error("Dedicated beat tracking did not return a current beat map. Analyze this audio source again.");
@@ -891,7 +892,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const input = request;
         const references = [];
         for (const assetId of input.referenceAssetIds ?? []) {
-          const asset = await ctx.runQuery(internal.assistant.getRunAsset, { ...run, assetId });
+          const asset = materializeTranscript(await ctx.runQuery(internal.assistant.getRunAsset, { ...run, assetId }));
           if (asset.kind !== 'image' || !['image/png', 'image/jpeg', 'image/webp'].includes(asset.contentType)) throw new Error(`${asset.fileName} is not a PNG, JPEG or WebP project image.`);
           if (asset.size > 50_000_000) throw new Error(`${asset.fileName} exceeds OpenAI's 50 MB reference image limit.`);
           const url = await mediaUrl(ctx, asset);

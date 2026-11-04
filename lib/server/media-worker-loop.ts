@@ -1,3 +1,4 @@
+import { transportTranscript } from '../media-analysis/transcript';
 import type { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from './media-task-runner';
@@ -136,6 +137,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
             progress = Math.max(progress, Math.min(snapshot.kind==='preview'?100:99, percent));
             if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
+          if(result.analysis?.transcript)result.analysis.transcript=transportTranscript(result.analysis.transcript);
           // Publishing a frame sheet can itself need network retries. Renew its
           // lease until publication finishes, not just until decoding finishes.
           await heartbeats; signal.throwIfAborted();

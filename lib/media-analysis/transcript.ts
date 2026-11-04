@@ -1,8 +1,25 @@
 import { z } from 'zod';
 
 export type TranscriptWord = { start: number; end: number; text: string; speaker?: number; speakerConfidence?: number };
-export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number; chunkCount?: number; wordCount?: number };
+export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number; chunkCount?: number; wordCount?: number; wordChunks?: TranscriptWord[][] };
 export const MAX_TRANSCRIPT_WORDS = 100000;
+/** Convex limits each transported array to 8192 entries. Storage chunks alone
+ * do not protect worker completion or hydrated query responses. */
+export function transportTranscript(transcript: Transcript): Transcript {
+  const full=readTranscript(transcript);
+  if(full.words.length<=4000)return full;
+  return {...full,words:[],wordCount:full.words.length,wordChunks:Array.from({length:Math.ceil(full.words.length/2000)},(_,i)=>full.words.slice(i*2000,(i+1)*2000))};
+}
+export function readTranscript(transcript: Transcript): Transcript {
+  if(!transcript.wordChunks)return transcript;
+  const {wordChunks,...rest}=transcript;
+  const count=wordChunks.reduce((sum,chunk)=>sum+chunk.length,0);
+  if(count>MAX_TRANSCRIPT_WORDS||count!==transcript.wordCount||transcript.words.length)throw new Error('Timed transcript transport is incomplete.');
+  return {...rest,words:wordChunks.flat()};
+}
+export function materializeTranscript<T extends {analysis?:{transcript?:Transcript}}>(asset:T):T {
+  return asset.analysis?.transcript?{...asset,analysis:{...asset.analysis,transcript:readTranscript(asset.analysis.transcript)}}:asset;
+}
 /** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.
  * Whisper transcripts (1, 2) stretched word times over fillers and pauses, so cuts
  * landed mid-word; those transcripts are redone. */
