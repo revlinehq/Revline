@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { join } from "node:path";
 import sharp from "sharp";
 import type { MediaWorkItem, MediaTaskResult } from "../../convex/mediaTasks";
 import {
@@ -11,6 +12,7 @@ import { sourceEndOf } from "../editor/playback-rate";
 import type { FrameCache } from './frame-cache';
 import { captureTimelineFrames } from "./review-composition";
 import { ownedMediaUrl } from "./owned-media";
+import { mediaSourceCacheIdentity, reuseCachedMediaFile } from "./media-file-cache";
 const run = promisify(execFile);
 
 /** Source health is one FFmpeg decode per distinct retained range, never an
@@ -40,6 +42,8 @@ export async function checkClipSnapshot(
       continue;
     }
     try {
+      const localSource=join(directory,`health-source-${seen.size}`);
+      const cached=await reuseCachedMediaFile({identity:mediaSourceCacheIdentity(convexUrl,asset.projectId,asset),variant:'source-v1',target:localSource,expectedBytes:asset.size,signal});
       const { stderr } = await run(
         "ffmpeg",
         [
@@ -48,7 +52,7 @@ export async function checkClipSnapshot(
           "-ss",
           String(clip.sourceStart),
           "-i",
-          ownedMediaUrl(asset.url, new URL(convexUrl).origin),
+          cached?localSource:ownedMediaUrl(asset.url, new URL(convexUrl).origin),
           "-t",
           String(sourceEndOf(clip) - clip.sourceStart),
           "-map",
