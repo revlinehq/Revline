@@ -1,3 +1,5 @@
+import { hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
+import { freeEditorModel } from '../lib/ai/claude-model';
 import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
@@ -58,6 +60,10 @@ export async function dispatchTurn(
   ctx: MutationCtx,
   args: ObjectType<typeof assistantRunArgs>,
 ): Promise<void> {
+  await requireEditorAccess(ctx, args.ownerId);
+  if (!await hasPaidModelAccess(ctx, args.ownerId)) {
+    args = { ...args, pinnedModel: freeEditorModel() };
+  }
   if (agentRunnerConfigured()) {
     await startRunnerTurn(ctx, args);
     return;
