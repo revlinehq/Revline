@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Deployment: Package reference tracking and its shared frame reader in processor images. Why: the main release failed its image runtime check before deployment.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
 - Snapshot recovery: Recover same-lease cache reservations, retain completed clip checks across lease handoffs, and bound transport retries. Why: lost responses could make a worker wait on itself or repeat finished work.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
