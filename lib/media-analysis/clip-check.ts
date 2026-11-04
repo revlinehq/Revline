@@ -13,6 +13,7 @@ import { textStyle } from "../editor/text-style";
 import { readHighlights, thoughtStart } from "./highlights";
 
 export const clipCheckRequest = z.object({
+  reviewMode: z.enum(["transcript", "visual"]).optional(),
   assetId: z.string(),
   start: z.number(),
   end: z.number(),
@@ -37,7 +38,8 @@ export const clipCheckResult = z.object({
   ),
   warnings: z.array(z.string()),
   sampleTimes: z.array(z.number()),
-  healthBasis: z.literal("source-ranges"),
+  healthBasis: z.enum(["source-ranges", "transcript-data"]),
+  skippedChecks: z.array(z.string()).optional(),
 });
 export type ClipCheckResult = z.infer<typeof clipCheckResult>;
 export const timelineFingerprint = (timeline: Timeline) => {
@@ -85,6 +87,7 @@ export function checkClipData(
   assets: MediaAsset[],
   request: ClipCheckRequest,
 ): ClipCheckResult {
+  const transcriptOnly = request.reviewMode === "transcript";
   const duration = timelineDuration(timeline),
     epsilon = 1 / timeline.fps + 0.015,
     checks: ClipCheckResult["checks"] = [],
@@ -106,7 +109,7 @@ export function checkClipData(
       ? []
       : [`Duration ${duration.toFixed(3)}s must be 15-60s.`],
   );
-  check(
+  if (!transcriptOnly) check(
     "aspect-ratio",
     timeline.aspectRatio === "vertical"
       ? []
@@ -141,11 +144,15 @@ export function checkClipData(
             : "There is no retained source range.",
         ],
   );
+  check("source-bounds", videos.length && source?.duration && videos.every(c =>
+    c.sourceStart >= 0 && sourceTimeAt(c, c.start + c.duration) <= source.duration! + epsilon)
+    ? [] : ["Retained footage must lie within the source duration."]);
   const boundary: string[] = [];
-  if (!tracks)
+  if (!tracks && !transcriptOnly)
     boundary.push(
       "Saved source highlight/helper analysis is missing. Run findHighlights first.",
     );
+  if (transcriptOnly && !words.length) boundary.push("Saved word timings are required for transcript-first clipping.");
   if (words.length) {
     if (
       words.some(
@@ -200,6 +207,12 @@ export function checkClipData(
       );
   }
   check("boundaries", boundary);
+  if (transcriptOnly) return {
+    passed: checks.every(c => c.passed), checks,
+    warnings: ['Transcript and timeline data checked; visual framing, decode health and loudness were not checked.'],
+    sampleTimes: [], healthBasis: 'transcript-data',
+    skippedChecks: ['visual-framing', 'decode-health', 'loudness', 'caption-geometry'],
+  };
   const master = timeline.audioNormalization;
   check(
     "loudness",

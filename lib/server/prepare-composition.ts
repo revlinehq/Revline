@@ -9,7 +9,7 @@ import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
 import { SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
 import { sceneLayerSources } from '../editor/scene-layers';
-import { generateComposition, type ExportResolution } from '../editor/composition';
+import { generateComposition, trimmedFocus, type ExportResolution } from '../editor/composition';
 import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
@@ -135,9 +135,12 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
       // A later source window can exhaust earlier splits of the same media.
       // Do not hand zero-length clips (including round-off residue) to the renderer.
       if(remaining<1e-7)return [];
-      return [{...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:remaining,sourceStart:0}];
+      const retained={...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:remaining,sourceStart:offset};
+      return [{...retained,sourceStart:0,...(clip.focus?.length?{focus:trimmedFocus(retained).map(point=>({...point,time:Math.max(0,point.time-offset)}))}:{})}];
     }
-    return [offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip];
+    // The extracted window and its crop path must use the same source clock.
+    // Otherwise a later speaker cut holds the original window's first anchor.
+    return [offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset),...(clip.focus?.length?{focus:trimmedFocus(clip).map(point=>({...point,time:Math.max(0,point.time-offset)}))}:{})}:clip];
   })};
   // HyperFrames dedupes a video's sound by comparing the authored src with the
   // browser's server-relative src ("asset-0.mp4"). A "./" prefix never matches,
