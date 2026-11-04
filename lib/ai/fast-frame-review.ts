@@ -1,5 +1,18 @@
+import { z } from 'zod';
+import type { LaneEvidence } from './lanes/types';
 import { equalTimelineValue } from '../editor/timeline-equality';
 import { timelineDuration, type Timeline } from '../editor/types';
+
+const frameReview = z.object({ pendingFrameTimes: z.array(z.number().nonnegative()) });
+export function readFastFrameTimes(evidence: LaneEvidence[], timelineId: string, fingerprint: string) {
+  const saved = evidence.find(item => item.tool === 'fastFrameReview' && item.timelineId === timelineId && item.fingerprint === fingerprint);
+  const parsed = frameReview.safeParse(saved?.output);
+  return parsed.success ? parsed.data.pendingFrameTimes : undefined;
+}
+
+export function fastFrameEvidence(timelineId: string, fingerprint: string, pendingFrameTimes: number[]): LaneEvidence {
+  return { tool: 'fastFrameReview', timelineId, fingerprint, input: {}, output: { pendingFrameTimes } };
+}
 
 /** Motion and layered compositions keep their normal review. */
 export function isPlainReelTimeline(timeline: Timeline): boolean {
@@ -57,6 +70,8 @@ export class FastFrameReview {
   reviewed(times: number[], fps: number) {
     for (const pending of this.pending) if (times.some(time => Math.abs(time - pending) < .1 / fps)) this.pending.delete(pending);
   }
+
+  restore(times: number[]) { this.pending = new Set(times); }
 
   times() { return [...this.pending].sort((a, b) => a - b); }
 

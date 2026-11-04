@@ -9,13 +9,9 @@ import {
   MAX_FINISH_ATTEMPTS,
 } from '../../lib/ai/lanes/task';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { timelineDuration, type Timeline } from '../../lib/editor/types';
-import { isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
-import { captionSyncFailures } from '../../lib/ai/lanes/reel/check';
-import {
-  sourceEndOf,
-  timelineTimeAtSource,
-} from '../../lib/editor/playback-rate';
+import type { Timeline } from '../../lib/editor/types';
+import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
+import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun } from './editorToolkit';
 import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
@@ -59,6 +55,7 @@ export async function finishLane(
   if (task.attempts >= MAX_FINISH_ATTEMPTS && task.result) return task.result;
   const fingerprint = await timelineHistoryKey(timeline),
     failures: string[] = [];
+  if (task.lane === 'reel') failures.push(...reelCaptionFailures(timeline, assets));
   const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
   let currentRevision: number | undefined;
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
@@ -70,6 +67,13 @@ export async function finishLane(
   );
   if (!checked.some((tab) => tab.timelineId === timelineId))
     checked.push({ timelineId, timeline });
+  const sparseReel = task.lane === 'reel' && options.fastFrameTimes !== undefined && isPlainReelTimeline(timeline);
+  const revision = sparseReel ? (await ctx.runQuery(internal.assistant.getRunTimeline, run)).revision : undefined;
+  const checkedTimelines = sparseReel ? await Promise.all(checked.map(async tab => ({ timelineId: tab.timelineId, fingerprint: tab.timeline ? await timelineHistoryKey(tab.timeline) : null }))) : [];
+  const checkKey = (evidence: LaneEvidence[]) => revision === undefined ? undefined : reelFinishKey({ fingerprint, revision, evidence, timelines: checkedTimelines, assets });
+  const initialKey = await checkKey(task.evidence);
+  if (initialKey && task.result?.checkKey === initialKey && !task.result.passed)
+    return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
   for (const tab of task.lane === 'clip' ? [] : checked) {
     const baseline = task.baselines.find(
       (item) => item.timelineId === tab.timelineId,
@@ -136,8 +140,9 @@ export async function finishLane(
       );
     }
     // Reference lanes already require dense rendered pairs, or explicit OFF windows, below.
-    if (summary.clipCount && summary.duration > 0 && !checksReference) {
+    if (!failures.length && summary.clipCount && summary.duration > 0 && !checksReference) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
+      const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
       const times = fastTimes ?? (baseline
         ? await changedFrameTimes(tab.timeline, baseline)
         : [0, summary.duration / 2]);
@@ -158,6 +163,10 @@ export async function finishLane(
             rendered.frames.some((frame) => !frame.image)
           )
             throw new Error('Changed-range rendering returned missing frames.');
+          if (pendingReview) {
+            pendingReview.reviewed(rendered.frames.map(frame => frame.time), tab.timeline.fps);
+            await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, pendingReview.times()) });
+          }
         }
       } catch (error) {
         failures.push(
@@ -192,42 +201,7 @@ export async function finishLane(
       )),
     );
   }
-  if (task.lane === 'reel' && timeline.clips.some(clip => clip.kind === 'caption')) {
-    // Split edits move picture edges only; captions follow the audible source, not video handles.
-    const speechClips = timeline.clips.flatMap(clip => {
-      if (clip.volume === 0 || !(clip.kind === 'audio' || clip.kind === 'video' && !clip.audioSeparated)) return [];
-      const transcript = assets.find(asset => asset._id === clip.assetId)?.analysis?.transcript
-        ?? assets.find(asset => asset.audioAssetId === clip.assetId)?.analysis?.transcript;
-      return transcript?.words.length ? [{ clip, transcript }] : [];
-    });
-    if (!speechClips.length)
-      failures.push(
-        'No retained speech transcript is available to verify caption synchronization.',
-      );
-    const words = [
-      ...new Map(
-        speechClips
-          .flatMap(({ clip, transcript }) => {
-            return transcript.words
-              .filter(
-                (word) =>
-                  word.start >= clip.sourceStart - 0.001 &&
-                  word.end <= sourceEndOf(clip) + 0.001,
-              )
-              .map((word) => ({
-                text: word.text,
-                start: timelineTimeAtSource(clip, word.start),
-                end: timelineTimeAtSource(clip, word.end),
-              }));
-          })
-          .map((word) => [
-            `${word.start.toFixed(3)}:${word.end.toFixed(3)}:${word.text}`,
-            word,
-          ]),
-      ).values(),
-    ].sort((a, b) => a.start - b.start);
-    failures.push(...captionSyncFailures(timeline, words));
-  }
+  const finalCheckKey = initialKey ? await checkKey(((await ctx.runQuery(internal.lanes.task, scope)) as LaneTask).evidence) : undefined;
   const result: FinishResult = {
     passed: failures.length === 0,
     lane: task.lane as LaneId,
@@ -236,6 +210,7 @@ export async function finishLane(
     failures: [...new Set(failures)],
     fingerprint,
     timelineId,
+    ...(finalCheckKey ? { checkKey: finalCheckKey } : {}),
     ...(motionReports.length ? { motionCheck: motionReports.join('\n') } : {}),
     ...(motionOff.length ? { motionOff } : {}),
   };

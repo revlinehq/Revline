@@ -7,7 +7,8 @@ import { toolBehavior } from '../lib/ai/tool-definitions';
 import { toolWriteReceipt } from './lib/tool_write_receipt';
 import { projectIdentity } from './lib/project_data';
 import { turnForRun } from './assistantTurnRecovery';
-import {FastFrameReview, fastReelFrameMoments} from '../lib/ai/fast-frame-review';
+import {timelineHistoryKey} from '../lib/editor/timeline-history-key';
+import {FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence} from '../lib/ai/fast-frame-review';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
@@ -49,6 +50,8 @@ export const run = internalMutation({
       if (args.input[key] !== undefined && args.input[key] !== args[key]) throw new ConvexError('The tool mutation belongs to another run.');
     }
     const beforeProject=await ctx.db.get(args.projectId),before=beforeProject?.revision??0;
+    const timelineWrite = args.functionName === 'assistant:previewDraft' || args.functionName === 'assistant:apply';
+    const beforePreview = turn && timelineWrite ? await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique() : null;
     let value;
     try {
       value = await ctx.runMutation(makeFunctionReference<'mutation'>(args.functionName), args.input);
@@ -71,11 +74,19 @@ export const run = internalMutation({
     const valueParts=serialized.length>partSize?Math.ceil(serialized.length/partSize):0;
     for(let part=0;part<valueParts;part++)await ctx.db.insert('toolWriteResultParts',{writeId:args.writeId,part,value:serialized.slice(part*partSize,(part+1)*partSize)});
     await ctx.db.insert('toolWriteReceipts', { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, writeId: args.writeId, toolName: args.toolName, functionName: args.functionName, ...(valueParts?{valueParts}:{value:value??null}),...(receipt?{receipt}:{}), ...(stagedRevision === undefined ? {} : { stagedRevision }), expiresAt: Date.now() + 86_400_000 });
-    if(turn&&receipt?.kind==='timeline'){
-      const review=new FastFrameReview(turn.pendingFastFrames);
+    if(turn&&(receipt?.kind==='timeline'||args.functionName==='assistant:previewDraft')){
       const task=await ctx.db.query('editingLaneTasks').withIndex('by_task',q=>q.eq('taskId',args.runId)).unique();
-      if(beforeProject?.timeline&&afterProject?.timeline)review.changed(beforeProject.timeline,afterProject.timeline,task?.lane==='reel'?fastReelFrameMoments(args.toolName,beforeProject.timeline,afterProject.timeline):undefined);
-      await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
+      const afterPreview=args.functionName==='assistant:previewDraft'?await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique():null;
+      const beforeTimeline=beforePreview?.runId===args.runId&&beforePreview.baseRevision===before?beforePreview.timeline:beforeProject?.timeline;
+      const afterTimeline=afterPreview?.runId===args.runId?afterPreview.timeline:afterProject?.timeline;
+      const saved=task&&beforeTimeline?readFastFrameTimes(task.evidence,turn.timelineId,await timelineHistoryKey(beforeTimeline)):undefined;
+      const review=new FastFrameReview(saved??turn.pendingFastFrames);
+      if(beforeTimeline&&afterTimeline)review.changed(beforeTimeline,afterTimeline,task?.lane==='reel'?fastReelFrameMoments(args.toolName,beforeTimeline,afterTimeline):undefined);
+      if(task&&afterTimeline){
+        const entry=fastFrameEvidence(turn.timelineId,await timelineHistoryKey(afterTimeline),review.times());
+        await ctx.db.patch(task._id,{evidence:[...task.evidence.filter(item=>item.tool!=='fastFrameReview'||item.timelineId!==turn.timelineId),entry].slice(-120)});
+      }
+      await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+(receipt?.kind==='timeline'?1:0),pendingFastFrames:review.times()});
     }
     return { value, replayed:false,...(receipt ? { receipt } : {}) };
   },
