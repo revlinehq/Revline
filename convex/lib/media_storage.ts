@@ -29,6 +29,10 @@ export async function mediaDownloadUrl(ctx: QueryCtx | MutationCtx | ActionCtx, 
   return `${url}/read?token=${token}`;
 }
 export async function storageControl(body: Record<string, unknown>): Promise<{ uploadId?: string; size?: number; contentType?: string }> {
+  if (process.env.REVLINE_ISOLATED === 'true' && (JSON.parse(process.env.REVLINE_BORROWED_MEDIA_KEYS ?? '[]') as unknown[]).includes(body.key)) {
+    if (body.action === 'delete') return {};
+    throw new Error('Borrowed development media is read-only.');
+  }
   const { url, secret } = mediaConfig();
   const token = await signMediaToken(secret, { operation: 'control', expires: Date.now() + 60_000 });
   const response = await fetch(`${url}/control`, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(body) });

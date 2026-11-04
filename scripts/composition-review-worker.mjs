@@ -28,10 +28,11 @@ try{
       const start=Math.max(settings.start,video.start),end=Math.min(settings.end,video.end);
       // A speed ramp (a rate lane) is cut to the window with the engine's own source-time mapping.
       const rate=video.playbackRate??1,skipped=start-video.start;
-      return {...video,start,end,mediaStart:video.mediaStart+sourceTimeAt(rate,skipped),playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
+      // Composition attributes use microseconds; avoid scientific-notation seeks FFmpeg rejects.
+      return {...video,start,end,mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
     });
     const extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
-    if(extracted.errors?.length)throw new Error('Video frames could not be decoded for review.');
+    if(extracted.errors?.length)throw new Error(`Video frames could not be decoded for review: ${extracted.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
     const injector=createVideoFrameInjector(createFrameLookupTable(videos,extracted.extracted,settings.fps));
     const server=await createFileServer({projectDir:dir,fps:{num:settings.fps,den:1}});
     const origin=server.url;

@@ -5,6 +5,7 @@ import { useConvexAuth, useQuery } from 'convex/react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/convex/_generated/api';
 import { ProjectCover } from './project-cover';
+import { WorkingAgents } from './working-agents';
 import './workspace-pages.css';
 import './recent-projects.css';
 
@@ -31,6 +32,7 @@ export function RecentProjects() {
         <Link className="workspace-chat-row-link recent-project-link" href={`/editor/${project._id}`}>
           <ProjectCover url={project.coverKind === 'image' ? project.coverUrl : null} kind={project.coverKind} />
           <span className="workspace-chat-description"><strong>{project.title}</strong><time dateTime={new Date(project.updatedAt).toISOString()}>{editedTime(project.updatedAt)}</time></span>
+          <WorkingAgents agents={project.agents??[]}/>
         </Link>
       </li>)}</ul>
         : <p className="recent-projects-empty">Your projects will appear here after you add footage.</p>}

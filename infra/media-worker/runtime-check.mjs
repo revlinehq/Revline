@@ -18,9 +18,10 @@ execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
 const exportsOnly = process.env.REVLINE_RUNTIME_CHECK === 'exports';
 if (!exportsOnly) {
   if (!existsSync('scripts/detect-facecam.py') || !existsSync('public/vendor/face-landmarker.task')) throw new Error('Local clipping vision assets are missing.');
+  if (!existsSync('scripts/track-reference.py')) throw new Error('Reference element tracker entry point is missing.');
   if (!existsSync('scripts/track-pixels.py')) throw new Error('Pixel tracker entry point is missing.');
   execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
-  execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', "import scenedetect, cv2; assert hasattr(cv2, 'calcOpticalFlowPyrLK') and hasattr(cv2, 'estimateAffinePartial2D')"], { stdio: 'inherit' });
+  execFileSync(process.env.SCENE_DETECT_PYTHON, ['-c', "import scenedetect, cv2; assert hasattr(cv2, 'calcOpticalFlowPyrLK') and hasattr(cv2, 'estimateAffinePartial2D') and hasattr(cv2, 'matchTemplate') and hasattr(cv2, 'findTransformECC')"], { stdio: 'inherit' });
   execFileSync(process.env.YT_DLP_PATH, ['--version'], { stdio: 'ignore' });
   if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
 }
