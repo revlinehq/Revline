@@ -18,9 +18,11 @@ export function mediaTaskActivityLabel(task: { kind: string; progress: number; s
   if (task.kind === 'transcribe') {
     if (task.status === 'queued') return 'Queued for speech transcription…';
     if (task.status === 'retrying' || task.activity === 'retrying-analysis') return 'Retrying speech transcription…';
+    if (task.activity === 'downloading') return 'Downloading source for speech…';
+    if (task.activity === 'preparing-analysis') return 'Preparing speech audio…';
     if (task.progress >= 75) return 'Measuring speech and pauses…';
     if (task.progress >= 30) return 'Transcribing speech…';
-    return task.activity === 'downloading' ? 'Downloading source for speech…' : 'Preparing speech audio…';
+    return 'Preparing speech audio…';
   }
   return task.activity ? MEDIA_ACTIVITY_LABELS[task.activity] : 'Preparing media…';
 }
