@@ -6,6 +6,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Landing: Added the short-form editing section with a real agent-edited talking-head Reel and a viewport-driven cut, caption and zoom illustration. Why: the user requested a short-form showcase after clipping.
+- Prototype: Add an isolated, replayable /clip recording flow using the real dashboard and editor. Why: the user needs repeatable marketing Reels without live AI runs.
 - Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.
 - Development: Give each agent worktree an expiring Convex backend, seeded footage and private Workers. Why: the user reported agents overwriting shared dev functions and schema.
 - Editor: Read rendered frames without following redirects in Cloudflare Workers. Why: isolated verification exposed an unsupported fetch mode that stopped editor turns.
