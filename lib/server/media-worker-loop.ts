@@ -93,12 +93,12 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt, queued = false, writing = 0;
         // A transient transport failure retries on the next tick. Stop when Convex
         // says the lease ended, or once two renewals were missed: renewedAt is when
-        // the last successful request was sent, so the lease then has under one
-        // interval left and Convex cannot yet have re-queued the task.
+        // the last successful request was sent. Renew at 20s and again at 40s;
+        // a single transient failure must not abort before the second attempt.
         // One renewal waits at most: it sends the latest progress when it runs, so a
         // stalled request cannot release a burst of renewals onto the task row.
         const heartbeat = () => {
-          if (!writing && Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS - HEARTBEAT_MS) { controller.abort(); return; }
+          if (!writing && Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS) { controller.abort(); return; }
           if (queued) return;
           queued = true;
           heartbeats = heartbeats.then(async () => {
