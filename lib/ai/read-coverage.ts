@@ -25,6 +25,12 @@ export class ReadCoverage {
   private cuts = new Map<string, number[]>();
   private closeUps = new Map<string, number[]>();
 
+  /** Use the same single-reference detection for visual and motion gates. */
+  referenceAssetId() {
+    const mapped = [...this.moments].filter(([, moments]) => moments.length);
+    return mapped.length === 1 ? mapped[0][0] : undefined;
+  }
+
   /** A reference's hard cuts (the starts of its measured shots after the first). */
   noteCuts(assetId: string, cuts: number[]) { this.cuts.set(assetId, cuts); }
 
@@ -64,9 +70,9 @@ export class ReadCoverage {
   /** What a scene placed over [start, end] of the timeline still owes: unread moments there (the reference plays on the
    * same clock as its recreation) and cuts that split a moment at the scene's edges. Empty unless one reference is mapped. */
   sceneCheck(start: number, end: number) {
-    const mapped = [...this.moments].filter(([, moments]) => moments.length);
-    if (mapped.length !== 1) return undefined;
-    const [assetId, moments] = mapped[0];
+    const assetId = this.referenceAssetId();
+    if (!assetId) return undefined;
+    const moments = this.moments.get(assetId)!;
     const inside = moments.filter(moment => moment.end > start + EPSILON && moment.start < end - EPSILON);
     const unread = inside.filter(moment => !this.read(assetId, moment));
     const keys = this.keyMoments(moments), unseen = inside.filter(moment => keys.has(moment) && !this.seenClose(assetId, moment));

@@ -1,6 +1,14 @@
 import { recordIncident, incidentDeployment } from './incidents';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
+import { internal } from '../_generated/api';
+
+export async function scheduleCapacityAdmission(ctx: MutationCtx, ownerId: string, delay = 0) {
+  const owner = await ctx.db.query('mediaCapacityOwners').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
+  if (!owner || owner.admissionScheduled || !await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_waiting', q => q.eq('ownerId', ownerId).eq('capacityWaiting', true)).first()) return;
+  await ctx.db.patch(owner._id, { admissionScheduled: true });
+  await ctx.scheduler.runAfter(delay, internal.mediaTasks.admitWaiting, { ownerId });
+}
 
 const active = (status: Doc<'mediaTasks'>['status']) => status === 'queued' || status === 'running' || status === 'retrying';
 function reservation(task: Pick<Doc<'mediaTasks'>, '_id' | 'ownerId' | 'projectId' | 'kind' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'status'>) {
@@ -15,6 +23,7 @@ export async function initializeMediaCapacity(ctx: MutationCtx | QueryCtx, owner
   if (!('insert' in db)) return false;
   for (const status of ['queued', 'running', 'retrying'] as const) {
     for await (const task of ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status))) {
+      if (task.capacityWaiting) continue;
       const slot = await ctx.db.query('mediaTaskSlots').withIndex('by_task', q => q.eq('taskId', task._id)).unique();
       if (slot) await db.patch(slot._id, reservation(task)); else await db.insert('mediaTaskSlots', reservation(task));
     }
@@ -45,7 +54,7 @@ export async function syncMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
 export async function insertMediaTask(ctx: MutationCtx, value: Omit<Doc<'mediaTasks'>, '_id' | '_creationTime'>) {
   await initializeMediaCapacity(ctx, value.ownerId);
   const id = await ctx.db.insert('mediaTasks', value);
-  if (active(value.status)) await ctx.db.insert('mediaTaskSlots', reservation({ ...value, _id: id }));
+  if (active(value.status) && !value.capacityWaiting) await ctx.db.insert('mediaTaskSlots', reservation({ ...value, _id: id }));
   await syncMediaTask(ctx, { ...value, _id: id, _creationTime: value.createdAt });
   return id;
 }
@@ -57,10 +66,10 @@ export async function patchMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, 
     projectId: task.projectId, deployment: incidentDeployment(),
   });
   await ctx.db.patch(task._id, patch);
-  if (patch.status && patch.status !== task.status) {
+  if (patch.status && patch.status !== task.status || patch.capacityWaiting !== undefined && patch.capacityWaiting !== task.capacityWaiting) {
     await initializeMediaCapacity(ctx, task.ownerId);
     const slot = await ctx.db.query('mediaTaskSlots').withIndex('by_task', q => q.eq('taskId', task._id)).unique();
-    if (active(patch.status)) {
+    if (active(patch.status ?? task.status) && !(patch.capacityWaiting ?? task.capacityWaiting)) {
       const value = reservation({ ...task, ...patch });
       if (slot) await ctx.db.patch(slot._id, value); else await ctx.db.insert('mediaTaskSlots', value);
     }

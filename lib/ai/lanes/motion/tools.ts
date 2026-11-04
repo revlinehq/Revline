@@ -19,4 +19,9 @@ export const tools = [
   'checkSound',
   'planEffects',
   'previewRender',
+  'readFrames',
+  'trackReference',
+  'motionMap',
+  'compareMotion',
+  'compareReference',
 ] as const;
