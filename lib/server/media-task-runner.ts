@@ -1,7 +1,7 @@
 import { materializeTranscript } from '../media-analysis/transcript';
 import { checkClipSnapshot } from './check-clip';
 import { FrameCache } from './frame-cache';
-import { referenceResultDescriptor, snapshotResultDescriptor } from '../media-analysis/frame-cache';
+import { referenceResultDescriptor, snapshotResultDescriptor, cacheHash } from '../media-analysis/frame-cache';
 import { importCheckpoint } from './import-checkpoint';
 import { findSourceHighlights } from './find-highlights';
 import { readHighlights } from '../media-analysis/highlights';
@@ -133,7 +133,15 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     if(task.kind==='blueprint'){if(!task.blueprint)throw new AnalysisError('The blueprint check is unavailable.',400);return {blueprint:await runBlueprintCheck(task.blueprint,signal,onProgress)};}
-    if(task.kind==='snapshot'&&task.snapshot?.clipCheck)return {snapshot:await runPhase('Checking clip',()=>checkClipSnapshot(task.snapshot!,directory,convexUrl,signal,onProgress,task.snapshot?.cacheIdentity?new FrameCache(convex,credentials,signal):undefined))};
+    if(task.kind==='snapshot'&&task.snapshot?.clipCheck){
+      const snapshot=task.snapshot,cache=snapshot.cacheIdentity?new FrameCache(convex,credentials,signal):undefined;
+      const produce=()=>runPhase('Checking clip',()=>checkClipSnapshot(snapshot,directory,convexUrl,signal,onProgress,cache));
+      // Complete check results survive a lease handoff after decoding/sampling.
+      // Scope, overrides, immutable timeline and source evidence all bind reuse.
+      const descriptor={kind:'clip-check-result',version:1,identity:snapshot.cacheIdentity,request:snapshot.clipCheck,
+        evidence:await cacheHash(snapshot.assets.map(asset=>[asset._id,asset.analysis]))};
+      return {snapshot:cache?await cache.json(descriptor,produce):await produce()};
+    }
     if(task.kind==='snapshot'&&task.snapshot?.normalization){
       const {path,...measurements}=await runPhase('Normalizing loudness',()=>normalizeTimelineAudio(task.snapshot!,directory,convexUrl,signal));
       onProgress(90);
