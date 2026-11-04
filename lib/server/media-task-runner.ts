@@ -166,7 +166,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const preview = (task.kind === 'highlights' || task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewR2Key !== asset.r2Key && asset.previewVersion === 1 && (task.kind !== 'highlights' || asset.previewSize! < sourceAsset.size) && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
-    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
+    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
     const localSource = join(directory, 'source'), sourceUrl = download.url;
     let source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : localSource;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);

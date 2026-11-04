@@ -7,7 +7,7 @@ import { z } from 'zod';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { fitMotion } from '@/lib/media-analysis/fit-motion';
-import { followBox } from '@/lib/media-analysis/follow-box';
+import { trackReference } from './track-reference';
 import { describeSounds } from '@/lib/media-analysis/gemini';
 import { detectOnsets, SOUND_RATE, visualHits } from '@/lib/media-analysis/sound';
 import { mapMotion, motionWindow } from '@/lib/inspo-motion/motion-map';
@@ -229,18 +229,11 @@ function strongEdges(changes: { at: number; before: string; after: string }[]) {
 async function readTrack(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   if (!work.box) throw new AnalysisError('Tracking needs a box around the object in the first frame.', 400);
   const box = clampBox(work.box, source), start = Math.min(work.start, Math.max(0, source.duration - .05)), end = Math.min(Math.max(work.end, start + .05), source.duration);
-  const step = Math.max(1 / source.fps, (end - start) / 90), width = Math.min(640, source.width) & ~1, k = width / source.width, height = Math.round(source.height * k) & ~1;
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', start.toFixed(3), '-t', (end - start).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${(1 / step).toFixed(4)},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 1024 * 1024 * 1024 });
-  const frameSize = width * height, frameCount = Math.floor(stdout.length / frameSize);
-  if (!frameCount) throw new AnalysisError('No frames could be read in that window.', 400);
-  const frames = Array.from({ length: frameCount }, (_, index) => stdout.subarray(index * frameSize, (index + 1) * frameSize));
-  // A box under about 40 px holds too little texture to tell a turn or a resize from noise: follow its position only.
-  const w0 = box.w * k, h0 = box.h * k, rigid = Math.min(box.w, box.h) < 40;
-  const poses = followBox({ frames, width, height }, { x: (box.x + box.w / 2) * k, y: (box.y + box.h / 2) * k, w: w0, h: h0 }, rigid, index => { if (index % 10 === 0) onProgress(10 + 60 * index / frameCount); });
-  const track: NonNullable<Result['track']> = poses.map((pose, index) => {
-    const w = w0 * pose.s / k, h = h0 * pose.s / k;
-    return { time: round(start + index * step, 3), x: Math.round(pose.x / k - w / 2), y: Math.round(pose.y / k - h / 2), w: Math.round(w), h: Math.round(h), scale: round(pose.s, 3), rotation: round(pose.a * 180 / Math.PI, 1), confidence: round(Math.max(0, pose.value), 2) };
-  });
+  if (end - start > 12) throw new AnalysisError('Track up to 12 s at a time, including holds before and after the move.', 400);
+  const frameTime = work.frameTime ?? start;
+  if (frameTime < start || frameTime >= end) throw new AnalysisError('frameTime must be inside the tracking window.', 400);
+  if (work.backgroundTime !== undefined && (work.backgroundTime < 0 || work.backgroundTime >= source.duration)) throw new AnalysisError('backgroundTime must be inside the source video.', 400);
+  const track = await trackReference(path, { start, end, box, frameTime, ...(work.backgroundTime !== undefined ? { backgroundTime: work.backgroundTime } : {}) }, signal, onProgress);
   // The sheet: up to 8 tracked frames in color with the box drawn where it was found.
   const picks = [...new Set(Array.from({ length: Math.min(8, track.length) }, (_, index) => Math.round(index * (track.length - 1) / Math.max(1, Math.min(8, track.length) - 1))))];
   const images = await Promise.all(picks.map(index => frameAt(path, directory, track[index].time, undefined, `track-${index}`, signal, cache)));
@@ -250,7 +243,7 @@ async function readTrack(path: string, directory: string, source: Source, work: 
     return { image: images[order], label: `${index + 1}  ${item.time.toFixed(2)}s  ${item.rotation}°  ×${item.scale}  conf ${item.confidence}`, overlay: boxOverlay(item, source) };
   });
   const result = await sheet(tiles, source.width / source.height);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source) };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source), trackingNotes: ['Geometry is frozen and excluded from fitting when invisible or lost.', 'Sharpness is relative to the seed frame; it is not blur in pixels.', ...(work.backgroundTime === undefined ? ['Opacity unavailable: provide a clean backgroundTime and a fully visible frameTime to calibrate alpha.'] : ['Opacity is a registered background/foreground blend; use only samples with opacityConfidence >= 0.5.'])] };
 }
 
 /** Hear a reference: every sound effect's measured onset, length and level, the picture change it lands on, and what it

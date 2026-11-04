@@ -28,6 +28,7 @@ import { VideoLinkImport } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
+import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
@@ -78,7 +79,6 @@ export function NewConversation() {
   const [draft, setDraft] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
-  const headline = 'What are we making today?';
   const busy = startingBlank || processing !== null && processing.phase !== 'error';
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
@@ -314,21 +314,13 @@ export function NewConversation() {
 
   return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}`} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
-    {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <main className="new-conversation-main" aria-labelledby="new-conversation-title">
-      <div className="new-conversation-start">
-        <div className="new-conversation-compose-group">
-        <div className="new-conversation-intro"><h1 id="new-conversation-title" title={headline}>{headline}</h1></div>
+    {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={<RecentProjects/>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
-        <div className="new-conversation-guidance">
-          <RecentProjects/>
-        </div>
-        </div>
-      </div>
-    </main>}
+    </ConversationStart>}
     <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onUpload={()=>{setLinkOpen(false);picker.current?.click();}} onImport={async url => {
       const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
       await importVideo({ url, projectId });
