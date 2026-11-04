@@ -39,7 +39,7 @@ export const clipCheckResult = z.object({
   ),
   warnings: z.array(z.string()),
   sampleTimes: z.array(z.number()),
-  healthBasis: z.enum(["source-ranges", "transcript-data"]),
+  healthBasis: z.enum(["source-ranges", "transcript-data", "timeline-data"]),
   skippedChecks: z.array(z.string()).optional(),
 });
 export type ClipCheckResult = z.infer<typeof clipCheckResult>;
@@ -206,7 +206,7 @@ export function checkClipData(
   if (!framing) skippedChecks.push('caption-geometry');
   if (!framing && !quality.includes('loudness')) return {
     passed: checks.every(c => c.passed), checks, warnings,
-    sampleTimes: [], healthBasis: 'transcript-data', skippedChecks,
+    sampleTimes: [], healthBasis: transcriptOnly ? 'transcript-data' : 'timeline-data', skippedChecks,
   };
   const master = timeline.audioNormalization;
   if (quality.includes("loudness")) check(
@@ -323,7 +323,7 @@ export function checkClipData(
     warnings,
     sampleTimes: framing ? clipContactTimes(timeline, source) : [],
     skippedChecks,
-    healthBasis: "source-ranges",
+    healthBasis: quality.includes("decode-health") ? "source-ranges" : "timeline-data",
   };
 }
 
