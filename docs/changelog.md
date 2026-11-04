@@ -7,6 +7,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
 - Clipping: Use saved transcripts and data checks for podcast/talk cuts, preserving source framing and audio. Why: the user requested spoken-content clips without mandatory visual processing.
+- Agent context: Project numeric highlight helpers by source window and let non-Claude turns compact superseded results. Why: the full-podcast run repeatedly carried large source payloads.
 
 - Clipping: Preserve speaker crops in extracted review windows and reuse passing checks without resending raw RMS tracks. Why: the full-podcast rehearsal exposed bad framing sheets and repeated work.
 - Assistant: Measure elapsed work from the persisted user turn across phases, retries and reconnects. Why: the user saw the full-podcast timer repeatedly reset.

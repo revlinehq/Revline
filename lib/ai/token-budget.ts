@@ -224,11 +224,13 @@ export class AssistantTokenBudget {
   middleware(selectedClipIds: readonly string[] = [], initialRevision?: number, countInput?:(params:LanguageModelV4CallOptions)=>Promise<number>, enforce = true): LanguageModelMiddleware {
     const exposedResults = new Map<string, LanguageModelV4ToolResultPart>();
     const projection:LanguageModelMiddleware={
-      transformParams: async ({ params }) => {
+      transformParams: async ({ params, model }) => {
         const projected = compactEditorPrompt(params.prompt, selectedClipIds, initialRevision);
         // Claude's preserved thinking and prefix cache require append-only
-        // history during a run. Project once, then freeze each exposed result.
-        const prompt = projected.map(message => message.role === 'system' ? message : { ...message, content: message.content.map(part => {
+        // history during a run. Other providers can apply supersession/deduplication
+        // as the turn progresses instead of freezing every obsolete result.
+        const preserveResults = model.provider.includes('anthropic') || model.modelId.startsWith('claude');
+        const prompt = !preserveResults ? projected : projected.map(message => message.role === 'system' ? message : { ...message, content: message.content.map(part => {
           if (part.type !== 'tool-result') return part;
           const exposed = exposedResults.get(part.toolCallId);
           if (exposed) return exposed;
