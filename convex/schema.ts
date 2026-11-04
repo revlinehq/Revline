@@ -59,7 +59,7 @@ export const audioSettingsValidator=v.object({role:v.union(v.literal('original')
 const clipApprovalValidator = v.object({ note: v.optional(v.string()), at: v.number(), by: v.union(v.literal('user'), v.literal('agent')) });
 export const clipValidator = v.object({
   id: v.string(), kind: v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("caption"), v.literal("graphic"), v.literal("solid"), v.literal("scene"), v.literal("effect")),
-  normalizedAudio:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number()),outputLufs:v.optional(v.number()),measuredTruePeak:v.optional(v.number())})), assetId: v.optional(v.string()), focus: v.optional(focusValidator), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
+  normalizedAudio:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number()),outputLufs:v.optional(v.number()),measuredTruePeak:v.optional(v.number())})), assetId: v.optional(v.string()), focus: v.optional(focusValidator), framingCuts:v.optional(v.array(v.number())), track: v.optional(v.number()), start: v.number(), duration: v.number(), sourceStart: v.number(),
   playbackRate: v.optional(v.number()),
   audio:v.optional(audioSettingsValidator),
   audioFadeTiming:v.optional(v.object({duration:v.number(),offset:v.number()})),

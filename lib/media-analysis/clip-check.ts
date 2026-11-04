@@ -398,7 +398,7 @@ export function clipContactTimes(timeline: Timeline, source?: MediaAsset) {
             JSON.stringify(s.facecam) !== JSON.stringify(all[i - 1].facecam),
         )
         .map((s) => s.time) ?? [];
-    const switches = [...sourceCuts, ...speakerCuts, ...layouts];
+    const switches = [...sourceCuts, ...speakerCuts, ...layouts, ...(clip.framingCuts ?? [])];
     for (const at of switches) {
       const local = timelineTimeAtSource(clip, at);
       if (local > clip.start && local < clip.start + clip.duration)

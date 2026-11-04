@@ -117,6 +117,8 @@ export type Clip = {
   animation?: 'none' | 'fade' | 'rise';
   textAnimationTiming?: {duration:number;offset:number};
   focus?: {time:number;x:number;y:number}[];
+  /** Source seconds of measured camera/speaker switches retained with the crop. */
+  framingCuts?: number[];
   transform?: VisualTransform;
   crop?: SourceCrop;
   fit?: 'cover' | 'contain';
