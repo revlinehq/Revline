@@ -17,10 +17,14 @@ type MotionSnapshot = { status: 'queued' | 'completed' | 'failed'; start: number
 type MeasuredMotion = { reference: MotionMap; timeline?: MotionMap; differences?: MotionDifference[]; revision?: number };
 
 /** Persist the existing readFrames single-mapped-reference detection across separate MCP calls. */
-export const noteReference = internalMutation({ args: { ...source, timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => {
+export const noteReference = internalMutation({ args: { ...source, timelineId: v.string(), select: v.optional(v.boolean()) }, returns: v.null(), handler: async (ctx, args) => {
   await requireProject(ctx, args.projectId, args.ownerId, false);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.projectId !== args.projectId || asset.ownerId !== args.ownerId || asset.kind !== 'video') throw new ConvexError('Choose a reference video in this project.');
+  if (args.select) {
+    const sources = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(400);
+    for (const source of sources) if (source._id !== asset._id && source.motionReferenceTimelines?.includes(args.timelineId)) await ctx.db.patch(source._id, { motionReferenceTimelines: source.motionReferenceTimelines.filter(id => id !== args.timelineId) });
+  }
   if (!asset.motionReferenceTimelines?.includes(args.timelineId)) await ctx.db.patch(asset._id, { motionReferenceTimelines: [...asset.motionReferenceTimelines ?? [], args.timelineId] });
   return null;
 } });

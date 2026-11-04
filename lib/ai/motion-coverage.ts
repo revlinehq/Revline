@@ -46,8 +46,9 @@ export function motionReport({ start, end, offset, revision, timelineKey, checks
   for (const window of relevant) {
     const range = motionRange(window);
     const wholeWindowOff = !missingMotionWindow(window.start, window.end, off);
-    const count = wholeWindowOff ? 0 : window.differences.filter(difference => !off.some(item => difference.time - offset >= item.start - EPSILON && difference.time - offset <= item.end + EPSILON)).length;
-    const exempted = window.differences.length - count;
+    const visible = window.differences.filter(difference => difference.time - offset >= start - EPSILON && difference.time - offset <= end + EPSILON);
+    const count = wholeWindowOff ? 0 : visible.filter(difference => !off.some(item => difference.time - offset >= item.start - EPSILON && difference.time - offset <= item.end + EPSILON)).length;
+    const exempted = visible.length - count;
     const current = window.revision === revision && window.timelineKey === timelineKey;
     parts.push(`${count} open differences in ${range}${exempted ? `; ${exempted} differences OFF (not matched)` : ''}${window.scope === 'full' ? '' : ' (cropped)'}${current ? count ? '' : `; checked at revision ${revision}` : `; ${range} not re-checked since revision ${window.revision}`}`);
   }

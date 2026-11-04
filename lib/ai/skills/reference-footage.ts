@@ -15,7 +15,7 @@ For a new motion film, read motion-design page \`ideation\`: agree the message, 
 ## 1. Map the film, then inventory one section
 Read the whole reference with readFrames count 16 for its moments and holds, then run motionMap with its assetId across the WHOLE reference in adjoining windows of up to 12 s (0–12, 12–24, …), before writing the inventory. Every move motionMap returns is an inventory item; group these into named sections with their incoming and outgoing transitions.
 
-Before building a section, read every change from a little before its onset through its settle with readFrames at 10 to 15 fps. Each sheet holds at most 30 frames: continue from its last returned time until the entire section is read. Open full-size frames or crops for details. Write a numbered effect inventory in your reply, with one item per visible change, including simultaneous changes on different layers:
+Before building a section, read every change from a little before its onset through its settle with readFrames at the reference's full source fps (from the readFrames result). Each sheet holds at most 30 frames: shorten windows and continue from the last returned time until the entire section is read. Open full-size frames or crops for details. Write a numbered effect inventory in your reply, with one item per visible change, including simultaneous changes on different layers:
 - Time window and what it is, including its first visible frame, end and settle.
 - Layer: background, foreground, cursor or UI; name the object within that layer.
 - Type: cut, continuous zoom, spring, stagger, morph, mask, blur, dither, click, hover, scatter or the specific behavior seen.

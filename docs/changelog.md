@@ -3,6 +3,8 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Editing agent: Integrate persisted motion evidence and timed off exits into recreate and bound-reference motion lane checks. Why: the lane registry merged while PR #51 awaited approval.
+- Agent: Let the editing agent choose its lane before exposing tools, with manual choices, isolated skills and bounded finish checks. Why: the user requested agent reasoning instead of keyword routing and premature completion claims.
 - Editing agent: Preserve R2 frame caching and media recovery alongside motion recreation gates when updating PR #51. Why: main advanced while the recreation changes waited for merge.
 - Scenes: Temporarily retire Three.js authoring and guide the agent toward GSAP scenes. Why: the user has no current use case and the agent chose it unnecessarily.
 - AI: Revline uses a single OpenAI key; the backup key that took over when the main account ran out of credit is removed. Why: the user replaced both with one funded key.
