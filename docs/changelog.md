@@ -1,9 +1,14 @@
+## 2026-11-04
+
+- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
 - Assistant: Show Working between steps while preserving the elapsed timer and resume/stop statuses. Why: the user requested a shorter activity label.
+- Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
