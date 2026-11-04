@@ -10,6 +10,7 @@ import {
 } from '../../lib/ai/lanes/task';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { timelineDuration, type Timeline } from '../../lib/editor/types';
+import { isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { captionSyncFailures } from '../../lib/ai/lanes/reel/check';
 import {
   sourceEndOf,
@@ -39,6 +40,7 @@ export async function finishLane(
     assets: Doc<'assets'>[];
     render: Render;
     staged: boolean;
+    fastFrameTimes?: number[];
     clipping?: () => Promise<{
       required: boolean;
       passed: boolean;
@@ -135,11 +137,12 @@ export async function finishLane(
     }
     // Reference lanes already require dense rendered pairs, or explicit OFF windows, below.
     if (summary.clipCount && summary.duration > 0 && !checksReference) {
-      const times = baseline
+      const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
+      const times = fastTimes ?? (baseline
         ? await changedFrameTimes(tab.timeline, baseline)
-        : [0, summary.duration / 2];
-      // An unchanged timeline still needs a real render before certifying it.
-      if (!times.length)
+        : [0, summary.duration / 2]);
+      // Plain Fast reel reuses its pending queue; other paths retain the rendered finish check.
+      if (!times.length && fastTimes === undefined)
         times.push(
           Math.min(
             summary.duration / 2,
@@ -190,15 +193,13 @@ export async function finishLane(
     );
   }
   if (task.lane === 'reel' && timeline.clips.some(clip => clip.kind === 'caption')) {
-    const speechClips = timeline.clips.filter(
-      (clip) =>
-        (clip.kind === 'video' || clip.kind === 'audio') &&
-        assets.some(
-          (asset) =>
-            asset._id === clip.assetId &&
-            asset.analysis?.transcript?.words.length,
-        ),
-    );
+    // Split edits move picture edges only; captions follow the audible source, not video handles.
+    const speechClips = timeline.clips.flatMap(clip => {
+      if (clip.volume === 0 || !(clip.kind === 'audio' || clip.kind === 'video' && !clip.audioSeparated)) return [];
+      const transcript = assets.find(asset => asset._id === clip.assetId)?.analysis?.transcript
+        ?? assets.find(asset => asset.audioAssetId === clip.assetId)?.analysis?.transcript;
+      return transcript?.words.length ? [{ clip, transcript }] : [];
+    });
     if (!speechClips.length)
       failures.push(
         'No retained speech transcript is available to verify caption synchronization.',
@@ -206,11 +207,8 @@ export async function finishLane(
     const words = [
       ...new Map(
         speechClips
-          .flatMap((clip) => {
-            const transcript = assets.find(
-              (asset) => asset._id === clip.assetId,
-            )?.analysis?.transcript;
-            return (transcript?.words ?? [])
+          .flatMap(({ clip, transcript }) => {
+            return transcript.words
               .filter(
                 (word) =>
                   word.start >= clip.sourceStart - 0.001 &&

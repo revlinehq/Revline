@@ -7,7 +7,7 @@ import { toolBehavior } from '../lib/ai/tool-definitions';
 import { toolWriteReceipt } from './lib/tool_write_receipt';
 import { projectIdentity } from './lib/project_data';
 import { turnForRun } from './assistantTurnRecovery';
-import {FastFrameReview} from '../lib/ai/fast-frame-review';
+import {FastFrameReview, fastReelFrameMoments} from '../lib/ai/fast-frame-review';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
@@ -73,7 +73,8 @@ export const run = internalMutation({
     await ctx.db.insert('toolWriteReceipts', { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, writeId: args.writeId, toolName: args.toolName, functionName: args.functionName, ...(valueParts?{valueParts}:{value:value??null}),...(receipt?{receipt}:{}), ...(stagedRevision === undefined ? {} : { stagedRevision }), expiresAt: Date.now() + 86_400_000 });
     if(turn&&receipt?.kind==='timeline'){
       const review=new FastFrameReview(turn.pendingFastFrames);
-      if(beforeProject?.timeline&&afterProject?.timeline)review.changed(beforeProject.timeline,afterProject.timeline);
+      const task=await ctx.db.query('editingLaneTasks').withIndex('by_task',q=>q.eq('taskId',args.runId)).unique();
+      if(beforeProject?.timeline&&afterProject?.timeline)review.changed(beforeProject.timeline,afterProject.timeline,task?.lane==='reel'?fastReelFrameMoments(args.toolName,beforeProject.timeline,afterProject.timeline):undefined);
       await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+1,pendingFastFrames:review.times()});
     }
     return { value, replayed:false,...(receipt ? { receipt } : {}) };

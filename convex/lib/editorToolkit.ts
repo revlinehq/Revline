@@ -15,7 +15,7 @@ import { readHighlights, sourceType, semanticMoment } from '../../lib/media-anal
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
-import { FastFrameReview } from '../../lib/ai/fast-frame-review';
+import { FastFrameReview, fastReelFrameMoments } from '../../lib/ai/fast-frame-review';
 import { effectPlanInput,validateEffectPlan,mergeEffectPlans,effectReviewBindings,type EffectPlan,type EffectEvidence } from '../../lib/ai/edit-plan';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { applyTwoRowLayout } from '../../lib/editor/two-row-layout';
@@ -956,7 +956,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
-      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      // In-app turns retain this queue across steps; separate MCP calls keep baseline rendering.
+      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(editMode==='fast'&&lane==='reel'&&options.publication?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
       finishResult=await check();
       if(finishResult.passed){
         try{
@@ -2085,10 +2086,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const execute = tool.execute;
     if (!execute) continue;
     tool.execute = async function (this: unknown, ...args: never[]) {
-      const input = (args[0] ?? {}) as { mode?: string; name?: string; page?: string; start?: number; end?: number; scope?: ScopeInput | ScopeInput[]; clipId?: string };
+      const input = (args[0] ?? {}) as { mode?: string; name?: string; page?: string; start?: number; end?: number; scope?: ScopeInput | ScopeInput[]; clipId?: string; times?: number[]; count?: number; fps?: number; stillsOnly?: boolean; momentsOnly?: boolean };
       if (['addFilm', 'addScene', 'addScenes'].includes(name) || name === 'analyzeMedia' && input.mode === 'reference' || name === 'readSkill' && input.name === 'reference-footage' && input.page === 'recreation') await requirePrecise();
       if (editMode === 'fast' && PRECISE_ONLY_TOOLS.has(name)) return { success: false, error: 'This is a Precise check. Fast uses getFrames at the changed spot and one frame either side. Use usePreciseMode only for a build, recreation or final delivery.' };
-      if (editMode === 'fast' && lane !== 'clip' && name === 'readFrames' && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: 'Fast reads only a named source window up to three seconds. Reuse saved analysis; no full-video sweeps.' };
+      const batchedReelStills = lane === 'reel' && input.stillsOnly === true && input.fps === undefined && !input.momentsOnly && (input.times ? input.times.length <= 30 : (input.count ?? 8) <= 12);
+      if (editMode === 'fast' && lane !== 'clip' && name === 'readFrames' && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: 'Fast reads a named source window up to three seconds. Reel visual cleanup may use one stillsOnly overview (count up to 12) or batched explicit join frames (up to 30 times), without fps or momentsOnly. Reuse saved frames; no dense full-video sweeps.' };
       const before = editSession.timeline;
       runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
       try {
@@ -2096,7 +2098,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (output?.staged === true) stagedTools.add(name);
         if (editMode === 'fast' && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const clip = input.clipId ? editSession.timeline.clips.find(clip => clip.id === input.clipId) : undefined;
-          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : undefined;
+          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : lane === 'reel' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
           fastReview.changed(before, editSession.timeline, moments);
           return { ...output, editMode, pendingFrameTimes: fastReview.times() };
         }
