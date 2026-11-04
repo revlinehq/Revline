@@ -12,6 +12,12 @@ export type TextAppearance = TextTypography & {
 export const DEFAULT_TEXT_APPEARANCE: Readonly<TextAppearance> = {
   strokeWidth: 0, strokeColor: '#000000', shadowBlur: 0, shadowX: 0, shadowY: 0, shadowColor: '#000000', glowBlur: 0, glowColor: '#FFFFFF',
 };
+/** Creation-only defaults: existing clips retain their saved appearance. */
+export const DEFAULT_CAPTION_STYLE = {
+  fontSize: 52, color: '#F4F4F0', background: 'transparent', x: .5, y: .78, animation: 'none',
+  textStyle: { ...DEFAULT_TEXT_APPEARANCE, strokeWidth: 1.5, shadowBlur: 3, shadowY: 1, shadowColor: '#000000B3' },
+} as const;
+
 export const TEXT_APPEARANCE_LIMITS = { strokeWidth: [0,20], shadowBlur: [0,80], shadowX: [-100,100], shadowY: [-100,100], glowBlur: [0,100] } as const;
 export const TEXT_TYPOGRAPHY_LIMITS = { fontWeight: [100,900], letterSpacing: [-10,100], lineHeight: [.5,3], paddingX: [0,200], paddingY: [0,200], borderRadius: [0,200] } as const;
 type TextStyleInput = {

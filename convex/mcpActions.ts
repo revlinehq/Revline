@@ -1,8 +1,9 @@
 "use node";
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
-import { LANES, laneToolAllowed, laneToolError, laneSkill, type LaneId } from '../lib/ai/lanes';
+import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools, type LaneId } from '../lib/ai/lanes';
 import { LANE_IDS } from '../lib/ai/lanes/types';
-import { initialLaneSelection, laneChoiceInstructions, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
+import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
+import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
 import { exportConfirmed } from '../lib/ai/lanes/export-confirmation';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
 import type { LaneTask } from './lib/laneFinish';
@@ -31,8 +32,8 @@ const projectIdField = z.string().min(1).describe('Revline project ID from listP
 const RESOURCE_TOOLS = new Set(['finishUpload', 'getMediaTask', 'getExport']);
 
 const PROJECT_TOOLS = {
-  startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. Without a lane, reason about the request, then call setLane. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
-  setLane:{description:'Choose or confirm the task lane and whether the request asks for edits or information only. Pass taskId from startTask, or projectId and timelineId. Switch when the kind of work changes. Preserves failed finish attempts. All tools are already listed; no refresh is needed.',inputSchema:z.object({projectId:projectIdField.optional(),timelineId:z.string().min(1).optional(),taskId:z.string().min(1).optional(),lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}).refine(value=>!!value.taskId||!!value.projectId&&!!value.timelineId,{message:'Pass taskId from startTask, or projectId and timelineId.'})},
+  startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. A style is optional; shared edits work immediately after startTask. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
+  setLane:{description:'Optionally choose the primary workflow when the deliverable changes. Use loadCapability for supporting work. Pass taskId from startTask, or projectId and timelineId. Switch when the kind of work changes. Preserves failed finish attempts. Refresh tools/list after a style change.',inputSchema:z.object({projectId:projectIdField.optional(),timelineId:z.string().min(1).optional(),taskId:z.string().min(1).optional(),lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}).refine(value=>!!value.taskId||!!value.projectId&&!!value.timelineId,{message:'Pass taskId from startTask, or projectId and timelineId.'})},
   listProjects: { description: 'List your Revline video projects, newest first, with their IDs and editor links. Start here to find the project to edit.', inputSchema: z.object({ limit: z.number().int().min(1).max(50).optional() }) },
   getProject: { description: 'Overview of one project: its timeline tabs (which one is open), aspect ratio, duration, revision, editor link and its media (asset IDs, kinds, durations, which analyses are saved). Then call inspectTimeline with the same projectId to read clips before editing.', inputSchema: z.object({ projectId: projectIdField }) },
   createProject: { description: 'Create an empty project. Add footage with uploadMedia (a local file) or importVideoLink.', inputSchema: z.object({ title: z.string().min(1).max(120), aspectRatio: z.enum(['landscape', 'vertical', 'square']) }) },
@@ -82,8 +83,7 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
   const options = catalogOptions();
   const { tools } = editorTools(ctx, options);
   const description = (name: string, text: string) => {
-    const lanes = LANE_IDS.filter(lane => laneToolAllowed(lane,name));
-    return `[Lanes: ${lanes.length === LANE_IDS.length ? 'all' : lanes.join(', ')}] ${text}`;
+    return `${laneToolAllowed('edit', name) ? '[Shared editing]' : '[Optional capability]'} ${text}`;
   };
   return [
     ...Object.entries(PROJECT_TOOLS).map(([name, tool]) => {
@@ -91,9 +91,21 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
       if(name!=='startTask'&&inputSchema.properties?.projectId) inputSchema.properties.taskId=toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask; resolves this project’s lane context and pins an omitted timelineId.'));
       return { name, description: description(name,tool.description), inputSchema };
     }),
-    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&LANE_IDS.some(lane=>laneToolAllowed(lane,name))).map(([name, tool]) => ({ name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
+    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => ({ name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
   ];
 }});
+
+export const availableTools = internalAction({
+  args: { ownerId: v.string(), connectionId: v.optional(v.string()) },
+  returns: v.array(v.string()),
+  handler: async (ctx, args): Promise<string[]> => {
+    if (!args.connectionId) return laneToolNames('edit');
+    const session = await ctx.runQuery(internal.lanes.mcpSession, args) as Doc<'mcpLaneSessions'> | null;
+    if (!session) return laneToolNames('edit');
+    const task = await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask | null;
+    return laneToolNames(task?.lane ?? session.lane, task?.capabilities);
+  },
+});
 
 const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
 type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[] };
@@ -134,9 +146,11 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   if(taskScoped&&input.taskId&&session){input.projectId??=session.projectId;input.timelineId??=session.timelineId;}
   const agentName=(args.agentClientId?args.agentName:session?.agentName??args.agentName)??'MCP client';
   const agentClientId=args.agentClientId??session?.agentClientId;
-  const lane=session?.lane??'edit';
-  if((!session||session.laneChosen===false)&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Choose a task lane for this target: call startTask with projectId and timelineId, then setLane with its taskId, lane, reason and taskType. No tools/list refresh is needed.',true);
-  if(!laneToolAllowed(lane,args.name))return result(laneToolError(lane,args.name),true);
+  const sessionLane=session?.lane??'edit';
+  if(!session&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Start a task for this target with startTask(projectId, timelineId, request). A style is optional; shared editing tools are available immediately.',true);
+  const task = session ? await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null : null;
+  const lane=task?.lane??sessionLane;
+  if(!laneToolAllowed(lane,args.name,task?.capabilities))return result(laneToolError(lane,args.name),true);
   if(args.name==='startTask'){
     const parsed=PROJECT_TOOLS.startTask.inputSchema.safeParse(input);
     if(!parsed.success)return result(z.prettifyError(parsed.error),true);
@@ -145,11 +159,11 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
     const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=`mcp-task:${crypto.randomUUID()}`;
-    const laneChosen=!!request.lane;
-    await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:laneChosen?request.reason!:selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',exportConfirmed:exportConfirmed(request.request)});
+    const laneChosen=true;
+    await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',exportConfirmed:exportConfirmed(request.request)});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
-    return result({projectId,taskId,timelineId,lane:laneChosen?selection.lane:null,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:false,...(laneChosen?{skills:LANES[selection.lane].skills.map(skill=>({name:skill.name,description:skill.description})),next:'Pass projectId and taskId on subsequent calls. Tools are already listed. Call finish before reporting an edit complete.'}:{instructions:laneChoiceInstructions(selection.lane,selection.lockedLane),next:'Reason about the request, then call setLane with this taskId, lane, reason and taskType. Tools are already listed; lane access is enforced on each call.'})});
+    return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:true,instructions:LANES[selection.lane].instructions,next:'Shared editing tools are ready. Style selection is optional. Discover and load only needed supporting capabilities, then refresh tools/list. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
   }
   if(args.name==='setLane'){
     if(!session)return result('Call startTask with projectId, timelineId and the user request first.',true);
@@ -158,7 +172,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     await ctx.runMutation(internal.lanes.switchLane,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,reason:parsed.data.reason,taskType:parsed.data.taskType});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,laneChosen:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
-    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,toolsChanged:false,skills:LANES[parsed.data.lane].skills.map(skill=>({name:skill.name,description:skill.description})),next:'Tools are already listed. Pass projectId and taskId on subsequent calls; read the lane skills and call finish before reporting an edit complete.'});
+    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,toolsChanged:true,next:'Refresh tools/list. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
   }
   if(args.name==='exportVideo'){
     const task=session?await ctx.runQuery(internal.lanes.task,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null:null;
@@ -194,6 +208,12 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
       }
     }
     if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: toolFailureMessage(output.text) }).catch(() => {});
+    if (!output.isError && ['loadCapability','readSkill'].includes(args.name) && typeof input.name === 'string') {
+      const catalog = await ctx.runAction(internal.mcpActions.listTools, {});
+      const names = capabilityTools(input.name);
+      const loaded = z.record(z.string(), z.unknown()).parse(JSON.parse(output.text));
+      return result({ ...loaded, toolsChanged: true, tools: catalog.filter(tool => names.includes(tool.name)), next: 'Refresh tools/list for loaded tools. Cached clients may use the returned schemas directly. The primary task and its completion checks are unchanged.' });
+    }
     return output;
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   finally { await touch(); }
@@ -285,7 +305,7 @@ function withImages(output: unknown, isError: boolean): CallResult {
 async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mcpLaneSessions'>) {
   if (!session) return {};
   const task = await ctx.runQuery(internal.lanes.task, { ownerId, projectId: session.projectId, taskId: session.taskId }) as LaneTask | null;
-  return { lane: session.lane, laneChosen: session.laneChosen, taskId: session.taskId, finishRequired: task?.required ?? true };
+  return { lane: task?.lane ?? session.lane, laneChosen: true, capabilities: task?.capabilities, taskId: session.taskId, finishRequired: task?.required ?? true };
 }
 
 async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise', comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {

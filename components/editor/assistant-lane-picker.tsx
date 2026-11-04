@@ -3,7 +3,7 @@
 import { useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { LANE_OPTIONS, type LaneId } from '@/lib/ai/lanes/options';
+import { LANE_OPTIONS } from '@/lib/ai/lanes/options';
 import {
   Select,
   SelectContent,
@@ -42,17 +42,19 @@ export function AssistantLanePicker({
   return (
     <div className="assistant-lane-picker">
       <Select
-        value={visible ? lane : undefined}
+        value={visible ? lane : 'auto'}
         disabled={disabled || saving || !state}
         onValueChange={async (value) => {
           if (!state) return;
+          const selected = value === 'auto' ? 'edit' : options.find(option => option.id === value)?.id;
+          if (!selected) return;
           setSaving(true);
           setError('');
           try {
             await choose({
               projectId,
               timelineId: state.timelineId,
-              lane: value as LaneId,
+              lane: selected,
             });
           } catch (error) {
             setError(userError(error));
@@ -63,13 +65,14 @@ export function AssistantLanePicker({
       >
         <SelectTrigger
           size="sm"
-          aria-label="Editing lane"
+          aria-label="Editing style"
           title={error || state?.reason}
           className="h-7 gap-1.5 border-0 bg-transparent px-2 text-xs text-muted-foreground shadow-none outline-none hover:bg-white/[0.07] focus:ring-0 dark:bg-transparent"
         >
-          <SelectValue placeholder="Editing lane" />
+          <SelectValue placeholder="Style (optional)" />
         </SelectTrigger>
         <SelectContent className="bg-[#2a2a2a]">
+          <SelectItem value="auto" className="text-xs">Auto</SelectItem>
           {options.map((option) => (
             <SelectItem key={option.id} value={option.id} className="text-xs">
               {option.label}

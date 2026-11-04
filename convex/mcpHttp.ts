@@ -6,7 +6,6 @@ import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
-import { laneDescriptions } from '../lib/ai/lanes/selection';
 import { requestMcpOrigin } from './lib/mcp_origin';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
@@ -27,11 +26,10 @@ If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or 
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
-Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Keep the returned taskId and pass it with projectId on subsequent lane tools, including setLane. Alternatively pass projectId and timelineId on every call. Choose the lane yourself using the request, brief and attached media. No classifier chooses for you. Without an explicit lane, call setLane(lane, reason, taskType: edit|question) before editing. Use edit for any request to create or change a video, including a request phrased as a question. Use question only for information without edits. A follow-up keeps the current timeline lane unless the kind of work changed. /clip and manual composer selections win.
-Lanes:
-${laneDescriptions()}
-A recreation is an explicit dev/MCP capability. tools/list always lists all tools, labeled with their lanes, so clients need only fetch it once. Lane access is enforced on each call; unavailable tools return an actionable error before executing. Changing lanes needs no tools/list refresh.
-Follow the skill list returned by startTask or setLane. readSkill only returns the current lane’s pages. inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for source transcripts and clipping signals, and getFrames for rendered timeline evidence. Keep reference media off the timeline when recreating.
+Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Keep the returned taskId and pass it with projectId on subsequent tools. Alternatively pass projectId and timelineId on every call. Basic trims, captions, audio and timeline edits work without setLane. Style is optional. Use setLane only to change the primary deliverable. /clip and explicit user style remain authoritative.
+Use discoverCapabilities with the action you need, then loadCapability for supporting workflows or readSkill for a known skill/page. Load only relevant skills and tools. Supporting motion within a Clip task keeps that task and its clip delivery checks. tools/list starts with shared tools and adds the primary workflow and loaded support; refresh after loading or changing style. Older clients with cached schemas may still call registered tools after loading the matching capability. Each call enforces owner, task and capability access.
+For a one-take short-form/reel rough cut, use reel by default unless the user chose another style. Clean false starts, accidental repeats, awkward pauses and abandoned takes while retaining natural delivery, intentional repeats and full meaning. Use saved transcript/audio first, then targeted visuals for awkward looks when needed. Let the retained message determine duration; no forced 30–60s, normalization or heavy full-film checks. Add minimal synchronized captions without a background unless the user declines captions or asks for a different style.
+inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for saved transcripts and clipping signals; getFrames provides rendered timeline evidence. Keep reference media off the timeline when recreating.
 Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
 Use Revline’s tools to measure media; all tool edits save immediately and are undoable. Share the editorUrl from getProject.
 
@@ -53,7 +51,8 @@ function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, compa
   const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
     toolCatalog ??= ctx.runAction(internal.mcpActions.listTools,{}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog=undefined;throw error;});
-    return {tools:await toolCatalog};
+    const names = await ctx.runAction(internal.mcpActions.availableTools, {ownerId,...(connectionId?{connectionId}:{})});
+    return {tools:(await toolCatalog).filter(tool=>names.includes(tool.name))};
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });

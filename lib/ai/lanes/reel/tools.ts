@@ -1,1 +1,1 @@
-export const tools = ['followSubject', 'getSound'] as const;
+export const tools = ['followSubject', 'getSound', 'readFrames', 'inspectVideo', 'inspectFrames'] as const;
