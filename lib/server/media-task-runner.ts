@@ -1,6 +1,10 @@
+import { materializeTranscript } from '../media-analysis/transcript';
+import { checkClipSnapshot } from './check-clip';
 import { FrameCache } from './frame-cache';
 import { referenceResultDescriptor, snapshotResultDescriptor } from '../media-analysis/frame-cache';
 import { importCheckpoint } from './import-checkpoint';
+import { findSourceHighlights } from './find-highlights';
+import { readHighlights } from '../media-analysis/highlights';
 import { ownedMediaUrl } from './owned-media';
 import { api as pixelTrackApi } from '../../convex/_generated/api';
 import { trackSourcePixels } from './track-source-pixels';
@@ -47,6 +51,7 @@ import { currentSpeechCleanup } from '@/lib/speech-cleanup';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
+  task={...task,...(task.asset?{asset:materializeTranscript(task.asset)}:{}),...(task.transcriptionAsset?{transcriptionAsset:materializeTranscript(task.transcriptionAsset)}:{}),...(task.snapshot?{snapshot:{...task.snapshot,assets:task.snapshot.assets.map(materializeTranscript)}}:{}),...(task.render?{render:{...task.render,assets:task.render.assets.map(materializeTranscript)}}:{}),...(task.review?{review:{...task.review,assets:task.review.assets.map(materializeTranscript)}}:{})};
   const startedAt = Date.now();
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();
@@ -128,6 +133,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}
     if(task.kind==='blueprint'){if(!task.blueprint)throw new AnalysisError('The blueprint check is unavailable.',400);return {blueprint:await runBlueprintCheck(task.blueprint,signal,onProgress)};}
+    if(task.kind==='snapshot'&&task.snapshot?.clipCheck)return {snapshot:await runPhase('Checking clip',()=>checkClipSnapshot(task.snapshot!,directory,convexUrl,signal,onProgress,task.snapshot?.cacheIdentity?new FrameCache(convex,credentials,signal):undefined))};
     if(task.kind==='snapshot'&&task.snapshot?.normalization){
       const {path,...measurements}=await runPhase('Normalizing loudness',()=>normalizeTimelineAudio(task.snapshot!,directory,convexUrl,signal));
       onProgress(90);
@@ -146,6 +152,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     if(task.kind==='preview'&&asset.kind==='video'&&asset.previewVersion===1&&asset.previewR2Key&&[asset.previewSize,asset.previewWidth,asset.previewHeight,asset.previewFps].every(value=>typeof value==='number'&&Number.isFinite(value)&&value>0))return {};
     if (task.kind === 'extract' && asset.audioExtracted) return asset.audioAssetId ? { audioAssetId: asset.audioAssetId } : {};
     if (task.kind === 'waveform' && asset.waveform) return { waveform: asset.waveform };
+    if (task.kind === 'highlights' && readHighlights(asset.analysis?.highlights)?.judge==='gemini' && (!task.highlightSourceType || readHighlights(asset.analysis?.highlights)?.sourceType===task.highlightSourceType)) return {analysis:{highlights:asset.analysis!.highlights}};
     if (task.kind === 'transcribe' && currentTranscript(asset.analysis?.transcript) && asset.analysis?.audioActivity && currentSpeechCleanup(asset.analysis.speechCleanup)) return { analysis: { transcript: asset.analysis.transcript, audioActivity: asset.analysis.audioActivity, speechCleanup: asset.analysis.speechCleanup } };
     if (task.kind === 'understand' && asset.analysis?.understanding) return { analysis: { understanding: asset.analysis.understanding } };
     // A breakdown saved before moments were measured only needs its moments; the model pass stays.
@@ -158,7 +165,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     // Speaker cuts must retain native PTS; older previews may have rounded the frame clock.
     // A passthrough preview is the same immutable source, so keep its source
     // cache identity instead of downloading a second copy for Gemini.
-    const preview = (task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewR2Key !== asset.r2Key && asset.previewVersion === 1 && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
+    const preview = (task.kind === 'highlights' || task.kind === 'video' || task.kind === 'understand' || task.kind === 'reference') && asset.kind === 'video' && asset.previewUrl && asset.previewR2Key !== asset.r2Key && asset.previewVersion === 1 && (task.kind !== 'highlights' || asset.previewSize! < sourceAsset.size) && [asset.previewSize, asset.previewWidth, asset.previewHeight].every(value => typeof value === 'number' && Number.isFinite(value) && value > 0)
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
     const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout')) || task.kind === 'extract' || task.kind === 'waveform' || task.kind === 'transcribe' || task.kind === 'beats';
@@ -177,7 +184,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
     const reusedSource = rangeRead ? reusedRangeSource : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
-      concurrency: task.kind === 'extract' ? 3 : 1,
+      concurrency: task.kind === 'extract' || task.kind === 'highlights' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
         if(task.kind!=='preview')onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
@@ -290,6 +297,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const speakers=speakerAnalysis.parse({...local,start:range.start,end:range.end,identityScope,turns:local.turns.map(t=>({...t,start:t.start+range.start,end:t.end+range.start})),focus:local.focus.map(p=>({...p,time:p.time+range.start})),...(local.version===2?{framing:local.framing.map(frame=>({...frame,start:frame.start+range.start,end:frame.end+range.start}))}:{})});
       return {analysis:{speakers}};
     }
+    if (task.kind === 'highlights') {
+      if (!media.hasVideo) throw new AnalysisError('Highlight discovery requires source video for Gemini to watch.', 400, false);
+      return {analysis:{highlights:JSON.stringify(await runPhase('Finding highlights',()=>findSourceHighlights({source,duration:asset.duration??media.duration,video:media.hasVideo,transcript:asset.analysis?.transcript,sourceType:task.highlightSourceType,geminiUnavailableReason:task.highlightSkipGemini,sceneCuts:asset.analysis?.shots?.shots.map(s=>s.start),cacheIdentity,cache:new FrameCache(convex,credentials,signal)},signal,onProgress,reportGeminiActivity)))}};
+    }
     if (task.kind === 'transcribe') {
       if (!media.hasAudio) throw new AnalysisError('This source has no audio to transcribe.', 400);
       // Older whole-file transcripts lost retakes; only a current one is reused.
@@ -298,7 +309,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // the task directory holding that audio is removed once this function returns.
       const measure = async (transcript: Transcript) => {
         const audioActivity = await runPhase('Measuring quiet audio', () => measureAudioActivity(source, signal, transcript));
-        const speechCleanup = await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal));
+        const speechCleanup = (asset.duration ?? media.duration) <= 600 ? await runPhase('Finding fillers, pauses and retakes', () => measureSpeechCleanup(source, asset.duration ?? media.duration, transcript, signal)) : undefined;
         return { analysis: { transcript, audioActivity, ...(speechCleanup ? { speechCleanup } : {}) } };
       };
       if (savedTranscript) return await measure(savedTranscript);

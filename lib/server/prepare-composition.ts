@@ -9,7 +9,7 @@ import { TEXT_FONTS } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
 import { SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
 import { sceneLayerSources } from '../editor/scene-layers';
-import { generateComposition, type ExportResolution } from '../editor/composition';
+import { generateComposition, trimmedFocus, type ExportResolution } from '../editor/composition';
 import { downloadOwnedMedia,probeMedia } from '../media-analysis/io';
 import { AnalysisError } from '../media-analysis/errors';
 import { prepareRenderAudioSource } from './prepare-render-audio';
@@ -64,7 +64,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     const extension=/^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif|glb|gltf)$/.test(sourceExtension)?sourceExtension:asset.kind==='video'?'.mp4':asset.kind==='audio'?'.audio':'.image';
     const name=`asset-${index}${extension}`;
     // Reuse only immutable media identified by a fresh, authorized task snapshot.
-    // The existing bounded cache isolates backend, owner and project and keeps
+    // The existing bounded cache isolates backend, owner and immutable source bytes and keeps
     // active files alive through hard links when an older entry is evicted.
     const identity=asset.projectId&&asset.contentType?mediaSourceCacheIdentity(convexUrl,asset.projectId,{...asset,contentType:asset.contentType}):undefined;
     await reuseMediaFile({identity,variant:'source-v1',target:join(directory,name),signal:sourceSignal,expectedBytes:asset.size},()=>downloadOwnedMedia(asset.url!,join(directory,name),new URL(convexUrl).origin,asset.size,sourceSignal));
@@ -135,9 +135,12 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
       // A later source window can exhaust earlier splits of the same media.
       // Do not hand zero-length clips (including round-off residue) to the renderer.
       if(remaining<1e-7)return [];
-      return [{...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:remaining,sourceStart:0}];
+      const retained={...clip,...offsetClipMotion(clip,delta),start:clip.start+delta,duration:remaining,sourceStart:offset};
+      return [{...retained,sourceStart:0,...(clip.focus?.length?{focus:trimmedFocus(retained).map(point=>({...point,time:Math.max(0,point.time-offset)}))}:{})}];
     }
-    return [offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset)}:clip];
+    // The extracted window and its crop path must use the same source clock.
+    // Otherwise a later speaker cut holds the original window's first anchor.
+    return [offset?{...clip,sourceStart:Math.max(0,clip.sourceStart-offset),...(clip.focus?.length?{focus:trimmedFocus(clip).map(point=>({...point,time:Math.max(0,point.time-offset)}))}:{})}:clip];
   })};
   // HyperFrames dedupes a video's sound by comparing the authored src with the
   // browser's server-relative src ("asset-0.mp4"). A "./" prefix never matches,

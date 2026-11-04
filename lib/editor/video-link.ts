@@ -1,4 +1,4 @@
-export type VideoLink = { kind: 'youtube' | 'file'; url: string };
+export type VideoLink = { kind: 'youtube' | 'twitch' | 'kick' | 'file'; url: string };
 
 /** Share validation between the form, queue and downloader. DNS is checked by the worker. */
 export function parseVideoLink(value: string): VideoLink {
@@ -9,6 +9,14 @@ export function parseVideoLink(value: string): VideoLink {
   const host = url.hostname.toLowerCase();
   if (host === 'localhost' || !host.includes('.') || host.endsWith('.local') || host.endsWith('.internal') || host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) throw new Error('Use a public video link.');
   url.hash = '';
+  if(['twitch.tv','www.twitch.tv'].includes(host)) {
+    if(!/^\/videos\/\d+\/?$/.test(url.pathname))throw new Error('Use a Twitch VOD link, not a live channel.');
+    return {kind:'twitch',url:`https://www.twitch.tv${url.pathname}`};
+  }
+  if(['kick.com','www.kick.com'].includes(host)) {
+    if(!/^\/[\w-]+\/videos\/[\w-]+\/?$/.test(url.pathname)&&!/^\/video\/[\w-]+\/?$/.test(url.pathname))throw new Error('Use a Kick recording link, not a live channel.');
+    return {kind:'kick',url:`https://kick.com${url.pathname}`};
+  }
   if (['youtube.com', 'www.youtube.com', 'm.youtube.com', 'youtu.be', 'www.youtu.be'].includes(host)) {
     const id = host.endsWith('youtu.be') ? url.pathname.slice(1) : url.pathname === '/watch' ? url.searchParams.get('v') : /^\/(shorts|embed)\/([^/]+)\/?$/.exec(url.pathname)?.[2];
     if (!id || !/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new Error('Paste a link to one YouTube video.');

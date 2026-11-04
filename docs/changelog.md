@@ -3,6 +3,12 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+
+- Clipping: Preserve speaker crops in extracted review windows and reuse passing checks without resending raw RMS tracks. Why: the full-podcast rehearsal exposed bad framing sheets and repeated work.
+- MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
+- Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
+- Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
+- Clipping: Let Gemini judge whole-source highlights and verify each accepted clip tab with data checks and one framing sheet. Why: the user wanted faster whole-source discovery and honest delivery where clips found equal tabs made.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Editor: Make whole choice cards select their option and give each question unique radio IDs. Why: the user could only reliably select the radio button.
 - Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.

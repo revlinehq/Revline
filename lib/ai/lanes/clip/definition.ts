@@ -10,5 +10,5 @@ export const definition: LaneDefinition = {
   tools,
   check,
   instructions:
-    'Read clipping. Discover moments from transcript, audio energy, scene cuts and clipping signals. Create one nonempty vertical tab per accepted highlight. findHighlights/checkClip are registration points for the find-highlights branch.',
+    'Read clipping and call findHighlights once. Gemini is the default judge; when unavailable, stop Gemini for the run and review transcript/audio/cuts with targeted source frames, then register grounded found moments in planClips. Create one nonempty vertical tab per accepted highlight. Batch checkClip; finishClipping and lane finish must both pass the persisted ledger before reporting the exact tab list.',
 };

@@ -47,12 +47,12 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 }
 
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
-export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,cache?:FrameCache):Promise<NonNullable<MediaTaskResult['snapshot']>> {
+export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,cache?:FrameCache,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const range=snapshot.pacing??snapshot.sound??snapshot.motion;
-  const windows=range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
+  const windows=contactSheet?[{start:0,end:last+frame}]:range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[],windows);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
@@ -98,7 +98,12 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);
   const capture = async (indices:number[]):Promise<Buffer[]> => {
     const images = new Map<number,Buffer>();
-    if(!timeline.clips.some(clip=>clip.kind==='video')){
+    if(contactSheet){
+      const group=indices.map(index=>({time:at[index],index})).sort((a,b)=>a.time-b.time);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group.at(-1)!.time+frame,variants:['edited'],sparse:true},signal);
+      for(const [sample,item] of group.entries())images.set(item.index,await readFile(join(path,`sample-${sample}.png`)));
+      onProgress(95);
+    }else if(!timeline.clips.some(clip=>clip.kind==='video')){
       // Scene samples within three seconds share the same capture, just as uncached requests do.
       const order=indices.map(index=>({time:at[index],index})).sort((a,b)=>a.time-b.time);
       for(let first=0;first<order.length;){
@@ -116,7 +121,11 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     }
     return indices.map(index=>images.get(index)!);
   };
-  const images = cache && snapshot.cacheIdentity ? await cache.batch(at.map(time=>({kind:'timeline-png',identity:snapshot.cacheIdentity,frameIndex:Math.round(time*timeline.fps),width:size.width,height:size.height,format:'png'})),capture) : await capture(at.map((_,index)=>index));
+  const descriptors=at.map(time=>({kind:'timeline-png',identity:snapshot.cacheIdentity,frameIndex:Math.round(time*timeline.fps),width:size.width,height:size.height,format:'png'}));
+  const images:Buffer[]=[];
+  if(cache&&snapshot.cacheIdentity){
+    for(let first=0;first<at.length;first+=30)images.push(...await cache.batch(descriptors.slice(first,first+30),missing=>capture(missing.map(index=>first+index))));
+  }else images.push(...await capture(at.map((_,index)=>index)));
   for(const [index,time] of at.entries())frames.push({time,image:images[index].toString('base64')});
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Keep the existing tool image budget and encoding; cached PNGs are never replaced by these smaller JPEGs.

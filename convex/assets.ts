@@ -1,7 +1,9 @@
+import { readTranscript } from '../lib/media-analysis/transcript';
 import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
-import { hydrateAsset,storeAnalysis } from './lib/asset_analysis';
+import { hydrateAsset,transportAsset,storeAnalysis,compactAnalysis } from './lib/asset_analysis';
+import { readHighlights } from '../lib/media-analysis/highlights';
 import { writeProject,projectIdentity,projectRun } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
@@ -140,7 +142,7 @@ export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.n
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
+  return { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
 }});
 export const saveExtractedAudio = internalMutation({
   args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },
@@ -195,7 +197,7 @@ export const getForAssistant = internalQuery({ args: { projectId: v.id("projects
   const ownerId = await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.projectId !== args.projectId || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
+  return { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
 }});
 export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), audioActivity: v.optional(audioActivityValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
   const secret = process.env.RENDER_WORKER_SECRET; if (!secret || secret !== args.workerSecret) throw new ConvexError("Media worker authentication required");
@@ -206,6 +208,7 @@ export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects
 
 export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, changes: Infer<typeof analysisValidator>) {
   asset=await hydrateAsset(ctx,asset);
+  if(changes.transcript)changes={...changes,transcript:readTranscript(changes.transcript)};
   const duration = asset.duration ?? 86400;
   if(changes.facecam&&(!facecamAnalysis.safeParse(changes.facecam).success||changes.facecam.samples.some(s=>s.time>duration)))throw new ConvexError('Invalid facecam analysis');
   if(changes.speakers&&(!speakerAnalysis.safeParse(changes.speakers).success||changes.speakers.turns.some(t=>t.end>duration)||changes.speakers.focus.some(s=>s.time>duration)))throw new ConvexError('Invalid speaker analysis');
@@ -216,7 +219,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   }
   const validRange = (start: number, end: number) => Number.isFinite(start) && Number.isFinite(end) && start >= 0 && end > start && end <= duration + 0.5;
   if (changes.transcript) {
-    if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 5000) throw new ConvexError("Transcript is too large");
+    if (changes.transcript.segments.length > 500 || changes.transcript.words.length > 100000) throw new ConvexError("Transcript is too large");
     for (const item of changes.transcript.segments) if (!validRange(item.start, item.end) || !item.text.trim() || item.text.length > 2000) throw new ConvexError("Invalid transcript timing or text");
     // A transcriber can measure an instantaneous word. Preserve its timing rather
     // than assigning an invented duration; rendered segments remain positive.
@@ -249,8 +252,9 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');
     try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
   }
-  const analysis = { ...asset.analysis, ...(changes.facecam ? {facecam:changes.facecam}:{}), ...(changes.speakers ? {speakers:changes.speakers}:{}), ...(changes.transcript ? { transcript: changes.transcript } : {}), ...(changes.audioActivity ? { audioActivity: changes.audioActivity } : {}), ...(changes.speechCleanup ? { speechCleanup: changes.speechCleanup } : {}), ...(changes.understanding ? { understanding: changes.understanding } : {}), ...(changes.shots ? { shots: changes.shots } : {}), ...(changes.beats ? { beats: changes.beats } : {}), ...(changes.focus ? { focus: changes.focus } : {}), ...(changes.reference ? { reference: changes.reference } : {}) };
-  if (serializedBytes(analysis) > 500_000) throw new ConvexError("Media analysis is too large to save");
+  if(changes.highlights){const tracks=readHighlights(changes.highlights);if(!tracks||Math.abs(tracks.duration-duration)>.5)throw new ConvexError('Invalid highlight signal tracks.');}
+  const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
+  if (serializedBytes(compactAnalysis(analysis)) > 900_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
   const analysisCompletedAt = { ...asset.analysisCompletedAt, ...(changes.transcript ? { transcribe: now } : {}), ...(changes.understanding ? { understand: now } : {}), ...(changes.shots ? { shots: now } : {}), ...(changes.beats ? { beats: now } : {}), ...(changes.focus ? { track: now } : {}) };
   await storeAnalysis(ctx,asset,analysis,now);await ctx.db.patch(asset._id,{analysisUpdatedAt:now,analysisCompletedAt}); return null;

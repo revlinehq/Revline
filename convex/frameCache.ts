@@ -16,7 +16,7 @@ const args = { ...mediaTaskCredentials, processorVersion:v.number(), output: v.a
 const TTL = 14 * 86400_000;
 async function taskScope(ctx: MutationCtx, credentials: { taskId: Id<'mediaTasks'>; leaseToken: string }): Promise<CacheScope> {
   const task = await requireMediaTask(ctx, credentials.taskId, credentials.leaseToken);
-  if (task.kind === 'read' && task.assetId) {
+  if ((task.kind === 'read' || task.kind === 'highlights') && task.assetId) {
     const asset = await ctx.db.get(task.assetId);
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Reference media was removed.');
     return referenceCacheScope(task.ownerId, task.projectId, asset);
