@@ -1,5 +1,7 @@
 import { v } from "convex/values";
+export const qualityCheck = v.union(v.literal('framing'), v.literal('decode-health'), v.literal('loudness'));
 export const clipCheckRequestValidator = v.object({
+  qualityChecks: v.optional(v.array(qualityCheck)),
   assetId: v.string(),
   candidateId: v.string(),
   clippingRunId: v.string(),
@@ -57,6 +59,10 @@ export const clippingManifest = v.object({
   assetId: v.id("assets"),
   createdAt: v.number(),
   delivery: v.boolean(),
+  targeted: v.optional(v.boolean()),
+  qualityTimelineIds: v.optional(v.array(v.string())),
+  qualityChecks: v.optional(v.array(qualityCheck)),
+  visualWindows: v.optional(v.array(v.object({ key: v.string(), start: v.number(), end: v.number(), token: v.string(), createdAt: v.number(), result: v.optional(v.string()) }))),
   reviewMode: v.optional(v.union(v.literal("transcript"), v.literal("visual"))),
   unavailableReason: v.optional(v.string()),
   candidates: v.string(),

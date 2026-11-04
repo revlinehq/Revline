@@ -29,8 +29,9 @@ export async function checkClipSnapshot(
     result = checkClipData(snapshot.timeline, snapshot.assets, request);
   const health: string[] = [],
     overrides = snapshot.clipCheck?.acceptedFindings ?? [];
+  const quality = snapshot.clipCheck?.qualityChecks ?? [];
   const seen = new Set<string>();
-  for (const clip of snapshot.timeline.clips.filter(
+  for (const clip of (quality.includes("decode-health") ? snapshot.timeline.clips : []).filter(
     (c) => c.kind === "video" && c.assetId,
   )) {
     const asset = snapshot.assets.find((a) => a._id === clip.assetId),
@@ -98,7 +99,7 @@ export async function checkClipSnapshot(
       );
     }
   }
-  result.checks.push({
+  if (quality.includes("decode-health")) result.checks.push({
     name: "decode-health",
     passed: !health.length,
     reasons: health,
@@ -108,6 +109,7 @@ export async function checkClipSnapshot(
     result.warnings.push(
       `This cut-heavy clip needs ${result.sampleTimes.length} shot/switch samples on its one sheet.`,
     );
+  if (!quality.includes('framing')) return { frames: [], clipCheck: JSON.stringify(result) };
   const captured = await captureTimelineFrames(
     { ...snapshot, clipCheck: undefined, times: result.sampleTimes },
     directory,
@@ -161,7 +163,7 @@ async function contactSheet(
   );
   if (!frames.length) throw new Error("No framing samples were rendered.");
   result.warnings.push(
-    "Decode health covers source ranges; the contact sheet shows the edited framing. It does not certify every rendered frame.",
+    "This contact sheet covers sampled edited framing only; it does not certify every rendered frame or unrequested source-health checks.",
   );
   return sharp({
     create: {
