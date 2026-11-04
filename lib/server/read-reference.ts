@@ -112,7 +112,7 @@ async function readSheet(path: string, directory: string, source: Source, work: 
   onProgress(80);
   const tiles = images.map((image, index) => ({ image, label: `${index + 1}  ${times[index].toFixed(2)}s${frames[index].change !== undefined ? `  change ${Math.round(frames[index].change! * 100)}%` : ''}` }));
   const result = await sheet(tiles, area.w / area.h);
-  const { moments } = await findMoments(path, work.start, work.end, source, area, signal, 12, cache).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
+  const { moments } = work.stillsOnly ? { moments: [] } : await findMoments(path, work.start, work.end, source, area, signal, 12, cache).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
   return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames, moments };
 }
 
