@@ -6,6 +6,10 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Landing: Added the short-form editing section with a real agent-edited talking-head Reel and a viewport-driven cut, caption and zoom illustration. Why: the user requested a short-form showcase after clipping.
+- Snapshots: Align decoder seeks to composition precision and handle failed cache captures without stopping the worker. Why: PR verification exposed a rejected FFmpeg seek and worker crash.
+- MCP identity: Distinguish Antigravity from Gemini using initialized client identity and Google’s official app mark. Why: the user requested accurate app badges for shared-token sessions.
+- MCP presence: Show each active agent’s company on project cards and timeline tabs, using initialized client identity. Why: personal-token agents appeared as generic MCP and concurrent agents hid one another.
+- MCP: Isolate conversations and task targets; list all lane-labeled tools with call-time checks. Why: parallel Codex agents shared task context and could not discover lane tools.
 - Prototype: Add an isolated, replayable /clip recording flow using the real dashboard and editor. Why: the user needs repeatable marketing Reels without live AI runs.
 - Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.
 - Development: Give each agent worktree an expiring Convex backend, seeded footage and private Workers. Why: the user reported agents overwriting shared dev functions and schema.

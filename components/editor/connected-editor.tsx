@@ -107,7 +107,8 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const connector=useQuery(api.mcpAuth.connector,{});
   const mcpConnection=connector&&(connector.connections.reduce<{label:string;at:number}|null>((latest,item)=>{const at=item.lastUsedAt??item.createdAt;return !latest||at>latest.at?{label:item.label,at}:latest;},null)?.label??null);
   const jobs=useQuery(api.renders.list,{projectId,limit:10});
-  const timelineTabs=useQuery(api.timelineTabs.list,{projectId});
+  const rawTimelineTabs=useQuery(api.timelineTabs.list,{projectId});
+  const timelineTabs=rawTimelineTabs?.map(tab=>({...tab,agents:ai?.externalAgents?.filter(agent=>agent.timelineId===tab.id)??[]}));
   // An MCP agent stays "working" across its whole request; the server sets how long it counts as active.
   const agent=ai?.externalAgent??null;
   const [agentClock,setAgentClock]=useState(()=>Date.now());
