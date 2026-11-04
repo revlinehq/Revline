@@ -1,0 +1,101 @@
+name: Release main on PC
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      base:
+        description: 'Dry-run comparison commit (blank = last successful release, or full bootstrap)'
+        type: string
+        default: ''
+  workflow_call:
+    inputs:
+      base:
+        type: string
+        default: ''
+
+permissions:
+  contents: write
+  issues: write
+
+# One whole release, including development, at a time. A newer queued push can
+# replace a pending one; the persistent successful-release cursor retains its diff.
+concurrency:
+  group: revline-main-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'zuraHQ/revline-editor' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    runs-on: [self-hosted, Linux, X64, revline-deploy-pc]
+    timeout-minutes: 360
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_BASE: ${{ inputs.base }}
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # This PC has no public IPv6 route. Keep every Node child, including the
+      # processor's Machines API fetch, on IPv4 instead of racing both families.
+      NODE_OPTIONS: '--dns-result-order=ipv4first --no-network-family-autoselection'
+    steps:
+      - name: Configure PATH and check required host CLIs
+        shell: bash
+        run: |
+          if [ -z "${REVLINE_NODE_BIN:-}" ] || [ ! -x "$REVLINE_NODE_BIN/node" ]; then
+            echo '::error::Runner is missing its nvm Node bin. Rerun scripts/install-deploy-runner.mjs and restart the idle runner service.'
+            exit 1
+          fi
+          export PATH="$REVLINE_NODE_BIN:$HOME/.fly/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+          printf '%s\n' "$REVLINE_NODE_BIN" "$HOME/.fly/bin" "$HOME/.local/bin" /usr/local/bin /usr/bin /bin >> "$GITHUB_PATH"
+          missing=0
+          for cli in node npm npx flyctl docker gh git flock systemctl journalctl; do
+            if ! command -v "$cli" >/dev/null 2>&1; then
+              echo "::error::Required CLI '$cli' is missing from the explicit runner PATH: $PATH"
+              missing=1
+            fi
+          done
+          exit "$missing"
+      - name: Check PC production environment and manual release lock
+        shell: bash
+        run: |
+          file="$HOME/Developer/revline-main/.env.production.local"
+          if [ ! -f "$file" ]; then
+            echo "::error::Missing required file: $file. The user must place their production environment file on this PC once; this workflow never creates it or copies secrets."
+            exit 1
+          fi
+          lock="$HOME/Developer/revline-main/.data/production-releases/release.lock"
+          if [ -e "$lock" ]; then
+            echo "::error::A manual production release holds $lock. Wait for it to finish."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        id: checkout
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate and release changed services
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.local/state/revline-deploy"
+          args=()
+          if [ "$GITHUB_EVENT_NAME" != push ]; then args+=(--dry-run); fi
+          flock "$HOME/.local/state/revline-deploy/release.lock" node scripts/release-main.mjs "${args[@]}"
+      - name: Report checkout or runner bootstrap failure
+        if: failure()
+        shell: bash
+        run: |
+          # The release script reports the exact step and bounded log tail. This
+          # fallback also covers a checkout failure before that script can start.
+          marker="$RUNNER_TEMP/revline-release-reported-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          if [ -f "$marker" ]; then exit 0; fi
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          body="Release failed during checkout or runner bootstrap, before the release script could report. Step logs: $url"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="$body" >/dev/null || \
+            gh issue create --repo "$GITHUB_REPOSITORY" --title 'Release runner bootstrap failed' --body "$body"
+          title='Revline deployment failed'
+          if [ "$GITHUB_EVENT_NAME" != push ]; then title='Revline deployment dry run failed'; fi
+          cd "$HOME/Developer/revline-main"
+          node node_modules/convex/bin/main.js run discordAlerts:enqueue \
+            "{\"source\":\"sentry\",\"eventId\":\"deploy-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT\",\"title\":\"$title\",\"description\":\"Checkout or runner bootstrap failed. $url\"}" \
+            --deployment different-gnu-398
