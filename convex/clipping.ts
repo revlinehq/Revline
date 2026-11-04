@@ -325,7 +325,7 @@ export const review = internalMutation({
         sourceLengthTarget:targetCount(row,tracks.duration),
         candidates: candidates.slice(0, 10),
         geminiUnavailableReason: row.unavailableReason,
-        next: "Accept or drop each returned candidate ID with planClips, then build exactly the accepted tabs and run checkClip/finishClipping.",
+        next: "Accept or drop each returned candidate ID with planClips, then build exactly the accepted tabs, then call finishClipping and finish directly. Cheap data checks run inline; heavy QA is optional.",
       };
     }
     const candidates = candidatesOf(row),
@@ -424,6 +424,9 @@ export const review = internalMutation({
     }
     await ctx.db.patch(row._id, {
       reviewed: true,
+      // Accepting a delivery plan promotes discovery-only inspection; otherwise
+      // completion could report zero tabs even after building the accepted cuts.
+      delivery: true,
       ...(shortfallReason?{shortfallReason}:{}),
       accepted: args.accepted,
       dropped: args.dropped,
@@ -715,7 +718,7 @@ export const completionState = internalQuery({
             required: true,
             passed: false,
             errors: [
-              "The supplied timeline is stale or is not the saved server draft. Inspect the current tab and rerun checkClip.",
+              "The supplied timeline is stale or is not the saved server draft. Inspect the current tab and retry completion with its saved data.",
             ],
           };
       }
