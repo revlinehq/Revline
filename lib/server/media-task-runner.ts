@@ -53,6 +53,10 @@ import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
   task={...task,...(task.asset?{asset:materializeTranscript(task.asset)}:{}),...(task.transcriptionAsset?{transcriptionAsset:materializeTranscript(task.transcriptionAsset)}:{}),...(task.snapshot?{snapshot:{...task.snapshot,assets:task.snapshot.assets.map(materializeTranscript)}}:{}),...(task.render?{render:{...task.render,assets:task.render.assets.map(materializeTranscript)}}:{}),...(task.review?{review:{...task.review,assets:task.review.assets.map(materializeTranscript)}}:{})};
   const startedAt = Date.now();
+  const parentSignal = signal;
+  const speechBudget = Math.min(900_000, Math.max(180_000, Math.ceil((task.asset?.duration ?? 600) * 1000)));
+  const speechDeadline = task.kind === 'transcribe' ? AbortSignal.timeout(speechBudget) : undefined;
+  if (speechDeadline) signal = AbortSignal.any([signal, speechDeadline]);
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();
     console.log(`[${new Date(now).toISOString()}] Media task ${task.taskId} (${task.kind}): ${phase} ${state}${detail ? ` · ${detail}` : ''} · phase ${((now - phaseStartedAt) / 1000).toFixed(1)}s · total ${((now - startedAt) / 1000).toFixed(1)}s · chat ${task.projectId}${task.aiRunId ? ` · run ${task.aiRunId}` : ''}`);
@@ -399,6 +403,9 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       return { videoInspection: { ...local, question: request.question, start: request.start, end: request.end, matches: local.matches.map(match => ({ ...match, start: toSource(match.start), end: toSource(match.end) })).filter(match => match.end > match.start) } };
     }
     return { analysis: { understanding: await runPhase('Understanding footage',()=>understandVideo(video, media.duration, key, signal, videoMimeType,reportGeminiActivity,{projectId:task.projectId,taskId:task.taskId})) } };
-  } catch(error) { if(checkpoint&&!isRetryableAnalysisError(error))completed=true;throw error; }
+  } catch(error) {
+    if (speechDeadline?.aborted && !parentSignal.aborted) throw new AnalysisError(`Speech preparation and transcription exceeded ${Math.ceil(speechBudget / 1000)} seconds. No transcript was saved. Check the prepared audio or provider connection before explicitly retrying.`, 504, false);
+    if(checkpoint&&!isRetryableAnalysisError(error))completed=true;throw error;
+  }
   finally { checkpoint?.close(); clearInterval(geminiHeartbeat); if (!checkpoint || completed) await rm(directory, { recursive: true, force: true }); }
 }
