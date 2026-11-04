@@ -1,0 +1,195 @@
+{
+  "projectId": "j979ftftba1qty1gv3jyhd09ws8hj3hj",
+  "sourceAssetId": "j57d4pm8jbt21b9hzhzqd85ht98hk58x",
+  "sourceFile": "~/landing-src/raw-talking-head.mp4",
+  "sourceDuration": 64.11405,
+  "outputDuration": 34.209999999999994,
+  "retainedRanges": [
+    {
+      "sourceStart": 1.44,
+      "sourceEnd": 4.11,
+      "timelineStart": 0
+    },
+    {
+      "sourceStart": 4.53,
+      "sourceEnd": 8.16,
+      "timelineStart": 2.6700000000000004
+    },
+    {
+      "sourceStart": 8.33,
+      "sourceEnd": 9.66,
+      "timelineStart": 6.300000000000001
+    },
+    {
+      "sourceStart": 9.89,
+      "sourceEnd": 12.48,
+      "timelineStart": 7.630000000000001
+    },
+    {
+      "sourceStart": 15.75,
+      "sourceEnd": 18.65,
+      "timelineStart": 10.22
+    },
+    {
+      "sourceStart": 18.85,
+      "sourceEnd": 18.895,
+      "timelineStart": 13.12
+    },
+    {
+      "sourceStart": 20.175,
+      "sourceEnd": 26.55,
+      "timelineStart": 13.164999999999997
+    },
+    {
+      "sourceStart": 26.97,
+      "sourceEnd": 31.02,
+      "timelineStart": 19.54
+    },
+    {
+      "sourceStart": 31.25,
+      "sourceEnd": 33.98,
+      "timelineStart": 23.59
+    },
+    {
+      "sourceStart": 34.21,
+      "sourceEnd": 35.22,
+      "timelineStart": 26.319999999999997
+    },
+    {
+      "sourceStart": 43.015,
+      "sourceEnd": 49.895,
+      "timelineStart": 27.329999999999995
+    }
+  ],
+  "previewWords": [
+    {
+      "text": "And",
+      "start": 19.59,
+      "end": 19.756666666666668
+    },
+    {
+      "text": "I",
+      "start": 19.756666666666668,
+      "end": 19.956666666666667
+    },
+    {
+      "text": "believe",
+      "start": 19.956666666666667,
+      "end": 20.123333333333335
+    },
+    {
+      "text": "AI",
+      "start": 20.123333333333335,
+      "end": 20.323333333333334
+    },
+    {
+      "text": "will",
+      "start": 20.323333333333334,
+      "end": 20.49
+    },
+    {
+      "text": "totally",
+      "start": 20.49,
+      "end": 21.91
+    },
+    {
+      "text": "change",
+      "start": 21.91,
+      "end": 22.11
+    },
+    {
+      "text": "how",
+      "start": 22.11,
+      "end": 22.31
+    },
+    {
+      "text": "we",
+      "start": 22.31,
+      "end": 22.51
+    },
+    {
+      "text": "edit",
+      "start": 22.51,
+      "end": 22.71
+    },
+    {
+      "text": "videos",
+      "start": 22.71,
+      "end": 23.19
+    },
+    {
+      "text": "is",
+      "start": 23.919999999999998,
+      "end": 24.086666666666666
+    },
+    {
+      "text": "why",
+      "start": 24.086666666666666,
+      "end": 24.25333333333333
+    },
+    {
+      "text": "I'm",
+      "start": 24.25333333333333,
+      "end": 24.453333333333333
+    },
+    {
+      "text": "building",
+      "start": 24.453333333333333,
+      "end": 24.619999999999997
+    },
+    {
+      "text": "a",
+      "start": 24.619999999999997,
+      "end": 24.786666666666665
+    },
+    {
+      "text": "video",
+      "start": 24.786666666666665,
+      "end": 25.280002
+    },
+    {
+      "text": "editor",
+      "start": 25.280002,
+      "end": 25.746668666666665
+    },
+    {
+      "text": "ground",
+      "start": 25.746668666666665,
+      "end": 26.080000000000002
+    },
+    {
+      "text": "just",
+      "start": 26.329999999999995,
+      "end": 26.56333333333333
+    }
+  ],
+  "previewStart": 19.54,
+  "rawPreview": "/landing/short-form-raw.mp4",
+  "rawPoster": "/landing/short-form-raw.webp",
+  "preview": "/landing/short-form-preview.mp4",
+  "previewPoster": "/landing/short-form-preview.webp",
+  "fileName": "raw-talking-head.mp4",
+  "timelineId": "main",
+  "developmentProjectUrl": "http://localhost:3001/editor/j979ftftba1qty1gv3jyhd09ws8hj3hj",
+  "previewEnd": 26.54,
+  "production": "Revline\u2019s in-app agent edited the uploaded original in the Reel lane. The seven-second muted preview uses the actual saved edit, rendered locally with Revline writeComposition and runRenderWorker at 360x640, 30fps, draft quality. No full-length Reel export was made. Replace the source through the development project and regenerate these preview/poster files and this manifest when new footage is ready.",
+  "zoomMoments": [
+    {
+      "start": 20.3,
+      "scale": 1.13,
+      "inDuration": 0.35,
+      "holdDuration": 1.55,
+      "outDuration": 0.35
+    },
+    {
+      "start": 30.6,
+      "scale": 1.12,
+      "inDuration": 0.35,
+      "holdDuration": 1.5,
+      "outDuration": 0.35
+    }
+  ],
+  "captionTiming": "Actual Revline word-pop reveal times at 30fps. Transcript-driven caption clip ranges are preserved; word entrances follow the renderer\u2019s reveal clock.",
+  "savedRevision": 2,
+  "verification": "The in-app agent encountered an unsupported redirect setting in its remote frame-review tool. Its exact generated edit was saved at revision 2 and the seven-second preview was rendered with the local Revline renderer (zero warnings)."
+}
