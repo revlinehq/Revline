@@ -3,6 +3,7 @@ export const tools = [
   'detectFacecam',
   'followSubject',
   'findHighlights',
+  'readFrames',
   'planClips',
   'checkClip',
   'finishClipping',
