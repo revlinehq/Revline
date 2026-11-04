@@ -10,17 +10,14 @@ import { cn } from '@/lib/utils';
 /** Elapsed run time is a development diagnostic; users see only the activity. */
 const SHOW_ELAPSED = process.env.NODE_ENV === 'development';
 
-function Elapsed({ startedAt }: { startedAt?: number | null }) {
-  const [seconds, setSeconds] = useState(0);
-  // Without a run start, count from first render; phase changes must not restart it.
-  const [mountedAt] = useState(() => Date.now());
+function Elapsed({ startedAt }: { startedAt: number }) {
+  const [seconds, setSeconds] = useState(() => Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
   useEffect(() => {
-    const start = startedAt ?? mountedAt;
-    const update = () => setSeconds(Math.max(0, Math.floor((Date.now() - start) / 1000)));
+    const update = () => setSeconds(Math.max(0, Math.floor((Date.now() - startedAt) / 1000)));
     update();
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
-  }, [startedAt, mountedAt]);
+  }, [startedAt]);
   return <span aria-hidden="true">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>;
 }
 
@@ -39,7 +36,7 @@ export function AssistantActivity({ label, detail, state = 'working', startedAt,
     <TraceLine status={state === 'working' ? 'running' : state === 'error' ? 'error' : undefined}>
       <TraceIcon>{Icon ? <Icon /> : <Spinner />}</TraceIcon>
       <TraceTitle className="font-medium">{title}</TraceTitle>
-      {SHOW_ELAPSED && state === 'working' && <TraceDescription><Elapsed startedAt={startedAt}/></TraceDescription>}
+      {SHOW_ELAPSED && state === 'working' && startedAt != null && <TraceDescription><Elapsed startedAt={startedAt}/></TraceDescription>}
     </TraceLine>
     {detail && <p className="pl-6 text-xs text-muted-foreground">{detail}</p>}
   </Trace>;

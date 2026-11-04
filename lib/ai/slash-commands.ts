@@ -1,7 +1,7 @@
 import { parseVideoLink } from '../editor/video-link';
 
 export const EDITOR_SLASH_COMMANDS = [
-  { name: 'clip', note: 'Clip a stream or video into vertical shorts' },
+  { name: 'clip', note: 'Clip a stream or video into separate shorts' },
 ] as const;
 
 export type EditorCommandName = typeof EDITOR_SLASH_COMMANDS[number]['name'];

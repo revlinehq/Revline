@@ -3,20 +3,27 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
 
 ## 2026-11-03
 - Clipping: Default all clips to inline data validation, original audio and bounded targeted video discovery; heavy QA is scoped and opt-in. Why: the user rejected automatic normalization and repeated full-batch checks.
 - Clipping: Use saved transcripts and data checks for podcast/talk cuts, preserving source framing and audio. Why: the user requested spoken-content clips without mandatory visual processing.
+- Agent context: Project numeric highlight helpers by source window and let non-Claude turns compact superseded results. Why: the full-podcast run repeatedly carried large source payloads.
 
 - Clipping: Preserve speaker crops in extracted review windows and reuse passing checks without resending raw RMS tracks. Why: the full-podcast rehearsal exposed bad framing sheets and repeated work.
+- Assistant: Measure elapsed work from the persisted user turn across phases, retries and reconnects. Why: the user saw the full-podcast timer repeatedly reset.
 - MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
 - Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
 - Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
 - Clipping: Let Gemini judge whole-source highlights and verify each accepted clip tab with data checks and one framing sheet. Why: the user wanted faster whole-source discovery and honest delivery where clips found equal tabs made.
+- Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
+- Editor: Make whole choice cards select their option and give each question unique radio IDs. Why: the user could only reliably select the radio button.
+- Landing: Move short-form editing to the third showcase and use the purple-outline Start editing button. Why: the user requested the corrected order and button style.
+- Landing: Added the short-form editing section with a real agent-edited talking-head Reel and a viewport-driven cut, caption and zoom illustration. Why: the user requested a short-form showcase after clipping.
+- Snapshots: Align decoder seeks to composition precision and handle failed cache captures without stopping the worker. Why: PR verification exposed a rejected FFmpeg seek and worker crash.
 - MCP identity: Distinguish Antigravity from Gemini using initialized client identity and Google’s official app mark. Why: the user requested accurate app badges for shared-token sessions.
 - MCP presence: Show each active agent’s company on project cards and timeline tabs, using initialized client identity. Why: personal-token agents appeared as generic MCP and concurrent agents hid one another.
-- Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - MCP: Isolate conversations and task targets; list all lane-labeled tools with call-time checks. Why: parallel Codex agents shared task context and could not discover lane tools.
 - Prototype: Add an isolated, replayable /clip recording flow using the real dashboard and editor. Why: the user needs repeatable marketing Reels without live AI runs.
 - Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.

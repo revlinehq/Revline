@@ -808,7 +808,7 @@ export const completionState = internalQuery({
           (c) => c.kind === "video" && c.assetId === row.assetId,
         )
       )
-        errors.push(`${choice.name}: needs populated source footage in the mode-appropriate aspect.`);
+        errors.push(`${choice.name}: needs populated source footage.`);
       tabs.push({
         timelineId: tab.id,
         name: tab.name,
