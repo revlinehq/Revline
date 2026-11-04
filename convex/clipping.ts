@@ -59,6 +59,7 @@ const rowFor = (
     )
     .unique();
 type Candidate = ReturnType<typeof rankHighlights>[number];
+const targetCount = (row: Doc<"clippingRuns">, duration: number) => Math.min(row.requestedCount??Math.min(10,Math.max(3,Math.round(duration/150))),Math.max(0,MAX_TIMELINE_TABS-row.baseline.length));
 const candidatesOf = (row: Doc<"clippingRuns">): Candidate[] =>
   JSON.parse(row.candidates);
 async function tabContents(
@@ -208,6 +209,7 @@ export const review = internalMutation({
   args: {
     ...runArgs,
     found: v.optional(v.array(fallbackMoment)),
+    shortfallReason:v.optional(v.string()),
     accepted: v.optional(v.array(clippingChoice)),
     editorRunId: v.optional(v.string()),
     dropped: v.optional(
@@ -300,6 +302,7 @@ export const review = internalMutation({
         found: candidates.length,
         qualified,
         recommendedCount,
+        sourceLengthTarget:targetCount(row,tracks.duration),
         candidates: candidates.slice(0, 10),
         geminiUnavailableReason: row.unavailableReason,
         next: "Accept or drop each returned candidate ID with planClips, then build exactly the accepted tabs and run checkClip/finishClipping.",
@@ -369,6 +372,9 @@ export const review = internalMutation({
       throw new ConvexError(
         "Record why each previously accepted candidate was dropped.",
       );
+    const source=await ctx.db.get(row.assetId),target=targetCount(row,source?.duration??0),shortfallReason=input.shortfallReason?.trim()??row.shortfallReason;
+    if(args.accepted.length<target&&!args.dropped.length&&(!shortfallReason||shortfallReason.length<20))throw new ConvexError(`Accepted ${args.accepted.length}, source-length target ${target}. Provide shortfallReason with the concrete quality/context/boundary reason fewer qualified; never pad weak moments.`);
+    if(shortfallReason&&shortfallReason.length>500)throw new ConvexError("Keep shortfallReason under 500 characters.");
     const discardedTabs: string[] = [];
     for (const choice of previouslyAccepted) {
       const tab = tabsOf(project).find((t) =>
@@ -398,6 +404,7 @@ export const review = internalMutation({
     }
     await ctx.db.patch(row._id, {
       reviewed: true,
+      ...(shortfallReason?{shortfallReason}:{}),
       accepted: args.accepted,
       dropped: args.dropped,
       receipts: row.receipts.filter((receipt) => {
@@ -633,6 +640,7 @@ export const completionState = internalQuery({
     const sourceRaw = await ctx.db.get(row.assetId);
     const source = sourceRaw ? await hydrateAsset(ctx, sourceRaw) : null;
     const candidates = candidatesOf(row);
+    if(row.reviewed&&row.accepted.length<targetCount(row,source?.duration??0)&&!row.dropped.length&&(!row.shortfallReason||row.shortfallReason.trim().length<20))errors.push("Explain the quality/context/boundary shortfall with planClips shortfallReason before finishing fewer than the source-length target.");
     const bound = new Set<string>();
     for (const choice of row.accepted) {
       const tab = contents.find((t) =>
@@ -745,6 +753,7 @@ export const completionState = internalQuery({
         ? {
             finalMessage:
               message +
+              (row.shortfallReason?`\nFewer clips qualified: ${row.shortfallReason}`:"")+
               (row.unavailableReason
                 ? "\nGemini was unavailable; picks used transcript and audio."
                 : ""),

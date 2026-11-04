@@ -61,6 +61,7 @@ export const clippingManifest = v.object({
   candidates: v.string(),
   recommendedCount: v.number(),
   requestedCount: v.optional(v.number()),
+  shortfallReason:v.optional(v.string()),
   reviewed: v.boolean(),
   accepted: v.array(clippingChoice),
   dropped: v.array(v.object({ candidateId: v.string(), reason: v.string() })),
