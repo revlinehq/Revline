@@ -128,3 +128,86 @@ Gaming final message, generated from the backend-validated ledger:
 Earlier diagnostics are not passing final benchmarks: a cold gaming transfer/encode took most of a 15m52s trial; a later 14m20s integrated run passed two tabs but exposed hidden source motion scans and slow remote health reads. Those were corrected by forwarding stillsOnly into the worker and reusing authorized local source bytes for health scans. A separate podcast YouTube import spent about 21 minutes downloading and then failed the host disk-size budget; it is excluded from the successful uploaded-source benchmark and must not be described as a delivered run. The first uploaded podcast trial exposed Convex's 8,192-entry RPC array limit at 10,195 words. Contract 41 preserves all timed words across completion/query transport as well as storage chunks; the real podcast turn must prove this before merge.
 
 Current checks: web typecheck, agent-runner typecheck and production build pass. DEV uses matching Convex functions and the statically bundled agent runner. Google native video still returns 402: the funded Gemini judgment path remains unverified. A successful fallback delivery does not certify funded Gemini behavior. Main's lane finish uses the stable taskId and requires both required:true and passed:true from the persisted ledger. Generic failed edits must be repaired before finish closes the tools. Final clip verification uses data checks and one contact sheet, with no dense finished-clip sweeps.
+
+## Earlier isolated rehearsal preserved from 59d4aad4
+
+This is the earlier isolated revision's historical record, retained with its screenshots and MCP evidence. The shared-DEV timings and current release requirements above supersede its speed and approval limits. These projects and processes belong to that earlier rehearsal.
+
+### Isolated app verification, November 3, 2026
+
+Both real `/clip` app runs completed on private development resources, using GPT-6.1 Terra with low reasoning. No export was requested or produced, and no original user project was edited. Gemini HTTP 402 was observed in actual discovery. The unavailable key was subsequently disabled only on the private backend, so the final runs exercise the explicitly disclosed transcript/audio/source-frame fallback. A successful Gemini judgment remains unverified.
+
+### Resources and integrated contract
+
+- Convex `resolute-magpie-736`, reference `dev/sol/t3-b3c0c273-27f371c36fdc`.
+- Media Worker `revline-sol-media-27f371c36fdc`, URL `https://revline-sol-media-27f371c36fdc.makaradze98-s.workers.dev`.
+- Agent runner `revline-sol-runner-27f371c36fdc`, URL `https://revline-sol-runner-27f371c36fdc.makaradze98-s.workers.dev`; deployed version `4ee06723-4482-41e3-9b1f-0b59bf58161d`.
+- Local frontend `http://localhost:3327` and matching local media worker. Both reported ready after restart at 03:29:16/03:29:20 UTC November 4 (November 3 locally).
+
+Main through `f76eba12ffd83b860a9fc71a444d0dab889165f0` is incorporated, including isolation, full-resolution reference tracking, the separate prototype, and MCP identity/presence/task scope. All changelog entries were retained. Combined contract 41 preserves tracker/worker fields and gates transcript, highlights, source reads, speaker and clip snapshot jobs. The live processor-contract query returned 41 and subsequent jobs completed on 41. The private backend/runner were deployed from `fa3cba84ea423d2c684e3b98669728dcf80b6fe8`; the subsequent bridge fix runs locally. Shared dev `majestic-alpaca-541` was read only; production `different-gnu-398` was not accessed.
+
+### Gaming: 495.821 seconds
+
+Project `th725yjevp145b1jfnedjmgxn98hjg0a` borrows real Florescent R2 source metadata. Initial run `1793758260552-0.49097985496655905` exposed a real missing capability: the clipping skill required source `readFrames`, but the Clip lane excluded it. The agent reported the issue, exhausted three finish checks, and saved no delivered tabs. Its final message honestly reported no timeline changes. The lane now exposes `readFrames`; real source-frame calls succeeded both in the app and through the scoped MCP bridge.
+
+Post-fix run `1793759605203-0.33701435696671356` completed with **2 found / 2 accepted / 2 populated checked tabs**, no completion errors:
+
+| Delivered tab | Source range | Duration |
+| --- | --- | --- |
+| The Ace on Match Point | 213.10–230.083333s | 16.983333s |
+| Knives Out Ace | 104.845–120.38s | 15.535s |
+
+The authoritative final message lists exactly those two tabs and says “Gemini was unavailable; picks used transcript and audio.” Both duration/aspect/coverage/range/boundary/loudness/caption/decode checks passed. Chat displays both model and authoritative completion text; both describe the saved result honestly.
+
+Elapsed chat-send to completion: **1165.187s (19m25s)**, with 28 recorded model calls and 54 tool calls. This does not establish a speed improvement over the user's approximately 18-minute, one-tab run: full podcast conversion ran concurrently, and this run included recovery and a boundary repair. Its transcript was already saved. Initial cold preparation separately took 27.8s for transcription (2.6s Deepgram), 63.1s for playback preparation after restart, and 485.0s for discovery including transfer/overview encoding and Gemini rejection.
+
+| Phase in the completed gaming run | Measured time |
+| --- | --- |
+| Fallback discovery, including transfer | 46.1s |
+| Source-wide facecam, queued to completed | about 93.7s |
+| First normalization, worker processing | 6.2s / 4.9s |
+| First clip checks, queued to completed | 94.6s / 102.2s |
+| Boundary repair normalization | 13.5s |
+| Repeated checks before receipt reuse fix | 183.9s / 195.8s |
+
+Remaining elapsed time includes frame review, queues, model turns and editing. The trace exposed redundant checking of an unchanged valid tab. `checkClip` now filters explicit IDs against fingerprint-validated current receipts and returns `reusedTimelineIds`; changed or failed tabs still queue checks. The podcast probe below verified this optimization in the app.
+
+### Full Syntax podcast: 3386.894 seconds
+
+Project `th7cjvgxjenvrgazar44qh7fzh8hkmg7` imported the full documented [Syntax video](https://www.youtube.com/watch?v=-f2ql_aGIbs): 1920×1080, 30fps, 3386.894s. The initial import exhausted disk space (roughly 113 MB free). Original downloads were preserved. Only this checkout's regenerable build cache and incomplete remux were removed; root separately reclaimed inactive generated build artifacts. Retry `s579csvrg7gfgembsmjk93z1s98hjx1g` reused the real downloads via hard links and completed at 03:02:06 UTC November 4. Recovered conversion took 23m14s queued-to-complete; full audio extraction took about 46s. These import stages precede the final chat run and are excluded from its time.
+
+The first complete-source transcription returned 10,206 words but failed worker completion at Convex's 8,192-item argument-array limit. Storage chunking did not protect RPC transport. Contract 41 now sends words in bounded chunks across completion, asset queries and snapshots, reconstructing before analysis. The live retry stored **10,207 words** (provider rerun differed by one), six storage/transport chunks of at most 2,000 words, 474 overview segments and final word end 3374.77s. Transcription, subsequent highlight discovery, speaker analysis and clip checks all completed.
+
+Run `1793762003156-0.1506588149170094` explicitly requested three clips and completed with **8 found / 3 accepted / 3 populated checked tabs**, five dropped reasons and no completion errors:
+
+| Delivered tab | Source range | Duration |
+| --- | --- | --- |
+| AI booked the wrong flight | 1478.19–1512.38s | 34.19s |
+| Would you go back before AI coding? | 912.635–944.68s | 32.045s |
+| The circuit breaker promise | 1631.685–1670.39s | 38.705s |
+
+Dropped moments at approximately 605s, 664s, 1800s, 2289s and 3272s each have an explicit editorial reason. The final authoritative message lists the three actual tabs, ranges/durations, all five dropped reasons and the fallback disclosure. The model final also discloses wider letterboxed framing to keep speakers visible and that nothing was exported.
+
+Elapsed chat-send to completion: **1231.058s (20m31s)**, with 55 recorded model calls and 73 tool calls. This includes a deliberate interruption and roughly two-minute worker restart, plus normalization repairs. No comparable old full-podcast app run was measured.
+
+| Phase | Measured time |
+| --- | --- |
+| Full-source transcription, worker processing | 44.5s: audio 20.8s, Deepgram 11.4s, quiet detection 11.6s |
+| Whole-source fallback discovery, worker processing | 13.3s |
+| Speaker windows, worker processing | about 55s / 50s / 61s |
+| First normalization, worker processing | about 9s / 13s / 11s |
+| First checks, queued to completed | 92.6s / 93.5s / 70.5s |
+| Last complete-mix normalization, queued to completed | 14.1s / 11.5s / 12.9s |
+| Last passing checks, queued to completed | 27.9s / 30.0s / 47.7s |
+
+The agent initially normalized individual clips; the complete-mix gate correctly rejected that evidence. It repaired all tabs with timeline-mix normalization and passed subsequent checks. Earlier repair/check batches and model editing account for additional elapsed time. The final explicit repeat of all three timeline IDs returned **zero new results**, `alreadyChecked:true`, and all three IDs in `reusedTimelineIds`, with no new check jobs.
+
+### Screenshots, MCP integration and limits
+
+Desktop (1280×800) and phone (390×844) screenshots come from the authenticated running app. Gaming before images show the earlier live run; after images show completed delivery. No historical pre-run podcast screenshot survived the browser interruption. Its before images therefore show an explicitly labeled **unclipped baseline in a separate copied verification project** (`th753t1qme0nvc961r3bdbb2qs8hktre`), with output tabs removed and real source media retained. They are not presented as screenshots of old code. After images show the actual completed podcast project. Assets live on `pr-assets` under `find-highlights/before/` and `find-highlights/after/`.
+
+A real scoped MCP SDK client listed 169 tools and read a source frame through Clip without exporting or editing. Integration inspection found the stdio bridge hid initialized identity as `revline-local` and did not terminate its HTTP session. The bridge now forwards client identity, explicitly terminates upstream sessions on stdin end/disconnect/signals, and closes transports. A live `Codex PR58 cleanup verification` connection was recorded with that identity and `closedAt`; its task lease was inactive after client close. In-app and MCP task IDs remain separate. Clerk development ticket sign-in restored the incognito preview; no production auth or default browser profile was changed.
+
+Local `npm run typecheck` passed after the final integration. The last local production build compiled successfully in 83s, then was stopped during TypeScript to avoid concurrent heavyweight builds/disk pressure; a completed local build is not claimed. Both GitHub checks passed exact integrated head `fa3cba84`; the final bridge/docs commit requires its own CI result. No tests, mocks, fixtures or test-only scripts were added.
+
+Remaining limits: successful Gemini judging and Linux container/export execution are unverified; wider letterboxed framing remains a visual quality concern in both sources; delivery correctness is demonstrated, speed improvement is not. Production release and PR merge require the user's approval. The private app and local worker remain running for review.

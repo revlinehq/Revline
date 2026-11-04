@@ -14,7 +14,7 @@ export function readTranscript(transcript: Transcript): Transcript {
   if(!transcript.wordChunks)return transcript;
   const {wordChunks,...rest}=transcript;
   const count=wordChunks.reduce((sum,chunk)=>sum+chunk.length,0);
-  if(count>MAX_TRANSCRIPT_WORDS||count!==transcript.wordCount||transcript.words.length)throw new Error('Timed transcript transport is incomplete.');
+  if(count>MAX_TRANSCRIPT_WORDS||transcript.wordCount!==undefined&&count!==transcript.wordCount||transcript.words.length)throw new Error('Timed transcript transport is incomplete.');
   return {...rest,words:wordChunks.flat()};
 }
 export function materializeTranscript<T extends {analysis?:{transcript?:Transcript}}>(asset:T):T {
