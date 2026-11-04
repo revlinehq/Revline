@@ -164,10 +164,15 @@ For edit requests, use one brief initial sentence stating the requested action, 
           prepareStep: async ({ steps: current, messages }) => {
             const completedSteps = [...steps, ...current];
             if (!hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
-            const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.editMode()==='precise'||!PRECISE_ONLY_TOOLS.has(name)));
+            // A failed finish is repaired by finish itself after the edits pass.
+            const openEdits=completedSteps.map(step=>({content:step.content.filter(part=>!part||typeof part!=='object'||!('toolName' in part)||part.toolName!=='finish')}));
+            const unresolved=hasUnresolvedToolFailures(openEdits);
+            // Closing the lane removes its tools. Resolve earlier failed edits
+            // first, while their correction tools are still available.
+            const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='finish'||!unresolved)&&(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.editMode()==='precise'||!PRECISE_ONLY_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw new LaneFinishError(`The ${failed.lane} task stopped after three failed finish checks: ${JSON.stringify(failed.failures)}`);
-            return {activeTools,toolChoice:!toolkit.laneChosen()||toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane(),!toolkit.laneChosen()),{role:'system',content:`${toolkit.laneChosen()?`${laneInstructions(toolkit.lane())}\n${editModeInstructions(toolkit.editMode(),toolkit.lane())}\nCatalog: ${JSON.stringify(editorCapabilityIndex(toolkit.lane(),LANES[toolkit.lane()].skills.map(({name,description})=>({name,description}))))}`:laneChoiceInstructions(toolkit.lane(),laneTask.lockedLane)}`}]};
+            return {activeTools,toolChoice:!toolkit.laneChosen()||toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane(),!toolkit.laneChosen()),{role:'system',content:`${toolkit.laneChosen()?`${laneInstructions(toolkit.lane())}\n${editModeInstructions(toolkit.editMode(),toolkit.lane())}\nCatalog: ${JSON.stringify(editorCapabilityIndex(toolkit.lane(),LANES[toolkit.lane()].skills.map(({name,description})=>({name,description}))))}`:laneChoiceInstructions(toolkit.lane(),laneTask.lockedLane)}${unresolved?`\nFinish is unavailable until these failed edits are corrected: ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
