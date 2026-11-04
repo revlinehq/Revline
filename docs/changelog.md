@@ -3,7 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
-- Clipping: Expose source frame reads in the Clip lane and record isolated app failures. Why: real gaming verification found fallback review could not access its required tool.
+- Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Clipping: Let Gemini judge whole-source highlights and verify each accepted clip tab with data checks and one framing sheet. Why: the user wanted faster whole-source discovery and honest delivery where clips found equal tabs made.
 - Prototype: Add an isolated, replayable /clip recording flow using the real dashboard and editor. Why: the user needs repeatable marketing Reels without live AI runs.

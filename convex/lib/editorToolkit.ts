@@ -857,8 +857,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       inputSchema:z.object({timelineIds:z.array(z.string()).min(1).max(10).optional(),acceptedFindings:z.array(z.object({kind:z.enum(['freeze','black']),reason:z.string().min(15).max(500)})).max(8).optional()}),execute:async(_ctx,input)=>{
         clippingActive=true;await editSession.wait();
         const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
-        const ids:string[]=input.timelineIds??('tabs' in state?state.tabs.filter(t=>!('checked' in t&&t.checked)).map((t:{timelineId:string})=>t.timelineId):[]);
-        if(!ids.length){if('tabs' in state&&state.tabs.length)return {results:[],images:[],alreadyChecked:true,next:'Current accepted tabs already have passing checkClip receipts. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
+        const checkedIds=new Set<string>('tabs' in state?state.tabs.filter((tab:{checked:boolean})=>tab.checked).map((tab:{timelineId:string})=>tab.timelineId):[]);
+        const requestedIds:string[]=[...new Set<string>(input.timelineIds??('tabs' in state?state.tabs.map((tab:{timelineId:string})=>tab.timelineId):[]))];
+        const reusedTimelineIds=requestedIds.filter(id=>checkedIds.has(id)),ids=requestedIds.filter(id=>!checkedIds.has(id));
+        if(!ids.length){if('tabs' in state&&state.tabs.length)return {results:[],images:[],alreadyChecked:true,reusedTimelineIds,next:'Current accepted tabs already have passing checkClip receipts. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
         const results:unknown[]=[],images:{label:string;data:string;mimeType:string}[]=[];
         await forEachLimited(ids,2,async(timelineId)=>{
           const prepared=await ctx.runQuery(internal.clipping.prepareCheck,{...clippingRun,timelineId,...(input.acceptedFindings?{acceptedFindings:input.acceptedFindings}:{})});
@@ -872,7 +874,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
         });
         results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
-        return {results,images,next:'Fix failed checks, glance at the framing sheet, then call finishClipping. Its finalMessage is the exact list of delivered tabs.'};
+        return {results,images,reusedTimelineIds,next:'Fix failed checks, glance at the framing sheet, then call finishClipping. Its finalMessage is the exact list of delivered tabs.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration, 9:16 and current passing checkClip receipts. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
       await editSession.wait();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
