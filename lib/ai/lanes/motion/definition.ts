@@ -11,5 +11,5 @@ export const definition: LaneDefinition = {
   check,
   referenceMotion: 'bound',
   instructions:
-    'Read motion-design, gsap page revline and scene-engine before building. Check original films with checkPacing. A film already bound to a reference uses reference-footage page recreation and persisted reference comparisons, including timed OFF exceptions.',
+    'Read motion-design, gsap page revline and scene-engine before building. Use readFrames and full-resolution trackReference to measure existing motion; motionMap gives a fast overview. Check original films with checkPacing. A film already bound to a reference uses reference-footage page recreation and persisted reference comparisons, including timed OFF exceptions.',
 };

@@ -29,6 +29,8 @@ A machine exits after 60 seconds with no work and auto-destroys. Detached scratc
 
 `MEDIA_PROCESSOR_THREADS` sizes native encoding to the machine's CPUs; local consumers retain their two-thread budget. `MEDIA_PREVIEW_CPUS` divides that budget across two simultaneous chunks, with the full budget assigned to a short source that needs one chunk. The parallel chunk boundary and final mux approach follows `fast-preview` (`f608190`), while this branch retains the existing preview quality and queue contract. Browser-based encoders receive `REVLINE_RENDER_ENCODE_THREADS` too. Torch/OpenMP/MKL receive the full CPU budget. Each machine has its own CPU budget, so concurrent jobs do not split one encoder's cores.
 
+For isolated development reads, set `MEDIA_WORKER_PROJECT_ID` to a project ID before `npm run dev`. The local worker then subscribes to and claims only that project’s tasks; other projects remain available to their existing workers. Stop the development launcher to stop both its frontend and worker. Reference element tracking reuses the pinned scene-detection OpenCV/NumPy runtime and decodes native-resolution source frames.
+
 ## Deployment
 
 Use Node 22. Install dependencies and keep environment files private:
