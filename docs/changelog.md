@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Clipping: Use saved transcripts and data checks for podcast/talk cuts, preserving source framing and audio. Why: the user requested spoken-content clips without mandatory visual processing.
 - MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
 - Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
 - Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
