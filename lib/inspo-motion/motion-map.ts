@@ -4,7 +4,7 @@
 // element moves come back as GSAP keyframes with the measured ease; each camera move names the change it answers.
 // The same map is read from a reference video and from our own rendered timeline, so the two can be compared.
 
-import { bestEase, fitMotion, type TrackSample } from '../media-analysis/fit-motion';
+import { bestEase, fitMotion, gsapEase, type TrackSample } from '../media-analysis/fit-motion';
 
 type Pose = { scale: number; x: number; y: number; rotation: number };
 export type CameraMove = { start: number; end: number; duration: number; kind: string; from: Pose; to: Pose; ease: string; fit: number; gsap: string; cause?: string; flag?: string };
@@ -241,7 +241,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     const dx = move.to.x - move.from.x, dy = move.to.y - move.from.y, ds = move.to.scale - move.from.scale;
     const kind = Math.abs(ds) > .08 && Math.abs(ds) * 50 > Math.hypot(dx, dy) ? (ds > 0 ? 'scales up' : 'scales down') : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'slides right' : 'slides left') : (dy > 0 ? 'slides down' : 'slides up');
     const fields = (p: { x: number; y: number; scale: number }) => `xPercent: ${round(p.x, 1)}, yPercent: ${round(p.y, 1)}${ds ? `, scale: ${p.scale}` : ''}`;
-    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${round(Math.hypot(dx, dy), 1)}% of the frame)`, from: move.from, to: move.to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: '${move.ease}' }, ${move.start})` };
+    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${round(Math.hypot(dx, dy), 1)}% of the frame)`, from: move.from, to: move.to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: ${gsapEase(move.ease)} }, ${move.start})` };
   })).sort((a, b) => a.start - b.start);
 
   // 6. Camera moves: where the accumulated pose changes, split where its speed jumps (a slow drift that bursts at a change).
@@ -254,40 +254,23 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     return { ls: window.reduce((s, p) => s + p.ls, 0) / window.length, x: window.reduce((s, p) => s + p.x, 0) / window.length, y: window.reduce((s, p) => s + p.y, 0) / window.length, r: window.reduce((s, p) => s + p.r, 0) / window.length };
   });
   const speed = smooth.map(delta => distance(vector(IDENTITY), delta) * fps);
-  // Cuts reset the camera: never one move across a cut.
-  const cutAt = hardCuts;
   const FLOOR = .008;
-  const runs: [number, number][] = [];
-  for (let i = 0; i < speed.length; i++) {
-    if (speed[i] < FLOOR || cutAt.has(i)) continue;
-    let last = i; while (last + 1 < speed.length && !cutAt.has(last + 1) && (speed[last + 1] >= FLOOR || (last + 3 < speed.length && speed[last + 2] >= FLOOR))) last++;
-    // Split at a local speed jump rather than the whole run's median, which changes with window length.
-    let from = i;
-    for (let k = i + 1; k <= last; k++) {
-      const a = speed[k - 1], b = speed[k];
-      const before = smooth[k - 1], after = smooth[k];
-      const turn = before.ls * after.ls < 0 && Math.abs(before.ls - after.ls) * fps > FLOOR || before.x * after.x + before.y * after.y < 0 && Math.hypot(before.x - after.x, before.y - after.y) * fps > FLOOR;
-      if ((turn || Math.max(a, b) > .05 && Math.max(a, b) > Math.max(FLOOR, Math.min(a, b)) * 3) && k - from >= Math.max(3, fps * .1)) { runs.push([from, k]); from = k; }
-    }
-    runs.push([from, last + 1]);
-    i = last;
-  }
+  // Cuts split paths; timing and easing are fitted jointly with each segment's holds.
+  const segments: TrackSample[][] = [[]];
+  cumulative.forEach((transform, index) => {
+    if (hardCuts.has(index - 1)) segments.push([]);
+    const p = poseOf(transform, width, height);
+    segments.at(-1)!.push({ time: start + index / fps, ...p, w: 0, h: 0, confidence: 1 });
+  });
   const camera: CameraMove[] = [];
-  for (const [a, b] of runs) {
-    const path = cumulative.slice(a, b + 1).map(t => vector(compose(invert(cumulative[a]), t)));
-    const total = distance(path[0], path[path.length - 1]);
-    if (total < .005 || (b - a) / fps < .1) continue;
-    const end = path[path.length - 1], norm = end.ls ** 2 + end.x ** 2 + end.y ** 2 + (end.r / (Math.PI / 2)) ** 2;
-    const points = path.map((pose, k) => ({ u: k / (b - a), p: Math.max(-.5, Math.min(1.5, (pose.ls * end.ls + pose.x * end.x + pose.y * end.y + pose.r * end.r / (Math.PI / 2) ** 2) / norm)) }));
-    const named = bestEase(points), custom = named.error > .08 ? customCurve(points) : null;
-    const from = poseOf(cumulative[a], width, height), to = poseOf(cumulative[b], width, height), duration = round((b - a) / fps, 2);
-    const relative = poseOf(compose(invert(cumulative[a]), cumulative[b]), width, height);
+  for (const move of segments.flatMap(samples => fitMotion(samples, { width: 100, height: 100 }))) {
+    const from = move.from, to = move.to, duration = move.duration;
+    const relative = relativePose(to, from);
     const dz = Math.log(relative.scale), dx = relative.x, dy = relative.y, dr = relative.rotation;
     // Named the way the camera turns: the picture slides the other way (picture moving down = the camera tilting up).
     const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'left' : 'right'} ${Math.abs(round(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'up' : 'down'} ${Math.abs(round(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${round(dr, 1)}°` : ''].filter(Boolean);
-    const ease = custom ? `CustomEase.create("measured", "M0,0 C${custom[0]},${custom[1]} ${custom[2]},${custom[3]} 1,1")` : named.name;
     const pose = (p: Pose) => `scale: ${p.scale}, xPercent: ${p.x}, yPercent: ${p.y}${from.rotation !== to.rotation ? `, rotation: ${p.rotation}` : ''}`;
-    camera.push({ start: at(a), end: at(b), duration, kind: parts.join(' + ') || 'drift', from, to, ease: custom ? `custom (closest named: ${named.name})` : named.name, fit: round(Math.max(0, 1 - Math.min(named.error, custom?.[4] ?? 1)), 2), gsap: `tl.fromTo(camera, { ${pose(from)} }, { ${pose(to)}, duration: ${duration}, ease: ${custom ? ease : `'${ease}'`} }, ${at(a)})` });
+    camera.push({ start: move.start, end: move.end, duration, kind: parts.join(' + ') || 'drift', from, to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(camera, { ${pose(from)} }, { ${pose(to)}, duration: ${duration}, ease: ${gsapEase(move.ease)} }, ${move.start})` });
   }
 
   // 7. Causes: what each camera move answers. A move starts with a change, or lands on one.
@@ -322,20 +305,6 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   };
 }
 
-/** The cubic bezier (x1, y1, x2, y2) closest to measured progress, when no named ease fits; the fifth value is its error. */
-function customCurve(points: { u: number; p: number }[]) {
-  const bezier = (x1: number, y1: number, x2: number, y2: number) => (x: number) => {
-    let t = x;
-    for (let k = 0; k < 6; k++) { const xt = 3 * (1 - t) ** 2 * t * x1 + 3 * (1 - t) * t * t * x2 + t ** 3 - x, d = 3 * (1 - t) ** 2 * x1 + 6 * (1 - t) * t * (x2 - x1) + 3 * t * t * (1 - x2); if (Math.abs(d) < 1e-6) break; t = Math.max(0, Math.min(1, t - xt / d)); }
-    return 3 * (1 - t) ** 2 * t * y1 + 3 * (1 - t) * t * t * y2 + t ** 3;
-  };
-  let best = [0, 0, 1, 1, Infinity];
-  for (let x1 = 0; x1 <= 1; x1 += .1) for (let x2 = 0; x2 <= 1; x2 += .1) for (let y1 = -.4; y1 <= 1.6; y1 += .2) for (let y2 = -.4; y2 <= 1.6; y2 += .2) {
-    const f = bezier(x1, y1, x2, y2), error = Math.sqrt(points.reduce((s, p) => s + (f(p.u) - p.p) ** 2, 0) / points.length);
-    if (error < best[4]) best = [x1, y1, x2, y2, error];
-  }
-  return best.map((v, i) => i < 4 ? round(v, 2) : v);
-}
 
 
 export type MotionDifference = { time: number; issue: string; fix?: string };
