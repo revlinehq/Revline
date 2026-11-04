@@ -1,6 +1,8 @@
 import { timelineDuration } from '../../../editor/types';
 import { currentEvidence, type LaneCheckContext } from '../types';
+import { referenceMotionFailures } from '../recreate/motion';
 export function check(context: LaneCheckContext): string[] {
+  if (context.referenceMotion?.length) return referenceMotionFailures(context);
   const duration = timelineDuration(context.timeline);
   const ranges = currentEvidence(context, 'checkPacing')
     .filter(
