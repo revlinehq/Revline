@@ -18,7 +18,9 @@ Build every new UI component from shadcn (`components/ui/`): tabs, segments, dia
 
 ## Delivery
 
-Start local development with `npm run dev`, which runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
+Agent worktrees start with `npm run dev:isolated` and use `scripts/isolated-mcp.mjs` for revline-local; details: `docs/isolated-development.md`. Only the primary checkout on `main` may push `majestic-alpaca-541`. Never override a worktree's scoped target.
+
+`npm run dev` runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
 
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
