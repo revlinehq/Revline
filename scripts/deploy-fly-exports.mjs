@@ -11,11 +11,11 @@ import { parseEnv } from 'node:util';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.some(arg => arg !== '--prod')) throw new Error('Usage: npm run deploy:fly-exports [-- --prod]');
+if (args.some(arg => !['--prod', '--dry-run'].includes(arg))) throw new Error('Usage: npm run deploy:fly-exports [-- --prod] [--dry-run]');
 const production = args.includes('--prod');
 const app = production ? 'revline-render' : 'revline-render-dev';
 const deployment = production ? 'different-gnu-398' : 'majestic-alpaca-541';
-const settings = parseEnv(await readFile(join(root, production ? '.env.production.local' : '.env.local'), 'utf8'));
+const settings = parseEnv(await readFile(process.env.REVLINE_ENV_FILE || join(root, production ? '.env.production.local' : '.env.local'), 'utf8'));
 if (settings.CONVEX_DEPLOYMENT !== `${production ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== `https://${deployment}.convex.cloud`) throw new Error('Export environment does not match the selected deployment.');
 const env = { ...process.env, ...settings };
 if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
@@ -36,6 +36,7 @@ function run(command, argv, options = {}) {
 }
 
 console.log(`Target: Fly app ${app}, Convex ${production ? 'production (different-gnu-398)' : 'development (majestic-alpaca-541)'}.`);
+if (args.includes('--dry-run')) { console.log('Validated export target. No image built or deployment changed.'); process.exit(0); }
 try {
   await run(process.execPath, ['infra/media-worker/prepare-context.mjs']);
   await writeFile(join(context, 'fly.toml'), `app = "${app}"\nprimary_region = "iad"\n[build]\n  dockerfile = "infra/media-worker/Dockerfile"\n  build-target = "exports"\n`);

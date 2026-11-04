@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.some(arg => !['--dry-run', '--processor-only', '--stage-only'].includes(arg))) throw new Error('Usage: npm run deploy:production [-- --dry-run] [--processor-only] [--stage-only]');
+if (args.some(arg => !['--dry-run', '--processor-only', '--stage-only', '--image-first'].includes(arg))) throw new Error('Usage: npm run deploy:production [-- --dry-run] [--processor-only] [--stage-only] [--image-first]');
 const state = join(root, '.data/production-releases');
 await mkdir(state, { recursive: true });
 const lockPath = join(state, 'release.lock');
