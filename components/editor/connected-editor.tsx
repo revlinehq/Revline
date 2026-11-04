@@ -31,7 +31,7 @@ import { EMPTY_TIMELINE, normalizeTimeline, timelineCover, timelineDuration, typ
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
-import { MEDIA_ACTIVITY_LABELS } from '@/lib/media-analysis/activity';
+import { mediaTaskActivityLabel } from '@/lib/media-analysis/activity';
 import { createPlaybackOpeningGate } from '@/lib/editor/editor-opening';
 import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
@@ -164,7 +164,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
     const analysis=mediaTasks?.find(task=>task.assetId===asset._id&&task.kind==='transcribe'&&!asset.analysisKinds?.includes('transcribe')&&!asset.analysis?.transcript);
     if(analysis&&analysis.status!=='completed'){
       const failed=analysis.status==='failed'||analysis.status==='cancelled';
-      return {...asset,footageProgress:progress,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':analysis.activity?MEDIA_ACTIVITY_LABELS[analysis.activity]:'Listening to your footage…'}};
+      return {...asset,footageProgress:progress,preparation:{status:failed?'failed' as const:'processing' as const,message:failed?'Media analysis failed. Retry preparation.':mediaTaskActivityLabel(analysis)}};
     }
     if(asset.kind!=='video'||asset.audioExtracted||asset.audioAssetId)return {...asset,footageProgress:progress};
     const task=mediaTasks?.find(task=>task.kind==='extract'&&task.assetId===asset._id);

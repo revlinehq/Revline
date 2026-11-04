@@ -394,6 +394,20 @@ export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysi
  * indexed read per distinct owner; with no other owner waiting, the oldest
  * task is claimed so a lone account still uses every free slot. */
 async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) {
+  // A video upload already prepares its audio. Do not occupy another worker
+  // demuxing that same video while its bounded extraction task is still active.
+  const ready: Doc<'mediaTasks'>[] = [];
+  for (const task of candidates) {
+    if (task.kind === 'transcribe' && task.assetId) {
+      const source = await ctx.db.get(task.assetId);
+      if (source?.kind === 'video' && !source.audioExtracted) {
+        const preparations = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', task.assetId!).eq('kind', 'extract')).order('desc').take(10);
+        if (preparations.some(p => p.ownerId === task.ownerId && p.projectId === task.projectId && ['queued', 'running', 'retrying'].includes(p.status))) continue;
+      }
+    }
+    ready.push(task);
+  }
+  candidates = ready;
   // Worker kind priorities must not let a later capacity-queued read overtake an earlier render.
   if (candidates.some(task => task.capacityQueued)) {
     const oldest = new Map<string, string | undefined>();
@@ -438,7 +452,9 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   if(renders.length)return fairest(ctx,renders);
   const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
-  return indexed??await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  if (indexed) return indexed;
+  const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  return legacy ? fairest(ctx, [legacy]) : null;
 }
 export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
   const task=await ctx.db.get(args.taskId);if(!task||task.ownerId!==await requireOwner(ctx))throw new ConvexError('Media task not found.');

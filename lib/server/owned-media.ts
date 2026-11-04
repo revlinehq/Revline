@@ -6,7 +6,7 @@ import { pipeline } from 'node:stream/promises';
 import { AnalysisError } from '../media-analysis/errors';
 import { retryMediaOperation } from '../media-analysis/network';
 
-type DownloadOptions = { concurrency?: 1 | 2 | 3; onProgress?: (downloaded: number, total: number) => void };
+type DownloadOptions = { reserveBytes?: number; concurrency?: 1 | 2 | 3; onProgress?: (downloaded: number, total: number) => void };
 
 export function ownedMediaUrl(url: string, origin: string) {
   const parsed = new URL(url);
@@ -24,8 +24,12 @@ export async function downloadOwnedMedia(url: string, path: string, origin: stri
   const fromR2 = parsed.pathname === '/read';
   if (!Number.isSafeInteger(expectedSize) || expectedSize < 1) throw new Error('The source file has invalid size metadata. Re-upload it.');
   const disk = await statfs(tmpdir());
-  // Keep room for the export and other concurrent jobs; capacity follows the host disk.
-  if (expectedSize > disk.bavail * disk.bsize / 3) throw new Error('The render server needs more temporary disk space for this source.');
+  // Render callers retain two source sizes of headroom; audio-only work reserves
+  // its bounded output separately instead of budgeting a video export.
+  const reserve = options.reserveBytes ?? expectedSize * 2;
+  if (!Number.isSafeInteger(reserve) || reserve < 0) throw new Error('Invalid temporary disk reservation.');
+  const free = disk.bavail * disk.bsize, required = expectedSize + reserve;
+  if (required > free) throw new AnalysisError(`Insufficient temporary disk: this job needs ${Math.ceil(required / 1048576)} MiB (${Math.ceil(expectedSize / 1048576)} MiB source plus ${Math.ceil(reserve / 1048576)} MiB processing headroom), but only ${Math.floor(free / 1048576)} MiB is available. Add worker disk or use a smaller source; retrying without more space will not help.`, 507, false);
   const concurrency = fromR2 && expectedSize >= 64 * 1024 * 1024 ? options.concurrency ?? 1 : 1;
   await retryMediaOperation(async () => {
     const attemptSignal = AbortSignal.any([signal, AbortSignal.timeout(15 * 60_000)]);
