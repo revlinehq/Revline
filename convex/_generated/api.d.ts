@@ -127,6 +127,7 @@ import type * as r2 from "../r2.js";
 import type * as referenceMotion from "../referenceMotion.js";
 import type * as referenceReads from "../referenceReads.js";
 import type * as renderSnapshotMigration from "../renderSnapshotMigration.js";
+import type * as railwayWorkers from "../railwayWorkers.js";
 import type * as renders from "../renders.js";
 import type * as saveIncidents from "../saveIncidents.js";
 import type * as sceneThumbs from "../sceneThumbs.js";
@@ -265,6 +266,7 @@ declare const fullApi: ApiFromModules<{
   referenceMotion: typeof referenceMotion;
   referenceReads: typeof referenceReads;
   renderSnapshotMigration: typeof renderSnapshotMigration;
+  railwayWorkers: typeof railwayWorkers;
   renders: typeof renders;
   saveIncidents: typeof saveIncidents;
   sceneThumbs: typeof sceneThumbs;

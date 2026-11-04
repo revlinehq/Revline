@@ -17,6 +17,7 @@ export const RUNTIME_PREFIXES = [
   'scripts/detect-facecam.py', 'scripts/render-worker.mjs', 'scripts/render-distributed.mjs', 'scripts/render-chunk.mjs', 'scripts/render-artifacts.mjs', 'scripts/render-resources.mjs', 'scripts/render-ffmpeg.sh', 'scripts/composition-review-worker.mjs', 'scripts/hyperframes-playback-compat.mjs',
   'scripts/beat-tracking-requirements.txt', 'scripts/scene-detection-requirements.txt', 'scripts/video-import-requirements.txt',
   'scripts/deploy-production.mjs', 'scripts/deploy-fly-processor.mjs', 'scripts/deploy-fly-exports.mjs', 'package.json', 'package-lock.json', 'tsconfig.json',
+  'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs', 'scripts/render-railway-chunks.mjs',
 ];
 
 function report(changed, reason, files = []) {

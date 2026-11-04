@@ -82,5 +82,14 @@ FROM processor AS fly-processor
 USER root
 CMD ["sh", "infra/media-worker/fly-entry.sh"]
 
+# Railway uses the same packaged runtimes with ephemeral, unprivileged scratch.
+FROM processor AS railway-processor
+CMD ["sh", "infra/media-worker/railway-entry.sh"]
+
+FROM exports AS railway-exports
+USER node
+ENV REVLINE_RUNTIME_CHECK=exports
+CMD ["sh", "infra/media-worker/railway-entry.sh"]
+
 # Preserve the Cloudflare default target for rollback.
 FROM processor

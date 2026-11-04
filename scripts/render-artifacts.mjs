@@ -1,4 +1,5 @@
-// Export render artifacts (plans and chunks) in the Fly app's Tigris bucket. Credentials
+// Export render artifacts (plans and chunks) in the existing Tigris bucket. Both
+// Fly and Railway use this same storage protocol; compute migration does not move data. Credentials
 // are the app secrets `fly storage create` sets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
 // AWS_ENDPOINT_URL_S3 and BUCKET_NAME. Bodies stream with an unsigned payload hash.
 import { spawn } from 'node:child_process';
@@ -52,6 +53,22 @@ export async function exists(key, signal) {
 }
 
 export async function remove(key) {
-  const response = await request('DELETE', key).catch(() => null);
+  const response = await request('DELETE', key, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
   return !!response?.ok;
+}
+
+/** Operator recovery for an orphaned Railway attempt, never a Fly export prefix. */
+export async function removeExpiredRailwayArtifacts(prefix) {
+  if (!/^exports\/[a-zA-Z0-9]+\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(prefix)) throw new Error('Use the exact Railway attempt prefix from artifact-prefix logs.');
+  const keys = [`${prefix}/plan.tar`, ...Array.from({ length: 16 }, (_, index) => `${prefix}/chunk-${index}.mp4`)];
+  const present = [];
+  for (const key of keys) {
+    const response = await request('HEAD', key, { signal: AbortSignal.timeout(30_000) });
+    if (response.status === 404) continue;
+    const modified = Date.parse(response.headers.get('last-modified') || '');
+    if (!response.ok || !Number.isFinite(modified) || Date.now() - modified < 55 * 60_000) throw new Error('Artifact age cannot be verified or is under 55 minutes; cleanup held.');
+    present.push(key);
+  }
+  for (const key of present) if (!await remove(key)) throw new Error(`Artifact cleanup incomplete for ${key}; retry the same prefix.`);
+  return present.length;
 }

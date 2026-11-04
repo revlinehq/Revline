@@ -66,6 +66,7 @@ export const releaseDispatch = internalMutation({ args: {}, returns: v.null(), h
 
 /** One slot per machine preserves task leases and gives each encoder the whole host. */
 export const dispatch = internalAction({ args: {}, returns: v.null(), handler: async ctx => {
+  if (processorBackend() === 'railway') return null;
   if (!process.env.FLY_PROCESSOR_IMAGE || !await ctx.runMutation(internal.flyProcessor.acquireDispatch, {})) return null;
   try {
     const config = configuration();

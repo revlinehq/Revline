@@ -138,3 +138,7 @@ These historical measurements used eight CPUs for comparison; the current user-s
 Prices are per running machine, billed by the second in `iad`: performance-4x with 8 GiB RAM costs $0.1833/hour; performance-8x with 16 GiB costs $0.3667/hour. A 20 GB scratch volume adds approximately $0.00417 per provisioned hour, including its cleanup grace period. Four running performance-8x processors cost approximately $1.4668/hour in compute. These are rates, not a monthly spending cap. Internet egress and external transcription/vision APIs are separate.
 
 Sources checked 2026-11-02: [Fly pricing](https://fly.io/pricing/), [resource billing and volumes](https://docs.fly.io/about/pricing), [Machines API](https://docs.fly.io/machines/api/machines-resource).
+
+## Railway migration
+
+The opt-in processor/export hosting path, environment mapping, staged preflight, cutover and rollback commands are in [the Railway migration runbook](../../docs/railway-worker-migration.md). Fly stays selected until an explicitly authorized cutover. No frontend, backend, authentication or storage migration is included.

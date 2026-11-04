@@ -33,7 +33,7 @@ export function renderResources() {
   const memory = limit > 0 ? Math.min(limit, totalmem()) : totalmem();
   const lowMemory = memory < LOW_MEMORY_BYTES;
   const cpus = Math.max(1, availableParallelism());
-  const flyCpus = process.env.FLY_APP_NAME ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
+  const flyCpus = process.env.FLY_APP_NAME || process.env.RAILWAY_SERVICE_ID ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
   // Two capture workers use both vCPUs of the hosted profile; more would
   // contend with the encoder and need re-measuring against the memory budget.
   // Fly overrides must fit this machine, including settings inherited from an old image.
