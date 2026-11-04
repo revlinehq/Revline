@@ -30,7 +30,10 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m venv .data/scene-detection && .data/scene-detection/bin/pip install -r scripts/scene-detection-requirements.txt
       - run: npm ci
+      - run: npm run agent-runner:install
       - run: npm run typecheck
+      - run: npm run typecheck:agent-runner
+      - run: npm run typecheck:processor-edge
       - run: npm run build
 
   # Dispatch bridge: ci.yml already exists on main, allowing the branch's new
