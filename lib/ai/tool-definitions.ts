@@ -5,6 +5,8 @@ export type ToolBehavior = { mcp: 'read' | 'exclusive' | 'hidden' } & (
 );
 
 export const EDITOR_TOOL_DEFINITIONS = {
+  discoverCapabilities: { effect: 'read', mcp: 'read' },
+  loadCapability: { effect: 'read', mcp: 'read' },
   switchLane: { effect: 'read', mcp: 'read' },
   finish: { effect: 'analysis', mcp: 'exclusive' },
   reportIssue: { effect: 'read', mcp: 'read' },

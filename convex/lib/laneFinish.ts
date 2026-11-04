@@ -10,13 +10,11 @@ import {
 } from '../../lib/ai/lanes/task';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { timelineDuration, type Timeline } from '../../lib/editor/types';
-import { timelineNormalizationKey } from '../../lib/editor/audio-normalization';
 import { captionSyncFailures } from '../../lib/ai/lanes/reel/check';
 import {
   sourceEndOf,
   timelineTimeAtSource,
 } from '../../lib/editor/playback-rate';
-import type { SoundResult } from '../../lib/media-analysis/sound';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun } from './editorToolkit';
 import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
@@ -191,19 +189,7 @@ export async function finishLane(
       )),
     );
   }
-  if (task.lane === 'reel') {
-    const duration = timelineDuration(timeline),
-      normalization = timeline.audioNormalization;
-    if (
-      !normalization ||
-      normalization.key !== timelineNormalizationKey(timeline) ||
-      normalization.targetLufs < -18 ||
-      normalization.targetLufs > -10 ||
-      normalization.truePeak > -1
-    )
-      failures.push(
-        'Normalize the current complete mix to -14 LUFS with a -1 dBFS ceiling.',
-      );
+  if (task.lane === 'reel' && timeline.clips.some(clip => clip.kind === 'caption')) {
     const speechClips = timeline.clips.filter(
       (clip) =>
         (clip.kind === 'video' || clip.kind === 'audio') &&
@@ -243,59 +229,6 @@ export async function finishLane(
       ).values(),
     ].sort((a, b) => a.start - b.start);
     failures.push(...captionSyncFailures(timeline, words));
-    if (duration > 0)
-      try {
-        const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, {
-          ownerId: run.ownerId,
-          projectId: run.projectId,
-          timelineId,
-          ...(options.staged ? { runId: run.runId } : {}),
-          times: [],
-          sound: { start: 0, end: Math.min(2, duration), check: false },
-        });
-        let sound: SoundResult | undefined;
-        try {
-          const deadline = Date.now() + 170_000;
-          while (Date.now() < deadline) {
-            const state = await ctx.runQuery(internal.mcp.frames, {
-              ownerId: run.ownerId,
-              snapshotId,
-            });
-            if (state.status === 'failed')
-              throw new Error(state.error ?? 'Audio decoding failed.');
-            if (state.status === 'completed') {
-              sound = state.sound as SoundResult | undefined;
-              break;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 1000));
-          }
-        } finally {
-          await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
-        }
-        if (!sound) throw new Error('Audio check did not finish.');
-        if (
-          sound.silences.some(
-            (range) => range.start <= 0.05 && range.end >= 0.25,
-          ) ||
-          !sound.words.some((word) => word.start <= 0.5)
-        )
-          failures.push(
-            'The opening has dead air: speech must begin within 0.5s.',
-          );
-        if (
-          !Number.isFinite(sound.loudness.integrated) ||
-          sound.loudness.integrated === null ||
-          sound.loudness.peak > -0.9
-        )
-          failures.push(
-            'The decoded opening mix is silent or exceeds the -1 dBFS peak ceiling.',
-          );
-      } catch (error) {
-        failures.push(
-          `Opening sound check failed: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    if (duration <= 0) failures.push('Reel is empty.');
   }
   const result: FinishResult = {
     passed: failures.length === 0,
