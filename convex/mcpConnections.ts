@@ -6,7 +6,7 @@ import { agentCompany, mcpClientName, MCP_AGENT_IDLE_MS, type WorkingAgent } fro
 
 const scope = { ownerId: v.string(), connectionId: v.string() };
 export const clientInfoValidator = v.object({ name: v.string(), title: v.optional(v.string()), version: v.string() });
-export const workingAgentValidator = v.object({ id: v.string(), name: v.string(), company: v.union(v.literal('claude'), v.literal('openai'), v.literal('gemini'), v.literal('cursor'), v.literal('mcp')), timelineId: v.string(), until: v.number() });
+export const workingAgentValidator = v.object({ id: v.string(), name: v.string(), company: v.union(v.literal('claude'), v.literal('openai'), v.literal('gemini'), v.literal('antigravity'), v.literal('cursor'), v.literal('mcp')), timelineId: v.string(), until: v.number() });
 
 export const initialize = internalMutation({
   args: { ...scope, clientInfo: clientInfoValidator, fallbackName: v.string() },

@@ -1,10 +1,11 @@
-export type AgentCompany = 'claude' | 'openai' | 'gemini' | 'cursor' | 'mcp';
+export type AgentCompany = 'claude' | 'openai' | 'gemini' | 'antigravity' | 'cursor' | 'mcp';
 export type WorkingAgent = { id: string; name: string; company: AgentCompany; timelineId: string; until: number };
 
 export const MCP_AGENT_IDLE_MS = 10 * 60_000;
 
 export function agentCompany(name: string): AgentCompany {
-  if (/antigravity|gemini|google/i.test(name)) return 'gemini';
+  if (/antigravity/i.test(name)) return 'antigravity';
+  if (/gemini|google/i.test(name)) return 'gemini';
   if (/claude|anthropic/i.test(name)) return 'claude';
   if (/gpt|openai|codex/i.test(name)) return 'openai';
   if (/cursor/i.test(name)) return 'cursor';

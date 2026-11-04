@@ -1,4 +1,4 @@
-import { ClaudeLogo, CursorLogo, GeminiLogo, McpLogo, OpenAILogo } from './ai-app-logos';
+import { AntigravityLogo, ClaudeLogo, CursorLogo, GeminiLogo, McpLogo, OpenAILogo } from './ai-app-logos';
 import { Brand } from './brand';
 import { agentCompany, type AgentCompany } from '@/lib/mcp/agent-identity';
 
@@ -7,6 +7,7 @@ import { agentCompany, type AgentCompany } from '@/lib/mcp/agent-identity';
 export function AgentLogo({ name, company, className }: { name?: string | null; company?: AgentCompany; className?: string }) {
   if (!name) return <Brand markOnly className={className} />;
   const source=company??agentCompany(name);
+  if (source==='antigravity') return <AntigravityLogo className={className} />;
   if (source==='gemini') return <GeminiLogo className={className} />;
   if (source==='claude') return <ClaudeLogo className={className} />;
   if (source==='openai') return <OpenAILogo className={className} />;
