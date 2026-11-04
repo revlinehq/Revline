@@ -580,7 +580,7 @@ export const checkTranscript = internalMutation({
   handler: async (ctx, args) => {
     const project = await requireProject(ctx, args.projectId, args.ownerId), row = await rowFor(ctx, args);
     if (!row || row.ownerId !== args.ownerId || !row.reviewed || checksFor(row, args.timelineId).length)
-      throw new ConvexError('A reviewed transcript-first plan is required.');
+      throw new ConvexError('A reviewed plan without selected heavy QA is required for data-only checks.');
     const tab = tabsOf(project).find(t => t.id === args.timelineId);
     const choice = row.accepted.find(c => c.timelineId === args.timelineId || (!c.timelineId && c.name === tab?.name));
     const candidate = choice && candidatesOf(row).find(c => c.id === choice.candidateId);

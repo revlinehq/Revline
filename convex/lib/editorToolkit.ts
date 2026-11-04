@@ -863,7 +863,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const checkedIds=new Set<string>(state.tabs?state.tabs.filter((tab:{checked:boolean})=>tab.checked).map((tab:{timelineId:string})=>tab.timelineId):[]);
         const requestedIds:string[]=[...new Set<string>(input.timelineIds??(state.tabs?state.tabs.map((tab:{timelineId:string})=>tab.timelineId):[]))];
         const reusedTimelineIds=requestedIds.filter(id=>checkedIds.has(id)),ids=requestedIds.filter(id=>!checkedIds.has(id));
-        if(!ids.length){if(state.tabs?.length)return {results:[],images:[],alreadyChecked:true,reusedTimelineIds,next:'Current accepted tabs already have passing checkClip receipts. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
+        if(!ids.length){if(state.tabs?.length)return {results:[],images:[],alreadyChecked:true,reusedTimelineIds,next:'Accepted tabs pass the current saved-data checks and any explicitly requested QA. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
         const results:unknown[]=[],images:{label:string;data:string;mimeType:string}[]=[];
         await forEachLimited(ids,2,async(timelineId)=>{
           const prepared=await ctx.runQuery(internal.clipping.prepareCheck,{...clippingRun,timelineId,...(input.acceptedFindings?{acceptedFindings:input.acceptedFindings}:{})});
