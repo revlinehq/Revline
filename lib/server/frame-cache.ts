@@ -3,6 +3,8 @@ import { api } from '../../convex/_generated/api';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
 import { MEDIA_PROCESSOR_VERSION } from '../media-analysis/processor-version';
 import { cacheJson } from '../media-analysis/frame-cache';
+import { retryMediaOperation } from '../media-analysis/network';
+import { AnalysisError, MEDIA_LEASE_LOST } from '../media-analysis/errors';
 
 type Reservation = { state: 'hit'; key: string; r2Key: string; url: string } | { state: 'wait'; key: string } | { state: 'miss'; key: string; r2Key: string; uploadToken: string; uploadUrl: string };
 /** Per-task promises also coalesce duplicate times inside one request. No pixels enter Convex. */
@@ -22,7 +24,7 @@ export class FrameCache {
     const unique = [...new Map(outputs.map((output,index)=>[cacheJson(output),{output,index}])).values()];
     const fresh = unique.filter(({output})=>!this.pending.has(cacheJson(output)));
     if (fresh.length) {
-      const reservations = await this.client.mutation(api.frameCache.reserveBatch,{...this.task,processorVersion:MEDIA_PROCESSOR_VERSION,outputs:fresh.map(item=>item.output)}) as Reservation[];
+      const reservations = await retryMediaOperation(()=>this.client.mutation(api.frameCache.reserveBatch,{...this.task,processorVersion:MEDIA_PROCESSOR_VERSION,outputs:fresh.map(item=>item.output)}),this.signal) as Reservation[];
       const missing = fresh.flatMap((item,index)=>reservations[index].state==='miss'?[item.index]:[]);
       const captured = missing.length ? produce(missing) : Promise.resolve([] as Buffer[]);
       // Sequencing must settle even when capture fails; consumers below retain the error.
@@ -50,7 +52,7 @@ export class FrameCache {
     let reservation: Reservation;
     for (;;) {
       this.signal.throwIfAborted();
-      reservation = await this.client.mutation(api.frameCache.reserve, { ...this.task, output, processorVersion:MEDIA_PROCESSOR_VERSION }) as Reservation;
+      reservation = await retryMediaOperation(()=>this.client.mutation(api.frameCache.reserve, { ...this.task, output, processorVersion:MEDIA_PROCESSOR_VERSION }),this.signal) as Reservation;
       if (reservation.state !== 'wait') break;
       if (Date.now() >= deadline) throw new Error('The shared frame decode did not finish. Retry this read.');
       await new Promise<void>((resolve, reject) => {
@@ -61,11 +63,20 @@ export class FrameCache {
     }
     return this.consume(reservation,output,contentType,produce,started);
   }
+  /** Retry response bodies too. Only a real missing-object response permits eviction. */
+  private transfer(url:string,init:RequestInit,read:boolean){
+    return retryMediaOperation(async()=>{
+      const response=await fetch(url,{...init,redirect:'error',signal:AbortSignal.any([this.signal,AbortSignal.timeout(15_000)])});
+      if(!response.ok&&!(read&&[404,410].includes(response.status)))
+        throw new AnalysisError(`Frame cache transfer failed (${response.status}).`,response.status);
+      return {status:response.status,bytes:read&&response.ok?Buffer.from(await response.arrayBuffer()):undefined};
+    },this.signal);
+  }
   private async consume(reservation:Exclude<Reservation,{state:'wait'}>,output:object,contentType:string,produce:()=>Promise<Buffer>,started=Date.now()):Promise<Buffer> {
     if (reservation.state === 'hit') {
-      const response = await fetch(reservation.url, { redirect: 'error', signal: this.signal });
-      if (response.ok) {
-        const bytes = Buffer.from(await response.arrayBuffer());
+      const response = await this.transfer(reservation.url, {}, true);
+      if (response.bytes) {
+        const bytes = response.bytes;
         console.info('[frame-cache]', { kind: (output as {kind?: string}).kind, outcome: 'hit', ms: Date.now() - started });
         return bytes;
       }
@@ -76,9 +87,9 @@ export class FrameCache {
     try {
       const bytes = await produce();
       this.signal.throwIfAborted();
-      const response = await fetch(reservation.uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType, 'Content-Length': String(bytes.length) }, body: new Uint8Array(bytes), signal: this.signal });
-      if (!response.ok) throw new Error(`Frame cache upload failed (${response.status}).`);
-      await this.client.mutation(api.frameCache.finish, { ...this.task, key: reservation.key, r2Key: reservation.r2Key, uploadToken: reservation.uploadToken });
+      await this.transfer(reservation.uploadUrl, { method: 'PUT', headers: { 'Content-Type': contentType, 'Content-Length': String(bytes.length) }, body: new Uint8Array(bytes) }, false);
+      const published=await retryMediaOperation(()=>this.client.mutation(api.frameCache.finish, { ...this.task, key: reservation.key, r2Key: reservation.r2Key, uploadToken: reservation.uploadToken }),this.signal);
+      if(!published)throw new Error(MEDIA_LEASE_LOST);
       console.info('[frame-cache]', { kind: (output as {kind?: string}).kind, outcome: 'miss', bytes: bytes.length, ms: Date.now() - started });
       return bytes;
     } catch (error) {

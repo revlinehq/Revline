@@ -1,3 +1,4 @@
+import { transportTranscript } from '../media-analysis/transcript';
 import type { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from './media-task-runner';
@@ -93,12 +94,12 @@ export function startMediaWorker(options: MediaWorkerOptions) {
         let progress = 0, reported = -1, activity: MediaTaskActivity | undefined, heartbeats = Promise.resolve(), renewedAt = claimedAt, queued = false, writing = 0;
         // A transient transport failure retries on the next tick. Stop when Convex
         // says the lease ended, or once two renewals were missed: renewedAt is when
-        // the last successful request was sent, so the lease then has under one
-        // interval left and Convex cannot yet have re-queued the task.
+        // the last successful request was sent. Renew at 20s and again at 40s;
+        // a single transient failure must not abort before the second attempt.
         // One renewal waits at most: it sends the latest progress when it runs, so a
         // stalled request cannot release a burst of renewals onto the task row.
         const heartbeat = () => {
-          if (!writing && Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS - HEARTBEAT_MS) { controller.abort(); return; }
+          if (!writing && Date.now() - renewedAt >= MEDIA_TASK_LEASE_MS) { controller.abort(); return; }
           if (queued) return;
           queued = true;
           heartbeats = heartbeats.then(async () => {
@@ -136,6 +137,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
             progress = Math.max(progress, Math.min(snapshot.kind==='preview'?100:99, percent));
             if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
+          if(result.analysis?.transcript)result.analysis.transcript=transportTranscript(result.analysis.transcript);
           // Publishing a frame sheet can itself need network retries. Renew its
           // lease until publication finishes, not just until decoding finishes.
           await heartbeats; signal.throwIfAborted();

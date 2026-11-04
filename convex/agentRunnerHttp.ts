@@ -11,7 +11,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
   'lanes:requireFinish','lanes:forRun','lanes:begin','lanes:task','lanes:switchLane','lanes:baseline','lanes:evidence','lanes:validate','lanes:timelines','lanes:recordFinish',
-  'clipping:completionState',
+  'clipping:begin', 'clipping:review', 'clipping:prepareCheck', 'clipping:checkTranscript', 'clipping:selectChecks', 'clipping:reserveVisual', 'clipping:recordVisual', 'clipping:completionState',
   'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',

@@ -16,7 +16,7 @@ const args = { ...mediaTaskCredentials, processorVersion:v.number(), output: v.a
 const TTL = 14 * 86400_000;
 async function taskScope(ctx: MutationCtx, credentials: { taskId: Id<'mediaTasks'>; leaseToken: string }): Promise<CacheScope> {
   const task = await requireMediaTask(ctx, credentials.taskId, credentials.leaseToken);
-  if (task.kind === 'read' && task.assetId) {
+  if ((task.kind === 'read' || task.kind === 'highlights') && task.assetId) {
     const asset = await ctx.db.get(task.assetId);
     if (!asset || asset.ownerId !== task.ownerId || asset.projectId !== task.projectId) throw new ConvexError('Reference media was removed.');
     return referenceCacheScope(task.ownerId, task.projectId, asset);
@@ -29,6 +29,11 @@ async function taskScope(ctx: MutationCtx, credentials: { taskId: Id<'mediaTasks
 }
 
 /** One small row per object, never pixels or analysis arrays. Reservations coalesce concurrent decodes. */
+async function writableReservation(key:string,r2Key:string) {
+  const {url,secret}=mediaConfig();
+  const token=await signMediaToken(secret,{operation:'cacheWrite',key:r2Key,expires:Date.now()+15*60_000});
+  return {state:'miss',key,r2Key,uploadToken:token,uploadUrl:`${url}/cache?token=${token}`};
+}
 async function reserveOutput(ctx:MutationCtx, scope:CacheScope, credentials:{taskId:Id<'mediaTasks'>;leaseToken:string}, output:unknown) {
   const key = await frameCacheKey(scope, output);
   let entry = await ctx.db.query('mediaFrameCache').withIndex('by_key', q => q.eq('key', key)).unique();
@@ -36,15 +41,18 @@ async function reserveOutput(ctx:MutationCtx, scope:CacheScope, credentials:{tas
   if (entry?.ready) return { state: 'hit', key, r2Key:entry.r2Key, url: await mediaUrl(ctx, entry) };
   if (entry) {
     const writer = entry.taskId ? await ctx.db.get(entry.taskId) : null;
-    if (writer && writer.leaseToken === entry.leaseToken && writer.status === 'running' && (writer.leaseExpiresAt ?? 0) > Date.now()) return { state: 'wait', key };
+    if (writer && writer.leaseToken === entry.leaseToken && writer.status === 'running' && (writer.leaseExpiresAt ?? 0) > Date.now()) {
+      // A reserve response may be lost after commit. The same lease must recover
+      // its reservation instead of waiting on itself until the decode deadline.
+      if(entry.taskId===credentials.taskId&&entry.leaseToken===credentials.leaseToken)return writableReservation(key,entry.r2Key);
+      return {state:'wait',key};
+    }
     await removeEntry(ctx, entry);
   }
   const timeline = !scope.assetId || (output as {kind?:string})?.kind === 'reference-result' && (output as {mode?:string})?.mode === 'compare';
   const r2Key = `media/${scope.ownerId}/${scope.projectId}/cache-${crypto.randomUUID()}`;
   await ctx.db.insert('mediaFrameCache', { key, r2Key, ownerId: scope.ownerId, projectId: scope.projectId as Id<'projects'>, ...(scope.assetId ? { assetId: scope.assetId as Id<'assets'> } : {}), ...(timeline ? {expiresAt:Date.now()+TTL} : {}), timeline, taskId: credentials.taskId, leaseToken: credentials.leaseToken, ready: false });
-  const { url, secret } = mediaConfig();
-  const token = await signMediaToken(secret, { operation: 'cacheWrite', key: r2Key, expires: Date.now() + 15 * 60_000 });
-  return { state: 'miss', key, r2Key, uploadToken: token, uploadUrl: `${url}/cache?token=${token}` };
+  return writableReservation(key,r2Key);
 }
 function processorVersion(version:number) {
   if (version !== MEDIA_PROCESSOR_VERSION) throw new ConvexError('The frame cache and media processor must use the same release.');

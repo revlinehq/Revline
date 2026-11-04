@@ -14,7 +14,7 @@ try{
   // Frame snapping can differ from an equivalent window bound by a few ULPs.
   // Keep the capture bounded while accepting that numerical round-off only.
   const tolerance=1e-7;
-  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||!settings.pacing&&(settings.times.length>12||settings.end-settings.start>3.00001))throw new Error('Invalid bounded review settings.');
+  if(!directory||!Number.isInteger(settings.width)||!Number.isInteger(settings.height)||![24,30,60].includes(settings.fps)||!Number.isFinite(settings.start)||!Number.isFinite(settings.end)||settings.start<0||settings.end<=settings.start||!Array.isArray(settings.times)||!settings.times.length||settings.times.some(t=>!Number.isFinite(t)||t<settings.start-tolerance||t>settings.end+tolerance)||!settings.pacing&&(settings.times.length>(settings.sparse?180:12)||settings.end-settings.start>(settings.sparse?60.00001:3.00001)))throw new Error('Invalid bounded review settings.');
   // Timeline snapshots render the edited composition only.
   const variants=settings.variants===undefined?['edited','reference']:settings.variants;
   if(!Array.isArray(variants)||!variants.length||variants.some(variant=>variant!=='edited'&&variant!=='reference'))throw new Error('Invalid capture variants.');
@@ -31,7 +31,26 @@ try{
       // Composition attributes use microseconds; avoid scientific-notation seeks FFmpeg rejects.
       return {...video,start,end,mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
     });
-    const extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
+    let extracted;
+    if(settings.sparse){
+      // A clipping sheet needs only these source frames, not every frame in
+      // the 60s span. Decode bounded one-frame windows, then share one browser.
+      const sparse=[];
+      for(const video of videos){
+        const paths=new Map();let template;
+        for(const [index,time] of settings.times.entries()){
+          if(time<video.start-tolerance||time>=video.end-tolerance)continue;
+          const rate=video.playbackRate??1,skipped=time-video.start;
+          const local={...video,start:time,end:Math.min(video.end,time+1/settings.fps),mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
+          const part=await extractAllVideoFrames([local],dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames',String(index)),format:'png',toneMapHdrToSdr:true,timelineEnd:local.end},controller.signal);
+          if(part.errors?.length)throw new Error(`Clipping-sheet source frame could not be decoded: ${part.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
+          if(!part.extracted[0]?.framePaths.size)throw new Error('A requested clipping-sheet source frame could not be decoded.');
+          template=part.extracted[0];paths.set(Math.floor(sourceTimeAt(rate,skipped)*settings.fps+1e-9),template.framePaths.values().next().value);
+        }
+        if(template)sparse.push({...template,videoId:video.id,fps:settings.fps,totalFrames:Math.ceil(sourceTimeAt(video.playbackRate??1,video.end-video.start)*settings.fps),framePaths:paths});
+      }
+      extracted={extracted:sparse};
+    }else extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
     if(extracted.errors?.length)throw new Error(`Video frames could not be decoded for review: ${extracted.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
     const injector=createVideoFrameInjector(createFrameLookupTable(videos,extracted.extracted,settings.fps));
     const server=await createFileServer({projectDir:dir,fps:{num:settings.fps,den:1}});

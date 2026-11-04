@@ -4,5 +4,9 @@
 // 36: persistent frame and analysis caching.
 // 32: shared scene bundles. 33: keyframed reference crops. 34: uncapped scene media. 35: still-image reads/comparisons.
 // 37: local runtime capabilities, resilient remote inputs and shared source reads.
+// 38: cached Gemini highlight discovery and clip delivery checks.
 // 39: full-resolution reference elements, calibrated opacity, shared joint timing/ease fitter.
-export const MEDIA_PROCESSOR_VERSION = 39;
+// 40: integrated highlight/clip checks with the reference motion runtime.
+// 41: lossless chunked transcript transport across worker and agent RPC boundaries.
+// 42: keep tracked crop keyframes on the extracted review/render source clock.
+export const MEDIA_PROCESSOR_VERSION = 42;

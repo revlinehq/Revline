@@ -10,5 +10,5 @@ export const definition: LaneDefinition = {
   tools,
   check,
   instructions:
-    'Read clipping. Discover moments from transcript, audio energy, scene cuts and clipping signals. Create one nonempty vertical tab per accepted highlight. findHighlights/checkClip are registration points for the find-highlights branch.',
+    'Read clipping. findHighlights returns saved transcript/helpers without whole-video Gemini. Speech-led moments use transcript/voice; gaming/action uses targeted inspectVideo windows only where visual context matters. Silent footage uses bounded adaptive video discovery; stills/cuts alone cannot establish action. Preserve source audio/framing unless requested otherwise. No automatic normalization or heavy QA. Persist planClips, build accepted tabs, then finishClipping and finish directly; cheap data checks run inline. Optional checkClip checks only an explicit concern and reuses unchanged results. Disclose skipped checks and visual coverage.',
 };
