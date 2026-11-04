@@ -4,6 +4,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
 - Editor: Make whole choice cards select their option and give each question unique radio IDs. Why: the user could only reliably select the radio button.
+- Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.
 - Deployments: Release changed production and development services in order on the PC after main merges, then restart the main dev server. Why: the user kept finding merged main changes undeployed.
 - Editing agent: Integrate persisted motion evidence and timed off exits into recreate and bound-reference motion lane checks. Why: the lane registry merged while PR #51 awaited approval.
 - Agent: Let the editing agent choose its lane before exposing tools, with manual choices, isolated skills and bounded finish checks. Why: the user requested agent reasoning instead of keyword routing and premature completion claims.

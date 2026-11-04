@@ -34,6 +34,9 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       RELEASE_BASE: ${{ inputs.base }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
+      # This PC has no public IPv6 route. Keep every Node child, including the
+      # processor's Machines API fetch, on IPv4 instead of racing both families.
+      NODE_OPTIONS: '--dns-result-order=ipv4first --no-network-family-autoselection'
     steps:
       - name: Configure PATH and check required host CLIs
         shell: bash
