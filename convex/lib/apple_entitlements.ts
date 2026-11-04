@@ -1,7 +1,16 @@
 import { v } from 'convex/values';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
+export const modelPaymentValidator = v.union(v.literal('paid'), v.literal('free'));
+
+/** Only verified transaction facts may establish payment; missing legacy facts stay unknown. */
+export function appleModelPayment(transaction: { price?: number; offerDiscountType?: string }) {
+  if (transaction.offerDiscountType === 'FREE_TRIAL' || transaction.price === 0) return 'free' as const;
+  return transaction.price !== undefined && transaction.price > 0 ? 'paid' as const : undefined;
+}
+
 export const appleEntitlementEvent = {
+  modelPayment: v.optional(modelPaymentValidator),
   source: v.union(v.literal('apple'), v.literal('superwall')),
   eventId: v.string(), ownerId: v.string(), transactionId: v.string(), originalTransactionId: v.string(),
   productId: v.string(), plan: v.union(v.literal('pro'), v.literal('ultra')),
@@ -17,6 +26,13 @@ export async function activeAppleEntitlement(ctx: QueryCtx | MutationCtx, ownerI
   const rows = await ctx.db.query('appleEntitlements').withIndex('by_owner_access', q => q.eq('ownerId', ownerId).gt('accessUntil', Date.now())).take(20);
   const active = rows.filter(row => row.revokedAt === undefined && appleEnvironmentAllowed(ownerId, row.environment));
   return active.find(row => row.plan === 'ultra') ?? active[0] ?? null;
+}
+
+export async function hasPaidAppleModelAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  const now = Date.now();
+  const rows = await ctx.db.query('appleEntitlements').withIndex('by_owner_access', q => q.eq('ownerId', ownerId).gt('accessUntil', now)).take(20);
+  return rows.some(row => row.revokedAt === undefined && appleEnvironmentAllowed(ownerId, row.environment) &&
+    row.purchasedAt <= now && row.expiresAt > now && row.modelPayment === 'paid');
 }
 
 export function appleEnvironmentAllowed(ownerId: string, environment: string) {
