@@ -1,3 +1,4 @@
+import type { LaneId } from './lanes/types';
 import { z } from 'zod';
 
 export const editorEditModeSchema = z.enum(['fast', 'precise']);
@@ -16,9 +17,9 @@ export function editorModeForRequest(prompt: string, requested: EditorEditModePr
 
 export const PRECISE_ONLY_TOOLS = new Set(['compareReference', 'compareMotion', 'motionMap', 'checkPacing', 'previewRender', 'planEffects', 'checkSound']);
 
-export function editModeInstructions(mode: EditorEditMode) {
+export function editModeInstructions(mode: EditorEditMode, lane:LaneId='edit') {
   return `# Editing mode: ${mode === 'fast' ? 'Fast' : 'Precise'}
 ${mode === 'fast' ? `Keep the same model and edit locally. Batch changes, then use getFrames at every changed spot and one frame either side (t - 1/fps, t, t + 1/fps, clamped inside the timeline). Zero rendered checks is never completion. Reuse cached context and analysis. No whole-video sweeps, reference comparisons, motion maps, pacing passes, effect review plans or repeated re-checks. Read only a short source window when the edit needs it. Correct a visible defect locally and check only that correction.
-For a film or motion scene built from scratch, a reference recreation, a final publish/export request, or an explicit full double-check, call usePreciseMode before studying or building it. This overrides Fast. Do not ask permission.` : `Use the full existing harness: inventory, dense reference reads, transition compares at 15 fps, compareReference, compareMotion, checkPacing, effect and sound checks, and the inventory close-out as applicable. Follow scene-engine edit-lanes and the matching skills.`}
+For a film or motion scene built from scratch, a reference recreation, a final publish/export request, or an explicit full double-check, call usePreciseMode before studying or building it. This overrides Fast. Do not ask permission.` : `Use the ${lane} lane’s skill pages and finish check. Call finish before reporting completion.`}
 Keep mode, cost and method metadata in tool results, out of user-facing replies. Add zero "How it was made", "Mode: Precise", "Edited in Fast/Precise" or cost footers. Explain methods or costs only when the user asks. Report actual results and limitations without claiming checks you did not perform.`;
 }

@@ -5,6 +5,8 @@ export type ToolBehavior = { mcp: 'read' | 'exclusive' | 'hidden' } & (
 );
 
 export const EDITOR_TOOL_DEFINITIONS = {
+  switchLane: { effect: 'read', mcp: 'read' },
+  finish: { effect: 'analysis', mcp: 'exclusive' },
   reportIssue: { effect: 'read', mcp: 'read' },
   listTimelines: { effect: 'read', mcp: 'exclusive' },
   createTimeline: { effect: 'timeline', mcp: 'exclusive' },
