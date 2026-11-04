@@ -1,8 +1,27 @@
 import { z } from 'zod';
 
 export type TranscriptWord = { start: number; end: number; text: string; speaker?: number; speakerConfidence?: number };
-export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number; chunkCount?: number; wordCount?: number };
+export type Transcript = { words: TranscriptWord[]; segments: TranscriptWord[]; version?: number; chunkCount?: number; wordCount?: number; wordChunks?: TranscriptWord[][] };
 export const MAX_TRANSCRIPT_WORDS = 100000;
+/** Convex limits each argument/return array to 8,192 entries. */
+export function encodeTranscript(transcript: Transcript): Transcript {
+  if (transcript.words.length <= 4000) return transcript;
+  return { ...transcript, words: [], wordChunks: Array.from({ length: Math.ceil(transcript.words.length / 2000) }, (_, index) => transcript.words.slice(index * 2000, (index + 1) * 2000)) };
+}
+export function decodeTranscript(transcript: Transcript): Transcript {
+  if (!transcript.wordChunks) return transcript;
+  if (transcript.words.length) throw new Error('Transcript contains both flat and chunked words.');
+  const { wordChunks, ...rest } = transcript;
+  const words = wordChunks.flat();
+  if (words.length > MAX_TRANSCRIPT_WORDS) throw new Error('Transcript exceeds the word limit.');
+  return { ...rest, words };
+}
+export function encodeAssetTranscript<T extends { analysis?: { transcript?: Transcript } }>(asset: T) {
+  return asset.analysis?.transcript ? { ...asset, analysis: { ...asset.analysis, transcript: encodeTranscript(asset.analysis.transcript) } } : asset;
+}
+export function decodeAssetTranscript<T extends { analysis?: { transcript?: Transcript } }>(asset: T) {
+  return asset.analysis?.transcript ? { ...asset, analysis: { ...asset.analysis, transcript: decodeTranscript(asset.analysis.transcript) } } : asset;
+}
 /** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.
  * Whisper transcripts (1, 2) stretched word times over fillers and pauses, so cuts
  * landed mid-word; those transcripts are redone. */

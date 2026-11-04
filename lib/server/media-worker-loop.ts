@@ -1,3 +1,4 @@
+import { encodeTranscript } from '../media-analysis/transcript';
 import type { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from './media-task-runner';
@@ -139,8 +140,9 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           // Publishing a frame sheet can itself need network retries. Renew its
           // lease until publication finishes, not just until decoding finishes.
           await heartbeats; signal.throwIfAborted();
+          const completionResult=result.analysis?.transcript?{...result,analysis:{...result.analysis,transcript:encodeTranscript(result.analysis.transcript)}}:result;
           if(snapshot.kind==='read'&&result.read){const read=result.read;await retryMediaOperation(()=>client.action(api.mediaTaskResults.completeRead,{...credentials,result:read}),signal);}
-          else await retryMediaOperation(()=>exclusive(()=>client.mutation(api.mediaTasks.complete, { ...credentials, result }, { skipQueue: true })),signal);
+          else await retryMediaOperation(()=>exclusive(()=>client.mutation(api.mediaTasks.complete, { ...credentials, result:completionResult }, { skipQueue: true })),signal);
           clearInterval(timer); clearInterval(cancelled); await heartbeats;
           options.log('media-completed', { projectId: task.projectId, runId: snapshot.aiRunId, taskId: task.taskId, kind: task.kind });
         } catch (error) {

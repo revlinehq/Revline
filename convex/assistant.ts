@@ -1,3 +1,4 @@
+import { encodeAssetTranscript } from '../lib/media-analysis/transcript';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { patchTurn, turnSummaryForRun, settleTurn } from './lib/assistant_turn_data';
 import { recordIncident, incidentDeployment } from './lib/incidents';
@@ -442,12 +443,12 @@ export const revisionChanges=internalQuery({args:{...runArgs,revision:v.number()
 export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
-  if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return hydrateAsset(ctx,asset);
+  if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return encodeAssetTranscript(await hydrateAsset(ctx,asset));
 }});
 /** The assistant's addSoundEffect attaches the shared catalog sound to this project before placing it. */
 export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  return hydrateAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId));
+  return encodeAssetTranscript(await hydrateAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId)));
 }});
 /** Reserve before each paid audio HTTP request, from either MCP or an editor turn. */
 export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null(),handler:async(ctx,args)=>{
@@ -468,7 +469,7 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
   // A music bed knows its beats exactly, and narration its words: they are saved as its analysis, like measured ones.
   const asset=args.beats||args.transcript?await storeAnalysis(ctx,(await ctx.db.get(id))!,{...(args.beats?{beats:args.beats}:{}),...(args.transcript?{transcript:args.transcript}:{})}):(await ctx.db.get(id))!;
   await recordAssetStorage(ctx,asset);
-  return hydrateAsset(ctx,asset);
+  return encodeAssetTranscript(await hydrateAsset(ctx,asset));
 }});
 export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
   const note=args.tool?{tool:args.tool}:undefined;

@@ -1,3 +1,4 @@
+import { decodeAssetTranscript } from '../media-analysis/transcript';
 import { checkClipSnapshot } from './check-clip';
 import { FrameCache } from './frame-cache';
 import { referenceResultDescriptor, snapshotResultDescriptor } from '../media-analysis/frame-cache';
@@ -50,6 +51,7 @@ import { currentSpeechCleanup } from '@/lib/speech-cleanup';
 import { MEDIA_ACTIVITY_LABELS, type MediaTaskActivity, type ReportMediaActivity } from '@/lib/media-analysis/activity';
 
 export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpClient, convexUrl: string, signal: AbortSignal, onProgress: (percent: number) => void, onActivity?: ReportMediaActivity, exclusive?: UploadContext['exclusive']): Promise<MediaTaskResult> {
+  task={...task,...(task.asset?{asset:decodeAssetTranscript(task.asset)}:{}),...(task.transcriptionAsset?{transcriptionAsset:decodeAssetTranscript(task.transcriptionAsset)}:{}),...(task.snapshot?{snapshot:{...task.snapshot,assets:task.snapshot.assets.map(decodeAssetTranscript)}}:{}),...(task.render?{render:{...task.render,assets:task.render.assets.map(decodeAssetTranscript)}}:{})};
   const startedAt = Date.now();
   const logPhase = (phase: string, state: string, phaseStartedAt: number, detail = '') => {
     const now = Date.now();

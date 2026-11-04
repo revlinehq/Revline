@@ -145,7 +145,8 @@ export const projectFields = {
 };
 export const projectDocument = v.object({ _id: v.id("projects"), _creationTime: v.number(), ...projectFields });
 export const timedText = v.object({ start: v.number(), end: v.number(), text: v.string() });
-export const transcriptValidator = v.object({ segments: v.array(timedText), words: v.array(v.object({ ...timedText.fields, speaker:v.optional(v.number()), speakerConfidence:v.optional(v.number()) })), version: v.optional(v.number()),chunkCount:v.optional(v.number()),wordCount:v.optional(v.number()) });
+const transcriptWordValidator = v.object({ ...timedText.fields, speaker:v.optional(v.number()), speakerConfidence:v.optional(v.number()) });
+export const transcriptValidator = v.object({ segments: v.array(timedText), words: v.array(transcriptWordValidator), wordChunks:v.optional(v.array(v.array(transcriptWordValidator))), version: v.optional(v.number()),chunkCount:v.optional(v.number()),wordCount:v.optional(v.number()) });
 export const audioActivityValidator = v.object({ version: v.literal(1), duration: v.number(), frameSeconds: v.literal(.01), quiet: v.array(v.object({ start: v.number(), end: v.number() })), level: v.object({ noiseFloorDb: v.number(), speechDb: v.number(), quietThresholdDb: v.number(), separationDb: v.number() }), reliable: v.boolean() });
 export const understandingValidator = v.object({ summary: v.string(), scenes: v.array(v.object({ start: v.number(), end: v.number(), description: v.string(), score: v.number() })), suggestions: v.optional(v.array(v.object({ label: v.string(), prompt: v.string(), start: v.number(), end: v.number() }))) });
 export const shotsValidator = v.object({ fps: v.number(), sourceTiming: v.optional(v.object({ basis: v.literal('pts'), videoStart: v.number(), videoEnd: v.number(), frameCount: v.number() })), shots: v.array(v.object({ start: v.number(), end: v.number(), startFrame: v.number(), endFrame: v.number() })) });

@@ -1,3 +1,4 @@
+import { encodeAssetTranscript, decodeTranscript } from '../lib/media-analysis/transcript';
 import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
@@ -141,7 +142,7 @@ export const remove = mutation({ args: { assetId: v.id('assets') }, returns: v.n
 export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("assets") }, returns: assetWithUrl, handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId); const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
+  return { ...encodeAssetTranscript(await hydrateAsset(ctx,asset)), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
 }});
 export const saveExtractedAudio = internalMutation({
   args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },
@@ -196,7 +197,7 @@ export const getForAssistant = internalQuery({ args: { projectId: v.id("projects
   const ownerId = await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret);
   const asset = await ctx.db.get(args.assetId);
   if (!asset || asset.projectId !== args.projectId || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  return { ...await hydrateAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
+  return { ...encodeAssetTranscript(await hydrateAsset(ctx,asset)), url: await mediaUrl(ctx, asset) };
 }});
 export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), audioActivity: v.optional(audioActivityValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
   const secret = process.env.RENDER_WORKER_SECRET; if (!secret || secret !== args.workerSecret) throw new ConvexError("Media worker authentication required");
@@ -206,6 +207,7 @@ export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects
 }});
 
 export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, changes: Infer<typeof analysisValidator>) {
+  if(changes.transcript)changes={...changes,transcript:decodeTranscript(changes.transcript)};
   asset=await hydrateAsset(ctx,asset);
   const duration = asset.duration ?? 86400;
   if(changes.facecam&&(!facecamAnalysis.safeParse(changes.facecam).success||changes.facecam.samples.some(s=>s.time>duration)))throw new ConvexError('Invalid facecam analysis');
