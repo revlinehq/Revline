@@ -36,4 +36,6 @@ export const laneResultValidator = v.object({
   failures: v.array(v.string()),
   fingerprint: v.string(),
   timelineId: v.string(),
+  motionCheck: v.optional(v.string()),
+  motionOff: v.optional(v.array(v.object({ assetId: v.string(), timelineId: v.string(), start: v.number(), end: v.number(), time: v.number(), reason: v.string() }))),
 });

@@ -2,7 +2,7 @@ import { checkCompletion } from '../../lib/ai/lanes/clip/check';
 import { makeFunctionReference } from 'convex/server';
 import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
-import type { Doc } from '../_generated/dataModel';
+import type { Doc, Id } from '../_generated/dataModel';
 import { LANES, type LaneId } from '../../lib/ai/lanes';
 import {
   changedFrameTimes,
@@ -19,7 +19,9 @@ import {
 import type { SoundResult } from '../../lib/media-analysis/sound';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun } from './editorToolkit';
-import type { LaneEvidence } from '../../lib/ai/lanes/types';
+import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
+import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
+import { motionReport, motionTimelineKey } from '../../lib/ai/motion-coverage';
 export type LaneTask = Doc<'editingLaneTasks'>;
 export type FinishResult = NonNullable<LaneTask['result']>;
 type Render = (
@@ -57,6 +59,8 @@ export async function finishLane(
   if (task.attempts >= MAX_FINISH_ATTEMPTS && task.result) return task.result;
   const fingerprint = await timelineHistoryKey(timeline),
     failures: string[] = [];
+  const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
+  let currentRevision: number | undefined;
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;
@@ -80,6 +84,18 @@ export async function finishLane(
     const summary = summarizeTimeline(tab.timeline, assets),
       prefix =
         tab.timelineId === timelineId ? '' : `Timeline ${tab.timelineId}: `;
+    const referencePolicy = LANES[task.lane].referenceMotion;
+    const targets = referencePolicy ? referenceMotionTargets(tab.timeline, assets, tab.timelineId, referencePolicy === 'required') : [];
+    const referenceMotion: ReferenceMotionEvidence[] = [];
+    for (const target of targets) {
+      currentRevision ??= (await ctx.runQuery(internal.assistant.getRunTimeline, run)).revision;
+      const state = await ctx.runQuery(internal.referenceMotion.state, { ownerId: run.ownerId, projectId: run.projectId, assetId: target.assetId as Id<'assets'>, timelineId: tab.timelineId });
+      const evidence = { ...target, ...state, projectId: run.projectId, revision: currentRevision!, timelineKey: await motionTimelineKey(tab.timeline) };
+      referenceMotion.push(evidence);
+      motionReports.push(prefix + motionReport(evidence));
+      motionOff.push(...state.off.map(item => ({ ...item, assetId: target.assetId, timelineId: tab.timelineId })));
+    }
+    const checksReference = referencePolicy === 'required' || targets.length > 0;
     if (
       !summary.clipCount ||
       summary.duration <= 0 ||
@@ -119,7 +135,8 @@ export async function finishLane(
         `${prefix}${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    if (summary.clipCount && summary.duration > 0) {
+    // Reference lanes already require dense rendered pairs, or explicit OFF windows, below.
+    if (summary.clipCount && summary.duration > 0 && !checksReference) {
       const times = baseline
         ? await changedFrameTimes(tab.timeline, baseline)
         : [0, summary.duration / 2];
@@ -156,6 +173,7 @@ export async function finishLane(
             fingerprint: key,
             timelineId: tab.timelineId,
             assets,
+            referenceMotion,
           })
           .map((error) => prefix + error),
       );
@@ -287,6 +305,8 @@ export async function finishLane(
     failures: [...new Set(failures)],
     fingerprint,
     timelineId,
+    ...(motionReports.length ? { motionCheck: motionReports.join('\n') } : {}),
+    ...(motionOff.length ? { motionOff } : {}),
   };
   return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result });
 }

@@ -1,4 +1,5 @@
 import { clipCheckRequestValidator } from './lib/clipping_validator';
+import { motionTimelineKey } from '../lib/ai/motion-coverage';
 import { cacheHash, frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { mediaUrl } from './lib/media_storage';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
@@ -207,7 +208,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
@@ -249,12 +250,13 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   const key = cacheIdentity && !args.clipCheck ? await frameCacheKey({ownerId:args.ownerId,projectId:project._id},snapshotResultDescriptor(cacheIdentity,args.times)) : undefined;
   const cached = key ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',key)).unique() : null;
   const hit = cached?.ready && (cached.expiresAt ?? 0) > Date.now() ? cached : null;
-  if (!hit) await requireMediaTaskCapacity(ctx, args.ownerId, 1);
+  const recreation = args.recreation === true;
+  if (!hit && !recreation) await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
   const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
-  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion });
+  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);
   if (taskId) await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison&&taskId?{cancelTaskId:taskId}:{})});
   // Measurements are saved verification records, kept until the project is deleted.

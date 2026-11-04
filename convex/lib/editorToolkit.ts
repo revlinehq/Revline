@@ -47,7 +47,7 @@ import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors'
 import { APPROVAL_NOTE_LIMIT, approvalRefusal, approvalViolations, approveClip, approveSection, approvedWork, isApproved, markerSection, unapproveClip, type ApprovalViolation } from '../../lib/editor/approvals';
 import { summarizeTimeline } from "./inspectTimeline";
 import { EditSession } from "./editSession";
-import { EDITOR_TOOL_DEFINITIONS, assertToolDefinitions } from '../../lib/ai/tool-definitions';
+import { EDITOR_TOOL_DEFINITIONS, assertToolDefinitions, toolBehavior } from '../../lib/ai/tool-definitions';
 import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
@@ -107,9 +107,11 @@ import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
 import { resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
-import { runCompare, runMotionRead } from '../referenceReads';
+import { runCompare } from '../referenceReads';
 import { comparisonCropFields, referenceCropAt, cropBounds, comparisonSamples, referenceComparisonInput, REFERENCE_COMPARISON_BUDGET_MS, type ComparisonCrop, type ComparisonCrops } from '../../lib/ai/reference-comparison';
-import { compareMotion, type MotionMap } from '../../lib/inspo-motion/motion-map';
+import type { MotionMap } from '../../lib/inspo-motion/motion-map';
+import { missingMotionWindow, motionRange, motionReport, motionTimelineKey, type MotionOff } from '../../lib/ai/motion-coverage';
+import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import type { ActionCtx } from "../_generated/server";
 
 export class AnalysisStepError extends Error {}
@@ -241,7 +243,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     editMode = 'precise';
   };
   const readTool = async (name: ReadToolName, input: object) => {
-    const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
+    const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal, isReferenceAsset((input as { assetId?: string }).assetId));
     let acrossCuts: string[] = [];
     if (name === 'readFrames') {
       const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number; crop?: object; momentsOnly?: boolean };
@@ -253,6 +255,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const first = shown[0] ?? args.start, last = shown[shown.length - 1] ?? first;
       coverage.noteRead(args.assetId, { start: first, end: last }, args.momentsOnly ? 0 : args.fps ?? Math.max(0, shown.length - 1) / Math.max(.001, last - first), result.moments ?? [], args.crop || shown.length <= CLOSE_UP_FRAMES ? shown : []);
       acrossCuts = coverage.acrossCuts(args.assetId, result.moments ?? []).map(moment => `${moment.start}-${moment.end}s`);
+      const asset = assets.find(asset => asset._id === args.assetId), timelineId = motionTimelineId();
+      if ((LANES[lane].referenceMotion === 'required' || isReferenceAsset(args.assetId)) && asset?.kind === 'video' && result.moments?.length && !asset.motionReferenceTimelines?.includes(timelineId)) {
+        await ctx.runMutation(internal.referenceMotion.noteReference, { ownerId: run.ownerId, projectId: run.projectId, assetId: asset._id, timelineId });
+        asset.motionReferenceTimelines = [...asset.motionReferenceTimelines ?? [], timelineId];
+      }
     }
     const summary = readSummary(name, result);
     // A change that runs across a hard cut is one continuous move (a morph, an element carried over the cut): never split it between scenes.
@@ -309,6 +316,45 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     beforeChange: beginEditing,
   }, abortSignal);
   if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(editMode==='fast')fastReview.changed(before,options.draft);}
+  const motionTimelineId = timelineIdForLane;
+  const referenceMotionEnabled = () => !!LANES[lane].referenceMotion;
+  const recreationRender = () => referenceMotionEnabled() && (LANES[lane].referenceMotion === 'required' || editSession.timeline.clips.some(clip => clip.scene?.film?.referenceAssetId));
+  const referenceAssetId = () => {
+    if (!referenceMotionEnabled()) return undefined;
+    const references = [...new Set(editSession.timeline.clips.flatMap(clip => clip.scene?.film?.referenceAssetId ? [clip.scene.film.referenceAssetId] : []))];
+    const targets = referenceMotionTargets(editSession.timeline, assets, motionTimelineId(), LANES[lane].referenceMotion === 'required');
+    const candidate = references.length === 1 ? references[0] : references.length ? undefined : LANES[lane].referenceMotion === 'required' ? (targets.length === 1 ? targets[0].assetId : undefined) ?? coverage.referenceAssetId() : undefined;
+    return assets.find(asset => asset._id === candidate)?.kind === 'video' ? candidate : undefined;
+  };
+  const motionState = (assetId: string) => ctx.runQuery(internal.referenceMotion.state, { ownerId: run.ownerId, projectId: run.projectId, assetId: assetId as Id<'assets'>, timelineId: motionTimelineId() });
+  const isReferenceAsset = (assetId?: string) => referenceMotionEnabled() && !!assetId && (referenceAssetId() === assetId || editSession.timeline.clips.some(clip => clip.scene?.film?.referenceAssetId === assetId));
+  const motionStatus = async (): Promise<{ motionCheck?: string; motionOff?: (MotionOff & { assetId: string })[]; closeOut?: string }> => {
+    if (!referenceMotionEnabled()) return {};
+    const targets = referenceMotionTargets(editSession.timeline, assets, motionTimelineId(), LANES[lane].referenceMotion === 'required');
+    const references = [...new Set(targets.map(target => target.assetId))];
+    const candidate = referenceAssetId();
+    if (!references.length && candidate) references.push(candidate);
+    if (!references.length) return {};
+    const timelineKey = await motionTimelineKey(editSession.timeline), reports: string[] = [], exceptions: (MotionOff & { assetId: string })[] = [];
+    for (const assetId of references) {
+      const state = await motionState(assetId);
+      const ranges = targets.filter(target => target.assetId === assetId);
+      reports.push(...ranges.map(range => motionReport({ ...range, revision: editSession.revision, timelineKey, checks: state.checks, off: state.off })));
+      exceptions.push(...state.off.map(item => ({ assetId, ...item })));
+    }
+    return { motionCheck: reports.join('\n'), ...(exceptions.length ? { motionOff: exceptions, closeOut: 'Include every motionOff time and reason in the final close-out. OFF never means matched.' } : {}) };
+  };
+  const motionGate = async (assetId: string, start: number, end: number) => {
+    if (!referenceMotionEnabled()) return undefined;
+    const state = await motionState(assetId), duration = assets.find(asset => asset._id === assetId)?.duration ?? end;
+    const missing = missingMotionWindow(start, Math.min(end, duration), [...state.windows, ...state.off]);
+    if (!missing) return undefined;
+    // The smallest measurable call is .3 s; pad a short tail so the offered call can really clear it.
+    const window = { start: Math.max(0, Math.min(missing.start, missing.end - .3)), end: missing.end };
+    const next = { projectId: run.projectId, assetId, ...window };
+    const offAction = { tool: 'motionMap', arguments: { ...next, off: { time: missing.start, reason: duration < .3 ? "The reference is shorter than motionMap's 0.3 s measurement minimum." : 'Describe the measurement limitation at this time (12–500 characters).' } } };
+    return { ...await motionStatus(), success: false, saved: false, refused: 'motion_reads', error: `Run motionMap on the reference ${motionRange(window)} before building this section.`, nextAction: duration < .3 ? offAction : { tool: 'motionMap', arguments: next }, offAction, note: 'If motionMap cannot measure this window, or after 2 failed tries, call offAction with the actual time and reason. OFF clears coverage but never means matched.' };
+  };
   // Approved work (lib/editor/approvals.ts) is refused unless the call passes overrideApproved with the user's reason.
   // The override covers the calls running under it; what it let through is reported back on that call.
   const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
@@ -591,7 +637,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string) => {
     await editSession.wait();
     const timelineId = targetTimelineId??readRunTab(run.runId);
-    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(revision !== undefined ? { revision } : {}) });
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(revision !== undefined ? { revision } : {}) });
     const deadline = Date.now() + 280_000;
     let started = false;
     while (Date.now() < deadline) {
@@ -664,7 +710,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const timelineMotion = async (start: number, end: number, crop?: ComparisonCrop, aspectRatio?: number): Promise<{ map: MotionMap; revision: number }> => {
     await editSession.wait();
     const timelineId = readRunTab(run.runId);
-    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], motion: { start, end }, ...(crop || aspectRatio ? { comparison: { ...(crop ? { crop } : {}), ...(aspectRatio ? { aspectRatio } : {}) } } : {}) });
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], motion: { start, end }, ...(crop || aspectRatio ? { comparison: { ...(crop ? { crop } : {}), ...(aspectRatio ? { aspectRatio } : {}) } } : {}) });
     try {
       const deadline = Date.now() + 540_000;
       for (let state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId })) {
@@ -676,29 +722,54 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
     } finally { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
   };
-  const motionMap = async (input: { assetId?: string; start: number; end: number; timelineStart?: number } & ComparisonCrops) => {
-    if (input.end - input.start < .3 || input.end - input.start > 12) throw new Error('Choose a motion window of 0.3 to 12 seconds.');
-    const length = input.end - input.start, referenceCrop = input.referenceCrop ?? input.crop, timelineCrop = input.timelineCrop ?? input.crop;
-    const shown = (map: MotionMap) => { const { track: _track, ...rest } = map; return { ...rest, elements: rest.elements.slice(0, 20), changes: rest.changes.filter(change => change.area >= 1).slice(0, 20) }; };
-    if (!input.assetId) { const { map, revision } = await timelineMotion(input.start, input.start + length, timelineCrop); return { revision, timeline: shown(map) }; }
-    if (input.timelineStart === undefined) return { reference: shown(await runMotionRead(ctx, run.ownerId, run.projectId, input.assetId, input.start, input.start + length, abortSignal, referenceCrop, input.referenceCropKeyframes)) };
-    const asset = assets.find(asset => asset._id === input.assetId), region = referenceCropAt(input.start, referenceCrop, input.referenceCropKeyframes);
-    if (!asset) throw new Error('Choose media from this project.');
-    if (!asset.width || !asset.height) throw new Error('The reference needs readable video dimensions.');
-    const bounds = region ? cropBounds(region, asset.width, asset.height) : { width: asset.width, height: asset.height };
-    const [reference, { map: ours, revision }] = await Promise.all([
-      runMotionRead(ctx, run.ownerId, run.projectId, input.assetId, input.start, input.start + length, abortSignal, referenceCrop, input.referenceCropKeyframes),
-      timelineMotion(input.timelineStart, input.timelineStart + length, timelineCrop, bounds.width / bounds.height),
-    ]);
-    const differences = compareMotion(reference, ours);
-    return { revision, ...input, differences, next: differences.length ? 'Fix the differences in the scene code (each fix is the reference move as a GSAP tween at your timeline time), then run compareMotion on this section again. Residual differences need fixes, not just a report; list any tool-limited item as off.' : 'No measured motion differences found. Verify the inventory in rendered pixels, including each layer, overshoot and settle.', reference: shown(reference), timeline: shown(ours) };
+  const motionMap = async (input: { assetId?: string; start: number; end: number; timelineStart?: number; off?: { time: number; reason: string } } & ComparisonCrops) => {
+    const { off, ...measurement } = input;
+    // Before a film is bound, an explicit motionMap source selects the reference among other inspected footage.
+    if (LANES[lane].referenceMotion === 'required' && input.assetId && !editSession.timeline.clips.some(clip => clip.scene?.film?.referenceAssetId)) {
+      const asset = assets.find(asset => asset._id === input.assetId && asset.kind === 'video');
+      const mapped = assets.filter(asset => asset.motionReferenceTimelines?.includes(motionTimelineId()));
+      if (asset && (mapped.length !== 1 || mapped[0]._id !== asset._id)) {
+        await ctx.runMutation(internal.referenceMotion.noteReference, { ownerId: run.ownerId, projectId: run.projectId, assetId: asset._id, timelineId: motionTimelineId(), select: true });
+        for (const source of assets) source.motionReferenceTimelines = source._id === asset._id ? [...source.motionReferenceTimelines ?? [], motionTimelineId()] : source.motionReferenceTimelines?.filter(id => id !== motionTimelineId());
+      }
+    }
+    const assetId = input.assetId, actualReference = referenceAssetId();
+    if (off) {
+      if (!isReferenceAsset(assetId) || !assetId) throw new Error(`Mark off a window on the actual recreation reference (${actualReference ?? 'read the reference with readFrames first'}).`);
+      await ctx.runMutation(internal.referenceMotion.markOff, { ownerId: run.ownerId, projectId: run.projectId, assetId: assetId as Id<'assets'>, timelineId: motionTimelineId(), start: input.start, end: input.end, ...off });
+      return { off: true, matched: false, ...await motionStatus() };
+    }
+    const duration = assets.find(asset => asset._id === assetId)?.duration ?? Math.max(input.end, input.start + .3);
+    const retryStart = Math.min(input.start, Math.max(0, duration - .3)), retryEnd = Math.min(duration, retryStart + 12, Math.max(input.end, retryStart + .3));
+    const nextAction = { tool: 'motionMap', arguments: { projectId: run.projectId, ...measurement, start: retryStart, end: retryEnd } };
+    const offAction = isReferenceAsset(assetId) ? { tool: 'motionMap', arguments: { ...nextAction.arguments, off: { time: retryStart, reason: duration < .3 ? "The reference is shorter than motionMap's 0.3 s measurement minimum." : 'Describe what motionMap cannot measure at this time (12–500 characters).' } } } : undefined;
+    let snapshotId: Id<'frameSnapshots'> | undefined;
+    try {
+      if (input.end - input.start < .3 || input.end - input.start > 12) throw new Error('Choose a motion window of 0.3 to 12 seconds.');
+      const length = input.end - input.start, referenceCrop = input.referenceCrop ?? input.crop, timelineCrop = input.timelineCrop ?? input.crop;
+      const shown = (map: MotionMap) => { const { track: _track, ...rest } = map; return { ...rest, elements: rest.elements.slice(0, 20), changes: rest.changes.filter(change => change.area >= 1).slice(0, 20) }; };
+      if (!assetId) { const { map, revision } = await timelineMotion(input.start, input.end, timelineCrop); return { revision, timeline: shown(map) }; }
+      if (input.timelineStart !== undefined) {
+        const asset = assets.find(asset => asset._id === assetId), region = referenceCropAt(input.start, referenceCrop, input.referenceCropKeyframes);
+        if (!asset?.width || !asset.height) throw new Error('The reference needs readable video dimensions. Retry after its import finishes, or mark this window off.');
+        const bounds = region ? cropBounds(region, asset.width, asset.height) : { width: asset.width, height: asset.height };
+        await editSession.wait();
+        snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), timelineId: motionTimelineId(), times: [], motion: { start: input.timelineStart, end: input.timelineStart + length }, comparison: { ...(timelineCrop ? { crop: timelineCrop } : {}), aspectRatio: bounds.width / bounds.height } });
+      }
+      const result = await ctx.runAction(internal.referenceMotion.measure, { ownerId: run.ownerId, projectId: run.projectId, assetId: assetId as Id<'assets'>, start: input.start, end: input.end, recreation: isReferenceAsset(assetId), ...(snapshotId ? { snapshotId } : {}), ...(referenceCrop ? { referenceCrop } : {}), ...(input.referenceCropKeyframes ? { referenceCropKeyframes: input.referenceCropKeyframes } : {}) });
+      return { ...measurement, ...(result.revision !== undefined ? { revision: result.revision } : {}), reference: shown(result.reference), ...(result.timeline ? { timeline: shown(result.timeline), differences: result.differences } : {}), ...await motionStatus(), next: result.differences?.length ? 'Fix every difference with patchScene and recheck, or mark the affected window OFF with its time and reason. OFF never means matched.' : 'Verify the inventory in rendered pixels, including each layer, overshoot and settle; still frames alone never certify motion.' };
+    } catch (error) {
+      const data = error && typeof error === 'object' && 'data' in error ? error.data as { status?: string; message?: string } : undefined;
+      const errorMessage = data?.message ?? (error instanceof Error ? error.message : String(error));
+      return { success: false, checkPassed: false, status: data?.status === 'still_queued' || errorMessage.includes('Still queued after') ? 'still_queued' : 'not_checked', error: errorMessage, retryAfterSeconds: 30, nextAction: duration < .3 && offAction ? offAction : nextAction, ...(offAction ? { offAction } : {}), note: 'Wait about 30 s and retry nextAction. If this cannot be measured, or after 2 failed tries, call offAction with a concrete timed reason. A refused check is not a pass.', ...await motionStatus() };
+    } finally { if (snapshotId) await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); }
   };
   // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
   const checkPacing = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }) => {
     await editSession.wait();
     const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId);
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : undefined;
-    const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], pacing: { start, end:end-start<=9?end:start+8, fps: input.fps ?? 10 } });
+    const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], pacing: { start, end:end-start<=9?end:start+8, fps: input.fps ?? 10 } });
     const deadline = Date.now() + 45_000;
     for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
       const checkedRevision = (state.atRevision ?? state.revision) as number, checkedTimelineId = state.timelineId ?? timelineId;
@@ -720,7 +791,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     await editSession.wait();
     const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : undefined;
-    const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], sound: { start, end:end-start<=9?end:start+8, check, ...(input.fps ? { fps: input.fps } : {}) } });
+    const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], sound: { start, end:end-start<=9?end:start+8, check, ...(input.fps ? { fps: input.fps } : {}) } });
     const deadline = Date.now() + 45_000;
     for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
       const checkedRevision = (state.atRevision ?? state.revision) as number, checkedTimelineId = state.timelineId ?? timelineId;
@@ -864,9 +935,15 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
-      finishResult=await finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      finishResult=await check();
       if(finishResult.passed){
-        try{await editSession.publish();}
+        try{
+          const checkedRevision=editSession.revision;
+          await editSession.publish();
+          // Publishing a draft advances the revision. Old motion checks cannot certify that new revision.
+          if(editSession.revision!==checkedRevision&&referenceMotionEnabled()&&referenceMotionTargets(editSession.timeline,assets,timelineId,LANES[lane].referenceMotion==='required').length)finishResult=await check();
+        }
         catch(error){finishResult=await laneCtx.runMutation(internal.lanes.recordFinish,{...taskScope,result:{...finishResult,passed:false,failures:[`The checked draft could not be saved: ${error instanceof Error?error.message:String(error)}`]}});}
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
@@ -1133,7 +1210,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(input.enabled===false)return checkpoint(t=>target?{...t,clips:t.clips.map(c=>c.id===target.id?{...c,normalizedAudio:undefined}:c)}:{...t,audioNormalization:undefined});
       const cached=target?.normalizedAudio??(!target?editSession.timeline.audioNormalization:undefined),cacheKey=target?audioNormalizationKey(editSession.timeline,target):timelineNormalizationKey(editSession.timeline);
       if(cached?.outputLufs!==undefined&&cached.measuredTruePeak!==undefined&&cached.key===cacheKey&&cached.targetLufs===(input.targetLufs??-14)&&cached.truePeak===(input.truePeak??-1))return {applied:false,alreadyNormalized:true,assetId:cached.assetId,targetLufs:cached.targetLufs,truePeakCeiling:cached.truePeak};
-      const timelineId=readRunTab(run.runId),snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,...(editSession.staged?{runId:run.runId}:{}),...(timelineId?{timelineId}:{}),times:[],normalization:{...(input.clipId?{clipId:input.clipId}:{}),targetLufs:input.targetLufs??-14,truePeak:input.truePeak??-1}});
+      const timelineId=readRunTab(run.runId),snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,recreation:recreationRender(),...(editSession.staged?{runId:run.runId}:{}),...(timelineId?{timelineId}:{}),times:[],normalization:{...(input.clipId?{clipId:input.clipId}:{}),targetLufs:input.targetLufs??-14,truePeak:input.truePeak??-1}});
       try{
         const deadline=Date.now()+540_000;
         while(true){
@@ -1406,7 +1483,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (queued >= requested.count || Date.now() >= deadline) return;
         if (abortSignal.aborted) throw new Error('Stopped.');
         const times = requested.batch(queued);
-        const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(snapshots[0] ? { sourceSnapshotId: snapshots[0] } : {}), comparison: timelineCrop ? { crop: timelineCrop } : {}, times: times.map(time => time + offset) });
+        const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(snapshots[0] ? { sourceSnapshotId: snapshots[0] } : {}), comparison: timelineCrop ? { crop: timelineCrop } : {}, times: times.map(time => time + offset) });
         snapshots.push(snapshotId);
         pending.push({ times, snapshotId });
         queued += times.length;
@@ -1428,7 +1505,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
           }
           if (!rendered) break;
-          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes);
+          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes, isReferenceAsset(input.assetId));
           if (!result) break;
           if (result.scores?.length !== times.length) throw new Error('The comparison returned incomplete scores. Retry this window.');
           scores.push(...result.scores.map((score, index) => ({ time: times[index], difference: Math.round(score.difference * 1000) / 10 })));
@@ -1460,7 +1537,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       ...await Promise.all(output.frames.map(frame => imagePart(ctx, frame.image, 'image/jpeg'))),
     ] }; } }),
     compareMotion: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareMotion, description: "Compare one section's rendered motion with its reference: camera path, start and duration, easing, overshoot, settle, transitions and element movement. SOURCE start/end (0.3 to 12 s); timelineStart aligns the build. Run for every section after compareReference, fix residuals with patchScene and repeat. Use independent referenceCrop and timelineCrop for a reference sub-panel versus a full-frame recreation; normalized regions are scaled to matching coordinates. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving reference region at interpolated SOURCE seconds (endpoints held), removing that framing motion from the measurement. Check background and foreground separately when they move differently. A regional map measures visible pixels, not semantic layer ownership; use trackReference on overlapping objects. No flags alone does not certify an inventory match.", inputSchema: z.object({ assetId: z.string().min(1), start: z.number().min(0), end: z.number().min(0), timelineStart: z.number().min(0), ...comparisonCropFields }).strict(), execute: async (_ctx, input) => motionMap(input) }),
-    motionMap: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.motionMap, description: "Read how a film moves, not what it shows: the camera (zoom, pan, tilt, rotate of the whole frame) as GSAP keyframes with the measured ease (a named GSAP ease, or a CustomEase when none fits), transitions (cut, fade, wipe with direction, other) with duration and ease, elements moving against the background as GSAP tweens, content changing in place (appearing, disappearing, changing) with where and how much of the frame, holds, and for each camera move the change it answers (cause) or a flag when nothing changes when it starts or ends. Windows are up to 12 s, read at 30 fps. With assetId alone: a reference video (SOURCE seconds). Without assetId: the timeline (timeline seconds). Use referenceCrop and timelineCrop for independent normalized regions, crop as shorthand for both, and referenceCropKeyframes for a moving reference region in SOURCE seconds. With assetId and timelineStart: both, and differences: every place your timeline moves differently from the reference (a missing or extra camera move, a different ease, timing or amount, a missing or different transition, a move where the reference holds), each with the reference move as a GSAP tween at your time. Use it before animating from a reference (read every stretch), and after building to compare.", inputSchema: z.object({ assetId: z.string().optional().describe('A reference video in the project; omit to map the timeline.'), start: z.number().min(0).describe('SOURCE seconds of the reference, or timeline seconds without assetId.'), end: z.number().min(0).describe('Up to 12 s after start.'), timelineStart: z.number().min(0).optional().describe('With assetId: the timeline second that lines up with start, to compare the two.'), ...comparisonCropFields }).strict(), execute: async (_ctx, input) => motionMap(input) }),
+    motionMap: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.motionMap, description: "Read how a film moves, not what it shows: the camera (zoom, pan, tilt, rotate of the whole frame) as GSAP keyframes with the measured ease (a named GSAP ease, or a CustomEase when none fits), transitions (cut, fade, wipe with direction, other) with duration and ease, elements moving against the background as GSAP tweens, content changing in place (appearing, disappearing, changing) with where and how much of the frame, holds, and for each camera move the change it answers (cause) or a flag when nothing changes when it starts or ends. Windows are up to 12 s, read at 30 fps. With assetId alone: a reference video (SOURCE seconds). Without assetId: the timeline (timeline seconds). Use referenceCrop and timelineCrop for independent normalized regions, crop as shorthand for both, and referenceCropKeyframes for a moving reference region in SOURCE seconds. With assetId and timelineStart: both, and differences: every place your timeline moves differently from the reference (a missing or extra camera move, a different ease, timing or amount, a missing or different transition, a move where the reference holds), each with the reference move as a GSAP tween at your time. Use it before animating from a reference (read every stretch), and after building to compare. If measurement is impossible or fails twice, pass off:{time,reason}; this clears coverage honestly and stays OFF, never matched, in later reports.", inputSchema: z.object({ assetId: z.string().optional().describe('A reference video in the project; omit to map the timeline.'), start: z.number().min(0).describe('SOURCE seconds of the reference, or timeline seconds without assetId.'), end: z.number().min(0).describe('Up to 12 s after start.'), timelineStart: z.number().min(0).optional().describe('With assetId: the timeline second that lines up with start, to compare the two.'), off: z.object({ time: z.number().min(0), reason: z.string().trim().min(12).max(500) }).strict().optional().describe('Declare this reference window OFF when measurement is impossible or after 2 failures. Required time inside the window and concrete reason persist in every report; OFF never means matched.'), ...comparisonCropFields }).strict(), execute: async (_ctx, input) => motionMap(input) }),
     checkPacing: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkPacing, description: "Check how the motion reads over time, which still frames cannot show: renders the timeline range at 10 samples a second (fps) and measures how much of the frame changes each second, how long each new picture holds before the next change, how zooms and pans speed up and slow down, and where cuts and single-frame flashes land. Returns the change per second and flagged moments with reasons: a visible change (a new headline, a panel filling in) followed by under about 1 s of hold, 3 or more changes within 1 s, changes landing in 3 or more different places within 1.5 s, a zoom or pan that starts or stops at full speed or is cut off mid-move, a camera move too fast to follow, a one-sample jump, a flash, or a still hold of 3 s or more. Run it on the changed range after building or changing motion, alongside getFrames, and fix what it flags. Long ranges run in chunks. Follow every nextAction until completed is true. Pending chunks keep running and are retrieved by checkId.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(2).max(30).optional().describe('Samples a second (default 10).') }).strict(), execute: async (_ctx, input) => checkPacing(input) }),
     getSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getSound, description: "Hear a timeline range, which frames cannot show: decodes the range's mix exactly as export mixes it and reports every clip that sounds there (sound effects, voice, music, footage audio) with its time and gain, the moments sounds start (onsets) with their level and which clip made them, momentary loudness (LUFS) and peak each 0.1 s with integrated loudness, silent stretches, and the spoken words with their timeline times. Use it to check what plays where before or after placing sound, music or narration.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).') }).strict(), execute: async (_ctx, input) => listen(input, false) }),
     checkSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkSound, description: "Check that sound lands with the picture: samples the range's frames (30 a second by default) to find each visual hit (a click, a pop, a cut, something appearing) and matches every sound effect's onset to it. Flags a sound effect with nothing happening on screen, a strong visual hit with no sound, a sound more than 2 frames early or late (with the time to move it to), a different number of sounds and visual hits in one moment (two clicks shown, three click sounds), a sound effect landing on a spoken word, and clipping in the mix. Also returns everything getSound does. Run it on the range after adding, moving or retiming sound effects, and fix what it flags. Long ranges run in chunks. Follow every nextAction until completed is true. Pending chunks keep running and are retrieved by checkId.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(10).max(60).optional().describe('Picture samples a second (default 30, up to the timeline frame rate).') }).strict(), execute: async (_ctx, input) => listen(input, true) }),
@@ -1532,15 +1609,35 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
     addFilm: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addFilm, description: "Build a motion film (a launch film, a recreation, any motion piece longer than one idea) as ONE scene clip for its whole length: one React or GSAP module whose animation runs on one continuous timeline, so moves flow from section to section with no cuts or transition clips. sections name its parts (a title and the film second each starts); they become timeline markers the user and you can point at, not separate clips. Change the film afterwards with patchScene (small exact edits); never rewrite it. Keep each call under about 20k tokens (60,000 characters) of code: for a longer film, write the first part now with a marker such as {/* more beats */} where the rest goes, then add each next part with patchScene insert 'before' that marker. When writing only the first section, set builtThrough to its film-second end so the read check covers that implemented section. Read motion-design and scene-engine first.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title).describe("The film's name."), code: z.string().min(1), start: z.number().min(0).describe('Timeline second where the film starts.'), duration: z.number().positive().max(180).describe("The film's length in seconds."), builtThrough: z.number().positive().max(180).optional().describe('When starting a film section by section: the end, in film seconds, of the part implemented in this call. The clip keeps its full duration; unread later sections are added with patchScene.'), sections: z.array(z.object({ title: z.string().trim().min(1).max(120), at: z.number().min(0).describe('Film second where this section starts.') })).max(24).optional().describe('Named sections, placed as timeline markers.'), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the film receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() }), execute: async (_ctx, { title, code, start, duration, builtThrough, sections, track, brandKitId, media, blueprints: names }) => {
       if (builtThrough !== undefined && builtThrough > duration) throw new Error('builtThrough must be inside the film duration.');
+      await editSession.wait();
+      const reference = LANES[lane].referenceMotion === 'required' ? referenceAssetId() : undefined;
+      if (reference) { const refusal = await motionGate(reference, start, start + (builtThrough ?? duration)); if (refusal) return refusal; }
       checkSceneCode(code);
       const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined, images = media ? sceneMedia(media) : undefined, mounted = names?.length ? await sceneBlueprints(brandKitId, names) : undefined;
       let placed: ReturnType<typeof placeFilm> | undefined;
-      const saved = await checkpoint(t => { const blueprints = mountFilmKit(code, mounted, undefined, timelineFilmKit(t)); placed = placeFilm(t, { title, start, duration, sections, track, scene: { code, ...(brand ? { brand } : {}), ...(images?.length ? { media: images } : {}), ...(blueprints?.length ? { blueprints } : {}) } }); return placed.timeline; });
+      const saved = await checkpoint(t => { const blueprints = mountFilmKit(code, mounted, undefined, timelineFilmKit(t)); placed = placeFilm(t, { title, start, duration, sections, track, scene: { code, ...(brand ? { brand } : {}), ...(images?.length ? { media: images } : {}), ...(blueprints?.length ? { blueprints } : {}) } }); if (reference) {
+        const clip = find(placed.timeline, placed.clip.id);
+        placed.timeline = patchClip(placed.timeline, clip.id, { scene: { ...clip.scene!, film: { ...clip.scene!.film!, referenceAssetId: reference, referenceStart: start, builtThrough: builtThrough ?? duration } } });
+      }
+      return placed.timeline; });
       return { ...saved, scenes: [{ clipId: placed!.clip.id, title, start, duration }], sections: placed!.markers, note: `One film clip of ${duration}s${placed!.markers.length ? ` with ${placed!.markers.length} section markers` : ''}. Check each section and every move between them with getFrames; change the film with patchScene.` };
     } }),
-    patchScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.patchScene, description: "Change a film or scene with small edits. The {find,replace,all?,insert?} edits apply snippets sequentially, tolerating line indentation differences when the match is unique; a missing match returns nearby exact numbered lines and changes nothing. Pass section (marker label or id) to search only its Beats and declarations. Or use edits [{lines:{start,end},replace}] to replace inclusive absolute lines without quoting old code; all line ranges in a call refer to the same inspected snapshot and must not overlap. Do not mix line and snippet edits. Pass expectedRevision from inspectClip: nonoverlapping changes since that snapshot are merged, while overlapping changed lines are refused; reinspect after a successful patch. section also supplies scope unless you pass scope explicitly. Shared code and edits across section boundaries return transition warnings; keep spanning tweens on the shared timeline and check both sides. Without markers, use whole-scene lines. Every clip sharing the code gets the change. insert before/after keeps the selected snippet or lines. kit: true edits blueprint:film instead; read it with inspectClip kit: true. The result compiles before saving; any failure saves nothing. Update generated sound with editSound when timing or motion changes. A change isolated to one Beat infers its scope; shared-code edits need explicit scope for the requested sections. Every other section stays locked by the visual guard. Use patchScene after the first build, including inserting later parts at markers; keep each call under about 20k tokens of code.", inputSchema: z.object({ clipId: z.string(), scope: scopeInput.optional(), section: codeSectionInput.optional(), expectedRevision: z.number().int().min(0).optional().describe('Revision from inspectClip. Edits rebase across unchanged lines; changes to the same lines or insertion boundaries are refused.'), edits: sceneEditsInput, kit: z.boolean().optional().describe('Patch the film kit module the scene imports as blueprint:film.') }), execute: async (_ctx, { clipId, edits, kit, scope, section, expectedRevision }) => {
+    patchScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.patchScene, description: "Change a film or scene with small edits. The {find,replace,all?,insert?} edits apply snippets sequentially, tolerating line indentation differences when the match is unique; a missing match returns nearby exact numbered lines and changes nothing. Pass section (marker label or id) to search only its Beats and declarations. Or use edits [{lines:{start,end},replace}] to replace inclusive absolute lines without quoting old code; all line ranges in a call refer to the same inspected snapshot and must not overlap. Do not mix line and snippet edits. Pass expectedRevision from inspectClip: nonoverlapping changes since that snapshot are merged, while overlapping changed lines are refused; reinspect after a successful patch. section also supplies scope unless you pass scope explicitly. Shared code and edits across section boundaries return transition warnings; keep spanning tweens on the shared timeline and check both sides. Without markers, use whole-scene lines. Every clip sharing the code gets the change. insert before/after keeps the selected snippet or lines. kit: true edits blueprint:film instead; read it with inspectClip kit: true. The result compiles before saving; any failure saves nothing. Update generated sound with editSound when timing or motion changes. A change isolated to one Beat infers its scope; shared-code edits need explicit scope for the requested sections. Every other section stays locked by the visual guard. Use patchScene after the first build, including inserting later parts at markers; keep each call under about 20k tokens of code.", inputSchema: z.object({ clipId: z.string(), builtThrough: z.number().positive().max(600).optional().describe('When extending a recreation, the implemented end in film seconds. Motion reads or timed OFF declarations must cover it.'), scope: scopeInput.optional(), section: codeSectionInput.optional(), expectedRevision: z.number().int().min(0).optional().describe('Revision from inspectClip. Edits rebase across unchanged lines; changes to the same lines or insertion boundaries are refused.'), edits: sceneEditsInput, kit: z.boolean().optional().describe('Patch the film kit module the scene imports as blueprint:film.') }), execute: async (_ctx, { clipId, edits, kit, scope, section, expectedRevision, builtThrough }) => {
       let updated: string[] = [], characters = 0, warnings: string[] = [];
       await editSession.wait();
+      const currentClip = find(editSession.timeline, clipId), film = currentClip.scene?.film;
+      const reference = referenceMotionEnabled() ? film?.referenceAssetId ?? (film && LANES[lane].referenceMotion === 'required' ? referenceAssetId() : undefined) : undefined;
+      let implemented = film?.builtThrough ?? film?.duration ?? currentClip.duration;
+      if (film && builtThrough !== undefined && builtThrough > film.duration) throw new Error('builtThrough must be inside the film duration.');
+      if (film && (scope ?? section) !== undefined) implemented = Math.max(implemented, ...resolveScope(editSession.timeline, currentClip, (scope ?? section)!).map(range => range.end));
+      implemented = Math.min(film?.duration ?? currentClip.duration, Math.max(implemented, builtThrough ?? 0));
+      const referenceStart = film?.referenceStart ?? currentClip.start - currentClip.sourceStart;
+      if (reference) { const refusal = await motionGate(reference, referenceStart, referenceStart + implemented); if (refusal) return refusal; }
+      const withProgress = (timeline: Timeline) => {
+        if (!reference || !film) return timeline;
+        const code = find(timeline, clipId).scene?.code;
+        return { ...timeline, clips: timeline.clips.map(clip => clip.scene?.code === code && clip.scene?.film ? { ...clip, scene: { ...clip.scene, film: { ...clip.scene.film, referenceAssetId: reference, referenceStart, builtThrough: implemented } } } : clip) };
+      };
       let baseClip: Clip | undefined;
       const rebased = expectedRevision !== undefined && expectedRevision !== editSession.revision;
       if (rebased) {
@@ -1561,7 +1658,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if (!current) throw new Error('This scene has no film kit; patch its code instead (leave kit out).');
           const next = prepareFilmKit(patch(current.code)), result = withFilmKit(t, next);
           updated = result.updated; characters = next.length;
-          return result.timeline;
+          return withProgress(result.timeline);
         }
         const next = patch(clip.scene.code);
         if (next === clip.scene.code) throw new Error('These edits change nothing.');
@@ -1570,7 +1667,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (kitCode) checkFilmKitImports(next, kitCode);
         const result = withPatchedScene(t, clip.scene.code, next);
         updated = result.updated; characters = next.length;
-        return result.timeline;
+        return withProgress(result.timeline);
       };
       const scoped = await scopedChange(clipId, scope ?? section, change, 'patch');
       if ('refusal' in scoped) return scoped.refusal;
@@ -1933,7 +2030,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const { readReason, ...input } = (args[0] ?? {}) as Record<string, unknown> & { readReason?: string };
         args = [input, ...args.slice(1)] as never[];
         const ranges = sceneRanges(name, input);
-        const checks = readReason ? [] : ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check);
+        const checks = readReason || LANES[lane].referenceMotion !== 'required' || coverage.referenceAssetId() !== referenceAssetId() ? [] : ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check);
         if (checks.length) return { success: false, saved: false, refused: 'reads', readCheck: `Nothing was built. ${checks.map(check => check.readCheck).join(' ')} Then call ${name} again. Pass readReason only if a flagged moment truly cannot be read.`, ...readLists(checks) };
       }
       const output = await execute.apply(this ?? tool, args) as Record<string, unknown>;
@@ -1942,7 +2039,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const beats = clip.scene?.film ? beatRanges(clip.scene) : [];
         return beats.length ? beats.map(beat => ({ start: Math.max(clip.start, timelineTimeAtSource(clip, beat.start)), end: Math.min(clip.start + clip.duration, timelineTimeAtSource(clip, beat.end)) })).filter(range => range.end > range.start) : [{ start: clip.start, end: clip.start + clip.duration }];
       });
-      const checks = editMode === 'precise' ? ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check) : [];
+      const checks = editMode === 'precise' && LANES[lane].referenceMotion === 'required' && coverage.referenceAssetId() === referenceAssetId() ? ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check) : [];
       return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), ...readLists(checks) } : output;
     };
   }
@@ -2069,6 +2166,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
+  // Reports include failed edits and all timed exceptions, after the save receipt is settled.
+  for (const [name, tool] of Object.entries(tools as Record<string, { execute?: (...args: never[]) => Promise<unknown> }>)) {
+    const execute = tool.execute;
+    if (!execute) continue;
+    tool.execute = async function (this: unknown, ...args: never[]) {
+      let output: unknown;
+      try { output = await execute.apply(this ?? tool, args); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const data = error && typeof error === 'object' && 'data' in error ? error.data as { status?: string; message?: string } : undefined;
+        if (data?.status !== 'still_queued' && !message.includes('Still queued after')) throw error;
+        output = { success: false, checkPassed: false, status: 'still_queued', error: data?.message ?? message, retryAfterSeconds: 30, nextAction: { tool: name, arguments: { projectId: run.projectId, ...((args[0] ?? {}) as Record<string, unknown>) } } };
+      }
+      if (referenceMotionEnabled() && (toolBehavior(name)?.effect === 'timeline' || (output as { status?: string })?.status === 'still_queued') && (referenceAssetId() || editSession.timeline.clips.some(clip => clip.scene?.film?.referenceAssetId))) {
+        try { return { ...(output as Record<string, unknown>), ...await motionStatus() }; }
+        catch { return { ...(output as Record<string, unknown>), motionCheck: 'motionMap: state unavailable; this check has not passed. Retry motionMap or mark an unmeasurable window OFF with its time and reason.' }; }
+      }
+      return output;
+    };
+  }
   const availableToolNames=():string[]=>laneChosen?Object.keys(tools).filter(name=>laneToolAllowed(lane,name)):['switchLane'];
   for(const [name,tool] of Object.entries(tools) as [string,{execute?:(...args:never[])=>Promise<unknown>}][]){
     const execute=tool.execute;if(!execute)continue;
@@ -2095,7 +2212,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const before=await timelineHistoryKey(editSession.timeline);
       const output=await execute.apply(this??tool,args) as Record<string,unknown>;
       const after=await timelineHistoryKey(editSession.timeline);
-      if(before!==after||name==='createTimeline'||name==='openTimeline')finishResult=undefined;
+      if(before!==after||name==='createTimeline'||name==='openTimeline'||referenceMotionEnabled()&&['motionMap','compareMotion','compareReference'].includes(name))finishResult=undefined;
       if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after){
         const {images:_images,...evidence}=output;
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:{tool:name,timelineId,fingerprint:after,input,output:evidence}});
@@ -2103,5 +2220,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => lane!=='clip'&&!clippingActive&&editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => lane!=='clip'&&!clippingActive&&editMode === 'fast' ? fastReview.feedback() : undefined };
 }

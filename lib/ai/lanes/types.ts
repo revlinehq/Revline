@@ -1,5 +1,6 @@
 import type { Timeline } from '../../editor/types';
 import type { EditorSkill } from '../skills';
+import type { MotionCheck, MotionOff, MotionWindow } from '../motion-coverage';
 
 export const LANE_IDS = [
   'edit',
@@ -23,6 +24,20 @@ export type LaneCheckContext = {
   fingerprint: string;
   timelineId: string;
   assets: { _id: string; kind: string; duration?: number }[];
+  referenceMotion?: ReferenceMotionEvidence[];
+};
+export type ReferenceMotionEvidence = {
+  projectId: string;
+  assetId: string;
+  start: number;
+  end: number;
+  offset: number;
+  referenceDuration?: number;
+  revision: number;
+  timelineKey: string;
+  windows: MotionWindow[];
+  checks: MotionCheck[];
+  off: MotionOff[];
 };
 export type LaneDefinition = {
   id: LaneId;
@@ -32,6 +47,7 @@ export type LaneDefinition = {
   tools: readonly string[];
   check: (context: LaneCheckContext) => string[];
   instructions: string;
+  referenceMotion?: 'required' | 'bound';
 };
 export const currentEvidence = (context: LaneCheckContext, tool: string) =>
   context.evidence.filter(
