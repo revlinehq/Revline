@@ -10,5 +10,5 @@ export const definition: LaneDefinition = {
   tools,
   check,
   instructions:
-    'Read clipping and call findHighlights once. Gemini is the default judge; when unavailable, stop Gemini for the run and review transcript/audio/cuts with targeted source frames, then register grounded found moments in planClips. Create one nonempty vertical tab per accepted highlight. Batch checkClip; finishClipping and lane finish must both pass the persisted ledger before reporting the exact tab list.',
+    'Read clipping and call findHighlights once. Podcast/talk defaults to transcript-first: pass sourceType, select grounded spoken hooks/payoffs from saved words, register planClips found, preserve source framing/aspect and audio. No Gemini, source frames, speaker tracking, normalization or rendered checks unless requested. Gaming/action and explicit visual requests use the visual path (visualReview:true for podcast/talk) with targeted evidence. Build each accepted tab, batch checkClip, then finishClipping and finish; both use the persisted mode and ledger. Never claim skipped visual checks passed.',
 };

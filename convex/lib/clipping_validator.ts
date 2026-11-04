@@ -57,6 +57,7 @@ export const clippingManifest = v.object({
   assetId: v.id("assets"),
   createdAt: v.number(),
   delivery: v.boolean(),
+  reviewMode: v.optional(v.union(v.literal("transcript"), v.literal("visual"))),
   unavailableReason: v.optional(v.string()),
   candidates: v.string(),
   recommendedCount: v.number(),
