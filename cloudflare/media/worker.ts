@@ -24,6 +24,8 @@ export default {
     const grant = token ? await verifyMediaToken(env.MEDIA_SIGNING_SECRET, token) : null;
     const reply = (value: unknown, status: number) => { if (status >= 400) diagnostic('request-rejected', status); const response = json(value, status); for (const [name, value] of cors) response.headers.set(name, value); return response; };
     if (!grant) return reply({ error: 'Media access has expired' }, 401);
+    const borrowed = 'READ_ONLY_MEDIA_KEYS' in env && typeof env.READ_ONLY_MEDIA_KEYS === 'string' ? JSON.parse(env.READ_ONLY_MEDIA_KEYS) as string[] : [];
+    if (grant.key && !['GET', 'HEAD'].includes(request.method) && borrowed.includes(grant.key)) return reply({ error: 'Borrowed development media is read-only' }, 403);
     const download = grant.operation === 'download';
     if (download && (typeof grant.fileName !== 'string' || grant.fileName !== safeDownloadFileName(grant.fileName))) return reply({ error: 'Invalid download grant' }, 403);
     let response: Response;
@@ -85,6 +87,7 @@ export default {
         if (Number(request.headers.get('Content-Length')) > 1_000_000) return reply({ error: 'Request is too large' }, 413);
         const body = await request.json() as { action: string; key: string; contentType?: string; uploadId?: string; parts?: R2UploadedPart[] };
         if (!validKey(body.key)) return reply({ error: 'Invalid media key' }, 400);
+        if (borrowed.includes(body.key)) return reply({ error: 'Borrowed development media is read-only' }, 403);
         if (body.action === 'create' && body.contentType && /^(video|audio|image)\//.test(body.contentType)) {
           const upload = await env.MEDIA.createMultipartUpload(body.key, { httpMetadata: { contentType: body.contentType } });
           response = json({ uploadId: upload.uploadId });

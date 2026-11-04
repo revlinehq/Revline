@@ -35,6 +35,7 @@ import type * as cutouts from "../cutouts.js";
 import type * as databaseIO from "../databaseIO.js";
 import type * as deploymentSetup from "../deploymentSetup.js";
 import type * as derivations from "../derivations.js";
+import type * as devIsolation from "../devIsolation.js";
 import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
 import type * as flyProcessor from "../flyProcessor.js";
@@ -171,6 +172,7 @@ declare const fullApi: ApiFromModules<{
   databaseIO: typeof databaseIO;
   deploymentSetup: typeof deploymentSetup;
   derivations: typeof derivations;
+  devIsolation: typeof devIsolation;
   discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
   flyProcessor: typeof flyProcessor;
