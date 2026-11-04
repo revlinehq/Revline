@@ -882,7 +882,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
         });
         results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
-        return {results,images,reusedTimelineIds,next:images.length?'Fix failed checks, glance at the framing sheet, then call finishClipping.':'Fix data failures or report the actual optional-check findings, then finishClipping and finish. Never normalize or rerender unchanged tabs automatically.'};
+        const failedTimelineIds=results.filter(result=>!(result as {passed:boolean}).passed).map(result=>(result as {timelineId:string}).timelineId);
+        return {results,images,reusedTimelineIds,failedTimelineIds,next:failedTimelineIds.length?'Review the actual failed data or optional QA findings. Do not retry unchanged failures or passing tabs. Fix only affected edits or explicitly scope an intentional black/freeze acknowledgement. Never normalize automatically.':'FinishClipping and finish can now validate the saved data. Unrequested heavy checks and normalization are skipped.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration, mode-appropriate aspect and current passing checkClip receipts. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
       await editSession.wait();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
