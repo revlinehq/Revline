@@ -15,6 +15,7 @@ import { WorkspaceNav, chatRecency, useWorkspaceChats, type WorkspaceChat } from
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { WorkingAgents } from './working-agents';
 
 export function ChatHistory() {
   const { chats, loading, connected } = useWorkspaceChats();
@@ -75,7 +76,7 @@ const ChatHistoryRow = memo(function ChatHistoryRow({ chat, onRename, onDelete, 
   onActionTrigger: (trigger: HTMLButtonElement) => void; onMenuClose: (event: Event) => void;
 }) {
   return <article className="workspace-chat-row">
-        <Link className="workspace-chat-row-link" href={`/editor/${chat.id}`}><span className="workspace-chat-cover">{chat.coverUrl ? chat.coverKind === 'video' ? <video src={`${chat.coverUrl}#t=.1`} muted preload="metadata" /> : <img src={chat.coverUrl} alt="" loading="lazy" /> : <Film size={18} />}</span><span className="workspace-chat-description"><strong>{chat.title}</strong><span>{chat.clipCount ? `${chat.clipCount} ${chat.clipCount === 1 ? 'clip' : 'clips'} in your edit` : 'Ready for your footage'}</span></span><span className={`workspace-chat-activity${chat.running ? ' is-editing' : ''}`}>{chat.running ? 'Editing…' : chatRecency(chat.updatedAt)}</span></Link>
+        <Link className="workspace-chat-row-link" href={`/editor/${chat.id}`}><span className="workspace-chat-cover">{chat.coverUrl ? chat.coverKind === 'video' ? <video src={`${chat.coverUrl}#t=.1`} muted preload="metadata" /> : <img src={chat.coverUrl} alt="" loading="lazy" /> : <Film size={18} />}</span><span className="workspace-chat-description"><strong>{chat.title}</strong><span>{chat.clipCount ? `${chat.clipCount} ${chat.clipCount === 1 ? 'clip' : 'clips'} in your edit` : 'Ready for your footage'}</span></span><WorkingAgents agents={chat.agents}/><span className={`workspace-chat-activity${chat.running || chat.agents.length ? ' is-editing' : ''}`}>{chat.running || chat.agents.length ? 'Editing…' : chatRecency(chat.updatedAt)}</span></Link>
         <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Actions for ${chat.title}`} onFocus={event => { onActionTrigger(event.currentTarget); }} onPointerDown={event => { onActionTrigger(event.currentTarget); }}><MoreHorizontal size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workspace-menu workspace-row-menu" onCloseAutoFocus={onMenuClose}><DropdownMenuItem className="workspace-menu-item" onSelect={() => onRename(chat)}><Pencil size={14} />Rename</DropdownMenuItem><DropdownMenuItem className="workspace-menu-item" onSelect={() => onDelete(chat)}><Trash2 size={14} />Delete chat</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </article>;
 });
