@@ -29,10 +29,21 @@ export function ChatHistory() {
   const [error, setError] = useState('');
   const actionTrigger = useRef<HTMLButtonElement | null>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const nearbyTriggers = useRef<HTMLButtonElement[]>([]);
   function clearSearch() { setSearch(''); searchInput.current?.focus(); }
-  function returnFocus(event: Event) { dialogRequested.current = false; event.preventDefault(); if (actionTrigger.current?.isConnected) actionTrigger.current.focus(); else searchInput.current?.focus(); }
+  function returnFocus(event: Event) {
+    dialogRequested.current = false;
+    event.preventDefault();
+    const trigger = [actionTrigger.current, ...nearbyTriggers.current].find(button => button?.isConnected);
+    (trigger ?? searchInput.current)?.focus({ preventScroll: true });
+  }
   const dialogRequested = useRef(false);
-  const rememberTrigger = useCallback((trigger: HTMLButtonElement) => { actionTrigger.current = trigger; }, []);
+  const rememberTrigger = useCallback((trigger: HTMLButtonElement) => {
+    actionTrigger.current = trigger;
+    const triggers = Array.from(trigger.closest('.workspace-chat-groups')?.querySelectorAll<HTMLButtonElement>('[data-chat-action]') ?? []);
+    const index = triggers.indexOf(trigger);
+    nearbyTriggers.current = [...triggers.slice(index + 1), ...triggers.slice(0, index).reverse()];
+  }, []);
   const onMenuClose = useCallback((event: Event) => { if (dialogRequested.current) event.preventDefault(); }, []);
   const openRename = useCallback((chat: WorkspaceChat) => { dialogRequested.current = true; setRenaming(chat); setName(chat.title); setError(''); }, []);
   const openDelete = useCallback((chat: WorkspaceChat) => { dialogRequested.current = true; setDeleting(chat); setError(''); }, []);
@@ -55,7 +66,7 @@ export function ChatHistory() {
   async function deleteChat() {
     if (!deleting || deleting.id === 'demo' || busy) return;
     setBusy(true); setError('');
-    try { await remove({ projectId: deleting.id }); setDeleting(null); }
+    try { await remove({ projectId: deleting.id }); actionTrigger.current = null; setDeleting(null); }
     catch (reason) { setError(userError(reason, 'Could not delete this chat.')); }
     finally { setBusy(false); }
   }
@@ -77,6 +88,6 @@ const ChatHistoryRow = memo(function ChatHistoryRow({ chat, onRename, onDelete, 
 }) {
   return <article className="workspace-chat-row">
         <Link className="workspace-chat-row-link" href={`/editor/${chat.id}`}><span className="workspace-chat-cover">{chat.coverUrl ? chat.coverKind === 'video' ? <video src={`${chat.coverUrl}#t=.1`} muted preload="metadata" /> : <img src={chat.coverUrl} alt="" loading="lazy" /> : <Film size={18} />}</span><span className="workspace-chat-description"><strong>{chat.title}</strong><span>{chat.clipCount ? `${chat.clipCount} ${chat.clipCount === 1 ? 'clip' : 'clips'} in your edit` : 'Ready for your footage'}</span></span><WorkingAgents agents={chat.agents}/><span className={`workspace-chat-activity${chat.running || chat.agents.length ? ' is-editing' : ''}`}>{chat.running || chat.agents.length ? 'Editing…' : chatRecency(chat.updatedAt)}</span></Link>
-        <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon-sm" aria-label={`Actions for ${chat.title}`} onFocus={event => { onActionTrigger(event.currentTarget); }} onPointerDown={event => { onActionTrigger(event.currentTarget); }}><MoreHorizontal size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workspace-menu workspace-row-menu" onCloseAutoFocus={onMenuClose}><DropdownMenuItem className="workspace-menu-item" onSelect={() => onRename(chat)}><Pencil size={14} />Rename</DropdownMenuItem><DropdownMenuItem className="workspace-menu-item" onSelect={() => onDelete(chat)}><Trash2 size={14} />Delete chat</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button data-chat-action variant="ghost" size="icon-sm" aria-label={`Actions for ${chat.title}`} onFocus={event => { onActionTrigger(event.currentTarget); }} onPointerDown={event => { onActionTrigger(event.currentTarget); }}><MoreHorizontal size={16} /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workspace-menu workspace-row-menu" onCloseAutoFocus={onMenuClose}><DropdownMenuItem className="workspace-menu-item" onSelect={() => onRename(chat)}><Pencil size={14} />Rename</DropdownMenuItem><DropdownMenuItem className="workspace-menu-item" onSelect={() => onDelete(chat)}><Trash2 size={14} />Delete chat</DropdownMenuItem></DropdownMenuContent></DropdownMenu>
       </article>;
 });

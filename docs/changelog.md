@@ -2,6 +2,9 @@
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
+## 2026-11-04
+- Chat history: Return focus to a surviving nearby chat without scrolling after deletion. Why: deleting a row jumped the user back to the search field.
+
 ## 2026-11-03
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
 - Editor: Make whole choice cards select their option and give each question unique radio IDs. Why: the user could only reliably select the radio button.
