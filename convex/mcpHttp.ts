@@ -1,11 +1,11 @@
 import type { HttpRouter } from 'convex/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { CallToolRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, InitializeRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
+import type { Id } from './_generated/dataModel';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
-import { type LaneId } from '../lib/ai/lanes';
 import { laneDescriptions } from '../lib/ai/lanes/selection';
 import { requestMcpOrigin } from './lib/mcp_origin';
 import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
@@ -27,10 +27,10 @@ If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or 
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
-Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Choose the lane yourself using the request, brief and attached media. No classifier chooses for you. Without an explicit lane, startTask exposes only selection controls; call setLane(lane, reason, taskType: edit|question) before any editing tools are offered. Use edit for any request to create or change a video, including a request phrased as a question. Use question only for information without edits. A follow-up keeps the current timeline lane unless the kind of work changed. /clip and manual composer selections win.
+Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Keep the returned taskId and pass it with projectId on subsequent lane tools, including setLane. Alternatively pass projectId and timelineId on every call. Choose the lane yourself using the request, brief and attached media. No classifier chooses for you. Without an explicit lane, call setLane(lane, reason, taskType: edit|question) before editing. Use edit for any request to create or change a video, including a request phrased as a question. Use question only for information without edits. A follow-up keeps the current timeline lane unless the kind of work changed. /clip and manual composer selections win.
 Lanes:
 ${laneDescriptions()}
-A recreation is an explicit dev/MCP capability. tools/list returns only shared tools and the chosen lane’s tools. setLane emits notifications/tools/list_changed. Clients that ignore list changes receive an actionable error before an unavailable tool executes.
+A recreation is an explicit dev/MCP capability. tools/list always lists all tools, labeled with their lanes, so clients need only fetch it once. Lane access is enforced on each call; unavailable tools return an actionable error before executing. Changing lanes needs no tools/list refresh.
 Follow the skill list returned by startTask or setLane. readSkill only returns the current lane’s pages. inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for source transcripts and clipping signals, and getFrames for rendered timeline evidence. Keep reference media off the timeline when recreating.
 Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
 Use Revline’s tools to measure media; all tool edits save immediately and are undoable. Share the editorUrl from getProject.
@@ -45,21 +45,18 @@ const oauthMetadata = (site: string) => ({
 });
 const resourceMetadata = (site: string) => ({ resource: `${site}/mcp`, authorization_servers: [site], bearer_methods_supported: ['header'], scopes_supported: ['revline'], resource_name: 'Revline video editor' });
 
-const toolCatalog=new Map<LaneId|'selection',Promise<Tool[]>>();
+let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId:string) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: { listChanged: true } }, instructions: MCP_INSTRUCTIONS });
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId?:string,agentClientId?:Id<'mcpConnections'>) {
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   server.setRequestHandler(ListToolsRequestSchema, async () => {
-    const session=await ctx.runQuery(internal.lanes.mcpSession,{ownerId,connectionId});
-    const selecting=!session||session.laneChosen===false,key=selecting?'selection':session.lane;
-    if(!toolCatalog.has(key))toolCatalog.set(key,ctx.runAction(internal.mcpActions.listTools,{lane:session?.lane,selecting}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog.delete(key);throw error;}));
-    return {tools:await toolCatalog.get(key)!};
+    toolCatalog ??= ctx.runAction(internal.mcpActions.listTools,{}).then(tools=>tools as Tool[]).catch(error=>{toolCatalog=undefined;throw error;});
+    return {tools:await toolCatalog};
   });
-  server.setRequestHandler(CallToolRequestSchema, async (request,extra) => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, connectionId, name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
-    if(!outcome.isError&&['startTask','setLane','switchLane'].includes(request.params.name))await extra.sendNotification({method:'notifications/tools/list_changed'});
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
   });
   return server;
@@ -81,17 +78,40 @@ const mcpHandler = httpAction(async (ctx, request) => {
     if (auth.error === 'rate_limited') return json({ jsonrpc: '2.0', id: null, error: { code: -32002, message: 'Too many tool calls. Wait a minute and retry.' } }, 429, { 'Retry-After': '60' });
     return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
   }
-  // Stateless: a fresh server and transport per request, answering with JSON rather than an event stream.
-  const server = revlineServer(ctx, auth.ownerId, auth.clientName, comparisonDeadline,auth.connectionId);
+  // Transports are request-local; the conversation ID survives in Convex, scoped
+  // to the grant. Never use a shared grant as the conversation identity.
+  const sessionId = method === 'initialize' ? crypto.randomUUID() : request.headers.get('Mcp-Session-Id');
+  if (sessionId && !/^[\x21-\x7e]{1,256}$/.test(sessionId)) return json({jsonrpc:'2.0',id:null,error:{code:-32600,message:'Invalid Mcp-Session-Id.'}},400);
+  const connectionId = sessionId ? `${auth.grantId}:${sessionId}` : undefined;
+  if (connectionId && method === 'initialize') {
+    const initialized=InitializeRequestSchema.safeParse(body);
+    if(initialized.success){
+      const {name,title,version}=initialized.data.params.clientInfo;
+      await ctx.runMutation(internal.mcpConnections.initialize,{ownerId:auth.ownerId,connectionId,clientInfo:{name,version,...(title?{title}:{})},fallbackName:auth.clientName});
+    }
+  }
+  const identity=connectionId?await ctx.runQuery(internal.mcpConnections.identity,{ownerId:auth.ownerId,connectionId}):null;
+  if(identity?.closed)return json({jsonrpc:'2.0',id:null,error:{code:-32000,message:'This MCP session ended. Initialize a new session.'}},404);
+  const server = revlineServer(ctx, auth.ownerId, identity?.agentName??auth.clientName, comparisonDeadline,connectionId,identity?.clientId);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: false });
   try {
     await server.connect(transport);
     const response=await transport.handleRequest(request,{parsedBody:body});
+    if (sessionId && method === 'initialize' && response.ok) response.headers.set('Mcp-Session-Id',sessionId);
     if(!response.body){await server.close();return withCors(response);}
     const reader=response.body.getReader();
     const stream=new ReadableStream<Uint8Array>({async pull(controller){try{const {done,value}=await reader.read();if(done){controller.close();await server.close();}else controller.enqueue(value);}catch(error){controller.error(error);await server.close();}},async cancel(){await reader.cancel();await server.close();}});
     return withCors(new Response(stream,{status:response.status,headers:response.headers}));
   } catch(error){await server.close();throw error;}
+});
+
+const mcpCloseHandler = httpAction(async (ctx, request) => {
+  const token=/^Bearer\s+(\S+)$/i.exec(request.headers.get('Authorization')??'')?.[1];
+  const auth=token?await ctx.runMutation(internal.mcpAuth.authenticate,{token,calls:0}):null;
+  if(!auth||'error' in auth)return json({error:'Sign in to Revline to close this MCP session.'},auth&&auth.error==='plan'?403:401);
+  const sessionId=request.headers.get('Mcp-Session-Id');
+  if(sessionId)await ctx.runMutation(internal.mcpConnections.close,{ownerId:auth.ownerId,connectionId:`${auth.grantId}:${sessionId}`});
+  return new Response(null,{status:204,headers:cors});
 });
 
 function formValues(text: string, contentType: string | null): Record<string, string> {
@@ -101,11 +121,11 @@ function formValues(text: string, contentType: string | null): Record<string, st
 
 export function registerMcpRoutes(http: HttpRouter) {
   const options = httpAction(async () => new Response(null, { status: 204, headers: cors }));
-  // Stateless JSON server: no standalone event stream and no sessions to delete.
+  // No standalone event stream; task records do not depend on a live transport.
   const notStreaming = httpAction(async () => new Response(null, { status: 405, headers: { ...cors, Allow: 'POST' } }));
   http.route({ path: '/mcp', method: 'POST', handler: mcpHandler });
   http.route({ path: '/mcp', method: 'GET', handler: notStreaming });
-  http.route({ path: '/mcp', method: 'DELETE', handler: notStreaming });
+  http.route({ path: '/mcp', method: 'DELETE', handler: mcpCloseHandler });
 
   for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp']) {
     http.route({ path, method: 'GET', handler: httpAction(async (_ctx, request) => json(resourceMetadata(requestMcpOrigin(request)))) });

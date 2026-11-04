@@ -1,0 +1,5 @@
+.working-agents{display:inline-flex;align-items:center;justify-content:flex-end;flex-shrink:0;flex-wrap:wrap;gap:6px;max-width:132px}
+.working-agent[data-slot=badge]{display:grid;place-items:center;flex:none;width:22px;height:22px;padding:4px;border:0;border-radius:6px;background:#2a2a2a;color:#ddd;transition:none}
+.working-agent>svg{width:14px!important;height:14px!important}
+.timeline-tab .working-agents{gap:5px;flex-wrap:nowrap;max-width:none}
+.timeline-tab .working-agent[data-slot=badge]{width:14px;height:14px;padding:0;border-radius:0;background:transparent}
