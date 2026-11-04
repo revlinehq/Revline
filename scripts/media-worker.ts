@@ -1,3 +1,4 @@
+import type { Id } from '../convex/_generated/dataModel';
 import { ConvexHttpClient, ConvexClient } from 'convex/browser';
 import { startMediaWorker } from '../lib/server/media-worker-loop';
 import { localWorkerCapabilities } from '../lib/server/local-worker-capabilities';
@@ -14,10 +15,11 @@ process.on('SIGINT', () => shutdown.abort());
 process.on('SIGTERM', () => shutdown.abort());
 const capabilities = await localWorkerCapabilities();
 if (capabilities.missing.length) console.warn(`Unavailable local runtimes: ${capabilities.missing.join(', ')}. ${capabilities.media ? `Declining task kinds: ${capabilities.excludedKinds.join(', ')}.` : 'Worker paused; no tasks will be claimed.'}`);
+if (process.env.MEDIA_WORKER_PROJECT_ID) console.log(`Development worker scoped to project ${process.env.MEDIA_WORKER_PROJECT_ID}.`);
 const subscriptions = new ConvexClient(convexUrl, { logger: false });
 const label = (fields: Record<string, unknown>) => `[${new Date().toISOString()}] Chat ${fields.projectId} · media task ${fields.taskId}`;
 const worker = startMediaWorker({
-  client: new ConvexHttpClient(convexUrl, { logger: false, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(15_000), ...(init?.signal ? [init.signal] : [])]) }) }), subscriptions, convexUrl, workerSecret, slots, claim: { lane: 'any', excludedKinds: capabilities.excludedKinds },
+  client: new ConvexHttpClient(convexUrl, { logger: false, fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(15_000), ...(init?.signal ? [init.signal] : [])]) }) }), subscriptions, convexUrl, workerSecret, slots, claim: { lane: 'any', excludedKinds: capabilities.excludedKinds, ...(process.env.MEDIA_WORKER_PROJECT_ID ? { projectId: process.env.MEDIA_WORKER_PROJECT_ID as Id<'projects'> } : {}) },
   deadlineMs: 15 * 60_000, signal: shutdown.signal,
   // Read-only sessions can keep both development services up without claiming paid work.
   draining: () => process.env.MEDIA_WORKER_PAUSED === 'true' || !capabilities.media,

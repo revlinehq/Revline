@@ -15,7 +15,7 @@ export const frameCacheKey = (scope: CacheScope, output: unknown) => cacheHash({
 
 /** Keep request and worker descriptors identical; never include request IDs or expiring URLs. */
 export function referenceResultDescriptor(work: Record<string, unknown>) {
-  const fields = ['mode', 'comparisonIdentity', 'start', 'end', 'times', 'compareCrop', 'referenceCropKeyframes', 'count', 'fps', 'momentsOnly', 'crop', 'box', 'points', 'lines', 'color', 'tolerance', 'text', 'categories'];
+  const fields = ['mode', 'comparisonIdentity', 'start', 'end', 'times', 'compareCrop', 'referenceCropKeyframes', 'count', 'fps', 'momentsOnly', 'crop', 'box', 'frameTime', 'backgroundTime', 'points', 'lines', 'color', 'tolerance', 'text', 'categories'];
   return { kind: 'reference-result', ...Object.fromEntries(fields.filter(key => work[key] !== undefined && !(key === 'momentsOnly' && work[key] === false)).map(key => [key, work[key]])) };
 }
 export const snapshotResultDescriptor = (identity: string, times: number[]) => ({ kind: 'snapshot-result', identity, times });
