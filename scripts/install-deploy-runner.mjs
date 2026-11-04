@@ -37,7 +37,7 @@ await copyFile(join(directory, 'bin/runsvc.sh'), join(directory, 'runsvc.sh'));
 await chmod(join(directory, 'runsvc.sh'), 0o755);
 await writeFile(join(directory, '.path'), path + '\n');
 await mkdir(dirname(unit), { recursive: true });
-await writeFile(unit, `[Unit]\nDescription=Revline GitHub Actions deployment runner\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${directory}\nExecStart=${directory}/runsvc.sh\nEnvironment="PATH=${path}"\nRestart=always\nRestartSec=5\nKillSignal=SIGTERM\nKillMode=process\nTimeoutStopSec=6h\n\n[Install]\nWantedBy=default.target\n`);
+await writeFile(unit, `[Unit]\nDescription=Revline GitHub Actions deployment runner\nAfter=network-online.target\n\n[Service]\nType=simple\nWorkingDirectory=${directory}\nExecStart=${directory}/runsvc.sh\nEnvironment="PATH=${path}"\nEnvironment="REVLINE_NODE_BIN=${dirname(process.execPath)}"\nRestart=always\nRestartSec=5\nKillSignal=SIGTERM\nKillMode=process\nTimeoutStopSec=6h\n\n[Install]\nWantedBy=default.target\n`);
 run('systemctl', ['--user', 'daemon-reload']);
 run('systemctl', ['--user', 'enable', '--now', 'revline-actions-runner.service']);
 const linger = run('loginctl', ['show-user', String(process.getuid()), '-p', 'Linger']).trim();

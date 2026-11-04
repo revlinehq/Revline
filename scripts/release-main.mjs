@@ -3,7 +3,7 @@
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readFile, writeFile, mkdir, rename, symlink, access } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 import { parseEnv } from 'node:util';
 import { command, mask, redact, logTail } from './release-command.mjs';
 import { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend, verifyFly } from './release-verify.mjs';
@@ -16,7 +16,7 @@ const productionFile = join(primary, '.env.production.local');
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 let step = 'Initialize release';
 const sha = git('rev-parse', 'HEAD');
-const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true' };
+const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true', PATH: [dirname(process.execPath), join(homedir(), '.fly/bin'), join(homedir(), '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':') };
 // Never inherit a deployment selection or provider token from another session.
 for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
 const targets = [
@@ -84,6 +84,11 @@ try {
   // in a clean checkout. Never expose the primary processor/Convex env file here.
   try { await access('.env.production.local'); throw new Error('Runner checkout contains .env.production.local. Frontend builds require a clean checkout; do not copy or link the PC production file here.'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
+  step = 'Check required host CLIs';
+  for (const [cli, args] of [['node', ['--version']], ['npm', ['--version']], ['npx', ['--version']], ['flyctl', ['version']], ['docker', ['--version']], ['gh', ['--version']], ['git', ['--version']]]) {
+    try { await command(cli, args, { env, quiet: true }); }
+    catch { throw new Error(`Required CLI '${cli}' is unavailable or cannot run. Explicit PATH: ${env.PATH}`); }
+  }
   await mkdir(state, { recursive: true, mode: 0o700 });
   let base;
   if (dry && env.RELEASE_BASE) base = git('rev-parse', `${env.RELEASE_BASE}^{commit}`);
@@ -103,6 +108,11 @@ try {
   await symlink(targets[1].file, '.env.local').catch(error => { if (error.code !== 'EEXIST') throw error; });
   await npm('Install dependencies', ['ci']);
   await npm('Install agent runner dependencies', ['run', 'agent-runner:install']);
+  for (const cli of ['convex', 'wrangler']) {
+    step = `Check installed ${cli} CLI`;
+    try { await command('npx', ['--no-install', cli, '--version'], { env, quiet: true }); }
+    catch { throw new Error(`Required project CLI '${cli}' cannot run after npm ci. Restore the project's locked dependencies before deploying.`); }
+  }
   const { releasePlan } = await import('./release-plan.mjs');
   step = 'Detect changed services';
   const plan = releasePlan(base);

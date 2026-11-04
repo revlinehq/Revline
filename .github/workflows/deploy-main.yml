@@ -35,6 +35,23 @@ jobs:
       RELEASE_BASE: ${{ inputs.base }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
+      - name: Configure PATH and check required host CLIs
+        shell: bash
+        run: |
+          if [ -z "${REVLINE_NODE_BIN:-}" ] || [ ! -x "$REVLINE_NODE_BIN/node" ]; then
+            echo '::error::Runner is missing its nvm Node bin. Rerun scripts/install-deploy-runner.mjs and restart the idle runner service.'
+            exit 1
+          fi
+          export PATH="$REVLINE_NODE_BIN:$HOME/.fly/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+          printf '%s\n' "$REVLINE_NODE_BIN" "$HOME/.fly/bin" "$HOME/.local/bin" /usr/local/bin /usr/bin /bin >> "$GITHUB_PATH"
+          missing=0
+          for cli in node npm npx flyctl docker gh git flock systemctl journalctl; do
+            if ! command -v "$cli" >/dev/null 2>&1; then
+              echo "::error::Required CLI '$cli' is missing from the explicit runner PATH: $PATH"
+              missing=1
+            fi
+          done
+          exit "$missing"
       - name: Check PC production environment and manual release lock
         shell: bash
         run: |
