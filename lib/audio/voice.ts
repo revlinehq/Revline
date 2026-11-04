@@ -27,7 +27,7 @@ export const NARRATION_VOICES = [
 ] as const;
 
 const voiceSettings = {
-  speed: z.number().min(.7).max(1.2).optional().describe('Speaking rate, 0.7 to 1.2 (default 1). Slightly slower (0.95) reads calmer for explainers.'),
+  speed: z.number().min(.7).max(1.2).optional().describe('Speaking rate, 0.7 to 1.2 (default 1). Slightly slower (0.95) reads calmer.'),
   stability: z.number().min(0).max(1).optional().describe('0 to 1, default 0.5. Lower is more expressive, higher more even.'),
 };
 export const voiceInput = z.object({

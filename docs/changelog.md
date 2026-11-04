@@ -1,3 +1,7 @@
+## 2026-11-04
+
+- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
