@@ -3,6 +3,7 @@ import { availableParallelism, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findFfBinary } from '@hyperframes/parsers/ff-binaries';
+import { FLY_WORKER_GUEST } from '../lib/fly-worker-resources.mjs';
 
 const MIB = 1024 * 1024;
 // Below this, keep the original one-worker, low-memory profile (the legacy
@@ -32,15 +33,16 @@ export function renderResources() {
   const memory = limit > 0 ? Math.min(limit, totalmem()) : totalmem();
   const lowMemory = memory < LOW_MEMORY_BYTES;
   const cpus = Math.max(1, availableParallelism());
+  const flyCpus = process.env.FLY_APP_NAME ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
   // Two capture workers use both vCPUs of the hosted profile; more would
   // contend with the encoder and need re-measuring against the memory budget.
-  // Large export machines (Fly, 16 vCPU) raise these through the environment.
-  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), 16);
+  // Fly overrides must fit this machine, including settings inherited from an old image.
+  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), flyCpus ?? 16);
   return {
     workers,
     lowMemory,
-    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), 8),
-    encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), 16),
+    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), flyCpus ?? 8),
+    encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), flyCpus ?? 16),
     memoryMb: Math.floor(memory / MIB),
   };
 }

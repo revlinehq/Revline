@@ -5,6 +5,7 @@ import { internal } from './_generated/api';
 import { accountLimit } from './lib/account_limits';
 import { processorBackend } from './lib/processor_backend';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { FLY_PROCESSOR_CPU_ENV, flyProcessorGuest } from '../lib/fly-worker-resources.mjs';
 
 const machineSchema = z.object({ id: z.string(), state: z.string(), config: z.object({ metadata: z.record(z.string(), z.string()).optional() }).optional() });
 const volumeSchema = z.object({ id: z.string(), name: z.string(), state: z.string(), attached_machine_id: z.string().nullable().optional(), created_at: z.string() });
@@ -20,9 +21,8 @@ function configuration() {
   if (url !== 'https://different-gnu-398.convex.cloud' && url !== 'https://majestic-alpaca-541.convex.cloud') throw new Error('Unknown processor deployment.');
   const production = url === 'https://different-gnu-398.convex.cloud';
   if (app !== (production ? 'revline-processor' : 'revline-processor-dev') || !image.startsWith(`registry.fly.io/${app}@sha256:`) || !/sha256:[a-f0-9]{64}$/.test(image)) throw new Error('Fly processor app/image does not match this Convex environment.');
-  const cpus = accountLimit('FLY_PROCESSOR_CPUS', 8, 4, 8);
-  if (cpus !== 4 && cpus !== 8) throw new Error('FLY_PROCESSOR_CPUS must be 4 or 8.');
-  return { token, app, image, cpus, region: process.env.FLY_PROCESSOR_REGION || 'iad', max: accountLimit('FLY_PROCESSOR_MAX_MACHINES', 4, 1, 8) };
+  const guest = flyProcessorGuest(process.env.FLY_PROCESSOR_CPUS);
+  return { token, app, image, guest, region: process.env.FLY_PROCESSOR_REGION || 'iad', max: accountLimit('FLY_PROCESSOR_MAX_MACHINES', 4, 1, 8) };
 }
 
 async function fly(config: ReturnType<typeof configuration>, method: string, path: string, body?: unknown): Promise<unknown> {
@@ -80,15 +80,13 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
     const active = machines.filter(machine => activeStates.has(machine.state)).length;
     let need = processorBackend() === 'fly' ? Math.min(Math.max(0, wanted.waiting - Math.max(0, active - wanted.running)), config.max - active) : 0;
     for (; need > 0 && Date.now() < reconcileUntil; need--) {
-      const volume = volumeSchema.parse(await fly(config, 'POST', '/volumes', { name: 'processor_scratch', region: config.region, size_gb: 20, require_unique_zone: false, snapshot_retention: 1, auto_backup_enabled: false }));
+      const volume = volumeSchema.parse(await fly(config, 'POST', '/volumes', { name: 'processor_scratch', region: config.region, size_gb: 20, compute: config.guest, require_unique_zone: false, snapshot_retention: 1, auto_backup_enabled: false }));
       try { await fly(config, 'POST', '/machines', { region: config.region, config: {
-        image: config.image, guest: { cpu_kind: 'performance', cpus: config.cpus, memory_mb: config.cpus * 2048 },
+        image: config.image, guest: config.guest,
         restart: { policy: 'no' }, auto_destroy: true,
         // No public services. fly-entry.sh clears scratch and drops root privileges.
         mounts: [{ volume: volume.id, path: '/scratch' }],
-        env: { MEDIA_PROCESSOR_BACKEND: 'fly', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000',
-          MEDIA_PROCESSOR_THREADS: String(config.cpus), MEDIA_PREVIEW_CPUS: String(config.cpus), REVLINE_RENDER_ENCODE_THREADS: String(config.cpus),
-          BEAT_TRACK_THREADS: String(config.cpus), OMP_NUM_THREADS: String(config.cpus), MKL_NUM_THREADS: String(config.cpus), OMP_THREAD_LIMIT: String(config.cpus) },
+        env: { ...FLY_PROCESSOR_CPU_ENV, MEDIA_PROCESSOR_BACKEND: 'fly', MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000' },
         metadata: { revline_processor: 'true', revline_version: String(MEDIA_PROCESSOR_VERSION) },
       } }); } catch (error) {
         // A timed-out create may have succeeded. Never delete an attached volume.

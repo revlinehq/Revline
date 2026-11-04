@@ -8,6 +8,7 @@ import { createConsoleLogger, resolveConfig } from '@hyperframes/producer';
 import { assemble, plan, renderChunk, resolvePlanAudioPath } from '@hyperframes/producer/distributed';
 import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
 import { exists, getFile, putFile, remove } from './render-artifacts.mjs';
+import { flyChunkResources } from '../lib/fly-worker-resources.mjs';
 
 const controller = new AbortController();
 process.on('SIGTERM', () => controller.abort());
@@ -42,6 +43,7 @@ try {
   const [directory, output, serialized] = process.argv.slice(2);
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality) || !settings.exportId) throw new Error('Invalid distributed render settings.');
+  const { chunkGuest, chunkEnv } = flyChunkResources({ guest: settings.chunkGuest, env: settings.chunkEnv });
   const signal = controller.signal;
   const resources = renderResources();
   configureRenderFfmpeg(directory, resources);
@@ -86,9 +88,9 @@ try {
       if (!keys.includes(key)) keys.push(key);
       attempts.set(index, (attempts.get(index) ?? 0) + 1);
       const machine = await fly('POST', '/machines', { region: process.env.FLY_REGION || 'iad', config: {
-        image: process.env.FLY_IMAGE_REF, guest: settings.chunkGuest, restart: { policy: 'no' }, auto_destroy: true,
+        image: process.env.FLY_IMAGE_REF, guest: chunkGuest, restart: { policy: 'no' }, auto_destroy: true,
         metadata: { revline_role: 'chunk', revline_export: settings.exportId },
-        env: { ...settings.chunkEnv, REVLINE_CHUNK_PLAN_KEY: `${prefix}/plan.tar`, REVLINE_CHUNK_INDEX: String(index), REVLINE_CHUNK_OUT_KEY: key, REVLINE_CHUNK_QUALITY: settings.quality },
+        env: { ...chunkEnv, REVLINE_CHUNK_PLAN_KEY: `${prefix}/plan.tar`, REVLINE_CHUNK_INDEX: String(index), REVLINE_CHUNK_OUT_KEY: key, REVLINE_CHUNK_QUALITY: settings.quality },
       } });
       machineFor.set(index, machine.id); launched.add(machine.id);
     };

@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseEnv } from 'node:util';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
+import { FLY_PROCESSOR_CPU_ENV, flyProcessorGuest } from '../lib/fly-worker-resources.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -19,6 +20,7 @@ const envFile = process.env.REVLINE_ENV_FILE || join(root, production ? '.env.pr
 const settings = parseEnv(await readFile(envFile, 'utf8'));
 if (settings.CONVEX_DEPLOYMENT !== `${production ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== convexUrl) throw new Error('Environment file targets the wrong Convex deployment.');
 const env = { ...process.env, ...settings };
+flyProcessorGuest(env.FLY_PROCESSOR_CPUS);
 if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
 if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deployment}|`)) throw new Error('Deploy key does not match the selected environment.');
 const cli = join(root, 'node_modules/convex/bin/main.js');
@@ -40,6 +42,7 @@ const convex = (argv, options) => run(process.execPath, [cli, ...argv], options)
 const setEnv = (name, value) => convex(['env', 'set', name, ...target], { input: value, quiet: true });
 // Secrets are resolved from the selected deployment, never from another app or environment.
 const remote = parseEnv(await convex(['env', 'list', ...target], { quiet: true }));
+const guest = flyProcessorGuest(remote.FLY_PROCESSOR_CPUS);
 const workerSecret = remote.RENDER_WORKER_SECRET;
 if (!workerSecret || !remote.MEDIA_WORKER_URL) throw new Error('The selected Convex deployment is missing media credentials.');
 const secrets = { RENDER_WORKER_SECRET: workerSecret, NEXT_PUBLIC_CONVEX_URL: convexUrl, MEDIA_WORKER_URL: remote.MEDIA_WORKER_URL };
@@ -49,7 +52,7 @@ for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY
   secrets[name] = value;
 }
 for (const name of ['GEMINI_VIDEO_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK']) if (settings[name]) secrets[name] = settings[name];
-if (dryRun) { console.log('Environment and required runtime credentials verified. No cloud resources changed.'); process.exit(0); }
+if (dryRun) { console.log(`Environment and required runtime credentials verified. Processor and preflight: ${guest.cpus} CPUs / ${guest.memory_mb} MB, matching volume compute placement. No cloud resources changed.`); process.exit(0); }
 
 let preflight;
 let preflightVolume;
@@ -76,12 +79,12 @@ try {
   const image = `registry.fly.io/${app}@${digest}`;
   token = env.FLY_PROCESSOR_API_TOKEN || remote.FLY_PROCESSOR_API_TOKEN || await run('flyctl', ['tokens', 'create', 'deploy', '-a', app, '--name', `convex-processor-${deployment}`, '--expiry', '8760h'], { quiet: true });
   // This process checks the full runtime without subscribing to or claiming the queue.
-  preflightVolume = await fly('POST', '/volumes', { name: 'processor_preflight', region: 'iad', size_gb: 20, require_unique_zone: false, snapshot_retention: 1, auto_backup_enabled: false });
+  preflightVolume = await fly('POST', '/volumes', { name: 'processor_preflight', region: 'iad', size_gb: 20, compute: guest, require_unique_zone: false, snapshot_retention: 1, auto_backup_enabled: false });
   if (preflightVolume.auto_backup_enabled !== false) throw new Error('Fly preflight scratch snapshots were not disabled.');
   const manifestDeadline = Date.now() + 120_000;
   while (!preflight) {
     try {
-      preflight = await fly('POST', '/machines', { region: 'iad', config: { image, init: { exec: ['sh', '-c', 'cd /app && node infra/media-worker/runtime-check.mjs'] }, guest: { cpu_kind: 'performance', cpus: 8, memory_mb: 16384 }, mounts: [{ volume: preflightVolume.id, path: '/scratch' }], restart: { policy: 'no' }, metadata: { revline_preflight: 'true' } } });
+      preflight = await fly('POST', '/machines', { region: 'iad', config: { image, init: { exec: ['sh', '-c', 'cd /app && node infra/media-worker/runtime-check.mjs'] }, guest, env: FLY_PROCESSOR_CPU_ENV, mounts: [{ volume: preflightVolume.id, path: '/scratch' }], restart: { policy: 'no' }, metadata: { revline_preflight: 'true' } } });
     } catch (error) {
       // A pushed manifest can take a few seconds to reach Machines' registry
       // resolver. A rejected manifest create has no machine to orphan.

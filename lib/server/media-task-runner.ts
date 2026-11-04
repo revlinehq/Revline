@@ -1,4 +1,5 @@
 import { materializeTranscript } from '../media-analysis/transcript';
+import { flyChunkResources } from '../fly-worker-resources.mjs';
 import { checkClipSnapshot } from './check-clip';
 import { FrameCache } from './frame-cache';
 import { referenceResultDescriptor, snapshotResultDescriptor, cacheHash } from '../media-analysis/frame-cache';
@@ -124,7 +125,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // Only the browser renderer reads the HTML composition.
       if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
       // Fly export machines split the render across parallel chunk machines (REVLINE_DISTRIBUTED_EXPORT).
-      const distributed = process.env.REVLINE_DISTRIBUTED_EXPORT === 'true' ? { maxChunks: Number(process.env.REVLINE_EXPORT_MAX_CHUNKS ?? 8), chunkGuest: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_GUEST ?? '{"cpu_kind":"performance","cpus":4,"memory_mb":8192}'), chunkEnv: JSON.parse(process.env.REVLINE_EXPORT_CHUNK_ENV ?? '{}') as Record<string, string> } : null;
+      const distributed = process.env.REVLINE_DISTRIBUTED_EXPORT === 'true' ? { maxChunks: Number(process.env.REVLINE_EXPORT_MAX_CHUNKS ?? 8), ...flyChunkResources({ guest: process.env.REVLINE_EXPORT_CHUNK_GUEST ? JSON.parse(process.env.REVLINE_EXPORT_CHUNK_GUEST) : undefined, env: process.env.REVLINE_EXPORT_CHUNK_ENV ? JSON.parse(process.env.REVLINE_EXPORT_CHUNK_ENV) : undefined }) } : null;
       if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
       else if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
       const normalized=snapshot.timeline.clips.filter(c=>c.normalizedAudio&&c.normalizedAudio.key===audioNormalizationKey(snapshot.timeline,c)&&(c.volume??1)>0);
