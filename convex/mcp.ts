@@ -151,8 +151,10 @@ export const openTimeline = internalMutation({ args: { ownerId: v.string(), proj
   await openTabFor(ctx, args.ownerId, { projectId: projectIdOf(ctx, args.projectId), timelineId: args.timelineId });
   return { opened: args.timelineId, note: 'Editing tools now act on this timeline; call inspectTimeline before editing.' };
 }});
-export const createTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, returns: v.any(), handler: async (ctx, { ownerId, projectId, ...rest }) => {
-  const timelineId = await createTabFor(ctx, ownerId, { projectId: projectIdOf(ctx, projectId), ...rest });
+export const createTimeline = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.optional(v.string()), name: v.optional(v.string()), from: v.union(v.literal('blank'), v.literal('duplicate')), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, returns: v.any(), handler: async (ctx, { ownerId, projectId, timelineId: sourceTimelineId, ...rest }) => {
+  const id=projectIdOf(ctx,projectId);
+  if(sourceTimelineId) await openTabFor(ctx,ownerId,{projectId:id,timelineId:sourceTimelineId});
+  const timelineId = await createTabFor(ctx, ownerId, { projectId: id, ...rest });
   return { timelineId, opened: true, note: 'The new timeline is open; editing tools act on it.' };
 }});
 
