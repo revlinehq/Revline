@@ -53,6 +53,25 @@ async function sourceProject(state) {
   const projects = projectId && ownerId ? [{ _id: projectId, ownerId }] : JSON.parse(await sourceConvex(['data', 'projects', '--limit', '30', '--format', 'json']));
   for (const project of projects.filter(project => !project.deleting && (!projectId || project._id === projectId))) {
     const assets = JSON.parse(await sourceConvex(['run', 'assets:list', JSON.stringify({ projectId: project._id, limit: 200 }), '--identity', JSON.stringify({ subject: project.ownerId })]));
+    if (args.includes('--snapshot')) {
+      if (assets.length >= 200) throw new Error('Snapshot requires fewer than 200 assets to prove the source list is complete.');
+      const read = (name, parameters) => sourceConvex(['run', name, JSON.stringify(parameters), '--identity', JSON.stringify({ subject: project.ownerId })]).then(JSON.parse);
+      const original = await read('projects:get', { projectId: project._id, includeHistory: false });
+      if (!original || original.aiRunning) throw new Error('Snapshot source is unavailable or editing; retry after it finishes.');
+      const hydrated = [];
+      for (const asset of assets) {
+        const { url: _url, previewUrl: _preview, thumbnailUrl: _thumbnail, previewSegments: _segments, ...savedAsset } = await read('assets:get', { projectId: project._id, assetId: asset._id });
+        hydrated.push({ ...savedAsset, url: null });
+      }
+      if (hydrated.some(asset => !asset.r2Key)) throw new Error('Faithful snapshots require every source asset to use R2; legacy Convex files cannot cross deployments.');
+      const saved = await read('timelineTabs:snapshots', { projectId: project._id });
+      const again = await read('projects:get', { projectId: project._id, includeHistory: false });
+      if (again.revision !== original.revision || again.updatedAt !== original.updatedAt || again.activeTimelineId !== original.activeTimelineId) throw new Error('Source changed during snapshot reads; retry.');
+      return { projectId: project._id, ownerId: project.ownerId, assets: hydrated,
+        snapshot: { sourceProjectId: project._id, timeline: original.timeline,
+          tabs: (original.timelineTabs ?? [{ id: 'main', name: 'Timeline 1' }]).map(({ id, name }) => ({ id, name })),
+          activeTimelineId: original.activeTimelineId ?? original.timelineTabs?.[0]?.id ?? 'main', saved } };
+    }
     const borrowed = assets.filter(asset => asset.r2Key && ['video', 'image', 'audio'].includes(asset.kind)).slice(0, 20);
     if (!borrowed.some(asset => asset.kind === 'video' && asset.duration > 0)) continue;
     return { projectId: project._id, ownerId: project.ownerId, assets: borrowed.map(asset => Object.fromEntries(['r2Key', 'fileName', 'contentType', 'size', 'kind', 'duration', 'width', 'height'].flatMap(key => asset[key] === undefined ? [] : [[key, asset[key]]]))) };
@@ -134,7 +153,7 @@ try {
   saveJson(statePath, state); saveJson(recordPath, state);
   const settings = await sourceValues();
   const project = await sourceProject(state);
-  const keys = project.assets.map(asset => asset.r2Key);
+  const keys = project.assets.flatMap(asset => [asset.r2Key, asset.previewR2Key].filter(Boolean));
   const previous = parseEnv(await convex(['env', 'list']));
   const secret = name => previous[name] || randomBytes(32).toString('hex');
   const origin = `http://localhost:${state.port}`;
@@ -174,8 +193,13 @@ try {
   client.setAdminAuth(localEnv().CONVEX_DEPLOY_KEY);
   const tokenHash = createHash('sha256').update(values.REVLINE_MCP_TOKEN).digest('base64url');
   const ownerId = option('--owner') ?? state.ownerId ?? project.ownerId;
-  const seeded = await client.mutation(internal.devIsolation.seed, { ownerId, title: `Isolated · ${basename(root)}`, assets: project.assets, tokenHash });
-  state = { ...state, ...seeded, ownerId, sourceOwnerId: project.ownerId, sourceProjectId: project.projectId };
+  const bootstrapAssets = project.assets.filter(asset => ['video', 'audio', 'image'].includes(asset.kind)).slice(0, 20).map(asset => Object.fromEntries(['r2Key', 'fileName', 'contentType', 'size', 'kind', 'duration', 'width', 'height'].flatMap(key => asset[key] === undefined ? [] : [[key, asset[key]]])));
+  let seeded = await client.mutation(internal.devIsolation.seed, { ownerId, title: `Isolated · ${basename(root)}`, assets: bootstrapAssets, tokenHash });
+  if (project.snapshot) {
+    if (state.snapshotSourceProjectId === project.projectId && !args.includes('--fresh-snapshot')) seeded = { projectId: state.projectId, assetIds: state.assetIds, timelineId: state.timelineId };
+    else seeded = await client.mutation(internal.devIsolation.importSnapshot, { ownerId, title: `Snapshot · ${basename(root)}`, assets: project.assets, ...project.snapshot });
+  }
+  state = { ...state, ...seeded, ownerId, sourceOwnerId: project.ownerId, sourceProjectId: project.projectId, snapshotSourceProjectId: project.snapshot ? project.projectId : undefined };
   saveJson(statePath, state); saveJson(recordPath, state);
   announce(`Ready: ${origin}/editor/${seeded.projectId} · owner ${state.ownerId} · ${seeded.assetIds.length} media references · timeline ${seeded.timelineId}`);
   announce('MCP: node scripts/isolated-mcp.mjs (stdio, scoped to this backend).');

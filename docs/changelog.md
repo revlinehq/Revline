@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Developer isolation: Add explicit faithful snapshots of saved tabs, hydrated analysis and media relationships. Why: metadata-only seeds cannot serve as cached-analysis development baselines.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
