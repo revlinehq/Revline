@@ -5,7 +5,9 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 ## 2026-11-04
 - Media preparation: Share prepared audio with transcription, stage audio inputs locally, bound speech-provider waits and report non-retryable disk shortages. Why: rough cuts reread large video sources and hid slow stages.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
+- Snapshot recovery: Recover same-lease cache reservations, retain completed clip checks across lease handoffs, and bound transport retries. Why: lost responses could make a worker wait on itself or repeat finished work.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
+- Chat history: Return focus to a surviving nearby chat without scrolling after deletion. Why: deleting a row jumped the user back to the search field.
 
 ## 2026-11-03
 - Clipping: Default all clips to inline data validation, original audio and bounded targeted video discovery; heavy QA is scoped and opt-in. Why: the user rejected automatic normalization and repeated full-batch checks.
