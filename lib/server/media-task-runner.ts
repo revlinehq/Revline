@@ -182,7 +182,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const downloadStartedAt = Date.now();
     let loggedPercent = 0, loggedAt = downloadStartedAt;
     const reusedSource = rangeRead ? reusedRangeSource : await reuseMediaFile({ identity: cacheIdentity, variant: preview ? 'preview-file-v1' : 'source-v1', target: source, signal, expectedBytes: download.size }, () => {onActivity?.('downloading');return runPhase(preview ? 'Downloading playback preview' : 'Downloading source', () => downloadOwnedMedia(sourceUrl, source, new URL(convexUrl).origin, download.size, signal, {
-      concurrency: task.kind === 'extract' ? 3 : 1,
+      concurrency: task.kind === 'extract' || task.kind === 'highlights' ? 3 : 1,
       onProgress: (bytes, total) => {
         const percent = Math.floor(bytes / total * 100), now = Date.now();
         if(task.kind!=='preview')onProgress(Math.round(bytes / total * (task.kind === 'extract' ? 45 : 10)));
