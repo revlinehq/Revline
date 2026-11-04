@@ -92,8 +92,12 @@ try {
   }
   const deadline = Date.now() + 10 * 60_000;
   while (true) {
-    const machine = await fly('GET', `/machines/${preflight.id}`);
-    if (machine.state === 'stopped') {
+    const machine = await fly('GET', `/machines/${preflight.id}`).catch(error => {
+      if (error?.cause?.code !== 'ECONNRESET') throw error;
+      console.log('Retrying Fly runtime status after a connection reset.');
+      return null;
+    });
+    if (machine?.state === 'stopped') {
       const exit = machine.events?.find(event => event.type === 'exit')?.request?.exit_event;
       if (exit?.exit_code !== 0 || exit?.oom_killed) throw new Error('Fly runtime preflight failed. Inspect the app logs before cutover.');
       break;
