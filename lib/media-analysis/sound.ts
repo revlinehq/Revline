@@ -183,7 +183,7 @@ export function analyzeSound(tracks: DecodedTrack[], words: SoundWord[], range: 
   });
   const offsetTime = (value: { start: number; end: number }) => ({ start: round(range.start + value.start), end: round(range.start + value.end) });
   const result: SoundResult = {
-    start: round(range.start), end: round(range.end), loudness: { integrated: loudness.integrated, peak: loudness.peak }, levels: loudness.levels, peaks: loudness.peaks,
+    start: range.start, end: range.end, loudness: { integrated: loudness.integrated, peak: loudness.peak }, levels: loudness.levels, peaks: loudness.peaks,
     events: tracks.map(track => track.event), onsets, words, silences: loudness.silences.map(offsetTime),
   };
   if (!check) return result;

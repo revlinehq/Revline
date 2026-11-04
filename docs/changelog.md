@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Analysis tools: Preserve exact sound range endpoints and overlap sub-minimum continuation tails; return compact effect-plan acknowledgments. Why: rounded bounds produced invalid follow-ups and repeated plans inflated context.
 - Analysis tools: Require exact brand names or aliases and accept small UI capture dimensions. Why: substring matches returned unrelated logos and valid composer captures were refused.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
 - Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
