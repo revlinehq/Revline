@@ -21,8 +21,13 @@ type SourceIdentity = { _id: string; ownerId?: string; size: number; contentType
 type CachedFileInput = { identity?: string; variant: string; target: string; signal: AbortSignal; expectedBytes?: number; maxBytes?: number };
 function cacheLocation(input: Pick<CachedFileInput, 'identity' | 'variant'>) {
   const directory = process.env.MEDIA_ANALYSIS_CACHE_DIR || join(tmpdir(), 'revline-worker-media-v1');
-  const key = createHash('sha256').update(JSON.stringify([input.identity, input.variant])).digest('hex');
-  return { directory, cached: join(directory, `${key}.cache`) };
+  // Fresh lease snapshots already authorize this exact owner/blob. A copied
+  // project must not download the same immutable bytes again.
+  let identity = input.identity;
+  try { const parts = JSON.parse(identity!); if (Array.isArray(parts) && parts.length === 9 && typeof parts[0] === 'string' && typeof parts[1] === 'string' && typeof parts[3] === 'string' && Number.isSafeInteger(parts[4]) && typeof parts[5] === 'string') identity = JSON.stringify(parts.filter((_, index) => index !== 2)); } catch { /* Non-source identities retain their exact scope. */ }
+  const key = createHash('sha256').update(JSON.stringify([identity, input.variant])).digest('hex');
+  const legacy = createHash('sha256').update(JSON.stringify([input.identity, input.variant])).digest('hex');
+  return { directory, cached: join(directory, `${key}.cache`), legacy: join(directory, `${legacy}.cache`) };
 }
 /** Only fresh, lease-authorized task snapshots supply this identity. Never key on signed URLs. */
 export function mediaSourceCacheIdentity(backend: string, projectId: string, source: SourceIdentity): string | undefined {
@@ -53,7 +58,8 @@ export async function reuseCachedMediaFile(input: CachedFileInput): Promise<bool
   input.signal.throwIfAborted();
   const limit = Math.min(MAX_BYTES, input.maxBytes ?? MAX_BYTES);
   if (!input.identity || limit <= 0 || (input.expectedBytes !== undefined && input.expectedBytes > limit)) return false;
-  const { cached } = cacheLocation(input);
+  const { cached, legacy } = cacheLocation(input);
+  if (cached !== legacy) try { await link(legacy, cached); await rm(legacy, { force: true }); } catch { /* Cache misses and concurrent migrations are harmless. */ }
   try {
     const info = await stat(cached);
     if (!info.isFile() || info.size <= 0 || info.size > limit || Date.now() - info.mtimeMs > TTL_MS || (input.expectedBytes !== undefined && info.size !== input.expectedBytes)) return false;
