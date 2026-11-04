@@ -27,7 +27,8 @@ export class FrameCache {
       const reservations = await retryMediaOperation(()=>this.client.mutation(api.frameCache.reserveBatch,{...this.task,processorVersion:MEDIA_PROCESSOR_VERSION,outputs:fresh.map(item=>item.output)}),this.signal) as Reservation[];
       const missing = fresh.flatMap((item,index)=>reservations[index].state==='miss'?[item.index]:[]);
       const captured = missing.length ? produce(missing) : Promise.resolve([] as Buffer[]);
-      let fallback = captured.then(()=>{});
+      // Sequencing must settle even when capture fails; consumers below retain the error.
+      let fallback = captured.then(()=>{},()=>{});
       for (const [index,{output,index:frame}] of fresh.entries()) {
         const reservation=reservations[index];
         const generate=async()=>{
