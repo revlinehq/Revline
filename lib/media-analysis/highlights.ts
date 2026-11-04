@@ -98,7 +98,7 @@ export const thoughtStart = (words: TranscriptWord[], i: number) =>
 
 /** Preserve Gemini's payoff/reaction; words and RMS pauses refine the cut only. */
 export function cleanHighlightRange(
-  moment: Pick<SemanticMoment, "start" | "end" | "payoff" | "reactionEnd">,
+  moment: Pick<SemanticMoment, "start" | "end" | "hook" | "payoff" | "reactionEnd">,
   transcript: Transcript | undefined,
   signals: HighlightSignal[],
   duration: number,
@@ -129,20 +129,26 @@ export function cleanHighlightRange(
   }
   const first = words.findIndex((w) => w.end > moment.start);
   if (first < 0) return { start: moment.start, end: target };
+  const latestStart = Math.min(moment.start + 0.45, moment.hook.start + 0.1);
   const starts = words
     .map((w, i) => ({ w, i }))
     .filter(
       ({ w, i }) =>
         i <= first &&
+        w.start <= latestStart &&
         w.start >= moment.start - 12 &&
         thoughtStart(words, i) &&
         !words
           .slice(Math.max(0, i - 30), i)
           .some((previous) => previous.end > w.start + 0.025),
     )
-    .reverse();
-  for (const { w: begin } of starts) {
-    const start = begin.start;
+    .reverse()
+    .map(({ w }) => w.start);
+  // A visual hook can start in a speech pause. Never move it forward to a
+  // later, unrelated sentence merely because that is the next timed word.
+  if (words[first].start > latestStart)
+    starts.unshift(moment.start);
+  for (const start of starts) {
     for (let i = first; i < words.length; i++) {
       const word = words[i],
         next = words[i + 1],
@@ -193,14 +199,12 @@ export function rankHighlights(
         tracks.signals,
         tracks.duration,
       );
-      if (
+      const invalidRange =
         range.end - range.start < 15 ||
         range.end - range.start > 60 ||
         moment.hook.start < range.start - 0.1 ||
         moment.payoff.end > range.end ||
-        moment.reactionEnd > range.end
-      )
-        return [];
+        moment.reactionEnd > range.end;
       return [
         {
           id:
@@ -212,7 +216,7 @@ export function rankHighlights(
           ...range,
           duration: round(range.end - range.start),
           score: Math.round(moment.score),
-          qualified: moment.score >= HIGHLIGHT_QUALITY_BAR,
+          qualified: !invalidRange && moment.score >= HIGHLIGHT_QUALITY_BAR,
           sourceType: type,
           kind: moment.kind,
           quote: moment.payoff.text,
@@ -221,7 +225,9 @@ export function rankHighlights(
           reactionEnd: moment.reactionEnd,
           cleanIn: range.start,
           cleanOut: range.end,
-          reason: moment.reason,
+          reason: invalidRange
+            ? `${moment.reason} Not qualified: a clean 15-60s range could not preserve the hook, payoff and reaction.`
+            : moment.reason,
           evidence: [
             {
               start: moment.start,
@@ -237,7 +243,7 @@ export function rankHighlights(
         },
       ];
     })
-    .sort((a, b) => b.score - a.score || a.start - b.start);
+    .sort((a, b) => Number(b.qualified) - Number(a.qualified) || b.score - a.score || a.start - b.start);
   const distinct: typeof ranked = [];
   for (const item of ranked)
     if (

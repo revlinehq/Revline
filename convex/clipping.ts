@@ -717,9 +717,12 @@ export const completionState = internalQuery({
           `${tab.name}: extra created/changed tab is not in the accepted list. Restore it or account for the candidate.`,
         );
     }
+    const created=tabs.filter(tab=>!row.baseline.some(b=>b.id===tab.timelineId)).length;
+    const changed=tabs.filter(tab=>{const baseline=row.baseline.find(b=>b.id===tab.timelineId),content=contents.find(t=>t.id===tab.timelineId);return baseline&&content&&baseline.fingerprint!==timelineFingerprint(content.timeline);}).length;
+    const reused=tabs.length-created-changed;
     const passed = !errors.length;
     const message = passed
-      ? `${tabs.length ? `Created ${tabs.length} clips:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed review and the clean-boundary quality bar." : ""}`
+      ? `${tabs.length ? `Delivered ${tabs.length} clips${reused?` (${created} new, ${changed} updated, ${reused} reused)`:""}:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed review and the clean-boundary quality bar." : ""}`
       : undefined;
     return {
       required: true,
@@ -731,7 +734,10 @@ export const completionState = internalQuery({
       qualified: candidates.filter((c) => c.qualified).length,
       recommended: row.recommendedCount,
       accepted: row.accepted.length,
-      tabsCreated: tabs.length,
+      tabsCreated: created,
+      tabsChanged: changed,
+      tabsReused: reused,
+      tabsDelivered: tabs.length,
       tabs,
       dropped: row.dropped,
       errors,

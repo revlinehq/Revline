@@ -88,7 +88,7 @@ export async function sheet(tiles: { image: Buffer; label: string; overlay?: str
 async function readSheet(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
   // fps reads consecutive moments (a transition at 10 fps); count spreads frames evenly across the window.
   const span = Math.max(0, work.end - work.start), count = work.fps ? Math.max(2, Math.min(MAX_FRAMES, Math.floor(span * work.fps) + 1)) : Math.max(1, Math.min(MAX_FRAMES, work.count ?? 8));
-  const crop = work.crop ? clampBox(work.crop, source) : undefined, times = work.fps ? timesIn(work.start, work.start + (count - 1) / work.fps, count, source) : timesIn(work.start, work.end, count, source);
+  const crop = work.crop ? clampBox(work.crop, source) : undefined, times = work.times?.length ? [...new Set(work.times)].sort((a,b)=>a-b).slice(0,MAX_FRAMES) : work.fps ? timesIn(work.start, work.start + (count - 1) / work.fps, count, source) : timesIn(work.start, work.end, count, source);
   const images: Buffer[] = new Array(times.length);
   let done = 0;
   await forEachLimited(times.map((time, index) => ({ time, index })), 4, async ({ time, index }, stop) => {
