@@ -9,12 +9,13 @@ import { makeFunctionReference } from 'convex/server';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
-if (args.some(arg => !['--prod', '--stage-only', '--skip-convex', '--dry-run'].includes(arg))) throw new Error('Usage: npm run deploy:fly-processor [-- --prod] [--stage-only] [--skip-convex] [--dry-run]');
+if (args.some(arg => !['--prod', '--stage-only', '--skip-convex', '--dry-run', '--image-first'].includes(arg))) throw new Error('Usage: npm run deploy:fly-processor [-- --prod] [--stage-only] [--skip-convex] [--dry-run] [--image-first]');
+if (args.includes('--image-first') && !args.includes('--skip-convex')) throw new Error('--image-first requires --skip-convex; deploy and verify Convex immediately afterwards.');
 const production = args.includes('--prod'), dryRun = args.includes('--dry-run');
 const app = production ? 'revline-processor' : 'revline-processor-dev';
 const deployment = production ? 'different-gnu-398' : 'majestic-alpaca-541';
 const convexUrl = `https://${deployment}.convex.cloud`;
-const envFile = join(root, production ? '.env.production.local' : '.env.local');
+const envFile = process.env.REVLINE_ENV_FILE || join(root, production ? '.env.production.local' : '.env.local');
 const settings = parseEnv(await readFile(envFile, 'utf8'));
 if (settings.CONVEX_DEPLOYMENT !== `${production ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== convexUrl) throw new Error('Environment file targets the wrong Convex deployment.');
 const env = { ...process.env, ...settings };
@@ -106,7 +107,9 @@ try {
   const contract = await new ConvexHttpClient(convexUrl).query(makeFunctionReference('mediaTasks:processorContract'), { workerSecret });
   const versionSource = await readFile(join(root, 'lib/media-analysis/processor-version.ts'), 'utf8');
   const expected = Number(/MEDIA_PROCESSOR_VERSION\s*=\s*(\d+)/.exec(versionSource)?.[1]);
-  if (contract.processorVersion !== expected) throw new Error('Deployed Convex processor contract differs from the image source.');
+  if (args.includes('--image-first') ? contract.processorVersion > expected : contract.processorVersion !== expected) throw new Error('Deployed Convex processor contract differs from the image source.');
+  // --image-first publishes a preflighted, backwards-compatible image before the
+  // backend raises its required version. The release pipeline verifies the new contract next.
   // Publish image configuration only after the image and backend are verified. Active
   // machines finish on their old image; every subsequent machine uses this release.
   for (const [name, value] of Object.entries({ FLY_PROCESSOR_APP: app, FLY_PROCESSOR_IMAGE: image, FLY_PROCESSOR_API_TOKEN: token })) await setEnv(name, value);
