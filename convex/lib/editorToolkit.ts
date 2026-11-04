@@ -786,8 +786,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       inputSchema:z.object({timelineIds:z.array(z.string()).min(1).max(10).optional(),acceptedFindings:z.array(z.object({kind:z.enum(['freeze','black']),reason:z.string().min(15).max(500)})).max(8).optional()}),execute:async(_ctx,input)=>{
         clippingActive=true;await editSession.wait();
         const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
-        const ids:string[]=input.timelineIds??('tabs' in state?state.tabs.map((t:{timelineId:string})=>t.timelineId):[]);
-        if(!ids.length)throw new Error('Build accepted clip tabs before checkClip.');
+        const ids:string[]=input.timelineIds??('tabs' in state?state.tabs.filter(t=>!('checked' in t&&t.checked)).map((t:{timelineId:string})=>t.timelineId):[]);
+        if(!ids.length){if('tabs' in state&&state.tabs.length)return {results:[],images:[],alreadyChecked:true,next:'Current accepted tabs already have passing checkClip receipts. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
         const results:unknown[]=[],images:{label:string;data:string;mimeType:string}[]=[];
         await forEachLimited(ids,2,async(timelineId)=>{
           const prepared=await ctx.runQuery(internal.clipping.prepareCheck,{...clippingRun,timelineId,...(input.acceptedFindings?{acceptedFindings:input.acceptedFindings}:{})});

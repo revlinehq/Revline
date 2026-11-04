@@ -6,4 +6,4 @@
 // 37: local runtime capabilities, resilient remote inputs and shared source reads.
 export const MEDIA_PROCESSOR_VERSION = 38;
 
-// 38: cached Gemini highlight discovery and clip delivery checks (36/37 reserved by frame-cache/worker fixes).
+// 38: cached Gemini highlight discovery and clip delivery checks (builds on frame-cache 36 and worker fixes 37).

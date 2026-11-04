@@ -627,6 +627,7 @@ export const completionState = internalQuery({
         end: number;
         duration: number;
         candidateId: string;
+        checked:boolean;
       }[] = [];
     if (!row.reviewed) errors.push("Review candidates and call planClips.");
     const sourceRaw = await ctx.db.get(row.assetId);
@@ -651,6 +652,7 @@ export const completionState = internalQuery({
           `${choice.name}: tab name does not match the accepted clip.`,
         );
       const candidate = candidates.find((c) => c.id === choice.candidateId);
+      let dataPassed=false;
       if (source && candidate) {
         const data = checkClipData(tab.timeline, [{ ...source, url: null }], {
           assetId: String(row.assetId),
@@ -660,6 +662,7 @@ export const completionState = internalQuery({
           reactionEnd: candidate.reactionEnd,
           criticalRegions: choice.criticalRegions ?? [],
         });
+        dataPassed=data.passed;
         errors.push(
           ...data.checks
             .filter((c) => !c.passed)
@@ -700,6 +703,7 @@ export const completionState = internalQuery({
         end: choice.end,
         duration: timelineDuration(tab.timeline),
         candidateId: choice.candidateId,
+        checked:dataPassed&&!!receipt&&receipt.fingerprint===fingerprint&&clipCheckResult.parse(JSON.parse(receipt.result)).passed,
       });
     }
     for (const tab of contents) {
