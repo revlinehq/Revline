@@ -4,44 +4,58 @@ import { definition as recreate } from './recreate/definition';
 import { definition as explainer } from './explainer/definition';
 import { definition as clip } from './clip/definition';
 import { definition as reel } from './reel/definition';
-import { BASE_TOOLS, PROJECT_BASE_TOOLS } from './base-tools';
+import { BASE_TOOLS, PROJECT_BASE_TOOLS, SKILL_TOOLS } from './base-tools';
+import { editorSkills } from '../skills';
 import { LANE_IDS, type LaneId } from './types';
 export { LANE_IDS, type LaneId } from './types';
 export const LANES = { edit, motion, recreate, explainer, clip, reel };
 export const isLane = (value: unknown): value is LaneId =>
-  LANE_IDS.includes(value as LaneId);
-export function laneToolNames(lane: LaneId) {
-  return [
-    ...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools]),
-  ];
+  LANE_IDS.some(id => id === value);
+
+function allSkills() {
+  return [...new Map([...Object.values(LANES).flatMap(lane => lane.skills), ...editorSkills()].map(skill => [skill.name, skill])).values()];
 }
-export function laneToolAllowed(lane: LaneId, tool: string) {
-  return laneToolNames(lane).includes(tool);
+export function capabilityExists(name: string) {
+  return isLane(name) || allSkills().some(skill => skill.name === name);
+}
+export function capabilityTools(name: string): readonly string[] {
+  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[name === 'vfx-recipes' ? 'effects' : name] ?? [];
+}
+export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
+  return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];
+}
+export function laneToolAllowed(lane: LaneId, tool: string, capabilities: readonly string[] = []) {
+  return laneToolNames(lane, capabilities).includes(tool);
 }
 export function laneToolError(lane: LaneId, tool: string) {
-  const owners = LANE_IDS.filter((id) => laneToolAllowed(id, tool));
-  return `Tool "${tool}" is unavailable in the ${lane} lane. ${owners.length ? `Available in: ${owners.join(', ')}. Call switchLane (in-app) or setLane/startTask (MCP) with a lane and reason.` : 'It has not been registered in a lane.'}`;
+  return `Tool "${tool}" is not loaded for this task. Use discoverCapabilities with the needed action, then loadCapability or readSkill. Keep the primary ${lane === 'edit' ? 'shared editing' : lane} workflow when adding supporting work.`;
 }
-export function laneSkill(lane: LaneId, name: string, page?: string) {
-  const skill = LANES[lane].skills.find((skill) => skill.name === name);
-  if (!skill)
-    throw new Error(
-      `Skill "${name}" is unavailable in the ${lane} lane. Available skills: ${LANES[lane].skills.map((skill) => skill.name).join(', ')}. Switch lanes when the task changes.`,
-    );
-  const found = page
-    ? skill.pages?.find((item) => item.name === page)
-    : undefined;
-  if (page && !found)
-    throw new Error(
-      `Unknown page "${page}". Pages: ${skill.pages?.map((page) => page.name).join(', ') || 'none'}.`,
-    );
-  return (
-    found?.body ??
-    `${skill.body}${skill.pages?.length ? `\n\nPages (readSkill with page): ${skill.pages.map((page) => `${page.name}: ${page.description}`).join('\n')}` : ''}`
-  );
+export function discoverCapabilities(query: string) {
+  const words = query.toLowerCase().split(/[^a-z0-9-]+/).filter(word => word.length > 2);
+  const entries = [
+    ...Object.values(LANES).filter(lane => lane.id !== 'edit').map(lane => ({ name: lane.id, kind: 'workflow', description: lane.description })),
+    ...allSkills().map(skill => ({ name: skill.name, kind: 'skill', description: skill.description })),
+  ];
+  return entries.map(entry => ({ ...entry, score: words.reduce((score, word) => score + (`${entry.name} ${entry.description}`.toLowerCase().includes(word) ? 1 : 0), 0) }))
+    .filter(entry => entry.score > 0).sort((a, b) => b.score - a.score).slice(0, 5)
+    .map(({ score: _score, ...entry }) => entry);
 }
-export const laneInstructions = (lane: LaneId) => `# Task lane: ${lane}
+export function capabilitySummary(name: string) {
+  if (isLane(name)) return { name, kind: 'workflow', description: LANES[name].description, skills: LANES[name].skills.map(({name, description}) => ({name, description})), tools: capabilityTools(name) };
+  const skill = allSkills().find(skill => skill.name === name);
+  if (!skill) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
+  return { name, kind: 'skill', description: skill.description, tools: capabilityTools(name) };
+}
+export function laneSkill(_lane: LaneId, name: string, page?: string) {
+  const skill = allSkills().find(skill => skill.name === name);
+  if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
+  const found = page ? skill.pages?.find(item => item.name === page) : undefined;
+  if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);
+  return found?.body ?? `${skill.body}${skill.pages?.length ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
+}
+export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' ? 'shared editing (no selected style)' : lane}
 ${LANES[lane].instructions}
-Skills available here: ${LANES[lane].skills.map((skill) => skill.name).join(', ')}.
-Only this lane's tools are available. Use switchLane with a reason and taskType (edit or question) when the request changes.
+Basic trims, captions, audio and timeline operations are shared. No style confirmation is needed for them or for questions.
+Use discoverCapabilities for additional skills/tools and loadCapability for supporting workflows, or readSkill for a known skill. Load only what this request needs. Loading support never changes the primary deliverable, user decisions, task identity or finish obligations. Switch the primary workflow only when the requested deliverable changes; /clip and explicit user style stay authoritative.
+For a one-take talking-head short-form/reel rough cut, choose reel unless the user chose another style. For separate highlights from a long source choose clip. Read the workflow skill before that work.
 Call finish before reporting an editing task complete. Its server checks must pass on the current timeline. After three failed checks stop and report their actual output; never claim completion. Ask a user question with askUser when you need an answer.`;
