@@ -10,5 +10,5 @@ export const definition: LaneDefinition = {
   tools,
   check,
   instructions:
-    'Read motion-design, gsap page revline and scene-engine before building. Check the finished motion with checkPacing.',
+    'Read motion-design, gsap page revline and scene-engine before building. Use readFrames and full-resolution trackReference to measure existing motion; motionMap gives a fast overview. Check the finished motion with checkPacing.',
 };

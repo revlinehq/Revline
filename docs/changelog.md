@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.
 - Agent: Let the editing agent choose its lane before exposing tools, with manual choices, isolated skills and bounded finish checks. Why: the user requested agent reasoning instead of keyword routing and premature completion claims.
 - Scenes: Temporarily retire Three.js authoring and guide the agent toward GSAP scenes. Why: the user has no current use case and the agent chose it unnecessarily.
 - AI: Revline uses a single OpenAI key; the backup key that took over when the main account ran out of credit is removed. Why: the user replaced both with one funded key.

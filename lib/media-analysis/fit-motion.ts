@@ -1,64 +1,153 @@
-// Turns a tracked path into GSAP tweens: split it into moves where the object travels, then pick the
-// GSAP ease whose curve best matches how far along the move the object is at each sampled moment.
-
-export type TrackSample = { time: number; x: number; y: number; w: number; h: number; scale: number; rotation: number; confidence: number };
-type Pose = { x: number; y: number; scale: number; rotation: number };
+// Fit timing and signed progress together, including the holds on either side of a move.
+export type TrackSample = { time: number; x: number; y: number; w: number; h: number; scale: number; rotation: number; confidence: number; visible?: boolean; opacity?: number; opacityConfidence?: number; sharpness?: number };
+type Pose = { x: number; y: number; scale: number; rotation: number; opacity?: number };
 export type FittedMove = { start: number; end: number; duration: number; from: Pose; to: Pose; ease: string; fit: number; gsap: string };
-
-const out = (f: (t: number) => number) => (t: number) => 1 - f(1 - t);
-const inOut = (f: (t: number) => number) => (t: number) => t < .5 ? f(2 * t) / 2 : 1 - f(2 - 2 * t) / 2;
-const power = (n: number) => (t: number) => t ** n;
-const expo = (t: number) => t === 0 ? 0 : 2 ** (10 * (t - 1));
-const sine = (t: number) => 1 - Math.cos(t * Math.PI / 2);
-const circ = (t: number) => 1 - Math.sqrt(1 - t * t);
-const back = (s: number) => (t: number) => t * t * ((s + 1) * t - s);
-/** GSAP's eases by their GSAP names (power1 is quad, power4 is quint). */
-const EASES: Record<string, (t: number) => number> = { none: t => t };
-for (const [name, f] of [['power1', power(2)], ['power2', power(3)], ['power3', power(4)], ['power4', power(5)], ['expo', expo], ['sine', sine], ['circ', circ]] as const) {
-  EASES[`${name}.in`] = f; EASES[`${name}.out`] = out(f); EASES[`${name}.inOut`] = inOut(f);
+type Curve = { name: string; at: (t: number, extra: number[]) => number; initial: number[]; bounds: [number, number][] };
+const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
+const round = (v: number, n = 6) => Math.round(v * 10 ** n) / 10 ** n;
+const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+const curves: Curve[] = [{ name: 'none', at: t => t, initial: [], bounds: [] }];
+for (const base of ['power1', 'power2', 'power3', 'power4', 'expo', 'circ', 'sine', 'back']) for (const direction of ['in', 'out', 'inOut']) {
+  const inside = (t: number, extra: number[]) => {
+    if (base.startsWith('power')) return t ** (Number(base.slice(-1)) + 1);
+    // GSAP blends Expo at its endpoint (see the installed gsap-core), rather than raw 2**t.
+    if (base === 'expo') return 2 ** (10 * (t - 1)) * t + t ** 6 * (1 - t);
+    if (base === 'circ') return 1 - Math.sqrt(Math.max(0, 1 - t * t));
+    if (base === 'sine') return 1 - Math.cos(t * Math.PI / 2);
+    const s = extra[0];
+    return t * t * ((s + 1) * t - s);
+  };
+  curves.push({ name: `${base}.${direction}`, at: (t, extra) => t === 0 || t === 1 ? t : direction === 'in' ? inside(t, extra) : direction === 'out' ? 1 - inside(1 - t, extra) : t < .5 ? inside(t * 2, extra) / 2 : 1 - inside(2 - t * 2, extra) / 2, initial: base === 'back' ? [1.70158] : [], bounds: base === 'back' ? [[0, 6]] : [] });
 }
-EASES['back.out(1.7)'] = out(back(1.70158)); EASES['back.in(1.7)'] = back(1.70158); EASES['back.inOut(1.7)'] = inOut(back(1.70158 * 1.525));
-
-/** The GSAP ease whose curve is closest to measured progress p at each share u of a move's time, and its RMS error. */
+const cubic: Curve = { name: 'cubic-bezier', initial: [.25, .1, .75, .9], bounds: [[0, 1], [-2, 3], [0, 1], [-2, 3]], at: (x, [x1, y1, x2, y2]) => {
+  if (x === 0 || x === 1) return x;
+  const b = (t: number, a: number, c: number) => 3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t * t * c + t ** 3;
+  let low = 0, high = 1;
+  for (let i = 0; i < 24; i++) { const mid = (low + high) / 2; if (b(mid, x1, x2) < x) low = mid; else high = mid; }
+  return b((low + high) / 2, y1, y2);
+} };
+const curveName = (curve: Curve, extra: number[]) => curve.name === 'cubic-bezier' ? `cubic-bezier(${extra.map(v => round(v, 5)).join(',')})` : curve.name.startsWith('back') ? `${curve.name}(${round(extra[0], 5)})` : curve.name;
+/** Use a CustomEase expression for measured Beziers; named GSAP eases stay strings. */
+export function gsapEase(name: string) {
+  if (!name.startsWith('cubic-bezier(')) return `'${name}'`;
+  const [x1, y1, x2, y2] = name.slice(13, -1).split(',');
+  return `CustomEase.create("measured", "M0,0 C${x1},${y1} ${x2},${y2} 1,1")`;
+}
+/** Bounded Nelder–Mead; offsets and amplitudes are solved analytically outside this search. */
+function minimize(fn: (p: number[]) => number, seed: number[], bounds: [number, number][], steps: number[], iterations = 240) {
+  const point = (p: number[]) => { const q = p.map((v, i) => clamp(v, ...bounds[i])); return { p: q, error: fn(q) }; };
+  let simplex = [point(seed), ...seed.map((_, i) => point(seed.map((v, j) => v + (i === j ? steps[j] : 0))))];
+  for (let k = 0; k < iterations; k++) {
+    simplex.sort((a, b) => a.error - b.error);
+    if (k > 25 && Math.max(...simplex.slice(1).map(p => Math.max(...p.p.map((v, i) => Math.abs(v - simplex[0].p[i]) / (bounds[i][1] - bounds[i][0]))))) < 1e-7) break;
+    const worst = simplex[seed.length], center = seed.map((_, i) => simplex.slice(0, -1).reduce((s, p) => s + p.p[i], 0) / seed.length);
+    const reflected = point(center.map((v, i) => 2 * v - worst.p[i]));
+    if (reflected.error < simplex[0].error) {
+      const expanded = point(center.map((v, i) => v + 2 * (reflected.p[i] - v)));
+      simplex[seed.length] = expanded.error < reflected.error ? expanded : reflected;
+    } else if (reflected.error < simplex[seed.length - 1].error) simplex[seed.length] = reflected;
+    else {
+      const outside = reflected.error < worst.error, target = outside ? reflected : worst;
+      const contracted = point(center.map((v, i) => v + .5 * (target.p[i] - v)));
+      if (contracted.error < (outside ? reflected.error : worst.error)) simplex[seed.length] = contracted;
+      else simplex = [simplex[0], ...simplex.slice(1).map(p => point(p.p.map((v, i) => (v + simplex[0].p[i]) / 2)))];
+    }
+  }
+  return simplex.sort((a, b) => a.error - b.error)[0];
+}
+function regression(xs: number[], ys: number[]) {
+  const mx = xs.reduce((s, v) => s + v, 0) / xs.length, my = ys.reduce((s, v) => s + v, 0) / ys.length;
+  let cov = 0, variance = 0;
+  xs.forEach((x, i) => { cov += (x - mx) * (ys[i] - my); variance += (x - mx) ** 2; });
+  const amplitude = variance > 1e-10 ? cov / variance : 0, offset = my - amplitude * mx;
+  const error = ys.reduce((s, y, i) => s + (y - offset - amplitude * xs[i]) ** 2, 0) / ys.length;
+  return { offset, amplitude, error };
+}
+/** Closest named ease for callers that already have normalized time/progress (transitions). */
 export function bestEase(points: { u: number; p: number }[]) {
   let best = { name: 'none', error: Infinity };
-  for (const [name, ease] of Object.entries(EASES)) {
-    const error = Math.sqrt(points.reduce((sum, point) => sum + (ease(point.u) - point.p) ** 2, 0) / points.length);
-    if (error < best.error) best = { name, error };
+  for (const curve of curves) {
+    const error = (extra: number[]) => points.reduce((s, p) => s + (curve.at(clamp(p.u), extra) - p.p) ** 2, 0) / Math.max(1, points.length);
+    const found = curve.initial.length ? minimize(error, curve.initial, curve.bounds, [.2], 80) : { p: [], error: error([]) };
+    if (found.error < best.error ** 2) best = { name: curveName(curve, found.p), error: Math.sqrt(found.error) };
   }
   return best;
 }
-
-const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
-const pose = (sample: TrackSample): Pose => ({ x: Math.round(sample.x + sample.w / 2), y: Math.round(sample.y + sample.h / 2), scale: round(sample.scale), rotation: round(sample.rotation, 1) });
-
-/** Moves in a tracked path, each with its from/to pose (box centers in source pixels), duration and best-fitting ease. */
-export function fitMotion(track: TrackSample[], size: { width: number; height: number }): FittedMove[] {
-  const usable = track.filter(sample => sample.confidence >= .5);
-  if (usable.length < 3) return [];
-  const span = Math.max(size.width, size.height);
-  // How much the object changes between samples: travel as a share of the frame, plus scale and rotation.
-  const change = (a: TrackSample, b: TrackSample) => { const pa = pose(a), pb = pose(b); return Math.hypot(pb.x - pa.x, pb.y - pa.y) / span + Math.abs(pb.scale - pa.scale) + Math.abs(pb.rotation - pa.rotation) / 90; };
-  const steps = usable.slice(1).map((sample, index) => change(usable[index], sample));
-  const moving = steps.map(step => step > .002);
-  // Bridge single still samples inside a move (tracking jitter), then collect runs of movement.
-  for (let index = 1; index < moving.length - 1; index++) if (!moving[index] && moving[index - 1] && moving[index + 1]) moving[index] = true;
-  const moves: FittedMove[] = [];
-  for (let index = 0; index < moving.length; index++) {
-    if (!moving[index]) continue;
-    let last = index; while (last + 1 < moving.length && moving[last + 1]) last++;
-    const samples = usable.slice(index, last + 2), from = samples[0], to = samples[samples.length - 1];
-    index = last;
-    const total = change(from, to), duration = to.time - from.time;
-    if (total < .01 || duration <= 0) continue;
-    // Progress along the move at each sample, measured as the share of the straight change from start to end.
-    const points = samples.map(sample => ({ u: (sample.time - from.time) / duration, p: Math.max(-.2, Math.min(1.2, 1 - change(sample, to) / total)) }));
-    const best = bestEase(points);
-    // A good ease match on a poorly tracked object is still a poor measurement, so fit carries the tracker's confidence across the move.
-    const covered = track.filter(sample => sample.time >= from.time && sample.time <= to.time);
-    const confidence = covered.reduce((sum, sample) => sum + sample.confidence, 0) / covered.length;
-    const a = pose(from), b = pose(to), fields = (p: Pose) => `x: ${p.x}, y: ${p.y}${a.scale !== b.scale ? `, scale: ${p.scale}` : ''}${a.rotation !== b.rotation ? `, rotation: ${p.rotation}` : ''}`;
-    moves.push({ start: round(from.time), end: round(to.time), duration: round(duration), from: a, to: b, ease: best.name, fit: round(Math.max(0, 1 - best.error) * confidence, 2), gsap: `tl.fromTo(el, { ${fields(a)} }, { ${fields(b)}, duration: ${round(duration)}, ease: '${best.name}' }, ${round(from.time)})` });
+function jointFit(times: number[], values: number[]) {
+  const first = times[0], span = times.at(-1)! - first, dt = median(times.slice(1).map((t, i) => t - times[i]));
+  const lo = Math.min(...values), range = Math.max(...values) - lo;
+  if (!range || span <= 0) return null;
+  const ys = values.map(v => (v - lo) / range), ts = times.map(t => (t - first) / span), minimum = Math.min(.5, dt / span);
+  const solve = (curve: Curve, p: number[]) => regression(ts.map(t => curve.at(clamp((t - p[0]) / p[1]), p.slice(2))), ys);
+  const search = (curve: Curve, seed?: number[]) => {
+    const bounds: [number, number][] = [[0, 1 - minimum], [minimum, 1.5], ...curve.bounds];
+    const error = (p: number[]) => p[0] + p[1] > 1 + minimum ? 10 + p[0] + p[1] : solve(curve, p).error;
+    const starts = seed ? [seed] : [[0, .9], [.15, .6], [.35, .5]].map(p => [...p, ...curve.initial]);
+    return starts.map(p => minimize(error, p, bounds, [.04, .08, ...curve.initial.map(() => .2)], curve === cubic ? 450 : 220)).sort((a, b) => a.error - b.error)[0];
+  };
+  let best = { curve: curves[0], ...search(curves[0]) };
+  for (const curve of curves.slice(1)) { const result = search(curve); if (result.error < best.error - 1e-10) best = { curve, ...result }; }
+  const namedError = Math.sqrt(best.error);
+  if (Math.sqrt(best.error) > .008) {
+    const result = search(cubic, [...best.p.slice(0, 2), ...cubic.initial]);
+    if (result.error < best.error * .8) best = { curve: cubic, ...result };
   }
-  return moves;
+  const progress = ts.map(t => best.curve.at(clamp((t - best.p[0]) / best.p[1]), best.p.slice(2)));
+  return { start: first + best.p[0] * span, end: first + (best.p[0] + best.p[1]) * span, ease: curveName(best.curve, best.p.slice(2)), error: Math.sqrt(best.error), namedError, progress };
+}
+const pose = (s: TrackSample): Pose => ({ x: s.x + s.w / 2, y: s.y + s.h / 2, scale: s.scale, rotation: s.rotation });
+function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 0): FittedMove[] {
+  if (samples.length < 5) return [];
+  const fields = opacity ? ['opacity'] as const : ['x', 'y', 'scale', 'rotation'] as const;
+  const poses = samples.map(s => opacity ? { opacity: s.opacity! } : pose(s));
+  const channels = fields.map(field => poses.map(p => (p as Record<string, number>)[field]));
+  const ranges = channels.map(v => Math.max(...v) - Math.min(...v));
+  const weights = opacity ? [1] : [1 / span, 1 / span, 1, 1 / 90];
+  const dominant = ranges.map((v, i) => v * weights[i]).reduce((best, v, i, all) => v > all[best] ? i : best, 0);
+  if (ranges[dominant] * weights[dominant] < (opacity ? .02 : .002)) return [];
+  const times = samples.map(s => s.time), values = channels[dominant], fit = jointFit(times, values);
+  if (!fit) return [];
+  // Try separate moves only after the full signed curve fails. An overshoot is never split at its turn.
+  if (fit.namedError > .035 && depth < 6 && samples.length >= 15) {
+    const range = ranges[dominant], window = Math.max(5, Math.round(.25 / median(times.slice(1).map((t, i) => t - times[i]))));
+    const holds: { first: number; last: number }[] = [];
+    for (let i = window; i < values.length - window * 2; i++) {
+      const hold = values.slice(i, i + window), level = median(hold);
+      if (Math.max(...hold) - Math.min(...hold) > range * .004) continue;
+      if (Math.max(...values.slice(0, i).map(v => Math.abs(v - level))) < range * .1 || Math.max(...values.slice(i + window).map(v => Math.abs(v - level))) < range * .1) continue;
+      const previous = holds.at(-1);
+      if (previous && i <= previous.last) previous.last = i + window;
+      else holds.push({ first: i, last: i + window });
+    }
+    const hold = holds.sort((a, b) => (b.last - b.first) - (a.last - a.first))[0];
+    if (hold) {
+      // Keep the entire easing tail and some hold on both sides of the split.
+      const split = Math.floor((hold.first + hold.last) / 2);
+      return [...fitRun(samples.slice(0, split + 1), span, opacity, depth + 1), ...fitRun(samples.slice(split), span, opacity, depth + 1)];
+    }
+  }
+  // Very poor tracks do not become authoritative tweens.
+  if (fit.error > .12) return [];
+  const a: Record<string, number> = {}, b: Record<string, number> = {};
+  channels.forEach((v, i) => { const reg = regression(fit.progress, v); a[fields[i]] = round(reg.offset); b[fields[i]] = round(reg.offset + reg.amplitude); });
+  const confidence = samples.reduce((s, p) => s + (opacity ? p.opacityConfidence ?? 0 : p.confidence), 0) / samples.length;
+  const start = round(fit.start), end = round(fit.end), duration = round(end - start);
+  const text = (p: Record<string, number>) => fields.filter((f, i) => opacity || f === 'x' || f === 'y' || Math.abs(b[f] - a[f]) * weights[i] >= .001).map(f => `${f}: ${p[f]}`).join(', ');
+  const from = opacity ? { ...pose(samples[0]), opacity: a.opacity } : a as Pose, to = opacity ? { ...pose(samples.at(-1)!), opacity: b.opacity } : b as Pose;
+  return [{ start, end, duration, from, to, ease: fit.ease, fit: round((1 - fit.error) * confidence, 3), gsap: `tl.fromTo(el, { ${text(a)} }, { ${text(b)}, duration: ${duration}, ease: ${gsapEase(fit.ease)} }, ${start})` }];
+}
+/** All callers share this fitter. Confidence gaps split runs; invisible geometry never joins two moves. */
+export function fitMotion(track: TrackSample[], size: { width: number; height: number }): FittedMove[] {
+  const moves: FittedMove[] = [], dt = track.length > 1 ? median(track.slice(1).map((s, i) => s.time - track[i].time)) : 0;
+  for (const opacity of [false, true]) {
+    let run: TrackSample[] = [];
+    const flush = () => { moves.push(...fitRun(run, Math.max(size.width, size.height), opacity)); run = []; };
+    for (const sample of track) {
+      const usable = opacity ? sample.opacity !== undefined && (sample.opacityConfidence ?? 0) >= .5 : sample.visible !== false && sample.confidence >= .5;
+      if (!usable || run.length && sample.time - run.at(-1)!.time > dt * 1.6) flush();
+      if (usable) run.push(sample);
+    }
+    flush();
+  }
+  return moves.sort((a, b) => a.start - b.start);
 }
