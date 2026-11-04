@@ -891,7 +891,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
         });
         results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
-        return {results,images,reusedTimelineIds,next:images.length?'Fix failed checks, glance at the framing sheet, then call finishClipping.':'Fix any data failures, then finishClipping and finish. Transcript mode needs no visual checks or normalization.'};
+        const failedTimelineIds=results.filter(result=>!(result as {passed:boolean}).passed).map(result=>(result as {timelineId:string}).timelineId);
+        return {results,images,reusedTimelineIds,failedTimelineIds,next:failedTimelineIds.length?'Review only the failed tabs. Fix actual data/crop failures; intentional static shots may be acknowledged with scoped acceptedFindings. Do not retry unchanged failures or passing tabs.':images.length?'Glance at the framing sheets, then finishClipping and finish. Do not repeat passing checks.':'Data checks passed; finishClipping and finish. No visual checks or normalization are required for transcript mode.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration, mode-appropriate aspect and current passing checkClip receipts. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
       await editSession.wait();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});

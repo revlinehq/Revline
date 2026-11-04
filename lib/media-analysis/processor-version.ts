@@ -8,4 +8,5 @@
 // 39: full-resolution reference elements, calibrated opacity, shared joint timing/ease fitter.
 // 40: integrated highlight/clip checks with the reference motion runtime.
 // 41: lossless chunked transcript transport across worker and agent RPC boundaries.
-export const MEDIA_PROCESSOR_VERSION = 41;
+// 42: keep tracked crop keyframes on the extracted review/render source clock.
+export const MEDIA_PROCESSOR_VERSION = 42;
