@@ -277,9 +277,10 @@ export default defineSchema({
     count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),
     status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('resolved')),
     delivery: v.union(v.literal('pending'), v.literal('claimed'), v.literal('finished'), v.literal('failed')),
+    issueDelivery: v.optional(v.union(v.literal('claimed'), v.literal('finished'), v.literal('failed'))), issueClaimToken: v.optional(v.string()), issueClaimedAt: v.optional(v.number()), issueDeliveredCount: v.optional(v.number()), issueDispatchReady: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
-  }).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
+  }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
   assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean()}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   assistantTurns: defineTable({
     projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
