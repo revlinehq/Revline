@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Snapshots: Align decoder seeks to composition precision and handle failed cache captures without stopping the worker. Why: PR verification exposed a rejected FFmpeg seek and worker crash.
 - MCP identity: Distinguish Antigravity from Gemini using initialized client identity and Google’s official app mark. Why: the user requested accurate app badges for shared-token sessions.
 - MCP presence: Show each active agent’s company on project cards and timeline tabs, using initialized client identity. Why: personal-token agents appeared as generic MCP and concurrent agents hid one another.
 - Verification: Run PR checks on GitHub-hosted Ubuntu. Why: Blacksmith jobs stayed queued without a runner.
