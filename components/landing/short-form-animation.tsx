@@ -98,7 +98,13 @@ export default function ShortFormAnimation({ playing }: { playing: boolean }) {
     });
     let raf = 0;
     let lastCycle = -1;
+    let elapsed = 0;
+    let previous = 0;
     const draw = () => {
+      const now = performance.now();
+      elapsed += (now - previous) / 1000;
+      previous = now;
+      film.totalTime(elapsed);
       const t = film.time();
       const cycle = film.iteration();
       if (cycle !== lastCycle) { raw.currentTime = 0; after.currentTime = 0; lastCycle = cycle; }
@@ -121,7 +127,7 @@ export default function ShortFormAnimation({ playing }: { playing: boolean }) {
       cancelAnimationFrame(raf);
       mediaReady ||= raw.readyState >= 2 && after.readyState >= 2;
       const ready = mediaReady && ![raw, after].some(video => ['blocked', 'error'].includes(video.dataset.playback ?? ''));
-      if (visible.current && !reduced.matches && !document.hidden && ready) { film.play(); draw(); }
+      if (visible.current && !reduced.matches && !document.hidden && ready) { previous = performance.now(); draw(); }
       else { film.pause(); rawPlayer.setPlaying(false); afterPlayer.setPlaying(false); }
       scene.style.visibility = reduced.matches || !ready ? 'hidden' : 'visible';
     };
