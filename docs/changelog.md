@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-03
+- Assistant: Measure elapsed work from the persisted user turn across phases, retries and reconnects. Why: the user saw the full-podcast timer repeatedly reset.
 - MCP isolation: Forward initialized client identity and close upstream sessions on disconnect. Why: real PR58 verification exposed hidden identities and lingering presence.
 - Clipping: Carry long transcripts in bounded RPC chunks. Why: the full Syntax run exceeded Convex’s 8,192-item argument-array limit.
 - Clipping: Expose source frame reads and reuse current receipts for explicit clip checks. Why: real gaming verification found missing fallback access and redundant checks.
