@@ -13,7 +13,8 @@ import { textStyle } from "../editor/text-style";
 import { readHighlights, thoughtStart } from "./highlights";
 
 export const clipCheckRequest = z.object({
-  reviewMode: z.enum(["transcript", "visual"]).optional(),
+  reviewMode: z.enum(["transcript", "visual", "data"]).optional(),
+  qualityChecks: z.array(z.enum(["framing", "decode-health", "loudness"])).optional(),
   assetId: z.string(),
   start: z.number(),
   end: z.number(),
@@ -38,7 +39,7 @@ export const clipCheckResult = z.object({
   ),
   warnings: z.array(z.string()),
   sampleTimes: z.array(z.number()),
-  healthBasis: z.enum(["source-ranges", "transcript-data"]),
+  healthBasis: z.enum(["source-ranges", "transcript-data", "timeline-data"]),
   skippedChecks: z.array(z.string()).optional(),
 });
 export type ClipCheckResult = z.infer<typeof clipCheckResult>;
@@ -88,6 +89,8 @@ export function checkClipData(
   request: ClipCheckRequest,
 ): ClipCheckResult {
   const transcriptOnly = request.reviewMode === "transcript";
+  const quality = request.qualityChecks ?? [];
+  const framing = quality.includes('framing');
   const duration = timelineDuration(timeline),
     epsilon = 1 / timeline.fps + 0.015,
     checks: ClipCheckResult["checks"] = [],
@@ -108,12 +111,6 @@ export function checkClipData(
     duration >= 15 - epsilon && duration <= 60 + epsilon
       ? []
       : [`Duration ${duration.toFixed(3)}s must be 15-60s.`],
-  );
-  if (!transcriptOnly) check(
-    "aspect-ratio",
-    timeline.aspectRatio === "vertical"
-      ? []
-      : ["The tab must use 9:16 (vertical)."],
   );
   check(
     "coverage",
@@ -148,10 +145,7 @@ export function checkClipData(
     c.sourceStart >= 0 && sourceTimeAt(c, c.start + c.duration) <= source.duration! + epsilon)
     ? [] : ["Retained footage must lie within the source duration."]);
   const boundary: string[] = [];
-  if (!tracks && !transcriptOnly)
-    boundary.push(
-      "Saved source highlight/helper analysis is missing. Run findHighlights first.",
-    );
+
   if (transcriptOnly && !words.length) boundary.push("Saved word timings are required for transcript-first clipping.");
   if (words.length) {
     if (
@@ -207,14 +201,15 @@ export function checkClipData(
       );
   }
   check("boundaries", boundary);
-  if (transcriptOnly) return {
-    passed: checks.every(c => c.passed), checks,
-    warnings: ['Transcript and timeline data checked; visual framing, decode health and loudness were not checked.'],
-    sampleTimes: [], healthBasis: 'transcript-data',
-    skippedChecks: ['visual-framing', 'decode-health', 'loudness', 'caption-geometry'],
+  const skippedChecks = ['framing', 'decode-health', 'loudness'].filter(c => !quality.includes(c as typeof quality[number]));
+  warnings.push(`Checks skipped: ${skippedChecks.join(', ') || 'none'}.`);
+  if (!framing) skippedChecks.push('caption-geometry');
+  if (!framing && !quality.includes('loudness')) return {
+    passed: checks.every(c => c.passed), checks, warnings,
+    sampleTimes: [], healthBasis: transcriptOnly ? 'transcript-data' : 'timeline-data', skippedChecks,
   };
   const master = timeline.audioNormalization;
-  check(
+  if (quality.includes("loudness")) check(
     "loudness",
     master?.key === timelineNormalizationKey(timeline) &&
       master.outputLufs !== undefined &&
@@ -223,11 +218,11 @@ export function checkClipData(
       master.measuredTruePeak <= -1
       ? []
       : [
-          "Normalize the complete mix to -14 LUFS / <= -1 dBTP; a current verified measurement is required.",
+          "No current verified loudness measurement. Normalize only if the user requests audio improvement.",
         ],
   );
   const captionReasons: string[] = [];
-  const size = dimensions("vertical", 1080);
+  const size = dimensions(timeline.aspectRatio, 1080);
   if (
     timeline.clips.some((c) => c.kind === "caption" || c.kind === "graphic") &&
     tracks &&
@@ -237,7 +232,7 @@ export function checkClipData(
     captionReasons.push(
       "Record the critical HUD/score/action source rectangles in planClips before checking captions.",
     );
-  for (const caption of timeline.clips.filter(
+  for (const caption of (framing ? timeline.clips : []).filter(
     (c) => c.kind === "caption" || c.kind === "graphic",
   )) {
     const style = textStyle(caption),
@@ -308,6 +303,7 @@ export function checkClipData(
           source,
           region,
           Math.max(video.start, caption.start),
+          timeline.aspectRatio,
         );
         if (projected && overlaps(box, projected))
           captionReasons.push(
@@ -320,13 +316,14 @@ export function checkClipData(
     warnings.push(
       "Caption collision bounds are conservative text geometry; move flagged text or reduce it.",
     );
-  check("captions", [...new Set(captionReasons)]);
+  if (framing) check("captions", [...new Set(captionReasons)]);
   return {
     passed: checks.every((c) => c.passed),
     checks,
     warnings,
-    sampleTimes: clipContactTimes(timeline, source),
-    healthBasis: "source-ranges",
+    sampleTimes: framing ? clipContactTimes(timeline, source) : [],
+    skippedChecks,
+    healthBasis: quality.includes("decode-health") ? "source-ranges" : "timeline-data",
   };
 }
 
@@ -335,8 +332,9 @@ function projectRegion(
   source: MediaAsset,
   box: { x: number; y: number; w: number; h: number },
   time: number,
+  aspectRatio: Timeline["aspectRatio"],
 ) {
-  const frame = dimensions("vertical", 1080),
+  const frame = dimensions(aspectRatio, 1080),
     focus = [...(clip.focus ?? [])].reverse().find((p) => p.time <= time),
     r = calculateVisualRect(
       source.width!,

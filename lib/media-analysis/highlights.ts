@@ -88,12 +88,12 @@ export function readHighlights(value?: string): HighlightTracks | undefined {
   if (result.success) return result.data;
 }
 /** Spoken-content discovery needs only existing word timings, never a media job. */
-export function transcriptHighlightTracks(duration: number, transcript: Transcript | undefined, type: SourceType = 'talk'): HighlightTracks {
-  if (!transcript?.words.length) throw new Error('Transcribe the source before transcript-first clipping.');
+export function transcriptHighlightTracks(duration: number, transcript: Transcript | undefined, type: SourceType = 'talk', requireWords = true): HighlightTracks {
+  if (requireWords && !transcript?.words.length) throw new Error('Transcribe the source before transcript-first clipping.');
   return { version: HIGHLIGHT_VERSION, judge: 'fallback', duration, sourceType: type,
     typeReason: 'Spoken-content request: select moments from the saved transcript.',
     levelStep: 0.5, levels: [], signals: [], moments: [], sceneCuts: [], warnings: [],
-    coverage: { audioSeconds: 0, transcriptWords: transcript.words.length, videoWindows: [] }, elapsedMs: 0 };
+    coverage: { audioSeconds: 0, transcriptWords: transcript?.words.length ?? 0, videoWindows: [] }, elapsedMs: 0 };
 }
 export const HIGHLIGHT_QUALITY_BAR = 65;
 

@@ -4,8 +4,10 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
+- Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
 
 ## 2026-11-03
+- Clipping: Default all clips to inline data validation, original audio and bounded targeted video discovery; heavy QA is scoped and opt-in. Why: the user rejected automatic normalization and repeated full-batch checks.
 - Clipping: Use saved transcripts and data checks for podcast/talk cuts, preserving source framing and audio. Why: the user requested spoken-content clips without mandatory visual processing.
 - Agent context: Project numeric highlight helpers by source window and let non-Claude turns compact superseded results. Why: the full-podcast run repeatedly carried large source payloads.
 

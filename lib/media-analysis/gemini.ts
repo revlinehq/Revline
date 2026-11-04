@@ -58,7 +58,7 @@ async function googleResponse(response: Response, key: string) {
   if (!response.ok) {
     await logProviderError(response, key);
     const retryable = response.status >= 500 || response.status === 408 || response.status === 429;
-    const message = response.status === 402 ? 'Gemini video analysis is unavailable (HTTP 402: provider billing/credits). Restore provider credits to use Gemini. Continue clipping with transcript, audio peaks, local scene cuts and readFrames; do not retry Gemini in this run.'
+    const message = response.status === 402 ? 'Gemini video analysis is unavailable (HTTP 402: provider billing/credits). Restore provider credits to use Gemini. Use transcript evidence only for spoken moments; visual action remains unverified. Do not retry Gemini in this run.'
       : response.status === 401 || response.status === 403 ? 'Media analysis is currently unavailable.'
       : response.status === 429 ? 'Media analysis is temporarily busy. Please try again later.'
       : response.status >= 500 ? 'Media analysis is temporarily unavailable. Please try again later.'

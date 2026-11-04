@@ -688,7 +688,8 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (!task.snapshotId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame request is no longer active.');
     const snapshot = (await ctx.db.get(task.snapshotId))!, frames = result.snapshot.frames;
     if(snapshot.clipCheck){
-      if(!result.snapshot.clipCheck||frames.length!==1||frames[0].image.length>900_000||!/^[A-Za-z0-9+/]+=*$/.test(frames[0].image))throw new ConvexError('Clip check is missing its one framing sheet.');
+      const framing = snapshot.clipCheck.qualityChecks?.includes('framing') ?? false;
+      if(!result.snapshot.clipCheck || (framing ? frames.length!==1||frames[0].image.length>900_000||!/^[A-Za-z0-9+/]+=*$/.test(frames[0].image) : frames.length!==0))throw new ConvexError('Clip check does not match its requested framing scope.');
       await recordClipCheck(ctx,snapshot,result.snapshot.clipCheck);
       await ctx.db.patch(snapshot._id,{status:'completed',clipCheckResult:result.snapshot.clipCheck,frames});return;
     }
