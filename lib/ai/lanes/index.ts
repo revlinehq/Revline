@@ -1,14 +1,14 @@
 import { definition as edit } from './edit/definition';
 import { definition as motion } from './motion/definition';
 import { definition as recreate } from './recreate/definition';
-import { definition as explainer } from './explainer/definition';
 import { definition as clip } from './clip/definition';
 import { definition as reel } from './reel/definition';
 import { BASE_TOOLS, PROJECT_BASE_TOOLS, SKILL_TOOLS } from './base-tools';
 import { editorSkills } from '../skills';
 import { LANE_IDS, type LaneId } from './types';
 export { LANE_IDS, type LaneId } from './types';
-export const LANES = { edit, motion, recreate, explainer, clip, reel };
+// Persisted legacy tasks use shared editing; this alias is never advertised.
+export const LANES = { edit, motion, recreate, clip, reel, explainer: edit };
 export const isLane = (value: unknown): value is LaneId =>
   LANE_IDS.some(id => id === value);
 
@@ -53,7 +53,7 @@ export function laneSkill(_lane: LaneId, name: string, page?: string) {
   if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);
   return found?.body ?? `${skill.body}${skill.pages?.length ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
 }
-export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' ? 'shared editing (no selected style)' : lane}
+export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' || lane === 'explainer' ? 'shared editing (no selected style)' : lane}
 ${LANES[lane].instructions}
 Basic trims, captions, audio and timeline operations are shared. No style confirmation is needed for them or for questions.
 Use discoverCapabilities for additional skills/tools and loadCapability for supporting workflows, or readSkill for a known skill. Load only what this request needs. Loading support never changes the primary deliverable, user decisions, task identity or finish obligations. Switch the primary workflow only when the requested deliverable changes; /clip and explicit user style stay authoritative.

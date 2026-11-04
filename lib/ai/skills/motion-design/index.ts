@@ -6,7 +6,7 @@ import { ideationPage } from './ideation';
 
 export const motionDesign: EditorSkill = {
   name: 'motion-design',
-  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page "taste"), and the user\'s rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Explainers and overlays on footage use explainer-scenes. Every film follows overall-styling (the user\'s house look). Scenes themselves: scene-engine.',
+  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page "taste"), and the user\'s rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Every film follows overall-styling (the user\'s house look). Scenes themselves: scene-engine.',
   body: `# Motion design: launch and feature films
 
 For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
