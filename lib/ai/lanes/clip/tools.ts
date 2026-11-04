@@ -1,4 +1,4 @@
-// Registered now; exposed when find-highlights adds the implementations to the toolkit.
+// Discovery, framing and verified clip delivery.
 export const tools = [
   'detectFacecam',
   'followSubject',
