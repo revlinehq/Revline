@@ -10,6 +10,7 @@
 // 41: lossless chunked transcript transport across worker and agent RPC boundaries.
 // 42: keep tracked crop keyframes on the extracted review/render source clock.
 // 43: explicit 1080p inspection must never be handled as a 720p preview.
-// 44: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
-// 45: sparse capture windows retain video before an audio tail for final-frame holds.
-export const MEDIA_PROCESSOR_VERSION = 45;
+// 44: decode bound scene video before the final Three VideoTexture draw.
+// 45: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
+// 46: sparse capture windows retain video before an audio tail for final-frame holds.
+export const MEDIA_PROCESSOR_VERSION = 46;
