@@ -1,3 +1,4 @@
+import { skillText, skillDocument } from '../documents';
 import type { EditorSkill } from '../index';
 import { blueprintsPage, brandPage } from './pages';
 import { imagePlatesPage } from './image-plates';
@@ -5,65 +6,8 @@ import { tastePage } from './taste';
 import { ideationPage } from './ideation';
 
 export const motionDesign: EditorSkill = {
-  name: 'motion-design',
-  description: 'Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page "taste"), and the user\'s rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Every film follows overall-styling (the user\'s house look). Scenes themselves: scene-engine.',
-  body: `# Motion design: launch and feature films
-
-For edits to an existing film, start with scene-engine page \`edit-lanes\` and follow its workflow instead of the build guidance below.
-
-For a new motion film, read page \`ideation\`: agree one message, one audience tension and 3–5 angles, each with "Hooks because …". The user's "do it" accepts that angle to BUILD immediately. Skip small edits and "just build it". Use page \`image-plates\` for real scene assets: icons, traced shapes and code come before generation. Never approve finished work on the user's behalf.
-
-Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
-
-**Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
-
-For original motion design, creative restyling or learning from a style reference, read page \`taste\` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
-
-## Launch-film length and proof
-1. Default to 30–40 seconds unless the user sets a length; use 35 seconds as a working example. An explicit 12-second or 60-second request wins.
-2. Structure the launch as 0–5 seconds of audience tension, ONE verified product proof in the middle, and the last 4–6 seconds for the payoff line and confirmed wordmark. Example 35-second plan: 0–5 hook, 5–30 proof, 30–35 payoff. Omit the wordmark when the user says "no logo".
-3. Choose the proof that most directly overturns the audience's expectation; compare at least two candidates in ideation. Bad default: typing a prompt, a podcast becomes Shorts, then a motion-design feature. Better example: one existing manual cut survives a verified multi-layer edit around it. Check readBrief and real product screens/tools before promising that operation; show its result, not only the input prompt.
-
-## How films are built
-Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
-- **One film = one scene clip.** The whole film is ONE React module on one continuous timeline (film seconds from its first frame), placed as ONE clip for its whole length with one addFilm call. Its sections are named timeline markers (\`sections\` on addFilm), not separate clips, so moves between sections (an element carried over, a morph, a camera push) are just tweens that run through. Split a film into clips only when the user asks. The product UI is components, one per part (\`Sidebar\`, \`Composer\`, \`DiffPanel\`), in that file.
-- **Write a long film in parts.** No single call carries more than about 20k tokens (60,000 characters) of code; past that a model's output limit can cut the call off and lose it. addFilm places the whole film's clip and sections at once, with the code for the first sections and a marker where the rest goes (\`{/* more beats */}\` in the film's JSX, \`/* more parts */\` above it for components). Then one patchScene per section or two inserts the next part at the marker (\`insert: 'before'\`), so the film compiles after every call. A 21 s film is typically 3 to 4 calls.
-- **Edit with patchScene; never retype the film.** Every change after the first build uses small patchScene edits. Read inspectClip with section or lines for short numbered blocks, then patch scoped snippets or line ranges with expectedRevision from that read (scene-engine, page \`react-scenes\`). Keep transitions that span sections on their shared timeline and check both sides when shared-code warnings appear. Never resend the film with editScene or rebuild a section as its own scene.
-- **All motion is GSAP on the frame clock.** Every move, even a single fade, is a GSAP tween in a \`useTimeline\` timeline, one per section: connected parts are the same tween, opens and closes overlap through position parameters (\`"<"\`, \`"-=0.2"\`), staggers come from GSAP, and SplitText, MorphSVG and DrawSVG run in it (read the gsap skill, readSkill name "gsap"). Never hand-time moves with \`progress()\` and \`mix()\` at typed seconds: that is what makes holds freeze, parts drift out of sync and moves jump.
-- **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page \`react-scenes\`). This skill decides what to make; scene-engine decides how it renders correctly.
-
-## Motion feel
-Motion directs attention and makes relationships clear. Use the smallest move that serves the idea; easing cannot connect unrelated scenes. The user's direction and measured reference behavior win over these defaults.
-- **Choose easing for the action.** Entrances can decelerate (\`expo.out\`, \`power3.out\`), exits accelerate (\`power2.in\`), and moves between resting positions use \`power3.inOut\`. Overshoot (\`back.out\` or a spring) suits a playful response, not every landing. A precise mechanism can settle cleanly. Linear motion is valid for constant-speed travel, drift or playback.
-- **Reveal from a meaningful anchor.** A window or panel can grow from the corner, edge or control that spawned it, revealing its contents through a mask. Keep borders, radius and type crisp with width, height or clip-path rather than distorting them with scale. Use a simple fade or direct appearance when the idea needs no elaborate opening.
-- **Change things in place.** When a UI element becomes a new version of itself (a new color, a new layout, a rebuilt button), tween the same element from old to new (its box, radius, color, position) instead of crossfading two copies. A crossfade between two states always shows as a fade.
-- **Connected parts move as one.** Anything that belongs together (a frame and the text inside it, a window and its contents, a button and its label, a highlight and what it marks) runs on one shared tween: same start, same ease. A frame opens and closes its content (the content is clipped by the frame's box), so no text outlives its frame and nothing waits for its container to finish before it reacts. Never animate connected parts one after another.
-- **Follow-through and overlap.** When a sequence helps reading, stagger separate items in a group (list rows, cards, words in a line); 40 to 90 ms is a starting range, not a requirement. Move them together when they express one idea. A soft secondary (a shadow, a glow) may trail its element by a few frames.
-- **Guides and frame lines are alive.** Camera frame lines, crop corners, selection boxes and scan lines track the element they mark on the same timeline (same start, same ease), and keep moving while it does. Never leave them as a static overlay.
-- **Anticipation when it helps.** A brief counter move can give a large action weight or signal effort; omit it when it adds fuss or delays a direct response.
-- **Pacing is measured, not guessed.** getFrames shows stills, so speed problems slip past it: a picture that changes before it can be read, a zoom with no ease, a click that lingers, a zoom cut off by the next shot. In Precise, after building or changing motion, run checkPacing on the changed range alongside getFrames and fix what it flags (longer holds, eased moves, fewer changes per second), then run it again.
-- **Deliberate holds.** Let an action settle and give the idea time to register. Keep the camera locked or the frame still when that gives the moment weight; add movement only when it reveals something.
-- Recipes for each of these (eases, masks, morphs, staggers): readSkill name "gsap" page "transitions".
-
-## Recreating a video (clone, remake, copy, "shot for shot")
-The video is the brief. New recreations run Precise. In Precise, read reference-footage page \`recreation\` before building a copy or making a full-lane edit. It owns the workflow: numbered effect inventories, exact content, camera behavior per layer, one section at a time, rendered comparisons across every transition, and close-out against every inventory item. Follow its measured behavior over this skill's motion defaults. Use scene-engine for implementation and its checklist for final checks.
-
-## A new film for the user's own brand
-1. **Brand first** (page \`brand-kit\`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
-2. **Product UI is real UI:** the kit's blueprint (page \`blueprints\`) or its screens, rebuilt strictly close to the product: measure colors, positions and sizes from the screenshots at full size (\`measureScreen\`), use the product's own icons and labels (findIcon for any brand logo or app icon, never drawn by hand), and check the build side by side (\`compareScreen\`). A screenshot appears only as what it is in the story (a file being dropped in, a thumbnail), never shown as the product.
-3. **Check before handing back:** follow scene-engine page \`edit-lanes\` for existing edits or page \`checklist\` after building the film.
-
-**Tip: one product UI, built once.** When the film shows the same product UI in several sections (for example the Revline editor), build it once as a component in the film (or the kit's blueprint) and reuse it in every section, changing only its state and framing. Base it on the real app's look: the kit's blueprint (getBlueprint), or the kit screen measured and checked with measureScreen and compareScreen. Inventing a fresh version per section gives a film with several different-looking copies of one product.
-
-## Never speculate
-In a new film, every fact on screen comes from the confirmed product text or the user (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have. The wording around the facts is yours to write; never paste website headings or section labels as captions just because they are true.
-
-## Direction and feedback
-- **Exact direction from the user:** do exactly that. Never override the user.
-- **Reference first for faithful copies in Precise.** When the project holds a reference video (one the film is based on), go to it before building or rebuilding any moment it has a counterpart for (a transition, the ending, a price or comparison beat, a logo reveal): readFrames a short window around its matching moment, trackReference its moves and measureFrame its sizes and colors, build from that, then compareReference at that moment and fix the worst differences. Don't fall back on a generic move when the reference shows how it is done.
-- **Approved work is off-limits.** Clips and film sections inspectTimeline lists as \`approved\` (with the user's note) stay exactly as they are; patchScene, editScene and every other tool refuse to touch them. Rebuild or restyle one only when the user names it in this request, passing \`overrideApproved: true\` with \`overrideReason\` quoting them. When the user approves a section, mark it with approveClip (markerId of its section) and their words as the note.
-- **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
-- **A style reference** (a film or brand they like, not one to recreate): use page \`taste\` to extract why its choices work and express those principles in new imagery and staging.
-- The brand kit's fonts and colors always win.`,
+  name: skillDocument("motion-design/SKILL.md").name,
+  description: skillDocument("motion-design/SKILL.md").description,
+  body: skillText("motion-design/SKILL.md"),
   pages: [ideationPage, tastePage, brandPage, blueprintsPage, imagePlatesPage],
 };

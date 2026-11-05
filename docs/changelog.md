@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Editor skills: Author prose in Markdown and bundle it for all runtimes; sharpen measured recreation guidance. Why: user requested reviewable skills without changing readSkill.
+
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
 - Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
 - MCP: Bound visual-guard waits and cancel abandoned guard renders before releasing edits. Why: Transport expiry could leave scoped patches holding the edit lock.
