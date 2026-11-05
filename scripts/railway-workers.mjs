@@ -18,7 +18,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'artifact-prefix': { type: 'string' },
 } });
 const [operation] = positionals;
-const operations = ['plan', 'build', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
+const operations = ['plan', 'build', 'preflight', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
 if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--apply]`);
 if (values['image-first'] && (operation !== 'stage' || values.kind !== 'processor')) throw new Error('--image-first is only for staging a processor before its immediately following Convex release.');
 const configPath = resolve(values.config);
@@ -36,13 +36,18 @@ if (operation === 'plan' || (!values.apply && operation !== 'status')) {
   console.log(JSON.stringify({ operation, kinds, config, effect: 'No API calls, image builds, resources or environments changed. Pass --apply only after migration authorization.' }, null, 2));
   process.exit(0);
 }
-// Mutating commands are deliberately unavailable from an agent worktree, even
-// if it has a usable shared-dev deploy key in its shell.
+// Railway-only image builds and temporary runtime preflights may use the exact
+// published PR head. Queue configuration and routing still require main.
 if (values.apply) {
   const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
   const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  if (gitDir !== '.git' || (branch !== 'main' && !mainPush)) throw new Error('Apply migration commands only from the primary checkout on reviewed main or its main-push release runner.');
+  const railwayOnly = ['build', 'preflight'].includes(operation);
+  if (railwayOnly && !mainPush && branch !== 'main') {
+    const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '82', '--repo', 'zuraHQ/revline-editor', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
+    const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+    if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Railway-only staging requires the exact published open PR #82 head.');
+  } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
@@ -72,13 +77,20 @@ if (operation === 'build') {
 }
 
 if (settings.CONVEX_DEPLOYMENT !== `${config.environment === 'production' ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== config.convexUrl) throw new Error('Use a separate environment file for the exact selected Convex deployment.');
+const token = settings.RAILWAY_API_TOKEN;
+const target = () => ({ token, config });
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+if (operation === 'preflight') {
+  await verifyRailwayTarget(target());
+  for (const kind of kinds) await preflight(kind);
+  console.log('Railway-only runtime preflight complete. No Convex access, queue credentials, staging receipt or routing changes.');
+  process.exit(0);
+}
 if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
 if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deployment}|`)) throw new Error('Convex deploy key belongs to another deployment.');
 const convex = (args, input) => command(process.execPath, ['node_modules/convex/bin/main.js', ...args, '--deployment', deployment], { env, input, quiet: true });
 const remote = parseEnv(await convex(['env', 'list']));
 mask(remote);
-const token = settings.RAILWAY_API_TOKEN;
-const target = () => ({ token, config });
 // Recovery must still be able to restore Convex routes during a Railway outage.
 if (!['rollback', 'pause'].includes(operation)) await verifyRailwayTarget(target());
 const setEnv = (name, value) => convex(['env', 'set', name], value);
@@ -87,7 +99,6 @@ const contract = await client.query(makeFunctionReference('railwayWorkers:contra
 const sourceVersion = Number(/MEDIA_PROCESSOR_VERSION\s*=\s*(\d+)/.exec(await readFile('lib/media-analysis/processor-version.ts', 'utf8'))?.[1]);
 if (['stage', 'verify', 'cutover'].includes(operation) && (values['image-first'] ? contract.processorVersion > sourceVersion : contract.processorVersion !== sourceVersion)) throw new Error('Deploy the matching Convex worker contract before cutover.');
 const dispatch = () => convex(['run', 'railwayWorkers:dispatch', '{}']);
-const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const caps = {
   processor: Number(remote.FLY_PROCESSOR_MAX_MACHINES ?? 4),
   standard: Number(remote.FLY_RENDER_MAX_STANDARD ?? 10), ultra: Number(remote.FLY_RENDER_MAX_ULTRA ?? 10),

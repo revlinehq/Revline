@@ -79,7 +79,7 @@ DEV's `MEDIA_PROCESSOR_BACKEND=local` continues to use the local editor worker a
 
 ## Operator sequence after separate authorization
 
-These commands are instructions for a later approved rollout, **not actions performed for this PR**. All mutating commands require `--apply` and reviewed `main` in the primary checkout (or its exact main-push release runner). Without `--apply`, commands other than `status` only print the plan and make no API calls. `status` performs authenticated reads. `plan` needs no credentials. Do not run `release-main.mjs` merely to try this migration: it is the existing full release workflow.
+These commands are instructions for a later approved rollout, **not actions performed for this PR**. Queue-mutating commands require `--apply` and reviewed `main` in the primary checkout (or its exact main-push release runner). Without `--apply`, commands other than `status` only print the plan and make no API calls. `status` performs authenticated reads. `plan` needs no credentials. Do not run `release-main.mjs` merely to try this migration: it is the existing full release workflow.
 
 The selected env file must contain its exact `CONVEX_DEPLOYMENT`, `NEXT_PUBLIC_CONVEX_URL`, Railway project token, and any required storage/model credentials. Convex CLI uses only the selected deployment; inherited deploy keys are removed unless explicitly supplied in that file. A supplied Convex deploy key must be scoped to that deployment. GHCR login/pull access and Docker Buildx must already be set up by the operator; tooling never changes registry account permissions. If images are private, registry credentials must be configured separately before preflight. Do not alter quotas/builders to get a green check.
 
@@ -148,3 +148,9 @@ Official documentation checked 2026-11-04:
 - [Restart policy](https://docs.railway.com/deployments/restart-policy), [serverless](https://docs.railway.com/deployments/serverless) and [deployment teardown](https://docs.railway.com/deployments/deployment-teardown): explicit exit/redeploy lifecycle and SIGTERM limitations.
 - [Deployment reference](https://docs.railway.com/deployments/reference), [volume reference](https://docs.railway.com/volumes/reference) and [scaling](https://docs.railway.com/deployments/scaling): paid ephemeral storage, volume/replica restrictions and per-replica resources.
 - [Regions](https://docs.railway.com/deployments/regions): accepted region identifiers.
+
+## Pre-merge Railway-only staging
+
+`build` and `preflight` accept a clean checkout at the exact published open PR #82 head, checked through GitHub. All other apply commands retain the primary-main gate. Use the existing production project `759ce3c9-db81-4ade-ae3b-2c21070f7442` and environment `b81548ce-f856-433b-a3aa-80f51d06ddd8`; do not create replacements.
+
+Run `preflight --environment production --config .data/railway/production.json --env-file .data/railway/production.env --kind all --apply` after building pinned images. The separate env file must declare the exact production Convex selector and URL plus the Railway environment-scoped project token. This command never invokes Convex, reads backend credentials, connects a queue, writes a cutover receipt or changes routing. It creates one temporary service at a time, enforces existing CPU/memory limits, validates the real runtime and deletes each service in `finally`. A successful preflight does not authorize cutover: full authenticated queue staging and its receipt still require the deployed matching contract through the normal main release.

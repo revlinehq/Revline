@@ -3,6 +3,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Worker hosting: Allow exact published PR image builds and Railway-only temporary preflights without Convex access. Why: the authorized rollout must validate containers before merging backend changes.
 - Worker hosting: Add staged Railway processors, exports and distributed chunks with bounded resources and explicit cutover/rollback. Why: the user requested moving only Fly container hosting while retaining the existing app, backend and storage.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
