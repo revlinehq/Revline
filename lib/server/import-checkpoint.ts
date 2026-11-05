@@ -1,17 +1,17 @@
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat, utimes, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { tmpdir } from "node:os";
 
 /** Download fragments survive a worker restart. Active imports refresh their
  * marker; abandoned checkpoints are reclaimed without touching running work. */
 export async function importCheckpoint(backend: string, taskId: string) {
   const root = join(
-    process.cwd(),
-    ".data",
-    "imports",
+    tmpdir(),
+    "revline-imports-v1",
     createHash("sha256").update(backend).digest("hex"),
   );
-  await mkdir(root, { recursive: true });
+  await mkdir(root, { recursive: true, mode: 0o700 });
   for (const entry of await readdir(root, { withFileTypes: true })) {
     if (!entry.isDirectory() || entry.name === taskId) continue;
     const path = join(root, entry.name),
@@ -21,7 +21,7 @@ export async function importCheckpoint(backend: string, taskId: string) {
   }
   const directory = join(root, taskId),
     marker = join(directory, ".active");
-  await mkdir(directory, { recursive: true });
+  await mkdir(directory, { recursive: true, mode: 0o700 });
   await writeFile(marker, "");
   const timer = setInterval(() => {
     void utimes(marker, new Date(), new Date()).catch(() => {});

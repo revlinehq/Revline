@@ -8,6 +8,8 @@ The Dockerfile packages a full `railway-processor` target and a lean `railway-ex
 
 Railway services use unprivileged ephemeral scratch, authenticate against their selected Convex deployment, process one task at a time, and exit after the configured idle period. Enqueueing work wakes the matching service. Standard and Ultra queues retain separate account seats and worker pools.
 
+Import checkpoints live under `TMPDIR/revline-imports-v1` (the OS temporary directory when `TMPDIR` is unset), scoped by backend and task. Railway sets `TMPDIR=/tmp/revline`, owned by the runtime user. Checkpoints survive process retries within the same container; container replacement can discard them. The application directory does not need write access.
+
 ## Capacity
 
 Permanent service CPU and RAM limits are managed in the Railway dashboard. The entrypoint derives native thread budgets from the actual container allocation. Worker counts use these optional backend settings:
