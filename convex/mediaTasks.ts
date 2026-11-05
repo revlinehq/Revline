@@ -1,20 +1,15 @@
 import { geminiBillingUnavailable, recordGeminiBilling, usesGemini } from './lib/gemini_billing';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { readHighlights } from '../lib/media-analysis/highlights';
-import { clipCheckRequestValidator } from './lib/clipping_validator';
 import { recordClipCheck } from './clipping';
 import { frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { processorBackend } from './lib/processor_backend';
-import { subjectSelectionValidator } from './lib/pixel_track_validator';
-import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
-import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
 import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask, scheduleCapacityAdmission } from './lib/media_task_data';
 import { hasMediaTaskCapacity } from './lib/account_limits';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
-import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset,transportAsset } from './lib/asset_analysis';
 import { shouldUnderstandFootage } from '../lib/media-analysis/overview-policy';
 import { TRANSCRIPT_VERSION } from '../lib/media-analysis/transcript';
@@ -25,13 +20,15 @@ import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/work
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { highlightSourceTypeValidator, speakerRequestValidator, referenceBox,referenceCropKeyframesValidator, referenceReadResult, analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, videoInspectionValidator, videoRequestValidator, mediaTaskKind, mediaTaskStatus, mediaTaskActivity, timelineValidator, waveformValidator, blueprintCheckResultValidator, blueprintLineValidator, blueprintPointValidator } from './schema';
+import { assetWithUrl, mediaTaskKind, mediaTaskStatus, mediaTaskActivity } from './schema';
 import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspection';
 import { requireOwner, requireProject } from './lib/auth';
-import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
+import { requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
+import { mediaTaskCredentials, workItem, taskResult, renderSnapshot, timelineFrames, reviewSnapshot, blueprintWork, type MediaWorkItem } from './lib/media_task_contract';
 import { mediaWorkflow } from './lib/workflows';
-import { hasPreview, mediaUrl, previewUrl, PREVIEW_VERSION } from './lib/media_storage';
+import { enqueueMediaTask, cancelMediaTask, markTerminal, releaseRenderSeat } from './lib/media_queue';
+import { hasPreview, mediaUrl, previewUrl } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
 import { parseVideoLink } from '../lib/editor/video-link';
 import { addMediaClip } from '../lib/editor/operations';
@@ -46,8 +43,6 @@ import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
-import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
-import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 
@@ -59,112 +54,20 @@ const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
-const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const timelineFrames=v.object({resolution:v.optional(v.union(v.literal(720),v.literal(1080))),clipCheck:v.optional(clipCheckRequestValidator),cacheIdentity:v.optional(v.string()),normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
-const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-// A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
-const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-// A reading of a source video: a labeled frame sheet (with how much each frame changed), a tracked box, or pixels measured.
-const readWork = v.object({ comparisonIdentity:v.optional(v.string()), renderedUrl: v.optional(v.string()), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-const workItem = v.object({previewRanges:v.optional(v.array(v.object({start:v.number(),end:v.number()}))),read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), highlightSkipGemini:v.optional(v.string()),highlightSourceType:v.optional(highlightSourceTypeValidator),speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
-export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({clipCheck:v.optional(v.string()),normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string(),width:v.optional(v.number()),height:v.optional(v.number())})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
-export type MediaTaskResult = Infer<typeof taskResult>;
 
-/** The oldest media processor that can run each kind; older processors leave these tasks queued. */
-// Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { highlights:MEDIA_PROCESSOR_VERSION,import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: MEDIA_PROCESSOR_VERSION, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: MEDIA_PROCESSOR_VERSION };
-/** Shape tracing (traceShape) came after plain frame reads. */
-export const TRACE_PROCESSOR_VERSION = 14;
-/** Font matching (matchFont) came after shape tracing. */
-export const FONT_PROCESSOR_VERSION = 15;
 /** Importing a start to end range of a long link came after font matching. */
 const RANGE_IMPORT_PROCESSOR_VERSION = 16;
 /** Pacing checks (checkPacing) came after range imports. */
 export const PACING_PROCESSOR_VERSION = 17;
 /** Listening to a range (getSound, checkSound) came after pacing checks. */
 export const SOUND_PROCESSOR_VERSION = 18;
-/** Listening to a reference video (listenReference) came after timeline listening. */
-export const REFERENCE_SOUND_PROCESSOR_VERSION = 19;
 /** The visual guard (a proposed scene change rendered beside the saved timeline) came after reference listening. */
 export const GUARD_PROCESSOR_VERSION = 20;
 /** Reading how a film moves (motionMap: camera, transitions, elements, content) came after the visual guard. */
 export const MOTION_PROCESSOR_VERSION = 23;
 /** Frozen comparison crops, displayed rotation and bounded sound capture. */
 export const RECREATION_PROCESSOR_VERSION = 23;
-/** Interpolated reference crops must never run on workers that ignore keyframes. */
-export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
-export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'highlightSourceType' | 'highlightSkipGemini' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>, waitForCapacity = false): Promise<Id<'mediaTasks'>> {
-  const minimum = usesGemini(input.kind) ? MEDIA_PROCESSOR_VERSION : MIN_PROCESSOR_VERSION[input.kind];
-  if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
-  if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
-  if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
-  if(asset?.ownerId===input.ownerId&&asset.projectId===input.projectId&&(hasPreview(asset)||asset.cutoutOf||asset.derivedOf)){const now=Date.now();return insertMediaTask(ctx,{...input,status:'completed',attempt:0,progress:100,createdAt:now,updatedAt:now});}}
-  if (input.assetId && input.kind === 'beats') {
-    const asset = await ctx.db.get(input.assetId);
-    const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
-    if (asset?.ownerId === input.ownerId && asset.projectId === input.projectId && beats?.engine === BEAT_ANALYSIS_ENGINE && beats.downbeats !== undefined && beats.accents !== undefined && beats.dropCandidates !== undefined) {
-      const now = Date.now();
-      const taskId = await insertMediaTask(ctx, { ...input, status: 'completed', attempt: 0, progress: 100, createdAt: now, updatedAt: now });
-      if (input.analysisRequestId) await ctx.db.patch(input.analysisRequestId, { status: 'completed', error: undefined });
-      return taskId;
-    }
-  }
-  // Each frame read, cut-out and derivation is its own request with its own result row: parallel ones on one asset each get a task.
-  if (input.assetId && input.kind !== 'speakers' && input.kind !== 'frames' && input.kind !== 'video' && input.kind !== 'cutout' && input.kind !== 'derive' && input.kind !== 'read') {
-    const existing = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', input.assetId).eq('kind', input.kind)).order('desc').take(10);
-    const active = existing.find(task => (input.kind!=='preview'||task.previewVersion===input.previewVersion)&&['queued','running','retrying'].includes(task.status));
-    if(active&&input.kind==='preview'&&(active.requiredProcessorVersion??0)<(input.requiredProcessorVersion??0))await cancelMediaTask(ctx,active._id);
-    else if (active) { if (input.analysisRequestId) await ctx.db.patch(active._id, { analysisRequestId: input.analysisRequestId }); return active._id; }
-  }
-  const requested = input.kind === 'video' ? input.videoRequest : input.kind === 'frames' ? input.frameRequest : undefined;
-  if(input.assetId&&requested){
-    const existing=await ctx.db.query('mediaTasks').withIndex('by_asset_kind',q=>q.eq('assetId',input.assetId).eq('kind',input.kind)).order('desc').take(20);
-    const reusable=existing.find(task=>{
-      const inspection = input.kind === 'video' ? task.videoRequest : task.frameRequest;
-      const evidence = input.kind === 'video' ? task.videoInspection : task.frameInspection;
-      // Older frame workers returned prose only, which cannot position a camera.
-      if (input.kind === 'frames' && ((task.requiredProcessorVersion ?? 1) < 4 || task.status === 'completed' && !task.frameInspection?.geometry)) return false;
-      return task.ownerId===input.ownerId&&task.projectId===input.projectId&&inspection?.question===requested.question&&inspection.start===requested.start&&inspection.end===requested.end&&((task.status==='completed'&&!!evidence)||['queued','running','retrying'].includes(task.status));
-    });
-    if(reusable){
-      if(input.analysisRequestId){
-        if(reusable.status==='completed')await ctx.db.patch(input.analysisRequestId,{status:'completed',...(input.kind==='video'?{videoInspection:reusable.videoInspection}:{frameInspection:reusable.frameInspection}),error:undefined});
-        else {
-          await ctx.db.patch(reusable._id,{analysisRequestId:input.analysisRequestId});
-          if(reusable.status==='running')await ctx.db.patch(input.analysisRequestId,{status:'running'});
-        }
-      }
-      return reusable._id;
-    }
-  }
-  // Reused evidence and active tasks need no new provider capacity. Reserve
-  // only when a fresh task will actually be inserted, in this transaction.
-  const billingReason = usesGemini(input.kind) ? await geminiBillingUnavailable(ctx, input.ownerId) : null;
-  if (billingReason) {
-    if (input.kind === 'highlights') input = { ...input, highlightSkipGemini: billingReason };
-    else {
-      const now = Date.now();
-      const taskId = await insertMediaTask(ctx, { ...input, status: 'failed', error: billingReason, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-      await markTerminal(ctx, taskId, 'failed', billingReason);
-      return taskId;
-    }
-  }
-  await beforeEnqueue?.();
-  const now = Date.now();
-  const earlier = waitForCapacity && await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_waiting', q => q.eq('ownerId', input.ownerId).eq('capacityWaiting', true)).first();
-  const capacityWaiting = waitForCapacity && (!!earlier || !await hasMediaTaskCapacity(ctx, input.ownerId, 1));
-  const taskId = await insertMediaTask(ctx, { ...input, status: 'queued', claimable:false, ...(capacityWaiting ? { capacityWaiting: true, capacityQueued: true } : {}), attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-  if (capacityWaiting) {
-    await scheduleCapacityAdmission(ctx, input.ownerId);
-    await ctx.scheduler.runAfter(120_000, internal.mediaTasks.expireWaiting, { taskId });
-    return taskId;
-  }
-  const workflowId = await mediaWorkflow.start(ctx, internal.mediaTasks.process, { taskId }, { startAsync: true, onComplete: internal.mediaTasks.settle, context: { taskId } });
-  await ctx.db.patch(taskId, { workflowId });
-  return taskId;
-}
 
 /** FIFO admission for recreation checks only. Waiting jobs hold no active slot and start no workflow. */
 export const admitWaiting = internalMutation({ args: { ownerId: v.string() }, returns: v.null(), handler: async (ctx, { ownerId }) => {
@@ -241,36 +144,11 @@ export const releaseUltraLane = internalMutation({ args: { taskId: v.id('mediaTa
 async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: Infer<typeof eventResult>) {
   if (task.workflowId) await mediaWorkflow.sendEvent(ctx, { workflowId: task.workflowId as WorkflowId, name: `attempt-${task.attempt}`, validator: eventResult, value });
 }
-/** A finished or failed export frees one of its owner's seats; let a waiting export take it. */
-async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
-  if (task.kind === 'render' && hostedRendersEnabled()) await ctx.scheduler.runAfter(0, internal.railwayWorkers.dispatch, {});
-}
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
   retryable = retryable && !isMediaDiskFull(error) && task.attempt < MAX_ATTEMPTS;
   await patchMediaTask(ctx, task, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
-}
-async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, status: 'failed' | 'cancelled', error: string) {
-  const task = await ctx.db.get(taskId);
-  // A workflow cancelled after a permanent failure must not hide its reason.
-  if (!task || task.status === 'completed' || task.status === 'cancelled' || (status === 'cancelled' && task.status === 'failed')) return;
-  await patchMediaTask(ctx, task, { status, error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
-  await releaseRenderSeat(ctx, task);
-  if (task.renderJobId) {
-    const job = await ctx.db.get(task.renderJobId);
-    if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
-  }
-  if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.snapshotId){const thumb=await ctx.db.query('sceneThumbnails').withIndex('by_snapshot',q=>q.eq('snapshotId',task.snapshotId!)).unique();if(thumb&&thumb.status==='queued')await ctx.db.patch(thumb._id,{status:'failed'});const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.readId){const read=await ctx.db.get(task.readId);if(read&&read.status==='queued')await ctx.db.patch(read._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);if(check&&check.status==='queued')await ctx.db.patch(check._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.derivationId){const row=await ctx.db.get(task.derivationId);if(row&&row.status==='queued')await ctx.db.patch(row._id,{status:'failed',error:error.slice(0,1000)});}
-  if (task.analysisRequestId) {
-    const request = await ctx.db.get(task.analysisRequestId);
-    if (request) await ctx.db.patch(request._id, { status: 'failed', error: error.slice(0, 1000) });
-  }
 }
 export const markFailed = internalMutation({ args: { taskId: v.id('mediaTasks'), error: v.string() }, returns: v.null(), handler: async (ctx, args) => { await markTerminal(ctx, args.taskId, 'failed', args.error); return null; } });
 export const settle = internalMutation({ args: { workflowId: vWorkflowId, result: vResultValidator, context: v.object({ taskId: v.id('mediaTasks') }) }, returns: v.null(), handler: async (ctx, args) => {
@@ -380,26 +258,6 @@ export const progressForProject=query({args:{projectId:v.id('projects')},returns
   const rows=await ctx.db.query('mediaTaskProgress').withIndex('by_project_createdAt',q=>q.eq('projectId',args.projectId)).order('desc').take(40);
   return rows.map(({taskId,progress})=>({taskId,progress}));
 }});
-/** Fails an unfinished task permanently and stops its workflow. */
-export async function failMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>, error: string) {
-  const task = await ctx.db.get(taskId);
-  if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
-  await markTerminal(ctx, taskId, 'failed', error);
-  if (task.workflowId) await mediaWorkflow.cancel(ctx, task.workflowId as WorkflowId);
-}
-export async function cancelMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>) {
-  const task = await ctx.db.get(taskId);
-  if (!task || ['completed', 'failed', 'cancelled'].includes(task.status)) return;
-  await markTerminal(ctx, taskId, 'cancelled', 'Processing cancelled.');
-  if (task.workflowId) await mediaWorkflow.cancel(ctx, task.workflowId as WorkflowId);
-}
-/** A bounded action wait ending must not discard already-running analysis. Stop
- * cancels its tasks separately before deleting their requests. */
-export async function detachAnalysisRequest(ctx:MutationCtx,request:Doc<'analysisRequests'>){
-  const task=request.taskId?await ctx.db.get(request.taskId):null;
-  if(task?.analysisRequestId===request._id&&task.ownerId===request.ownerId&&task.projectId===request.projectId&&task.assetId===request.assetId&&['queued','running','retrying'].includes(task.status))await patchMediaTask(ctx, task,{analysisRequestId:undefined});
-  await ctx.db.delete(request._id);
-}
 /** Oldest first, except an owner already running FAIR_RUNNING_PER_OWNER tasks
  * yields to another owner's queued work. Bounded: one scan plus one small
  * indexed read per distinct owner; with no other owner waiting, the oldest

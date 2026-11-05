@@ -5,7 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import { z } from 'zod';
-import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
+import type { MediaTaskResult, MediaWorkItem } from '@/convex/lib/media_task_contract';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { fitMotion } from '@/lib/media-analysis/fit-motion';
 import { trackReference } from './track-reference';

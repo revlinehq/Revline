@@ -123,35 +123,3 @@ export const remove = mutation({
     await ctx.db.delete(kitId);
   },
 });
-
-/** Clears fields retired from brand kits (voice, and the context's call to action and tone). */
-export const dropRetiredFields = internalMutation({
-  args: {},
-  handler: async ctx => {
-    let changed = 0;
-    for await (const kit of ctx.db.query('brandKits')) {
-      const { cta: _cta, tone: _tone, ...context } = (kit.context ?? {}) as Record<string, unknown>;
-      const retired = kit as typeof kit & { voice?: unknown };
-      if (retired.voice === undefined && _cta === undefined && _tone === undefined) continue;
-      await ctx.db.replace(kit._id, { ...Object.fromEntries(Object.entries(kit).filter(([key]) => key !== 'voice' && key !== '_id' && key !== '_creationTime')), ...(kit.context ? { context: context as typeof kit.context } : {}) } as typeof kit);
-      changed++;
-    }
-    return changed;
-  },
-});
-
-/** One-off: the context becomes one product text (what it is, the problem, the features); audience is asked per video. */
-export const mergeContextFields = internalMutation({
-  args: {},
-  handler: async ctx => {
-    let changed = 0;
-    for await (const kit of ctx.db.query('brandKits')) {
-      const context = kit.context as { product?: string; problem?: string; audience?: string; features?: string[]; notes?: string } | undefined;
-      if (!context || Object.keys(context).every(key => key === 'product')) continue;
-      const lines = [[context.product, context.problem].filter(Boolean).join(' ').trim(), ...(context.features ?? []).map(feature => `- ${feature}`), context.notes ?? ''].filter(Boolean);
-      await ctx.db.patch(kit._id, { context: (lines.length ? { product: lines.join('\n') } : {}) as typeof kit.context });
-      changed++;
-    }
-    return changed;
-  },
-});

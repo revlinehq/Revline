@@ -9,7 +9,7 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
-import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
 import type { MotionMap } from '../lib/inspo-motion/motion-map';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult, referenceCropKeyframesValidator } from './schema';
 

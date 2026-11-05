@@ -1,7 +1,7 @@
 import { resolvedAudioTimeline } from "../editor/audio-normalization";
 import { spawn } from "node:child_process";
 import { basename, extname, join } from "node:path";
-import type { MediaWorkItem } from "../../convex/mediaTasks";
+import type { MediaWorkItem } from "../../convex/lib/media_task_contract";
 import {
   audioFadeAttributes,
   audioSettings,

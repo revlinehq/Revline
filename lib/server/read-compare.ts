@@ -1,7 +1,7 @@
 import { roundTo } from '../math';
 import type { FrameCache } from './frame-cache';
 import sharp from 'sharp';
-import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
+import type { MediaTaskResult, MediaWorkItem } from '@/convex/lib/media_task_contract';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
 import { frameAt, imageSource, probe, sheet } from './read-reference';

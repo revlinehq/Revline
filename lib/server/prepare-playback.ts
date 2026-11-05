@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { z } from 'zod';
 import { api } from '../../convex/_generated/api';
-import type { MediaWorkItem } from '../../convex/mediaTasks';
+import type { MediaWorkItem } from '../../convex/lib/media_task_contract';
 import { downloadOwnedMedia } from '../media-analysis/io';
 import { uploadMediaFile, type UploadContext } from './upload-media-file';
 import { extractPreviewPoster, inspectPreviewVideo, preparePreviewVideo, probePreviewVideo } from './preview-video';

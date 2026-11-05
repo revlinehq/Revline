@@ -7,6 +7,7 @@ import { generatedImageSummary } from './lib/generated_image_summary';
 import { normalizationRequestValidator } from './lib/normalization_validator';
 import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
+import { isMcpRun } from './lib/run_ids';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireProject } from './lib/auth';
@@ -16,13 +17,15 @@ import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
-import { cancelMediaTask, importVideoFor } from './mediaTasks';
+import { importVideoFor } from './mediaTasks';
+import { cancelMediaTask } from './lib/media_queue';
 import { exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
 import { briefFor } from './briefs';
-import { enqueueMediaTask, GUARD_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { GUARD_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { referenceBox } from './schema';
 import { comparisonCrop } from '../lib/ai/reference-comparison';
 import { soundRequestValidator } from './lib/sound_validator';
@@ -71,7 +74,7 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 
 /** One MCP tool call is one AI run: the same lock, live preview and undo group as an in-app edit. */
 const MCP_RUN_LIMIT = 11 * 60_000;
-const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
+const mcpRunStarted = (runId?: string) => runId && isMcpRun(runId) ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
 /** A tab's saved timeline with its scene code, for reading a tab without opening it. */
@@ -114,7 +117,7 @@ export const beginRun = internalMutation({ args: { ownerId: v.string(), projectI
   const project = await projectRunContext(ctx, projectIdOf(ctx, args.projectId), args.ownerId);
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
   const started = mcpRunStarted(project.aiRunId), stale = started !== undefined && Date.now() - started > MCP_RUN_LIMIT;
-  if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
+  if (project.aiRunning && !stale) throw new ConvexError(isMcpRun(project.aiRunId) ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
   const timelineId = args.timelineId ?? activeTabOf(project);
   if (!await storedTabTimeline(ctx, (await ctx.db.get(project._id))!, timelineId)) throw new ConvexError('That timeline no longer exists.');
   const runId = `mcp-${Date.now()}-${crypto.randomUUID()}:tab:${timelineId}`;

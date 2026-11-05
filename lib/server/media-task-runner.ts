@@ -18,7 +18,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
-import type { MediaWorkItem, MediaTaskResult } from '@/convex/mediaTasks';
+import type { MediaWorkItem, MediaTaskResult } from '@/convex/lib/media_task_contract';
 import { dimensions, timelineDuration, type MediaAsset } from '@/lib/editor/types';
 import { downloadOwnedMedia, extractTranscriptionAudio, extractVideoWindow, needsAnalysisVideoProxy, prepareVideo, probeMedia } from '@/lib/media-analysis/io';
 import { breakDownReference, inspectVideo, inspectVideoFrames, understandVideo } from '@/lib/media-analysis/gemini';

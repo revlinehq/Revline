@@ -2,7 +2,7 @@ import type { FrameCache } from './frame-cache';
 import { mkdir,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
-import type { MediaWorkItem,MediaTaskResult } from '../../convex/mediaTasks';
+import type { MediaWorkItem,MediaTaskResult } from '../../convex/lib/media_task_contract';
 import type { MediaAsset } from '../editor/types';
 import { dimensions, timelineDuration } from '../editor/types';
 import { checkPlanTiming } from '../ai/edit-plan';

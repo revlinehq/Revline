@@ -17,7 +17,7 @@ import { currentTimeline, validateTimeline } from "./lib/timeline";
 import { renderSummaryDocument } from "./schema";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { timelineDuration } from '../lib/editor/types';
-import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './lib/media_queue';
 import { accountLimit } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);

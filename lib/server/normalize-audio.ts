@@ -4,7 +4,7 @@ import { open } from "node:fs/promises";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import { z } from "zod";
-import type { MediaWorkItem } from "../../convex/mediaTasks";
+import type { MediaWorkItem } from "../../convex/lib/media_task_contract";
 import { timelineDuration } from "../editor/types";
 import { prepareComposition } from "./prepare-composition";
 import { decodeTimelineSound } from "./sound-check";

@@ -9,9 +9,15 @@ export function readRunTab(runId: string) {
   return end > 4 ? rest.slice(4, end) : undefined;
 }
 
+/** Every MCP run id, read-only or exclusive, starts with mcp-; in-app runs never do. */
+export const isMcpRun = (runId?: string) => !!runId?.startsWith('mcp-');
+
+/** Who an agent edit is credited to: the external agent's name for MCP runs, else Revline's own agent. */
+export const runAuthorLabel = (runId: string | undefined, agentName: string | undefined) => isMcpRun(runId) ? agentName ?? 'AI agent' : 'Revline agent';
+
 /** Exclusive MCP calls bind a tab without changing the editor selection. */
 export function mcpRunTab(runId: string) {
-  if (!runId.startsWith('mcp-') || runId.startsWith(READ_ONLY_RUN_PREFIX)) return undefined;
+  if (!isMcpRun(runId) || runId.startsWith(READ_ONLY_RUN_PREFIX)) return undefined;
   return runId.split(':tab:')[1];
 }
 

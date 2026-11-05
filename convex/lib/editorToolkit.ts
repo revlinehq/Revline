@@ -55,7 +55,7 @@ import { EDITOR_TOOL_DEFINITIONS, assertToolDefinitions, toolBehavior } from '..
 import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
-import { boundRunTab } from "./run_ids";
+import { boundRunTab, isMcpRun } from "./run_ids";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
 import { placeClip, TIMELINE_ROW } from "./revision_log";
@@ -472,7 +472,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
     // Healthy worker heartbeats extend the durable request, but must not extend
     // an MCP call past its transport budget while it holds the edit lock.
-    const waitDeadline = run.runId.startsWith('mcp-') ? Date.now() + 170_000 : Infinity;
+    const waitDeadline = isMcpRun(run.runId) ? Date.now() + 170_000 : Infinity;
     const requestId = await retryAbortedTransaction(() => ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection }), abortSignal);
     try {
       while (true) {
@@ -693,7 +693,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
       // MCP transport expires before the in-app guard budget. Refuse before any save.
-      const deadline = Date.now() + (run.runId.startsWith('mcp-') ? 170_000 : 420_000);
+      const deadline = Date.now() + (isMcpRun(run.runId) ? 170_000 : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });

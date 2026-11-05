@@ -8,12 +8,13 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, runAuthorLabel } from './lib/run_ids';
+import { runArgs, holdsRun, runIsActive } from './lib/active_run';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {cancelTurn} from './assistantWorkflow';
-import {stopRunnerTurn} from './agentRunner';
+import {stopRunnerTurn} from './lib/runner_turns';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
@@ -33,6 +34,7 @@ import { abortStream, createThread, listStreams, listUIMessages, saveMessage, sy
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
@@ -44,7 +46,7 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
-import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
@@ -259,7 +261,6 @@ export const messages = query({
     return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
-const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
 // Both switches belong to one transaction: subscribers only see the original selection.
 const scopedRunMutation = customMutation(internalMutation, {
   args: runArgs,
@@ -327,13 +328,13 @@ export const recordBudget = internalMutation({ args: { ...runArgs, used: v.numbe
 }});
 async function requireRunState(ctx: QueryCtx | MutationCtx, args: {projectId:Doc<'projects'>['_id'];ownerId:string;runId:string}) {
   const project=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
+  if(!holdsRun(project,args.runId))throw new ConvexError('AI run is no longer active');
   return project;
 }
 /** Project tools used inside an existing editor run keep its lock and ownership checks. */
 async function requireActiveRun(ctx: QueryCtx | MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.deleting || project.ownerId !== args.ownerId || !project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  if (!project || project.deleting || project.ownerId !== args.ownerId || !holdsRun(project, args.runId)) throw new ConvexError('AI run is no longer active');
   return project;
 }
 export const listRunTimelines = internalQuery({ args: runArgs, handler: async (ctx, args) => {
@@ -403,10 +404,7 @@ export const modelForRun = internalQuery({
     return validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
   },
 });
-export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
-  const project = await projectRun(ctx,args.projectId,args.ownerId).catch(()=>null);
-  return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
-}});
+export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: (ctx, args) => runIsActive(ctx, args) });
 export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);
@@ -458,7 +456,7 @@ export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),rev
   const fixes=row.fixes??[],existing=fixes.find(fix=>fix.clipId===args.clipId&&fix.summary===summary&&fix.verification===verification);
   if(existing)return {revision:row.revision,timelineId,fix:existing};
   if(fixes.length>=20)throw new ConvexError('This revision already has 20 fix records. Keep further details in the next saved fix.');
-  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:run.aiRunId?.startsWith('mcp-')?run.aiAgentName??'AI agent':'Revline agent'};
+  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:runAuthorLabel(run.aiRunId,run.aiAgentName)};
   await ctx.db.patch(row._id,{fixes:[...fixes,fix]});
   return {revision:row.revision,timelineId,fix};
 }});
@@ -506,8 +504,8 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   if(!args.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`))throw new ConvexError('Generated sound key is outside this project');
-  const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
-  if(count.length>=200)throw new ConvexError('A project supports up to 200 media files');
+  const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
+  if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(args.waveform);
   const id=await ctx.db.insert('assets',{ownerId:args.ownerId,projectId:args.projectId,kind:'audio',fileName:args.fileName,r2Key:args.r2Key,contentType:args.contentType??'audio/wav',size:args.size,duration:args.duration,waveform:args.waveform,...(args.recipe?{soundRecipe:args.recipe}:{}),createdAt:Date.now()});
   // A music bed knows its beats exactly, and narration its words: they are saved as its analysis, like measured ones.

@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { PROJECT_MEDIA_LIMIT } from './lib/upload_limits';
 import { internalMutation, type MutationCtx } from './_generated/server';
 import { assetDocument, imageGenerationValidator } from './schema';
 import { projectIdentity, projectRun } from './lib/project_data';
@@ -14,8 +15,8 @@ async function requireCapacity(ctx: MutationCtx, args: { ownerId: string; projec
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
   await requireEditorAccess(ctx, args.ownerId);
   if (!Number.isInteger(count) || count < 1 || count > 4) throw new ConvexError('Generate between 1 and 4 image variants.');
-  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(200);
-  if (assets.length + count > 200) throw new ConvexError('A project supports up to 200 media files. Remove unused media before generating images.');
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(PROJECT_MEDIA_LIMIT);
+  if (assets.length + count > PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files. Remove unused media before generating images.`);
 }
 
 /** Check paid access and space before making a provider call. */

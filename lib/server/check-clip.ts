@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { join } from "node:path";
 import sharp from "sharp";
-import type { MediaWorkItem, MediaTaskResult } from "../../convex/mediaTasks";
+import type { MediaWorkItem, MediaTaskResult } from "../../convex/lib/media_task_contract";
 import {
   checkClipData,
   clipCheckRequest,

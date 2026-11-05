@@ -13,7 +13,7 @@ import { projectRun, writeProject } from "./lib/project_data";
 import { loadSceneCode } from "./lib/scene_code";
 import { equalTimelineValue } from "../lib/editor/timeline-equality";
 import { activeTabOf } from "./timelineTabs";
-import { agentRunnerConfigured, startRunnerTurn } from "./agentRunner";
+import { agentRunnerConfigured, startRunnerTurn } from "./lib/runner_turns";
 import { aiWorkflow } from "./lib/workflows";
 import type { Timeline } from "../lib/editor/types";
 import type { Doc } from "./_generated/dataModel";
