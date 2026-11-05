@@ -4,8 +4,6 @@ import { calculateVisualRect } from './visual-source-geometry';
 import { validateSmoothZoom, type SmoothZoomSettings } from './smooth-zoom-settings';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
 
-export { motionEase as zoomEase } from './motion-path';
-
 /** Source coordinates are mapped through the same fit/crop geometry as playback/export. */
 export function smoothZoomFocus(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, point: { centerX: number; centerY: number }) {
   if (!asset.width || !asset.height) throw new Error('Source dimensions are required to position a smooth zoom.');

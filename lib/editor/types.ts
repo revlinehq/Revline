@@ -1,26 +1,133 @@
+/**
+ * The timeline data model: plain data types, the enumerations they are built from, and the track model.
+ * Settings modules (clip-effects, visual-effects, masks, ...) import their data types from here and add the
+ * validation and behaviour; this file imports only types, from modules that never import it back.
+ */
 import type { ImpactSettings, OverlaySettings, ParallaxSettings } from './montage-vfx';
-import type { PixelTrackBinding } from '../media-analysis/pixel-track';
 import type { TextGradient } from './text-gradient';
-import type { BlendMode, CinematicBarSettings, EffectPreset, SolidColorSettings, MotionKeyframe, FrameShrinkSettings, ZoomSettings } from './clip-effects';
-import type { ColorGrade, ZoomBlur, Glitch, InvertColors, Dither, NeonEdges, LensDistortion, FilmOverlay, Vhs, LightLeak, DirectionalBlur, TurbulentDisplace, LightSweep, SoftBlur, FrameDistortion, FrameCorners, Bloom } from './visual-effects';
+import type { MotionKeyframe, NamedMotionEasing } from './motion-path';
+import type { NeonEdges } from './neon-edges';
 import type { RemotionTextTemplate } from './remotion-text';
-import type { ClipTransition } from './clip-transitions';
-import type { AudioSettings } from './audio-settings';
-import type { VisualFadeSettings } from './visual-fades';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
-import type { FlashSettings, PunchSettings, ShakeSettings, PopSettings } from './motion-effect-settings';
-import type { SmoothZoomSettings } from './smooth-zoom-settings';
-import type { CameraMotionSettings } from './camera-motion-settings';
-import type { EffectKeyframeLane } from './effect-keyframes';
 import type { RampPoint } from './speed-ramp';
-import type { AudioReactive } from './audio-reactive';
 import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finish';
-import type { ClipMask } from './masks';
-import type { SceneSource } from './scene-layers';
-import type { ClipOutline } from './clip-outline';
-import { scenePlaceholderCover } from './scene-placeholder';
-export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
+import type { SceneBrand } from './brand-kit';
+import type { Transcript } from '../media-analysis/transcript';
+/** Every project frame, as its name and the width:height of its shape, narrowest first. */
+const ASPECT_RATIO_SHAPES = [['vertical', 9, 16], ['portrait-feed', 4, 5], ['square', 1, 1], ['classic', 4, 3], ['landscape', 16, 9]] as const;
+export type AspectRatio = typeof ASPECT_RATIO_SHAPES[number][0];
+export const ASPECT_RATIOS: readonly AspectRatio[] = ASPECT_RATIO_SHAPES.map(([ratio]) => ratio);
+
+// Clip settings data. Validation and defaults live in the named settings module.
+
+// clip-effects
+export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
+export type BlendMode = typeof BLEND_MODES[number];
+export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color', 'impact-frame', 'texture-overlay'] as const;
+export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
+export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe', 'whip-pan', 'zoom-through', 'film-burn'] as const;
+export type TransitionPreset = typeof TRANSITION_PRESETS[number];
+/** Retired presets remain valid for saved projects; new choices use the active catalog. */
+export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
+export type EffectPreset = typeof EFFECT_PRESETS[number];
+export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
+export type CinematicBarSettings = { size: number; speed: number };
+export type FrameShrinkSettings = { size: number; speed: number };
+export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
+
+// clip-transitions
+export const TRANSITION_DIRECTIONS = ['clockwise', 'counter-clockwise'] as const;
+export type TransitionDirection = typeof TRANSITION_DIRECTIONS[number];
+export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
+export const IRIS_SHAPES = ['circle', 'ellipse'] as const;
+export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number] };
+export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<TransitionWipeSettings>;
+
+// visual-effects
+export type ColorGrade = { enabled: boolean; exposure: number; contrast: number; saturation: number; temperature: number; tint: number; vibrance: number };
+export type ZoomBlur = { enabled: boolean; amount: number; centerX: number; centerY: number };
+export type Glitch = { enabled: boolean; intensity: number; blockSize: number; rgbSplit: number };
+export type InvertColors = { enabled: boolean; amount: number };
+export type Dither = { enabled: boolean; amount: number; levels: number; size: number; shadowColor?: string; highlightColor?: string };
+export type FrameDistortion = { enabled: boolean; horizontal: number; vertical: number; skew: number; bend?: number };
+export type FrameCorners = { enabled: boolean; amount: number };
+export type SoftBlur = { enabled: boolean; amount: number };
+export type LensDistortion = { enabled: boolean; amount: number; centerX: number; centerY: number; fringing: number };
+export type FilmOverlay = { enabled: boolean; amount: number; grain: number; dust: number; scratches: number; vignette: number; flicker: number; warmth: number };
+export type Vhs = { enabled: boolean; amount: number; scanlines: number; noise: number; bleed: number; tracking: number; speed: number };
+/** Position travels clockwise around the edge: left 0, top .25, right .5, bottom .75. */
+export type LightLeak = { enabled: boolean; amount: number; color: string; position: number; spread: number; speed: number };
+export type DirectionalBlur = { enabled: boolean; amount: number; angle: number };
+export type TurbulentDisplace = { enabled: boolean; amount: number; scale: number; speed: number };
+export type LightSweep = { enabled: boolean; amount: number; color: string; angle: number; position: number; width: number; speed: number };
+/** Glow around highlights: brightness above `threshold` spreads over `radius` pixels (at 1080p). */
+export type Bloom = { enabled: boolean; amount: number; threshold: number; radius: number };
+
+// audio-settings
+export const AUDIO_ROLES=['original','voice','music'] as const;
+export type AudioRole=typeof AUDIO_ROLES[number];
+export type AudioDucking={enabled:boolean;amount:number;attack:number;release:number};
+export type AudioSettings={role:AudioRole;fadeIn:number;fadeOut:number;ducking:AudioDucking};
+
+// visual-fades
+export type VisualFadeSettings = { fadeIn: number; fadeOut: number };
+
+// motion-effect-settings
+export type FlashSettings = { strength: number; attack: number; release: number };
+export type PunchSettings = { amount: number; speed: number; centerX: number; centerY: number; attack?: number; release?: number };
+export type ShakeSettings = { strength: number; speed: number; direction: 'both' | 'horizontal' | 'vertical' };
+export type PopSettings = { startScale: number; bounce: number; speed: number };
+
+// smooth-zoom-settings, camera-motion-settings
+export type SmoothZoomSettings = { start: number; inDuration: number; holdDuration: number; outDuration: number; scale: number; centerX: number; centerY: number; framing?: 'anchor' | 'center'; easing: NamedMotionEasing };
+export type CameraMotionSettings = { blurAmount?:number; keyframes: { time: number; scale: number; centerX: number; centerY: number; easing: SmoothZoomSettings['easing'] }[] };
+
+// effect-keyframes
+export type EffectKey = { time: number; value: number };
+export type EffectKeyframeLane = { control: string; keys: EffectKey[] };
+
+// audio-reactive
+export type ReactiveTarget = { property: string; amount: number };
+export type AudioReactive = { rate: number; start: number; levels: string; targets: ReactiveTarget[] };
+
+// masks
+export const MASK_SHAPES = ['rectangle', 'ellipse', 'polygon', 'text'] as const;
+export type MaskShape = typeof MASK_SHAPES[number];
+export type MaskGeometry = { x: number; y: number; width: number; height: number; rotation: number; feather: number };
+export type MaskKey = MaskGeometry & { time: number };
+export type ClipMask = { shape: MaskShape; invert?: boolean; radius?: number; points?: number[][]; text?: string; active?: { start: number; end: number }; keys: MaskKey[] };
+
+// clip-outline
+/** A stroke and glow traced around a clip's visible pixels. On a cut-out (alpha video)
+ * it follows the subject's silhouette. Pixel sizes are measured at 1080 output height. */
+export type ClipOutline = { enabled: boolean; color: string; width: number; glow: number };
+
+// scene-layers
+/** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
+/** A project image a scene uses, by the name its code reads from `media`. */
+export type SceneMedia = { name: string; assetId: string };
+/** A brand's UI rebuilt as a scene module with named parts, mounted inside a scene with blueprint(name, container). */
+export type SceneBlueprint = { name: string; code: string; codeRef?: string };
+/**
+ * A film is one scene module whose animation runs on film time; its beat clips share that code and each shows
+ * its own window: `sourceStart` is where the clip starts in the film, and every clip gets the film's whole
+ * duration. So motion flows across clip edges, and an edit to the code changes every beat at once.
+ */
+export type SceneFilm = { duration: number; builtThrough?: number; referenceAssetId?: string; referenceStart?: number };
+export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
+
+// Pixel tracking: how a clip follows a tracked point (lib/media-analysis/pixel-track holds the tracker's wire format).
+export type PixelTrackReference = { trackId: string; token: string };
+export type TrackGeometry = Pick<Clip, 'id' | 'kind' | 'assetId' | 'start' | 'duration' | 'sourceStart' | 'playbackRate' | 'speedRamp' | 'focus' | 'transform' | 'crop' | 'fit' | 'motion' | 'motionOffset' | 'cameraMotion' | 'smoothZoom'>;
+export type TrackMaskSettings = { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string };
+type BindingBase = { reference: PixelTrackReference; footage: TrackGeometry; width: number; height: number; aspectRatio: AspectRatio; attachedStart: number; attachedDuration: number; attachedMotionOffset: number; smoothing: number; followTransform: boolean };
+export type PixelTrackBinding = BindingBase & ({ mode: 'move'; offsetX: number; offsetY: number } | { mode: 'mask'; target: TrackGeometry; mask: TrackMaskSettings });
+
+// preview-segments
+export type SourceRange = { start: number; end: number };
+export type PreviewSegment = SourceRange & { url: string; size: number };
+
 export type ClipKind = 'video' | 'image' | 'audio' | 'caption' | 'graphic' | 'solid' | 'scene' | 'effect';
 export type LayerGroup = 'visual' | 'overlay' | 'audio' | 'effects';
 export type TrackCounts = Record<Exclude<LayerGroup, 'effects'>, number> & { effects?:number };
@@ -133,7 +240,7 @@ export type MediaAsset = {
   duration?: number; width?: number; height?: number; size?: number; url: string | null; thumbnailUrl?:string|null;
   previewUrl?: string | null; previewSize?: number; previewWidth?: number; previewHeight?: number; previewFps?: number; previewVersion?: number;
   previewOriginalPlayable?: boolean;
-  previewSegments?: import('./preview-segments').PreviewSegment[];
+  previewSegments?: PreviewSegment[];
   audioAssetId?: string; audioExtracted?: boolean;
   /** Set on a background-removed copy (VP9 with alpha) of cutoutOf, on the same source timeline; frames before cutoutStart are transparent. */
   cutoutOf?: string; cutoutStart?: number;
@@ -147,7 +254,7 @@ export type MediaAsset = {
     highlights?: string;
     facecam?: import('../media-analysis/clipping').FacecamAnalysis;
     speakers?: import('../media-analysis/clipping').SpeakerAnalysis;
-    transcript?: {segments:{start:number;end:number;text:string}[];words:{start:number;end:number;text:string;speaker?:number;speakerConfidence?:number}[]};
+    transcript?: Transcript;
     audioActivity?: import('../media-analysis/audio-activity').AudioActivity;
     speechCleanup?: import('../speech-cleanup/types').SpeechCleanup;
     understanding?: {summary:string;scenes:{start:number;end:number;description:string;score:number}[];suggestions?:SourceEditSuggestion[]};
@@ -171,18 +278,6 @@ function validTrack(value: number, maximum = 24) {
   return value;
 }
 export function trackOf(clip: Pick<Clip, 'kind' | 'track'>) { return validTrack(clip.track ?? (clip.kind === 'caption' ? 2 : 1), maxTrackCount(layerGroup(clip.kind))); }
-/** A timeline's preview: the thumbnail of its first shot (the earliest video or image, top layer first). */
-/** The timeline's first picture: footage's thumbnail, or a motion scene's own rendered frame (from sceneThumbs). */
-export function timelineCover(timeline: Pick<Timeline, 'clips'>, assets: readonly Pick<MediaAsset, '_id' | 'kind' | 'url' | 'thumbnailUrl'>[], sceneThumbs?: Record<string, { time: number; image: string }[]>) {
-  const first = timeline.clips.filter(clip => clip.kind === 'video' || clip.kind === 'image' || (clip.kind === 'scene' && sceneThumbs?.[clip.id]?.length)).sort((a, b) => a.start - b.start || trackOf(b) - trackOf(a))[0];
-  if (first?.kind === 'scene') { const frames = sceneThumbs![first.id]; const image = frames[Math.floor(frames.length / 2)].image; return image.startsWith('https://') ? image : `data:image/jpeg;base64,${image}`; }
-  const asset = first && assets.find(item => item._id === first.assetId);
-  if (asset) return asset.thumbnailUrl ?? (asset.kind === 'image' ? asset.url : null);
-  // Motion clips whose frames are still coming get their placeholder, not a blank cover.
-  if (first) return null;
-  const scene = timeline.clips.filter(clip => clip.kind === 'scene').sort((a, b) => a.start - b.start)[0] as Clip | undefined;
-  return scene ? scenePlaceholderCover(scene.scene?.title || 'Scene') : null;
-}
 /** Zero legacy overlay rows marks the shared V-track model, without a schema migration. */
 export function normalizeTimeline(timeline: Timeline): Timeline {
   if (timeline.tracks?.overlay === 0) return timeline;
@@ -230,15 +325,15 @@ export function timelineDuration(timeline: Timeline) {
 }
 export function dimensions(ratio: AspectRatio, resolution = 1080) {
   const even = (value: number) => Math.round(value / 2) * 2;
-  if (ratio === 'vertical') return { width: resolution, height: even(resolution * 16 / 9) };
-  if (ratio === 'portrait-feed') return { width: resolution, height: even(resolution * 5 / 4) };
-  if (ratio === 'landscape') return { width: even(resolution * 16 / 9), height: resolution };
-  if (ratio === 'classic') return { width: even(resolution * 4 / 3), height: resolution };
-  return { width: resolution, height: resolution };
+  // The short side is `resolution`; the long side rounds to an even pixel count.
+  const shape = ASPECT_RATIO_SHAPES.find(([name]) => name === ratio);
+  if (!shape || shape[1] === shape[2]) return { width: resolution, height: resolution };
+  const [, width, height] = shape;
+  return width < height ? { width: resolution, height: even(resolution * height / width) } : { width: even(resolution * width / height), height: resolution };
 }
 /** The project frame closest to a source's shape, so new footage fills the frame it was shot for. */
 export function aspectRatioForSize(width: number, height: number): AspectRatio {
-  const shapes: [AspectRatio, number][] = [['vertical', 9 / 16], ['portrait-feed', 4 / 5], ['square', 1], ['classic', 4 / 3], ['landscape', 16 / 9]];
+  const shapes = ASPECT_RATIO_SHAPES.map(([name, width, height]): [AspectRatio, number] => [name, width / height]);
   const ratio = width / height;
   return shapes.reduce((best, shape) => Math.abs(Math.log(shape[1] / ratio)) < Math.abs(Math.log(best[1] / ratio)) ? shape : best)[0];
 }

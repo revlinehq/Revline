@@ -1,10 +1,7 @@
-import type { Clip } from './types';
-import type { MotionKeyframe } from './clip-effects';
+import type { Clip, FlashSettings, PopSettings, PunchSettings, ShakeSettings } from './types';
+import type { MotionKeyframe } from './motion-path';
 
-export type FlashSettings = { strength: number; attack: number; release: number };
-export type PunchSettings = { amount: number; speed: number; centerX: number; centerY: number; attack?: number; release?: number };
-export type ShakeSettings = { strength: number; speed: number; direction: 'both' | 'horizontal' | 'vertical' };
-export type PopSettings = { startScale: number; bounce: number; speed: number };
+export type { FlashSettings, PopSettings, PunchSettings, ShakeSettings };
 export type MotionEffectChanges = { flash?: Partial<FlashSettings>; punch?: Partial<PunchSettings>; shake?: Partial<ShakeSettings>; pop?: Partial<PopSettings> };
 const PROPERTY_EFFECT_PRESETS = ['flash', 'punch', 'shake', 'pop'] as const;
 export type PropertyEffectPreset = typeof PROPERTY_EFFECT_PRESETS[number];

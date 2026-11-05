@@ -1,7 +1,7 @@
-import type { Clip } from './types';
-import { CAMERA_ZOOM_RANGE, SMOOTH_ZOOM_EASINGS, type SmoothZoomSettings } from './smooth-zoom-settings';
+import type { CameraMotionSettings, Clip } from './types';
+import { CAMERA_ZOOM_RANGE, SMOOTH_ZOOM_EASINGS } from './smooth-zoom-settings';
 
-export type CameraMotionSettings = { blurAmount?:number; keyframes: { time: number; scale: number; centerX: number; centerY: number; easing: SmoothZoomSettings['easing'] }[] };
+export type { CameraMotionSettings };
 
 /** Recipe times retain motion's original clip-local origin through trims and splits. */
 export function validateCameraMotion(clip: Pick<Clip, 'kind' | 'cameraMotion' | 'smoothZoom'>) {

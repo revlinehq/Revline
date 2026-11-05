@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import type { Clip, AspectRatio } from '../editor/types';
-import type { MaskShape } from '../editor/masks';
+import type { PixelTrackReference } from '../editor/types';
+export type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from '../editor/types';
 
 const fraction = z.number().min(0).max(1);
 export const trackBox = z.object({ left: fraction, top: fraction, right: fraction, bottom: fraction }).strict().refine(box => box.right > box.left && box.bottom > box.top, 'The box must have positive width and height.');
@@ -38,11 +38,6 @@ export type PixelTrackResult = z.infer<typeof pixelTrackResult>;
 export type PixelTrackSummary = z.infer<typeof pixelTrackSummary>;
 export type PixelTrackChunk = z.infer<typeof pixelTrackChunk>;
 export type PixelTrackPage = z.infer<typeof pixelTrackPage>;
-export type PixelTrackReference = { trackId: string; token: string };
-export type TrackGeometry = Pick<Clip, 'id' | 'kind' | 'assetId' | 'start' | 'duration' | 'sourceStart' | 'playbackRate' | 'speedRamp' | 'focus' | 'transform' | 'crop' | 'fit' | 'motion' | 'motionOffset' | 'cameraMotion' | 'smoothZoom'>;
-export type TrackMaskSettings = { shape: MaskShape; width: number; height: number; feather?: number; invert?: boolean; radius?: number; text?: string };
-type BindingBase = { reference: PixelTrackReference; footage: TrackGeometry; width: number; height: number; aspectRatio: AspectRatio; attachedStart: number; attachedDuration: number; attachedMotionOffset: number; smoothing: number; followTransform: boolean };
-export type PixelTrackBinding = BindingBase & ({ mode: 'move'; offsetX: number; offsetY: number } | { mode: 'mask'; target: TrackGeometry; mask: TrackMaskSettings });
 
 export function summarizePixelTrack(result: PixelTrackResult): PixelTrackSummary {
   if (result.engine === 'opencv-klt-template-v2') return result;

@@ -27,7 +27,8 @@ import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project
 import type { ChatMessage } from './assistant-panel';
 import { matchesUndoSnapshot, type AssistantEditSnapshot } from './assistant-results';
 import type { ExportSettings } from './export-dialog';
-import { EMPTY_TIMELINE, normalizeTimeline, timelineCover, timelineDuration, type Timeline, type MediaAsset } from '@/lib/editor/types';
+import { EMPTY_TIMELINE, normalizeTimeline, timelineDuration, type Timeline, type MediaAsset } from '@/lib/editor/types';
+import { timelineCover } from '@/lib/editor/timeline-cover';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';

@@ -1,4 +1,4 @@
-import { motionAt, NEUTRAL_MOTION } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { cssMotionBlur } from './camera-motion-blur';
 import { textStyle } from './text-style';
 import type { Clip } from './types';

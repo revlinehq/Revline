@@ -1,11 +1,11 @@
 import { DEFAULT_IMPACT, DEFAULT_OVERLAY, validateMontageVfx } from './montage-vfx';
 import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
-import type { Clip } from './types';
+import { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS, type BlendMode, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 import { validatePlaybackRate } from './playback-rate';
-import { isTransitionPreset, TRANSITION_PRESETS, validateTransitionSettings } from './clip-transitions';
+import { isTransitionPreset, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
@@ -18,20 +18,15 @@ import { shiftSpeedRamp } from './speed-ramp';
 import { validateMask } from './masks';
 import { validateAudioReactive } from './audio-reactive';
 import { validateColorFinish } from './color-finish';
-export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
+// lib/ai/object-motion.ts still reads MotionKeyframe from here.
+export type { MotionKeyframe } from './motion-path';
 
-export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
-export type BlendMode = typeof BLEND_MODES[number];
+export { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS };
+export type { BlendMode, CinematicBarSettings, EffectPreset, FrameShrinkSettings, SolidColorSettings, TimedEffectPreset, ZoomSettings };
 const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color', 'impact-frame', 'texture-overlay'] as const;
-export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
 /** Presets offered for new edits; the rest stay renderable in saved projects. */
 export const OFFERED_TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'zoom-blur', 'quick-zoom-in', 'quick-zoom-out', 'solid-color', 'impact-frame', 'texture-overlay'] as const satisfies readonly TimedEffectPreset[];
-/** Retired presets remain valid for saved projects; new choices use the active catalog. */
-export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
-export type EffectPreset = typeof EFFECT_PRESETS[number];
-export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
 export const SOLID_COLOR_LIMITS = { width: [.01, 2], height: [.01, 2], x: [0, 1], y: [0, 1], opacity: [0, 1] } as const;
 /** Saved FX rectangles retain their original compositing until explicitly moved to V. */
@@ -42,13 +37,10 @@ export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):P
   validateClipEffects({...clip,solidColor});
   return {solidColor};
 }
-export type CinematicBarSettings = { size: number; speed: number };
 const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
 const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
-export type FrameShrinkSettings = { size: number; speed: number };
 const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
 const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
-export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
 export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
 export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
 function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
@@ -204,8 +196,27 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
   return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, impact: preset === 'impact-frame' ? {...DEFAULT_IMPACT,...clip.impact} : undefined, overlay: preset === 'texture-overlay' ? {...DEFAULT_OVERLAY,...clip.overlay} : undefined, overlayTiming: preset === 'texture-overlay' ? {duration:clip.duration,offset:0} : undefined, flash: preset === 'flash' ? { ...flashSettings(propertyClip) } : undefined, punch: preset === 'punch' ? { ...punchSettings(clip) } : undefined, shake: preset === 'shake' ? { ...shakeSettings(clip) } : undefined, pop: preset === 'pop' ? { ...popSettings(clip) } : undefined, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
+/**
+ * Clip settings that run on their own frozen `{duration, offset}` clock, keyed by the field that holds it.
+ * Changing a clip's length freezes each clock (delta 0); moving its start shifts each offset by delta.
+ * A text gradient is not here: its clock is an offset only (its animation loops on its own duration),
+ * so a length change leaves it alone and only a moved start shifts it (see offsetClipMotion).
+ */
+export const OWN_CLOCK_SETTINGS = [
+  ['textTemplate', textTemplateTimingPatch],
+  ['textAnimationTiming', textAnimationTimingPatch],
+  ['audioFadeTiming', audioFadeTimingPatch],
+  ['visualFadeTiming', visualFadeTimingPatch],
+] as const;
+export type OwnClockSetting = typeof OWN_CLOCK_SETTINGS[number][0];
+
+/** Freeze (delta 0) or shift every own-clock setting the clip carries, except those `keep` names. */
+export function ownClockTimingPatch(clip: Clip, delta = 0, keep: (setting: OwnClockSetting) => boolean = () => false): Partial<Clip> {
+  return Object.assign({}, ...OWN_CLOCK_SETTINGS.map(([setting, patch]) => keep(setting) ? {} : patch(clip, delta)));
+}
+
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax || clip.pixelTracking ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax || clip.pixelTracking ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...ownClockTimingPatch(clip, delta), ...textGradientTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */

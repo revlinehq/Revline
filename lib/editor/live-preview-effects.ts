@@ -1,11 +1,9 @@
 import type { Timeline } from './types';
 import { textLayerSources } from './text-layers';
-import type { TextLayerController } from './remotion-text-runtime';
-
-type PreviewWindow = Window & { __revlineTextLayerController?: TextLayerController;__revlineRemotionText?:{installTextLayers(sources:ReturnType<typeof textLayerSources>):TextLayerController} };
+import type { CompositionWindow } from './composition-window';
 /** Apply text content, styling, entrances, addition and removal synchronously on the existing clock. */
 export function updateLiveTextEffects(document: Document, _previous: Timeline, next: Timeline): boolean {
-  const host=document.defaultView as PreviewWindow | null;
+  const host=document.defaultView as CompositionWindow | null;
   let controller=host?.__revlineTextLayerController;
   if(!controller){
     if(!next.clips.some(clip=>clip.kind==='caption'||clip.kind==='graphic'))return true;

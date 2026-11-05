@@ -1,7 +1,9 @@
 import { dimensions, normalizeTimeline, type Clip, type Timeline, type MediaAsset, type VisualTransform } from './types';
-import { calculateVisualRect, layerZIndex } from './composition';
+import { layerZIndex } from './composition';
+import { calculateVisualRect } from './visual-source-geometry';
 import { visualBounds, visualCornerPosition, visualTransform, type VisualCorner, type VisualRect } from './visual-transforms';
-import { motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
+import { solidColorSettings, visibleMotion } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 
 type Point = { x: number; y: number };
 type Size = { width: number; height: number };

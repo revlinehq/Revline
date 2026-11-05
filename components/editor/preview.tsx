@@ -14,7 +14,8 @@ import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-set
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle, Play, Pause } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
+import { compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
+import { calculateVisualRect } from '@/lib/editor/visual-source-geometry';
 import { dimensions,normalizeTimeline,type Timeline,type MediaAsset,type Clip,type VisualTransform } from '@/lib/editor/types';
 import { VisualHandles } from './visual-controls';
 import { CropControls, type CropControlsHandle } from './crop-controls';
@@ -25,13 +26,13 @@ import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
 import { compositionNode, compositionIndex } from '@/lib/editor/composition-node';
-import { needsLiveMediaSync, updateLiveMediaContent } from '@/lib/editor/live-media-content';
+import { needsLiveMediaSync } from '@/lib/editor/live-media-content';
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
-import { updateLiveScenes } from '@/lib/editor/live-scenes';
-import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';
-import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
+import { updateLivePreview } from '@/lib/editor/live-preview';
+import type { CompositionWindow } from '@/lib/editor/composition-window';
+import { previewVisualEffects } from '@/lib/editor/live-visual-effects';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
-import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
+import { previewAdjustmentEffect } from '@/lib/editor/live-adjustment-effects';
 import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
 /** Assets the preview must load: every clip's media plus images and videos shown inside scenes. */
 const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>([...timeline.clips.map(clip=>clip.assetId),...sceneMediaAssetIds(timeline)]);
@@ -51,7 +52,7 @@ function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:
   const fallback=new Promise<MediaAsset[]>(resolve=>{timer=setTimeout(()=>resolve(cache.cachedAssets(assets)),LOCAL_COPY_WAIT_MS);});
   return Promise.race([local,fallback]).finally(()=>clearTimeout(timer));
 }
-function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
+function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as CompositionWindow|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
 export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;controls?:boolean;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,controls=true,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
@@ -167,7 +168,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       const before=renderedTimeline.current??previous;
       const resolved=mediaSession.current?.resolveAssets(playbackAssets)??playbackAssets;
       const sourceChanged=current.clips.some(clip=>clip.assetId&&renderedAssets.current.find(asset=>asset._id===clip.assetId)?.url!==resolved.find(asset=>asset._id===clip.assetId)?.url);
-      const retained=updateLiveMediaContent(doc,before,current,resolved)&&updateLiveAdjustmentEffects(doc,before,current)&&updateLiveTextEffects(doc,before,current)&&updateLiveVisualEffects(doc,before,current)&&updateLiveVisualGeometry(doc,before,current,resolved)&&updateLiveScenes(doc,before,current);
+      const retained=updateLivePreview(doc,before,current,resolved);
       if(retained){
         mediaSession.current?.update(current,playbackAssets);updateLayers(active,current);
         if(sourceChanged||needsLiveMediaSync(before,current)){
@@ -242,7 +243,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     let diagnosticTimer:ReturnType<typeof setTimeout>|undefined;
     const diagnose=(reason:string)=>{
       if(!p||!debugId)return;
-      const doc=p.iframeElement?.contentDocument,win=doc?.defaultView as (Window&{__renderReady?:boolean;__player?:{isPlaying?():boolean;getTime?():number;getDuration?():number};__timelines?:{revline?:{time():number;paused():boolean;duration():number}};gsap?:{ticker:{time:number}}})|null;
+      const doc=p.iframeElement?.contentDocument,win=doc?.defaultView as CompositionWindow|null;
       const media=Array.from(doc?.querySelectorAll<HTMLMediaElement>('video,audio')??[]);
       let runtime: {runtimePlaying?:boolean;runtimeTime?:number;runtimeDuration?:number;runtimeReadError?:boolean}={};
       try { const bridge=win?.__player;runtime={...(typeof bridge?.isPlaying==='function'?{runtimePlaying:bridge.isPlaying()}:{}),...(typeof bridge?.getTime==='function'?{runtimeTime:bridge.getTime()}:{}),...(typeof bridge?.getDuration==='function'?{runtimeDuration:bridge.getDuration()}: {})}; } catch { runtime={runtimeReadError:true}; }
@@ -276,7 +277,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
           const doc=p.iframeElement?.contentDocument;if(!doc)return;
           await loadPreviewRemotion(doc,current);
           if(cancelled)return;
-          updateLiveMediaContent(doc,stagedTimeline,current,prepared);updateLiveTextEffects(doc,stagedTimeline,current);updateLiveVisualEffects(doc,stagedTimeline,current);updateLiveVisualGeometry(doc,stagedTimeline,current,prepared);updateLiveScenes(doc,stagedTimeline,current);updateLiveAdjustmentEffects(doc,stagedTimeline,current);stagedTimeline=current;
+          updateLivePreview(doc,stagedTimeline,current,prepared,{continueAfterFailure:true});stagedTimeline=current;
           // Seeks while this replacement loads only reach the displayed player.
           const requested=seekRequest.current;
           playbackAssets=prepared;session.update(current,prepared);session.seek(seekPosition.current);updateLayers(p,current);
