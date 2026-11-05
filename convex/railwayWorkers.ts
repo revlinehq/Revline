@@ -4,7 +4,7 @@ import { internal } from './_generated/api';
 import { processorBackend } from './lib/processor_backend';
 import { requireMediaWorker } from './lib/media_task_auth';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
-import { accountLimit } from './lib/account_limits';
+import { workerCapacity } from '../lib/worker-capacity.mjs';
 import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwaySlot, railwayActive, deployRailwaySlot, reapRailwayServices } from '../lib/railway-workers.mjs';
 
 // The existing lock table is a dispatch mutex, independent of the hosting provider.
@@ -83,12 +83,13 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
     await verifyRailwayTarget(target);
     await reapRailwayServices(target);
     if (process.env.RAILWAY_WORKERS_PAUSED === 'true') return null;
-    const processor = await ctx.runQuery(internal.flyProcessor.demand, {});
-    const exports = await ctx.runQuery(internal.flyRender.demand, {});
+    const processor = await ctx.runQuery(internal.queueDemand.processingDemand, {});
+    const exports = await ctx.runQuery(internal.queueDemand.exportDemand, {});
+    const capacity = workerCapacity();
     const pools = [
-      { ids: config.processorServices, max: accountLimit('FLY_PROCESSOR_MAX_MACHINES', 4, 1, 8), image: config.processorImage, enabled: processorBackend() === 'railway', demand: processor },
-      { ids: config.standardServices, max: accountLimit('FLY_RENDER_MAX_STANDARD', 10, 0, 100), image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.standard },
-      { ids: config.ultraServices, max: accountLimit('FLY_RENDER_MAX_ULTRA', 10, 0, 100), image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.ultra },
+      { ids: config.processorServices, max: capacity.processor, image: config.processorImage, enabled: processorBackend() === 'railway', demand: processor },
+      { ids: config.standardServices, max: capacity.standard, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.standard },
+      { ids: config.ultraServices, max: capacity.ultra, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.ultra },
     ];
     const deadline = Date.now() + 5 * 60_000;
     for (const pool of pools) {

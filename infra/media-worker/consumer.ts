@@ -11,8 +11,8 @@ if (!convexUrl || !workerSecret) throw new Error('Configure the production Conve
 const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
 // The Ultra slot claims only Ultra exports; regular slots leave them to it.
 const backend = process.env.MEDIA_PROCESSOR_BACKEND;
-const lane: MediaWorkerOptions['claim'] = { ...(backend === 'fly' || backend === 'railway' ? { processorBackend: backend, lane: 'any' } : {}), ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' } : {}),
-  // Fly export machines claim only exports of their lane.
+const lane: MediaWorkerOptions['claim'] = { ...(backend === 'railway' ? { processorBackend: backend, lane: 'any' } : {}), ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' } : {}),
+  // Dedicated export workers claim only exports of their lane.
   ...(process.env.MEDIA_RENDERS_ONLY === 'true' ? { rendersOnly: true, ...(process.env.RAILWAY_SERVICE_ID ? { renderProvider: 'railway' } : {}) } : {}) };
 // Staying warm after work spares the next export a container and Chromium cold
 // start; idle containers still bill memory/disk, so this stays bounded.

@@ -16,16 +16,14 @@ expect(prod.values.APP_ORIGIN === 'https://tryrevline.com', `production APP_ORIG
 expect(prod.values.MCP_PUBLIC_ORIGIN === 'https://tryrevline.com', `production MCP_PUBLIC_ORIGIN is ${prod.values.MCP_PUBLIC_ORIGIN}`);
 expect(!prod.site.includes(dev.site.split('//')[1]?.split('.')[0] ?? '#'), 'production points at the dev deployment');
 for (const [name, setup] of [['dev', dev], ['production', prod]]) {
-  if (setup.values.RENDER_PROVIDER === 'fly') {
-    for (const key of ['FLY_API_TOKEN', 'MEDIA_WORKER_SECRET_EXPORTS']) expect(setup.secrets[key], `${name}: exports run on Fly but ${key} is missing`);
-    for (const key of ['FLY_RENDER_APP', 'FLY_RENDER_IMAGE']) expect(setup.values[key], `${name}: exports run on Fly but ${key} is missing`);
+  if (setup.values.RENDER_PROVIDER === 'railway') {
+    for (const key of ['RAILWAY_API_TOKEN', 'MEDIA_WORKER_SECRET_EXPORTS']) expect(setup.secrets[key], `${name}: exports run on Railway but ${key} is missing`);
   }
   expect(!setup.secrets.RENDER_WORKER_SECRET_PREVIOUS, `${name}: RENDER_WORKER_SECRET_PREVIOUS is still set; unset it once processor containers have restarted`);
-  expect(setup.values.FLY_DISTRIBUTED_EXPORTS !== 'true' || name === 'dev', `${name}: chunked exports (FLY_DISTRIBUTED_EXPORTS) are on`);
 }
 // A secret set on one deployment but not the other usually means a step was missed. Dev runs the
 // local worker instead of the Cloudflare processor, and alerts and the Clerk webhook are production-only.
-const PRODUCTION_ONLY = new Set(['RENDER_WORKER_SECRET_PREVIOUS', 'MEDIA_PROCESSOR_WAKE_URL', 'DISCORD_WEBHOOK_URL', 'CLERK_WEBHOOK_SIGNING_SECRET']);
+const PRODUCTION_ONLY = new Set(['RENDER_WORKER_SECRET_PREVIOUS', 'MEDIA_PROCESSOR_WAKE_URL', 'RAILWAY_API_TOKEN', 'MEDIA_WORKER_SECRET_EXPORTS', 'DISCORD_WEBHOOK_URL', 'CLERK_WEBHOOK_SIGNING_SECRET']);
 for (const key of Object.keys(prod.secrets)) if (!PRODUCTION_ONLY.has(key) && dev.secrets[key] !== prod.secrets[key]) problems.push(`${key} is ${prod.secrets[key] ? 'set' : 'missing'} on production but ${dev.secrets[key] ? 'set' : 'missing'} on dev`);
 
 const rows = [['setting', 'dev', 'production'], ['site', dev.site, prod.site], ['stripe', dev.stripeMode, prod.stripeMode],

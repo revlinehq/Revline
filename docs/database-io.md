@@ -107,8 +107,8 @@ A throwaway duplicate of the real **Clone 06** project supplied its scene and me
 The worktree ran `npm run dev -- --port 3021`, an isolated local Convex backend on
 3216/3217, and the actual media Worker with a local R2 binding on 8796. Both web and
 worker readiness were observed. Port 3001 and the original clone were untouched.
-No shared backend, media Worker or Fly code was deployed. These are local timings,
-not measurements of Cloudflare network latency or Fly cold starts; some samples
+No shared backend, media Worker or hosted processor code was deployed. These are local timings,
+not measurements of Cloudflare network latency or hosted-worker cold starts; some samples
 overlapped a production build.
 
 | Tool/request | Cold | Repeat | New tasks on repeat |

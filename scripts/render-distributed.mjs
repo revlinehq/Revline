@@ -1,4 +1,4 @@
-// Distributed export on Fly or Railway, built on HyperFrames' distributed primitives:
+// Distributed export on Railway, built on HyperFrames' distributed primitives:
 // plan once here, render chunks in parallel on short-lived containers (this container
 // renders one too), then assemble. Same IPC contract as render-worker.mjs.
 import { spawn } from 'node:child_process';
@@ -8,7 +8,7 @@ import { createConsoleLogger, resolveConfig } from '@hyperframes/producer';
 import { assemble, plan, renderChunk, resolvePlanAudioPath } from '@hyperframes/producer/distributed';
 import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
 import { exists, getFile, putFile, remove } from './render-artifacts.mjs';
-import { flyChunkResources } from '../lib/fly-worker-resources.mjs';
+import { exportChunkResources } from '../lib/export-chunk-resources.mjs';
 import { randomUUID } from 'node:crypto';
 import { launchRailwayChunk, railwayChunkRunning, removeRailwayChunk } from './render-railway-chunks.mjs';
 
@@ -18,17 +18,6 @@ process.on('disconnect', () => controller.abort());
 const report = message => { if (process.connected) process.send(message); };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const log = (event, fields = {}) => console.log(`[Render:trace] ${JSON.stringify({ phase: 'distributed', event, ...fields })}`);
-
-async function fly(method, path, body) {
-  const token = process.env.FLY_API_TOKEN, app = process.env.FLY_APP_NAME;
-  if (!token || !app) throw new Error('Fly API access is not configured on this machine.');
-  const authorization = token.startsWith('FlyV1 ') ? token : `Bearer ${token}`;
-  const response = await fetch(`https://api.machines.dev/v1/apps/${app}${path}`, { method, headers: { authorization, 'content-type': 'application/json' }, ...(body ? { body: JSON.stringify(body) } : {}), signal: AbortSignal.timeout(30_000) });
-  if (response.status === 404) return null;
-  if (!response.ok) throw new Error(`Fly ${method} ${path} failed (${response.status}): ${(await response.text()).slice(0, 200)}`);
-  const text = await response.text();
-  return text ? JSON.parse(text) : null;
-}
 
 function tar(directory, output) {
   return new Promise((accept, reject) => {
@@ -40,14 +29,15 @@ function tar(directory, output) {
 }
 
 const launched = new Set();
-const onRailway = !!process.env.RAILWAY_SERVICE_ID;
+
 let keys = [];
 let scratch = [];
 try {
   const [directory, output, serialized] = process.argv.slice(2);
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality) || !settings.exportId) throw new Error('Invalid distributed render settings.');
-  const { chunkGuest, chunkEnv } = flyChunkResources({ guest: settings.chunkGuest, env: settings.chunkEnv });
+  const { chunkGuest, chunkEnv } = exportChunkResources({ guest: settings.chunkGuest, env: settings.chunkEnv });
+  if (!process.env.RAILWAY_SERVICE_ID) throw new Error('Distributed exports require a Railway worker.');
   const signal = controller.signal;
   const resources = renderResources();
   configureRenderFfmpeg(directory, resources);
@@ -73,8 +63,8 @@ try {
   report({ type: 'progress', progress: 10 });
   const chunkPaths = Array.from({ length: count }, (_, index) => `${directory}-chunk-${index}.mp4`);
   scratch = [planDir, `${planDir}.tar`, ...chunkPaths];
-  const prefix = `exports/${settings.exportId}${onRailway ? `/${randomUUID()}` : ''}`;
-  if (onRailway) log('artifact-prefix', { prefix });
+  const prefix = `exports/${settings.exportId}/${randomUUID()}`;
+  log('artifact-prefix', { prefix });
   const local = count - 1;
   const done = new Set();
   const progress = () => report({ type: 'progress', progress: 10 + Math.round(85 * done.size / count) });
@@ -93,26 +83,12 @@ try {
       const key = `${prefix}/chunk-${index}.mp4`;
       if (!keys.includes(key)) keys.push(key);
       attempts.set(index, (attempts.get(index) ?? 0) + 1);
-      if (onRailway) {
-        signal.throwIfAborted();
-        const id = await launchRailwayChunk({ index, planKey: `${prefix}/plan.tar`, outKey: key, quality: settings.quality, chunkGuest, chunkEnv });
-        machineFor.set(index, id); launched.add(id);
-        return;
-      }
-      const machine = await fly('POST', '/machines', { region: process.env.FLY_REGION || 'iad', config: {
-        image: process.env.FLY_IMAGE_REF, guest: chunkGuest, restart: { policy: 'no' }, auto_destroy: true,
-        metadata: { revline_role: 'chunk', revline_export: settings.exportId },
-        env: { ...chunkEnv, REVLINE_CHUNK_PLAN_KEY: `${prefix}/plan.tar`, REVLINE_CHUNK_INDEX: String(index), REVLINE_CHUNK_OUT_KEY: key, REVLINE_CHUNK_QUALITY: settings.quality },
-      } });
-      machineFor.set(index, machine.id); launched.add(machine.id);
+      signal.throwIfAborted();
+      const id = await launchRailwayChunk({ index, planKey: `${prefix}/plan.tar`, outKey: key, quality: settings.quality, chunkGuest, chunkEnv });
+      machineFor.set(index, id); launched.add(id);
     };
-    if (onRailway) {
-      // Each launch makes several control requests. Avoid a 15-service API burst.
-      for (let index = 0; index < count - 1; index++) await launch(index);
-    } else {
-      const launches = await Promise.allSettled(Array.from({ length: count - 1 }, (_, index) => launch(index)));
-      for (const result of launches) if (result.status === 'rejected') throw result.reason;
-    }
+    // Each launch makes several control requests; avoid an API burst.
+    for (let index = 0; index < count - 1; index++) await launch(index);
     log('chunks-launched', { machines: count - 1, ms: Date.now() - startedAt });
     const deadline = Date.now() + 40 * 60_000;
     while (Array.from({ length: count - 1 }, (_, index) => index).some(index => !done.has(index))) {
@@ -124,11 +100,11 @@ try {
         if (await exists(`${prefix}/chunk-${index}.mp4`, signal)) { done.add(index); progress(); continue; }
         // Railway's control API is rate-limited. Object storage remains the completion signal;
         // query a service's lifecycle at most every five minutes while it is busy.
-        if (onRailway && Date.now() < (nextStatusAt.get(index) ?? 0)) continue;
+        if (Date.now() < (nextStatusAt.get(index) ?? 0)) continue;
         nextStatusAt.set(index, Date.now() + 5 * 60_000);
         // A machine that exited without uploading failed; give its chunk one more machine.
-        const machine = onRailway ? (await railwayChunkRunning(machineFor.get(index)) ? { state: 'started' } : null) : await fly('GET', `/machines/${machineFor.get(index)}`);
-        if (machine && !['stopped', 'destroyed', 'failed'].includes(machine.state)) continue;
+        const running = await railwayChunkRunning(machineFor.get(index));
+        if (running) continue;
         if (await exists(`${prefix}/chunk-${index}.mp4`, signal)) { done.add(index); progress(); continue; }
         if ((attempts.get(index) ?? 0) >= 2) throw new Error(`Export chunk ${index + 1} of ${count} failed twice.`);
         log('chunk-retry', { index });
@@ -148,9 +124,8 @@ try {
   report({ type: 'error', message: error instanceof Error ? error.message.slice(0, 800) : 'The distributed render failed.' });
   process.exitCode = 1;
 } finally {
-  // Chunk machines auto-destroy on exit; stop any still running after a failure.
-  if (onRailway) for (const id of launched) await removeRailwayChunk(id).catch(() => log('chunk-cleanup-pending', { serviceId: id }));
-  else await Promise.all([...launched].map(id => fly('DELETE', `/machines/${id}?force=true`).catch(() => {})));
+  // Remove temporary chunk services after completion or failure.
+  for (const id of launched) await removeRailwayChunk(id).catch(() => log('chunk-cleanup-pending', { serviceId: id }));
   await Promise.all(keys.map(async key => { if (!await remove(key)) log('artifact-cleanup-pending', { key }); }));
   await Promise.all(scratch.map(path => rm(path, { recursive: true, force: true }).catch(() => log('scratch-cleanup-pending', { path }))));
   if (process.connected) process.disconnect();

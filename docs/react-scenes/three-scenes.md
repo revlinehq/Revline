@@ -15,29 +15,6 @@ There is no running R3F clock: `frameloop: 'never'`. Every seek commits React, d
 
 Defaults are fixed across preview and export: DPR 1 (bounded opt-in 0.5–1), antialias off, shadows off, transparent canvas, basic/standard materials. Each layer allows at most 4 lights, 32 materials, 128 draw calls and 200,000 triangles; transmission and clearcoat are rejected. Aim under 30 calls and 50,000 triangles, and keep textures under 2048 px. No postprocessing or interactive controls. The optional renderer is about 1.43 MB raw / 358 KB gzip and is fetched only by scenes using 3D, including their blueprints and transition neighbours. The regular React scene runtime is 233 KB raw / 73 KB gzip.
 
-## Dev export measurements — 2026-11-02
-
-Fly app `revline-render-dev`, image digest `sha256:4cd2cf0087f405b95cc63da0b4e7f26ebdac5046ce44b11a5125f437be674bdc`, 16 performance vCPUs / 32 GB RAM, 8 capture workers, Chromium software GL, 1920×1080, 30 fps, standard quality, 120 frames per scene. Durations come from the worker's `Rendering export started/complete` timestamps. This includes browser initialization, capture and encoding; it excludes Fly queue/image startup, media preparation and upload.
-
-| Scene | Render phase | Seconds/frame | Task including preparation/upload |
-| --- | ---: | ---: | ---: |
-| Representative | 9.388 s | 0.0782 | 10.8 s |
-| Heavy | 33.290 s | 0.2774 | 35.1 s |
-
-The heavy job waited about 34 seconds for the new image/machine before its task began. The representative job waited about 69 seconds, including that startup and the heavy job ahead of it. These short clips emphasize fixed startup cost; timings are observations, not an export SLA.
-
-Final verification used image `sha256:920f3c96645bc3c3ffec539ebfb132b6d7c257ac03d45b7422569ca4eb416da2`, after rebasing on the latest main and fixing project-model media resolution. Three exports were submitted together to fresh dev machines with the same 16-vCPU/32-GB/8-worker software-GL profile. All three downloaded MP4s contain exactly 120 frames at 1920×1080 / 30 fps.
-
-| Final scene | Render phase | Seconds/frame | Task including preparation/upload |
-| --- | ---: | ---: | ---: |
-| Representative | 34.533 s | 0.2878 | 36.5 s |
-| Heavy | 34.505 s | 0.2875 | 36.6 s |
-| Project GLB animation + extruded text + HTML | 27.424 s | 0.2285 | 29.4 s |
-
-The final jobs waited roughly 73–84 seconds before rendering while Fly refreshed and started the new image. Short-clip browser initialization and concurrent cold starts dominate this round; the first sequential run above shows the warm-machine observation separately. Across measured runs, the representative scene took 0.078–0.288 s/frame and the heavier one 0.277–0.288 s/frame. The model/text scene also passed the actual getFrames handler (captureTimelineFrames), returning all three requested frames, and its exported middle frame was inspected at full resolution.
-
-Verification used `npm ci`, `npm run typecheck`, `npm run build`, headless Chromium against localhost:3008, the existing composition frame-capture engine at full 1080p, repeated/backward/direct-middle seeks, Beat unmount/remount, embedded animation, malformed-resource rejection, and real dev Fly exports. No test files or workers were added; existing media workers were left running.
-
 ## Review assets and licenses
 
 The sculpture GLB in the isolated dev review project is an original generated octahedron with an original rotation animation, with no third-party model assets. The source examples use only Three.js primitives. Helvetiker Regular is used only by the model/text review scene via [Three.js's typeface JSON](https://threejs.org/examples/fonts/helvetiker_regular.typeface.json). Its embedded metadata credits MAGENTA Ltd. (2004) and carries the MgOpen font permission notice: use/copy/distribution permitted with the copyright and permission notice, restrictions on the MgOpen name for modifications, and no standalone font resale. No font file is committed; the downloaded JSON retains that notice. The development deployment has no `asset-library` skill (its readSkill catalog rejected that name).

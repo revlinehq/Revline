@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Worker hosting: Remove Fly controllers, deployment scripts and rendering branches; keep shared queue demand and capacity limits independent of the host. Why: production now runs on Railway.
+
 - Repository: Remove unused design source and preview images and ignore local design drafts. Why: the user requested excluding design working files from the public source.
 - Worker hosting: Verify standard and Ultra jobs before promoting single-worker Railway exports; require remote chunk proof only when enabled. Why: Hobby repository builds must not depend on private registry support.
 

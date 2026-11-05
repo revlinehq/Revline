@@ -18,8 +18,8 @@ export type MediaWorkerOptions = {
   convexUrl: string;
   workerSecret: string;
   slots: number;
-  /** Which tasks this worker claims: an export lane, or Fly's exports only. */
-  claim: { projectId?: import('../../convex/_generated/dataModel').Id<'projects'>; lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'fly' | 'railway' | 'cloudflare' | 'local'; renderProvider?: 'fly' | 'railway'; excludedKinds?: import('../../convex/mediaTasks').MediaWorkItem['kind'][] };
+  /** Which tasks this worker claims: an export lane, or dedicated exports only. */
+  claim: { projectId?: import('../../convex/_generated/dataModel').Id<'projects'>; lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'railway' | 'cloudflare' | 'local'; renderProvider?: 'railway'; excludedKinds?: import('../../convex/mediaTasks').MediaWorkItem['kind'][] };
   deadlineMs: number;
   signal: AbortSignal;
   /** A draining worker finishes its current tasks and claims no more. */

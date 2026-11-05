@@ -6,7 +6,6 @@
     "skills:bundle": "node scripts/bundle-editor-skills.mjs",
     "skills:check": "node scripts/bundle-editor-skills.mjs --check",
     "pretypecheck": "npm run skills:check",
-    "deploy:production": "node scripts/deploy-production.mjs",
     "predev": "node scripts/copy-vendor.mjs",
     "dev": "node scripts/dev.mjs",
     "dev:isolated": "node scripts/isolated-dev.mjs",
@@ -29,7 +28,6 @@
     "deploy:frontend": "node scripts/cloudflare-frontend.mjs deploy",
     "check:setup": "node scripts/check-setup.mjs",
     "deploy:frontend:ci": "npm run build:cloudflare && wrangler deploy --config dist/server/wrangler.json",
-    "deploy:fly-exports": "node scripts/deploy-fly-exports.mjs",
     "agent-runner:install": "npm ci --prefix cloudflare/agent-runner --legacy-peer-deps --no-audit --no-fund",
     "typecheck:agent-runner": "tsc -p cloudflare/agent-runner/tsconfig.json",
     "deploy:agent-runner": "npm run agent-runner:install && npm run typecheck:agent-runner && wrangler deploy --config cloudflare/agent-runner/wrangler.jsonc",
@@ -38,7 +36,6 @@
     "incidents:listen": "node --import tsx scripts/incident-listener/index.ts",
     "incidents:install": "node --import tsx scripts/incident-listener/install.ts",
     "incidents:fix": "node scripts/fix-save-incidents.mjs",
-    "deploy:fly-processor": "node scripts/deploy-fly-processor.mjs",
     "typecheck:processor-edge": "tsc -p infra/media-worker/edge/tsconfig.json"
   },
   "dependencies": {

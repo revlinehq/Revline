@@ -38,7 +38,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   if(args.burnCaptions === false) snapshot = {...snapshot, clips: snapshot.clips.filter(clip => clip.kind !== 'caption')};
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
-  // With Fly, seats bound concurrent renders; beyond them exports wait in a longer queue.
+  // With hosted exports, seats bound concurrent renders; beyond them exports wait in a longer queue.
   const limit = hostedRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   // The indexed reads and insert share one transaction, so separate projects
   // cannot race past the account's outstanding-work limit.
@@ -48,7 +48,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   for (const assetId of [...timeline.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.normalizedAudio ? [clip.normalizedAudio.assetId] : []]), ...sceneMediaAssetIds(timeline),...timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
-  // Ultra exports take the Ultra lane: the large Fly machines, or the 4-vCPU Cloudflare slot.
+  // Ultra exports take the Ultra lane: dedicated Ultra export workers.
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...((timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio))?{requiredProcessorVersion:MEDIA_PROCESSOR_VERSION}:{}), ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;

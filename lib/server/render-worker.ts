@@ -8,7 +8,7 @@ export type ReviewCaptureSettings={width:number;height:number;fps:number;times:n
 export function runRenderWorker(directory: string, output: string, settings: Settings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
   return runRendererProcess('render-worker.mjs',[directory,output,JSON.stringify(settings)],onProgress,signal);
 }
-/** Fly export machines: plan here, render chunks on parallel machines, assemble (render-distributed.mjs). */
+/** dedicated export workers: plan here, render chunks on parallel machines, assemble (render-distributed.mjs). */
 export type DistributedSettings = Settings & { width: number; height: number; exportId: string; maxChunks: number; chunkGuest: { cpu_kind: string; cpus: number; memory_mb: number }; chunkEnv: Record<string, string> };
 export function runDistributedRender(directory: string, output: string, settings: DistributedSettings, onProgress: (render: { progress: number }) => void, signal: AbortSignal): Promise<{ warnings: number }> {
   return runRendererProcess('render-distributed.mjs',[directory,output,JSON.stringify(settings)],onProgress,signal);

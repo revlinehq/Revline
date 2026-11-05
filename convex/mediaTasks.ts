@@ -222,7 +222,7 @@ export const prepareAttempt = internalMutation({ args: { taskId: v.id('mediaTask
   }
   await patchMediaTask(ctx, task, { status: 'queued', claimable:true, attempt: args.attempt, progress:['import','preview','extract','waveform','transcribe'].includes(task.kind)?task.progress:0,activity:undefined,activityStartedAt:undefined,leaseToken: undefined, leaseExpiresAt: undefined, attemptStartedAt: undefined, updatedAt: Date.now() });
   // Wake only after this attempt is claimable, including retries after backoff.
-  if (task.kind === 'render' && hostedRendersEnabled()) { await ctx.scheduler.runAfter(0, globalThis.process.env.RENDER_PROVIDER === 'railway' ? internal.railwayWorkers.dispatch : internal.flyRender.dispatch, {}); return true; }
+  if (task.kind === 'render' && hostedRendersEnabled()) { await ctx.scheduler.runAfter(0, internal.railwayWorkers.dispatch, {}); return true; }
   await ctx.scheduler.runAfter(0, internal.mediaProcessor.wake, {});
   // Each Ultra attempt gets the 4-vCPU slot first, then any slot.
   if (task.lane === 'ultra') await ctx.scheduler.runAfter(ULTRA_FALLBACK_MS, internal.mediaTasks.releaseUltraLane, { taskId: task._id, attempt: args.attempt });
@@ -243,7 +243,7 @@ async function signalResult(ctx: MutationCtx, task: Doc<'mediaTasks'>, value: In
 }
 /** A finished or failed export frees one of its owner's seats; let a waiting export take it. */
 async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
-  if (task.kind === 'render' && hostedRendersEnabled()) await ctx.scheduler.runAfter(0, globalThis.process.env.RENDER_PROVIDER === 'railway' ? internal.railwayWorkers.dispatch : internal.flyRender.dispatch, {});
+  if (task.kind === 'render' && hostedRendersEnabled()) await ctx.scheduler.runAfter(0, internal.railwayWorkers.dispatch, {});
 }
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
   retryable = retryable && !isMediaDiskFull(error) && task.attempt < MAX_ATTEMPTS;
@@ -442,15 +442,15 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
 }
 async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:'ultra'|'any',rendersOnly=false,excludedKinds:Doc<'mediaTasks'>['kind'][]=[],projectId?:Id<'projects'>) {
   const versioned=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>q.and(q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)),...excludedKinds.map(kind=>q.neq(q.field('kind'),kind)),...(projectId?[q.eq(q.field('projectId'),projectId)]:[]));
-  // Fly export machines take only their lane's exports, within each owner's seats.
+  // Hosted export workers take only their lane's exports, within each owner's seats.
   if(rendersOnly)return (await seatedRenders(ctx,lane==='ultra'?'ultra':undefined,versioned))[0]??null;
-  // With Fly exports, the regular processors leave every export to Fly.
-  const fly=hostedRendersEnabled();
+  // With dedicated exports, regular processors leave rendering to the export workers.
+  const separateExports=hostedRendersEnabled();
   // The Ultra slot only runs Ultra exports; regular slots leave them to it unless they wait too long.
-  if(lane==='ultra')return fly?null:fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
+  if(lane==='ultra')return separateExports?null:fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
-  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return fly?q.and(base,q.neq(q.field('kind'),'render')):base;};
+  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return separateExports?q.and(base,q.neq(q.field('kind'),'render')):base;};
   // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
   for(const kind of ['preview','read','snapshot','blueprint'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
@@ -459,12 +459,12 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
     const quick=await fairest(ctx,rows);if(quick)return quick;
   }
   // Exports are interactive; claim them before long queued analysis work.
-  const renders=fly?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
+  const renders=separateExports?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);
   const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
   if (indexed) return indexed;
-  const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(fly?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(separateExports?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
   return legacy ? fairest(ctx, [legacy]) : null;
 }
 export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
@@ -485,9 +485,9 @@ export const processorContract = query({ args: { workerSecret: v.string() }, ret
   return { processorVersion: MEDIA_PROCESSOR_VERSION };
 } });
 
-export const ready = query({ args: { projectId:v.optional(v.id('projects')),workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),renderProvider:v.optional(v.union(v.literal('fly'),v.literal('railway'))),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('railway'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
+export const ready = query({ args: { projectId:v.optional(v.id('projects')),workerSecret: v.string(),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),renderProvider:v.optional(v.literal('railway')),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('railway'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.string(), handler: async (ctx, args) => {
   const role=requireMediaWorker(args.workerSecret);
-  if ((role === 'exports' || args.rendersOnly) && (args.renderProvider ?? 'fly') !== globalThis.process.env.RENDER_PROVIDER) return '';
+  if ((role === 'exports' || args.rendersOnly) && (args.renderProvider !== 'railway' || globalThis.process.env.RENDER_PROVIDER !== 'railway')) return '';
   if ((args.processorBackend === 'railway' || args.renderProvider === 'railway') && globalThis.process.env.RAILWAY_WORKERS_PAUSED === 'true') return '';
   const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
   if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return '';
@@ -583,9 +583,9 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
-export const claim = mutation({ args: { projectId:v.optional(v.id('projects')),workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),renderProvider:v.optional(v.union(v.literal('fly'),v.literal('railway'))),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('fly'),v.literal('railway'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
+export const claim = mutation({ args: { projectId:v.optional(v.id('projects')),workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),renderProvider:v.optional(v.literal('railway')),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('railway'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
-  if ((role === 'exports' || args.rendersOnly) && (args.renderProvider ?? 'fly') !== globalThis.process.env.RENDER_PROVIDER) return null;
+  if ((role === 'exports' || args.rendersOnly) && (args.renderProvider !== 'railway' || globalThis.process.env.RENDER_PROVIDER !== 'railway')) return null;
   if ((args.processorBackend === 'railway' || args.renderProvider === 'railway') && globalThis.process.env.RAILWAY_WORKERS_PAUSED === 'true') return null;
   const local=(args.processorBackend??(args.lane==='any'?'local':'cloudflare'))==='local';
   if(local&&((args.processorVersion??1)<37||args.excludedKinds===undefined))return null;
