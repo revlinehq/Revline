@@ -38,7 +38,7 @@ Railway serverless sleep uses network inactivity. Convex subscriptions send outb
 | Processor image | `ghcr.io/zurahq/revline-processor-dev@sha256:…` | `ghcr.io/zurahq/revline-processor@sha256:…` |
 | Export image | `ghcr.io/zurahq/revline-exports-dev@sha256:…` | `ghcr.io/zurahq/revline-exports@sha256:…` |
 | Service namespace | `revline-dev-*` | `revline-production-*` |
-| Temporary namespace | `revline-temp-dev-<timestamp>-*` | `revline-temp-production-<timestamp>-*` |
+| Temporary namespace | `rv-t-dev-<timestamp>-*` | `rv-t-production-<timestamp>-*` |
 
 Use separate Railway project/environment IDs, service IDs and project tokens for DEV and production. `RAILWAY_API_TOKEN` must be an environment-scoped project token, sent as `Project-Access-Token`; no account-token fallback exists. `projectToken` readback must match both manifest IDs. Never copy credentials from another machine/environment. The operator supplies existing credentials through the selected env file after approval.
 
@@ -122,7 +122,7 @@ Resume requires the exact staged manifest/token. Rollback sets the Railway pause
 
 Distributed parents render one local chunk and create at most 15 remote chunk services (16 total), each capped at 4 CPUs/8192 MiB. Launches are sequential control operations to limit API bursts; rendering is concurrent. The existing plan/chunk storage protocol and assembler stay unchanged. Each attempt has a unique `exports/<taskId>/<uuid>` prefix, avoiding reuse of a cancelled attempt's artifacts. Object existence signals completion; lifecycle is checked at most every five minutes per remote chunk. A chunk that exits without output gets one retry. A remote chunk process has a 35-minute hard timeout; parents wait at most 40 minutes for remote output, within their 45-minute task deadline.
 
-Normal completion, failure and cancellation delete launched chunk services and attempt objects in `finally`. Hard termination or a lost create acknowledgement can bypass cleanup. The Convex cron and `reap` sweep only this environment's timestamped `revline-temp-*` chunk/preflight services older than 55 minutes, including interrupted creates; permanent slots are excluded. Service enumeration is paginated. Cleanup failures are logged and retried by that sweep. If the Railway token is revoked, restore its environment-scoped access before reaping.
+Normal completion, failure and cancellation delete launched chunk services and attempt objects in `finally`. Hard termination or a lost create acknowledgement can bypass cleanup. The Convex cron and `reap` sweep only this environment's timestamped `rv-t-*` chunk/preflight services older than 55 minutes, including interrupted creates; permanent slots are excluded. Service enumeration is paginated. Cleanup failures are logged and retried by that sweep. If the Railway token is revoked, restore its environment-scoped access before reaping.
 
 Object storage has no automatic lifecycle change in this migration. Hard-killed parent attempts can leave private artifact objects; recover the exact prefix from `artifact-prefix` / `artifact-cleanup-pending` logs, pause all slots, and run:
 
@@ -170,3 +170,5 @@ node scripts/railway-workers.mjs preflight --environment production --config .da
 ```
 
 Check both UUIDs in CLI status. The deployment commands independently verify the environment-scoped project token against both manifest IDs. The private operator env file is ignored by Git and mode 0600. CLI login alone does not bypass queue-stage/cutover gates. After migration, use the existing main release for image updates, draining and contract ordering; avoid bare `railway up` or redeploying an active consumer.
+
+Authenticated resource check: temporary service `28cb2f32-6b97-4fd2-b684-4317dc2dc12f` accepted 4 CPUs / 8 GB and returned nested `containers` limits of 4 CPUs / 8,000,000,000 bytes. The empty service was deleted afterward. Temporary names use `rv-t-p-<timestamp>-<suffix>` for production and `rv-t-d-<timestamp>-<suffix>` for DEV.

@@ -7,7 +7,7 @@ export async function launchRailwayChunk({ index, planKey, outKey, quality, chun
   if (chunkGuest.cpus !== 4 || chunkGuest.memory_mb !== 8192) throw new Error('Railway chunks use exactly 4 CPUs / 8192 MiB.');
   const selected = target();
   await verifyRailwayTarget(selected);
-  const name = `revline-temp-${selected.config.environment}-${Date.now()}-chunk-${randomUUID()}`;
+  const name = `rv-t-${selected.config.environment === 'production' ? 'p' : 'd'}-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const serviceId = await createRailwayService({ ...selected, name });
   try {
     await configureRailwaySlot({ ...selected, serviceId, image: selected.config.exportsImage, variables: {

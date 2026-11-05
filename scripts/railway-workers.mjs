@@ -118,7 +118,7 @@ async function waitStopped() {
 
 async function preflight(kind) {
   const image = kind === 'processor' ? config.processorImage : config.exportsImage;
-  const serviceId = await createRailwayService({ ...target(), name: `revline-temp-${config.environment}-${Date.now()}-preflight-${randomUUID()}` });
+  const serviceId = await createRailwayService({ ...target(), name: `rv-t-${config.environment === 'production' ? 'p' : 'd'}-${Date.now()}-${randomUUID().slice(0, 8)}` });
   try {
     await configureRailwaySlot({ ...target(), serviceId, image, variables: {
       ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
