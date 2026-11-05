@@ -4,7 +4,7 @@
 
 The primary workflow owns the deliverable and completion checks. `/clip` and an explicit style pin it for the request. `discoverCapabilities(query)` returns at most five matching workflow/skill descriptions. `loadCapability(name)` adds supporting tools and a small skill index; `readSkill(name, page?)` loads one body/page and its tools. Neither changes the primary workflow, task ID, failure budget, clipping ledger or user decisions. Capabilities persist on the owner-checked task across continuations and MCP calls.
 
-The app exposes shared tools plus primary and loaded supporting tools on each step. MCP tools/list uses the current authenticated connection's task; refresh after startTask, setLane or loading support. Loading responses also return relevant tool schemas for clients with cached catalogs. Execution still checks the exact task and target. Tool schemas, specialized catalogs and full skill text are not all injected eagerly.
+The app exposes shared tools plus primary and loaded supporting tools on each step. MCP tools/list returns the full, stable catalog for the whole session, so clients that never re-fetch it (Codex ignores `notifications/tools/list_changed`) still see every tool. Each call enforces owner, task, lane and capability: a lane or capability tool called before its lane is chosen or its capability is loaded returns the exact `loadCapability` step to take. Full skill text is not injected eagerly.
 
 ## Check levels
 

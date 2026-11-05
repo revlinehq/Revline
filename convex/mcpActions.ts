@@ -1,7 +1,7 @@
 "use node";
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
-import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools } from '../lib/ai/lanes';
+import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilities } from '../lib/ai/lanes';
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
 import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
@@ -82,8 +82,9 @@ const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
 export const listTools = internalAction({ args: {}, returns: v.array(v.object({ name: v.string(), description: v.string(), inputSchema: v.any() })), handler: async (ctx): Promise<{ name: string; description: string; inputSchema: unknown }[]> => {
   const options = catalogOptions();
   const { tools } = editorTools(ctx, options);
+  // The catalog is the same for every session. A tag names what enables the tool; calls enforce it.
   const description = (name: string, text: string) => {
-    return `${laneToolAllowed('edit', name) ? '[Shared editing]' : '[Optional capability]'} ${text}`;
+    return `${laneToolAllowed('edit', name) ? '[Shared editing]' : `[Needs: ${toolCapabilities(name).slice(0, 3).join(' | ')}]`} ${text}`;
   };
   return [
     ...Object.entries(PROJECT_TOOLS).map(([name, tool]) => {
@@ -94,18 +95,6 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
     ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => ({ name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
   ];
 }});
-
-export const availableTools = internalAction({
-  args: { ownerId: v.string(), connectionId: v.optional(v.string()) },
-  returns: v.array(v.string()),
-  handler: async (ctx, args): Promise<string[]> => {
-    if (!args.connectionId) return laneToolNames('edit');
-    const session = await ctx.runQuery(internal.lanes.mcpSession, args) as Doc<'mcpLaneSessions'> | null;
-    if (!session) return laneToolNames('edit');
-    const task = await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask | null;
-    return laneToolNames(task?.lane ?? session.lane, task?.capabilities);
-  },
-});
 
 const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
 type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[] };
@@ -163,7 +152,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
-    return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:true,checkLevel,instructions:LANES[selection.lane].instructions,checks:checkInstructions(selection.lane,checkLevel),next:'Shared editing tools are ready. Style selection is optional. Discover and load only needed supporting capabilities, then refresh tools/list. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
+    return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,checkLevel,instructions:LANES[selection.lane].instructions,checks:checkInstructions(selection.lane,checkLevel),next:'Shared editing tools are ready. Style selection is optional. tools/list already holds every tool; load only the supporting capabilities you need, and a [Needs: …] tool runs once its lane or capability is loaded. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
   }
   if(args.name==='setLane'){
     if(!session)return result('Call startTask with projectId, timelineId and the user request first.',true);
@@ -173,7 +162,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,laneChosen:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
     const checkLevel=taskCheckLevel(task);
-    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,checkLevel,checks:checkInstructions(parsed.data.lane,checkLevel),toolsChanged:true,next:'Refresh tools/list. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
+    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,checkLevel,checks:checkInstructions(parsed.data.lane,checkLevel),next:'The lane’s tools now run; tools/list is unchanged. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
   }
   if(args.name==='exportVideo'){
     // A paid export never rests on an inferred task: a sessionless call names the task the user confirmed it in.
@@ -218,10 +207,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
       if (frames.success) await ctx.runMutation(internal.lanes.reviewFrames, { ownerId: args.ownerId, projectId: session.projectId, taskId: session.taskId, timelineId: input.timelineId, revision: frames.data.revision, times: frames.data.frames.map(frame => frame.time) });
     }
     if (!output.isError && ['loadCapability','readSkill'].includes(args.name) && typeof input.name === 'string') {
-      const catalog = await ctx.runAction(internal.mcpActions.listTools, {});
-      const names = capabilityTools(input.name);
       const loaded = z.record(z.string(), z.unknown()).parse(JSON.parse(output.text));
-      return result({ ...loaded, toolsChanged: true, tools: catalog.filter(tool => names.includes(tool.name)), next: 'Refresh tools/list for loaded tools. Cached clients may use the returned schemas directly. The primary task and its completion checks are unchanged.' });
+      return result({ ...loaded, tools: capabilityTools(input.name), next: 'These tools are already in tools/list and now run for this task. The primary task and its completion checks are unchanged.' });
     }
     return output;
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
