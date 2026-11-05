@@ -1,4 +1,5 @@
 import {
+  SPEAKER_ANALYSIS_VERSION,
   speakerFocus,
   type SpeakerAnalysis,
   type SpeakerFraming,
@@ -152,7 +153,7 @@ export function matchSpeakingFaces(
   detection: ShotDetection,
   turns: Turn[],
   duration: number,
-): Extract<SpeakerAnalysis, { version: 2 }> {
+): Extract<SpeakerAnalysis, { version: typeof SPEAKER_ANALYSIS_VERSION }> {
   const observations = trackIdentities(evidence, detection.shots);
   const shotEvidence = detection.shots.map((bounds, shot) => {
     const samples = evidence.samples.filter(
@@ -406,7 +407,7 @@ export function matchSpeakingFaces(
       speaker: null,
     });
   return {
-    version: 2,
+    version: SPEAKER_ANALYSIS_VERSION,
     start: 0,
     end: duration,
     identityScope: "window",
