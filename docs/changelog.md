@@ -1,6 +1,6 @@
 ## 2026-11-04
 
-- Security: Add Apache 2.0 notices, contributor and vulnerability reporting guidance, credential scanning and patched dependencies. Why: the user requested open-source publication readiness.
+- Security: Add Apache 2.0 notices, contributor and vulnerability reporting guidance, local credential scanning and patched dependencies. Why: the user requested open-source publication readiness.
 
 - Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
 

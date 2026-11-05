@@ -71,7 +71,7 @@ Deployment roles and credentials are separate. Use your own infrastructure and e
 
 ## Security
 
-Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not include credentials, signed URLs, private media or raw production logs in issues. Dependency audits and redacted Git-history scans run in the security workflow.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not include credentials, signed URLs, private media or raw production logs in issues. Run dependency audits and redacted Git-history scans locally as described in SECURITY.md. GitHub Actions workflows are disabled; use manual deployment.
 
 ## License and assets
 

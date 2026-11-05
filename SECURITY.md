@@ -18,3 +18,19 @@ Security fixes target the current main branch. Older revisions are not maintaine
 - Repository builds, media workers and scene execution require an appropriate isolated runtime. Do not expose a development server, privileged worker, Docker socket or deployment token to untrusted users.
 
 Automated scans reduce risk but cannot prove that software has no vulnerabilities. Review deployment permissions, authentication, ownership checks and dependency advisories before operating a public instance.
+
+## Local security checks
+
+GitHub Actions is disabled for this repository. Before publishing changes, run:
+
+```sh
+npm audit --omit=dev --audit-level=moderate
+npm audit --prefix cloudflare/agent-runner --omit=dev --audit-level=moderate
+gitleaks git --redact=100 --no-banner --log-opts="--remotes=origin --tags"
+npm run typecheck
+npm run build
+```
+
+Install Gitleaks from its official release before using the scan command. Fetch the refs being published first. Review exact historical false-positive exceptions rather than disabling secret rules. Keep scan reports private.
+
+Deploy manually through the repository's release scripts from the authorized checkout and intended environment. Never run simultaneous manual and automated releases. An existing release must finish and release its lock before another starts.
