@@ -154,3 +154,19 @@ Official documentation checked 2026-11-04:
 `build` and `preflight` accept a clean checkout at the exact published open PR #82 head, checked through GitHub. All other apply commands retain the primary-main gate. Use the existing production project `759ce3c9-db81-4ade-ae3b-2c21070f7442` and environment `b81548ce-f856-433b-a3aa-80f51d06ddd8`; do not create replacements.
 
 Run `preflight --environment production --config .data/railway/production.json --env-file .data/railway/production.env --kind all --apply` after building pinned images. The separate env file must declare the exact production Convex selector and URL plus the Railway environment-scoped project token. This command never invokes Convex, reads backend credentials, connects a queue, writes a cutover receipt or changes routing. It creates one temporary service at a time, enforces existing CPU/memory limits, validates the real runtime and deletes each service in `finally`. A successful preflight does not authorize cutover: full authenticated queue staging and its receipt still require the deployed matching contract through the normal main release.
+
+## Mac CLI access
+
+Railway CLI 5.71.0 was installed with `brew install railway` and authenticated using `railway login --browserless`, authorizing the displayed activation link in the already signed-in browser. `railway whoami` confirmed the existing account. Login persists in Railway's private CLI configuration; no account API key or browser cookie extraction is used.
+
+Before operating, run:
+
+```sh
+railway whoami
+railway link --project 759ce3c9-db81-4ade-ae3b-2c21070f7442 --environment b81548ce-f856-433b-a3aa-80f51d06ddd8
+railway status --json
+node scripts/railway-workers.mjs build --environment production --config .data/railway/production.json --kind all --apply
+node scripts/railway-workers.mjs preflight --environment production --config .data/railway/production.json --env-file .data/railway/production.env --kind all --apply
+```
+
+Check both UUIDs in CLI status. The deployment commands independently verify the environment-scoped project token against both manifest IDs. The private operator env file is ignored by Git and mode 0600. CLI login alone does not bypass queue-stage/cutover gates. After migration, use the existing main release for image updates, draining and contract ordering; avoid bare `railway up` or redeploying an active consumer.
