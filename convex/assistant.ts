@@ -46,17 +46,15 @@ import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
-import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
 import { sceneCodeSource } from '../lib/editor/scene-code-edits';
 import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
-const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel('gpt-6.1-terra')), 'medium');
-const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
+const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(FREE_EDITOR_MODEL_CHOICE)), 'medium');
 function configured(paidModelAccess = true) {
   try{assertEditorModelConfigured(paidModelAccess ? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
 }
@@ -84,7 +82,7 @@ async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const catalogModels = [...allowedClaudeModelChoices()];
   const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
-  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: ['gpt-6.1-terra'] satisfies ClaudeModelChoice[], defaultModelChoice: 'gpt-6.1-terra' as const, defaultReasoningEffort: 'low' as const };
+  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
   const choices = editorModelChoices();
   return {
@@ -125,7 +123,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task&&(task.activity||task.kind==='transcribe')?mediaTaskActivityLabel(task):labels[active.mode]:editing?'Applying edits…':null;
   const externalAgents=await projectWorkingAgents(ctx,ownerId,project._id), latestAgent=externalAgents[0];
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
@@ -148,7 +146,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const mobile = args.clientPlatform === 'ios';
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
-  if (mobile && (args.modelChoice !== 'gpt-6.1-terra' || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
+  if (mobile && (args.modelChoice !== FREE_EDITOR_MODEL_CHOICE || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
   if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(args.modelChoice)) throw new ConvexError('This AI model is not available.');
   let pinnedModel;
@@ -166,7 +164,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if (args.selectedClipIds.some(id => !clipIds.has(id))) throw new ConvexError("Selected clips must belong to this project");
   }
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
-  if (!mobile && !configured(paidModelAccess)) throw new ConvexError(providerReason);
+  if (!mobile && !configured(paidModelAccess)) throw new ConvexError(EDITOR_PROVIDER_REASON);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
   let command: ReturnType<typeof parseEditorCommand>;
   try { command = parseEditorCommand(prompt); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid command.'); }
