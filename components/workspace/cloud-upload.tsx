@@ -16,7 +16,7 @@ import { PrimaryButton } from './primary-button';
 type UploadState = {kind:'waiting'} | {kind:'reading'} | {kind:'uploading';percent:number} | {kind:'saving'} | {kind:'done'} | {kind:'failed';message:string} | {kind:'cancelled'};
 type UploadRow = {name:string;size:number;state:UploadState};
 function displayName(name:string){return name.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}__/i,'');}
-function bytes(value:number){return value>=1_000_000_000?`${(value/1_000_000_000).toFixed(1)} GB`:`${Math.max(1,Math.round(value/1_000_000))} MB`;}
+function bytes(value:number){if(value===0)return '0 MB';if(value<1_000_000)return `${Math.max(1,Math.round(value/1_000))} KB`;return value>=1_000_000_000?`${(value/1_000_000_000).toFixed(1)} GB`:`${Math.max(1,Math.round(value/1_000_000))} MB`;}
 
 function label(state:UploadState) {
   switch(state.kind){
