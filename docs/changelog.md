@@ -5,6 +5,7 @@
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
+- Motion design: Carry visual anchors across scenes and choose restrained motion for each action. Why: the user's continuity guidance conflicted with blanket overshoot and anticipation rules in the agent skill.
 
 ## 2026-11-04
 - Incident delivery: Route agent reports to durable, deduplicated GitHub Issues with bounded leases and explicit backlog delivery. Why: the user needs saved reports surfaced without launching fix agents.
