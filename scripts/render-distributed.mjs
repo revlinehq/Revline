@@ -6,7 +6,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createConsoleLogger, resolveConfig } from '@hyperframes/producer';
 import { assemble, plan, renderChunk, resolvePlanAudioPath } from '@hyperframes/producer/distributed';
-import { RENDER_X264, configureRenderFfmpeg, renderResources } from '../lib/render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, configureRenderX264, renderResources } from '../lib/render-resources.mjs';
 import { exists, getFile, putFile, remove } from './render-artifacts.mjs';
 import { exportChunkResources } from '../lib/export-chunk-resources.mjs';
 import { randomUUID } from 'node:crypto';
@@ -41,9 +41,7 @@ try {
   const signal = controller.signal;
   const resources = renderResources();
   configureRenderFfmpeg(directory, resources);
-  const x264 = RENDER_X264[settings.quality];
-  if (x264.preset !== x264.producerPreset) process.env.REVLINE_RENDER_X264_PRESET = `${x264.producerPreset}=${x264.preset}`;
-  if (x264.crf !== x264.producerCrf) process.env.REVLINE_RENDER_X264_CRF = `${x264.producerCrf}=${x264.crf}`;
+  configureRenderX264(RENDER_X264[settings.quality]);
   const logger = createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error');
   // BeginFrame capture (see render-worker.mjs); the plan locks this config for every chunk.
   const producerConfig = resolveConfig({ concurrency: resources.workers, frameDataUriCacheBytesLimitMb: 128, forceScreenshot: process.env.PRODUCER_FORCE_SCREENSHOT === 'true' });
