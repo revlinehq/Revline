@@ -362,17 +362,17 @@ export async function importVideoLink(
         )
       )
         throw new AnalysisError(
-          "YouTube blocked this download. Use a public MP4 link or upload the video file instead.",
+          "The video provider blocked this download. Use a public MP4 link or upload the video file instead.",
           400,
         );
       if ((error as NodeJS.ErrnoException).code === "ENOENT")
         throw new AnalysisError(
-          "YouTube import is unavailable on this media worker. Install yt-dlp first.",
+          "Video-link import is unavailable on this media worker. Install yt-dlp first.",
           503,
         );
       if (/requested format.*not available|no video formats|unsupported url/i.test(stderr))throw new AnalysisError('This link has no downloadable video format.',422);
       throw new AnalysisError(
-        `YouTube download failed: ${
+        `Video-link download failed: ${
           stderr
             .replace(/https?:\/\/\S+/g, "[video URL]")
             .trim()

@@ -672,7 +672,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const guardRender = async (baseline: Timeline, candidate: Timeline, times: number[]) => {
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
-      const deadline = Date.now() + 420_000;
+      // MCP transport expires before the in-app guard budget. Refuse before any save.
+      const deadline = Date.now() + (run.runId.startsWith('mcp-') ? 170_000 : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
@@ -960,6 +961,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
+      if(lane==='reel'&&editSession.timeline.clips.some(clip=>clip.kind==='caption')){
+        const audibleIds=new Set(editSession.timeline.clips.filter(clip=>clip.volume!==0&&(clip.kind==='audio'||clip.kind==='video'&&!clip.audioSeparated)).map(clip=>clip.assetId));
+        // Each call starts with metadata rows; saved transcripts live in source analysis.
+        await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
+      }
       const frameTask=editMode==='fast'&&lane==='reel'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
