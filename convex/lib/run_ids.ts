@@ -8,3 +8,9 @@ export function readRunTab(runId: string) {
   const end = rest.lastIndexOf(':');
   return end > 4 ? rest.slice(4, end) : undefined;
 }
+
+/** Exclusive MCP calls bind a tab without changing the editor selection. */
+export function mcpRunTab(runId: string) {
+  if (!runId.startsWith('mcp-') || runId.startsWith(READ_ONLY_RUN_PREFIX)) return undefined;
+  return runId.split(':tab:')[1];
+}

@@ -4,6 +4,17 @@ import type { ModelMessage } from 'ai';
 import type { Timeline, MediaAsset } from '../editor/types';
 import { summarizeSpeakerFraming } from '../media-analysis/clipping';
 import { readHighlights } from '../media-analysis/highlights';
+import { z } from 'zod';
+
+const projectedNormalization = z.object({ assetId: z.string(), targetLufs: z.number(), truePeakCeiling: z.number(), active: z.boolean() }).strict();
+
+function modelNormalization(value: NonNullable<Timeline['audioNormalization']>, active: () => boolean) {
+  if (!('key' in value)) {
+    const projected = projectedNormalization.safeParse(value);
+    if (projected.success) return projected.data;
+  }
+  return { assetId: value.assetId, targetLufs: value.targetLufs, truePeakCeiling: value.truePeak, active: active() };
+}
 
 export const EDITOR_CONTEXT_NOTICE = 'Context loads the latest 100 saved messages plus associated steps needed to complete their tool calls. Older messages or superseded timeline snapshots may be omitted. Omission is not evidence that an event or edit is absent. Preserve recent user constraints and use the current timeline. Visual observations and images in this context remain intact. Before a creative decision needing absent visual evidence, inspect the relevant source window again (saved analysis may be reused). Read inspectClip for omitted motion/focus samples; never reconstruct source trims from a summary.';
 export const EDITOR_CONTEXT_BOUNDARY = '\nCURRENT EDIT CONTEXT:\n';
@@ -27,10 +38,10 @@ function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[
 /** A read-only model projection; the edit session retains every source sample. */
 export function modelTimeline(timeline: Timeline, selectedClipIds: readonly string[] = []) {
   const selected = new Set(selectedClipIds);
-  return { ...timeline,...(timeline.audioNormalization?{audioNormalization:{assetId:timeline.audioNormalization.assetId,targetLufs:timeline.audioNormalization.targetLufs,truePeakCeiling:timeline.audioNormalization.truePeak,active:timeline.audioNormalization.key===timelineNormalizationKey(timeline)}}:{}), clips: timeline.clips.map(clip => {
+  return { ...timeline,...(timeline.audioNormalization?{audioNormalization:modelNormalization(timeline.audioNormalization,()=>timeline.audioNormalization?.key===timelineNormalizationKey(timeline))}:{}), clips: timeline.clips.map(clip => {
     const { motion, focus, scene, normalizedAudio, ...settings } = clip;
     return { ...settings,
-      ...(normalizedAudio?{normalizedAudio:{assetId:normalizedAudio.assetId,targetLufs:normalizedAudio.targetLufs,truePeakCeiling:normalizedAudio.truePeak,active:normalizedAudio.key===audioNormalizationKey(timeline,clip)}}:{}),
+      ...(normalizedAudio?{normalizedAudio:modelNormalization(normalizedAudio,()=>normalizedAudio.key===audioNormalizationKey(timeline,clip))}:{}),
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       // Compacted history can hold timelines whose scene code was already summarized.
@@ -127,6 +138,9 @@ function withoutSceneCode(clip: unknown): unknown {
 }
 
 export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipIds: readonly string[] = [], initialRevision?: number): LanguageModelV4Prompt {
+  // Full-source fallback transcripts only. Exact serialized keys avoid hash collisions.
+  // Reset at every user boundary so history fitting removes references with their evidence.
+  const transcripts = new Map<string, string>();
   let latestTimelineCall: string | undefined;
   const latestClipState = new Map<string, string>();
   const latestRead = new Map<string, string>();
@@ -157,6 +171,7 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
   // so no saved turn was ever read from the provider cache by the next request.
   let requestContext: LanguageModelV4Prompt[number] | undefined;
   const compacted = prompt.flatMap<LanguageModelV4Prompt[number]>((message, index) => {
+    if (message.role === 'user') transcripts.clear();
     message = withoutDiagnostics(message);
     if (message.role === 'system') {
       const boundary = message.content.indexOf(EDITOR_CONTEXT_BOUNDARY);
@@ -175,6 +190,20 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
       const value = timelineOutput(part.output);
       if (!value) return part;
       let projected = value;
+      if (part.toolName === 'findHighlights' && Array.isArray(value.transcript) && value.transcript.length) {
+        const input = toolInputs.get(part.toolCallId);
+        // Require the call and receipt to agree on source; preserve unknown/windowed shapes.
+        if (object(input) && typeof value.assetId === 'string' && input.assetId === value.assetId &&
+          !['start', 'end', 'windows', 'sourceWindow'].some(key => key in input || key in value)) {
+          const key = JSON.stringify([value.assetId, value.transcript]);
+          const retained = transcripts.get(key);
+          if (retained && retained !== part.toolCallId) projected = { ...value, transcript: {
+            retainedToolCallId: retained, field: 'transcript',
+            note: 'Identical complete transcript for this source is retained in the earlier tool result in this user turn.',
+          } };
+          else transcripts.set(key, part.toolCallId);
+        }
+      }
       if (index < lastUser && (object(value.clip) || Array.isArray(value.changedClips))) projected = { ...projected, ...(object(value.clip) ? { clip: withoutSceneCode(value.clip) } : {}), ...(Array.isArray(value.changedClips) ? { changedClips: value.changedClips.map(withoutSceneCode) } : {}) };
       if (part.toolName === 'inspectVideo' && Array.isArray(value.matches) && Array.isArray(value.timelineOccurrences)) {
         // Keep every original visual observation once; mapped occurrences retain

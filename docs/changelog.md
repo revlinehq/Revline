@@ -1,3 +1,12 @@
+## 2026-11-04
+
+- Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
+- Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
+
+- Frame reads: Round whole-source motion-scan timeouts to integer milliseconds. Why: Fractional media durations must produce valid Node process deadlines.
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
+- Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
@@ -8,14 +17,32 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Worker hosting: Shorten Railway temporary service names and validate nested container limits. Why: authenticated API inspection rejected long names and revealed the actual limit response.
 - Worker hosting: Allow exact published PR image builds and Railway-only temporary preflights without Convex access. Why: the authorized rollout must validate containers before merging backend changes.
 - Worker hosting: Add staged Railway processors, exports and distributed chunks with bounded resources and explicit cutover/rollback. Why: the user requested moving only Fly container hosting while retaining the existing app, backend and storage.
+- MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
+- Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
+- Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
+- Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
+- Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
+- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
+- Motion design: Carry visual anchors across scenes and choose restrained motion for each action. Why: the user's continuity guidance conflicted with blanket overshoot and anticipation rules in the agent skill.
+- Assistant: Show Working between steps while preserving the elapsed timer and resume/stop statuses. Why: the user requested a shorter activity label.
+- Incident delivery: Route agent reports to durable, deduplicated GitHub Issues with bounded leases and explicit backlog delivery. Why: the user needs saved reports surfaced without launching fix agents.
+- Assistant models: Keep free/trial accounts on Terra Low with visible locked upgrades; unlock existing choices from verified paid terms. Why: model entitlement must be separate from editing access.
+- Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
+- MCP: Resolve sessionless calls by an unambiguous explicit project and timeline. Why: transport session IDs are optional, so task context must remain addressable without borrowing another conversation.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
+- Analysis tools: Preserve exact sound range endpoints and overlap sub-minimum continuation tails; return compact effect-plan acknowledgments. Why: rounded bounds produced invalid follow-ups and repeated plans inflated context.
+- Analysis tools: Require exact brand names or aliases and accept small UI capture dimensions. Why: substring matches returned unrelated logos and valid composer captures were refused.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
 - Reel and captions: Clean one-take rough cuts at their natural duration and default new subtitles to minimal text without a background. Why: fixed duration, forced normalization and boxed subtitles distorted the intended edit.
+- Agent context: Preserve verified normalization status when compacting timeline summaries. Why: a second projection falsely reported active audio masters and clips as inactive (#97).
 - Deployment: Retry reset connections when reading Fly preflight status within its existing deadline. Why: a transient TLS reset aborted the latest main release after its image upload.
 - Media preparation: Share prepared audio with transcription, stage audio inputs locally, bound speech-provider waits and report non-retryable disk shortages. Why: rough cuts reread large video sources and hid slow stages.
+- Agent runner: Allow scoped skill capability loads and pixel-track reads. Why: runner authorization rejected tools used by editing workflows.
 - Deployment: Package reference tracking and its shared frame reader in processor images. Why: the main release failed its image runtime check before deployment.
+- Developer isolation: Add explicit faithful snapshots of saved tabs, hydrated analysis and media relationships. Why: metadata-only seeds cannot serve as cached-analysis development baselines.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
+- Clip planning: Return all quote and acceptance errors with exact word windows, current IDs and range limits. Why: the podcast benchmark repeated rejected plans after vague diagnostics and candidate replacement.
 - Snapshot recovery: Recover same-lease cache reservations, retain completed clip checks across lease handoffs, and bound transport retries. Why: lost responses could make a worker wait on itself or repeat finished work.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
 - Chat history: Return focus to a surviving nearby chat without scrolling after deletion. Why: deleting a row jumped the user back to the search field.

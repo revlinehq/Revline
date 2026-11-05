@@ -2,7 +2,7 @@ import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4Usage,
 import type { LanguageModelMiddleware } from 'ai';
 import { compactEditorPrompt } from './editor-context';
 
-// An anomaly backstop, not a work limit: a three-scene explainer (13 calls)
+// An anomaly backstop, not a work limit: a three-scene film (13 calls)
 // used ~10% of these ceilings. Only runaway tool loops should reach them.
 const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 128_000 } as const;
 /** Models with a 1M-token context hold a whole film's reads, logs and scene code: give their requests room before

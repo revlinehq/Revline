@@ -102,15 +102,11 @@ export const beginRun = internalMutation({ args: { ownerId: v.string(), projectI
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
   const started = mcpRunStarted(project.aiRunId), stale = started !== undefined && Date.now() - started > MCP_RUN_LIMIT;
   if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
-  // Work on the requested tab: switched here, in the same transaction that takes the lock, and only for this
-  // call. The tab open before it (kept across a stale takeover) reopens when the run ends, so a timelineId
-  // edit never moves the user's tab; openTimeline is the call that switches it for good.
-  const returnTo = stale && project.aiReturnTimelineId ? project.aiReturnTimelineId : activeTabOf(project);
-  const borrowing = !!args.timelineId && args.timelineId !== activeTabOf(project);
-  if (borrowing) await openTabFor(ctx, args.ownerId, { projectId: project._id, timelineId: args.timelineId! });
-  const runId = `mcp-${Date.now()}-${crypto.randomUUID()}`;
+  const timelineId = args.timelineId ?? activeTabOf(project);
+  if (!await storedTabTimeline(ctx, (await ctx.db.get(project._id))!, timelineId)) throw new ConvexError('That timeline no longer exists.');
+  const runId = `mcp-${Date.now()}-${crypto.randomUUID()}:tab:${timelineId}`;
   await clearLivePreview(ctx, project._id);
-  await writeRunState(ctx, project._id, { aiReturnTimelineId: borrowing || (stale && project.aiReturnTimelineId) ? returnTo : undefined, aiRunning: true, aiEditing: false, aiRunId: runId, aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
+  await writeRunState(ctx, project._id, { aiReturnTimelineId: undefined, aiRunning: true, aiEditing: false, aiRunId: runId, aiAgentName: args.agentName?.slice(0, 60) || 'AI agent', aiAnalysisUsage: { runId, enqueued: 0 }, aiUndoRecorded: false, aiCheckpointRevision: undefined });
   // Releases the lock even if the action is killed; finish ignores a run that already ended.
   const scheduledId=await ctx.scheduler.runAfter(MCP_RUN_LIMIT, internal.assistant.finish, { projectId: project._id, ownerId: args.ownerId, runId });
   await ctx.db.insert('mcpRunTimeouts',{projectId:project._id,ownerId:args.ownerId,runId,scheduledId});
@@ -213,8 +209,9 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { resolution:v.optional(v.union(v.literal(720),v.literal(1080))), ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
+  if(args.resolution===1080&&(args.times.length!==1||args.clipCheck||args.normalization||args.sourceSnapshotId||args.comparison||args.pacing||args.motion||args.sound))throw new ConvexError('1080p inspection accepts one composited frame per call.');
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const other = args.timelineId && args.timelineId !== activeTabOf(project) ? args.timelineId : undefined;
   const stored = other ? await storedTabTimeline(ctx, project, other) : null;
@@ -251,14 +248,14 @@ export const requestFrames = internalMutation({ args: { ownerId: v.string(), pro
   const frozen = await storeSceneCode(ctx, timeline);
   const snapshotRevision = source?.atRevision ?? source?.revision ?? (pacing || sound ? revision : undefined) ?? project.revision ?? 0;
   const tab = source?.timelineId ?? other ?? activeTabOf(project);
-  const cacheIdentity = !normalization && !pacing && !sound && !motion ? await cacheHash({ timelineId: tab, revision: source?.atRevision ?? source?.revision ?? revision ?? snapshotRevision, timeline: frozen, comparison: args.comparison, resolution: args.comparison ? 1080 : 720, format: 'jpeg', quality: 'bounded-frame-budget' }) : undefined;
+  const cacheIdentity = !normalization && !pacing && !sound && !motion ? await cacheHash({ timelineId: tab, revision: source?.atRevision ?? source?.revision ?? revision ?? snapshotRevision, timeline: frozen, comparison: args.comparison, resolution: args.resolution ?? (args.comparison ? 1080 : 720), format: 'jpeg', quality: 'bounded-frame-budget' }) : undefined;
   const key = cacheIdentity && !args.clipCheck ? await frameCacheKey({ownerId:args.ownerId,projectId:project._id},snapshotResultDescriptor(cacheIdentity,args.times)) : undefined;
   const cached = key ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',key)).unique() : null;
   const hit = cached?.ready && (cached.expiresAt ?? 0) > Date.now() ? cached : null;
   const recreation = args.recreation === true;
   if (!hit && !recreation) await requireMediaTaskCapacity(ctx, args.ownerId, 1);
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
   const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
   const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);

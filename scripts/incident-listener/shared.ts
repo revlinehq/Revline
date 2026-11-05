@@ -16,7 +16,7 @@ export const config = () => readFile(configFile, 'utf8').then(text => configSche
 export const incidentSchema = z.object({
   _id: z.string(), fingerprint: z.string().regex(/^incident-v1-[a-f0-9]{64}$/), generation: z.number().int().positive(),
   source: z.string(), kind: z.string(), message: z.string(), stack: z.string().optional(), deployment: z.enum(['dev', 'prod']),
-  count: z.number(), firstSeen: z.number(), lastSeen: z.number(), priority: z.number(), prUrl: z.string().optional(),
+  count: z.number(), firstSeen: z.number(), lastSeen: z.number(), priority: z.number(), issueUrl: z.string().optional(), prUrl: z.string().optional(),
   samples: z.array(z.object({ at: z.number(), context: z.string(), projectId: z.string().optional(), runId: z.string().optional() })),
 });
 const jobSchema = z.object({ incident: incidentSchema, claimToken: z.string(), branch: z.string(), directory: z.string().optional(), phase: z.enum(['starting', 'running', 'finished', 'failed']), workerPid: z.number().optional(), codexPid: z.number().optional(), threadId: z.string().optional(), threadLink: z.string().optional(), runId: z.string().optional(), prUrl: z.string().optional() });

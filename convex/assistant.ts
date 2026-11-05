@@ -1,3 +1,4 @@
+import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
 import { patchTurn, turnSummaryForRun, settleTurn } from './lib/assistant_turn_data';
@@ -6,8 +7,8 @@ import { MAX_SPEAKER_WINDOW_SECONDS } from '../lib/media-analysis/clipping';
 import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
-import {validatePinnedClaudeModel,type ClaudeModelSelection} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
+import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
+import { READ_ONLY_RUN_PREFIX, readRunTab, mcpRunTab } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
@@ -26,7 +27,8 @@ import { importVideoFor } from './mediaTasks';
 import { startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
-import { billingEnabled, hasUltraPlan, requireEditorAccess } from './lib/billing_access';
+import { activeAppleEntitlement } from './lib/apple_entitlements';
+import { billingEnabled, hasPaidModelAccess, hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -44,8 +46,8 @@ import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
-import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator } from './lib/claude_model';
+import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
 import { allowedClaudeModelChoices, ANTHROPIC_EDIT_CHOICES, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
@@ -55,8 +57,8 @@ import { sceneCodeSource } from '../lib/editor/scene-code-edits';
 import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
 const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel('gpt-6.1-terra')), 'medium');
 const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
-function configured() {
-  try{assertEditorModelConfigured(resolveClaudeModel());return true;}catch{return false;}
+function configured(paidModelAccess = true) {
+  try{assertEditorModelConfigured(paidModelAccess ? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
 }
 /** Manual model, reasoning and speed choices: Ultra accounts, or a deployment
  * that opens them to everyone (development sets EDITOR_MODEL_CHOICE_OPEN). */
@@ -75,7 +77,10 @@ async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string
   return !!choices && (modelChoice === undefined || choices.some(choice => choice === modelChoice));
 }
 const composerSettingsFields = {
+  modelAccessNeedsSync: v.optional(v.boolean()),
+  paidModelAccess: v.optional(v.boolean()),
   modelSwitcher: v.optional(v.boolean()),
+  catalogModels: v.optional(v.array(claudeModelChoiceValidator)),
   allowedModels: v.optional(v.array(claudeModelChoiceValidator)),
   claudeViaMcp: v.optional(v.boolean()),
   defaultModelChoice: v.optional(claudeModelChoiceValidator),
@@ -83,9 +88,16 @@ const composerSettingsFields = {
   effortSwitcher: v.optional(v.boolean()),
 };
 async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
+  const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
+  const catalogModels = [...allowedClaudeModelChoices()];
+  const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
+  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: ['gpt-6.1-terra'] satisfies ClaudeModelChoice[], defaultModelChoice: 'gpt-6.1-terra' as const, defaultReasoningEffort: 'low' as const };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
   const choices = await editorModelChoices(ctx, ownerId);
   return {
+    paidModelAccess,
+    catalogModels,
+    modelAccessNeedsSync: false,
     ...(defaultModelChoice ? { defaultModelChoice } : {}),
     defaultReasoningEffort: defaultEditorReasoningEffort(),
     ...(choices ? { modelSwitcher: true, allowedModels: [...choices] } : {}),
@@ -109,7 +121,8 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const task = active?.taskId ? await ctx.db.query('mediaTaskViews').withIndex('by_task',q=>q.eq('taskId',active.taskId!)).unique() : null;
   const source = active ? await ctx.db.get(active.assetId) : null;
   const labels = { highlights:'Finding highlights…',facecam:'Finding the facecam…', speakers:'Following active speakers…', transcribe: 'Listening to your footage…', understand: 'Analyzing footage…', shots: 'Finding shot changes…', beats: 'Finding the rhythm…', track: 'Following the subject…', reference: 'Breaking down the reference…', frames: 'Inspecting the moment…', video: 'Analyzing footage…' };
-  const ready=args.clientPlatform==='ios'?(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})():configured();
+  const settings = await editorComposerSettings(ctx, ownerId);
+  const ready=!settings.paidModelAccess ? configured(false) : args.clientPlatform==='ios'?(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})():configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
   // Run-scoped analysis remains evidence of the editing workflow while the
   // model plans its next step; a plain reply never acquires this workflow lock.
@@ -119,7 +132,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task&&(task.activity||task.kind==='transcribe')?mediaTaskActivityLabel(task):labels[active.mode]:editing?'Applying edits…':null;
   const externalAgents=await projectWorkingAgents(ctx,ownerId,project._id), latestAgent=externalAgents[0];
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...await editorComposerSettings(ctx, ownerId), running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
@@ -138,13 +151,14 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
 }
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), clientPlatform: v.optional(v.literal("ios")), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+  const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const mobile = args.clientPlatform === 'ios';
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
   if (mobile && (args.modelChoice !== 'gpt-6.1-terra' || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
-  if (!mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
+  if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
   let pinnedModel;
-  try { pinnedModel = mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
@@ -158,7 +172,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if (args.selectedClipIds.some(id => !clipIds.has(id))) throw new ConvexError("Selected clips must belong to this project");
   }
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
-  if (!mobile && !configured()) throw new ConvexError(providerReason);
+  if (!mobile && !configured(paidModelAccess)) throw new ConvexError(providerReason);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
   let command: ReturnType<typeof parseEditorCommand>;
   try { command = parseEditorCommand(prompt); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid command.'); }
@@ -189,7 +203,7 @@ export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:
   const runId=crypto.randomUUID(),text=prompt.text??'';
   const recovery:Doc<'projects'>['aiRecovery']=turn?{requests:[text],runId:turn.runId,revision:project.revision??0,savedEdits:turn.savedEdits,status:'failed',reason:turn.feedback??project.aiError??'Resume the unfinished request.',updatedAt:Date.now()}:project.aiRecovery;
   const sameUndoGroup=turn?.runId===project.aiRunId&&project.aiCheckpointRevision===project.revision;
-  const pinnedModel=validatePinnedClaudeModel(turn?.args.pinnedModel??resolveClaudeModel());assertEditorModelConfigured(pinnedModel);
+  const pinnedModel=await hasPaidModelAccess(ctx,ownerId)?validatePinnedClaudeModel(turn?.args.pinnedModel??resolveClaudeModel()):freeEditorModel();assertEditorModelConfigured(pinnedModel);
   if(turn?.timelineId&&turn.timelineId!==activeTabOf(project))await openTabFor(ctx,ownerId,{projectId:args.projectId,timelineId:turn.timelineId});
   const resumed={...(turn?.args??{}),projectId:args.projectId,ownerId,runId,threadId:prompt.threadId,promptMessageId:args.promptMessageId,pinnedModel,...(recovery?{recovery}:{}),continuation:{segment:0,repairPass:0,savedEdits:0,pendingFastFrames:turn?.pendingFastFrames??[],feedback:'Resume the original request in place. Inspect the saved timeline and finish only unfinished work; never repeat a completed edit.'}};
   await writeProject(ctx,project._id,{aiRunning:true,aiEditing:false,aiAgentName:undefined,aiAgentActiveUntil:undefined,aiRunId:runId,aiError:undefined,aiQueuePaused:false,aiWorkflowId:undefined,aiAnalysisUsage:{runId,enqueued:0},aiRequest:{prompt:text,messageId:args.promptMessageId,startedRevision:project.revision??0},...(!sameUndoGroup?{aiUndoRecorded:false,aiCheckpointRevision:undefined}:{})});
@@ -252,6 +266,22 @@ export const messages = query({
   },
 });
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
+// Both switches belong to one transaction: subscribers only see the original selection.
+const scopedRunMutation = customMutation(internalMutation, {
+  args: runArgs,
+  input: async (ctx, args) => {
+    const target = mcpRunTab(args.runId);
+    const project = await requireProject(ctx, args.projectId, args.ownerId);
+    const selected = activeTabOf(project);
+    if (!target || target === selected) return { ctx: {}, args };
+    await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: target }, args.runId, true);
+    return { ctx: {}, args, onSuccess: async () => {
+      await clearLivePreview(ctx, args.projectId);
+      await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: selected }, args.runId, true);
+    } };
+  },
+});
+
 function settledAnalysisUsage(usage: Doc<'projects'>['aiAnalysisUsage']) {
   if (!usage?.videoUnavailable) return usage;
   const next = { ...usage };
@@ -368,6 +398,19 @@ export const beginEditing = internalMutation({ args: runArgs, returns: v.null(),
   if (!project.aiEditing) await writeRunState(ctx,project._id,{aiEditing:true});
   return null;
 }});
+/** Recheck persisted access at inference time, including turns saved by older clients/runners. */
+export const modelForRun = internalQuery({
+  args: { ...runArgs, pinnedModel: v.optional(pinnedClaudeModelValidator) },
+  returns: pinnedClaudeModelValidator,
+  handler: async (ctx, args): Promise<ClaudeModelSelection> => {
+    await requireActiveRun(ctx, args);
+    await requireEditorAccess(ctx, args.ownerId);
+    if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
+    const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
+    if (selection.provider === 'anthropic' && !await claudeInApp(ctx, args.ownerId)) return validatePinnedClaudeModel(resolveClaudeModel());
+    return selection;
+  },
+});
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId).catch(()=>null);
   return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
@@ -379,16 +422,19 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
-  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):undefined;
-  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,timeline:await loadSceneCode(ctx,stored)},assets};}
+  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):mcpRunTab(args.runId);
+  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
   return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  const project=(await ctx.db.get(args.projectId))!;return {timeline:await loadSceneCode(ctx,currentTimeline(project)),revision:project.revision??0};
+  const project=(await ctx.db.get(args.projectId))!,tab=mcpRunTab(args.runId);
+  const timeline=tab?await storedTabTimeline(ctx,project,tab):currentTimeline(project);
+  if(!timeline)throw new ConvexError('That timeline no longer exists.');
+  return {timeline:await loadSceneCode(ctx,timeline),revision:project.revision??0};
 }});
 /** The tab a run works on: a read of a named tab, or the open one. */
-const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):undefined)??activeTabOf(project);
+const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):mcpRunTab(runId))??activeTabOf(project);
 /** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
 export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),kit:v.optional(v.boolean()),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
@@ -409,7 +455,7 @@ export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRev
   return {clipId:args.clipId,timelineId,target:args.kit?'kit':'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
 }});
 /** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
-export const recordFix=internalMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
+export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,timelineId=runTab(project,args.runId);
@@ -477,7 +523,7 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
   await recordAssetStorage(ctx,asset);
   return transportAsset(ctx,asset);
 }});
-export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
+export const apply = scopedRunMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
   const note=args.tool?{tool:args.tool}:undefined;
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
@@ -506,7 +552,7 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
-export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
+export const undoLatestEdit=scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId,true);
   if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
   if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
@@ -527,7 +573,13 @@ export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:
 // Destructive turns validate each private draft without exposing intermediate deletions.
 // The final apply repeats these checks atomically before publishing the replacement.
 export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, args.ownerId);
+  let project = await requireProject(ctx, args.projectId, args.ownerId);
+  const tab=mcpRunTab(args.runId);
+  if(tab&&tab!==activeTabOf(project)){
+    const timeline=await storedTabTimeline(ctx,project,tab);
+    if(!timeline)throw new ConvexError('That timeline no longer exists.');
+    project={...project,activeTimelineId:tab,timeline,aspectRatio:timeline.aspectRatio};
+  }
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
   if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
   await validateTimeline(ctx, project, args.timeline);
@@ -535,7 +587,7 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   return null;
 }});
 /** A read-only client projection. This never publishes a draft or adds undo history. */
-export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
+export const previewDraft = scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId);
   if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
@@ -718,9 +770,10 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
   if(!row||row._id!==args.id||row.ownerId!==args.ownerId)return null;
     await requireEditorAccess(ctx,args.ownerId);
     // A queued choice the plan no longer allows (Opus in-app on Pro) falls back to the default.
-    const queued=validatePinnedClaudeModel(row.pinnedModel);
+    const paidModelAccess=await hasPaidModelAccess(ctx,args.ownerId);
+    const queued=paidModelAccess?validatePinnedClaudeModel(row.pinnedModel):freeEditorModel();
     const chosen=queued.modelChoice!==undefined||queued.reasoningEffort!==undefined||queued.speedMode!==undefined;
-    const pinnedModel=row.clientPlatform==='ios'?mobileModel():chosen&&!await canChooseEditorModel(ctx,args.ownerId,queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
+    const pinnedModel=!paidModelAccess?queued:row.clientPlatform==='ios'?mobileModel():chosen&&!await canChooseEditorModel(ctx,args.ownerId,queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
     const ids=new Set((await requestTimeline(ctx,project,row.timelineId).catch(()=>currentTimeline(project))).clips.map(clip=>clip.id));
