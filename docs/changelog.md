@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Blog: Add a clipping guide for turning long videos into a varied batch of Shorts and Reels. Why: the user requested a timely clipping post.
+
 - Marketing: Widen workflow pages, use shared purple styling, and move their footer links into blog navigation. Why: the user requested consistent branding and clearer navigation.
 
 - Navigation: Keep Blog in the footer and remove it from the navbar. Why: the user requested footer-only blog navigation.
