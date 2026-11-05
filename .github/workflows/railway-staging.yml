@@ -44,6 +44,8 @@ jobs:
           context: .wrangler/media-processor-build
           file: .wrangler/media-processor-build/infra/media-worker/Dockerfile
           target: railway-processor
+          cache-from: type=gha,scope=railway-processor
+          cache-to: type=gha,mode=max,scope=railway-processor
           platforms: linux/amd64
           push: true
           tags: ghcr.io/zurahq/revline-railway-processor:${{ github.sha }}
@@ -55,6 +57,8 @@ jobs:
           context: .wrangler/media-processor-build
           file: .wrangler/media-processor-build/infra/media-worker/Dockerfile
           target: railway-exports
+          cache-from: type=gha,scope=railway-exports
+          cache-to: type=gha,mode=max,scope=railway-exports
           platforms: linux/amd64
           push: true
           tags: ghcr.io/zurahq/revline-railway-exports:${{ github.sha }}

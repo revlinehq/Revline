@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Worker hosting: Permit exact-PR isolated staging queue validation and bound chunk concurrency. Why: staging must prove real jobs before production promotion.
+
 - Worker hosting: Decode Railway structured runtime logs and reserve capacity while builds are pending. Why: real staging passed its limits but the controller missed parsed log attributes.
 
 - Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.

@@ -38,17 +38,19 @@ if (operation === 'plan' || (!values.apply && operation !== 'status')) {
   process.exit(0);
 }
 // Railway-only image builds and temporary runtime preflights may use the exact
-// published PR head. Queue configuration and routing still require main.
+// published PR head. The dedicated isolated staging target may also exercise
+// its queue; shared DEV and production queue changes still require main.
 if (values.apply) {
   const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
   const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
   const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
-  if ((railwayOnly || stagingCi) && !mainPush && branch !== 'main') {
+  const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
+  if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
     const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '82', '--repo', 'zuraHQ/revline-editor', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Railway-only staging requires the exact published open PR #82 head.');
+    if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR #82 head.');
   } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
@@ -98,6 +100,7 @@ if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deploymen
 const convex = (args, input) => command(process.execPath, ['node_modules/convex/bin/main.js', ...args, '--deployment', deployment], { env, input, quiet: true });
 const remote = parseEnv(await convex(['env', 'list']));
 mask(remote);
+if (config.environment === 'staging' && remote.REVLINE_ISOLATED !== 'true') throw new Error('Staging queue operations require the dedicated isolated backend.');
 // Recovery must still be able to restore Convex routes during a Railway outage.
 if (!['rollback', 'pause'].includes(operation)) await verifyRailwayTarget(target());
 const setEnv = (name, value) => convex(['env', 'set', name], value);
@@ -181,6 +184,7 @@ if (operation === 'status') {
 } else if (operation === 'stage') {
   if (kinds.includes('exports') && contract.renderProvider !== 'railway' && config.distributedExports !== (remote.FLY_DISTRIBUTED_EXPORTS === 'true')) throw new Error('Keep the existing distributed-export setting during migration.');
   const artifactVariables = {};
+  const maxChunks = z.coerce.number().int().min(2).max(16).parse(settings.REVLINE_EXPORT_MAX_CHUNKS ?? 8);
   if (kinds.includes('exports') && config.distributedExports) {
     for (const name of ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_ENDPOINT_URL_S3', 'BUCKET_NAME']) {
       if (!settings[name]) throw new Error(`${name} for the selected environment’s existing artifact bucket is required. No bucket migration or cross-environment credential lookup is performed.`);
@@ -201,7 +205,7 @@ if (operation === 'status') {
       RENDER_WORKER_SECRET: secret, MEDIA_WORKER_URL: remote.MEDIA_WORKER_URL, REVLINE_RAILWAY_IMAGE: pool.image,
       MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000', MEDIA_TASK_DEADLINE_MS: String(45 * 60_000),
       ...(exportsOnly ? { MEDIA_RENDERS_ONLY: 'true', ...(pool.name === 'ultra' ? { MEDIA_LANE: 'ultra' } : {}) } : { MEDIA_PROCESSOR_BACKEND: 'railway' }),
-      ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: '16', PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
+      ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(maxChunks), PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
     };
     if (!exportsOnly) for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_VIDEO_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK']) {
       const value = settings[name] || remote[name];
