@@ -26,7 +26,7 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
   const hostname = request.headers.get('host')?.split(':')[0] ?? url.hostname;
   const forwardedProtocol = request.headers.get('x-forwarded-proto');
   const protocol = forwardedProtocol === 'http' || forwardedProtocol === 'https' ? `${forwardedProtocol}:` : url.protocol;
-  const publicPage = ['/', '/pricing', '/podcast-clips', '/ai-video-captions', '/reference-video-recreation', '/robots.txt', '/sitemap.xml'].includes(url.pathname);
+  const publicPage = ['/', '/pricing', '/podcast-clips', '/ai-video-captions', '/reference-video-recreation', '/robots.txt', '/sitemap.xml'].includes(url.pathname) || url.pathname === '/blog' || url.pathname.startsWith('/blog/');
   if (['tryrevline.com', 'editor.tryrevline.com'].includes(hostname) && (protocol === 'http:' || (hostname === 'editor.tryrevline.com' && publicPage))) {
     const destination = url.clone();
     destination.protocol = 'https:';

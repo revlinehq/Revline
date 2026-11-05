@@ -7,6 +7,7 @@ export function LandingFooter() {
     <div className="landing-footer-brand"><Brand /><small>© 2026</small></div>
     <nav aria-label="Footer navigation">
       <Link href="/pricing">Pricing</Link>
+      <Link href="/blog">Blog</Link>
       {marketingPages.map(page => <Link key={page.slug} href={`/${page.slug}`}>{page.title}</Link>)}
       <a href="/#faq">FAQ</a>
       <Link href="/privacy">Privacy</Link>
