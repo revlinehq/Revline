@@ -49,3 +49,17 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 }
 
 .new-conversation-actions-title{margin:0;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:500;line-height:18px;color:#aaa}
+.new-conversation-recent{display:grid;gap:12px}
+.new-conversation-recent-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.new-conversation-recent .new-conversation-upload-new{color:#b5b5b5;font-weight:400}
+.new-conversation-recent .new-conversation-upload-new:hover{background:#2a2a2a;color:#eee}
+.new-conversation-projects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.new-conversation-projects .new-conversation-project{height:auto;min-width:0;justify-content:flex-start;gap:12px;padding:10px;border:1px solid #2b2b2b;border-radius:8px;background:#1f1f1f;color:#eee;text-align:left;white-space:normal}
+.new-conversation-projects .new-conversation-project:hover{border-color:#3b3b3b;background:#262626}
+.new-conversation-project .workspace-chat-cover{width:56px;height:42px;border-radius:4px;background:#2a2a2a;color:#aaa}
+.new-conversation-project-details{display:grid;min-width:0;gap:4px}
+.new-conversation-project-details strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:500;line-height:18px}
+.new-conversation-project-details>span{color:#aaa;font-size:12px;font-weight:400;line-height:16px}
+.new-conversation-has-projects .new-conversation-start{height:auto;min-height:100dvh;grid-template-rows:minmax(48px,.8fr) auto minmax(32px,1.2fr)}
+.new-conversation-has-projects .new-conversation-guidance{position:static}
+@media(max-width:600px){.new-conversation-projects{grid-template-columns:minmax(0,1fr)}}
