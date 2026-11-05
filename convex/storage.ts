@@ -1,4 +1,13 @@
 import { normalizationAssetIds } from '../lib/editor/audio-normalization';
+import { createProjectFor } from './projects';
+import { addMediaClip } from '../lib/editor/operations';
+import { normalizeTimeline } from '../lib/editor/types';
+import { validateTimeline } from './lib/timeline';
+import { writeProject } from './lib/project_data';
+import { enqueueMediaTask } from './mediaTasks';
+import { requireMediaTaskCapacity,uploadPreparationTasks } from './lib/account_limits';
+import { releaseAccountStorage,recordAssetStorage } from './lib/storage_accounting';
+import { releaseMediaObjects } from './lib/shared_media';
 import { projectRun } from './lib/project_data';
 import { ConvexError,v } from 'convex/values';
 import { paginationOptsValidator } from 'convex/server';
@@ -17,7 +26,7 @@ import { removeShareTabs } from './lib/shared_media';
 
 const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('model'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
-const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null())});
+const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null()),canCreateEdit:v.boolean(),cloudOnly:v.boolean()});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),modelBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
@@ -44,7 +53,7 @@ function listingReads(ctx:QueryCtx):DescriptionReads {
   };
 }
 async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
-  const result={id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
+  const result={canCreateEdit:false,cloudOnly:false,id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
@@ -52,6 +61,8 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     result.canDelete=job.status==='completed'||job.status==='failed'||job.status==='cancelled';result.protectedReason=result.canDelete?null:'Export in progress';return result;
   }
   const refs=await ownedObjectReferences(ctx,row.ownerId,row);
+  result.canCreateEdit=row.kind!=='model'&&(!!refs.library?.completed||refs.attachments.some(asset=>asset.kind!=='model'));
+  result.cloudOnly=!!refs.library?.completed&&!refs.attachments.length;
   // Listing previews reuse the editor's small JPEG thumbnail; an image falls back to itself.
   const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
   result.thumbnailUrl=thumbnail?await ctx.storage.getUrl(thumbnail):row.kind==='image'?await mediaUrl(ctx,row):null;
@@ -75,7 +86,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';
     if(await(reads?reads.activeExport(row.ownerId,projectId,ids):usedByActiveExport(ctx,row.ownerId,projectId,ids)))result.protectedReason='Used by an active export';
   }
-  result.canDelete=refs.attachments.length>0&&!result.protectedReason;return result;
+  result.canDelete=(refs.attachments.length>0||!!refs.library?.completed)&&!result.protectedReason;return result;
 }
 export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.optional(kind),search:v.optional(v.string()),unused:v.optional(v.boolean()),sort:v.union(v.literal('largest'),v.literal('newest'))},returns:v.object({page:v.array(item),isDone:v.boolean(),continueCursor:v.string(),splitCursor:v.optional(v.union(v.string(),v.null())),pageStatus:v.optional(v.union(v.literal("SplitRecommended"),v.literal("SplitRequired"),v.null()))}),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx);if(args.paginationOpts.numItems<1||args.paginationOpts.numItems>40)throw new ConvexError('Load up to 40 files');
@@ -105,6 +116,7 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},ret
     if(row.kind==='export')await removeOwnedExport(ctx,ownerId,row.jobId!);
     else {
       const refs=await ownedObjectReferences(ctx,ownerId,row);
+      if(refs.library?.ownerId===ownerId)await ctx.db.delete(refs.library._id);
       for(const asset of refs.attachments){
         const project=await ctx.db.get(asset.projectId);
         if(project&&project.ownerId!==ownerId)throw new ConvexError('Project not found');
@@ -114,7 +126,55 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},ret
         }else await removeOwnedAsset(ctx,ownerId,asset._id);
       }
       for(const shareId of new Set(refs.shares.map(pin=>pin.shareId))){const share=await ctx.db.get(shareId);await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);if(share?.cardStorageId)await ctx.storage.delete(share.cardStorageId);await ctx.db.delete(shareId);}
+      await releaseMediaObjects(ctx,row);await releaseAccountStorage(ctx,ownerId,row);
     }
   }
   return [...projects];
+}});
+
+export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.id('projects'),handler:async(ctx,{fileIds})=>{
+  const ownerId=await requireOwner(ctx);
+  const ids=[...new Set(fileIds)];
+  if(!ids.length||ids.length>20)throw new ConvexError('Choose between 1 and 20 media files.');
+  const sources=[];
+  for(const id of ids){
+    const row=await ctx.db.get(id);
+    if(!row||row.ownerId!==ownerId||row.pending||row.auxiliary||row.kind==='export'||row.kind==='model')throw new ConvexError('Choose available video, audio or image files.');
+    const refs=await ownedObjectReferences(ctx,ownerId,row);
+    const library=refs.library?.ownerId===ownerId&&refs.library.completed&&!refs.library.aborting?refs.library:null;
+    const asset=refs.attachments.find(asset=>asset.ownerId===ownerId);
+    if(!library&&!asset)throw new ConvexError('This media is no longer available.');
+    sources.push({row,library,asset});
+  }
+  const first=sources[0];
+  if(!first)throw new ConvexError('Choose media for this edit.');
+  const original=first.library??first.asset;
+  const aspectRatio=original?.width&&original.height?(original.width===original.height?'square':original.width<original.height?'vertical':'landscape'):'landscape';
+  const title=first.row.fileName.replace(/\.[^.]+$/,'').slice(0,100)||'New edit';
+  const preparation=sources.filter(source=>source.library).reduce((total,source)=>total+(source.library?uploadPreparationTasks(source.library.kind):0),0);
+  if(preparation)await requireMediaTaskCapacity(ctx,ownerId,preparation);
+  const projectId=await createProjectFor(ctx,ownerId,{title,aspectRatio,assetIds:sources.flatMap(source=>source.library||!source.asset?[]:[source.asset._id]),placeOnTimeline:false});
+  let timeline=normalizeTimeline({clips:[],fps:60,aspectRatio});
+  for(const source of sources){
+    let asset:Doc<'assets'>|null;
+    if(source.library){
+      const {r2Key,fileName,contentType,kind,size,duration,width,height}=source.library;
+      const assetId=await ctx.db.insert('assets',{ownerId,projectId,r2Key,fileName,contentType,kind,size,duration,width,height,createdAt:Date.now()});
+      asset=await ctx.db.get(assetId);
+      if(kind!=='image'){
+        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'extract':'waveform'});
+        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
+      }
+    }else{
+      const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(200);
+      asset=candidates.find(asset=>(source.row.r2Key&&asset.r2Key===source.row.r2Key)||(source.row.storageId&&asset.storageId===source.row.storageId))??null;
+    }
+    if(!asset)throw new ConvexError('Could not attach this media.');
+    await recordAssetStorage(ctx,asset);
+    timeline=addMediaClip(timeline,asset,crypto.randomUUID());
+  }
+  const project=await ctx.db.get(projectId);
+  if(!project)throw new ConvexError('Could not create this edit.');
+  await writeProject(ctx,projectId,{timeline:await validateTimeline(ctx,project,timeline)});
+  return projectId;
 }});

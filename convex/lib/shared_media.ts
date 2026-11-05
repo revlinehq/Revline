@@ -26,10 +26,11 @@ export async function releaseMediaObjects(ctx:MutationCtx,asset:StoredMedia){
     ]);if(!attachment&&!pin)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:asset.previewR2Key});
   }
   if(asset.r2Key&&!isStockAudioKey(asset.r2Key)){
-    const [attachment,pin]=await Promise.all([
+    const [attachment,pin,library]=await Promise.all([
       ctx.db.query('assets').withIndex('by_r2Key',q=>q.eq('r2Key',asset.r2Key)).first(),
       ctx.db.query('shareAssets').withIndex('by_r2Key',q=>q.eq('r2Key',asset.r2Key)).first(),
-    ]);if(!attachment&&!pin)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:asset.r2Key});
+      ctx.db.query('cloudMedia').withIndex('by_r2Key',q=>q.eq('r2Key',asset.r2Key!)).first(),
+    ]);if(!attachment&&!pin&&!library)await ctx.scheduler.runAfter(0,internal.r2.deleteObject,{key:asset.r2Key});
   }
 }
 export async function removeMediaAttachment(ctx:MutationCtx,asset:Doc<'assets'>){

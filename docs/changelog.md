@@ -1,3 +1,7 @@
+## 2026-11-05
+
+- Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
+
 ## 2026-11-04
 
 - MCP frame reads: Return a resumable handle while frames render and retain results until download succeeds. Why: Timeout retries queued duplicate work and could discard unread images.
