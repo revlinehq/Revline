@@ -413,7 +413,16 @@ export const mcpSession = internalQuery({
       if (!row || row.ownerId !== args.ownerId || args.projectId && row.projectId !== args.projectId) return null;
       return row;
     }
-    if (!args.connectionId) return null;
+    if (!args.connectionId) {
+      if (!args.projectId || !args.timelineId) return null;
+      const projectId = ctx.db.normalizeId('projects', args.projectId);
+      if (!projectId) return null;
+      const matches = await ctx.db.query('mcpLaneSessions').withIndex('by_target', q =>
+        q.eq('ownerId', args.ownerId).eq('projectId', projectId).eq('timelineId', args.timelineId!)
+      ).take(2);
+      const match = matches.length === 1 ? matches[0] : null;
+      return match?.connectionId === `task:${match?.taskId}` ? match : null;
+    }
     if (!args.projectId) return ctx.db.query('mcpLaneSessions').withIndex('by_connection', q => q.eq('ownerId', args.ownerId).eq('connectionId', args.connectionId!)).order('desc').first();
     const projectId = ctx.db.normalizeId('projects', args.projectId);
     if (!projectId) return null;
