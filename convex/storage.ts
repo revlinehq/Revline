@@ -23,8 +23,8 @@ import { mediaUrl } from './lib/media_storage';
 import { allTabTimelines } from './timelineTabs';
 import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 import { removeShareTabs } from './lib/shared_media';
+import { storageObjectKind as kind } from './schema';
 
-const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('model'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
 const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null()),canCreateEdit:v.boolean(),cloudOnly:v.boolean()});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),modelBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{

@@ -6,11 +6,12 @@ import type { MutationCtx, QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { storageControl } from './lib/media_storage';
+import { cloudMediaKind } from './schema';
 import { forgetStorageObject, recordStorageObject } from './lib/storage_accounting';
 import { partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
 import { uploadPartSize } from '../lib/editor/limits';
 
-const metadata = { fileName:v.string(), contentType:v.string(), kind:v.union(v.literal('video'),v.literal('audio'),v.literal('image')), size:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()) };
+const metadata = { fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()) };
 const uploadArgs = { uploadId:v.id('cloudMedia') };
 /** An upload that requests no part for this long was abandoned. Part URLs are valid for an hour. */
 const IDLE_MS = 2 * 3600_000;

@@ -42,6 +42,10 @@ export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("model"));
+/** What a cloud storage upload may hold. */
+export const cloudMediaKind = v.union(v.literal('video'), v.literal('audio'), v.literal('image'));
+/** A stored file's kind: any media asset, or an export. */
+export const storageObjectKind = v.union(assetKind, v.literal('export'));
 export const waveformValidator = v.object({ peaks: v.string(), samplesPerSecond: v.number() });
 export const focusValidator = v.array(v.object({ time: v.number(), x: v.number(), y: v.number() }));
 export const motionKeyframeValidator = v.object({ time: v.number(), x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number(), brightness: v.number() });
@@ -352,8 +356,8 @@ export default defineSchema({
   projectCatalog:defineTable({agentSummary:v.optional(v.union(v.null(),v.object({name:v.string(),until:v.number(),running:v.boolean()}))),projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
   storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), modelBytes:v.optional(v.number()), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
-  cloudMedia: defineTable({ ownerId:v.string(), r2Key:v.string(), uploadId:v.string(), fileName:v.string(), contentType:v.string(), kind:v.union(v.literal('video'),v.literal('audio'),v.literal('image')), size:v.number(), partSize:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()), createdAt:v.number(), expiresAt:v.number(), activeAt:v.optional(v.number()), completed:v.boolean(), aborting:v.optional(v.boolean()) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
-  storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:v.union(assetKind,v.literal('export')), size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
+  cloudMedia: defineTable({ ownerId:v.string(), r2Key:v.string(), uploadId:v.string(), fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), partSize:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()), createdAt:v.number(), expiresAt:v.number(), activeAt:v.optional(v.number()), completed:v.boolean(), aborting:v.optional(v.boolean()) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
+  storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:storageObjectKind, size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
