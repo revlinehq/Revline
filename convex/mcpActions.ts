@@ -2,15 +2,14 @@
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools } from '../lib/ai/lanes';
+import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
 import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
 import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
-import { exportConfirmed } from '../lib/ai/lanes/export-confirmation';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
 import type { LaneTask } from './lib/laneFinish';
 import { v } from 'convex/values';
 import { z } from 'zod';
-import { editorEditModeSchema, type EditorEditMode } from '../lib/ai/edit-mode';
 import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
@@ -62,7 +61,7 @@ const toJsonSchema = (schema: z.ZodType) => { const { $schema: _, ...json } = z.
 
 /** Editing tools receive an explicit project/timeline, or a task that pins both. */
 function withProjectId(schema: JsonSchema): JsonSchema {
-  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), timelineId: toJsonSchema(timelineIdField), taskId: toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask. Resolves the project, lane and timeline even when conversations share or omit an MCP session. Pass taskId or explicit projectId and timelineId.')), editMode: toJsonSchema(editorEditModeSchema.optional().describe('Verification mode for this call. Defaults to precise for MCP. Fast uses local frame checks; builds and recreations still run Precise.')), ...(schema.properties ?? {}) }, required: (schema.required ?? []).filter(name => name !== 'projectId') };
+  return { ...schema, type: 'object', properties: { projectId: toJsonSchema(projectIdField), timelineId: toJsonSchema(timelineIdField), taskId: toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask. Resolves the project, lane and timeline even when conversations share or omit an MCP session. Pass taskId or explicit projectId and timelineId.')), ...(schema.properties ?? {}) }, required: (schema.required ?? []).filter(name => name !== 'projectId') };
 }
 /** Lane calls require an explicit timeline or a task that pins one. */
 const timelineIdField = z.string().min(1).optional().describe('The timeline tab to work on (from listTimelines). Pass timelineId or taskId from startTask; the call never follows another agent’s open tab.');
@@ -160,11 +159,11 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
     const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=`mcp-task:${crypto.randomUUID()}`;
-    const laneChosen=true;
-    await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',exportConfirmed:exportConfirmed(request.request)});
+    const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
+    await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
-    return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:true,instructions:LANES[selection.lane].instructions,next:'Shared editing tools are ready. Style selection is optional. Discover and load only needed supporting capabilities, then refresh tools/list. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
+    return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,toolsChanged:true,checkLevel,instructions:LANES[selection.lane].instructions,checks:checkInstructions(selection.lane,checkLevel),next:'Shared editing tools are ready. Style selection is optional. Discover and load only needed supporting capabilities, then refresh tools/list. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
   }
   if(args.name==='setLane'){
     if(!session)return result('Call startTask with projectId, timelineId and the user request first.',true);
@@ -173,7 +172,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     await ctx.runMutation(internal.lanes.switchLane,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,reason:parsed.data.reason,taskType:parsed.data.taskType});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,laneChosen:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
-    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,toolsChanged:true,next:'Refresh tools/list. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
+    const checkLevel=taskCheckLevel(task);
+    return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,checkLevel,checks:checkInstructions(parsed.data.lane,checkLevel),toolsChanged:true,next:'Refresh tools/list. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
   }
   if(args.name==='exportVideo'){
     // A paid export never rests on an inferred task: a sessionless call names the task the user confirmed it in.
@@ -210,6 +210,13 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
       }
     }
     if (output.isError) await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: toolFailureMessage(output.text) }).catch(() => {});
+    // Looking at the saved timeline clears the task's queued changed frames, as the app's getFrames does.
+    if (session && args.name === 'getFrames' && !output.isError && input.revision === undefined && input.projectId === session.projectId && typeof input.timelineId === 'string') {
+      let read: { revision?: unknown; frames?: unknown } = {};
+      try { read = JSON.parse(output.text); } catch { /* A non-JSON result renders no frames. */ }
+      const frames = z.object({ revision: z.number(), frames: z.array(z.object({ time: z.number() })).min(1) }).safeParse(read);
+      if (frames.success) await ctx.runMutation(internal.lanes.reviewFrames, { ownerId: args.ownerId, projectId: session.projectId, taskId: session.taskId, timelineId: input.timelineId, revision: frames.data.revision, times: frames.data.frames.map(frame => frame.time) });
+    }
     if (!output.isError && ['loadCapability','readSkill'].includes(args.name) && typeof input.name === 'string') {
       const catalog = await ctx.runAction(internal.mcpActions.listTools, {});
       const names = capabilityTools(input.name);
@@ -316,17 +323,17 @@ function withImages(output: unknown, isError: boolean): CallResult {
 async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mcpLaneSessions'>) {
   if (!session) return {};
   const task = await ctx.runQuery(internal.lanes.task, { ownerId, projectId: session.projectId, taskId: session.taskId }) as LaneTask | null;
-  return { lane: task?.lane ?? session.lane, laneChosen: true, capabilities: task?.capabilities, taskId: session.taskId, finishRequired: task?.required ?? true };
+  return { lane: task?.lane ?? session.lane, laneChosen: true, capabilities: task?.capabilities, taskId: session.taskId, finishRequired: task?.required ?? true, checkLevel: taskCheckLevel(task) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, editMode: EditorEditMode = 'precise', comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, comparisonDeadline, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, comparisonDeadline, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     return withImages(output, failed(output));
@@ -334,8 +341,8 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
 }
 
 async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
-  const { projectId: rawProjectId, timelineId: rawTimelineId, taskId: _taskId, editMode: rawEditMode, ...rawInput } = raw;
-  const editMode = editorEditModeSchema.default('precise').parse(rawEditMode);
+  // Clients with cached schemas may still send the retired editMode; it is dropped, never validated against a tool.
+  const { projectId: rawProjectId, timelineId: rawTimelineId, taskId: _taskId, editMode: _legacyEditMode, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
   if (rawTimelineId !== undefined && (typeof rawTimelineId !== 'string' || !rawTimelineId)) return result('timelineId must be a timeline id from listTimelines.', true);
   const timelineId = rawTimelineId as string | undefined;
@@ -345,7 +352,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, editMode, comparisonDeadline,laneSession);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, comparisonDeadline,laneSession);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };
@@ -355,11 +362,11 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
-    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, editMode, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
+    const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     if(name==='switchLane'&&laneSession)await ctx.runMutation(internal.lanes.setMcpSession,{ownerId,connectionId:laneSession.connectionId,projectId,taskId:laneSession.taskId,timelineId:laneSession.timelineId,lane:toolkit.lane(),laneChosen:toolkit.laneChosen()});
-    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, editMode: toolkit.editMode() } : rawOutput;
+    const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, checkLevel: toolkit.checkLevel() } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');
     return withImages(published ? await toolkit.publicationResult(output) : output, failed(output));

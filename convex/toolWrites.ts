@@ -9,6 +9,7 @@ import { projectIdentity } from './lib/project_data';
 import { turnForRun } from './assistantTurnRecovery';
 import {timelineHistoryKey} from '../lib/editor/timeline-history-key';
 import {FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence} from '../lib/ai/fast-frame-review';
+import {laneChecks, taskCheckLevel} from '../lib/ai/lanes/checks';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
@@ -81,7 +82,7 @@ export const run = internalMutation({
       const afterTimeline=afterPreview?.runId===args.runId?afterPreview.timeline:afterProject?.timeline;
       const saved=task&&beforeTimeline?readFastFrameTimes(task.evidence,turn.timelineId,await timelineHistoryKey(beforeTimeline)):undefined;
       const review=new FastFrameReview(saved??turn.pendingFastFrames);
-      if(beforeTimeline&&afterTimeline)review.changed(beforeTimeline,afterTimeline,task?.lane==='reel'?fastReelFrameMoments(args.toolName,beforeTimeline,afterTimeline):undefined);
+      if(beforeTimeline&&afterTimeline)review.changed(beforeTimeline,afterTimeline,task&&laneChecks(task.lane,taskCheckLevel(task)).frames==='sample'?fastReelFrameMoments(args.toolName,beforeTimeline,afterTimeline):undefined);
       if(task&&afterTimeline){
         const entry=fastFrameEvidence(turn.timelineId,await timelineHistoryKey(afterTimeline),review.times());
         await ctx.db.patch(task._id,{evidence:[...task.evidence.filter(item=>item.tool!=='fastFrameReview'||item.timelineId!==turn.timelineId),entry].slice(-120)});

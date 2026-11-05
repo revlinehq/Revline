@@ -15,7 +15,8 @@ import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/edito
 import { sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
-import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
+import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
+import type { CheckLevel } from '../../lib/ai/lanes/types';
 import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
 import { FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence } from '../../lib/ai/fast-frame-review';
 import { effectPlanInput,validateEffectPlan,mergeEffectPlans,effectReviewBindings,type EffectPlan,type EffectEvidence } from '../../lib/ai/edit-plan';
@@ -141,7 +142,9 @@ type EditorToolkitOptions = {
   comparisonDeadline?: number;
   /** MCP clients review their own work (getFrames); effects need no in-turn plan there. */
   planlessEffects?: boolean;
-  editMode?: EditorEditMode;
+  /** Set by the server from the task's request (lanes.begin); model and reasoning effort never change it. */
+  checkLevel?: CheckLevel;
+  /** Changed-frame times still to check, carried between runner steps (stored as pendingFastFrames). */
   pendingFastFrames?: number[];
   segment?:number;
   /** Stable editing-lane task identity; MCP calls otherwise have one run each. */
@@ -184,7 +187,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'usePreciseMode', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -247,12 +250,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // What this turn has read of a reference, so scenes built over unread moments say so (lib/ai/read-coverage.ts).
   const coverage = new ReadCoverage();
   const sourceFrameRates=new Map<string,number>();
-  let editMode = options.editMode ?? 'precise';
+  // The lane's recipe decides every check below. The level only steps up to `final` from the request, never by tool.
+  const checkLevel: CheckLevel = options.checkLevel ?? 'standard';
+  const recipe = () => laneChecks(lane, checkLevel);
+  const tracksChanges = () => tracksChangedFrames(recipe());
   const fastReview = new FastFrameReview(options.pendingFastFrames);
-  const requirePrecise = async () => {
-    if (editMode === 'precise') return;
-    editMode = 'precise';
-  };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal, isReferenceAsset((input as { assetId?: string }).assetId));
     if ('status' in result) {
@@ -286,6 +288,19 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const clippingUnavailableReason=async()=>{const state=await ctx.runQuery(internal.clipping.completionState,clippingRun);return 'geminiUnavailableReason' in state?state.geminiUnavailableReason:undefined;};
   let clippingActive=false;
   let clippingTimelineId=boundRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
+  type ClipQa='framing'|'decode-health'|'loudness';
+  // Final clip checks require QA receipts on every accepted tab: selecting the QA makes finishClipping and finish ask for checkClip.
+  // clipping.selectChecks clears every receipt whenever the selection changes, so the selection only grows and always covers every tab;
+  // a narrower timelineIds scope from checkClip is not applied at this level.
+  const selectClipQa=async(requested:readonly ClipQa[]=[])=>{
+    const required=recipe().clipQa??[];
+    if(!required.length)return;
+    const current=await laneCtx.runQuery(internal.lanes.clipQa,{ownerId:run.ownerId,projectId:run.projectId,runId:clippingRun.runId});
+    if(!current)return;
+    const checks=[...new Set([...current.checks as ClipQa[],...required,...requested])].sort();
+    if(current.allTabs&&checks.length===current.checks.length)return;
+    await ctx.runMutation(internal.clipping.selectChecks,{...clippingRun,checks});
+  };
   let effectPlans:EffectPlan[]=options.initialPlans;
   // Once this environment reports no review service, later reviews answer at once.
   let reviewServiceMissing=false;
@@ -330,7 +345,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
   }, abortSignal);
-  if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(editMode==='fast')fastReview.changed(before,options.draft);}
+  if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(tracksChanges())fastReview.changed(before,options.draft);}
   const motionTimelineId = timelineIdForLane;
   const referenceMotionEnabled = () => !!LANES[lane].referenceMotion;
   const recreationRender = () => referenceMotionEnabled() && (LANES[lane].referenceMotion === 'required' || editSession.timeline.clips.some(clip => clip.scene?.film?.referenceAssetId));
@@ -718,7 +733,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const locked = guardedBeats(clip.scene, next, ranges), film = before.clips.filter(item => item.kind === 'scene' && item.scene?.code === clip.scene!.code);
     const times = guardTimes(film, locked, before.fps).map(item => ({ ...item, time: Math.round(item.time * 1000) / 1000 }));
     if (!times.length) return scopeResult;
-    if (editMode === 'fast') return { refusal: { success: false, saved: false, error: 'This patch touches shared code outside the requested section. Keep the change in that section so Fast can check only the changed spot.' } };
+    if (!recipe().fullTools) return { refusal: { success: false, saved: false, error: 'This patch touches shared code outside the requested section. Keep the change in that section so this lane can check only the changed spot.' } };
     const { differences, frames } = await guardRender(before, after, times.map(item => item.time));
     const changed = times.map((item, index) => ({ ...item, difference: differences[index] ?? 0 })).filter(item => item.difference > GUARD_LIMIT);
     if (!changed.length) return { ...scopeResult, guard: { passed: true, checked: times.map(item => item.time), note: `Code outside the scope changed; the ${locked.length} locked section(s) it reaches render the same, so it was saved.` } };
@@ -831,9 +846,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const trimChangeInput=z.object({clipId:z.string().min(1),duration:z.number().positive(),sourceStart:z.number().min(0).optional()});
   const verifyCurrentTimeline = async () => {
     await editSession.wait();
-    const missingFrames = !clippingActive && editMode === 'fast' ? fastReview.feedback() : undefined;
+    const missingFrames = !clippingActive && tracksChanges() ? fastReview.feedback() : undefined;
     if (missingFrames) throw new Error(missingFrames);
-    if (effectPlans.length) {
+    // Effect plans gate only lanes that run full checks; a lane switch mid-task cannot strand them behind refused review tools.
+    if (effectPlans.length && recipe().fullTools) {
       const state = await ctx.runQuery(internal.compositionReview.completionState, { ...run, timeline: editSession.timeline, expectedRevision: editSession.revision });
       const feedback = completionRepairFeedback([], 'stop', { ...state, revision: editSession.revision });
       if (feedback) throw new Error(feedback);
@@ -874,7 +890,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
 
       inputSchema:z.object({timelineIds:z.array(z.string()).min(1).max(10).optional(),checks:z.array(z.enum(['framing','decode-health','loudness'])).max(3).optional().describe('Only the checks the user explicitly requested. Omit for cheap data validation.'),acceptedFindings:z.array(z.object({kind:z.enum(['freeze','black']),reason:z.string().min(15).max(500)})).max(8).optional()}),execute:async(_ctx,input)=>{
         clippingActive=true;await editSession.wait();
-        if (input.checks) await ctx.runMutation(internal.clipping.selectChecks, { ...clippingRun, checks: input.checks, ...(input.timelineIds ? { timelineIds: input.timelineIds } : {}) });
+        if (recipe().clipQa) await selectClipQa(input.checks);
+        else if (input.checks) await ctx.runMutation(internal.clipping.selectChecks, { ...clippingRun, checks: input.checks, ...(input.timelineIds ? { timelineIds: input.timelineIds } : {}) });
         await editSession.publish();
         const state: { required: boolean; tabs?: { timelineId: string; checked: boolean }[]; reviewMode?: string } = await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
         if ('reviewMode' in state && state.reviewMode === 'transcript') await editSession.publish();
@@ -904,7 +921,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return {results,images,reusedTimelineIds,failedTimelineIds,next:failedTimelineIds.length?'Review the actual failed data or optional QA findings. Do not retry unchanged failures or passing tabs. Fix only affected edits or explicitly scope an intentional black/freeze acknowledgement. Never normalize automatically.':'FinishClipping and finish can now validate the saved data. Unrequested heavy checks and normalization are skipped.'};
       },toModelOutput:(ctx,options)=>blueprintImages(ctx,options.output)}),
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced clipping close-out: compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration and cheap saved-data checks inline. Only explicitly requested scoped QA requires receipts; no compulsory checkClip, normalization or media job. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
-      await editSession.wait();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
+      await editSession.wait();await selectClipQa();const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
       if(!state.passed)throw new Error(`Clipping delivery is incomplete: ${JSON.stringify(state.errors)}`);
       return state;
     }}),
@@ -960,8 +977,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(!taskId)throw new Error('Start a task first with startTask.');
       await laneCtx.runMutation(internal.lanes.switchLane,{...taskScope,timelineId,...input});
       lane=input.lane;laneChosen=true;finishRequired ||= input.taskType==='edit';requiredPersisted=finishRequired;finishResult=undefined;
-      if(['motion','recreate'].includes(lane))await requirePrecise();
-      return {lane,instructions:laneInstructions(lane),tools:availableToolNames()};
+      return {lane,instructions:laneInstructions(lane),checks:checkInstructions(lane,checkLevel),tools:availableToolNames()};
     }}),
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
@@ -971,7 +987,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         // Each call starts with metadata rows; saved transcripts live in source analysis.
         await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
       }
-      const frameTask=editMode==='fast'&&lane==='reel'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
+      if(lane==='clip')await selectClipQa();
+      // Unviewed changed frames keep the task open the same way in the app and over MCP. The refusal spends no finish attempt.
+      if(recipe().frames==='changes'&&!clippingActive){const missing=fastReview.feedback();if(missing)return {passed:false,success:false,attemptRecorded:false,pendingFrameTimes:fastReview.times(),next:missing};}
+      const frameTask=recipe().frames==='sample'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
       finishResult=await check();
@@ -1014,7 +1033,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
     } }),
 
-    usePreciseMode: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.usePreciseMode, description: 'Switch this request to Precise before building a film or motion scene from scratch, recreating a reference, preparing a final publish/export, or an explicit full double-check. Keeps the model and restores the full verification harness. Never downgrade within a request.', inputSchema: z.object({}), execute: async () => { await requirePrecise(); return { editMode, instructions: editModeInstructions(editMode) }; } }),
     planEffects:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.planEffects,description:"Not for scene clips: verify their rendered frames with getFrames and the scene-engine checklist; recreations also use compareReference and compareMotion. Scenes are never planned or reviewed as effects. Not for simple edits whose result is known from their settings: fades, crossfades or dissolves built from existing footage, opacity, volume, cuts, trims, moves, crops, layout and split screens. Apply those directly; never plan or previewRender them. Before an authorized effect or creative styling edit whose look must be judged (zoom punches, footage or texture effects, text looks), record one to eight concrete expectations: purpose, actual supported strength, timeline window/peak and anchor. Derive acceptance criteria from the current user request and decoded evidence; do not add new creative requirements. Subject readability means the requested object remains recognizable, not that fine print becomes legible unless the user explicitly asks for that. Describe the observed action literally: a hand-held object moving through the air is not evidence of unsupported free flight. If the requested opening is ambiguous, inspect it before claiming a hover or release. For observed action, use an evidenceId returned by this run's inspectVideo mapped match; never invent an impact. Markers and cuts must still exist. Requested-time anchors are for explicit requested timing. Include targetClipId for existing footage/text. No timeline edits, no approval question. Long looks can be reviewed in a short sample window. Calls add or update plans by ID and retain other plans and their output links, up to eight per run. Use a separate timed plan for each FX pulse with its actual start and full duration. Reviewed expectations stay fixed; other plans can still be corrected. To attach an output for review, pass previewRender bindings instead of rewriting the plan.",inputSchema:z.object({plans:z.array(effectPlanInput).min(1).max(8)}),execute:async(_ctx,{plans})=>{
       // Selecting an edit plan is explicit workflow intent, even while the
       // model corrects a rejected preflight before its first timeline write.
@@ -2044,7 +2062,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     })}),
     addTimedEffect: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addTimedEffect, description: `For explicit effects or authorized creative styling: add a supported independent FX clip (solid-color instead creates a normal V color layer): ${OFFERED_TIMED_EFFECT_PRESETS.map(preset=>EFFECT_CATALOG[preset].label).join(', ')}. One planId maps to one FX clip with the same start and full duration; plan repeated pulses separately. It affects the visual composition during its range; use explicit start or current playhead. Punch is the returning pulse in the Zoom family. It has amount1..3, speed.25..4 and centerX/centerY0..1. Optional attack/release are .01..30 seconds at1x speed; speed scales both, and if their total exceeds the FX duration both fit proportionally. Omitted timing fields preserve the legacy pulse; partial timing edits preserve every omitted control. Quick zoom in/out are one configurable Zoom family: optional zoom direction in/out, amount 1..3 times normal framing, speed 0.25..4 and centerX/centerY 0..1. Speed is progression relative to the FX range: 1 completes across the range, faster reaches the target early and holds, slower ends partway. Optional solidColor controls configure a solid-color V frame/rectangle only. Solid color follows V layer stacking; put it below footage for a background or above it for an overlay. This is independent of footage and sound timing. Footage fade in/out belongs to configureVisualFade, and sound fades to configureAudio; do not create a separate fade FX. Use addClipTransition for a real neighboring-pair transition.`, inputSchema: z.object({ planId:z.string().optional(),preset:z.enum(OFFERED_TIMED_EFFECT_PRESETS),start:z.number().min(0).optional(),duration:z.number().positive().optional(),aboveClipId:z.string().optional(),solidColor:solidColorInput.optional(),zoom:zoomInput.optional(),...pulseInputs }).strict().refine(input=>!input.zoom||isZoomPreset(input.preset),{message:'Zoom controls belong to Zoom FX.'}).refine(input=>!input.solidColor||input.preset==='solid-color',{message:'Solid color controls belong to solid-color FX.'}).refine(input=>!input.flash||input.preset==='flash',{message:'Flash controls require flash FX.'}).refine(input=>!input.shake||input.preset==='shake',{message:'Shake controls require shake FX.'}).refine(input=>!input.punch||input.preset==='punch',{message:'Controls must match the requested effect preset.'}), execute:async(_ctx,input)=>checkpoint(t=>{
       const start=input.start??options.playhead??0,plan=effectPlans.find(plan=>(!input.planId||plan.id===input.planId)&&plan.kind==='timed'&&plan.effect===input.preset&&Math.abs(plan.start-start)<1/t.fps);
-      if(!plan&&!options.planlessEffects&&editMode==='precise')throw new Error('Record this effect with planEffects before adding it.');
+      if(!plan&&!options.planlessEffects&&recipe().fullTools&&laneToolAllowed(lane,'planEffects',[...capabilities]))throw new Error('Record this effect with planEffects before adding it.');
       if(plan&&Math.abs((input.duration??plan.duration)-plan.duration)>1/t.fps)throw new Error('Match the timed plan duration to this one FX clip. Plan each separate pulse with its own ID and range.');
       const duration=input.duration??plan?.duration;if(duration===undefined)throw new Error('Give the effect a duration in seconds.');
       const id=crypto.randomUUID();if(plan)planBindings.set(plan.id,id);
@@ -2115,7 +2133,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const beats = clip.scene?.film ? beatRanges(clip.scene) : [];
         return beats.length ? beats.map(beat => ({ start: Math.max(clip.start, timelineTimeAtSource(clip, beat.start)), end: Math.min(clip.start + clip.duration, timelineTimeAtSource(clip, beat.end)) })).filter(range => range.end > range.start) : [{ start: clip.start, end: clip.start + clip.duration }];
       });
-      const checks = editMode === 'precise' && LANES[lane].referenceMotion === 'required' && coverage.referenceAssetId() === referenceAssetId() ? ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check) : [];
+      const checks = recipe().fullTools && LANES[lane].referenceMotion === 'required' && coverage.referenceAssetId() === referenceAssetId() ? ranges.map(range => coverage.sceneCheck(range.start, range.end)).filter(check => !!check) : [];
       return checks.length ? { ...output, readCheck: checks.map(check => check.readCheck).join(' '), ...readLists(checks) } : output;
     };
   }
@@ -2125,20 +2143,19 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     if (!execute) continue;
     tool.execute = async function (this: unknown, ...args: never[]) {
       const input = (args[0] ?? {}) as { mode?: string; name?: string; page?: string; start?: number; end?: number; scope?: ScopeInput | ScopeInput[]; clipId?: string; times?: number[]; count?: number; fps?: number; stillsOnly?: boolean; momentsOnly?: boolean };
-      if (['addFilm', 'addScene', 'addScenes'].includes(name) || name === 'analyzeMedia' && input.mode === 'reference' || name === 'readSkill' && input.name === 'reference-footage' && input.page === 'recreation') await requirePrecise();
-      if (editMode === 'fast' && PRECISE_ONLY_TOOLS.has(name)) return { success: false, error: 'This is a Precise check. Fast uses getFrames at the changed spot and one frame either side. Use usePreciseMode only for a build, recreation or final delivery.' };
+      if (!recipe().fullTools && FULL_CHECK_TOOLS.has(name)) return { success: false, error: fullCheckRefusal(lane, name) };
       const batchedReelStills = lane === 'reel' && input.stillsOnly === true && input.fps === undefined && !input.momentsOnly && (input.times ? input.times.length <= 30 : (input.count ?? 8) <= 12);
-      if (editMode === 'fast' && lane !== 'clip' && name === 'readFrames' && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: 'Fast reads a named source window up to three seconds. Reel visual cleanup may use one stillsOnly overview (count up to 12) or batched explicit join frames (up to 30 times), without fps or momentsOnly. Reuse saved frames; no dense full-video sweeps.' };
+      if (recipe().boundedReads && name === 'readFrames' && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: BOUNDED_READ_REFUSAL };
       const before = editSession.timeline;
       runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
       try {
         const output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
         if (output?.staged === true) stagedTools.add(name);
-        if (editMode === 'fast' && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
+        if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const clip = input.clipId ? editSession.timeline.clips.find(clip => clip.id === input.clipId) : undefined;
-          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : lane === 'reel' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
+          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : recipe().frames === 'sample' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
           fastReview.changed(before, editSession.timeline, moments);
-          return { ...output, editMode, pendingFrameTimes: fastReview.times() };
+          return { ...output, pendingFrameTimes: fastReview.times() };
         }
         return output;
       } finally {
@@ -2188,7 +2205,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return receipts.execute(name, () => editSession.revision, () => execute.apply(bound, args), async () => {
         const before=editSession.timeline;
         await editSession.reconcileSaved(() => ctx.runQuery(internal.assistant.getRunTimeline, run),true);
-        if(editMode==='fast')fastReview.changed(before,editSession.timeline);
+        if(tracksChanges())fastReview.changed(before,editSession.timeline);
       },call.toolCallId);
     };
     const serialize = tool.toModelOutput;
@@ -2281,7 +2298,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         if(task?.result?.exhausted)throw new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${task.result.failures.join(' ')}`);
-        if(editMode==='fast'&&task){
+        if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
           if(saved!==undefined)fastReview.restore(saved);
         }
@@ -2293,7 +2310,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const output=await execute.apply(this??tool,args) as Record<string,unknown>;
       const after=await timelineHistoryKey(editSession.timeline);
       if(before!==after||name==='createTimeline'||name==='openTimeline'||referenceMotionEnabled()&&['motionMap','compareMotion','compareReference'].includes(name))finishResult=undefined;
-      if(taskId&&editMode==='fast'&&(before!==after||name==='getFrames'||name==='finish'))
+      if(taskId&&tracksChanges()&&(before!==after||name==='getFrames'||name==='finish'))
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:fastFrameEvidence(timelineId,after,fastReview.times())});
       if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after&&(name!=='compareReference'||(typeof output.samples==='number'&&output.samples>0&&output.sourceFingerprint===after&&output.revision===editSession.revision))){
         const {images:_images,...evidence}=output;
@@ -2302,5 +2319,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, editMode: () => editMode, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => lane!=='clip'&&!clippingActive&&editMode === 'fast' ? fastReview.feedback() : undefined };
+  return { tools, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => !clippingActive&&tracksChanges() ? fastReview.feedback() : undefined };
 }

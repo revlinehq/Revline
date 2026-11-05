@@ -142,7 +142,8 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
-export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), clientPlatform: v.optional(v.literal("ios")), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
+export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), clientPlatform: v.optional(v.literal("ios")), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), // Older clients still send editMode; it validates and is ignored. The lane sets the checks.
+  editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const mobile = args.clientPlatform === 'ios';
@@ -174,7 +175,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     const pending=await ctx.db.query('assistantQueue').withIndex('by_project',q=>q.eq('projectId',project._id)).take(10);
     if(pending.length>=10)throw new ConvexError('You can queue up to 10 messages. Remove one before adding more.');
     await consumeAssistantRequest(ctx,ownerId);
-    const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,...context}=args;
+    const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,editMode:_legacyEditMode,...context}=args;
     await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,...(command?{command}:{}),createdAt:Date.now()});
     if(!project.aiRunning&&!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId});
     return null;
@@ -182,7 +183,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   await consumeAssistantRequest(ctx,ownerId);
   return beginRequest(ctx,project,prompt,pinnedModel,{...args,...(command?{command}:{})});
 }});
-type QueuedContext=Pick<Doc<'assistantQueue'>,'command'|'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'|'editMode'>;
+type QueuedContext=Pick<Doc<'assistantQueue'>,'command'|'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'>;
 /** Retry is a continuation of an existing prompt; it never writes a user message. */
 export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);
@@ -227,7 +228,7 @@ async function beginRequest(ctx:MutationCtx,sent:Doc<'projects'>,prompt:string,p
   const runId = `${Date.now()}-${Math.random()}`;
   await clearLivePreview(ctx,project._id);
   await writeProject(ctx,project._id, { threadId, aiQueuePaused:false, aiRunning: true, aiEditing: false, aiAgentName:undefined, aiAgentActiveUntil:undefined, aiError: undefined, aiRunId: runId, aiAnalysisUsage:{runId,enqueued:0}, aiUndoRecorded: false, aiCheckpointRevision: undefined, aiRequest:{prompt,messageId,startedRevision:project.revision??0}, aiRecovery:recovery });
-  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.command?{command:request.command}:{}),editMode:request.editMode??'fast',...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
+  const turn = { projectId: project._id, ownerId, runId, threadId, promptMessageId: messageId, pinnedModel,...(request.command?{command:request.command}:{}),...(request.attachedAssetIds?{attachedAssetIds:request.attachedAssetIds}:{}), ...(recovery?{recovery}:{}), ...(request.selectedClipId ? { selectedClipId: request.selectedClipId } : {}), ...(request.selectedClipIds ? { selectedClipIds: request.selectedClipIds } : {}), ...(request.playhead !== undefined ? { playhead: request.playhead } : {}) };
   await rememberTurn(ctx,turn,project);
   await dispatchTurn(ctx,turn);
   return null;

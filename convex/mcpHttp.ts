@@ -20,7 +20,7 @@ const cors = {
 
 const json = (body: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(body), { status, headers: { ...cors, 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers } });
 
-export const MCP_INSTRUCTIONS = `Keep mode, cost and method metadata in tool results. User-facing replies have zero "How it was made", "Mode" or cost footers; explain how or cost only when asked. Never approve finished work on the user’s behalf.
+export const MCP_INSTRUCTIONS = `Keep check-level, cost and method metadata in tool results. User-facing replies have zero "How it was made", check-level or cost footers; explain how or cost only when asked. Never approve finished work on the user’s behalf.
 
 If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or contradicts its documented contract, call reportIssue once with its name, a minimal input summary, what happened and what you expected. Never include credentials, tokens, user text or media. Do not report ordinary validation failures or unsupported requests. Continue safely and describe any unresolved limitation honestly.
 
@@ -30,7 +30,7 @@ Start with listProjects -> getProject -> startTask(projectId, timelineId, reques
 Use discoverCapabilities with the action you need, then loadCapability for supporting workflows or readSkill for a known skill/page. Load only relevant skills and tools. Supporting motion within a Clip task keeps that task and its clip delivery checks. tools/list starts with shared tools and adds the primary workflow and loaded support; refresh after loading or changing style. Older clients with cached schemas may still call registered tools after loading the matching capability. Each call enforces owner, task and capability access.
 For a one-take short-form/reel rough cut, use reel by default unless the user chose another style. Clean false starts, accidental repeats, awkward pauses and abandoned takes while retaining natural delivery, intentional repeats and full meaning. Use saved transcript/audio first, then targeted visuals for awkward looks when needed. Let the retained message determine duration; no forced 30–60s, normalization or heavy full-film checks. Add minimal synchronized captions without a background unless the user declines captions or asks for a different style.
 inspectTimeline provides real clip/asset IDs. Use inspectAssetAnalysis for saved transcripts and clipping signals; getFrames provides rendered timeline evidence. Keep reference media off the timeline when recreating.
-Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
+The lane sets the checks; startTask and setLane return them. A final export or publish request, or an explicit request to double-check everything, runs the lane's full checks. Every editing task ends with finish. It runs real lane checks against the current timelines and saved evidence; do not report completion until passed:true. After three failures, stop and report the exact failures as unfinished work. setLane preserves failed attempts. Export only after explicit user confirmation.
 Use Revline’s tools to measure media; all tool edits save immediately and are undoable. Share the editorUrl from getProject.
 
 Editing quality rules:

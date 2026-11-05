@@ -16,7 +16,6 @@ export const EDITOR_TOOL_DEFINITIONS = {
   importVideoLink: { effect: 'job', mcp: 'exclusive', writes: ['assistant:importRunVideo'] },
   getMediaTask: { effect: 'read', mcp: 'exclusive' },
   exportVideo: { effect: 'job', mcp: 'exclusive', writes: ['assistant:exportRunVideo'] },
-  usePreciseMode: { effect: 'read', mcp: 'hidden' },
   planEffects: { effect: 'analysis', mcp: 'hidden' },
   previewRender: { effect: 'analysis', mcp: 'hidden' },
   duplicateClips: { effect: 'timeline', mcp: 'exclusive' },
