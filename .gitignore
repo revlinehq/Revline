@@ -37,3 +37,13 @@ public/vendor/scene-three.js
 public/vendor/scene-three.js.LEGAL.txt
 
 /public/prototype/
+
+# Local agent notes, captured logs and signing material
+.context/
+notes/
+*.log
+__pycache__/
+*.pem
+*.key
+*.p12
+*.pfx
