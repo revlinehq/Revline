@@ -43,9 +43,11 @@ export async function traceShape(crop: Buffer, options: { color?: string; tolera
   }
   if (count < 20) throw new Error('No pixels in the box match the shape color. Check the color with measureFrame or widen the tolerance.');
   const fill = hex(sum.map(value => value / count) as Rgb);
-  // Brush texture and compression noise: a slight blur and threshold smooth the edge before tracing.
-  const scale = Math.min(1, TRACE_SIDE / Math.max(width, height)), tw = Math.max(2, Math.round(width * scale)), th = Math.max(2, Math.round(height * scale));
-  const smooth = await sharp(mask, { raw: { width, height, channels: 1 } }).resize(tw, th).blur(1.2).threshold(128).extractChannel(0).raw().toBuffer();
+  // Give native pixels room before smoothing: blur at native resolution closes small
+  // interior gaps. Nearest-neighbor enlargement preserves the classified mask, while
+  // reciprocal path scaling keeps the result in the original crop coordinates.
+  const scale = Math.min(4, TRACE_SIDE / Math.max(width, height)), tw = Math.max(2, Math.round(width * scale)), th = Math.max(2, Math.round(height * scale));
+  const smooth = await sharp(mask, { raw: { width, height, channels: 1 } }).resize(tw, th, { kernel: 'nearest' }).blur(1.2).threshold(128).extractChannel(0).raw().toBuffer();
   const paths = tracePaths(smooth, tw, th, 1 / scale, fill);
   const centerline = spine(smooth, tw, th, 1 / scale);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" fill-rule="evenodd">${paths.map(path => `<path fill="${path.fill}" d="${path.d}"/>`).join('')}</svg>`;

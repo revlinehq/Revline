@@ -53,7 +53,7 @@ export function run(args, { env = {}, input = '', cwd = root } = {}) {
 }
 export const convex = (args, options) => run([join(root, 'node_modules/convex/bin/main.js'), ...args], options);
 export const sourceConvex = args => {
-  const read = args[0] === 'data' || args[0] === 'function-spec' || args[0] === 'env' && args[1] === 'list' || args[0] === 'run' && args[1] === 'assets:list' && !args.includes('--push');
+  const read = args[0] === 'data' || args[0] === 'function-spec' || args[0] === 'env' && args[1] === 'list' || args[0] === 'run' && ['assets:list', 'assets:get', 'projects:get', 'timelineTabs:snapshots'].includes(args[1]) && !args.includes('--push');
   if (!read) throw new Error('Shared dev access from isolation setup is read-only.');
   return convex([...args, '--deployment', shared, '--env-file', '/dev/null'], { env: { CONVEX_DEPLOY_KEY: '', CONVEX_DEPLOYMENT_TOKEN: '' } });
 };
