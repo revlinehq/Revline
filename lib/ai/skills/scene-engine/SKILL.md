@@ -27,7 +27,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 - `icon('scissors', { size: 16, color: '#8d8f93', strokeWidth: 2 })` returns a Lucide icon as SVG markup (kebab-case names, as on lucide.dev). Use it for every UI icon instead of drawing one.
 - `blueprint('Editor', container, { width, height })` builds a brand kit blueprint attached with `blueprints` inside `container` and returns its root; animate its `[data-part=...]` pieces (motion-design, blueprints page).
 - `brand` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See motion-design's `brand-kit` page.
-- The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
+- The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP on that timeline (gsap page `revline` lists what never follows the clock).
 - GSAP scenes are plain TypeScript, not JSX (React scenes, page `react-scenes`, are TSX). Imports: `gsap` and its plugins ({{revline:0}}, plus EasePack), each from `gsap/<Name>` or all from `gsap`. They are registered already. Nothing else loads: no network, no other packages.
 - Math.random is seeded, so scatter and noise come out the same in preview and export.
 - Limits: code up to 120,000 characters per scene and 400,000 per timeline (code shared by several clips counts once), clips up to 120 s.
