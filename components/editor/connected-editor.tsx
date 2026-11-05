@@ -24,7 +24,7 @@ import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
 import { ConnectedTimelineShareDialog } from './timeline-share-dialog';
 import { EditorAccessGate } from '@/components/workspace/editor-access-gate';
-import { acknowledgeDraftFiles, takeFiles } from '@/components/workspace/project-draft';
+import { acknowledgeDraftFiles, takeFiles } from '@/lib/editor/project-draft';
 import type { ChatMessage } from './chat-types';
 import { matchesUndoSnapshot, type AssistantEditSnapshot } from './assistant-results';
 import type { ExportSettings } from './export-dialog';

@@ -33,7 +33,7 @@ import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { WorkspaceNav, chatRecency, useWorkspaceChats } from './workspace-nav';
 import { ProjectCover } from './project-cover';
-import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from './project-draft';
+import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from '@/lib/editor/project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
 import './shared.css';
 import './new-conversation.css';

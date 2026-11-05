@@ -1,6 +1,6 @@
 import { clearProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { clearNewProjectSources } from '@/lib/editor/opening-request';
-import { stashFiles } from './project-draft';
+import { stashFiles } from '@/lib/editor/project-draft';
 
 export const NEW_WORKSPACE_EVENT = 'revline:new-workspace';
 
