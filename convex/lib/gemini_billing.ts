@@ -2,7 +2,7 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 
 export const GEMINI_BILLING_REASON = 'Gemini visual analysis is unavailable after a provider billing/credits rejection (HTTP 402). Fresh Gemini work is paused for up to 15 minutes; a changed provider key can recover immediately. Transcript and local measurements remain available; visual action is unverified.';
 export function usesGemini(kind: string) {
-  return ['video', 'frames', 'reference', 'understand', 'highlights'].includes(kind);
+  return ['video', 'frames', 'reference', 'understand', 'highlights', 'review'].includes(kind);
 }
 async function configuredKeyHash() {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;

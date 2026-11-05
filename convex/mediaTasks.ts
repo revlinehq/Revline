@@ -96,7 +96,7 @@ export const RECREATION_PROCESSOR_VERSION = 23;
 export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'highlightSourceType' | 'highlightSkipGemini' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>, waitForCapacity = false): Promise<Id<'mediaTasks'>> {
-  const minimum = MIN_PROCESSOR_VERSION[input.kind];
+  const minimum = usesGemini(input.kind) ? MEDIA_PROCESSOR_VERSION : MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
@@ -147,7 +147,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
     else {
       const now = Date.now();
       const taskId = await insertMediaTask(ctx, { ...input, status: 'failed', error: billingReason, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
-      if (input.analysisRequestId) await ctx.db.patch(input.analysisRequestId, { status: 'failed', error: billingReason });
+      await markTerminal(ctx, taskId, 'failed', billingReason);
       return taskId;
     }
   }

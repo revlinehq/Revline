@@ -11,4 +11,5 @@
 // 42: keep tracked crop keyframes on the extracted review/render source clock.
 // 43: explicit 1080p inspection must never be handled as a 720p preview.
 // 44: decode bound scene video before the final Three VideoTexture draw.
-export const MEDIA_PROCESSOR_VERSION = 44;
+// 49: report genuine Gemini billing failures and honor durable admission cooldowns.
+export const MEDIA_PROCESSOR_VERSION = 49;
