@@ -1,140 +1,80 @@
 # Revline
 
-An AI video editor built with Next.js, shadcn/ui, Clerk, Convex, Cloudflare R2, and HyperFrames. Describe an edit in chat, watch the preview update, and export your video. The landing uses Space Grotesk; the workspace uses Inter with light and dark themes.
+An AI video editor with a chat assistant, editable timeline, media analysis and background video exports. Built with Next.js, shadcn/ui, Clerk, Convex, Cloudflare R2 and HyperFrames.
 
-What ships today, for marketing copy: [Features](features.md). Planned product direction: [Future features](future-features.md), including motion design from scratch.
+## Features
+
+- Edit video, images, text, captions and audio on a shared timeline.
+- Describe changes in chat and inspect the saved result in the editor.
+- Find clips, transcribe speech, inspect source frames and build motion scenes.
+- Process media and render exports through durable background jobs.
+- Keep projects and media scoped to authenticated owners.
+
+See [features](features.md) for more detail. Availability depends on your configured providers and deployment.
+
+## Requirements
+
+- Node.js 22 and npm.
+- Your own Clerk application and Convex development project.
+- FFmpeg and the Python runtimes required by the media features you enable.
+- An R2 media gateway and signing configuration for private uploads/playback.
+- Your own AI provider credentials for model-backed features.
+
+Hosted Revline credentials, signing keys and production infrastructure are not included.
 
 ## Run locally
 
-```bash
-npm install
+```sh
+npm ci
+cp .env.example .env.local
+```
+
+Fill in your own development settings using [.env.example](.env.example). Configure Clerk's Convex JWT template and the matching Convex auth issuer. Keep server and worker secrets out of `NEXT_PUBLIC_` variables.
+
+Start your Convex development deployment:
+
+```sh
+npx convex dev
+```
+
+In another terminal, start the frontend and development media worker:
+
+```sh
 npm run dev -- --port 3001
 ```
 
-Open http://localhost:3001. `/chat` starts a new project; creating or reopening a project opens `/editor/[projectId]` with its conversation, preview, and editable timeline together. Existing `/chat/[projectId]` links redirect to the matching editor. The retired `/editor/demo` and `/chat/demo` routes return 404. `/chats` shows your saved conversations, `/profile` is the account page, and `/projects` redirects to `/chat`. Saved projects and their data require Clerk sign-in and ownership checks.
+Open http://localhost:3001. Configure the worker dependencies described in [media worker setup](infra/media-worker/README.md) before processing footage. Check both web and worker readiness in the terminal.
 
-Internal routes share an authenticated `(dashboard)` layout. `/sign-in` and `/sign-up` use one custom Google or email-code flow, including new accounts; verified Clerk identities sync to private Convex profiles. A temporary, tab-scoped IndexedDB draft preserves attached footage through authentication and clears each file after its successful import. An incomplete initial import keeps the request saved instead of starting the AI edit.
+For parallel agent checkouts, use [isolated development](docs/isolated-development.md) and `npm run dev:isolated`. Never use a contributor checkout to deploy shared or production backends.
 
-The current development project uses `.env.local`. For a fresh installation, use `.env.example` as the configuration reference. Configure Clerk's Convex JWT template and matching Convex auth issuer, then run `npx convex dev` against your development project. Never commit private keys.
+## Verify changes
 
-```bash
+```sh
 npm run typecheck
 npm run build
 ```
 
-To build without replacing a running development server's output:
-
-```bash
-REVLINE_DIST_DIR=.next-build npm run build
-REVLINE_DIST_DIR=.next-build npm run start -- --port 3002
-```
-
-## Editing
-
-- Each project opens directly in the full editor, with resizable conversation, preview, and timeline panels, shared composers, and reusable navigation. Project revisions and chat messages are saved in Convex.
-- Shared visual layers for video, images, and text with V labels, plus separate A audio layers; add, reorder, compact, collapse, and delete empty layers.
-- Revline’s custom timeline provides clip and marquee selection, floating drag previews, multi-clip movement, trimming, its ruler, zoom, and scrolling. Shift-click adds clips to the selection; Ctrl/Cmd+A selects all. Delete and duplicate work on the selection, with application undo.
-- Ctrl/Cmd+C copies selected clips, including linked audio; Ctrl/Cmd+V pastes at the playhead with fresh IDs. Right-click offers Copy and Paste here. The clipboard stays within the current project and preserves source trims, effects, and relative timing.
-- Frame-snapped splits and playhead scrubbing, keyboard trimming, timeline zoom, nearby clip-edge snapping, and smooth playhead playback. Moving a selection snaps its clip starts and ends; dropping above or below a group can create a layer.
-- On-canvas visual move/resize plus source cropping, fit/fill, position, scale, rotation, opacity, and reset. Canvas presets: 9:16, 4:5, 1:1, 4:3, and 16:9.
-- Streaming replies reuse ViralShark’s incremental text fade. Reading earlier messages preserves your scroll position; Stop cancels the current run without discarding saved edits.
-- Structured Claude tools edit saved timeline state and update the preview after each completed edit. Selected clips and the playhead are supplied as context. `inspectTimeline` reads the latest saved revision, visual gaps, same-layer overlaps, and missing source references.
-- Word-timed subtitle generation, beat-aligned cuts, strongest-scene selection, and face following use saved analysis results.
-- Effects are independent amber clips on V tracks: fade, punch zoom, impact shake, flash, pop, and animated cinematic bars. New effects start at the playhead, affect only lower visual tracks, and can be moved, stretched, split, or deleted independently. `EFFECT_CATALOG` defines preset labels, default durations, and keyframes. The preview and MP4 renderer share the same composition.
-- Visual overlays support Normal, Screen, Multiply, Overlay, and Add light blending. Orange beat markers use M to add, drag to move, click to seek, and right-click to rename or delete; they also work as snap targets.
-- MP4 export runs from a frozen timeline snapshot in a background Node worker; progress and completion persist in Convex.
-
-Arranging and saving clips has no fixed duration or clip-count cap. Timelines retain a 150 KB serialized payload limit, with at most 24 visual layers and 12 audio layers. MP4 export currently supports final edits up to five minutes; the export dialog reports this before a render is queued. Uploads and exported MP4s stream into a private Cloudflare R2 bucket in 32 MB parts. There is no 100 MB upload cap; transport limits, available render-server disk, and processing time still apply. Convex stores ownership and project metadata. Playback and seeking use signed URLs from the media Worker.
-
-## Error monitoring
-
-Clerk signup/deletion and Stripe billing alerts are connected to production Discord notifications. Sentry and PostHog remain scaffolded and inactive until configured. See [observability setup](docs/observability.md) for the remaining account settings, endpoint URLs, and verification steps. Browser analytics currently captures page views only, with session replay and text autocapture disabled.
-
-`node scripts/convex-error-monitor.mjs --start` starts read-only Convex log streams for development and production. `--summary` returns new failures plus capture health; `--ack <event-ids...>` acknowledges only reviewed events. The watcher removes validator payloads, signed URLs, and credential patterns before saving bounded, deduplicated summaries in `~/.local/state/revline-monitor` (outside the repository). It never stores raw console payloads or credentials.
-
-The local watcher reconnects interrupted streams. A Codex heartbeat can check its summary every five minutes, triage new failures, and restart it after a computer restart with `--start`. Check `healthy` and `warnings`, not only `running`: the capture parent can remain alive while one deployment stream needs attention. Run these commands with host process visibility; sandbox PID isolation can otherwise report a running host process as absent. Monitoring pauses while this computer is off; Convex log retention limits what can be recovered afterward. This is separate from Sentry's hosted exception integration and is not an instantaneous webhook into Codex.
-
-## Provider configuration
-
-Claude editing requires `ANTHROPIC_API_KEY` in the Convex deployment. Gemini native video understanding and word-timed transcription require the worker-only `GOOGLE_GENERATIVE_AI_API_KEY`. Video inputs explicitly use `processing: "agentic"`; Gemini chooses its own video/audio inspection passes. Revline requests `gemini-3.7-flash`, which Google currently routes to `gemini-3.8-flash`. The overview and focused video questions return validated source timestamps; model timestamps are evidence for editing tools, not a guarantee of exact decoded impact frames. No local scene detector or manually extracted JPEG pass runs with the overview. TwelveLabs is removed. Legacy queued shot/frame tasks remain compatible with their saved schema. Model settings are listed in `.env.example`.
-
-Music tracking uses the pinned CPU [Beat This](https://github.com/CPJKU/beat_this) model for musical beats and bar starts. Separate measured spectral changes identify prominent hits, and sustained energy rises produce possible-drop candidates. These are distinct event types; candidates require listening and do not prove a musical drop. Legacy onset-only caches are refreshed before marking or aligning cuts. The AI asks which audio to use when the target is ambiguous.
-
-New video uploads queue an overview in the background without waiting to edit. Saved overviews can provide up to three source-grounded suggestion buttons; clicking one submits an ordinary request with the matching clip context. Focused requests use `inspectVideo` to send the actual question and source window to Gemini's native agentic video processing. Answers, including zero matches and uncertainty, are saved per request without replacing the general overview or editing the timeline. The separate frame/shot tools are no longer exposed to the editing assistant.
-
-Beat detection decodes audio and measures onset peaks in the background worker. Face following uses the bundled MediaPipe detector in worker-side Chromium; it is not arbitrary-object tracking. The public demo can still run local tracking in its browser. Analysis results persist on the owned asset and notify the active AI run without a browser relay.
-
-Media preparation, AI-requested analysis, and exports use `@convex-dev/workflow`. Convex queues owned tasks, retries transient failures up to three times, and replaces expired worker leases. Scoped attempt tokens protect result writes and R2 uploads; completed audio/MP4 uploads are reused on retry. The worker subscribes to queued work instead of polling while idle. Closing the editor leaves queued/running work intact, and reopening reads its saved state. An AI reply can still reach its existing action timeout while a long analysis continues; a subsequent edit can use the saved results.
-
-`npm run worker` starts the development daemon on this computer. Production processing runs in the [Cloudflare media processor](infra/media-worker/README.md), which supplies FFmpeg, the pinned CPU beat-tracking runtime/model, Chromium, and its production environment. Convex Workflow coordinates the saved queue and leases; the container runs the media tools. Uploading a local file still needs the browser until its R2 upload has finished.
-
-## Production deployment
-
-The hosted app is https://tryrevline.com on Cloudflare Worker `revline-web`; https://editor.tryrevline.com remains an alias. Cloudflare also manages DNS and email records. The connected GitHub repository is `zuraHQ/revline-editor`; the PC runner releases pushes to `main` as described below. Production uses Clerk's live instance for `tryrevline.com` and Convex `different-gnu-398`, with `APP_ORIGIN=https://tryrevline.com`. Localhost continues to use the development instance and Convex `majestic-alpaca-541` through `.env.local`.
-
-The frontend Worker holds the production Clerk secret; `wrangler.jsonc` holds its public Convex/Clerk settings. The Anthropic key and media-worker credentials belong in production Convex. Gemini keys belong only in the processing worker's environment. Environment files, generated build output, and private fixtures are excluded from Git and Vercel uploads.
-
-The production R2 gateway uses `cloudflare/media/wrangler.production.jsonc`, allows both hosted origins, and has its own signing secret. Deploy it with `npx wrangler deploy --config cloudflare/media/wrangler.production.jsonc`. Deploy Convex changes to the announced production target with `npx convex deploy --yes --typecheck enable`; verify the selected deployment before running this command.
-
-Media processing supports on-demand Fly performance machines, with separate dev/production apps and a Convex backend switch for the retained Cloudflare processor. Development normally keeps its local consumer. Deployment, measured timings and the production cutover/rollback commands are in the [processor deployment notes](infra/media-worker/README.md). `npm run worker:production` remains an optional manual daemon using private `.env.production.local` settings for coordinated maintenance. Queued jobs remain saved in Convex until a worker can claim them.
-
-Video-link imports are available on the new-edit page and in the editor’s Sources panel. Public YouTube links and direct HTTPS MP4 downloads are queued through the same workflow, saved privately to R2, and appended to the current timeline without replacing concurrent edits. Limits: five-minute sources; size is bounded only by the media worker's free disk. Downloads check public DNS addresses, pin the connection to the checked IP, revalidate redirects, and reject webpages. Imported streams are remuxed or converted to H.264/AAC for browser playback; audio preparation runs afterward. A full timeline leaves the imported source in Sources and reports the limit.
-
-YouTube worker setup (FFmpeg and Node 22+ are also required):
-
-```bash
-uv venv .data/video-import
-uv pip sync --python .data/video-import/bin/python scripts/video-import-requirements.txt
-```
-
-The worker uses `.data/video-import/bin/yt-dlp`; `YT_DLP_PATH` can point to another installed executable. The pinned requirements include yt-dlp’s JavaScript challenge support. YouTube can restrict downloads or require sign-in; no browser cookies, account credentials, or access-control bypasses are used. Restricted videos return an import error and can be added as local files instead.
-
-The public demo explicitly shows a sample conversation. Its local editing, preview, selection, and transform controls work without model credentials. No live Claude or Gemini inference is claimed without configuring and testing those providers.
-
-Stripe billing is scaffolded and gated by `BILLING_ENABLED=false`. The single Revline Editor Pro plan is USD $39/month, with a 3-day free trial on the first subscription. Its live catalog product and price remain inactive; no checkout, webhook processing, or charges are enabled. Trial checkout collects a payment method and renews monthly unless canceled. Returning subscribers do not receive another trial. Activation requires the matching price, server secret, signed lifecycle webhook, and an intentional billing enablement. Tax collection is not configured.
+The project intentionally has no test suite. Inspect the relevant running behavior and actual media output. See [contribution guidance](CONTRIBUTING.md).
 
 ## Architecture
 
-The existing Convex API can serve web and mobile clients using the same Clerk identities and Cloudflare media services. See [connecting a mobile app](docs/mobile-backend.md) for the current function map, native upload flow, authentication, and remaining platform-specific work.
+Next.js serves the editor. Convex stores owned project state and coordinates durable jobs. Clerk supplies identity. The media gateway signs access to private R2 objects. Background workers run media tools and render frozen timeline snapshots. HyperFrames provides HTML/GSAP playback and rendering.
 
-HyperFrames provides HTML/GSAP playback and video rendering. Revline owns the project/timeline model, editor controls, source geometry, AI tools, media analysis, authentication, persistence, and billing integration.
+Deployment roles and credentials are separate. Use your own infrastructure and explicitly select each deployment target. The included self-hosted release workflow is specific to the maintainers' infrastructure and must be adapted before enabling it in a fork.
 
-Zustand holds per-project interaction state and local history. Convex persists owned assets, versioned timelines, conversations, analysis requests, and export jobs. Editing tools use validated structured arguments and revision checks. Consecutive AI edits share undo history; manual edits remain protected from stale writes.
+- [Editor skills and workflows](lib/ai/lanes/README.md)
+- [Reference footage](docs/reference-footage.md)
+- [Scene rendering](docs/react-scenes/README.md)
+- [Media workers](infra/media-worker/README.md)
+- [Mobile backend integration](docs/mobile-backend.md)
+- [Observability](docs/observability.md)
 
-Revline’s custom timeline uses DOM clips, pointer gestures, and the same Zustand project model as the editing tools. Floating drag previews and frame-aligned destinations are transient; releasing a gesture creates one undoable edit. HyperFrames remains the sole playback clock for the preview, playhead, and time readouts.
+## Security
 
-Shared editor controls live in `components/editor`: `effect-slider.tsx` owns slider appearance and gesture behavior, and `fade-controls.tsx` renders the audio/footage fade rows. Keep appearance changes in those controls and their own stylesheets. Callers supply values and callbacks rather than copying markup or styles.
+Report vulnerabilities privately as described in [SECURITY.md](SECURITY.md). Do not include credentials, signed URLs, private media or raw production logs in issues. Dependency audits and redacted Git-history scans run in the security workflow.
 
-Editing rules live in `lib/editor` and are imported by both the frontend and Convex tools. `visual-effects.ts` owns effect defaults and validated merges; `visual-effect-actions.ts` owns group reset/removal. `audioSettingsPatch` and `visualFadePatch` own settings merges, validation and fade-clock resets. Manual controls, drag/drop and agent operations should call these functions instead of maintaining separate default maps or edit rules. New controls should reuse the shared control and the corresponding validated operation.
+## License and assets
 
-OpenCut Classic preview and editing patterns are adapted with MIT attribution retained in `third-party/`. OpenChatCut was reviewed as an architectural reference; its AGPL source is not included.
+Revline-authored code is licensed under [Apache 2.0](LICENSE). Third-party code, fonts, models, sounds and footage retain their original licenses. See [NOTICE](NOTICE), [third-party attribution](third-party/README.md), [font licenses](public/fonts/README.md) and [media provenance](assets/landing-media/README.md).
 
-## Verification
-
-The Claude editing model picker is separate: `MODEL_SWITCHER_ENABLED=true` on Convex enables manual Haiku/Sonnet/Opus choices in either development or production. Each edit run pins its provider and model at submission; absent a choice, existing model environment defaults still apply.
-
-The project has no test suite. Verify changes with `npm run typecheck`, `npm run build`, and by running the app and checking real previews and exports.
-
-Music worker setup (Python 3.13 and FFmpeg):
-
-```sh
-uv venv --python 3.13 .data/beat-tracking
-uv pip sync --python .data/beat-tracking/bin/python --index-strategy unsafe-best-match scripts/beat-tracking-requirements.txt
-node scripts/install-beat-model.mjs
-```
-
-The installation script verifies the pinned model checksum; processing jobs do not download model weights. `npm run dev` starts both the frontend and media worker. Git worktrees reuse the primary checkout's installed beat runtime and model automatically. `BEAT_TRACK_PYTHON` and `BEAT_TRACK_MODEL_PATH` override the local paths on a hosted worker. Local inference uses two CPU threads and no CUDA runtime; hosted Fly processors use their full CPU budget.
-
-### Automatic releases from this PC
-
-`.github/workflows/deploy-main.yml` releases pushes to `main` on `revline-deploy-pc`. `node scripts/install-deploy-runner.mjs` installs the user systemd service with lingering for reboot persistence. Keep this PC online and its Convex, Wrangler, Fly and GitHub logins valid. Service/workflow PATH explicitly includes the nvm Node bin, `~/.fly/bin` and `~/.local/bin`. Host CLIs are checked first; Convex/Wrangler are checked after `npm ci`. Reinstall and restart the idle runner after changing Node versions. Logs: Actions or `journalctl --user -u revline-actions-runner -f`.
-
-The service and workflow set `NODE_OPTIONS=--dns-result-order=ipv4first --no-network-family-autoselection` because this PC has no public IPv6 route. This keeps Node's Fly Machines API connections on IPv4, including deployment child processes.
-
-One-time setup: the user must place `~/Developer/revline-main/.env.production.local` here, selecting `prod:different-gnu-398` and its production URL. Every run checks for it upfront and names the missing file; the workflow never creates it or copies secrets. This processor/Convex file needs no Clerk settings. Frontend builds use the clean runner checkout **without** `.env.production.local`, with live public settings from `wrangler.jsonc` and existing Worker secrets. The primary checkout's `.data/production-releases/release.lock` blocks runs during manual releases.
-
-One concurrency group and PC lock prevent overlapping releases or cancellation. Typecheck/build precede selective releases, based on imports/runtime paths since `~/.local/state/revline-deploy/released.json`: preflighted Fly processor **before** Convex, then media/agent Workers and exports, then frontend. Prod is `different-gnu-398`; dev is `majestic-alpaca-541`, with separate Workers/Fly apps. Backend switches are preserved; iOS never deploys. `deploy:frontend:ci` builds `dist/` before upload, fixing the old disabled CI's missing-build failure.
-
-Checks verify Convex contracts, active Worker versions, live HTML build IDs and Fly images (old tasks may drain for 50 minutes). Only the clean primary main checkout is fast-forwarded; `revline-dev` restarts `npm run dev` on 3001 and checks both readiness logs. Sol worktrees stay untouched. Failure retains the cursor, posts the step/log tail on the commit (issue fallback), and uses the existing Convex Discord outbox's Sentry route; the webhook stays in Convex.
-
-Dispatch is always a dry run. Before merge, temporarily enable `ci.yml`, run `gh workflow run ci.yml --ref <review-branch> -f base=<commit>`, then disable it after the run starts. After merge, dispatch `deploy-main.yml` directly; it activates independently of legacy CI. No cursor forces a full bootstrap, including #53, #54, #56 and #54's processor rebuild.
+The code license does not grant rights to third-party footage, music or trademarks. **Public distribution is pending the remaining media-rights and history review** described in [publication readiness](docs/open-source-readiness.md).

@@ -40,7 +40,7 @@ The timeline can show the film's structure: each beat is its own scene clip, and
 
 | Clip | Track | Time | What it is |
 | --- | --- | --- | --- |
-| `t3-code-kit.tsx` | (blueprint "T3 Code") | — | T3 Code's app as components: `T3App`, `Window`, `Sidebar`, `ThreadHeader`, `ComposerControls`, `ComposerFooter`, `DiffHeader`, `DiffHunk`, `Caption`… |
+| `t3-code-kit.tsx` | (blueprint "T3 Code") | - | T3 Code's app as components: `T3App`, `Window`, `Sidebar`, `ThreadHeader`, `ComposerControls`, `ComposerFooter`, `DiffHeader`, `DiffHunk`, `Caption`… |
 | `beat-assembly.tsx` | V2 | 0 – 3.75 s | The title blows away, the dashboard builds, then everything but the composer clears |
 | `transition-zoom-into-composer.tsx` | V3 | 2.85 – 3.75 s | `<Transition kind="zoom-into" target="composer" …/>` |
 | `beat-chat.tsx` | V2 | 3.75 – 8.15 s | Typing, send, pull back to the reply |
@@ -102,7 +102,7 @@ The numbers are medians of 3 runs (unthrottled) and 2 runs (4× CPU throttle).
 
 | | Characters | Minified | Gzipped |
 | --- | --- | --- | --- |
-| GSAP original, whole film (as stored, already minified) | 28,253 + 12,999 blueprint | — | — |
+| GSAP original, whole film (as stored, already minified) | 28,253 + 12,999 blueprint | - | - |
 | GSAP beat (same window) | 25,552 (22,441 without the unused browser panel) | 25,543 | 9,301 |
 | React beat, readable TSX | 31,630 | 22,893 | 8,089 |
 

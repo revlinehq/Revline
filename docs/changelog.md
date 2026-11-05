@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Security: Add Apache 2.0 notices, contributor and vulnerability reporting guidance, credential scanning and patched dependencies. Why: the user requested open-source publication readiness.
+
 - Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
 
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
@@ -81,7 +83,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.
 - Development: Give each agent worktree an expiring Convex backend, seeded footage and private Workers. Why: the user reported agents overwriting shared dev functions and schema.
 - Editor: Read rendered frames without following redirects in Cloudflare Workers. Why: isolated verification exposed an unsupported fetch mode that stopped editor turns.
-- Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.
+- Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on the deployment host's missing IPv6 route.
 - Deployments: Release changed production and development services in order on the PC after main merges, then restart the main dev server. Why: the user kept finding merged main changes undeployed.
 - Editing agent: Integrate persisted motion evidence and timed off exits into recreate and bound-reference motion lane checks. Why: the lane registry merged while PR #51 awaited approval.
 - Agent: Let the editing agent choose its lane before exposing tools, with manual choices, isolated skills and bounded finish checks. Why: the user requested agent reasoning instead of keyword routing and premature completion claims.
