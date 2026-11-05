@@ -14,7 +14,7 @@ execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
   const {AnalysisError,isRetryableAnalysisError}=await import('./lib/media-analysis/errors.ts');
   if(!isRetryableAnalysisError(new AnalysisError('temporary',429,true))||isRetryableAnalysisError(new AnalysisError('quota',429,false)))throw new Error('Media retry policy is invalid.');
 `],{stdio:'inherit'});
-// The Fly exports image renders only; its Python trackers and models are left out.
+// The export image renders only; its Python trackers and models are left out.
 const exportsOnly = process.env.REVLINE_RUNTIME_CHECK === 'exports';
 if (!exportsOnly) {
   if (!existsSync('scripts/detect-facecam.py') || !existsSync('public/vendor/face-landmarker.task')) throw new Error('Local clipping vision assets are missing.');

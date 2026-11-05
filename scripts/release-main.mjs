@@ -6,7 +6,7 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { parseEnv } from 'node:util';
 import { command, mask, redact, logTail } from './release-command.mjs';
-import { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend, verifyFly } from './release-verify.mjs';
+import { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend } from './release-verify.mjs';
 import { releaseRailway, verifyRailway } from './release-railway.mjs';
 
 const dry = process.argv.includes('--dry-run');
@@ -17,9 +17,10 @@ const productionFile = join(primary, '.env.production.local');
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 let step = 'Initialize release';
 const sha = git('rev-parse', 'HEAD');
-const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true', PATH: [dirname(process.execPath), join(homedir(), '.fly/bin'), join(homedir(), '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':') };
+const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true', PATH: [dirname(process.execPath), join(homedir(), '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':') };
 // Never inherit a deployment selection or provider token from another session.
-for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN', 'RAILWAY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
+for (const name of Object.keys(env)) if (name.startsWith('FLY_')) delete env[name];
+for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'RAILWAY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
 const targets = [
   { name: 'production', deployment: 'different-gnu-398', file: productionFile },
   { name: 'dev', deployment: 'majestic-alpaca-541', file: join(primary, '.env.local') },
@@ -86,7 +87,7 @@ try {
   try { await access('.env.production.local'); throw new Error('Runner checkout contains .env.production.local. Frontend builds require a clean checkout; do not copy or link the PC production file here.'); }
   catch (error) { if (error.code !== 'ENOENT') throw error; }
   step = 'Check required host CLIs';
-  for (const [cli, args] of [['node', ['--version']], ['npm', ['--version']], ['npx', ['--version']], ['flyctl', ['version']], ['docker', ['--version']], ['gh', ['--version']], ['git', ['--version']]]) {
+  for (const [cli, args] of [['node', ['--version']], ['npm', ['--version']], ['npx', ['--version']], ['docker', ['--version']], ['gh', ['--version']], ['git', ['--version']]]) {
     try { await command(cli, args, { env, quiet: true }); }
     catch { throw new Error(`Required CLI '${cli}' is unavailable or cannot run. Explicit PATH: ${env.PATH}`); }
   }
@@ -128,22 +129,16 @@ try {
   // Resolve and mask each target independently. DEV local processing is retained.
   const workerSettings = new Map();
   for (const target of targets) workerSettings.set(target.deployment, await remoteEnv(target.deployment, env));
+  for (const target of targets) {
+    const values = workerSettings.get(target.deployment);
+    const processor = values.MEDIA_PROCESSOR_BACKEND || (values.MEDIA_PROCESSOR_WAKE_URL ? 'cloudflare' : 'local');
+    if (!['local', 'cloudflare', 'railway'].includes(processor) || !['local', 'railway'].includes(values.RENDER_PROVIDER || 'local')) throw new Error(`${target.name}: select a supported worker host before releasing.`);
+  }
   const railwayRole = (target, kind) => workerSettings.get(target.deployment)[kind === 'processor' ? 'MEDIA_PROCESSOR_BACKEND' : 'RENDER_PROVIDER'] === 'railway';
-  if (changed('processor')) {
-    if (!dry) {
-      if (targets.some(target => !railwayRole(target, 'processor'))) await run('Verify Fly CLI login', 'flyctl', ['auth', 'whoami']);
-      await run('Restore pinned beat model', 'gh', ['release', 'download', 'beat-model-final0', '-R', repo, '-p', 'beat_this-final0.ckpt', '-D', '.data/beat-tracking-models/hub/checkpoints', '--clobber']);
-      await node('Verify pinned beat model', ['scripts/install-beat-model.mjs']);
-    }
-    for (const target of targets) {
-      if (railwayRole(target, 'processor')) {
-        await check(`${target.name}: Railway processor image`, () => releaseRailway({ target, kind: 'processor', values: workerSettings.get(target.deployment), env, dry }));
-        continue;
-      }
-      const options = { env: { ...env, REVLINE_ENV_FILE: target.file } };
-      console.log(`Target: ${target.name} ${target.deployment}; Fly image BEFORE Convex.`);
-      await npm(`${target.name}: Fly processor image`, ['run', target.name === 'production' ? 'deploy:production' : 'deploy:fly-processor', '--', ...(target.name === 'production' ? ['--processor-only'] : ['--skip-convex']), '--stage-only', '--image-first', ...(dry ? ['--dry-run'] : [])], options);
-    }
+  if (changed('processor')) for (const target of targets) {
+    if (railwayRole(target, 'processor')) await check(`${target.name}: Railway processor image`, () => releaseRailway({ target, kind: 'processor', values: workerSettings.get(target.deployment), env, dry }));
+    else if (workerSettings.get(target.deployment).MEDIA_PROCESSOR_BACKEND === 'cloudflare') throw new Error('Release the Cloudflare processor through its dedicated edge configuration.');
+    else console.log(`${target.name}: local processing uses the updated development checkout.`);
   }
   if (changed('convex')) for (const target of targets) {
     console.log(`Target: ${target.name} Convex (${target.deployment}).${dry ? ' Dry run only.' : ''}`);
@@ -168,11 +163,10 @@ try {
     }
     if (changed('exports')) {
       if (railwayRole(target, 'exports')) await check(`${target.name}: Railway exports`, async () => releaseRailway({ target, kind: 'exports', values: await remoteEnv(target.deployment, env), env, dry }));
-      else await npm(`${target.name}: Fly exports`, ['run', 'deploy:fly-exports', '--', ...(target.name === 'production' ? ['--prod'] : []), ...(dry ? ['--dry-run'] : [])], { env: { ...env, REVLINE_ENV_FILE: target.file } });
+      else console.log(`${target.name}: exports use the local processor.`);
     }
     if (!dry) for (const kind of ['processor', 'exports']) if (changed(kind)) {
       if (railwayRole(target, kind)) await check(`${target.name}: verify Railway ${kind}`, async () => verifyRailway({ deployment: target.deployment, kind, values: await remoteEnv(target.deployment, env) }));
-      else await check(`${target.name}: verify Fly ${kind}`, () => verifyFly(target.deployment, kind, env));
     }
   }
   if (changed('frontend')) {

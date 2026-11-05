@@ -32,9 +32,7 @@ RUN npm ci --include=dev --ignore-scripts \
     && npm cache clean --force \
     && rm -rf /var/lib/apt/lists/*
 
-# Fly.io export machines (`--target exports`): exports only, so no Python
-# trackers or models. Their scratch volume is root-owned, so fly-entry.sh
-# prepares it as root and then runs the consumer as `node`.
+# Lean export runtime; Python analysis tools stay in the processor image.
 FROM runtime AS exports
 COPY tsconfig.json ./
 COPY convex ./convex
@@ -45,12 +43,13 @@ COPY infra/media-worker ./infra/media-worker
 RUN node scripts/copy-vendor.mjs \
     && REVLINE_RUNTIME_CHECK=exports node infra/media-worker/runtime-check.mjs \
     && mkdir -p /tmp/revline && chown node:node /tmp/revline
+USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["sh", "infra/media-worker/fly-entry.sh"]
+CMD ["node", "--import", "tsx", "infra/media-worker/consumer.ts"]
 
-# Every media task kind, shared by the retained Cloudflare image and Fly.
+# Full media analysis runtime, shared by Cloudflare and Railway.
 FROM runtime AS processor
 COPY scripts/beat-tracking-requirements.txt scripts/scene-detection-requirements.txt scripts/video-import-requirements.txt /opt/requirements/
 RUN python3 -m venv /opt/beat-tracking \
@@ -78,11 +77,6 @@ EXPOSE 8080
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["node", "--import", "tsx", "infra/media-worker/consumer.ts"]
-
-# Fly prepares scratch as root, then drops privileges through fly-entry.sh.
-FROM processor AS fly-processor
-USER root
-CMD ["sh", "infra/media-worker/fly-entry.sh"]
 
 # Railway uses the same packaged runtimes with ephemeral, unprivileged scratch.
 FROM processor AS railway-processor

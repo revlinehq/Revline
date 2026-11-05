@@ -45,8 +45,8 @@ jobs:
             echo '::error::Runner is missing its nvm Node bin. Rerun scripts/install-deploy-runner.mjs and restart the idle runner service.'
             exit 1
           fi
-          export PATH="$REVLINE_NODE_BIN:$HOME/.fly/bin:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
-          printf '%s\n' "$REVLINE_NODE_BIN" "$HOME/.fly/bin" "$HOME/.local/bin" /usr/local/bin /usr/bin /bin >> "$GITHUB_PATH"
+          export PATH="$REVLINE_NODE_BIN:$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin"
+          printf '%s\n' "$REVLINE_NODE_BIN" "$HOME/.local/bin" /usr/local/bin /usr/bin /bin >> "$GITHUB_PATH"
           missing=0
           for cli in node npm npx flyctl docker gh git flock systemctl journalctl; do
             if ! command -v "$cli" >/dev/null 2>&1; then

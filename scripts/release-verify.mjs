@@ -39,24 +39,3 @@ export async function verifyFrontend() {
     console.log(`Verified ${origin}: live HTML contains build ID ${id}.`);
   }
 }
-export async function verifyFly(deployment, kind, env) {
-  const values = await remoteEnv(deployment, env);
-  const image = values[kind === 'processor' ? 'FLY_PROCESSOR_IMAGE' : 'FLY_RENDER_IMAGE'];
-  const app = `${kind === 'processor' ? 'revline-processor' : 'revline-render'}${deployment === 'different-gnu-398' ? '' : '-dev'}`;
-  if (!image?.startsWith(`registry.fly.io/${app}@sha256:`)) throw new Error(`${app}: selected image targets the wrong app.`);
-  // Existing tasks drain on their original image. Never stop an active export or
-  // processor to make a release look complete; fail visibly if it cannot drain.
-  const deadline = Date.now() + 50 * 60_000;
-  while (true) {
-    const machines = JSON.parse(await command('flyctl', ['machine', 'list', '-a', app, '--json'], { env, quiet: true }));
-    const old = machines.filter(machine => !['destroyed', 'destroying'].includes(machine.state) && machine.config?.image !== image);
-    for (const machine of old.filter(machine => ['stopped', 'failed'].includes(machine.state))) {
-      await command('flyctl', ['machine', 'destroy', machine.id, '-a', app], { env });
-    }
-    const active = old.filter(machine => !['stopped', 'failed'].includes(machine.state));
-    if (!active.length) { console.log(`Verified Fly ${app}: image ${image}; all remaining machines use it (scale-to-zero allowed).`); return; }
-    if (Date.now() > deadline) throw new Error(`${app}: ${active.length} machines still use the previous image after draining.`);
-    console.log(`Waiting for ${active.length} ${app} machines to finish on their previous image.`);
-    await new Promise(resolve => setTimeout(resolve, 15000));
-  }
-}
