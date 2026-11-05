@@ -51,7 +51,7 @@ const PROJECT_TOOLS = {
   deleteTimeline: { description: 'Delete a timeline tab and its undo history; media stays in the project. A project keeps at least one timeline. Only when the user asks.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1) }) },
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
   exportVideo: { description: 'Render the saved timeline to MP4: the open tab, or another tab with timelineId (from listTimelines). Call once per timeline to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
-  getFrames: { description: 'Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision: look at an earlier version the user refers to before bringing it back with restoreSection or restoreClip.', inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing; use only for precise layout inspection.'), projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to render instead of the current timeline.') }) },
+  getFrames: { description: 'If a read returns pending, follow nextAction with its checkId to retrieve the same frozen render. Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision: look at an earlier version the user refers to before bringing it back with restoreSection or restoreClip.', inputSchema: z.object({ checkId: z.string().min(1).optional().describe('Resume the pending frame read returned by this tool; retain its original arguments.'), resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing; use only for precise layout inspection.'), projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to render instead of the current timeline.') }) },
   listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
 } as const;
@@ -250,19 +250,29 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
     case 'getMediaTask': return result(await ctx.runQuery(internal.mcp.mediaTask, { ownerId, taskId: input.taskId }));
     case 'exportVideo': return result(await ctx.runMutation(internal.mcp.startExport, { ownerId, projectId: input.projectId, ...(input.timelineId ? { timelineId: input.timelineId } : {}), resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' }));
     case 'getFrames': {
-      const snapshotId = await retryAbortedTransaction(() => ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.resolution?{resolution:input.resolution}:{}), ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) }));
-      const deadline = Date.now() + 170_000;
+      const input = PROJECT_TOOLS.getFrames.inputSchema.parse(parsed.data);
+      if (!input.timelineId) return result('Pass timelineId to pin the frame read to its timeline.', true);
+      const request = { ownerId, projectId: input.projectId, times: input.times, ...(input.resolution?{resolution:input.resolution}:{}), ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) };
+      const snapshotId = input.checkId
+        ? await ctx.runQuery(internal.mcp.resolveFrameRead, { ...request, timelineId: input.timelineId, checkId: input.checkId })
+        : await retryAbortedTransaction(() => ctx.runMutation(internal.mcp.requestFrames, request));
+      const deadline = Date.now() + 45_000;
+      let revision = input.revision;
+      const pending = (error?: string) => result({ status: 'pending', checkId: snapshotId, revision, ...(error ? { error } : {}), nextAction: { tool: 'getFrames', arguments: { ...input, checkId: snapshotId } }, note: 'Follow nextAction to retrieve this frozen frame read without starting another render. The request expires ten minutes after it started.' });
       while (Date.now() < deadline) {
-        const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId, snapshotId });
+        const state = await ctx.runQuery(internal.mcp.frames, { ownerId, snapshotId });
+        revision = state.revision;
         if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return result(`Frames could not be rendered: ${state.error ?? 'unknown error'}`, true); }
         if (state.status === 'completed') {
+          let frames: Awaited<ReturnType<typeof snapshotFrames>>;
+          try { frames = await snapshotFrames(state); }
+          catch (error) { return pending(error instanceof Error ? error.message : 'The rendered frames could not load.'); }
           await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
-          const frames = await snapshotFrames(state);
           return { ...result({ revision: state.revision, ...(state.atRevision !== undefined ? { atRevision: state.atRevision } : {}), frames: frames.map(frame => ({ time: frame.time, ...(frame.width?{width:frame.width,height:frame.height}:{}) })), note: `Images follow in time order, ${input.resolution===1080?'1080p':'Preview'} composited frames of ${state.atRevision !== undefined ? `the timeline as it was at revision ${state.atRevision}` : 'the saved timeline'}.` }), images: frames.map(frame => ({ data: frame.image, mimeType: 'image/jpeg' })) };
         }
         await new Promise(resolve => setTimeout(resolve, 1500));
       }
-      return result('Rendering frames is taking longer than expected. Try again in a minute.', true);
+      return pending();
     }
     case 'listExports': {
       const jobs = await ctx.runQuery(internal.mcp.listExports, { ownerId, projectId: input.projectId, limit: input.limit ?? 10 }) as { output: { storageId?: Id<'_storage'>; r2Key?: string; fileName: string } | null }[];
