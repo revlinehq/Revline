@@ -8,7 +8,7 @@ type Size = { width: number; height: number };
 const order = ['nw', 'ne', 'se', 'sw'] as const;
 
 /**
- * OpenCut's preview-coords convention: media and handles share composition
+ * Preview coordinates: media and handles share composition
  * coordinates and one canvas-to-screen scale. Intersect the content polygon
  * with our composition mask before drawing its visible selection.
  */

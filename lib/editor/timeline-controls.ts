@@ -2,8 +2,7 @@ import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
 import { textAnimationTimingPatch } from './text-animation-timing';
 import { anchoredFadeTimingPatch } from './fade-clock';
 import { textTemplateTimingPatch } from './remotion-text';
-// Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
-// Copyright 2025–2026 OpenCut. MIT: NOTICE.
+// Includes MIT-licensed code; see NOTICE.
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, freeLayer, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
@@ -292,7 +291,7 @@ function rippleTrim(timeline:Timeline,clips:Clip[],members:Clip[],side:'left'|'r
   return next;
 }
 
-/** OpenCut's shared edge delta: clamp against neighbors and real source extents. With ripple, neighbors move instead of limiting the edge. */
+/** Shared edge delta: clamp against neighbors and real source extents. With ripple, neighbors move instead of limiting the edge. */
 export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:string[],side:'left'|'right',delta:number,magnet?:TimelineMagnet,ripple=false):Timeline {
   timeline=normalizeTimeline(timeline);
   const selected=new Set(linkedClipIds(timeline,ids));const members=timeline.clips.filter(clip=>selected.has(clip.id));

@@ -19,7 +19,7 @@ type Gesture={pointer:number;target:HTMLElement;clip:Clip;initial:TextPlacement;
 type InlineEdit={id:string;original:string;draft:string};
 const corners=[['nw','top left'],['ne','top right'],['sw','bottom left'],['se','bottom right']] as const;
 
-// OpenCut Classic's preview interaction pattern: select on pointer down,
+// Preview interaction pattern: select on pointer down,
 // update the rendered node while dragging, commit once, and discard on cancel.
 // MIT notice: NOTICE.
 export function TextControls({timeline,assets,time,revision,selected,activeId,onActivate,getDocument,onSelect,onCommit,onEdit}:{

@@ -9,8 +9,7 @@ export type VisualSnapLine = { axis: 'x' | 'y'; position: number };
 export type VisualSnapResult = { transform: VisualTransform; lines: VisualSnapLine[] };
 type Size = { width: number; height: number };
 
-// Adapted from OpenCut preview/element-bounds.ts and components/handle-primitives.tsx,
-// revision cf5e79e919144200294fb9fed22a222592a0aeea. MIT: NOTICE.
+// Includes MIT-licensed code; see NOTICE.
 export function visualBounds(transform: VisualTransform, rect: VisualRect, width: number, height: number): VisualBounds {
   const localX = (rect.left + rect.width / 2 - width / 2) * transform.scale;
   const localY = (rect.top + rect.height / 2 - height / 2) * transform.scale;
@@ -52,8 +51,7 @@ function axisPositions(bounds: VisualBounds) {
   return {x:[bounds.cx,bounds.cx-halfWidth,bounds.cx+halfWidth],y:[bounds.cy,bounds.cy-halfHeight,bounds.cy+halfHeight]};
 }
 
-// OpenCut preview-snap.ts's rotated bounds / nearest-axis targets, adapted to
-// Revline's normalized transforms and retained crop rectangle. Same MIT notice above.
+// Rotated bounds and nearest-axis snap targets for normalized transforms and the retained crop rectangle.
 export function snapVisualMove(proposed: VisualTransform, rect: VisualRect, canvas: Size, viewport: Size, threshold=8): VisualSnapResult {
   const positions=axisPositions(visualBounds(proposed,rect,canvas.width,canvas.height));
   const transform={...proposed},lines:VisualSnapLine[]=[];

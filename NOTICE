@@ -7,30 +7,8 @@ See the attributions below, public/fonts/README.md, assets/audio-fx/ and
 assets/landing-media/README.md for attribution and asset-specific terms.
 This license grants no rights to third-party footage, music or trademarks.
 
-Revline adapts timeline interaction math from OpenCut Classic.
-
-The custom timeline adapts OpenCut interaction patterns to Revline’s DOM clips and Zustand timeline model. The retained notice also covers the OpenCut preview geometry used by Revline.
-
-Source: https://github.com/OpenCut-app/opencut-classic/tree/cf5e79e919144200294fb9fed22a222592a0aeea/apps/web/src/timeline
-
-Adapted files: lib/editor/timeline-controls.ts and components/editor/use-timeline-playhead.ts.
-
-The complete MIT notice is retained below. These attributions identify code provenance and do not imply affiliation or endorsement.
-
-Box selection follows OpenCut Classic's selection/hooks/use-box-select.ts: movement threshold, rectangle intersection, and additive Shift/Ctrl selection. Revline adapts it to pointer events and its own Zustand state; layer and clip gestures use scoped pointer destinations and commit once on release.
-
-Track insertion adapts placement/resolve.ts and placement/insert-index.ts: prefer a compatible free row; create a row when the requested placement collides, using the hovered half for insertion above/below. Drops outside a group's first/last row create tracks at that edge. Revline uses shared numbered V visual layers for video, images, captions, and graphics, with separate A audio layers.
-
-Clip edge resizing adapts controllers/resize-controller.ts and group-resize/compute-resize.ts: one frame-aligned delta shared by a selection, source and neighbor bounds, local preview while dragging, and one undoable commit on release.
-
-Direct text manipulation follows preview/controllers/preview-interaction-controller.ts and transform-handle-controller.ts: hit-test rendered text bounds, select and capture the pointer, show transient updates, snap to canvas center (Shift bypass), commit once on release, and discard on cancellation. Revline uses its HyperFrames DOM and normalized x/y/fontSize fields rather than OpenCut's parameter model.
-
-Visual preview bounds, anchored corner resizing, and rotation-aware cursors adapt `preview/element-bounds.ts` and `preview/components/handle-primitives.tsx` from [OpenCut Classic at cf5e79e919144200294fb9fed22a222592a0aeea](https://github.com/OpenCut-app/opencut-classic/tree/cf5e79e919144200294fb9fed22a222592a0aeea/apps/web/src/preview). The single composition viewport follows `preview/preview-coords.ts` and `preview/components/preview-viewport.tsx`: media and controls use the same composition coordinates and one canvas-to-screen scale. Revline additionally intersects the transformed fitted/cropped source polygon with its HyperFrames composition mask, so the selection follows the visible media instead of an enlarged, clipped source window. Outside handle hit areas remain usable; pointer resizing and snapping retain the canonical source geometry and export transform. Adapted files: `lib/editor/visual-transforms.ts`, `lib/editor/preview-viewport.ts`, `components/editor/preview.tsx`, and `components/editor/visual-controls.tsx`.
-
-The streaming text fade in `components/core/flowtoken` reuses the adaptation from the user's ViralShark project. It derives from Ephibbs/flowtoken 1.0.40; the ISC notice and original attribution are retained alongside the source. Chat prose rendering also follows ViralShark's renderer.
-
-
-MIT notice for adapted components
+Portions of the timeline and preview code are adapted from OpenCut Classic
+under the MIT License:
 
 Copyright 2025-2026 OpenCut
 

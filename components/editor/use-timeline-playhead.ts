@@ -19,7 +19,7 @@ export function paintPlayhead(element: HTMLDivElement | null, x: number, viewpor
   }
 }
 
-// OpenCut's imperative playhead pattern, adapted to HyperFrames' frame clock.
+// Imperative playhead driven by HyperFrames' frame clock.
 // MIT attribution: NOTICE.
 export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,viewport,head,cap,scrubbing,followPausedUntil}:{
   time:number;playing:boolean;readTime?:()=>number;px:number;duration:number;origin:number;
