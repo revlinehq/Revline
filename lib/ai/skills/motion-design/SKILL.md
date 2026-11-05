@@ -1,6 +1,6 @@
 ---
 name: "motion-design"
-description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page \"taste\"), and the user's rules for facts and feedback; pages for the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Every film follows overall-styling (the user's house look). Scenes themselves: scene-engine."
+description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page \"taste\"), and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Every film follows overall-styling (the user's house look). Scenes themselves: scene-engine."
 ---
 # Motion design: launch and feature films
 
@@ -11,6 +11,8 @@ For a new motion film, read page `ideation`: agree one message, one audience ten
 Follow the user's request first. A video to recreate goes through "Recreating a video" below; a new film for the user's own brand goes through "A new film" below.
 
 **Project brief first.** Read the project's brief (getProject, inspectTimeline or readBrief) before changing anything, and follow it. When the user gives direction that should last (what to keep, what to avoid, style), update the brief with updateBrief in their own words, replacing the rule it supersedes.
+
+**Background before the first addFilm.** For a new film or a background restyle, read page `backgrounds`: build base, structure and accent from the brand kit, write the one-line choice into the brief, and keep its shadows and limits.
 
 For original motion design, creative restyling or learning from a style reference, read page `taste` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
 

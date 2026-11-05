@@ -8,7 +8,7 @@ House defaults apply to invented graphics. Explicit user direction and measured 
 
 ## Everywhere
 
-- Invented UI: surfaces #111–#202020, 1 px dividers, text #F5F5F5/#A6A6A6, one accent hue per shot at 1080-based size. No grids, scan lines or bright purple fills. Panel shadows only for a selected blueprint lift; subtitle shadow is specified below.
+- Invented UI: surfaces #111–#202020, 1 px dividers, text #F5F5F5/#A6A6A6, one accent hue per shot at 1080-based size. No scan lines or bright purple fills; a background grid only as motion-design page `backgrounds` describes it (faint, under 8% contrast, doing a job). Panel shadows only for a selected blueprint lift; subtitle shadow is specified below.
 - Reuse one product component or blueprint across sections; vary state/framing. Use getBlueprint or measureScreen/compareScreen against the real app. Separate copies once produced three different Revline editors in one film.
 - Choose a hold or motion that communicates the idea; getFrames/checkPacing verify it. The example demonstrates technique, not a required composition.
 

@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Skills: Add motion-design page `backgrounds`, a three-layer background recipe (base, structure, accent) derived from the brand kit, with soft-shadow values, banned looks, a measured check and the user's rated examples. Why: the user rejected dark grain-gradient film backgrounds and asked to train the agent to pick good ones.
+
 - Codebase: Untangle the code (no import cycles, worker/backend contract and media queue in leaf modules, one owner for models, tool labels, limits, run ids and storage keys; dead routes and functions removed); fix the processor release file list, the media Worker upload part limit and the pre-paint dark theme. Why: the user asked to run the untangle-codebase refactor.
 
 - Plugins: Add a Claude Code plugin and marketplace that connect the Revline MCP server and teach Claude the edit flow. Why: the user asked to list Revline in the Claude plugin directory.

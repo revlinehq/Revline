@@ -11,7 +11,7 @@ Read the memories returned by getProject. Use recallMemory for a relevant saved 
 
 Observed Revline feedback, evidence to learn from rather than a universal style for every user:
 - Liked: the Isometric line diagram, thin white isometric outlines on near-black, hatching on one face, one thin green accent edge, dimension ticks and small sans labels. It makes structure legible with little ink; use that principle where structure is the subject, rather than putting every title inside a blueprint.
-- Liked: muted film-grain gradients and Terra's motion study. Quiet tonal texture can enrich empty space; the study's attention anchors, semantic actions and holds make its variety coherent.
+- Liked: Terra's motion study; its attention anchors, semantic actions and holds make its variety coherent. Muted film-grain gradients were liked as image fills, but dark grain gradients as a launch film's whole background were rejected (2026-11-05); film backgrounds follow page `backgrounds` and its rated examples.
 - Disliked: cheap-looking cursors, bright brand-purple fills, sparkles / AI-magic icons and generic stock-template looks. Prefer a well-made subject-specific action over a decorative symbol for intelligence. A cursor earns its place by demonstrating an interaction.
 Retrieve and learn the current user's preferences; these verdicts do not replace their brief or confirmed brand.
 
