@@ -49,7 +49,9 @@ export async function touchTaskAgent(ctx: MutationCtx, ownerId: string, taskId: 
   if(row.agentEndedAt!==undefined&&row.agentEndedAt>=startedAt)return;
   if(agentClientId&&(await ctx.db.get(agentClientId))?.closedAt!==undefined)return;
   const now = Date.now();
-  if (row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS - 1000) return;
+  // Each lease write reruns every open dashboard's project and assistant queries. Keep a lease with
+  // more than half its idle window left, so a busy task writes (and schedules expiry) at most every five minutes.
+  if (row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return;
   const activeUntil = now + MCP_AGENT_IDLE_MS;
   await ctx.db.patch(row._id, { agentName, agentClientId, activeUntil });
   // Convex queries don't rerun as wall time passes. Retire the lease with a

@@ -414,14 +414,18 @@ export const mcpSession = internalQuery({
       return row;
     }
     if (!args.connectionId) {
+      // A sessionless call names no task, so it may only continue the one live, unfinished sessionless
+      // task on that tab. A finished or idle task never lends a later sessionless call its target.
       if (!args.projectId || !args.timelineId) return null;
       const projectId = ctx.db.normalizeId('projects', args.projectId);
       if (!projectId) return null;
-      const matches = await ctx.db.query('mcpLaneSessions').withIndex('by_target', q =>
-        q.eq('ownerId', args.ownerId).eq('projectId', projectId).eq('timelineId', args.timelineId!)
-      ).take(2);
-      const match = matches.length === 1 ? matches[0] : null;
-      return match?.connectionId === `task:${match?.taskId}` ? match : null;
+      let match = null;
+      for (const row of await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', Date.now())).take(100)) {
+        if (row.ownerId !== args.ownerId || row.timelineId !== args.timelineId || row.connectionId !== `task:${row.taskId}` || row.agentEndedAt !== undefined) continue;
+        if (match) return null;
+        match = row;
+      }
+      return match;
     }
     if (!args.projectId) return ctx.db.query('mcpLaneSessions').withIndex('by_connection', q => q.eq('ownerId', args.ownerId).eq('connectionId', args.connectionId!)).order('desc').first();
     const projectId = ctx.db.normalizeId('projects', args.projectId);

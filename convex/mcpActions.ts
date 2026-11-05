@@ -148,7 +148,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   const agentName=(args.agentClientId?args.agentName:session?.agentName??args.agentName)??'MCP client';
   const agentClientId=args.agentClientId??session?.agentClientId;
   const sessionLane=session?.lane??'edit';
-  if(!session&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Start a task for this target with startTask(projectId, timelineId, request). A style is optional; shared editing tools are available immediately.',true);
+  if(!session&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Pass the taskId from startTask, or start a task for this target with startTask(projectId, timelineId, request). A style is optional; shared editing tools are available immediately.',true);
   const task = session ? await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null : null;
   const lane=task?.lane??sessionLane;
   if(!laneToolAllowed(lane,args.name,task?.capabilities))return result(laneToolError(lane,args.name),true);
@@ -176,6 +176,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,toolsChanged:true,next:'Refresh tools/list. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
   }
   if(args.name==='exportVideo'){
+    // A paid export never rests on an inferred task: a sessionless call names the task the user confirmed it in.
+    if(session&&!args.connectionId&&!input.taskId)return result('Pass the taskId of the task in which the user confirmed this export.',true);
     const task=session?await ctx.runQuery(internal.lanes.task,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null:null;
     if(!task?.exportConfirmed)return result('Export needs explicit user confirmation. Start the task with the user’s export request only after they confirm.',true);
   }
@@ -184,10 +186,10 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   }
   if(session&&['createTimeline','renameTimeline','deleteTimeline'].includes(args.name))await ctx.runMutation(internal.lanes.requireFinish,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId});
   // The editor shows the agent as working across its whole request, not only during each call.
+  // One touch per call. touchAgent rewrites the ten-minute lease only once less than half is left, so a call
+  // longer than five minutes can outlast it; the next call renews it.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
-  let taskEnded=false;
-  const touch = () => projectId&&!taskEnded ? ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, agentName, startedAt, ...(session?{taskId:session.taskId}:{}), ...(agentClientId?{agentClientId}:{}) }).catch(() => null) : null;
-  await touch();
+  if (projectId) await ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, agentName, startedAt, ...(session?{taskId:session.taskId}:{}), ...(agentClientId?{agentClientId}:{}) }).catch(() => null);
   try {
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
@@ -196,7 +198,6 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
       let completion: {passed?:boolean;exhausted?:boolean}|undefined;
       try{completion=JSON.parse(output.text);}catch{/* A tool failure keeps its ordinary idle lease. */}
       if(output.ended||completion?.passed||completion?.exhausted){
-        taskEnded=true;
         await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:session.taskId});
       }
     }
@@ -217,7 +218,6 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     }
     return output;
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
-  finally { await touch(); }
   } catch(error){return result(message(error),true);}
 }});
 
