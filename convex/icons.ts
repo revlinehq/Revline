@@ -38,7 +38,7 @@ function validateIconId(id: string) {
 const TRADEMARK = 'A trademark of its owner: show it as it is, to name that product. Never recolor, distort, restyle or combine it with other marks, and never imply endorsement.';
 const MAX_SVG = 40_000;
 /** Raise when results change shape or quality, so cached answers are fetched again. */
-const CACHE_VERSION = 4;
+const CACHE_VERSION = 5;
 
 type SimpleIcon = { title: string; slug: string; hex: string; source: string; guidelines?: string; license?: { type: string; url?: string }; aliases?: { aka?: string[]; dup?: { title: string }[]; loc?: Record<string, string>; old?: string[] } };
 type Candidate = { id: string; title: string; kind: 'logo' | 'glyph' | 'ui' | 'emoji'; score: number; hex?: string; simple?: SimpleIcon };
@@ -143,8 +143,11 @@ export const find = internalAction({
       candidates = await iconifyCandidates(name, UI_SETS, 'ui');
     } else {
       const [simple, logos, emoji] = await Promise.all([simpleCandidates(name).catch(() => []), iconifyCandidates(name, LOGO_SETS, 'logo').catch(() => []), style === 'glyph' ? iconifyCandidates(name, EMOJI_SETS, 'emoji').catch(() => []) : Promise.resolve([])]);
+      // Programming packs use shorthand slugs (e.g. apollo for Apollo GraphQL),
+      // which cannot establish a requested company's identity on their own.
+      const identifiedLogos = logos.filter(candidate => simple.length > 0 || candidate.id.startsWith('logos:'));
       // A full-color logo leads for 'logo' when it is the same name; the brand's single-color mark leads for 'glyph'.
-      const exactLogos = logos.filter(candidate => candidate.score >= 2), rest = logos.filter(candidate => candidate.score < 2);
+      const exactLogos = identifiedLogos.filter(candidate => candidate.score >= 2), rest = identifiedLogos.filter(candidate => candidate.score < 2);
       candidates = style === 'glyph' ? [...simple, ...emoji, ...exactLogos, ...rest] : [...exactLogos, ...simple, ...rest];
     }
     candidates = candidates.filter((candidate, index) => candidates.findIndex(other => other.id === candidate.id) === index).slice(0, 8);

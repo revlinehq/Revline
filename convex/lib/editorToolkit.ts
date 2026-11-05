@@ -450,6 +450,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
   const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
+    // Healthy worker heartbeats extend the durable request, but must not extend
+    // an MCP call past its transport budget while it holds the edit lock.
+    const waitDeadline = run.runId.startsWith('mcp-') ? Date.now() + 170_000 : Infinity;
     const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
     try {
       while (true) {
@@ -457,7 +460,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const request = await ctx.runQuery(internal.assistant.analysisRequest, { ...run, requestId });
         if (request.status === "failed") throw new AnalysisStepError(request.error ?? "Media analysis could not complete");
         if (request.status === "completed") return await read(request);
-        if (request.expiresAt <= Date.now()) throw new AnalysisStepError("Media analysis is taking longer than this edit request allows. Its background job will save results; try the edit again once processing finishes.");
+        if (Math.min(request.expiresAt, waitDeadline) <= Date.now()) throw new AnalysisStepError("Media analysis is taking longer than this edit request allows. Its background job will save results; try the edit again once processing finishes.");
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } finally { await ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId }); }
@@ -669,7 +672,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const guardRender = async (baseline: Timeline, candidate: Timeline, times: number[]) => {
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
-      const deadline = Date.now() + 420_000;
+      // MCP transport expires before the in-app guard budget. Refuse before any save.
+      const deadline = Date.now() + (run.runId.startsWith('mcp-') ? 170_000 : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
@@ -957,6 +961,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
+      if(lane==='reel'&&editSession.timeline.clips.some(clip=>clip.kind==='caption')){
+        const audibleIds=new Set(editSession.timeline.clips.filter(clip=>clip.volume!==0&&(clip.kind==='audio'||clip.kind==='video'&&!clip.audioSeparated)).map(clip=>clip.assetId));
+        // Each call starts with metadata rows; saved transcripts live in source analysis.
+        await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
+      }
       const frameTask=editMode==='fast'&&lane==='reel'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});

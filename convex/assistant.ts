@@ -28,7 +28,7 @@ import { startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
-import { billingEnabled, hasPaidModelAccess, hasUltraPlan, requireEditorAccess } from './lib/billing_access';
+import { hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -48,7 +48,7 @@ import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './medi
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
-import { allowedClaudeModelChoices, ANTHROPIC_EDIT_CHOICES, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
+import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
@@ -60,20 +60,13 @@ const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or A
 function configured(paidModelAccess = true) {
   try{assertEditorModelConfigured(paidModelAccess ? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
 }
-/** Manual model, reasoning and speed choices: Ultra accounts, or a deployment
- * that opens them to everyone (development sets EDITOR_MODEL_CHOICE_OPEN). */
-/** Opus and Sonnet cost too much to run in the editor chat on Pro (trial included): they run through MCP, on the user's own Claude. In-app only without billing (development) or on Ultra. */
-async function claudeInApp(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  return !billingEnabled() || await hasUltraPlan(ctx, ownerId);
-}
-/** Every plan picks its model; Claude models only where claudeInApp allows. Null when the switcher is off. */
-async function editorModelChoices(ctx: QueryCtx | MutationCtx, ownerId: string) {
+/** Paid accounts can choose any configured model. Null when the switcher is off. */
+function editorModelChoices() {
   if (!claudeModelSwitcherEnabled()) return null;
-  const choices = allowedClaudeModelChoices();
-  return await claudeInApp(ctx, ownerId) ? choices : choices.filter(choice => !ANTHROPIC_EDIT_CHOICES.some(item => item === choice));
+  return allowedClaudeModelChoices();
 }
-async function canChooseEditorModel(ctx: QueryCtx | MutationCtx, ownerId: string, modelChoice?: string) {
-  const choices = await editorModelChoices(ctx, ownerId);
+function canChooseEditorModel(modelChoice?: string) {
+  const choices = editorModelChoices();
   return !!choices && (modelChoice === undefined || choices.some(choice => choice === modelChoice));
 }
 const composerSettingsFields = {
@@ -93,7 +86,7 @@ async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
   const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
   if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: ['gpt-6.1-terra'] satisfies ClaudeModelChoice[], defaultModelChoice: 'gpt-6.1-terra' as const, defaultReasoningEffort: 'low' as const };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
-  const choices = await editorModelChoices(ctx, ownerId);
+  const choices = editorModelChoices();
   return {
     paidModelAccess,
     catalogModels,
@@ -101,7 +94,7 @@ async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
     ...(defaultModelChoice ? { defaultModelChoice } : {}),
     defaultReasoningEffort: defaultEditorReasoningEffort(),
     ...(choices ? { modelSwitcher: true, allowedModels: [...choices] } : {}),
-    ...(await claudeInApp(ctx, ownerId) ? {} : { claudeViaMcp: true }),
+    claudeViaMcp: false,
     ...(process.env.EDITOR_EFFORT_SWITCHER === 'true' && choices ? { effortSwitcher: true } : {}),
   };
 }
@@ -156,7 +149,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
   if (mobile && (args.modelChoice !== 'gpt-6.1-terra' || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
-  if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !await canChooseEditorModel(ctx, ownerId, args.modelChoice)) throw new ConvexError(args.modelChoice === 'opus' || args.modelChoice === 'sonnet' ? 'Opus and Sonnet run through MCP on your plan: connect Claude Code or Claude Desktop to Revline.' : 'This AI model is not available.');
+  if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(args.modelChoice)) throw new ConvexError('This AI model is not available.');
   let pinnedModel;
   try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
@@ -406,9 +399,7 @@ export const modelForRun = internalQuery({
     await requireActiveRun(ctx, args);
     await requireEditorAccess(ctx, args.ownerId);
     if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
-    const selection = validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
-    if (selection.provider === 'anthropic' && !await claudeInApp(ctx, args.ownerId)) return validatePinnedClaudeModel(resolveClaudeModel());
-    return selection;
+    return validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
   },
 });
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
@@ -773,7 +764,7 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
     const paidModelAccess=await hasPaidModelAccess(ctx,args.ownerId);
     const queued=paidModelAccess?validatePinnedClaudeModel(row.pinnedModel):freeEditorModel();
     const chosen=queued.modelChoice!==undefined||queued.reasoningEffort!==undefined||queued.speedMode!==undefined;
-    const pinnedModel=!paidModelAccess?queued:row.clientPlatform==='ios'?mobileModel():chosen&&!await canChooseEditorModel(ctx,args.ownerId,queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
+    const pinnedModel=!paidModelAccess?queued:row.clientPlatform==='ios'?mobileModel():chosen&&!canChooseEditorModel(queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
     const ids=new Set((await requestTimeline(ctx,project,row.timelineId).catch(()=>currentTimeline(project))).clips.map(clip=>clip.id));
