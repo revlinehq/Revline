@@ -4,7 +4,6 @@ import { tools } from './tools';
 import { check } from './check';
 export const definition: LaneDefinition = {
   id: 'reel',
-  label: 'Reel',
   description: 'One-take talking-head or raw footage into a coherent short-form rough cut.',
   skills,
   tools,

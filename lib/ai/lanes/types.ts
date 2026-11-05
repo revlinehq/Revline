@@ -62,7 +62,6 @@ export type CheckRecipe = {
 };
 export type LaneDefinition = {
   id: LaneId;
-  label: string;
   description: string;
   skills: EditorSkill[];
   tools: readonly string[];
