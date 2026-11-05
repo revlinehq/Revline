@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Editor skills: Author prose in Markdown and bundle it for all runtimes; sharpen measured recreation guidance. Why: user requested reviewable skills without changing readSkill.
 - Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
 
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
