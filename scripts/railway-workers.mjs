@@ -8,13 +8,14 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
+import { workerCapacity } from '../lib/worker-capacity.mjs';
 import { verifyStagingPromotion } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
-  apply: { type: 'boolean' }, 'staged-pr': { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
+  apply: { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
   processors: { type: 'string' }, standard: { type: 'string' }, ultra: { type: 'string' },
   'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' },
 } });
@@ -47,12 +48,10 @@ if (values.apply) {
   const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
   const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
   const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
-  const productionOperator = values['staged-pr'] && config.environment === 'production' && ['stage', 'cutover', 'pause', 'resume', 'rollback', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
-  if (values['staged-pr'] && !productionOperator) throw new Error('--staged-pr requires a bounded production operation with one existing service per lane.');
-  if ((railwayOnly || stagingCi || stagingOperator || productionOperator) && !mainPush && branch !== 'main') {
-    const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '82', '--repo', 'zuraHQ/revline-editor', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
+  if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
+    const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '--repo', 'zuraHQ/Revline', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-    if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR #82 head.');
+    if (pr.state !== 'OPEN' || pr.headRefName !== branch || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR head.');
   } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
@@ -64,7 +63,7 @@ const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 
 if (operation === 'build') {
   // Build the existing credential-free allow-list context. Explicit target keeps
-  // the Cloudflare default Docker stage and Fly rollback stages unchanged.
+  // the Cloudflare default Docker stage unchanged.
   await command(process.execPath, ['infra/media-worker/prepare-context.mjs'], { env });
   const context = resolve('.wrangler/media-processor-build');
   const metadata = resolve('.data/railway-build', config.environment);
@@ -111,11 +110,8 @@ const contract = await client.query(makeFunctionReference('railwayWorkers:contra
 const sourceVersion = Number(/MEDIA_PROCESSOR_VERSION\s*=\s*(\d+)/.exec(await readFile('lib/media-analysis/processor-version.ts', 'utf8'))?.[1]);
 if (['stage', 'verify', 'cutover'].includes(operation) && (values['image-first'] ? contract.processorVersion > sourceVersion : contract.processorVersion !== sourceVersion)) throw new Error('Deploy the matching Convex worker contract before cutover.');
 const dispatch = () => convex(['run', 'railwayWorkers:dispatch', '{}']);
-const caps = {
-  processor: Number(remote.FLY_PROCESSOR_MAX_MACHINES ?? 4),
-  standard: Number(remote.FLY_RENDER_MAX_STANDARD ?? 10), ultra: Number(remote.FLY_RENDER_MAX_ULTRA ?? 10),
-};
-for (const pool of selectedPools()) if (!Number.isInteger(caps[pool.name]) || pool.ids.length > caps[pool.name]) throw new Error(`${pool.name}: Railway pool exceeds the existing Fly capacity; review capacity separately.`);
+const caps = workerCapacity(remote);
+for (const pool of selectedPools()) if (!Number.isInteger(caps[pool.name]) || pool.ids.length > caps[pool.name]) throw new Error(`${pool.name}: Railway pool exceeds the configured worker capacity; review capacity separately.`);
 
 async function waitStopped() {
   const deadline = Date.now() + 50 * 60_000;
@@ -187,7 +183,6 @@ if (operation === 'status') {
   if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
   for (const pool of selectedPools()) for (const serviceId of pool.ids) await verifyRailwaySlot({ ...target(), serviceId, image: pool.image });
 } else if (operation === 'stage') {
-  if (kinds.includes('exports') && contract.renderProvider !== 'railway' && config.distributedExports !== (remote.FLY_DISTRIBUTED_EXPORTS === 'true')) throw new Error('Keep the existing distributed-export setting during migration.');
   const artifactVariables = {};
   const maxChunks = z.coerce.number().int().min(2).max(16).parse(settings.REVLINE_EXPORT_MAX_CHUNKS ?? 8);
   if (kinds.includes('exports') && config.distributedExports) {
@@ -245,22 +240,20 @@ if (operation === 'status') {
   if (kinds.includes('processor')) await setEnv('MEDIA_PROCESSOR_BACKEND', 'railway');
   if (kinds.includes('exports')) await setEnv('RENDER_PROVIDER', 'railway');
   await dispatch();
-  console.log('Railway queue dispatch selected. Existing Fly leases finish normally; Fly resources retained.');
+  console.log('Railway queue dispatch selected. Existing task leases finish normally.');
 } else if (operation === 'rollback') {
-  const previous = z.object({ environment: z.literal(config.environment), projectId: z.literal(config.projectId), environmentId: z.literal(config.environmentId), kinds: z.array(z.enum(['processor', 'exports'])), processorBackend: z.enum(['local', 'fly', 'cloudflare', 'railway']), renderProvider: z.string() }).parse(JSON.parse(await readFile(`${configPath}.rollback.json`, 'utf8')));
+  const previous = z.object({ environment: z.literal(config.environment), projectId: z.literal(config.projectId), environmentId: z.literal(config.environmentId), kinds: z.array(z.enum(['processor', 'exports'])), processorBackend: z.enum(['local', 'cloudflare', 'railway']), renderProvider: z.enum(['', 'local', 'cloudflare', 'railway']) }).parse(JSON.parse(await readFile(`${configPath}.rollback.json`, 'utf8')));
   await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
   if (previous.kinds.includes('processor')) await setEnv('MEDIA_PROCESSOR_BACKEND', previous.processorBackend);
   if (previous.kinds.includes('exports')) {
     if (previous.renderProvider) await setEnv('RENDER_PROVIDER', previous.renderProvider);
     else await convex(['env', 'remove', 'RENDER_PROVIDER']);
   }
-  if (previous.processorBackend === 'fly') await convex(['run', 'flyProcessor:dispatch', '{}']);
-  if (previous.renderProvider === 'fly') await convex(['run', 'flyRender:dispatch', '{}']);
   if (previous.processorBackend === 'railway' || previous.renderProvider === 'railway') {
     await setEnv('RAILWAY_WORKERS_PAUSED', 'false');
     await dispatch();
   }
-  console.log('Previous routes restored. Railway tasks retain their leases and drain. No Fly resources changed.');
+  console.log('Previous routes restored. Railway tasks retain their leases and drain.');
 } else if (operation === 'pause' || operation === 'resume') {
   if (operation === 'resume' && (remote.RAILWAY_WORKERS_JSON !== JSON.stringify(config) || token !== remote.RAILWAY_API_TOKEN)) throw new Error('Resume requires the exact staged manifest and token.');
   await setEnv('RAILWAY_WORKERS_PAUSED', String(operation === 'pause'));

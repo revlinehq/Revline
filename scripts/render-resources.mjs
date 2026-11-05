@@ -3,7 +3,6 @@ import { availableParallelism, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { findFfBinary } from '@hyperframes/parsers/ff-binaries';
-import { FLY_WORKER_GUEST } from '../lib/fly-worker-resources.mjs';
 
 const MIB = 1024 * 1024;
 // Below this, keep the original one-worker, low-memory profile (the legacy
@@ -35,10 +34,10 @@ export function renderResources() {
   const cpus = Math.max(1, availableParallelism());
   const hostedCpus = process.env.RAILWAY_SERVICE_ID
     ? Math.min(cpus, boundedInteger('MEDIA_PROCESSOR_THREADS', Math.min(64, cpus), 64))
-    : process.env.FLY_APP_NAME ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
+    : null;
   // Two capture workers use both vCPUs of the hosted profile; more would
   // contend with the encoder and need re-measuring against the memory budget.
-  // Fly overrides must fit this machine, including settings inherited from an old image.
+  // Hosted overrides must fit this worker, including settings inherited from an old image.
   const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), hostedCpus ?? 16);
   return {
     workers,

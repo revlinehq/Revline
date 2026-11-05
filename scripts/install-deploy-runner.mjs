@@ -30,7 +30,7 @@ if (!configured) {
   const registration = JSON.parse(run('gh', ['api', '-X', 'POST', 'repos/zuraHQ/revline-editor/actions/runners/registration-token']));
   run('./config.sh', ['--unattended', '--url', 'https://github.com/zuraHQ/revline-editor', '--token', registration.token, '--name', 'revline-deploy-pc', '--labels', 'revline-deploy-pc', '--work', '_work'], { cwd: directory });
 }
-const path = [dirname(process.execPath), join(home, '.fly/bin'), join(home, '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':');
+const path = [dirname(process.execPath), join(home, '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':');
 // svc.sh normally copies this entry point while installing a system service.
 // Our user service needs the same entry point and a reboot-stable CLI path.
 await copyFile(join(directory, 'bin/runsvc.sh'), join(directory, 'runsvc.sh'));

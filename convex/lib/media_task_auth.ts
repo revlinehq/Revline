@@ -7,7 +7,7 @@ import { MEDIA_LEASE_LOST } from '../../lib/media-analysis/errors';
 export const mediaTaskCredentials = { taskId: v.id('mediaTasks'), leaseToken: v.string() };
 
 /** Each worker type has its own credential: RENDER_WORKER_SECRET for the media processor
- *  (Cloudflare, local dev) and MEDIA_WORKER_SECRET_EXPORTS for Fly export machines. An export
+ *  (Cloudflare, local dev) and MEDIA_WORKER_SECRET_EXPORTS for dedicated export workers. An export
  *  worker can only claim export tasks, so its key never reaches uploads or analysis. */
 type MediaWorkerRole = 'processor' | 'exports';
 export function requireMediaWorker(secret: string): MediaWorkerRole {

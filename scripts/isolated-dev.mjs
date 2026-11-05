@@ -165,7 +165,7 @@ try {
     AGENT_RUNNER_SECRET: secret('AGENT_RUNNER_SECRET'), AGENT_RUNNER_RUN_KEY: secret('AGENT_RUNNER_RUN_KEY'),
     REVLINE_MCP_TOKEN: previous.REVLINE_MCP_TOKEN || `rvl_pat_${randomBytes(32).toString('hex')}`,
     // Hosted processors wake the shared queue. Isolated media tasks are handled by this worktree's local worker.
-    MEDIA_PROCESSOR_WAKE_URL: '', MEDIA_PROCESSOR_BACKEND: 'local', RENDER_PROVIDER: 'local', FLY_DISTRIBUTED_EXPORTS: 'false',
+    MEDIA_PROCESSOR_WAKE_URL: '', MEDIA_PROCESSOR_BACKEND: 'local', RENDER_PROVIDER: 'local',
   };
   const mediaConfig = await workerConfig('cloudflare/media/wrangler.jsonc', state.mediaName, { ALLOWED_ORIGINS: origin, READ_ONLY_MEDIA_KEYS: overrides.REVLINE_BORROWED_MEDIA_KEYS });
   const runnerConfig = await workerConfig('cloudflare/agent-runner/wrangler.jsonc', state.runnerName, { CONVEX_SITE_URL: site });
@@ -180,7 +180,7 @@ try {
   if (!overrides.MEDIA_WORKER_URL || !overrides.AGENT_RUNNER_URL) throw new Error('Wrangler did not report isolated Worker URLs.');
   const values = { ...settings, ...overrides };
   // Never carry deployment selectors, production service hooks, or default-runner URLs into the new backend.
-  const omitted = ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT_TOKEN', 'CONVEX_URL', 'CONVEX_SITE_URL', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'CLERK_WEBHOOK_SIGNING_SECRET', 'DISCORD_WEBHOOK_URL', 'FLY_API_TOKEN', 'RENDER_WORKER_SECRET_PREVIOUS', 'MEDIA_WORKER_SECRET_EXPORTS'];
+  const omitted = [...new Set([...Object.keys(settings), ...Object.keys(previous)].filter(key => key.startsWith('FLY_') || key.startsWith('RAILWAY_'))), 'CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT_TOKEN', 'CONVEX_URL', 'CONVEX_SITE_URL', 'STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'CLERK_WEBHOOK_SIGNING_SECRET', 'DISCORD_WEBHOOK_URL', 'RENDER_WORKER_SECRET_PREVIOUS', 'MEDIA_WORKER_SECRET_EXPORTS'];
   for (const key of omitted) delete values[key];
   await setValues(values);
   for (const key of omitted) if (previous[key] !== undefined) await convex(['env', 'remove', key]);

@@ -1,7 +1,5 @@
-// Export render artifacts (plans and chunks) in the existing Tigris bucket. Both
-// Fly and Railway use this same storage protocol; compute migration does not move data. Credentials
-// are the app secrets `fly storage create` sets: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY,
-// AWS_ENDPOINT_URL_S3 and BUCKET_NAME. Bodies stream with an unsigned payload hash.
+// Plans and chunks use the configured S3-compatible artifact bucket.
+// Bodies stream with an unsigned payload hash; credentials remain in runtime secrets.
 import { spawn } from 'node:child_process';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
@@ -57,7 +55,7 @@ export async function remove(key) {
   return !!response?.ok;
 }
 
-/** Operator recovery for an orphaned Railway attempt, never a Fly export prefix. */
+/** Operator recovery for an orphaned Railway attempt, never an unscoped export prefix. */
 export async function removeExpiredRailwayArtifacts(prefix) {
   if (!/^exports\/[a-zA-Z0-9]+\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(prefix)) throw new Error('Use the exact Railway attempt prefix from artifact-prefix logs.');
   const keys = [`${prefix}/plan.tar`, ...Array.from({ length: 16 }, (_, index) => `${prefix}/chunk-${index}.mp4`)];

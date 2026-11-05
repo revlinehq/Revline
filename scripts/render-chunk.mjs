@@ -1,4 +1,4 @@
-// Fly chunk machine: render one slice of a distributed export plan and upload it.
+// Railway chunk worker: render one slice of a distributed export plan and upload it.
 // Started by render-distributed.mjs with REVLINE_CHUNK_* env; the machine is
 // auto-destroyed when this process exits. Exit 0 only once the chunk is stored.
 import { mkdir, mkdtemp } from 'node:fs/promises';
