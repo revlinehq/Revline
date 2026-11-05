@@ -47,7 +47,8 @@ export async function traceShape(crop: Buffer, options: { color?: string; tolera
   // interior gaps. Nearest-neighbor enlargement preserves the classified mask, while
   // reciprocal path scaling keeps the result in the original crop coordinates.
   const scale = Math.min(4, TRACE_SIDE / Math.max(width, height)), tw = Math.max(2, Math.round(width * scale)), th = Math.max(2, Math.round(height * scale));
-  const smooth = await sharp(mask, { raw: { width, height, channels: 1 } }).resize(tw, th, { kernel: 'nearest' }).blur(1.2).threshold(128).extractChannel(0).raw().toBuffer();
+  const enlarged = sharp(mask, { raw: { width, height, channels: 1 } }).resize(tw, th, { kernel: 'nearest' });
+  const smooth = await (scale > 1 ? enlarged : enlarged.blur(1.2)).threshold(128).extractChannel(0).raw().toBuffer();
   const paths = tracePaths(smooth, tw, th, 1 / scale, fill);
   const centerline = spine(smooth, tw, th, 1 / scale);
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" fill-rule="evenodd">${paths.map(path => `<path fill="${path.fill}" d="${path.d}"/>`).join('')}</svg>`;
@@ -58,8 +59,10 @@ export async function traceShape(crop: Buffer, options: { color?: string; tolera
 function tracePaths(mask: Buffer, width: number, height: number, scale: number, fill: string) {
   const rgba = new Uint8ClampedArray(width * height * 4);
   for (let index = 0; index < width * height; index++) { const value = mask[index] ? 0 : 255; rgba.set([value, value, value, 255], index * 4); }
-  for (const detail of [1, 2, 4, 8]) {
-    const options = { ltres: detail, qtres: detail, pathomit: 8 * detail, colorsampling: 0, numberofcolors: 2, pal: [{ r: 0, g: 0, b: 0, a: 255 }, { r: 255, g: 255, b: 255, a: 255 }], blurradius: 0, mincolorratio: 0, colorquantcycles: 1, layering: 0, strokewidth: 0, linefilter: true, scale, roundcoords: 1, desc: false, viewbox: false };
+  // Enlarged small crops need subpixel contours: rounding hole coordinates and
+  // filtering short paths can split a thin interior into disconnected islands.
+  for (const detail of scale < 1 ? [.1, 1, 2, 4, 8] : [1, 2, 4, 8]) {
+    const options = { ltres: detail, qtres: detail, pathomit: detail < 1 ? 0 : 8 * detail, colorsampling: 0, numberofcolors: 2, pal: [{ r: 0, g: 0, b: 0, a: 255 }, { r: 255, g: 255, b: 255, a: 255 }], blurradius: 0, mincolorratio: 0, colorquantcycles: 1, layering: 0, strokewidth: 0, linefilter: detail >= 1, scale, roundcoords: detail < 1 ? -1 : 1, desc: false, viewbox: false };
     const svg = ImageTracer.getsvgstring(ImageTracer.imagedataToTracedata({ width, height, data: rgba }, options), options);
     const paths = [...svg.matchAll(/<path[^>]*fill="rgb\(0,0,0\)"[^>]*\sd="([^"]+)"/g)].map(found => ({ d: found[1].trim().replace(/\s+/g, ' '), fill }));
     if (paths.reduce((total, path) => total + path.d.length, 0) <= MAX_PATH_TEXT || detail === 8) return paths;
