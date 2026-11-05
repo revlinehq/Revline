@@ -2,7 +2,7 @@ import {execFile} from 'node:child_process';
 import {statfs} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {promisify} from 'node:util';
-import {AnalysisError} from '@/lib/media-analysis/errors';
+import {AnalysisError, isMediaDiskFull} from '@/lib/media-analysis/errors';
 
 const run=promisify(execFile);
 const seekSafePcm=new Set(['pcm_s16le','pcm_s24le','pcm_s32le','pcm_f32le','pcm_f64le']);
@@ -25,7 +25,7 @@ export async function prepareRenderAudioSource(input:string,output:string,signal
     if(!Number.isFinite(start)||start<0||!Number.isFinite(end)||end<=start)throw new AnalysisError('Export audio source window is invalid.',422);
     const sampleCount=Math.ceil((end-start)*SAMPLE_RATE);
     const disk=await statfs(dirname(output));
-    if(sampleCount*channels*2+1024*1024*1024>disk.bavail*disk.bsize)throw new AnalysisError('The render server needs more temporary disk space for this audio section.',503);
+    if(sampleCount*channels*2+1024*1024*1024>disk.bavail*disk.bsize)throw new AnalysisError('The render server needs more temporary disk space for this audio section. Free disk space before retrying.',507,false);
     // Integer-second preroll keeps resampling phase stable across an AAC seek.
     // Trim in the output sample clock and return the new file's source origin.
     const seek=Math.max(0,Math.floor(start)-1),skip=Math.round((start-seek)*SAMPLE_RATE);
@@ -35,6 +35,7 @@ export async function prepareRenderAudioSource(input:string,output:string,signal
     return {path:output,decoded:true,sourceStart:start,elapsedMs:performance.now()-started};
   } catch(error) {
     if(signal.aborted||error instanceof AnalysisError)throw error;
+    if(isMediaDiskFull(error))throw new AnalysisError('The render server ran out of temporary disk space while decoding audio. Free disk space before retrying.',507,false);
     throw new AnalysisError('Export audio source could not be decoded.',422);
   }
 }

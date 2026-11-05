@@ -167,7 +167,7 @@ function Templates({ saved, onApply, onDelete, onSave, onImport, onExport }: { s
 
 export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: boolean; query?: string }) {
   const id = useId();
-  const [category, setCategory] = useState<LabCategory>('explainer');
+  const [category, setCategory] = useState<LabCategory>('graphics');
   const [clipMotionVisited, setClipMotionVisited] = useState(false);
   const [config, setConfig] = useState<LabConfig>(() => cloneConfig(DEFAULT_LAB_CONFIG));
   const [frame, setFrame] = useState(60);
@@ -183,7 +183,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   const [controlTab, setControlTab] = useState<'content' | 'speech' | 'style' | 'motion'>('content');
   const currentCategory = LAB_CATEGORIES.find(item => item.id === category)!;
   const search = query.trim().toLocaleLowerCase();
-  const categories = LAB_CATEGORIES.filter(item => !search || `${item.label} ${item.description} ${item.id === 'explainer' ? 'cards diagrams arrows charts counters speech' : ''}`.toLocaleLowerCase().includes(search));
+  const categories = LAB_CATEGORIES.filter(item => !search || `${item.label} ${item.description} ${item.id === 'graphics' ? 'cards diagrams arrows charts counters speech' : ''}`.toLocaleLowerCase().includes(search));
   const visibleCategory = categories.some(item => item.id === category) ? category : categories[0]?.id;
   const activeCategory = LAB_CATEGORIES.find(item => item.id === visibleCategory) ?? currentCategory;
   useEffect(() => { if (visibleCategory === 'clip-motion') setClipMotionVisited(true); }, [visibleCategory]);
@@ -247,9 +247,9 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   function selectCategory(next: LabCategory) {
     setCategory(next); setPlaying(false);
     if (next === 'typography') { change({ scene: 'typography' }); setControlTab('content'); }
-    if (next === 'explainer' && config.scene === 'typography') { change({ scene: 'block-card' }); setControlTab('content'); }
+    if (next === 'graphics' && config.scene === 'typography') { change({ scene: 'block-card' }); setControlTab('content'); }
   }
-  function applyTemplate(template: LabTemplate) { setConfig(cloneConfig(template.config)); setCategory(template.config.scene === 'typography' ? 'typography' : 'explainer'); setControlTab('content'); setPlaying(false); frameRef.current = 0; setFrame(0); setNotice(`Loaded “${template.name}”. Press play to preview it.`); }
+  function applyTemplate(template: LabTemplate) { setConfig(cloneConfig(template.config)); setCategory(template.config.scene === 'typography' ? 'typography' : 'graphics'); setControlTab('content'); setPlaying(false); frameRef.current = 0; setFrame(0); setNotice(`Loaded “${template.name}”. Press play to preview it.`); }
   function persist(next: LabTemplate[]) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(next)); setSaved(next); return true; } catch { setNotice('Browser storage is unavailable. Export JSON to keep this design.'); return false; } }
   function save(name: string) { const template = { id: crypto.randomUUID(), name, description: 'Saved in this browser', config: cloneConfig(visualConfig) }; if (persist([template, ...saved].slice(0, 30))) setNotice(`Saved “${name}” in this browser.`); }
   async function importTemplate(file: File) { try { if (file.size > 500_000) throw new Error('Choose a template smaller than 500 KB.'); const checked = parseLabFile(JSON.parse(await file.text())); applyTemplate({ id: 'import', name: file.name.replace(/\.json$/i, ''), description: 'Imported template', config: checked }); } catch (error) { setNotice(error instanceof Error ? error.message : 'The template could not be read.'); } }
@@ -267,7 +267,7 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
       <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>REMOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Six ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try six motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/remotion-dev-tests" target="_blank" rel="noopener noreferrer" title="Open full Remotion playground"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
       <nav className="rmlab-categories" aria-label="Motion experiments">{categories.map((item, index) => <button type="button" key={item.id} aria-pressed={visibleCategory === item.id} onClick={() => selectCategory(item.id)}><span>{String(LAB_CATEGORIES.findIndex(value => value.id === item.id) + 1).padStart(2, '0')}</span>{item.label}{!embedded && index === 0 ? <i>START HERE</i> : null}</button>)}</nav>
       {!visibleCategory ? <p className="rmlab-no-results">No motion experiments match “{query}”. Try cards, tracking, typography or templates.</p> : <>
-        <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'explainer' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
+        <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'graphics' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
         {clipMotionVisited || visibleCategory === 'clip-motion' ? <div hidden={visibleCategory !== 'clip-motion'}><ClipMotionLab active={visibleCategory === 'clip-motion'}/></div> : null}
         {visibleCategory === 'clip-motion' ? null : visibleCategory === 'tracking' ? <SubjectToolsLab/> : <div className="rmlab-editor-grid">
           <div className="rmlab-preview-column">

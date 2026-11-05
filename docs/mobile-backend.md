@@ -73,3 +73,15 @@ Processing and renders run on the existing workers, independently of the mobile 
 - Real-device verification of sign-in, multipart uploads, signed URL playback/seeking, concurrent web/mobile saves, reconnecting to running edits/exports, and cancellation.
 
 Keep provider keys, Clerk secret keys, Convex deployment credentials, R2 signing secrets, and processing-worker credentials server-side. A phone needs its signed-in session and operation-scoped URLs, never a worker secret or an admin key.
+
+## In-app model entitlement
+
+Editing access and model access are separate decisions. Existing editing checks still admit trials, complimentary grants and accepted Apple access periods. They do not prove payment for upgraded in-app models. Free, trial and unknown payment states use GPT-6.1 Terra with Low reasoning, including when manual model selection is disabled. Active Stripe subscriptions unlock only within their current term; cancellation scheduled for the end of that term does not remove model access. Past-due and unknown Stripe states do not unlock models.
+
+Apple model access requires a current, unrevoked paid transaction, within both its original expiry and accepted access window. Billing grace alone does not establish a new paid term. Verified Apple JWS price and offer mode establish paid versus free; authenticated Superwall transaction price and trial period facts can establish the same evidence. Evidence belongs to a transaction, never to a different renewal described by a webhook snapshot. Apple evidence wins over Superwall evidence. Missing facts remain unknown.
+
+Legacy Apple rows gain evidence on the next verified transaction sync, notification redelivery or purchase restore. Receipt deduplication still prevents repeating access changes, while allowing payment evidence to be backfilled for that same owned transaction. Do not infer payment from plan, renewal count or expiry. Before rollout, audit active legacy rows for missing evidence and reverify their transactions through the existing StoreKit restore/sync or verified provider redelivery path. This change does not retroactively label those rows paid or mutate subscriptions. Existing editing access continues during reconciliation.
+
+The web composer consumes the same entitlement in both entry points, defaulting to restricted while settings load. Send, queued starts and retries clamp restricted accounts; dispatch and the runner's authenticated model query recheck persisted access. Each provider step checks again and stops if access changed. Existing paid provider restrictions still apply; user-owned external MCP inference does not use this in-app model policy.
+
+Sources: [Apple signed transaction fields](https://developer.apple.com/documentation/appstoreserverapi/jwstransactiondecodedpayload), [Apple offer modes](https://developer.apple.com/documentation/appstoreserverapi/offerdiscounttype), [Superwall verified transaction and snapshot semantics](https://superwall.com/docs/integrations/webhooks/v2).
