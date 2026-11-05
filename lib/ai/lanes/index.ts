@@ -6,7 +6,7 @@ import { definition as reel } from './reel/definition';
 import { BASE_TOOLS, PROJECT_BASE_TOOLS, SKILL_TOOLS } from './base-tools';
 import { editorSkills } from '../skills';
 import { LANE_IDS, type LaneId } from './types';
-export { LANE_IDS, type LaneId } from './types';
+export type { LaneId } from './types';
 // Persisted legacy tasks use shared editing; this alias is never advertised.
 export const LANES = { edit, motion, recreate, clip, reel, explainer: edit };
 export const isLane = (value: unknown): value is LaneId =>
