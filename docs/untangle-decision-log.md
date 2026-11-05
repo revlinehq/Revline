@@ -219,4 +219,5 @@ Verified on the isolated backend `amiable-ocelot-695` with `npm run typecheck`, 
 - **Editor store:** the edit lock and the selection should live in the editor store.
 - **Voice tools:** decide whether to re-enable or delete them.
 - **Drag-and-drop:** the effect and stock-audio drop handlers have no drag source.
+- **Opening gate (found during verification; it also happens on `94050549`):** while the gate waits on an initial analysis that never arrives, its invisible `.footage-preparation` layer sits over the chat composer. Clicks land on `<main>` and typed text is lost. To reproduce, open an isolated backend that has no transcription key.
 - **Skill text:** it still names `addClipTransition` and `configureClipTransition`, which don't exist; the tool is `addTransition`.
