@@ -1,6 +1,6 @@
 ## 2026-11-05
 
-- Composer: Add the compact home composer, direct upload and a Start clipping shortcut that fills `/clip [ENTER YOUTUBE URL]`; keep the editor flat. Why: user approved the design and requested the clipping prompt.
+- Composer: Add the compact home composer with centered upload/clip icons and a `/clip [ENTER YOUTUBE URL]` shortcut; keep the editor flat. Why: user approved the design and requested centered icon actions.
 
 ## 2026-11-04
 
