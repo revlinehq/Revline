@@ -17,7 +17,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { createEditorToolkit, EXPORT_SETTINGS_INPUT } from './lib/editorToolkit';
 import { toolBehavior } from '../lib/ai/tool-definitions';
 import { mediaDownloadUrl } from './lib/media_storage';
-import { readRunId } from './lib/run_ids';
+import { newMcpTaskId, readRunId } from './lib/run_ids';
 import { CALL_LIMIT_MS } from './lib/mcp_limits';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 import { startLocalUpload, mediaKind } from './mcpUploads';
@@ -146,7 +146,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const {project}=await ctx.runQuery(internal.assistant.getRun,{ownerId:args.ownerId,projectId,runId:readRunId(request.timelineId)});
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
-    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=`mcp-task:${crypto.randomUUID()}`;
+    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=newMcpTaskId();
     const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});

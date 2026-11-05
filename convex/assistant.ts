@@ -8,7 +8,7 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, runAuthorLabel } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, isMcpRun, runAuthorLabel } from './lib/run_ids';
 import { runArgs, holdsRun, runIsActive } from './lib/active_run';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
@@ -125,7 +125,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task&&(task.activity||task.kind==='transcribe')?mediaTaskActivityLabel(task):labels[active.mode]:editing?'Applying edits…':null;
   const externalAgents=await projectWorkingAgents(ctx,ownerId,project._id), latestAgent=externalAgents[0];
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && isMcpRun(project.aiRunId) } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
