@@ -25,6 +25,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
 - Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
+- Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
