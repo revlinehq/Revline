@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
 # Changelog
@@ -7,7 +8,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
-- Clip planning: Return all quote and acceptance errors with exact word windows, current IDs and range limits. Why: the podcast benchmark repeated rejected plans after vague diagnostics and candidate replacement.
+- Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
 - Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
 - Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
@@ -24,6 +25,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Media preparation: Share prepared audio with transcription, stage audio inputs locally, bound speech-provider waits and report non-retryable disk shortages. Why: rough cuts reread large video sources and hid slow stages.
 - Deployment: Package reference tracking and its shared frame reader in processor images. Why: the main release failed its image runtime check before deployment.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
+- Clip planning: Return all quote and acceptance errors with exact word windows, current IDs and range limits. Why: the podcast benchmark repeated rejected plans after vague diagnostics and candidate replacement.
 - Snapshot recovery: Recover same-lease cache reservations, retain completed clip checks across lease handoffs, and bound transport retries. Why: lost responses could make a worker wait on itself or repeat finished work.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
 - Chat history: Return focus to a surviving nearby chat without scrolling after deletion. Why: deleting a row jumped the user back to the search field.
