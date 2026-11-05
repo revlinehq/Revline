@@ -40,7 +40,6 @@ import type * as derivations from "../derivations.js";
 import type * as devIsolation from "../devIsolation.js";
 import type * as discordAlerts from "../discordAlerts.js";
 import type * as editorAccess from "../editorAccess.js";
-import type * as fpsMigration from "../fpsMigration.js";
 import type * as frameCache from "../frameCache.js";
 import type * as generatedImages from "../generatedImages.js";
 import type * as http from "../http.js";
@@ -187,7 +186,6 @@ declare const fullApi: ApiFromModules<{
   devIsolation: typeof devIsolation;
   discordAlerts: typeof discordAlerts;
   editorAccess: typeof editorAccess;
-  fpsMigration: typeof fpsMigration;
   frameCache: typeof frameCache;
   generatedImages: typeof generatedImages;
   http: typeof http;
