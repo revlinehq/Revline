@@ -15,16 +15,10 @@ for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'lib',
   await mkdir(dirname(join(context, name)), { recursive: true });
   await cp(join(root, name), join(context, name), { recursive: true, dereference: false, filter });
 }
-for (const name of ['render-worker.mjs', 'render-distributed.mjs', 'render-chunk.mjs', 'render-artifacts.mjs', 'render-resources.mjs', 'render-ffmpeg.sh', 'composition-review-worker.mjs', 'track-reference.py', 'track-pixels.py', 'source_frames.py', 'detect-facecam.py', 'detect-shots.py', 'detect-beats.py', 'install-beat-model.mjs', 'copy-vendor.mjs', 'hyperframes-playback-compat.mjs', 'beat-tracking-requirements.txt', 'scene-detection-requirements.txt', 'video-import-requirements.txt']) {
+for (const name of ['render-worker.mjs', 'render-distributed.mjs', 'render-railway-chunks.mjs', 'render-chunk.mjs', 'render-artifacts.mjs', 'render-resources.mjs', 'render-ffmpeg.sh', 'composition-review-worker.mjs', 'track-reference.py', 'track-pixels.py', 'source_frames.py', 'detect-facecam.py', 'detect-shots.py', 'detect-beats.py', 'install-beat-model.mjs', 'copy-vendor.mjs', 'hyperframes-playback-compat.mjs', 'beat-tracking-requirements.txt', 'scene-detection-requirements.txt', 'video-import-requirements.txt']) {
   await mkdir(join(context, 'scripts'), { recursive: true });
   await cp(join(root, 'scripts', name), join(context, 'scripts', name));
 }
-// Seed the pinned beat model from the verified local copy so image builds do not
-// depend on the upstream model host; install-beat-model.mjs re-verifies it.
-await mkdir(join(context, 'models'), { recursive: true });
-const beatModel = join(root, '.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt');
-await cp(beatModel, join(context, 'models/beat_this-final0.ckpt')).catch(error => { if (error.code !== 'ENOENT') throw error; });
-await writeFile(join(context, 'models/.keep'), '');
 // Wrangler rewrites Dockerfiles before building, so use a context that is safe
 // even if the Dockerfile-specific ignore file is not copied by its builder.
 await writeFile(join(context, '.dockerignore'), '**/.env*\n**/.dev.vars*\n**/.git/**\n**/.data/**\npublic/uploads/**\n');

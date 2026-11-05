@@ -7,6 +7,7 @@ import { internalAction } from './_generated/server';
 export const wake = internalAction({ args: {}, returns: v.null(), handler: async ctx => {
   const backend = processorBackend();
   if (backend === 'local') return null;
+  if (backend === 'railway') { await ctx.runAction(internal.railwayWorkers.dispatch, {}); return null; }
   if (backend === 'fly') { await ctx.runAction(internal.flyProcessor.dispatch, {}); return null; }
   const url = process.env?.MEDIA_PROCESSOR_WAKE_URL;
   const secret = process.env?.RENDER_WORKER_SECRET;
