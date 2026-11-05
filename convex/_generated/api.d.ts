@@ -90,6 +90,7 @@ import type * as lib_pixel_track_validator from "../lib/pixel_track_validator.js
 import type * as lib_processor_backend from "../lib/processor_backend.js";
 import type * as lib_project_data from "../lib/project_data.js";
 import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
+import type * as lib_reference_reads from "../lib/reference_reads.js";
 import type * as lib_render_seats from "../lib/render_seats.js";
 import type * as lib_render_snapshots from "../lib/render_snapshots.js";
 import type * as lib_retry_aborted_transaction from "../lib/retry_aborted_transaction.js";
@@ -232,6 +233,7 @@ declare const fullApi: ApiFromModules<{
   "lib/processor_backend": typeof lib_processor_backend;
   "lib/project_data": typeof lib_project_data;
   "lib/publicationReceipt": typeof lib_publicationReceipt;
+  "lib/reference_reads": typeof lib_reference_reads;
   "lib/render_seats": typeof lib_render_seats;
   "lib/render_snapshots": typeof lib_render_snapshots;
   "lib/retry_aborted_transaction": typeof lib_retry_aborted_transaction;
