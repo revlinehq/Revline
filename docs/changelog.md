@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Player: Match native Hyperframes controls to Revline’s fonts, neutral surfaces, compact spacing, and accent color. Why: user requested a customized player.
+
 - Composer: Remove the aspect ratio button’s hover background and brighten its label instead. Why: user disliked the outer picker highlight.
 
 - New edit: Increase space above the Start new edit section beneath the composer. Why: user requested more separation.
