@@ -4,7 +4,7 @@ import { ConvexError, v, convexToJson, jsonToConvex, type Infer } from 'convex/v
 import {internal} from './_generated/api';
 import { internalMutation, internalQuery } from './_generated/server';
 import { toolBehavior } from '../lib/ai/tool-definitions';
-import { toolWriteReceipt } from './lib/tool_write_receipt';
+import { savesNothing, toolWriteReceipt } from './lib/tool_write_receipt';
 import { projectIdentity } from './lib/project_data';
 import { saveEvidence } from './lib/lane_evidence';
 import { turnForRun } from './assistantTurnRecovery';
@@ -33,7 +33,7 @@ export const run = internalMutation({
   returns: v.object({ value: v.any(), receipt: v.optional(toolWriteReceipt),replayed:v.optional(v.boolean()) }),
   handler: async (ctx, args) => {
     const definition = toolBehavior(args.toolName);
-    if (!definition || definition.effect === 'read' || definition.effect === 'analysis' || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
+    if (!definition || savesNothing(definition.effect) || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
     await projectIdentity(ctx, args.projectId, args.ownerId);
     const existing = await ctx.db.query('toolWriteReceipts').withIndex('by_write', q => q.eq('writeId', args.writeId)).unique();
     if (existing) {
