@@ -22,6 +22,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
