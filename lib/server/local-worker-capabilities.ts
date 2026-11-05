@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import puppeteer from 'puppeteer';
 import type { MediaWorkItem } from '../../convex/mediaTasks';
-import { workerToolPath } from './worker-tool-path';
+import { beatTrackModelPath, beatTrackPython, pixelTrackPython, sceneDetectPython, videoImporterPath } from './worker-tool-path';
 
 const run = promisify(execFile);
 /** Check before subscribing/claiming: a missing dependency must not consume an attempt. */
@@ -23,19 +23,19 @@ export async function localWorkerCapabilities() {
     missing.push('MediaPipe models / WASM');
     for (const kind of ['facecam', 'speakers', 'track'] as const) excludedKinds.add(kind);
   }
-  const scene = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
+  const scene = sceneDetectPython();
   if (!await available('scene detection / OpenCV', scene, ['-c', 'import cv2, scenedetect'])) {
     for (const kind of ['facecam', 'speakers', 'shots', 'reference', 'derive'] as const) excludedKinds.add(kind);
   }
-  const pixel = workerToolPath(process.env.PIXEL_TRACK_PYTHON || process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
+  const pixel = pixelTrackPython();
   if (pixel !== scene && !await available('pixel tracking / OpenCV', pixel, ['-c', 'import cv2'])) excludedKinds.add('derive');
-  const beat = workerToolPath(process.env.BEAT_TRACK_PYTHON, '.data/beat-tracking/bin/python');
-  const model = workerToolPath(process.env.BEAT_TRACK_MODEL_PATH, '.data/beat-tracking-models/hub/checkpoints/beat_this-final0.ckpt');
+  const beat = beatTrackPython();
+  const model = beatTrackModelPath();
   if (!await available('Beat This', beat, ['-c', 'import beat_this, torch, torchaudio']) || !existsSync(model)) {
     excludedKinds.add('beats'); excludedKinds.add('reference');
     if (!existsSync(model)) missing.push('Beat This model');
   }
-  const importer = workerToolPath(process.env.YT_DLP_PATH, '.data/video-import/bin/yt-dlp', 'yt-dlp');
+  const importer = videoImporterPath();
   if (!await available('video importer', importer, ['--version'])) excludedKinds.add('import');
   return { media, excludedKinds: [...excludedKinds], missing };
 }

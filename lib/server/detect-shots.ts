@@ -1,4 +1,4 @@
-import { workerToolPath } from './worker-tool-path';
+import { sceneDetectPython } from './worker-tool-path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
@@ -7,7 +7,7 @@ import { parseShots, type ShotDetection } from '../media-analysis/shots';
 
 const run = promisify(execFile);
 export async function detectShots(path: string, duration: number, signal: AbortSignal): Promise<ShotDetection> {
-  const python = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
+  const python = sceneDetectPython();
   let stdout: string;
   try {
     // Inspecting every source frame can take longer than a fixed short-clip

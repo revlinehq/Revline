@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { AnalysisError } from '../media-analysis/errors';
-import { workerToolPath } from './worker-tool-path';
+import { sceneDetectPython } from './worker-tool-path';
 
 const number = z.number().finite();
 const sample = z.object({ time: number, x: number, y: number, w: number.positive(), h: number.positive(), scale: number.positive(), scaleX: number.positive().optional(), scaleY: number.positive().optional(), registrationBox: z.object({ x: number, y: number, w: number.positive(), h: number.positive() }).optional(), corners: z.array(z.tuple([number, number])).optional(), rotation: number, confidence: number.min(0).max(1), visible: z.boolean(), opacity: number.min(0).max(1).optional(), opacityConfidence: number.min(0).max(1).optional(), sharpness: number.nonnegative().optional() });
@@ -11,7 +11,7 @@ type Request = { start: number; end: number; box: { x: number; y: number; w: num
 
 /** The processor's existing pinned OpenCV environment; no image processing runs in Convex. */
 export async function trackReference(source: string, request: Request, signal: AbortSignal, progress: (percent: number) => void) {
-  const python = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
+  const python = sceneDetectPython();
   const child = spawn(python, [join(process.cwd(), 'scripts/track-reference.py'), source, JSON.stringify(request)], { signal, stdio: ['ignore', 'pipe', 'pipe'] });
   const closed = new Promise<number | null>(resolve => child.once('close', resolve));
   let stderr = '', spawnError: Error | undefined;
