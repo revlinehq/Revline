@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Codebase: Untangle the code (no import cycles, worker/backend contract and media queue in leaf modules, one owner for models, tool labels, limits, run ids and storage keys; dead routes and functions removed) and fix the processor release file list, upload part limit and new-workspace format drift. Why: the user asked to run the untangle-codebase refactor.
+
 - Workspace: Make the home composer one text row taller. Why: the user asked for more room to type.
 
 - Workspace: Show recent projects with an Upload new button on the home screen; keep Start new edit for empty accounts. Why: the user asked to restore recent projects.
