@@ -1,12 +1,13 @@
 import { v } from 'convex/values';
-export const laneValidator = v.union(
+export const activeLaneValidator = v.union(
   v.literal('edit'),
   v.literal('motion'),
   v.literal('recreate'),
-  v.literal('explainer'),
   v.literal('clip'),
   v.literal('reel'),
 );
+// Keep persisted records readable without offering the retired workflow.
+export const laneValidator = v.union(activeLaneValidator, v.literal('explainer'));
 export const laneEvidenceValidator = v.object({
   tool: v.string(),
   timelineId: v.string(),

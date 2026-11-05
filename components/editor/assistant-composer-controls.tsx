@@ -8,7 +8,7 @@ import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { AssistantModePicker, useAssistantEditMode } from './assistant-mode-picker';
 
-type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'defaultModelChoice'>> & { allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
+type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'catalogModels' | 'defaultModelChoice'>> & { catalogModels?: readonly ClaudeModelChoice[]; allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
 
 export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   settings: ComposerSettings; draftKey?: string; disabled: boolean;
@@ -17,11 +17,12 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
   const editMode = useAssistantEditMode();
   const { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES } = settings;
+  const restricted = settings.paidModelAccess !== true;
   const supportedModels = useMemo(() => EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => model.id), [allowedModels]);
   const availableModels: readonly typeof EDITOR_MODELS[number]['id'][] = supportedModels.length ? supportedModels : PRODUCTION_CLAUDE_MODEL_CHOICES;
   const selectedModelChoice = availableModels.find(choice => choice === modelChoice);
-  const effectiveModelChoice = selectedModelChoice ?? (availableModels.find(choice => choice === defaultModelChoice) ?? (availableModels.includes('gpt-6.1-sol') ? 'gpt-6.1-sol' : availableModels[0] ?? 'gpt-6.1-sol'));
-  const effectiveEffort = effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
+  const effectiveModelChoice = restricted ? 'gpt-6.1-terra' : selectedModelChoice ?? (availableModels.find(choice => choice === defaultModelChoice) ?? (availableModels.includes('gpt-6.1-sol') ? 'gpt-6.1-sol' : availableModels[0] ?? 'gpt-6.1-sol'));
+  const effectiveEffort = restricted ? 'low' : effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
 
   useEffect(() => {
     try {
@@ -41,8 +42,8 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   }, [draftKey]);
 
   const actions = <div className="assistant-model-controls">
-    {(modelSwitcher || claudeViaMcp) && <AssistantModelPicker claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={modelSwitcher && effortSwitcher ? { value: effectiveEffort, onChange: chooseEffort } : undefined}/>}
+    {(restricted || modelSwitcher || claudeViaMcp) && <AssistantModelPicker catalogModels={settings.catalogModels} modelAccessNeedsSync={settings.modelAccessNeedsSync} restricted={restricted} claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={restricted || modelSwitcher && effortSwitcher ? { value: effectiveEffort, onChange: chooseEffort } : undefined}/>}
     <AssistantModePicker value={editMode.value} onChange={editMode.onChange} disabled={disabled}/>
   </div>;
-  return { actions, request: { modelChoice: modelSwitcher ? selectedModelChoice : undefined, reasoningEffort: modelSwitcher && effortSwitcher ? effectiveEffort : undefined, editMode: editMode.value } };
+  return { actions, request: { modelChoice: restricted ? 'gpt-6.1-terra' : modelSwitcher ? selectedModelChoice : undefined, reasoningEffort: restricted ? 'low' : modelSwitcher && effortSwitcher ? effectiveEffort : undefined, editMode: editMode.value } };
 }

@@ -1,7 +1,7 @@
 import { Easing, interpolate, spring } from 'remotion';
 import { LAB_TEXT_PRESETS, type LabTextPreset } from './remotion-lab-text-presets';
 
-export type LabCategory = 'explainer' | 'typography' | 'clip-motion' | 'tracking' | 'templates';
+export type LabCategory = 'graphics' | 'typography' | 'clip-motion' | 'tracking' | 'templates';
 export type LabScene = 'block-card' | 'block-arrow' | 'block-label' | 'block-chart' | 'block-counter' | 'block-progress-ring' | 'block-progress-bar' | 'block-stat-badge' | 'block-checklist' | 'block-steps' | 'block-quote' | 'block-comparison' | 'block-marker' | 'block-highlight' | 'block-lower-third' | 'typography';
 export type LabWord = { word: string; start: number; end: number };
 export type LabItem = { label: string; detail: string; value: number; start: number; trigger: string };
@@ -18,7 +18,7 @@ export type LabConfig = {
   blockChecks:boolean[];
 };
 export const LAB_CATEGORIES: { id: LabCategory; label: string; description: string }[] = [
-  { id: 'explainer', label: 'Graphics', description: 'Fifteen individual graphics on a clean white canvas. Each one has editable content, color, position and motion.' },
+  { id: 'graphics', label: 'Graphics', description: 'Fifteen individual graphics on a clean white canvas. Each one has editable content, color, position and motion.' },
   { id: 'typography', label: 'Typography', description: 'Emphasize speech with timed words, kinetic titles and editable type.' },
   { id: 'clip-motion', label: 'Clip animations', description: 'Animate two photo layers with entrance and exit presets, editable timing, placement and easing. Try them over your own local video.' },
   { id: 'tracking', label: 'Tracking', description: 'Track a face in your own clip and attach a label to its motion.' },
