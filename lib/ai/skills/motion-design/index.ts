@@ -5,10 +5,11 @@ import { imagePlatesPage } from './image-plates';
 import { tastePage } from './taste';
 import { ideationPage } from './ideation';
 import { backgroundsPage } from './backgrounds';
+import { TRANSITION_RECIPE_PAGES } from './recipes';
 
 export const motionDesign: EditorSkill = {
   name: skillDocument("motion-design/SKILL.md").name,
   description: skillDocument("motion-design/SKILL.md").description,
   body: skillText("motion-design/SKILL.md"),
-  pages: [ideationPage, tastePage, backgroundsPage, brandPage, blueprintsPage, imagePlatesPage],
+  pages: [ideationPage, tastePage, backgroundsPage, brandPage, blueprintsPage, imagePlatesPage, ...TRANSITION_RECIPE_PAGES],
 };

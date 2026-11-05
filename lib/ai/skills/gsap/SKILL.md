@@ -1,8 +1,10 @@
 ---
 name: "gsap"
-description: "GSAP choreography for scenes: GreenSock's official skills (timeline, core, plugins, React, performance, utils) under Revline's rules for paused, frame-seeked timelines. Also transition recipes (letter reveal, write-on, mask wipe, blur-in and motion blur, morph, typing, fly-off). Read before writing staggers, word reveals, SplitText, MorphSVG or any multi-step motion in a scene."
+description: "GSAP choreography for scenes: GreenSock's official skills (timeline, core, plugins, React, performance, utils) under Revline's rules for paused, frame-seeked timelines. Read before writing staggers, word reveals, SplitText, MorphSVG or any multi-step motion in a scene."
 ---
 # GSAP in Revline scenes
+
+This skill is the GSAP API and the engine rules only. How Revline films should move (timing, eases, transitions, style) lives in motion-design.
 
 GSAP choreographs scene motion: staggers, overlaps, word and letter reveals, SplitText, MorphSVG, DrawSVG, motion paths. The API pages adapt GreenSock’s MIT skills (github.com/greensock/gsap-skills) for Revline. Use the supplied paused timeline: the engine seeks every frame for identical preview/export.
 
@@ -18,9 +20,6 @@ Build motion once; verify first/mid/settled frames and backward seeks with getFr
 - **Randomness is seeded.** Math.random, gsap.utils.random and shuffle give the same values in preview and export when called while the timeline is built; never call them per frame or inside onUpdate.
 - **No responsive or reduced-motion branches.** gsap.matchMedia does not apply: the canvas has a fixed size and every frame is rendered.
 - **Plugins:** {{revline:0}} and EasePack are loaded and registered; import them from `gsap/<Name>` (registering again is harmless). No other plugin loads.
-
-## Transition recipes
-Launch films and remakes are built from a handful of transitions: letter reveal, write-on and draw-on, mask wipe, blur-in and motion blur, morph, typing with a colored highlight, fly-off. Page `transitions` maps the words of a motion log to each one; each `recipe-*` page is a short useTimeline snippet with its usual durations and eases. Name the transition type of every moment, then build it from its recipe with the reference's measured timing.
 
 ## What to take from GreenSock's pages
 - `gsap-timeline`: the position parameter (absolute, `<`, `>`, `-=0.2`), labels, timeline defaults and nesting. Sequence with these instead of chained delays.

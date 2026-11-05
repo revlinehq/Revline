@@ -12,13 +12,16 @@ Follow the user's request first. A video to recreate goes through "Recreating a 
 
 **Background before the first addFilm.** For a new film or a background restyle, read page `backgrounds`: build base, structure and accent from the brand kit, write the one-line choice into the brief, and keep its shadows and limits.
 
-For original motion design, creative restyling or learning from a style reference, read page `taste` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
+For original work or a style reference, read page `taste` for the user's saved preferences and how to learn from a reference.
 
 ## Length and structure come from the request
 Length, number of sections and what the film shows follow the user's request and brief. There is no default structure or required proof beat. When the user gives no length, ask once in the ideation message with a suggestion sized to the content (for example "about 20 s: title, three features, end card"). Pacing rules apply at any length.
 
 ## How films are built
 A film is one React scene clip built with addFilm and changed with patchScene. How to write, split and edit it lives in scene-engine page `react-scenes`; this skill decides what the film shows. Split a film into clips only when the user asks.
+
+## Moves and transitions
+Named transitions (letter reveal, write-on, mask wipe, blur-in, morph, typing, fly-off) each have a recipe page; page `transitions` maps motion words to them. Their timing follows the table below unless a reference is being copied.
 
 ## Timing and easing (measured)
 Measured from 151 tweens and 87 shots across the user's saved launch films (rerun, shipper, rightnowai, krea, allophone, juampitech, Deepusleepy, firecrawl ×3). These are defaults for original films; the user's direction and a reference being copied win.

@@ -34,7 +34,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 
 ## GSAP technique
 
-Build motion on tl/useTimeline with explicit positions, e.g. `tl.from(el, {y:20, opacity:0, stagger:.06}, 1)`. Use gsap’s core/plugins/recipes for easing, text, SVG, blur/masks and perspective. Counters write derived text in onUpdate; loops use repeat:-1/yoyo:true; instant changes use tl.set at explicit times or ease:steps(n). Rebuild interacting UI as HTML parts; measure against the real screen with compareScreen.
+Build motion on tl/useTimeline with explicit positions, e.g. `tl.from(el, {y:20, opacity:0, stagger:.06}, 1)`. Use gsap’s core and plugins (motion-design recipes for named transitions) for easing, text, SVG, blur/masks and perspective. Counters write derived text in onUpdate; loops use repeat:-1/yoyo:true; instant changes use tl.set at explicit times or ease:steps(n). Rebuild interacting UI as HTML parts; measure against the real screen with compareScreen.
 
 ## Fonts and images
 

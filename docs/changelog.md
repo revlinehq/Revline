@@ -1,4 +1,5 @@
 ## 2026-11-05
+- Motion skills: motion guidance now lives only in motion-design (transition recipes moved out of gsap; taste keeps only user preferences and reference learning). Why: the user wants one place that controls how films move.
 - Motion skills: frame-clock rules now live only in gsap page revline; taste no longer repeats ideation; the React example uses measured timing instead of the 0.8 s blur. Why: repeated and conflicting rules confused the agent.
 - Motion skills: removed rules repeated across motion-design, scene-engine and the checklist (brief, build/edit mechanics, timing and sound checks, reference workflow). Why: duplicates made the agent read the same instruction twice.
 - Motion skills: ideation now covers only the pre-build conversation; look, asset and approval advice removed. Why: the user wanted editing advice out of ideation.
