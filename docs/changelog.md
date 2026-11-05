@@ -1,4 +1,5 @@
 ## 2026-11-05
+- Motion skills: removed rules repeated across motion-design, scene-engine and the checklist (brief, build/edit mechanics, timing and sound checks, reference workflow). Why: duplicates made the agent read the same instruction twice.
 - Motion skills: ideation now covers only the pre-build conversation; look, asset and approval advice removed. Why: the user wanted editing advice out of ideation.
 
 - Motion lane: Films load only motion-design, gsap, scene-engine and reference-footage (no footage, caption or sound-effect skills), no longer need checkPacing to finish, and default to music only cut on bar lines. Why: the user found the shared skills and pacing check produced dark, stop-start films.

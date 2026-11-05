@@ -14,7 +14,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- A film (React scenes): write it with addFilm as one clip (page `react-scenes`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. For GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- A film: page `react-scenes`. GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
 - Changing any existing scene or film: inspectClip with section or lines for a short numbered read, then patchScene with scoped snippets or line edits and expectedRevision (page `react-scenes`). Use inspectClip kit: true for the shared film kit. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 - Going back to a version of a scene the user liked: listRevisions (with its clipId) finds the revision, then restoreClip puts that one clip back exactly, leaving every other clip as it is now. Use it, not chains of undoLatestEdit, which also take back later approved work.
 
