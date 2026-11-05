@@ -1,5 +1,4 @@
 import { comparisonCrop, referenceCropKeyframes } from '../lib/ai/reference-comparison';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -7,13 +6,12 @@ import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
-import type { MotionMap } from '../lib/inspo-motion/motion-map';
-import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult, referenceCropKeyframesValidator } from './schema';
+import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceCropKeyframesValidator, referenceReadMode } from './schema';
 import { READ_TOOL_INPUTS } from './lib/reference_reads';
 
 // The reference-read rows and their lifecycle. The runners that queue a read and wait for the worker are in lib/reference_reads.
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), recreation: v.optional(v.boolean()), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, recreation, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), recreation: v.optional(v.boolean()), mode: referenceReadMode, color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, recreation, ...args }) => {
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
@@ -29,7 +27,7 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
   if (!recreation) await requireMediaTaskCapacity(ctx, ownerId, 1);
   const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, ...(recreation ? { recreation } : {}), status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION }, undefined, recreation);
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId }, undefined, recreation);
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });

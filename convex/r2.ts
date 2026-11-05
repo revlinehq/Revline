@@ -1,4 +1,4 @@
-import { uploadPartSize } from '../lib/editor/limits';
+import { PROJECT_MEDIA_LIMIT, uploadPartSize } from '../lib/editor/limits';
 import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import type { Doc, Id } from './_generated/dataModel';
@@ -8,8 +8,8 @@ import { internal } from './_generated/api';
 import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
-import { storageControl, hasPreview, PREVIEW_VERSION } from './lib/media_storage';
-import { PROJECT_MEDIA_LIMIT, partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
+import { storageControl, hasPreview, newProjectMediaKey, PREVIEW_VERSION } from './lib/media_storage';
+import { partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks, UPLOAD_RESERVATION_MS } from './lib/account_limits';
@@ -28,7 +28,7 @@ function uprightDimensions(source:Pick<Doc<'assets'>,'width'|'height'>,width:num
 }
 export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('projects')},returns:v.array(v.id('assets')),handler:async(ctx,args)=>{
   const project=await ctx.db.get(args.projectId);if(!project)throw new ConvexError('Project not found');
-  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',project.ownerId).eq('projectId',project._id)).take(200);
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',project.ownerId).eq('projectId',project._id)).take(PROJECT_MEDIA_LIMIT);
   const repaired:Id<'assets'>[]=[];
   for(const asset of assets){
     if(asset.kind!=='video'||!hasPreview(asset)||!asset.previewWidth||!asset.previewHeight)continue;
@@ -129,7 +129,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   const partSize = uploadPartSize(args.size);
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
-  const key = `media/${ownerId}/${args.projectId}/${crypto.randomUUID()}`;
+  const key = newProjectMediaKey(ownerId, args.projectId);
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   const multipartId = created.uploadId;

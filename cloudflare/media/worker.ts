@@ -1,5 +1,5 @@
 import { attachmentDisposition, safeDownloadFileName, verifyMediaToken } from '../../lib/storage/media-tokens';
-import { MAX_UPLOAD_PART_BYTES } from '../../lib/storage/upload-parts';
+import { MAX_UPLOAD_PART_BYTES, MAX_UPLOAD_PARTS } from '../../lib/storage/upload-parts';
 
 function validKey(key: unknown): key is string {
   return typeof key === 'string' && /^media\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9_-]+\/[a-zA-Z0-9-]+$/.test(key);
@@ -38,7 +38,7 @@ export default {
         if (!contentType || !['image/png', 'application/json', 'application/octet-stream'].includes(contentType)) return reply({ error: 'Invalid cache content type' }, 400);
         await env.MEDIA.put(grant.key, request.body, { httpMetadata: { contentType } });
         response = json({ ok: true });
-      } else if (url.pathname === '/part' && request.method === 'PUT' && grant.operation === 'part' && validKey(grant.key) && grant.uploadId && Number.isInteger(grant.partNumber) && grant.partNumber! > 0 && grant.partNumber! <= 10000 && grant.size && request.body) {
+      } else if (url.pathname === '/part' && request.method === 'PUT' && grant.operation === 'part' && validKey(grant.key) && grant.uploadId && Number.isInteger(grant.partNumber) && grant.partNumber! > 0 && grant.partNumber! <= MAX_UPLOAD_PARTS && grant.size && request.body) {
         // Upload bodies stream straight to R2; no whole-file buffering in the Worker.
         if (Number(request.headers.get('Content-Length')) !== grant.size || grant.size > MAX_UPLOAD_PART_BYTES) return reply({ error: 'Upload part size does not match' }, 400);
         const upload = env.MEDIA.resumeMultipartUpload(grant.key, grant.uploadId);

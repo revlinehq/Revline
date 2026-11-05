@@ -14,7 +14,8 @@ import { createProject, writeProject } from './lib/project_data';
 import { enqueueMediaTask } from './lib/media_queue';
 import { hasPreview } from './lib/media_storage';
 import { recordAssetStorage } from './lib/storage_accounting';
-import { HISTORY_BYTES, HISTORY_LIMIT, serializedBytes, validateTimeline } from './lib/timeline';
+import { validateTimeline } from './lib/timeline';
+import { HISTORY_BYTES, HISTORY_LIMIT, serializedBytes } from './lib/timeline_history';
 
 const ownerArgs = { ownerId: v.string(), email: v.string() };
 const mediaValidator = v.object({

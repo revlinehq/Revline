@@ -12,6 +12,11 @@ export function readRunTab(runId: string) {
 /** Every MCP run id, read-only or exclusive, starts with mcp-; in-app runs never do. */
 export const isMcpRun = (runId?: string) => !!runId?.startsWith('mcp-');
 
+/** startTask ids are mcp-task:<uuid>. */
+const MCP_TASK_PREFIX = 'mcp-task:';
+export const newMcpTaskId = () => `${MCP_TASK_PREFIX}${crypto.randomUUID()}`;
+export const isMcpTaskId = (runId: string) => runId.startsWith(MCP_TASK_PREFIX);
+
 /** Who an agent edit is credited to: the external agent's name for MCP runs, else Revline's own agent. */
 export const runAuthorLabel = (runId: string | undefined, agentName: string | undefined) => isMcpRun(runId) ? agentName ?? 'AI agent' : 'Revline agent';
 

@@ -1,5 +1,4 @@
 import { recordIncident, incidentDeployment } from './lib/incidents';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
@@ -49,7 +48,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: dedicated Ultra export workers.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...((timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio))?{requiredProcessorVersion:MEDIA_PROCESSOR_VERSION}:{}), ...(ultra ? { lane: 'ultra' as const } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
 }

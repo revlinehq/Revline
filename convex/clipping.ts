@@ -1,5 +1,5 @@
 import { ConvexError, v } from "convex/values";
-import { isMcpRun } from "./lib/run_ids";
+import { isMcpRun, isMcpTaskId } from "./lib/run_ids";
 import { runArgs } from "./lib/active_run";
 import {
   internalMutation,
@@ -45,7 +45,7 @@ import { loadSceneCode } from "./lib/scene_code";
 import { clipQuoteProblems, clipChoiceProblems } from '../lib/media-analysis/clip-plan-feedback';
 
 const runKey = (runId: string) =>
-  runId.startsWith("mcp-task:")
+  isMcpTaskId(runId)
     ? runId
     : isMcpRun(runId)
       ? "mcp-clipping"

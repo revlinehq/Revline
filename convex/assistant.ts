@@ -8,7 +8,7 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, runAuthorLabel } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, isMcpRun, runAuthorLabel } from './lib/run_ids';
 import { runArgs, holdsRun, runIsActive } from './lib/active_run';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
@@ -22,6 +22,7 @@ import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { transportAsset, storeAnalysis } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
+import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
 import { importVideoFor } from './mediaTasks';
@@ -34,7 +35,7 @@ import { abortStream, createThread, listStreams, listUIMessages, saveMessage, sy
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
+import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
@@ -125,7 +126,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task&&(task.activity||task.kind==='transcribe')?mediaTaskActivityLabel(task):labels[active.mode]:editing?'Applying edits…':null;
   const externalAgents=await projectWorkingAgents(ctx,ownerId,project._id), latestAgent=externalAgents[0];
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && isMcpRun(project.aiRunId) } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
@@ -408,7 +409,7 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);
   // Full model context still needs recovery/request text; run-state checks deliberately do not.
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
-  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
   const tab=boundRunTab(args.runId);
   if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
@@ -501,7 +502,7 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  if(!args.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`))throw new ConvexError('Generated sound key is outside this project');
+  if(!args.r2Key.startsWith(projectMediaPrefix(args.ownerId,args.projectId)))throw new ConvexError('Generated sound key is outside this project');
   const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(args.waveform);

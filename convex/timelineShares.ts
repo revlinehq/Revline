@@ -141,7 +141,7 @@ export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timeline
   const projectId=await createProject(ctx,{ownerId,title:tab?`${share.title} · ${tab.name}`:share.title,aspectRatio:source.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
   for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});await recordAssetStorage(ctx,(await ctx.db.get(id))!);ids.set(sourceId,id);}
   for(const pin of pins)if(pin.audioAssetId&&ids.has(pin.audioAssetId))await ctx.db.patch(ids.get(pin.sourceId)!,{audioAssetId:ids.get(pin.audioAssetId)!});
-  // Every pinned asset reference moves to the copy; one the share did not pin keeps its id.
-  const timeline=normalizeTimeline(remapTimelineAssets(source,assetId=>ids.get(assetId)??assetId));
+  // Pinned references move to the copy. An unpinned scene image keeps its id; any other unpinned reference is dropped.
+  const timeline=normalizeTimeline(remapTimelineAssets(source,(assetId,reference)=>reference==='sceneMedia'?ids.get(assetId)??assetId:ids.get(assetId)!));
   await writeProject(ctx,projectId,{timeline});return projectId;
 }});

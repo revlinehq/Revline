@@ -9,7 +9,7 @@ import { requireMediaTask } from './lib/media_task_auth';
 import { mediaTaskCredentials } from './lib/media_task_contract';
 import { projectIdentity } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
-import { mediaConfig, mediaUrl } from './lib/media_storage';
+import { mediaConfig, mediaUrl, newProjectMediaKey } from './lib/media_storage';
 import { signMediaToken, verifyMediaToken } from '../lib/storage/media-tokens';
 import { frameCacheKey, referenceCacheScope, referenceResultDescriptor, type CacheScope } from '../lib/media-analysis/frame-cache';
 
@@ -51,7 +51,7 @@ async function reserveOutput(ctx:MutationCtx, scope:CacheScope, credentials:{tas
     await removeEntry(ctx, entry);
   }
   const timeline = !scope.assetId || (output as {kind?:string})?.kind === 'reference-result' && (output as {mode?:string})?.mode === 'compare';
-  const r2Key = `media/${scope.ownerId}/${scope.projectId}/cache-${crypto.randomUUID()}`;
+  const r2Key = newProjectMediaKey(scope.ownerId, scope.projectId, 'cache-');
   await ctx.db.insert('mediaFrameCache', { key, r2Key, ownerId: scope.ownerId, projectId: scope.projectId as Id<'projects'>, ...(scope.assetId ? { assetId: scope.assetId as Id<'assets'> } : {}), ...(timeline ? {expiresAt:Date.now()+TTL} : {}), timeline, taskId: credentials.taskId, leaseToken: credentials.leaseToken, ready: false });
   return writableReservation(key,r2Key);
 }

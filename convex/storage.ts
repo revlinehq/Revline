@@ -2,6 +2,7 @@ import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { createProjectFor } from './projects';
 import { addMediaClip } from '../lib/editor/operations';
 import { normalizeTimeline } from '../lib/editor/types';
+import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { validateTimeline } from './lib/timeline';
 import { writeProject } from './lib/project_data';
 import { enqueueMediaTask } from './lib/media_queue';
@@ -166,7 +167,7 @@ export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))}
         await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
       }
     }else{
-      const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(200);
+      const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(PROJECT_MEDIA_LIMIT);
       asset=candidates.find(asset=>(source.row.r2Key&&asset.r2Key===source.row.r2Key)||(source.row.storageId&&asset.storageId===source.row.storageId))??null;
     }
     if(!asset)throw new ConvexError('Could not attach this media.');
