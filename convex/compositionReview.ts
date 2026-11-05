@@ -84,7 +84,7 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   const assetIds=[];
   for(const value of used){const id=ctx.db.normalizeId('assets',value!);const asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Review source media is unavailable.');assetIds.push(asset._id);}
   const reviewId=await ctx.db.insert('compositionReviews',{...runFields(args),revision:args.expectedRevision,timeline:args.timeline,reference,plans:bound,assetIds,start,end,status:'queued',createdAt:Date.now()});
-  const taskId=await enqueueMediaTask(ctx,{ownerId:args.ownerId,projectId:args.projectId,kind:'review',reviewId,requiredProcessorVersion:2});
+  const taskId=await enqueueMediaTask(ctx,{ownerId:args.ownerId,projectId:args.projectId,kind:'review',reviewId});
   await ctx.db.patch(reviewId,{taskId});await ctx.db.patch(saved._id,{reviews:saved.reviews+1});return reviewId;
 }});
 function runFields(args:{projectId:Id<'projects'>;ownerId:string;runId:string}){return {projectId:args.projectId,ownerId:args.ownerId,runId:args.runId};}

@@ -1,5 +1,4 @@
 import { comparisonCrop, referenceCropKeyframes } from '../lib/ai/reference-comparison';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -28,7 +27,7 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
   if (!recreation) await requireMediaTaskCapacity(ctx, ownerId, 1);
   const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, ...(recreation ? { recreation } : {}), status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION }, undefined, recreation);
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId }, undefined, recreation);
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });

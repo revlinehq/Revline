@@ -1,6 +1,5 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -59,7 +58,7 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   const fps = currentTimeline(project).fps;
   const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, fps, mode, ...(selection ? { selection } : {}), ...(effect ? { effect } : {}), status: 'queued', createdAt: Date.now() });
   // Foreground mode requires the current processor; old workers only know person matting.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId });
   await ctx.db.patch(cutoutId, { taskId });
   return { cutoutId, estimatedUsd: estimate(end - start, fps), alreadyRunning: false, reused: false };
 }

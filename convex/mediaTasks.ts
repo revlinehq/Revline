@@ -55,12 +55,6 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 
-/** Importing a start to end range of a long link came after font matching. */
-const RANGE_IMPORT_PROCESSOR_VERSION = 16;
-/** The visual guard (a proposed scene change rendered beside the saved timeline) came after reference listening. */
-export const GUARD_PROCESSOR_VERSION = 20;
-
-
 /** FIFO admission for recreation checks only. Waiting jobs hold no active slot and start no workflow. */
 export const admitWaiting = internalMutation({ args: { ownerId: v.string() }, returns: v.null(), handler: async (ctx, { ownerId }) => {
   const owner = await ctx.db.query('mediaCapacityOwners').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
@@ -221,7 +215,7 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   if (pending.length >= 3) throw new ConvexError('Wait for the current video imports to finish.');
   // Counted only once a fresh import is accepted; a refusal rolls back a new edit with it.
   await consumeVideoImport(ctx, ownerId, !args.projectId); await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl, ...(args.sourcesOnly ? { sourcesOnly: true } : {}), ...(importRange ? { importRange, requiredProcessorVersion: RANGE_IMPORT_PROCESSOR_VERSION } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId, kind: 'import', sourceUrl, ...(args.sourcesOnly ? { sourcesOnly: true } : {}), ...(importRange ? { importRange } : {}) });
   return { projectId, taskId };
 }
 export const importVideo = mutation({ args: importVideoForArgs, returns: v.object({ projectId: v.id('projects'), taskId: v.id('mediaTasks') }), handler: async (ctx, args) => importVideoFor(ctx, await requireOwner(ctx), args) });

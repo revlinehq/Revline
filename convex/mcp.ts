@@ -2,7 +2,6 @@ import { clipCheckRequestValidator } from './lib/clipping_validator';
 import { motionTimelineKey } from '../lib/ai/motion-coverage';
 import { cacheHash, frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { mediaUrl } from './lib/media_storage';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { generatedImageSummary } from './lib/generated_image_summary';
 import { normalizationRequestValidator } from './lib/normalization_validator';
 import { memoriesFor } from './memories';
@@ -25,7 +24,6 @@ import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renam
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
 import { briefFor } from './briefs';
-import { GUARD_PROCESSOR_VERSION } from './mediaTasks';
 import { enqueueMediaTask } from './lib/media_queue';
 import { referenceBox } from './schema';
 import { comparisonCrop } from '../lib/ai/reference-comparison';
@@ -264,8 +262,7 @@ export const requestFrames = internalMutation({ args: { resolution:v.optional(v.
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
   const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
-  const requiredProcessorVersion=MEDIA_PROCESSOR_VERSION;
-  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);
+  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId }, undefined, recreation);
   if (taskId) await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison&&taskId?{cancelTaskId:taskId}:{})});
   // Measurements are saved verification records, kept until the project is deleted.
@@ -289,7 +286,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   if (!args.times.length || args.times.length > 24 || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError('The guard renders 1 to 24 times.');
   const baseline = await storeSceneCode(ctx, args.baseline as Timeline), candidate = await storeSceneCode(ctx, args.candidate as Timeline);
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
   await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false,cancelTaskId:taskId});
   await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });
