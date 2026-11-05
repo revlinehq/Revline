@@ -7,5 +7,6 @@ export const metadata: Metadata = { title: `${NEW_WORKSPACE_LABEL} · Revline` }
 
 export default async function NewProjectPage({ searchParams }: { searchParams: Promise<{ checkout?: string }> }) {
   const { checkout } = await searchParams;
-  return <EditorAccessGate checkoutPending={checkout === 'success'}><NewConversation /></EditorAccessGate>;
+  const conversation = <NewConversation />;
+  return <EditorAccessGate checkoutPending={checkout === 'success'} loading={conversation}>{conversation}</EditorAccessGate>;
 }

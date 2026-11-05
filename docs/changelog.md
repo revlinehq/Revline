@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Workspace: Keep the dashboard composer visible during plan checks and show loading inside recent-project cards. Why: the user reported the whole page waiting for data.
+
 - Workspace: Make the home composer one text row taller. Why: the user asked for more room to type.
 
 - Workspace: Show recent projects with an Upload new button on the home screen; keep Start new edit for empty accounts. Why: the user asked to restore recent projects.
