@@ -16,10 +16,8 @@ Follow the user's request first. A video to recreate goes through "Recreating a 
 
 For original motion design, creative restyling or learning from a style reference, read page `taste` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
 
-## Launch-film length and proof
-1. Default to 30–40 seconds unless the user sets a length; use 35 seconds as a working example. An explicit 12-second or 60-second request wins.
-2. Structure the launch as 0–5 seconds of audience tension, ONE verified product proof in the middle, and the last 4–6 seconds for the payoff line and confirmed wordmark. Example 35-second plan: 0–5 hook, 5–30 proof, 30–35 payoff. Omit the wordmark when the user says "no logo".
-3. Choose the proof that most directly overturns the audience's expectation; compare at least two candidates in ideation. Bad default: typing a prompt, a podcast becomes Shorts, then a motion-design feature. Better example: one existing manual cut survives a verified multi-layer edit around it. Check readBrief and real product screens/tools before promising that operation; show its result, not only the input prompt.
+## Length and structure come from the request
+Length, number of sections and what the film shows follow the user's request and brief. There is no default structure or required proof beat. When the user gives no length, ask once in the ideation message with a suggestion sized to the content (for example "about 20 s: title, three features, end card"). Pacing rules apply at any length.
 
 ## How films are built
 Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
@@ -29,31 +27,16 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **All motion is GSAP on the frame clock.** Every move, even a single fade, is a GSAP tween in a `useTimeline` timeline, one per section: connected parts are the same tween, opens and closes overlap through position parameters (`"<"`, `"-=0.2"`), staggers come from GSAP, and SplitText, MorphSVG and DrawSVG run in it (read the gsap skill, readSkill name "gsap"). Never hand-time moves with `progress()` and `mix()` at typed seconds: that is what makes holds freeze, parts drift out of sync and moves jump.
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page `react-scenes`). This skill decides what to make; scene-engine decides how it renders correctly.
 
-## Motion feel
-Motion directs attention and makes relationships clear. Use the smallest move that serves the idea; easing cannot connect unrelated scenes. The user's direction and measured reference behavior win over these defaults.
-- **Choose easing for the action.** Entrances can decelerate (`expo.out`, `power3.out`), exits accelerate (`power2.in`), and moves between resting positions use `power3.inOut`. Overshoot (`back.out` or a spring) suits a playful response, not every landing. A precise mechanism can settle cleanly. Linear motion is valid for constant-speed travel, drift or playback.
-- **Reveal from a meaningful anchor.** A window or panel can grow from the corner, edge or control that spawned it, revealing its contents through a mask. Keep borders, radius and type crisp with width, height or clip-path rather than distorting them with scale. Use a simple fade or direct appearance when the idea needs no elaborate opening.
-- **Change things in place.** When a UI element becomes a new version of itself (a new color, a new layout, a rebuilt button), tween the same element from old to new (its box, radius, color, position) instead of crossfading two copies. A crossfade between two states always shows as a fade.
-- **Connected parts move as one.** Anything that belongs together (a frame and the text inside it, a window and its contents, a button and its label, a highlight and what it marks) runs on one shared tween: same start, same ease. A frame opens and closes its content (the content is clipped by the frame's box), so no text outlives its frame and nothing waits for its container to finish before it reacts. Never animate connected parts one after another.
-- **Follow-through and overlap.** When a sequence helps reading, stagger separate items in a group (list rows, cards, words in a line); 40 to 90 ms is a starting range, not a requirement. Move them together when they express one idea. A soft secondary (a shadow, a glow) may trail its element by a few frames.
-- **Guides and frame lines are alive.** Camera frame lines, crop corners, selection boxes and scan lines track the element they mark on the same timeline (same start, same ease), and keep moving while it does. Never leave them as a static overlay.
-- **Anticipation when it helps.** A brief counter move can give a large action weight or signal effort; omit it when it adds fuss or delays a direct response.
-- **Pacing is measured, not guessed.** getFrames shows stills, so speed problems slip past it: a picture that changes before it can be read, a zoom with no ease, a click that lingers, a zoom cut off by the next shot. With full checks (the motion and recreate lanes, or final checks), after building or changing motion, run checkPacing on the changed range alongside getFrames and fix what it flags (longer holds, eased moves, fewer changes per second), then run it again.
-- **Deliberate holds.** Let an action settle and give the idea time to register. Keep the camera locked or the frame still when that gives the moment weight; add movement only when it reveals something.
-- Recipes for each of these (eases, masks, morphs, staggers): readSkill name "gsap" page "transitions".
-
 ## Recreating a video (clone, remake, copy, "shot for shot")
 The video is the brief. New recreations use the recreate lane, which runs full checks. Read reference-footage page `recreation` before building a copy or making a full-lane edit. It owns the workflow: numbered effect inventories, exact content, camera behavior per layer, one section at a time, rendered comparisons across every transition, and close-out against every inventory item. Follow its measured behavior over this skill's motion defaults. Use scene-engine for implementation and its checklist for final checks.
 
 ## A new film for the user's own brand
-1. **Brand first** (page `brand-kit`): find or create the brand kit and confirm its product text. Nothing is designed before the brand is known.
-2. **Product UI is real UI:** the kit's blueprint (page `blueprints`) or its screens, rebuilt strictly close to the product: measure colors, positions and sizes from the screenshots at full size (`measureScreen`), use the product's own icons and labels (findIcon for any brand logo or app icon, never drawn by hand), and check the build side by side (`compareScreen`). A screenshot appears only as what it is in the story (a file being dropped in, a thumbnail), never shown as the product.
+1. **Brand kit for the look:** find or create the brand kit (page `brand-kit`) and use its fonts, colors and logo. Skip the product-text interview unless the film states product facts the user has not given.
+2. **Product UI only when asked:** rebuild the user's real product UI (blueprints, kit screens, measureScreen, compareScreen) only when the user asks to show their product, page or components. Otherwise design the film's own UI and objects freely in the brand's fonts and colors. When product UI is shown in several sections, build it once and reuse it.
 3. **Check before handing back:** follow scene-engine page `edit-lanes` for existing edits or page `checklist` after building the film.
 
-**Tip: one product UI, built once.** When the film shows the same product UI in several sections (for example the Revline editor), build it once as a component in the film (or the kit's blueprint) and reuse it in every section, changing only its state and framing. Base it on the real app's look: the kit's blueprint (getBlueprint), or the kit screen measured and checked with measureScreen and compareScreen. Inventing a fresh version per section gives a film with several different-looking copies of one product.
-
 ## Never speculate
-In a new film, every fact on screen comes from the confirmed product text or the user (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have. The wording around the facts is yours to write; never paste website headings or section labels as captions just because they are true.
+In a new film, every fact on screen comes from what the user wrote or listed in the request, the confirmed product text, or the brief (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have. The wording around the facts is yours to write; never paste website headings or section labels as captions just because they are true.
 
 ## Direction and feedback
 - **Exact direction from the user:** do exactly that. Never override the user.

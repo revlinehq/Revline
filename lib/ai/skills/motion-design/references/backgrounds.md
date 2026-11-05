@@ -53,7 +53,7 @@ The accent color appears in one layer plus at most one word per line of text.
 
 ## Every layer does a job
 - A grid builds itself, carries the focal box, or gives the camera something to travel over. A bloom follows the subject. Pixels build the next element. Lit cells mark the beat. A layer that only sits there is removed.
-- Change the background at most once per act (hook, proof, payoff), never per shot. Carry layers through a transition (the grid scrolls, the bloom slides) instead of crossfading two backgrounds.
+- Change the background at most once per act (for example opening, middle, end card), never per shot. Carry layers through a transition (the grid scrolls, the bloom slides) instead of crossfading two backgrounds.
 
 ## Shadows
 - Cards, tiles and windows on a light base: `0 18px 40px rgba(20,10,40,.10), 0 2px 6px rgba(0,0,0,.06)`.
