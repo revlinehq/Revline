@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Incidents: Separate GitHub publishing from fixer setup and accept renamed repository URLs. Why: saved agent reports were not reaching GitHub.
+
 - Chat: Reduce sent user message corners from 12px to 6px. Why: user requested less rounded bubbles.
 
 - Player: Preserve play or pause state when using the preview seek bar. Why: user reported seeking unexpectedly paused playback.

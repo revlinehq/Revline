@@ -11,7 +11,9 @@ export const state = join(homedir(), '.revline-incidents');
 export const configFile = join(state, 'config.json');
 export const githubToken = () => readFile(join(state, 'github-token'), 'utf8').then(value => value.trim());
 export const endpointSchema = z.object({ deployment: z.enum(['dev', 'prod']), url: z.enum(['https://majestic-alpaca-541.convex.cloud', 'https://different-gnu-398.convex.cloud']), secret: z.string().min(32) }).refine(value => value.url === (value.deployment === 'dev' ? 'https://majestic-alpaca-541.convex.cloud' : 'https://different-gnu-398.convex.cloud'));
-const configSchema = z.object({ repoRoot: z.string(), t3ProjectId: z.string(), endpoints: z.array(endpointSchema).min(1).max(2) });
+const publisherConfigSchema = z.object({ endpoints: z.array(endpointSchema).min(1).max(2) });
+const configSchema = publisherConfigSchema.extend({ repoRoot: z.string(), t3ProjectId: z.string() });
+export const publisherConfig = () => readFile(configFile, 'utf8').then(text => publisherConfigSchema.parse(JSON.parse(text)));
 export const config = () => readFile(configFile, 'utf8').then(text => configSchema.parse(JSON.parse(text)));
 export const incidentSchema = z.object({
   _id: z.string(), fingerprint: z.string().regex(/^incident-v1-[a-f0-9]{64}$/), generation: z.number().int().positive(),
@@ -30,7 +32,7 @@ export async function writeJob(path: string, job: Job) {
 export const readJob = (path: string) => readFile(path, 'utf8').then(text => jobSchema.parse(JSON.parse(text)));
 export function alive(pid: number | undefined) { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } }
 export const run = promisify(execFile);
-export const repo = 'zuraHQ/revline-editor';
+export const repo = 'revlinehq/Revline';
 const prSchema = z.object({ url: z.string().url(), state: z.string(), isDraft: z.boolean(), headRefName: z.string(), body: z.string(), title: z.string() });
 async function github(args: string[]) {
   return await run('gh', args, { env: { ...process.env, GH_TOKEN: await githubToken() }, timeout: 180_000, maxBuffer: 4_000_000 });
