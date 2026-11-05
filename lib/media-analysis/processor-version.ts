@@ -12,4 +12,5 @@
 // 43: explicit 1080p inspection must never be handled as a 720p preview.
 // 44: decode bound scene video before the final Three VideoTexture draw.
 // 45: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
-export const MEDIA_PROCESSOR_VERSION = 45;
+// 46: sparse capture windows retain video before an audio tail for final-frame holds.
+export const MEDIA_PROCESSOR_VERSION = 46;
