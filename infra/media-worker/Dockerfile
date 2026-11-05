@@ -1,4 +1,7 @@
+ARG REVLINE_FINAL_TARGET=processor
 FROM node:22.21.1-trixie-slim@sha256:c3bf4cf764467f1bf9789fde549971a2cf8e720196df6cf3f95bafa590e5f4af AS runtime
+
+LABEL org.opencontainers.image.source="https://github.com/zuraHQ/revline-editor"
 
 ENV NODE_ENV=production \
     PUPPETEER_CACHE_DIR=/opt/chrome \
@@ -57,7 +60,7 @@ RUN python3 -m venv /opt/beat-tracking \
     && python3 -m venv /opt/video-import \
     && /opt/video-import/bin/pip install --no-cache-dir -r /opt/requirements/video-import-requirements.txt
 
-COPY models/ /opt/models/
+COPY infra/media-worker/models/ /opt/models/
 COPY tsconfig.json ./
 COPY convex ./convex
 COPY lib ./lib
@@ -84,12 +87,20 @@ CMD ["sh", "infra/media-worker/fly-entry.sh"]
 
 # Railway uses the same packaged runtimes with ephemeral, unprivileged scratch.
 FROM processor AS railway-processor
+ENV REVLINE_BUILD_ROLE=processor
+ARG RAILWAY_GIT_COMMIT_SHA
+ARG REVLINE_BUILD_COMMIT
+ENV REVLINE_BUILD_COMMIT=${REVLINE_BUILD_COMMIT:-${RAILWAY_GIT_COMMIT_SHA}}
 CMD ["sh", "infra/media-worker/railway-entry.sh"]
 
 FROM exports AS railway-exports
+ENV REVLINE_BUILD_ROLE=exports
+ARG RAILWAY_GIT_COMMIT_SHA
+ARG REVLINE_BUILD_COMMIT
+ENV REVLINE_BUILD_COMMIT=${REVLINE_BUILD_COMMIT:-${RAILWAY_GIT_COMMIT_SHA}}
 USER node
 ENV REVLINE_RUNTIME_CHECK=exports
 CMD ["sh", "infra/media-worker/railway-entry.sh"]
 
-# Preserve the Cloudflare default target for rollback.
-FROM processor
+# Preserve the Cloudflare default target; Railway explicitly selects its role.
+FROM ${REVLINE_FINAL_TARGET}

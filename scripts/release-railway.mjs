@@ -1,21 +1,34 @@
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { command } from './release-command.mjs';
+import { verifyStagingPromotion } from './railway-promotion.mjs';
 import { railwayConfig, verifyRailwayTarget, verifyRailwaySlot } from '../lib/railway-workers.mjs';
 
 /** Release only a queue role that was explicitly migrated. Initial provisioning
  * and cutover remain operator commands, outside the main push workflow. */
 export async function releaseRailway({ target, kind, values, env, dry }) {
-  const config = railwayConfig(values.RAILWAY_WORKERS_JSON);
+  let config = railwayConfig(values.RAILWAY_WORKERS_JSON);
   if (config.convexUrl !== `https://${target.deployment}.convex.cloud`) throw new Error('Release Railway/Convex target mismatch.');
   if (dry) { console.log(`${target.name}: would build and runtime-preflight Railway ${kind}, drain slots, then stage the verified digest. Queue selection unchanged.`); return; }
+  const promotionArgs = [];
+  if (config.environment === 'production') {
+    const receiptFile = env.REVLINE_RAILWAY_STAGING_RECEIPT;
+    const stagingEnvFile = env.REVLINE_RAILWAY_STAGING_ENV_FILE;
+    if (!receiptFile || !stagingEnvFile) throw new Error('Production release requires live staging job evidence before any Railway deployment.');
+    const staged = railwayConfig(JSON.parse(await readFile(receiptFile, 'utf8')).config);
+    const commit = kind === 'processor' ? staged.processorCommit : staged.exportsCommit;
+    if (commit !== env.GITHUB_SHA) throw new Error('Staging must verify the exact main release commit.');
+    config = railwayConfig({ ...config, [`${kind}Commit`]: commit, [`${kind}Image`]: staged[`${kind}Image`] });
+    await verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds: [kind] });
+    promotionArgs.push('--staging-receipt', receiptFile, '--staging-env-file', stagingEnvFile);
+  }
   const directory = resolve('.data/railway-release');
   await mkdir(directory, { recursive: true });
   const file = resolve(directory, `${target.deployment}-${kind}.json`);
   await writeFile(file, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
   const args = ['scripts/railway-workers.mjs', '--config', file, '--environment', config.environment, '--env-file', target.file, '--kind', kind, '--apply'];
-  await command(process.execPath, [args[0], 'build', ...args.slice(1)], { env });
-  await command(process.execPath, [args[0], 'stage', ...args.slice(1), ...(kind === 'processor' ? ['--image-first'] : [])], { env });
+  if (config.environment !== 'production') await command(process.execPath, [args[0], 'build', ...args.slice(1)], { env });
+  await command(process.execPath, [args[0], 'stage', ...args.slice(1), ...(kind === 'processor' ? ['--image-first'] : []), ...promotionArgs], { env });
 }
 
 export async function verifyRailway({ deployment, kind, values }) {

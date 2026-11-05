@@ -3,6 +3,8 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Worker hosting: Build permanent Railway services from explicit repository commits while chunks retain matching immutable artifacts. Why: the user requested repository integration without competing autodeploys or per-chunk builds.
+- Worker hosting: Verify Railway placement from its environment configuration. Why: the authenticated service API returns a null legacy region even when placement is explicitly configured.
 - Worker hosting: Shorten Railway temporary service names and validate nested container limits. Why: authenticated API inspection rejected long names and revealed the actual limit response.
 - Worker hosting: Allow exact published PR image builds and Railway-only temporary preflights without Convex access. Why: the authorized rollout must validate containers before merging backend changes.
 - Worker hosting: Add staged Railway processors, exports and distributed chunks with bounded resources and explicit cutover/rollback. Why: the user requested moving only Fly container hosting while retaining the existing app, backend and storage.

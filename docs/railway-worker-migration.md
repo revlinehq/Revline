@@ -35,8 +35,8 @@ Railway serverless sleep uses network inactivity. Convex subscriptions send outb
 | Convex URL | `https://majestic-alpaca-541.convex.cloud` | `https://different-gnu-398.convex.cloud` |
 | Manifest | `.data/railway/dev.json` | `.data/railway/production.json` |
 | Separate operator env file | primary `.env.local` | primary `.env.production.local` |
-| Processor image | `ghcr.io/zurahq/revline-processor-dev@sha256:…` | `ghcr.io/zurahq/revline-processor@sha256:…` |
-| Export image | `ghcr.io/zurahq/revline-exports-dev@sha256:…` | `ghcr.io/zurahq/revline-exports@sha256:…` |
+| Processor image | `ghcr.io/zurahq/revline-railway-processor-dev@sha256:…` | `ghcr.io/zurahq/revline-railway-processor@sha256:…` |
+| Export image | `ghcr.io/zurahq/revline-railway-exports-dev@sha256:…` | `ghcr.io/zurahq/revline-railway-exports@sha256:…` |
 | Service namespace | `revline-dev-*` | `revline-production-*` |
 | Temporary namespace | `rv-t-dev-<timestamp>-*` | `rv-t-production-<timestamp>-*` |
 
@@ -51,8 +51,10 @@ Manifest shape (replace all angle-bracket placeholders; digests are 64 lowercase
   "environmentId": "<DEV_RAILWAY_ENVIRONMENT_UUID>",
   "convexUrl": "https://majestic-alpaca-541.convex.cloud",
   "region": "us-east4-eqdc4a",
-  "processorImage": "ghcr.io/zurahq/revline-processor-dev@sha256:<digest>",
-  "exportsImage": "ghcr.io/zurahq/revline-exports-dev@sha256:<digest>",
+  "processorImage": "ghcr.io/zurahq/revline-railway-processor-dev@sha256:<digest>",
+  "processorCommit": "<40-character git commit>",
+  "exportsCommit": "<40-character git commit>",
+  "exportsImage": "ghcr.io/zurahq/revline-railway-exports-dev@sha256:<digest>",
   "processorServices": [],
   "standardServices": [],
   "ultraServices": [],
@@ -172,3 +174,21 @@ node scripts/railway-workers.mjs preflight --environment production --config .da
 Check both UUIDs in CLI status. The deployment commands independently verify the environment-scoped project token against both manifest IDs. The private operator env file is ignored by Git and mode 0600. CLI login alone does not bypass queue-stage/cutover gates. After migration, use the existing main release for image updates, draining and contract ordering; avoid bare `railway up` or redeploying an active consumer.
 
 Authenticated resource check: temporary service `28cb2f32-6b97-4fd2-b684-4317dc2dc12f` accepted 4 CPUs / 8 GB and returned nested `containers` limits of 4 CPUs / 8,000,000,000 bytes. The empty service was deleted afterward. Temporary names use `rv-t-p-<timestamp>-<suffix>` for production and `rv-t-d-<timestamp>-<suffix>` for DEV.
+
+Authenticated placement verification uses `environment.config(decryptVariables: false)` and requires exactly one configured region with one replica; the legacy service `region` field returned null. Complete capped configuration passed on service `f2cbd8bf-6725-4b2b-a5d3-eb0c82f50022`, which was deleted without deployment.
+
+The production processor (`bbd89acf-f3cf-47eb-93be-4c1aec4052fa`), standard export (`6d54efb4-cc27-4ccf-ab6f-3b3edd679285`) and Ultra export (`601a3ccc-0fcb-4f63-aa43-3cfa251ff8da`) services are connected to `zuraHQ/revline-editor`. Source connection selected `main`; deleting their automatic deployment triggers removes the persisted branch selector in Railway. The release therefore supplies the exact reviewed main commit explicitly, rather than relying on a mutable branch default. All three services have 4 CPUs / 8,000,000,000 bytes, no queue credentials, no domains or volumes, and use `infra/media-worker/Dockerfile` with role-specific `REVLINE_FINAL_TARGET` (`railway-processor` or `railway-exports`).
+
+`stage-repository` is a Railway-only pre-merge command at the exact published PR head. It accepts exactly one existing service per selected lane, configures preflight mode without queue credentials, deploys the manifest's exact commit, and requires real runtime success followed by idle exit. It writes no queue staging/cutover receipt and does not access Convex. It leaves those services stopped for later authenticated main-stage configuration.
+
+Long-lived slots use repository builds; temporary preflight/chunk services use immutable GHCR artifacts. Each manifest records `processorCommit` and `exportsCommit` alongside the image digests. Image builds bake the source commit; repository builds bake Railway's commit. Runtime refuses a different baked commit or Railway source commit. Repeated queue demand redeploys the previous tested image for the same commit rather than rebuilding the repository per job; a new release explicitly builds its exact commit. Chunk services retain the parent's export digest and commit, including deterministic retries.
+
+The main release is the single deployment controller. Automatic Railway GitHub triggers must remain absent (verified before dispatch); Wait for CI cannot create a cycle with Release main on PC. Cutover still requires the separately deployed matching Convex contract and successful authenticated queue stage. Fly rollback remains available.
+
+## Staging rollout under implementation
+
+Railway staging was cloned from production in the same project: environment `dde1b6c2-9225-46d3-ae43-c20fd2456d3b`. Service IDs are shared across environments. Their visible names are **Media Processing**, **Video Export**, and **Ultra Video Export**, with FFmpeg, Remotion, and Chromium icons. The selected environment visibly distinguishes staging/production; DEV remains separate. Temporary services use readable `preflight-{p,s,d}-...` and `render-{p,s,d}-...` names.
+
+A separate persistent, non-default Convex production-type deployment named `staging` was created: `striped-starling-234` (`https://striped-starling-234.convex.cloud`). Creating it did not select or overwrite this worktree's deployment. Its scoped deploy key and Railway staging token are stored in separate ignored mode-0600 operator files. No production backend credentials or user data were copied into it.
+
+The staging promotion gate, backend bootstrap, storage namespace and real job validation are still being implemented. Do not cut over production until staging succeeds with the exact same source/artifact revisions. At this checkpoint no staging or production media jobs have run.

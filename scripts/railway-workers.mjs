@@ -8,6 +8,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
+import { verifyStagingPromotion } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
@@ -15,16 +16,16 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
   apply: { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
   processors: { type: 'string' }, standard: { type: 'string' }, ultra: { type: 'string' },
-  'artifact-prefix': { type: 'string' },
+  'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' },
 } });
 const [operation] = positionals;
-const operations = ['plan', 'build', 'preflight', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
-if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--apply]`);
+const operations = ['plan', 'build', 'preflight', 'stage-repository', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
+if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'staging', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|staging|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--apply]`);
 if (values['image-first'] && (operation !== 'stage' || values.kind !== 'processor')) throw new Error('--image-first is only for staging a processor before its immediately following Convex release.');
 const configPath = resolve(values.config);
 let config = railwayConfig(await readFile(configPath, 'utf8'));
 if (config.environment !== values.environment) throw new Error('Explicit environment and manifest differ.');
-const deployment = config.environment === 'production' ? 'different-gnu-398' : 'majestic-alpaca-541';
+const deployment = { dev: 'majestic-alpaca-541', staging: 'striped-starling-234', production: 'different-gnu-398' }[config.environment];
 const kinds = values.kind === 'all' ? ['processor', 'exports'] : [values.kind];
 const selectedPools = () => [
   ...(kinds.includes('processor') ? [{ name: 'processor', ids: config.processorServices, image: config.processorImage }] : []),
@@ -42,14 +43,16 @@ if (values.apply) {
   const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
   const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const railwayOnly = ['build', 'preflight'].includes(operation);
-  if (railwayOnly && !mainPush && branch !== 'main') {
+  const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
+  const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
+  if ((railwayOnly || stagingCi) && !mainPush && branch !== 'main') {
     const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '82', '--repo', 'zuraHQ/revline-editor', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Railway-only staging requires the exact published open PR #82 head.');
-  } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
+  } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
+if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds });
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
 const env = { ...process.env, ...settings };
 mask(env);
@@ -65,24 +68,27 @@ if (operation === 'build') {
   try {
     for (const kind of kinds) {
       const name = kind === 'processor' ? 'processor' : 'exports';
-      const tag = `ghcr.io/zurahq/revline-${name}${config.environment === 'production' ? '' : '-dev'}:${git('rev-parse', 'HEAD')}`;
+      const tag = `ghcr.io/zurahq/revline-railway-${name}${config.environment === 'dev' ? '-dev' : ''}:${git('rev-parse', 'HEAD')}`;
       const file = join(metadata, `${name}.json`);
-      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'infra/media-worker/Dockerfile', '--tag', tag, '--metadata-file', file, '--push', '.'], { cwd: context, env });
+      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'infra/media-worker/Dockerfile', '--tag', tag, '--build-arg', `REVLINE_BUILD_COMMIT=${git('rev-parse', 'HEAD')}`, '--metadata-file', file, '--push', '.'], { cwd: context, env });
       const digest = z.object({ 'containerimage.digest': z.string().regex(/^sha256:[a-f0-9]{64}$/) }).parse(JSON.parse(await readFile(file, 'utf8')))['containerimage.digest'];
-      config = railwayConfig({ ...config, [`${name}Image`]: `${tag.slice(0, tag.lastIndexOf(':'))}@${digest}` });
+      config = railwayConfig({ ...config, [`${name}Image`]: `${tag.slice(0, tag.lastIndexOf(':'))}@${digest}`, [`${name}Commit`]: git('rev-parse', 'HEAD') });
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
     }
   } finally { await rm(context, { recursive: true, force: true }); }
   process.exit(0);
 }
 
-if (settings.CONVEX_DEPLOYMENT !== `${config.environment === 'production' ? 'prod' : 'dev'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== config.convexUrl) throw new Error('Use a separate environment file for the exact selected Convex deployment.');
+if (settings.CONVEX_DEPLOYMENT !== `${config.environment === 'dev' ? 'dev' : 'prod'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== config.convexUrl) throw new Error('Use a separate environment file for the exact selected Convex deployment.');
 const token = settings.RAILWAY_API_TOKEN;
 const target = () => ({ token, config });
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-if (operation === 'preflight') {
+if (operation === 'preflight' || operation === 'stage-repository') {
   await verifyRailwayTarget(target());
-  for (const kind of kinds) await preflight(kind);
+  if (operation === 'stage-repository') {
+    if (selectedPools().some(pool => pool.ids.length !== 1)) throw new Error('Pre-merge repository staging requires exactly one existing capped service per selected lane.');
+    for (const pool of selectedPools()) await preflight(pool.name === 'processor' ? 'processor' : 'exports', pool.ids[0]);
+  } else for (const kind of kinds) await preflight(kind);
   console.log('Railway-only runtime preflight complete. No Convex access, queue credentials, staging receipt or routing changes.');
   process.exit(0);
 }
@@ -116,9 +122,9 @@ async function waitStopped() {
   }
 }
 
-async function preflight(kind) {
+async function preflight(kind, existingServiceId) {
   const image = kind === 'processor' ? config.processorImage : config.exportsImage;
-  const serviceId = await createRailwayService({ ...target(), name: `rv-t-${config.environment === 'production' ? 'p' : 'd'}-${Date.now()}-${randomUUID().slice(0, 8)}` });
+  const serviceId = existingServiceId || await createRailwayService({ ...target(), name: `preflight-${{ production: 'p', staging: 's', dev: 'd' }[config.environment]}-${Date.now()}-${randomUUID().slice(0, 6)}` });
   try {
     await configureRailwaySlot({ ...target(), serviceId, image, variables: {
       ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
@@ -132,13 +138,13 @@ async function preflight(kind) {
       }));
       if (['FAILED', 'CRASHED', 'REMOVED'].includes(result.deployment.status)) throw new Error(`${kind}: Railway runtime preflight failed; dispatch unchanged.`);
       const verified = result.deploymentLogs.some(({ message }) => {
-        try { const event = JSON.parse(message); return event.event === 'railway-runtime-verified' && event.image === image; } catch { return false; }
+        try { const event = JSON.parse(message); return event.event === 'railway-runtime-verified' && event.image === image && event.commit === config[kind === 'processor' ? 'processorCommit' : 'exportsCommit'] && event.role === kind; } catch { return false; }
       });
       if (verified && result.deployment.deploymentStopped) { console.log(`Verified ${kind} runtime on Railway: ${image}. No queue connection or media/model task.`); return; }
       await wait(10_000);
     }
     throw new Error(`${kind}: runtime preflight timed out; dispatch unchanged.`);
-  } finally { await deleteRailwayService({ ...target(), serviceId }); }
+  } finally { if (!existingServiceId) await deleteRailwayService({ ...target(), serviceId }); }
 }
 
 async function verifyQueueConnection(serviceId) {
