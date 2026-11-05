@@ -2,7 +2,7 @@ import { transportTranscript } from '../media-analysis/transcript';
 import type { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
 import { processMediaTask } from './media-task-runner';
-import { isMediaLeaseLost, isRetryableAnalysisError, mediaErrorMessage, MEDIA_TASK_LEASE_MS } from '../media-analysis/errors';
+import { AnalysisError, isMediaLeaseLost, isRetryableAnalysisError, mediaErrorMessage, MEDIA_TASK_LEASE_MS } from '../media-analysis/errors';
 import type { MediaTaskActivity } from '../media-analysis/activity';
 import { MEDIA_PROCESSOR_VERSION } from '../media-analysis/processor-version';
 import { retryMediaOperation } from '../media-analysis/network';
@@ -150,7 +150,7 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           const timedOut = signal.aborted && deadline.aborted;
           const retryable = task.kind !== 'review' && !(task.kind === 'render' && timedOut) && isRetryableAnalysisError(error);
           if (!shutdown.aborted && !controller.signal.aborted) {
-            await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, error: timedOut && task.kind === 'render' ? `The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.` : mediaErrorMessage(error) }, { skipQueue: true }).catch(failure => {
+            await client.mutation(api.mediaTasks.fail, { ...credentials, retryable, ...(error instanceof AnalysisError && error.geminiBilling ? { geminiBilling: true, geminiKeyHash: Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? ''))), b => b.toString(16).padStart(2, '0')).join('') } : {}), error: timedOut && task.kind === 'render' ? `The export exceeded its ${deadlineMinutes}-minute processing limit. Automatic retries were stopped.` : mediaErrorMessage(error) }, { skipQueue: true }).catch(failure => {
               if (!isMediaLeaseLost(failure)) queueError('failure report', failure, task.taskId);
             });
           }

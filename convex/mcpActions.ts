@@ -1,4 +1,5 @@
 "use node";
+import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools, type LaneId } from '../lib/ai/lanes';
 import { LANE_IDS } from '../lib/ai/lanes/types';
@@ -10,7 +11,7 @@ import type { LaneTask } from './lib/laneFinish';
 import { v } from 'convex/values';
 import { z } from 'zod';
 import { editorEditModeSchema, type EditorEditMode } from '../lib/ai/edit-mode';
-import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
+import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -126,7 +127,7 @@ function toolFailureMessage(text: string): string {
 
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
-  const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS) : undefined;
+  const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS) : undefined;
   try {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   const projectTool=args.name in PROJECT_TOOLS;
@@ -254,7 +255,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
       const request = { ownerId, projectId: input.projectId, times: input.times, ...(input.resolution?{resolution:input.resolution}:{}), ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) };
       const snapshotId = input.checkId
         ? await ctx.runQuery(internal.mcp.resolveFrameRead, { ...request, timelineId: input.timelineId, checkId: input.checkId })
-        : await ctx.runMutation(internal.mcp.requestFrames, request);
+        : await retryAbortedTransaction(() => ctx.runMutation(internal.mcp.requestFrames, request));
       const deadline = Date.now() + 45_000;
       let revision = input.revision;
       const pending = (error?: string) => result({ status: 'pending', checkId: snapshotId, revision, ...(error ? { error } : {}), nextAction: { tool: 'getFrames', arguments: { ...input, checkId: snapshotId } }, note: 'Follow nextAction to retrieve this frozen frame read without starting another render. The request expires ten minutes after it started.' });

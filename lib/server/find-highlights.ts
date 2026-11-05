@@ -310,6 +310,7 @@ export async function findSourceHighlights(
           " No partial or signal-only ranking was returned.",
         error.status,
         error.retryable,
+        error.geminiBilling,
       );
     }
     throw new AnalysisError(

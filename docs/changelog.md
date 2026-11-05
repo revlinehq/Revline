@@ -1,6 +1,16 @@
 ## 2026-11-04
 
 - MCP frame reads: Return a resumable handle while frames render and retain results until download succeeds. Why: Timeout retries queued duplicate work and could discard unread images.
+- Source frames: Reject empty receipts and return saved handles after transient result downloads. Why: first-call download failures hid resumable work (#87).
+
+- Reference comparison: Resume pending renders and pixel comparisons on the original frozen revision with scoped receipts. Why: #86 restarted cancelled work after MCP timeouts.
+
+- Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.
+
+- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
+- Editor skills: Author prose in Markdown and bundle it for all runtimes; sharpen measured recreation guidance. Why: user requested reviewable skills without changing readSkill.
+- Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
+
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
 - Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
 - MCP: Bound visual-guard waits and cancel abandoned guard renders before releasing edits. Why: Transport expiry could leave scoped patches holding the edit lock.
@@ -23,6 +33,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Media analysis: Pause fresh Gemini analysis and composition reviews per owner and configured key for 15 minutes after genuine billing rejections. Why: #111 repeated new runs downloaded and uploaded footage against an unfunded provider.
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
