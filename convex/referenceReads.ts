@@ -213,19 +213,20 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<ReadResult | null> {
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false, continuation?: {readId?: Id<'referenceReads'>; save: (readId: Id<'referenceReads'>) => Promise<void>}): Promise<ReadResult | null> {
   if (Date.now() >= deadline) return null;
   const cached = await ctx.runAction(internal.frameCache.readResult, {ownerId,projectId,assetId,snapshotId,work:{mode:'compare',start:Math.min(...times),end:Math.max(...times),times,...(compareCrop?{compareCrop}:{}),...(cropKeyframes?{referenceCropKeyframes:cropKeyframes}:{})}});
   if (cached) return cached as ReadResult;
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  const readId = continuation?.readId ?? await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  if (continuation && !continuation.readId) await continuation.save(readId);
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
       if (state.status === 'failed') throwReadFailure(state.error, 'The comparison could not be made');
-      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
+      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId,retain:!!continuation,deadline}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
     return null;
-  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+  } finally { if (!continuation || signal?.aborted) await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }

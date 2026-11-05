@@ -23,6 +23,7 @@ export function cropBounds(crop: ComparisonCrop, width: number, height: number) 
   const left = Math.min(width - 1, Math.floor(crop.x * width + 1e-6)), top = Math.min(height - 1, Math.floor(crop.y * height + 1e-6));
   return { left, top, width: Math.max(1, Math.min(width - left, Math.round(crop.w * width))), height: Math.max(1, Math.min(height - top, Math.round(crop.h * height))) };
 }
+export const MCP_REFERENCE_COMPARISON_BUDGET_MS = 35_000;
 export const REFERENCE_COMPARISON_BUDGET_MS = 4 * 60_000;
 const shared = { assetId: z.string().min(1), offset: z.number().optional(), ...comparisonCropFields };
 const times = z.array(z.number().min(0)).min(1).describe('Reference seconds. Use sparse times only for steady stretches.');
@@ -33,11 +34,11 @@ const samplingInput = z.union([
   z.object({ ...shared, ...range }).strict().refine(input => input.end > input.start && Number.isSafeInteger(Math.ceil((input.end - input.start) * input.fps))),
 ]);
 // MCP adds projectId and timelineId to the top-level object. Keep the alternatives inside boundary validation.
-export const referenceComparisonInput = z.object({ ...shared, times: times.optional(), start: range.start.optional(), end: range.end.optional(), fps: fps.optional() }).strict().refine(input => samplingInput.safeParse(input).success, { message: 'Give either times, or an increasing start/end range with optional fps (default 15). Follow nextAction when the time budget returns a partial comparison.' });
+export const referenceComparisonInput = z.object({ receipt: z.string().min(1).optional(), cancel:z.boolean().optional().describe("Cancel and clean up a receipt using its original request arguments."), ...shared, times: times.optional(), start: range.start.optional(), end: range.end.optional(), fps: fps.optional() }).strict().refine(input => samplingInput.safeParse((({receipt: _receipt, cancel:_cancel, ...work}) => work)(input)).success, { message: 'Give either times, or an increasing start/end range with optional fps (default 15). Follow nextAction when the time budget returns a partial comparison.' });
 
 /** Generate only the next batch, so long windows do not allocate every sample before the budget starts. */
 export function comparisonSamples(raw: z.infer<typeof referenceComparisonInput>) {
-  const input = samplingInput.parse(raw);
+  const input = samplingInput.parse((({receipt: _receipt, cancel:_cancel, ...work}) => work)(raw));
   if ('times' in input) return { count: input.times.length, batch: (first: number) => input.times.slice(first, first + 6) };
   const count = Math.floor((input.end - input.start) * input.fps + 1e-6);
   const samples = count + 1 + (input.end - (input.start + count / input.fps) > 1e-6 ? 1 : 0);
