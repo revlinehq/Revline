@@ -1,6 +1,7 @@
 ## 2026-11-04
 
 - Scene capture: Decode bound video before the final Three draw and invalidate older captures. Why: #100 and #120 legacy playback captured black VideoTexture frames.
+- Video import: Route public X status links through the supported downloader. Why: #114 treated supported video posts as direct MP4 files.
 
 - Scene video: Overlay decoded still frames on video boxes and wait for the first decoded frame at zero. Why: original #100 captures omitted bound mascot imagery.
 - Assistant models: Unlock every configured in-app model for paid subscriptions, including Sonnet and Opus, while trials stay on Terra Low. Why: the user wants model choice after trial conversion without an Ultra-only Claude restriction.
