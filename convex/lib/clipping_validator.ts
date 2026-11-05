@@ -21,6 +21,13 @@ export const clipCheckRequestValidator = v.object({
     ),
   ),
 });
+export const clipSourceType = v.union(
+  v.literal("podcast"),
+  v.literal("gaming"),
+  v.literal("irl"),
+  v.literal("sports"),
+  v.literal("talk"),
+);
 const line = v.object({ start: v.number(), end: v.number(), text: v.string() });
 export const fallbackMoment = v.object({
   start: v.number(),
@@ -64,6 +71,10 @@ export const clippingManifest = v.object({
   qualityChecks: v.optional(v.array(qualityCheck)),
   visualWindows: v.optional(v.array(v.object({ key: v.string(), start: v.number(), end: v.number(), token: v.string(), createdAt: v.number(), result: v.optional(v.string()) }))),
   reviewMode: v.optional(v.union(v.literal("transcript"), v.literal("visual"))),
+  // The type the agent declared to findHighlights; found moments are ranked with it.
+  sourceType: v.optional(clipSourceType),
+  // Visual moments found left out because no video observation could be made.
+  unresolved: v.optional(v.array(v.object({ title: v.string(), start: v.number(), end: v.number(), reason: v.string() }))),
   unavailableReason: v.optional(v.string()),
   candidates: v.string(),
   recommendedCount: v.number(),

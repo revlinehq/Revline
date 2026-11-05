@@ -27,10 +27,12 @@ import {
   readHighlights,
   semanticMoment,
   transcriptHighlightTracks,
+  type SemanticMoment,
   type SourceType,
 } from "../lib/media-analysis/highlights";
 import {
   clippingChoice,
+  clipSourceType,
   qualityCheck,
   fallbackMoment,
   clipCheckRequestValidator,
@@ -67,6 +69,42 @@ const checksFor = (row: Doc<'clippingRuns'>, timelineId: string) =>
   row.qualityTimelineIds && !row.qualityTimelineIds.includes(timelineId) ? [] : row.qualityChecks ?? [];
 const candidatesOf = (row: Doc<"clippingRuns">): Candidate[] =>
   JSON.parse(row.candidates);
+// One bounded targeted-video budget per batch, shared by reserveVisual and found.
+const VISUAL_WINDOWS = 12,
+  VISUAL_SECONDS = 600,
+  INSPECTION_TIMEOUT_MS = 240_000;
+const visualBudgetFits = (row: Doc<"clippingRuns">, duration: number, seconds: number) => {
+  const windows = row.visualWindows ?? [];
+  return windows.length < VISUAL_WINDOWS &&
+    windows.reduce((n, w) => n + w.end - w.start, 0) + seconds <= Math.min(VISUAL_SECONDS, duration);
+};
+/** findHighlights proposes no moments; saved words, pauses and cuts only refine found ones. */
+function discoveryTracks(
+  asset: Doc<"assets">,
+  type: SourceType | undefined,
+  transcriptOnly: boolean,
+) {
+  const saved = readHighlights(asset.analysis?.highlights);
+  const tracks = transcriptHighlightTracks(
+    asset.duration ?? 0,
+    asset.analysis?.transcript,
+    type ?? saved?.sourceType,
+    transcriptOnly,
+  );
+  // Out points snap to the same measured pauses that finish checks against.
+  if (saved) {
+    tracks.signals = saved.signals;
+    tracks.sceneCuts = saved.sceneCuts;
+  }
+  return tracks;
+}
+// A quote needs a letter or digit; "..." or "—" is not spoken evidence.
+const spoken = (text: string) => /[\p{L}\p{N}]/u.test(text);
+/** Quoted words ground spoken parts; every other part needs a video observation. */
+const visualParts = (m: SemanticMoment) => [
+  ...(m.kind === "action" || !spoken(m.payoff.text) ? [m.payoff] : []),
+  ...(!spoken(m.hook.text) ? [m.hook] : []),
+];
 async function tabContents(
   ctx: QueryCtx | MutationCtx,
   project: Doc<"projects">,
@@ -90,15 +128,7 @@ export const begin = internalMutation({
     ...runArgs,
     assetId: v.id("assets"),
     delivery: v.boolean(),
-    sourceType: v.optional(
-      v.union(
-        v.literal("podcast"),
-        v.literal("gaming"),
-        v.literal("irl"),
-        v.literal("sports"),
-        v.literal("talk"),
-      ),
-    ),
+    sourceType: v.optional(clipSourceType),
     count: v.optional(v.number()),
     transcriptOnly: v.optional(v.boolean()),
   },
@@ -114,26 +144,6 @@ export const begin = internalMutation({
       throw new ConvexError("Choose a source from this project.");
     const asset = await hydrateAsset(ctx, raw);
     const transcriptOnly = !!args.transcriptOnly;
-    const tracks = transcriptHighlightTracks(asset.duration ?? 0, asset.analysis?.transcript, args.sourceType, transcriptOnly);
-    const savedHelpers = readHighlights(asset.analysis?.highlights);
-    if (savedHelpers) { tracks.signals = savedHelpers.signals; tracks.sceneCuts = savedHelpers.sceneCuts; }
-    const candidates = rankHighlights(
-      tracks,
-      asset.analysis?.transcript,
-      args.sourceType as SourceType | undefined,
-    ).map((c) => ({
-      ...c,
-      evidence: c.evidence.sort((a, b) => b.strength - a.strength).slice(0, 24),
-    }));
-    const qualified = candidates.filter((c) => c.qualified).length;
-    const recommendedCount = Math.min(
-      args.count ??
-        (tracks.judge === "fallback"
-          ? Math.min(10, Math.max(3, Math.round(tracks.duration / 150)))
-          : defaultClipCount(tracks.duration, qualified)),
-      tracks.judge === "fallback" ? 10 : qualified,
-      Math.max(0, MAX_TIMELINE_TABS - tabsOf(project).length),
-    );
     const previous = await rowFor(ctx, args);
     if (previous && (previous.reviewMode === 'transcript') !== transcriptOnly)
       throw new ConvexError('Keep the existing batch review mode; start a new request to change it.');
@@ -142,6 +152,18 @@ export const begin = internalMutation({
       throw new ConvexError(
         "Finish this source batch before starting another in the same run.",
       );
+    // A reviewed plan keeps its type; otherwise the latest declared type applies.
+    const tracks = discoveryTracks(asset, previous?.reviewed ? previous.sourceType : args.sourceType ?? previous?.sourceType, transcriptOnly);
+    // Discovery proposes no moments of its own: candidates come only from planClips
+    // found and survive a repeated findHighlights (e.g. to request delivery). The
+    // source type is only their label, so relabeling equals re-ranking.
+    const candidates = (previous ? candidatesOf(previous) : []).map((c) => ({ ...c, sourceType: tracks.sourceType }));
+    const qualified = candidates.filter((c) => c.qualified).length;
+    const slots = Math.max(0, MAX_TIMELINE_TABS - tabsOf(project).length);
+    // Before found this is the source-length suggestion; afterwards at most the qualified moments.
+    const recommendedCount = candidates.length
+      ? Math.min(args.count ?? previous?.requestedCount ?? defaultClipCount(tracks.duration, qualified), qualified, slots)
+      : Math.min(args.count ?? Math.min(10, Math.max(3, Math.round(tracks.duration / 150))), 10, slots);
     if (!previous) {
       const tabs = await tabContents(ctx, project);
       await ctx.db.insert("clippingRuns", {
@@ -153,6 +175,7 @@ export const begin = internalMutation({
         delivery: args.delivery,
         targeted: true,
         reviewMode: transcriptOnly ? "transcript" : "visual",
+        ...(args.sourceType ? { sourceType: args.sourceType } : {}),
         ...(tracks.unavailableReason
           ? { unavailableReason: tracks.unavailableReason }
           : {}),
@@ -173,6 +196,8 @@ export const begin = internalMutation({
         delivery: previous.delivery || args.delivery,
         candidates: JSON.stringify(candidates),
         recommendedCount,
+        ...(args.count ? { requestedCount: args.count } : {}),
+        ...(args.sourceType ? { sourceType: args.sourceType } : {}),
         ...(tracks.unavailableReason
           ? { unavailableReason: tracks.unavailableReason }
           : {}),
@@ -181,9 +206,12 @@ export const begin = internalMutation({
       await ctx.db.patch(previous._id, { delivery: true });
     return {
       assetId: asset._id,
-      sourceType: args.sourceType ?? tracks.sourceType,
+      sourceType: tracks.sourceType,
       typeReason: tracks.typeReason,
       found: candidates.length,
+      ...(candidates.length
+        ? { registeredCandidates: "Kept the candidates already registered with planClips found; accept/drop these IDs, or send found again with the complete replacement set." }
+        : {}),
       qualified,
       recommendedCount: previous?.reviewed
         ? previous.recommendedCount
@@ -208,7 +236,7 @@ export const begin = internalMutation({
             sceneCuts:
               asset.analysis?.shots?.shots.map((s) => s.start) ??
               tracks.sceneCuts,
-            next: transcriptOnly ? "Select distinct hooks/payoffs from this transcript, then register planClips found. Use inspectAssetAnalysis only for exact boundary word windows; do not reread the full source. Preserve source framing/aspect, skip normalization unless requested, finishClipping and finish validate data inline without checkClip. No source frames, Gemini, speaker tracking or rendered verification is required." : "Propose candidates from the transcript and existing audio/shot helpers. For visually dependent moments, inspectVideo with explicit SOURCE start/end (up to 60s) and a focused question; extend only uncertain candidates. For silent footage, inspect a bounded sparse set of short video windows, then refine observed events; report inspected coverage. Stills/cuts alone cannot prove action. Register grounded planClips found moments. The server returns candidate IDs; accept/drop those IDs in the next planClips call. Never stop at suggestions when clips were requested.",
+            next: transcriptOnly ? "Select distinct hooks/payoffs from this transcript, then register planClips found. Use inspectAssetAnalysis only for exact boundary word windows; do not reread the full source. Preserve source framing/aspect, skip normalization unless requested, finishClipping and finish validate data inline without checkClip. No source frames, Gemini, speaker tracking or rendered verification is required." : "Propose candidates from the transcript and existing audio/shot helpers. Spoken moments are grounded by exact hook/payoff quotes and need no video. For action or non-verbal hook/payoff moments, inspectVideo with explicit SOURCE start/end (up to 60s) and a focused question; extend only uncertain candidates. If Gemini is unavailable, register the spoken moments; unobserved visual ones come back unresolved. For silent footage, inspect a bounded sparse set of short video windows, then refine observed events; report inspected coverage. Stills/cuts alone cannot prove action. Register grounded planClips found moments. The server returns candidate IDs; accept/drop those IDs in the next planClips call. Never stop at suggestions when clips were requested.",
           }
         : {}),
       note: "Review top 8-10. Call planClips with current accepted IDs and named tabs; give reasons for rejected reviewed candidates. Build accepted tabs, then finishClipping and finish directly; checkClip is optional. Never pad to the count.",
@@ -254,11 +282,11 @@ export const review = internalMutation({
       const raw = await ctx.db.get(row.assetId);
       if (!raw) throw new ConvexError("The source was removed.");
       const source = await hydrateAsset(ctx, raw),
-        tracks = row.targeted || row.reviewMode === 'transcript' ? transcriptHighlightTracks(source.duration ?? 0, source.analysis?.transcript, 'talk', row.reviewMode === 'transcript') : readHighlights(source.analysis?.highlights);
+        tracks = row.targeted || row.reviewMode === 'transcript' ? discoveryTracks(source, row.sourceType, row.reviewMode === 'transcript') : readHighlights(source.analysis?.highlights);
       if (!tracks) throw new ConvexError("Source helper analysis is missing.");
       const moments = args.found.map((raw) => {
         const m = semanticMoment.parse(raw);
-        if (row.reviewMode === 'transcript' && (m.kind === 'action' || !m.hook.text.trim() || !m.payoff.text.trim()))
+        if (row.reviewMode === 'transcript' && (m.kind === 'action' || !spoken(m.hook.text) || !spoken(m.payoff.text)))
           throw new ConvexError('Transcript-first moments need spoken hook and payoff quotes; visual action uses the visual path.');
         if (
           m.start < 0 ||
@@ -277,22 +305,55 @@ export const review = internalMutation({
           throw new ConvexError(
             "Fallback moments need an intact hook/payoff/reaction and concrete source evidence.",
           );
-        if (row.targeted && row.reviewMode === 'visual') {
-          const observed = (row.visualWindows ?? []).some(w => {
-            if (!w.result) return false;
-            const result = JSON.parse(w.result);
-            return Array.isArray(result.matches) && result.matches.some((match: { start: number; end: number }) => match.start <= m.payoff.end && match.end >= m.payoff.start);
-          });
-          if (!observed) throw new ConvexError('Action candidates require saved targeted video observations covering the payoff; stills, scene cuts and commentary alone do not establish the action.');
-        }
         return m;
       });
       const quoteErrors = moments.flatMap((moment, index) => clipQuoteProblems(moment, source.analysis?.transcript?.words ?? [])
         .map(problem => ({ index, title: moment.title, ...problem })));
       if (quoteErrors.length) return { success: false, saved: false, errors: quoteErrors,
         next: 'Correct every listed hook/payoff using the saved word timings. Retry found with the complete candidate set; nothing was replaced. For truncated windows, read only that source window with inspectAssetAnalysis.' };
+      // Quotes now ground every spoken hook/payoff. Action and non-verbal parts
+      // need a saved targeted video observation; stills, cuts and commentary never do.
+      type Observation = { available?: boolean; code?: string; reason?: string; matches?: { start: number; end: number }[] };
+      const targetedVisual = !!row.targeted && row.reviewMode === 'visual';
+      const windows = targetedVisual
+        ? (row.visualWindows ?? []).map(w => ({ ...w, observation: w.result ? JSON.parse(w.result) as Observation : undefined })) : [];
+      // Gemini is down now if the batch's latest inspection or this run's provider latch says so;
+      // a later successful inspection (or a new run) lifts it.
+      const latest = windows.filter(w => w.observation).at(-1)?.observation;
+      const unavailable = row.unavailableReason
+        ?? (latest?.available === false && latest.code === 'VIDEO_ANALYSIS_UNAVAILABLE' ? latest.reason : undefined)
+        ?? (args.editorRunId && project.aiAnalysisUsage?.runId === args.editorRunId ? project.aiAnalysisUsage.videoUnavailable : undefined);
+      const now = Date.now();
+      // An inspected part that shows nothing must go; one that cannot be inspected
+      // (outage, interrupted inspection, spent budget) stays out as unresolved.
+      const problems = targetedVisual
+        ? moments.flatMap((moment, index) => {
+            const parts = visualParts(moment).flatMap(part => {
+              if (windows.some(w => w.observation?.matches?.some(match => match.start <= part.end && match.end >= part.start))) return [];
+              const covering = windows.filter(w => w.start <= part.start && w.end >= part.end);
+              const at = { start: part.start, end: part.end };
+              if (covering.some(w => Array.isArray(w.observation?.matches)))
+                return [{ ...at, message: 'The saved inspectVideo observation of this window does not show it; remove this moment.' }];
+              const reason = unavailable ? `Video inspection was unavailable: ${unavailable.split(/(?<=\.)\s/)[0].slice(0, 200)}`
+                : covering.some(w => !w.result && now - w.createdAt > INSPECTION_TIMEOUT_MS) ? 'Its targeted video inspection was interrupted.'
+                : !visualBudgetFits(row, tracks.duration, Math.max(1, part.end - part.start)) ? 'The batch visual-inspection budget was spent.'
+                : undefined;
+              return [reason ? { ...at, reason } : { ...at, message: 'No saved inspectVideo observation covers this action or non-verbal part.' }];
+            });
+            const part = parts.find(p => 'message' in p) ?? parts[0];
+            return part ? [{ index, title: moment.title, ...part }] : [];
+          })
+        : [];
+      const errors = problems.filter(p => 'message' in p);
+      if (errors.length) return { success: false, saved: false, errors,
+        next: 'inspectVideo each listed SOURCE window (at most 60s, focused question), or remove moments an observation does not show, then retry found with the complete set. Spoken moments with matching hook/payoff quotes need no video. Nothing was replaced.' };
+      const unresolved = problems.flatMap(p => 'reason' in p && p.reason ? [{ title: p.title, start: p.start, end: p.end, reason: p.reason }] : []);
+      const grounded = moments.filter((_, index) => !problems.some(p => p.index === index));
+      if (!grounded.length) return { success: false, saved: false, unresolved,
+        ...(unavailable ? { geminiUnavailableReason: unavailable } : {}),
+        next: 'No spoken or video-observed moment remains, and stills, cuts or commentary cannot prove action. Register transcript-grounded spoken moments, or record planClips accepted:[] with a shortfallReason naming these unresolved visual moments. Nothing was replaced.' };
       const candidates = rankHighlights(
-        { ...tracks, judge: "fallback", moments },
+        { ...tracks, judge: "fallback", moments: grounded },
         source.analysis?.transcript,
       );
       const qualified = candidates.filter((c) => c.qualified).length;
@@ -304,6 +365,8 @@ export const review = internalMutation({
       await ctx.db.patch(row._id, {
         candidates: JSON.stringify(candidates),
         recommendedCount,
+        // Replaced with the candidate set; finish lists them in the final message.
+        unresolved: unresolved.length ? unresolved : undefined,
       });
       return {
         planSaved: true,
@@ -313,8 +376,10 @@ export const review = internalMutation({
         recommendedCount,
         sourceLengthTarget:targetCount(row,tracks.duration),
         candidates: candidates.slice(0, 10),
-        geminiUnavailableReason: row.unavailableReason,
-        next: "This found call replaced the candidate set. Use only these returned IDs and suggested start/end ranges; another found call must include the complete replacement set. Accept or drop each reviewed ID with planClips, then build the accepted tabs and call finishClipping and finish directly. Heavy QA is optional.",
+        geminiUnavailableReason: unavailable,
+        ...(unresolved.length ? { unresolved } : {}),
+        next: "This found call replaced the candidate set. Use only these returned IDs and suggested start/end ranges; another found call must include the complete replacement set. Accept or drop each reviewed ID with planClips, then build the accepted tabs and call finishClipping and finish directly. Heavy QA is optional." +
+          (unresolved.length ? " Unresolved visual moments were left out for lack of a video observation; the final message lists them. Never present them as clips." : ""),
       };
     }
     const candidates = candidatesOf(row),
@@ -533,11 +598,11 @@ export const reserveVisual = internalMutation({
     const prior = windows.find(w => w.key === key);
     if (prior) {
       if (prior.result) return { cached: JSON.parse(prior.result) };
-      if (Date.now() - prior.createdAt <= 240_000) return { pending: true };
+      if (Date.now() - prior.createdAt <= INSPECTION_TIMEOUT_MS) return { pending: true };
       return { cached: { available: false, reason: 'The targeted inspection was interrupted; no visual observation was recorded. Leave this candidate unresolved rather than repeating a sweep.' } };
     }
-    if (windows.length >= 12 || windows.reduce((n,w) => n+w.end-w.start, 0) + args.end-args.start > Math.min(600, source.duration))
-      throw new ConvexError('This batch reached its bounded visual-inspection budget (12 windows / 600 source seconds maximum). Report the inspected coverage and unresolved candidates; do not sweep the source.');
+    if (!visualBudgetFits(row, source.duration, args.end - args.start))
+      throw new ConvexError(`This batch reached its bounded visual-inspection budget (${VISUAL_WINDOWS} windows / ${VISUAL_SECONDS} source seconds maximum). Register the spoken and observed moments; planClips found returns the rest as unresolved. Do not sweep the source.`);
     const token = crypto.randomUUID();
     await ctx.db.patch(row._id, { visualWindows: [...windows, { key, start: args.start, end: args.end, token, createdAt: Date.now() }] });
     return { token };
@@ -841,6 +906,7 @@ export const completionState = internalQuery({
               message +
               ("\nSaved source/timeline data and available word timings checked; unrequested visual, decode and loudness checks were skipped." + (row.qualityChecks?.length ? ` Optional QA: ${row.qualityChecks.join(', ')} on ${row.qualityTimelineIds?.length ?? tabs.length} tab(s).` : ""))+
               (row.shortfallReason?`\nFewer clips qualified: ${row.shortfallReason}`:"")+
+              (row.unresolved?.length ? `\nLeft out without video evidence: ${row.unresolved.map((u) => `${u.title} (${u.start.toFixed(2)}-${u.end.toFixed(2)}s): ${u.reason}`).join("; ")}` : "")+
               (row.unavailableReason
                 ? "\nGemini was unavailable; picks used transcript and audio."
                 : ""),
