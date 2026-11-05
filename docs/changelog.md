@@ -3,6 +3,7 @@
 - Scene capture: Decode bound video before the final Three draw and invalidate older captures. Why: #100 and #120 legacy playback captured black VideoTexture frames.
 
 - Scene video: Overlay decoded still frames on video boxes and wait for the first decoded frame at zero. Why: original #100 captures omitted bound mascot imagery.
+- Assistant models: Unlock every configured in-app model for paid subscriptions, including Sonnet and Opus, while trials stay on Terra Low. Why: the user wants model choice after trial conversion without an Ultra-only Claude restriction.
 
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
