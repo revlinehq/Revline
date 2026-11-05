@@ -96,6 +96,7 @@ import type * as lib_render_snapshots from "../lib/render_snapshots.js";
 import type * as lib_retry_aborted_transaction from "../lib/retry_aborted_transaction.js";
 import type * as lib_revision_log from "../lib/revision_log.js";
 import type * as lib_run_ids from "../lib/run_ids.js";
+import type * as lib_run_types from "../lib/run_types.js";
 import type * as lib_runner_auth from "../lib/runner_auth.js";
 import type * as lib_save_incidents from "../lib/save_incidents.js";
 import type * as lib_scene_code from "../lib/scene_code.js";
@@ -239,6 +240,7 @@ declare const fullApi: ApiFromModules<{
   "lib/retry_aborted_transaction": typeof lib_retry_aborted_transaction;
   "lib/revision_log": typeof lib_revision_log;
   "lib/run_ids": typeof lib_run_ids;
+  "lib/run_types": typeof lib_run_types;
   "lib/runner_auth": typeof lib_runner_auth;
   "lib/save_incidents": typeof lib_save_incidents;
   "lib/scene_code": typeof lib_scene_code;

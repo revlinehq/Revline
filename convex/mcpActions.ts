@@ -7,7 +7,7 @@ import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
 import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
-import type { LaneTask } from './lib/laneFinish';
+import type { LaneTask } from './lib/run_types';
 import { v } from 'convex/values';
 import { z } from 'zod';
 import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';

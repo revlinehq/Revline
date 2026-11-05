@@ -13,11 +13,10 @@ import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { summarizeTimeline } from './inspectTimeline';
-import type { EditorRun } from './editorToolkit';
+import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
 import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import { motionReport, motionTimelineKey } from '../../lib/ai/motion-coverage';
-export type LaneTask = Doc<'editingLaneTasks'>;
 export type FinishResult = NonNullable<LaneTask['result']>;
 type Render = (
   times: number[],

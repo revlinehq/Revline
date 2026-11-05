@@ -6,7 +6,7 @@ import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { toolBehavior, type ToolBehavior } from '../../lib/ai/tool-definitions';
 import type { ToolSaveReceipt } from '../../lib/ai/save-confirmation';
-import type { EditorRun } from './editorToolkit';
+import type { EditorRun } from './run_types';
 
 type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; writeFailed?: string; interrupted?: string; responseLost?: boolean };
 class RecoveredWrite extends Error {}

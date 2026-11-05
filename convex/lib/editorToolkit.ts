@@ -5,7 +5,8 @@ import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneT
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline, LaneFinishError } from '../../lib/ai/lanes/task';
-import { finishLane, type FinishResult, type LaneTask } from './laneFinish';
+import { finishLane, type FinishResult } from './laneFinish';
+import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
@@ -124,7 +125,6 @@ async function reportAnalysisFailure<T>(work: () => Promise<T>) {
   catch (error) { if (error instanceof AnalysisStepError) return { success: false as const, error: error.message.slice(0, 1000) }; throw error; }
 }
 
-export type EditorRun = { projectId: Id<'projects'>; ownerId: string; runId: string };
 type EditorToolkitOptions = {
   run: EditorRun;
   project: Doc<'projects'>;
