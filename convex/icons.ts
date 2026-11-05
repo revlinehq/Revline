@@ -38,7 +38,7 @@ function validateIconId(id: string) {
 const TRADEMARK = 'A trademark of its owner: show it as it is, to name that product. Never recolor, distort, restyle or combine it with other marks, and never imply endorsement.';
 const MAX_SVG = 40_000;
 /** Raise when results change shape or quality, so cached answers are fetched again. */
-const CACHE_VERSION = 3;
+const CACHE_VERSION = 4;
 
 type SimpleIcon = { title: string; slug: string; hex: string; source: string; guidelines?: string; license?: { type: string; url?: string }; aliases?: { aka?: string[]; dup?: { title: string }[]; loc?: Record<string, string>; old?: string[] } };
 type Candidate = { id: string; title: string; kind: 'logo' | 'glyph' | 'ui' | 'emoji'; score: number; hex?: string; simple?: SimpleIcon };
@@ -53,11 +53,11 @@ async function fetchFrom(url: string, as: 'text' | 'json') {
 }
 
 const words = (value: string) => value.toLowerCase().normalize('NFD').replace(/\+/g, 'plus').replace(/&/g, 'and').replace(/[^a-z0-9]/g, '');
-/** 3 for the same name, 2 when one starts with the other, 1 when one contains the other. */
+/** Brand identity requires a full normalized name or a declared alias. */
 function match(query: string, name: string) {
   const a = words(query), b = words(name);
   if (!a || !b) return 0;
-  return a === b ? 3 : b.startsWith(a) || a.startsWith(b) ? 2 : b.includes(a) || a.includes(b) ? 1 : 0;
+  return a === b ? 3 : 0;
 }
 
 let simpleIcons: Promise<SimpleIcon[]> | undefined;
