@@ -1,4 +1,4 @@
-export type VideoLink = { kind: 'youtube' | 'twitch' | 'kick' | 'file'; url: string };
+export type VideoLink = { kind: 'youtube' | 'twitch' | 'kick' | 'x' | 'file'; url: string };
 
 /** Share validation between the form, queue and downloader. DNS is checked by the worker. */
 export function parseVideoLink(value: string): VideoLink {
@@ -9,6 +9,11 @@ export function parseVideoLink(value: string): VideoLink {
   const host = url.hostname.toLowerCase();
   if (host === 'localhost' || !host.includes('.') || host.endsWith('.local') || host.endsWith('.internal') || host.startsWith('[') || /^\d+(\.\d+){3}$/.test(host)) throw new Error('Use a public video link.');
   url.hash = '';
+  if (['x.com', 'www.x.com', 'twitter.com', 'www.twitter.com', 'mobile.twitter.com'].includes(host)) {
+    const status = /^\/(?:[A-Za-z0-9_]+\/status|i\/status)\/(\d+)\/?$/.exec(url.pathname);
+    if (!status) throw new Error('Use a link to one public X video post.');
+    return { kind: 'x', url: `https://x.com/i/status/${status[1]}` };
+  }
   if(['twitch.tv','www.twitch.tv'].includes(host)) {
     if(!/^\/videos\/\d+\/?$/.test(url.pathname))throw new Error('Use a Twitch VOD link, not a live channel.');
     return {kind:'twitch',url:`https://www.twitch.tv${url.pathname}`};
