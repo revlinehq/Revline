@@ -1,7 +1,7 @@
 import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from '../media-analysis/pixel-track';
 import { boundedCameraMotion } from './camera-framing';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
-import { objectMotionPatch } from '../ai/object-motion';
+import { objectMotionPatch } from './object-motion';
 import { solidColorSettings, visibleMotion } from './clip-effects';
 import { bakeMaskAnchors, type ClipMask, type MaskShape } from './masks';
 import { sourceTimeAt, timelineTimeAtSource } from './playback-rate';

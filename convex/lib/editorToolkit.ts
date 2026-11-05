@@ -26,7 +26,7 @@ import { SPEAKER_ANALYSIS_VERSION, summarizeSpeakerFraming, type SpeakerAnalysis
 import {configureSmoothZoomPatch,rememberZoomTargets,type ZoomTargetEvidence} from '../../lib/ai/zoom-targets';
 import {configureCameraMotionPatch} from '../../lib/ai/camera-targets';
 import {textGradientPatch} from '../../lib/editor/text-gradient';
-import {animateObjects} from '../../lib/ai/object-motion';
+import {animateObjects} from '../../lib/editor/object-motion';
 import {EFFECT_KEYFRAME_CONTROLS,effectKeyframesPatch} from '../../lib/editor/effect-keyframes';
 import {MOTION_EASINGS} from '../../lib/editor/motion-path';
 import {SPEED_RAMP_PRESET_IDS,presetAnchors,type SpeedRampPreset} from '../../lib/editor/speed-ramp';
