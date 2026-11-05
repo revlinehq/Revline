@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Reference tracing: Preserve classified small-crop interiors through vector simplification. Why: The original #107 logo still split two holes into six after enlargement alone.
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
 - Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
