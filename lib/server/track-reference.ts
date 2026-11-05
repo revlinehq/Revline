@@ -5,7 +5,7 @@ import { AnalysisError } from '../media-analysis/errors';
 import { workerToolPath } from './worker-tool-path';
 
 const number = z.number().finite();
-const sample = z.object({ time: number, x: number, y: number, w: number.positive(), h: number.positive(), scale: number.positive(), rotation: number, confidence: number.min(0).max(1), visible: z.boolean(), opacity: number.min(0).max(1).optional(), opacityConfidence: number.min(0).max(1).optional(), sharpness: number.nonnegative().optional() });
+const sample = z.object({ time: number, x: number, y: number, w: number.positive(), h: number.positive(), scale: number.positive(), scaleX: number.positive().optional(), scaleY: number.positive().optional(), registrationBox: z.object({ x: number, y: number, w: number.positive(), h: number.positive() }).optional(), corners: z.array(z.tuple([number, number])).optional(), rotation: number, confidence: number.min(0).max(1), visible: z.boolean(), opacity: number.min(0).max(1).optional(), opacityConfidence: number.min(0).max(1).optional(), sharpness: number.nonnegative().optional() });
 const message = z.union([z.object({ sample }), z.object({ progress: number })]);
 type Request = { start: number; end: number; box: { x: number; y: number; w: number; h: number }; frameTime?: number; backgroundTime?: number };
 
