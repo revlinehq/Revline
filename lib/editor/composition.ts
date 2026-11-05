@@ -7,6 +7,7 @@ import { resolvedAudioTimeline } from './audio-normalization';
 import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
+import { focusAt } from './focus-path';
 import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
 import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
@@ -89,15 +90,8 @@ export function trimmedFocus(clip: Clip) {
     if (![sample.time, sample.x, sample.y].every(Number.isFinite) || sample.time < 0 || sample.x < 0 || sample.x > 1 || sample.y < 0 || sample.y > 1 || (index > 0 && sample.time <= samples[index - 1].time)) throw new Error('Focus samples must have increasing source times and normalized positions.');
   }
   if (!samples.length) return [];
-  function at(time: number) {
-    const after = samples.findIndex(sample => sample.time >= time);
-    if (after <= 0) return { ...(after === -1 ? samples[samples.length - 1] : samples[0]), time };
-    const previous = samples[after - 1], next = samples[after];
-    const mix = (time - previous.time) / (next.time - previous.time);
-    return { time, x: previous.x + (next.x - previous.x) * mix, y: previous.y + (next.y - previous.y) * mix };
-  }
   const end = sourceEndOf(clip);
-  return [at(clip.sourceStart), ...samples.filter(sample => sample.time > clip.sourceStart && sample.time < end), at(end)];
+  return [focusAt(samples, clip.sourceStart)!, ...samples.filter(sample => sample.time > clip.sourceStart && sample.time < end), focusAt(samples, end)!];
 }
 
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */

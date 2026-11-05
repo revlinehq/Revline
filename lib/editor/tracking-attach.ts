@@ -1,5 +1,6 @@
 import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
 import { boundedCameraMotion } from './camera-framing';
+import { focusAt } from './focus-path';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from '../ai/object-motion';
 import { solidColorSettings, visibleMotion } from './clip-effects';
@@ -21,18 +22,12 @@ function assertFootage(footage: Clip) {
 function footageMapper(footage: Clip, asset: Pick<MediaAsset, 'width' | 'height'>, aspectRatio: AspectRatio) {
   const { width, height } = dimensions(aspectRatio);
   if (!(asset.width! > 0 && asset.height! > 0)) throw new Error('The footage has no recorded dimensions. Re-import it.');
-  const focusAt = (at: number) => {
-    const keys = footage.focus ?? [], after = keys.findIndex(key => key.time >= at);
-    if (after <= 0) return keys[after < 0 ? keys.length - 1 : 0];
-    const a = keys[after - 1], b = keys[after], mix = (at - a.time) / (b.time - a.time);
-    return { time: at, x: a.x + (b.x - a.x) * mix, y: a.y + (b.y - a.y) * mix };
-  };
   const fit = footage.fit === 'contain' ? 'contain' : 'cover';
-  const aperture = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(footage.sourceStart), fit).window;
+  const aperture = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(footage.focus ?? [], footage.sourceStart), fit).window;
   const keys = boundedCameraMotion(footage, asset, aspectRatio, visibleMotion(footage));
   const transform = { ...DEFAULT_TRANSFORM, ...footage.transform }, angle = transform.rotation * Math.PI / 180;
   return (x: number, y: number, time: number) => {
-    const rect = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(time), fit);
+    const rect = calculateVisualRect(asset.width!, asset.height!, width, height, footage.crop, focusAt(footage.focus ?? [], time), fit);
     const motion = keys.length ? motionAt(keys, timelineTimeAtSource(footage, time) - footage.start) : NEUTRAL_MOTION;
     const localX = aperture.left + rect.left - rect.window.left + x * rect.width - width / 2, localY = aperture.top + rect.top - rect.window.top + y * rect.height - height / 2, radians = motion.rotation * Math.PI / 180;
     const frameX = width / 2 + motion.x * width + motion.scale * (localX * Math.cos(radians) - localY * Math.sin(radians));
