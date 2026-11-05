@@ -19,6 +19,7 @@
 - Worker hosting: Decode Railway structured runtime logs and reserve capacity while builds are pending. Why: real staging passed its limits but the controller missed parsed log attributes.
 
 - Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.
+- Composer: Add the compact home composer with centered upload/clip icons and a `/clip [ENTER YOUTUBE URL]` shortcut; keep the editor flat. Why: user approved the design and requested centered icon actions.
 - Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
 - Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
 
