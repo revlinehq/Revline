@@ -1,7 +1,8 @@
+import { FOOTAGE_DRAFT_KEY } from '@/lib/editor/opening-request';
+
 // Browser-session draft footage. File objects remain local until an owned upload.
 const databaseName = 'revline-drafts';
 const storeName = 'footage';
-const sessionKey = 'revline:footage-draft';
 const expiry = 60 * 60 * 1000;
 type Draft = { id: string; files: File[]; expiresAt: number };
 let pendingFiles: File[] | null = null;
@@ -15,8 +16,8 @@ function storageError() {
 }
 
 function draftId(create = false) {
-  let id = sessionStorage.getItem(sessionKey);
-  if (!id && create) { id = crypto.randomUUID(); sessionStorage.setItem(sessionKey, id); }
+  let id = sessionStorage.getItem(FOOTAGE_DRAFT_KEY);
+  if (!id && create) { id = crypto.randomUUID(); sessionStorage.setItem(FOOTAGE_DRAFT_KEY, id); }
   return id;
 }
 
@@ -58,7 +59,7 @@ async function persist(files: File[]) {
     // Invalidate the session pointer even if an unavailable database cannot delete
     // its old record. Removed footage must never be restored after authentication.
     let id: string | null = null;
-    try { id = draftId(); sessionStorage.removeItem(sessionKey); } catch { /* No files remain to preserve. */ }
+    try { id = draftId(); sessionStorage.removeItem(FOOTAGE_DRAFT_KEY); } catch { /* No files remain to preserve. */ }
     if (id) await transaction('readwrite', store => store.delete(id)).catch(() => undefined);
     persistenceError = null;
     return;
