@@ -79,6 +79,7 @@ import type * as lib_generated_image_summary from "../lib/generated_image_summar
 import type * as lib_incidents from "../lib/incidents.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_laneFinish from "../lib/laneFinish.js";
+import type * as lib_lane_evidence from "../lib/lane_evidence.js";
 import type * as lib_lane_validators from "../lib/lane_validators.js";
 import type * as lib_mcp_limits from "../lib/mcp_limits.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   "lib/incidents": typeof lib_incidents;
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/laneFinish": typeof lib_laneFinish;
+  "lib/lane_evidence": typeof lib_lane_evidence;
   "lib/lane_validators": typeof lib_lane_validators;
   "lib/mcp_limits": typeof lib_mcp_limits;
   "lib/mcp_origin": typeof lib_mcp_origin;

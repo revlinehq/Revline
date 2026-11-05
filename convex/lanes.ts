@@ -15,12 +15,13 @@ import {
 import { requireOwner, requireProject } from './lib/auth';
 import { activeTabOf, tabsOf, storedTabTimeline } from './timelineTabs';
 import { validateTimeline } from './lib/timeline';
+import { saveEvidence } from './lib/lane_evidence';
 import { summarizeTimeline } from './lib/inspectTimeline';
 import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../lib/ai/lanes/task';
 import { capabilityExists, type LaneId } from '../lib/ai/lanes';
 import { FastFrameReview, fastFrameEvidence, readFastFrameTimes } from '../lib/ai/fast-frame-review';
 import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
-import type { Doc, Id } from './_generated/dataModel';
+import type { Id } from './_generated/dataModel';
 const scope = { ownerId: v.string(), projectId: v.id('projects') };
 const taskScope = { ...scope, taskId: v.string() };
 const tabState = v.object({
@@ -354,26 +355,6 @@ export const evidence = internalMutation({
     return null;
   },
 });
-/** One bounded writer for task evidence: a newer entry replaces the same tool, timeline and input. */
-async function saveEvidence(ctx: MutationCtx, row: Doc<'editingLaneTasks'>, entry: Doc<'editingLaneTasks'>['evidence'][number]) {
-  const previous = row.evidence.filter(
-    (item) =>
-      item.timelineId !== entry.timelineId ||
-      item.tool !== entry.tool ||
-      JSON.stringify(item.input) !== JSON.stringify(entry.input),
-  );
-  const evidence = [...previous, entry].slice(-120);
-  while (
-    evidence.length > 1 &&
-    new TextEncoder().encode(JSON.stringify(evidence)).length > 650_000
-  )
-    evidence.shift();
-  if (new TextEncoder().encode(JSON.stringify(evidence)).length > 650_000)
-    throw new ConvexError(
-      'Check output is too large to retain. Check shorter contiguous windows.',
-    );
-  await ctx.db.patch(row._id, { evidence });
-}
 export const validate = internalMutation({
   args: { ...scope, timeline: v.any() },
   returns: v.null(),

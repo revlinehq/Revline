@@ -6,6 +6,7 @@ import { internalMutation, internalQuery } from './_generated/server';
 import { toolBehavior } from '../lib/ai/tool-definitions';
 import { toolWriteReceipt } from './lib/tool_write_receipt';
 import { projectIdentity } from './lib/project_data';
+import { saveEvidence } from './lib/lane_evidence';
 import { turnForRun } from './assistantTurnRecovery';
 import {timelineHistoryKey} from '../lib/editor/timeline-history-key';
 import {FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence} from '../lib/ai/fast-frame-review';
@@ -85,7 +86,7 @@ export const run = internalMutation({
       if(beforeTimeline&&afterTimeline)review.changed(beforeTimeline,afterTimeline,task&&laneChecks(task.lane,taskCheckLevel(task)).frames==='sample'?fastReelFrameMoments(args.toolName,beforeTimeline,afterTimeline):undefined);
       if(task&&afterTimeline){
         const entry=fastFrameEvidence(turn.timelineId,await timelineHistoryKey(afterTimeline),review.times());
-        await ctx.db.patch(task._id,{evidence:[...task.evidence.filter(item=>item.tool!=='fastFrameReview'||item.timelineId!==turn.timelineId),entry].slice(-120)});
+        await saveEvidence(ctx,task,entry);
       }
       await patchTurn(ctx,turn,{savedEdits:turn.savedEdits+(receipt?.kind==='timeline'?1:0),pendingFastFrames:review.times()});
     }
