@@ -73,12 +73,12 @@ async function stashActive(ctx: MutationCtx, project: Doc<'projects'>) {
 }
 
 /** Open a tab: its timeline becomes the project's, minus clips whose media was deleted meanwhile. */
-async function openTab(ctx: MutationCtx, project: Doc<'projects'>, tabs: Tab[], timelineId: string, timeline: Timeline, history: Timeline[]) {
+async function openTab(ctx: MutationCtx, project: Doc<'projects'>, tabs: Tab[], timelineId: string, timeline: Timeline, history: Timeline[], preserveRevision = false) {
   const assets = new Set((await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', project.ownerId).eq('projectId', project._id)).take(400)).map(asset => String(asset._id)));
   const present = (item: Timeline) => ({ ...item, clips: item.clips.filter(clip => !clip.assetId || assets.has(clip.assetId)) });
   const opened = present(await loadSceneCode(ctx, timeline));
   const restoredHistory = await Promise.all(history.map(item => loadSceneCode(ctx, item)));
-  await writeProject(ctx, project._id, { timeline: opened, aspectRatio: opened.aspectRatio, history: restoredHistory.map(present), revision: (project.revision ?? 0) + 1, timelineTabs: tabs, activeTimelineId: timelineId, updatedAt: Date.now() });
+  await writeProject(ctx, project._id, { timeline: opened, aspectRatio: opened.aspectRatio, history: restoredHistory.map(present), revision: (project.revision ?? 0) + (preserveRevision ? 0 : 1), timelineTabs: tabs, activeTimelineId: timelineId, updatedAt: Date.now() });
 }
 
 export const tabSummary = v.object({ id: v.string(), name: v.string(), aspectRatio, duration: v.number(), clipCount: v.number(), active: v.boolean() });
@@ -132,13 +132,13 @@ export async function createTabFor(ctx: MutationCtx, ownerId: string, args: Obje
 }
 
 export const open = mutation({ args: { projectId: v.id('projects'), timelineId: v.string() }, returns: v.null(), handler: async (ctx, args) => openTabFor(ctx, await requireOwner(ctx), args) });
-export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }, runId?: string) {
+export async function openTabFor(ctx: MutationCtx, ownerId: string, args: { projectId: Id<'projects'>; timelineId: string }, runId?: string, preserveRevision = false) {
   const project = await openProject(ctx, args.projectId, ownerId, runId), tabs = tabsOf(project);
   if (args.timelineId === activeTabOf(project)) return null;
   const row = tabs.some(tab => tab.id === args.timelineId) ? await stashedRow(ctx, project._id, args.timelineId) : null;
   if (!row) throw new ConvexError('That timeline no longer exists');
   const stashed = await stashActive(ctx, project);
-  await openTab(ctx, project, withSummary(tabs, stashed.timelineId, stashed.timeline), args.timelineId, row.timeline, await takeStashed(ctx, row));
+  await openTab(ctx, project, withSummary(tabs, stashed.timelineId, stashed.timeline), args.timelineId, row.timeline, await takeStashed(ctx, row), preserveRevision);
   return null;
 }
 

@@ -131,7 +131,7 @@ async function findMoments(path: string, start: number, end: number, source: Sou
   if (to - from < .2) return { moments: [], holds: [], changed: false };
   // A window up to 30 s is read wide enough that an app icon or one key is several pixels, not one; long maps stay small.
   const width = to - from <= 30 ? 256 : 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, (to - from) * 1000), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, Math.ceil((to - from) * 1000)), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
   if (total < 2) return { moments: [], holds: [], changed: false };
   const frame = (index: number) => stdout.subarray(index * size, (index + 1) * size);
@@ -308,7 +308,7 @@ async function readMotion(path: string, source: Source, work: Work, signal: Abor
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
   onProgress(40);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)) };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: { ...motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)), sourceFps: round(source.fps, 3) } };
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
