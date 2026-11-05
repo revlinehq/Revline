@@ -26,3 +26,9 @@ Visually inspected these original 1920×1080 frames. Replayed all ten generated 
 The original title request uses 0.167–0.8 seconds and box (96,150,740,150). Replayed the saved original title video at native 1280×720 with a visible 0.5-second seed; 36 of 37 samples register. Inspected full-resolution frames at 0.2, 0.5 and 0.783333 seconds. The first title line rises and holds; the near-invisible earliest sample remains untrusted. The final rigid-compatible fit produces one title move; replay through GSAP has a maximum vertical residual of 1.71 px against the registered samples. This defect does not reproduce with the current visible-seed registration, so no visibility threshold was relaxed.
 
 The production TypeScript worker parser accepted all 60 original card samples and the shared fitter returned ten moves. Verification creates no test files, fixtures or mocks and changes no shared deployment.
+
+## Queued result delivery
+
+The real original-media worker result exposed a result-boundary gap: strict validation rejected `track[0].scaleX`, while the old permissive parser silently stripped independent axes and registration geometry. The Convex track and move validators now retain these optional fields. Processor version 44 excludes older workers and invalidates old cached results.
+
+On isolated `bold-pig-880`, uploaded the original file through MCP and invoked `trackReference` through `mcpActions:callTool`. Task `s977agywqvp22vyehe7hnmkfsd8hmqsc` completed; the tool returned in 15,031 ms with all 60 samples, ten moves, one frame sheet, independent axes on samples and moves, and the measured seed box `(676,481,621,142)`. Typecheck/build and scoped Convex deployment passed. Frontend and worker are ready on port 3103. The actual reply is retained at `/tmp/card-queued-result.json` on the PC.

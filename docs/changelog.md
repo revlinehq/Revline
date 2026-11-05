@@ -1,6 +1,6 @@
 ## 2026-11-04
 
-- Reference tracking: Register expanding panel silhouettes and fit independent box axes while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
+- Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
