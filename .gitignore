@@ -47,3 +47,6 @@ __pycache__/
 *.key
 *.p12
 *.pfx
+
+# Local design source and previews
+/designs/
