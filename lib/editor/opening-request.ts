@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Id } from '@/convex/_generated/dataModel';
-import type { AspectRatio } from './types';
+import { ASPECT_RATIOS, type AspectRatio } from './types';
 
 // The new-project page hands its brief, format, footage and model choices to the
 // editor through browser storage. Every key that handoff uses is spelled here.
@@ -32,7 +32,7 @@ export function saveNewProjectBrief(value: string) {
 }
 export function newProjectAspectRatio(): AspectRatio | undefined {
   const saved = sessionStorage.getItem(NEXT_ASPECT_RATIO_KEY);
-  if (saved === 'landscape' || saved === 'vertical' || saved === 'square' || saved === 'portrait-feed' || saved === 'classic') return saved;
+  return ASPECT_RATIOS.find(ratio => ratio === saved);
 }
 export const saveNewProjectAspectRatio = (value: AspectRatio) => sessionStorage.setItem(NEXT_ASPECT_RATIO_KEY, value);
 /** Saved uploads chosen for the next project, or undefined when nothing valid is stored. */
