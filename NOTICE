@@ -3,7 +3,7 @@ Copyright 2026 Revline contributors
 
 Revline-authored code is distributed under the Apache License, Version 2.0.
 Third-party components and assets retain their original notices and licenses.
-See the attributions below, OpenCut-LICENSE, public/fonts/README.md, assets/audio-fx/ and
+See the attributions below, public/fonts/README.md, assets/audio-fx/ and
 assets/landing-media/README.md for attribution and asset-specific terms.
 This license grants no rights to third-party footage, music or trademarks.
 
@@ -15,7 +15,7 @@ Source: https://github.com/OpenCut-app/opencut-classic/tree/cf5e79e919144200294f
 
 Adapted files: lib/editor/timeline-controls.ts and components/editor/use-timeline-playhead.ts.
 
-The complete MIT notice is retained in OpenCut-LICENSE.
+The complete MIT notice is retained below. These attributions identify code provenance and do not imply affiliation or endorsement.
 
 Box selection follows OpenCut Classic's selection/hooks/use-box-select.ts: movement threshold, rectangle intersection, and additive Shift/Ctrl selection. Revline adapts it to pointer events and its own Zustand state; layer and clip gestures use scoped pointer destinations and commit once on release.
 
@@ -28,3 +28,14 @@ Direct text manipulation follows preview/controllers/preview-interaction-control
 Visual preview bounds, anchored corner resizing, and rotation-aware cursors adapt `preview/element-bounds.ts` and `preview/components/handle-primitives.tsx` from [OpenCut Classic at cf5e79e919144200294fb9fed22a222592a0aeea](https://github.com/OpenCut-app/opencut-classic/tree/cf5e79e919144200294fb9fed22a222592a0aeea/apps/web/src/preview). The single composition viewport follows `preview/preview-coords.ts` and `preview/components/preview-viewport.tsx`: media and controls use the same composition coordinates and one canvas-to-screen scale. Revline additionally intersects the transformed fitted/cropped source polygon with its HyperFrames composition mask, so the selection follows the visible media instead of an enlarged, clipped source window. Outside handle hit areas remain usable; pointer resizing and snapping retain the canonical source geometry and export transform. Adapted files: `lib/editor/visual-transforms.ts`, `lib/editor/preview-viewport.ts`, `components/editor/preview.tsx`, and `components/editor/visual-controls.tsx`.
 
 The streaming text fade in `components/core/flowtoken` reuses the adaptation from the user's ViralShark project. It derives from Ephibbs/flowtoken 1.0.40; the ISC notice and original attribution are retained alongside the source. Chat prose rendering also follows ViralShark's renderer.
+
+
+MIT notice for adapted components
+
+Copyright 2025-2026 OpenCut
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the “Software”), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

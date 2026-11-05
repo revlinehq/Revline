@@ -1,5 +1,9 @@
 ## 2026-11-05
 
+- Blog: Remove the visible RSS subscription link. Why: the user requested cleaner customer-facing navigation.
+
+- Repository: Remove the separate OpenCut license file and retain its notice inside NOTICE. Why: the user requested a single project license file.
+
 - Blog: Add a clipping guide for turning long videos into a varied batch of Shorts and Reels. Why: the user requested a timely clipping post.
 
 - Marketing: Widen workflow pages, use shared purple styling, and move their footer links into blog navigation. Why: the user requested consistent branding and clearer navigation.
