@@ -6,6 +6,7 @@ export function LandingFooter() {
     <div className="landing-footer-brand"><Brand /><small>© 2026</small></div>
     <nav aria-label="Footer navigation">
       <Link href="/pricing">Pricing</Link>
+      <Link href="/blog">Blog</Link>
       <a href="/#faq">FAQ</a>
       <Link href="/privacy">Privacy</Link>
       <Link href="/terms">Terms</Link>

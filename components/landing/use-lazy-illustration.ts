@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ComponentType } from 'react';
 
 type Animation = ComponentType<{ playing: boolean }>;
 
-/** Load near the viewport; play only inside it. */
+/** Load and play only inside the viewport. */
 export function useLazyIllustration(loadAnimation: () => Promise<{ default: Animation }>) {
   const frame = useRef<HTMLDivElement>(null);
   const [nearby, setNearby] = useState(false);
@@ -32,7 +32,7 @@ export function useLazyIllustration(loadAnimation: () => Promise<{ default: Anim
           load.disconnect();
         }
       },
-      { rootMargin: '320px' },
+      { rootMargin: '0px' },
     );
     const playback = new IntersectionObserver(([entry]) =>
       setPlaying(entry.isIntersecting),
