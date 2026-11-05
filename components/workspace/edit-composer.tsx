@@ -7,15 +7,12 @@ import { Popover, PopoverAnchor, PopoverContent } from '@/components/ui/popover'
 import { EDITOR_SLASH_COMMANDS, parseEditorCommand, type EditorCommandName } from '@/lib/ai/slash-commands';
 import { userError } from '@/lib/user-error';
 
-import { createContext, useContext, useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
 import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import './composer-upload-swap.css';
-
-// Scoped by EditorShell so custom conversation panels share the active timeline control.
-export const EditComposerHeaderContext = createContext<ReactNode>(null);
 
 export type EditComposerProps = {
   value: string; onChange: (value: string) => void; onSubmit: () => void | Promise<void>;
@@ -25,9 +22,7 @@ export type EditComposerProps = {
   header?: ReactNode; slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
 };
 
-export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', appearance = 'raised', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header: suppliedHeader }: EditComposerProps) {
-  const timelineHeader = useContext(EditComposerHeaderContext);
-  const header = suppliedHeader ?? timelineHeader;
+export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', appearance = 'raised', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header }: EditComposerProps) {
   const commandListId = useId();
   const [commandDismissed, setCommandDismissed] = useState(false);
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
