@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Source frames: Reject empty receipts and return saved handles after transient result downloads. Why: first-call download failures hid resumable work (#87).
+
 - Reference comparison: Resume pending renders and pixel comparisons on the original frozen revision with scoped receipts. Why: #86 restarted cancelled work after MCP timeouts.
 
 - Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.

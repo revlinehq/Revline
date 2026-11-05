@@ -1572,7 +1572,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
           }
           if (!rendered) break;
-          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes, isReferenceAsset(input.assetId), {readId:batch.readId,save:async readId=>{batch.readId=readId;await save();}}).catch(error=>{if(Date.now()>=deadline&&!abortSignal.aborted)return null;throw error;});
+          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes, isReferenceAsset(input.assetId), {readId:batch.readId,save:async readId=>{batch.readId=readId;await save();}});
           if (!result) break;
           if (result.scores?.length !== times.length) throw new Error('The comparison returned incomplete scores. Retry this window.');
           scores.push(...result.scores.map((score, index) => ({ time: times[index], difference: Math.round(score.difference * 1000) / 10 })));
@@ -1588,7 +1588,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           await queueBatch();
         }
       } catch(error) {
-        if(abortSignal.aborted || (error instanceof Error && /could not be rendered|incomplete scores|comparison could not be made/.test(error.message))) await ctx.runMutation(internal.comparisonContinuations.expire,{id:receipt});
+        if(abortSignal.aborted || (error as {data?:{code?:string}})?.data?.code==='REFERENCE_READ_INVALID' || (error instanceof Error && /could not be rendered|incomplete scores|comparison could not be made/.test(error.message))) await ctx.runMutation(internal.comparisonContinuations.expire,{id:receipt});
         throw error;
       }
       await save();
