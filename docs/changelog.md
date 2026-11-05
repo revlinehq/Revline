@@ -2,6 +2,16 @@
 
 - Security: Restrict the PC release runner to owner main releases, restore GitHub-hosted secret and dependency scans, publish agent-report issues with structured fields only and rate-limit agent reports. Why: a code review found risks after the repository became public.
 
+- Editor: Keep shortcuts working while focus sits on the native player's controls; Space there stays the player's own. Why: a code review found ⌘Z, Delete, B, M and frame steps died after clicking Play.
+
+- Assistant models: Unlock configured models where billing is off and for operator-granted Ultra; free accounts stay on Terra Low. Why: a code review found dev, worktrees and granted Ultra forced to Terra Low.
+
+- Railway workers: Accept the transferred revlinehq/Revline repository (and its earlier names) from one constant and publish images under its owner. Why: a code review found repository guards would hold dispatch, staging and releases.
+
+- Cloud storage: Expire uploads after 2 idle hours and let people review and cancel unfinished ones. Why: a code review found abandoned uploads blocked new ones for 24 hours.
+
+- Railway workers: Count queued exports as processor demand when no export pool exists. Why: a code review found exports never woke a Railway processor with local RENDER_PROVIDER.
+
 - Blog: Remove the visible RSS subscription link. Why: the user requested cleaner customer-facing navigation.
 
 - Repository: Remove the separate OpenCut license file and retain its notice inside NOTICE. Why: the user requested a single project license file.
