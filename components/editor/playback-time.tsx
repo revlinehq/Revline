@@ -9,7 +9,7 @@ export function EditorPlaybackTime(props: React.ComponentProps<typeof PlaybackTi
   return <PlaybackTime {...props} time={time}/>;
 }
 
-export function PlaybackTime({ time, duration, fps, playing, readTime, className }: {
+export function PlaybackTime({ time, duration, playing, readTime, className }: {
   time: number; duration: number; fps: number; playing: boolean;
   readTime?: () => number; className: string;
 }) {
@@ -18,11 +18,11 @@ export function PlaybackTime({ time, duration, fps, playing, readTime, className
   latestTime.current = time;
 
   const position = (value: number) => Math.min(duration, Math.max(0, Number.isFinite(value) ? value : 0));
-  const description = () => `Frame timecode · minutes:seconds:frames · ${fps} fps`;
+  const description = () => 'Playback time · minutes:seconds';
 
   function paint(value: number) {
     const node = element.current?.firstChild;
-    const text = formatTime(position(value), true, fps);
+    const text = formatTime(position(value));
     if (node?.nodeType === Node.TEXT_NODE && node.nodeValue !== text) node.nodeValue = text;
     const title = description();
     if (element.current && element.current.title !== title) element.current.title = title;
@@ -30,7 +30,7 @@ export function PlaybackTime({ time, duration, fps, playing, readTime, className
 
   // React still owns paused/seeking values. During playback, read the real
   // composition clock, rather than HyperFrames' throttled timeupdate events.
-  useLayoutEffect(() => { paint(playing && readTime ? readTime() : time); }, [time, playing, readTime, duration, fps]);
+  useLayoutEffect(() => { paint(playing && readTime ? readTime() : time); }, [time, playing, readTime, duration]);
   useEffect(() => {
     if (!playing || !readTime) return;
     let frame = 0;
@@ -40,7 +40,7 @@ export function PlaybackTime({ time, duration, fps, playing, readTime, className
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [playing, readTime, duration, fps]);
+  }, [playing, readTime, duration]);
 
-  return <span ref={element} className={className} title={description()}>{formatTime(position(time), true, fps)}<span> / {formatTime(duration, true, fps)}</span></span>;
+  return <span ref={element} className={className} title={description()}>{formatTime(position(time))}<span> / {formatTime(duration)}</span></span>;
 }

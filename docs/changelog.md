@@ -9,6 +9,7 @@
 - Storage uploads: Replace the blocking dialog with a compact, minimizable progress panel, readable filenames, total progress, and retries. Why: user reported the upload experience was confusing.
 
 - Storage: Remove the filter menu’s nested scrollbar and wrap media filters on small screens. Why: user reported awkward scrolling on the storage page.
+- Editor: Use Hyperframes playback controls, collapse the timeline by default, show time in seconds, and remove the composer lane selector. Why: user requested native playback and fewer controls.
 
 - Editor chat: Give sent user bubbles the composer’s raised background, gradient border, and shadow. Why: user requested matching surface styling.
 

@@ -52,12 +52,12 @@ function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
-export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,timeline,assets,time,onTime,onPlaying,onError,muted,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
+export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
   timeline=useMemo(()=>resolvedAudioTimeline(normalizeTimeline(committedTimeline)),[committedTimeline]);
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
   const cropControls=useRef<CropControlsHandle>(null);
-  const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad};
+  const container=useRef<HTMLDivElement>(null); const player=useRef<HyperframesPlayer|null>(null); const callbacks=useRef({onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad,onMutedChange});callbacks.current={onTime,onPlaying,onError,onRefreshMedia,onPlaybackAssets,onReady,onThumbnail,onSlowLoad,onMutedChange};
   const mediaSession=useRef<ReturnType<typeof createPreviewMediaSession>|null>(null);
   const sourceCache=useRef<ReturnType<typeof createPreviewSourceCache>|null>(null);
   const disposeDisplayed=useRef<(()=>void)|null>(null);
@@ -212,7 +212,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     void Promise.all([import('@hyperframes/player'),openingAssets(cache,assets.filter(asset=>used.has(asset._id)),preparation.signal)]).then(([,prepared])=>{
       if(cancelled||!container.current)return;
       playbackAssets=prepared;callbacks.current.onPlaybackAssets?.(prepared);p=document.createElement('hyperframes-player') as HyperframesPlayer;
-      p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js?v=managed-media-5`);p.setAttribute('disable-click-to-play','');p.removeAttribute('controls');
+      p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js?v=managed-media-5`);p.setAttribute('disable-click-to-play','');p.setAttribute('controls','');
       p.setAttribute('srcdoc',generateComposition(timeline,playbackAssets,{preview:true,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=pixel-track-streams-14`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=custom-typography-3`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia||!session)return;
@@ -234,7 +234,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
             if(latestCommittedTimeline.current!==committed||seekRequest.current!==requested){waitingForMedia=false;swap();return;}
             swapped=true;const previous=disposeDisplayed.current,resume=mediaSession.current?.isPlaying()??false;
             player.current=p;mediaSession.current=session;disposeDisplayed.current=disposePlayer;
-            p.muted=mutedRef.current;p.style.zIndex='1';previous?.();
+            p.muted=mutedRef.current;p.style.zIndex='3';previous?.();
             renderedTimeline.current=current;renderedAssets.current=playbackAssets;renderedContentKey.current=contentKey;
             setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setBuffering(false);callbacks.current.onReady?.();setRevision(value=>value+1);setPlayerVersion(value=>value+1);if(resume)session.play();
           });});
@@ -251,9 +251,10 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
         loaded=true;session.seek(seekPosition.current);updateLayers(p,latestTimeline.current);if(p.painted)swap();
       });
       p.addEventListener('painted',swap);
-      p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p||seekOwned.current&&p?.paused)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
+      p.addEventListener('volumechange',()=>{if(p&&player.current===p)callbacks.current.onMutedChange?.(p.muted);});
+      p.addEventListener('timeupdate',(e)=>{if(!loaded||player.current!==p||seekOwned.current&&p?.paused)return;const detail=(e as CustomEvent<{currentTime:number}>).detail;const t=p?.paused?(detail?.currentTime??p.currentTime):frameTime(p,detail?.currentTime??seekPosition.current);seekPosition.current=t;setSelectionVisible(selectionAt(t));callbacks.current.onTime(t);});
       const stopped=()=>{if(!loaded||player.current!==p)return;const t=playbackTime(p);seekPosition.current=t;callbacks.current.onTime(t);if(!session?.isBuffering())callbacks.current.onPlaying(false);};
-      p.addEventListener('play',()=>{if(p&&loaded&&player.current===p){callbacks.current.onPlaying(true);const start=p.currentTime;if(diagnosticTimer)clearTimeout(diagnosticTimer);diagnosticTimer=setTimeout(()=>{if(p&&!p.paused&&p.currentTime<=start+.05)diagnose('clock did not advance after Play');},1200);}});p.addEventListener('pause',stopped);p.addEventListener('ended',stopped);
+      p.addEventListener('play',()=>{if(p&&loaded&&player.current===p){seekOwned.current=false;callbacks.current.onPlaying(true);const start=p.currentTime;if(diagnosticTimer)clearTimeout(diagnosticTimer);diagnosticTimer=setTimeout(()=>{if(p&&!p.paused&&p.currentTime<=start+.05)diagnose('clock did not advance after Play');},1200);}});p.addEventListener('pause',stopped);p.addEventListener('ended',stopped);
       p.addEventListener('error',()=>{if(!cancelled){diagnose('player error');callbacks.current.onError('The preview could not load this media. Try an MP4 with H.264 video.');}});
       container.current.appendChild(p);if(debugId)diagnosticTimer=setTimeout(()=>{if(p&&!p.ready)diagnose('player readiness stalled');},4000);
     }).catch(error=>{if(!cancelled&&!preparation.signal.aborted)callbacks.current.onError(userError(error,'Could not load the preview.'));});
@@ -267,7 +268,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host"/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host" onPointerDownCapture={()=>{seekOwned.current=false;}} onKeyDownCapture={()=>{seekOwned.current=false;}}/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
