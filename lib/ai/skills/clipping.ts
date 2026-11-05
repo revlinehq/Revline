@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill, EditorSkillPage } from './index';
+import type { EditorSkill, EditorSkillPage } from './types';
 const moments: EditorSkillPage = {
   name: skillDocument("clipping/references/moments.md").name,
   description: skillDocument("clipping/references/moments.md").description,

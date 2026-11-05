@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill } from './index';
+import type { EditorSkill } from './types';
 
 const example = skillText("overall-styling/references/example.md");
 

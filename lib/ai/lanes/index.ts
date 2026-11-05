@@ -55,7 +55,7 @@ export function capabilitySummary(name: string) {
   if (!skill) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
   return { name, kind: 'skill', description: skill.description, tools: capabilityTools(name) };
 }
-export function laneSkill(_lane: LaneId, name: string, page?: string) {
+export function laneSkill(name: string, page?: string) {
   const skill = allSkills().find(skill => skill.name === name);
   if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
   const found = page ? skill.pages?.find(item => item.name === page) : undefined;

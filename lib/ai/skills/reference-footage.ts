@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill, EditorSkillPage } from './index';
+import type { EditorSkill, EditorSkillPage } from './types';
 import { imagePlatesPage } from './motion-design/image-plates';
 
 const recreation: EditorSkillPage = {

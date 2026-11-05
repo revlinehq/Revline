@@ -1,11 +1,6 @@
 import { v } from 'convex/values';
-export const activeLaneValidator = v.union(
-  v.literal('edit'),
-  v.literal('motion'),
-  v.literal('recreate'),
-  v.literal('clip'),
-  v.literal('reel'),
-);
+import { LANE_IDS } from '../../lib/ai/lanes/types';
+export const activeLaneValidator = v.union(...LANE_IDS.map(lane => v.literal(lane)));
 // Keep persisted records readable without offering the retired workflow.
 export const laneValidator = v.union(activeLaneValidator, v.literal('explainer'));
 export const laneEvidenceValidator = v.object({

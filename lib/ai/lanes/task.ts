@@ -1,5 +1,5 @@
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
-import { type LaneId } from './index';
+import type { LaneId } from './types';
 import type { Timeline } from '../../editor/types';
 import { timelineHistoryKey } from '../../editor/timeline-history-key';
 import type { LanguageModelMiddleware } from 'ai';

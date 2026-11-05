@@ -5,6 +5,7 @@ import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
 import { SAVED_ELSEWHERE, hasSaveEvidence, toolSaveReceipt, needsSaveConfirmation } from '@/lib/ai/save-confirmation';
 import { mediaErrorMessage } from '@/lib/media-analysis/errors';
+import { toolBehavior } from '@/lib/ai/tool-definitions';
 export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 
 export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
@@ -116,7 +117,7 @@ export function liveActivity(replies: readonly ChatMessage[]): { label: string; 
   if (!step || step.state !== 'running') return { label: 'Working' };
   const title = typeof step.input?.title === 'string' ? step.input.title : undefined;
   if (step.name === 'addScene' || step.name === 'addScenes' || step.name === 'addFilm' || step.name === 'editScene' || step.name === 'patchScene') return { label: step.name === 'editScene' || step.name === 'patchScene' ? 'Changing scene code' : step.name === 'addFilm' ? 'Writing the film' : 'Writing scene code', ...(title ? { detail: title } : {}) };
-  return { label: TOOL_LABELS[step.name]?.[0] ?? 'Running a step' };
+  return { label: toolBehavior(step.name)?.label?.[0] ?? 'Running a step' };
 }
 
 /** Images a step returned (frames, blueprint renders and diffs), from its raw output or the content sent to the model. */
@@ -138,30 +139,6 @@ export function toolImages(step: ChatTool): { label: string; src: string }[] {
   return [];
 }
 
-const TOOL_LABELS: Record<string, [string, string]> = {
-  updateBrief: ['Saving project brief', 'Saved project brief'],
-  upscaleClip: ['Starting upscale', 'Started upscale'], smoothSlowMotion: ['Starting smooth slow motion', 'Started smooth slow motion'], removeBackground: ['Starting background removal', 'Started background removal'], importVideoLink: ['Importing media', 'Started media import'], exportVideo: ['Starting export', 'Started export'],
-  setTextGradient: ['Styling gradient text', 'Styled gradient text'],
-  configureSmoothZoom: ['Adding smooth zoom', 'Added smooth zoom'],
-  configureCameraMotion: ['Adding camera motion', 'Added camera motion'],
-  markMusicBeats: ['Marking beats', 'Marked beats'], removeMarker: ['Removing marker', 'Removed marker'], removeMarkers: ['Removing markers', 'Removed markers'], delete: ['Removing clips', 'Removed clips'], addSubtitlesFromTranscript: ['Adding subtitles', 'Added subtitles'],
-  split: ['Splitting clips', 'Split clips'], trim: ['Trimming footage', 'Trimmed footage'], move: ['Arranging clips', 'Arranged clips'], addMedia: ['Adding footage', 'Added footage'],
-  addCaption: ['Adding captions', 'Added captions'], addGraphic: ['Adding titles', 'Added titles'], editText: ['Updating text', 'Updated text'], styleCaptions: ['Styling captions', 'Styled captions'], styleTextClip: ['Styling text', 'Styled text'],
-  applyTextLook: ['Applying text style', 'Styled text'], setTextStyle: ['Styling text', 'Styled text'], setTextAnimation: ['Animating text', 'Animated text'], configureTextTemplate: ['Adjusting text animation', 'Adjusted text animation'],
-  setCaptionTiming: ['Adjusting subtitle timing', 'Adjusted subtitle timing'], applyCaptionStyle: ['Styling captions', 'Styled captions'], configureAudio: ['Adjusting sound', 'Adjusted sound'], configureVisualFade: ['Adjusting footage fades', 'Adjusted footage fades'],
-  addClipTransition: ['Adding transition', 'Added transition'], configureClipTransition: ['Adjusting transition', 'Adjusted transition'], configureTimedEffect: ['Adjusting effect', 'Adjusted effect'], setSolidColor: ['Adjusting color rectangle', 'Adjusted color rectangle'], resetVisualEffect: ['Resetting effect', 'Reset effect'],
-  addMarker: ['Adding marker', 'Added marker'], moveMarker: ['Moving marker', 'Moved marker'],
-  undoLatestEdit: ['Reverting latest edit', 'Reverted latest edit'], unlink: ['Unlinking video and audio', 'Unlinked video and audio'], duplicateClips: ['Duplicating clips', 'Duplicated clips'],
-  reorderLayer: ['Reordering track', 'Reordered track'], moveClips: ['Arranging clips', 'Arranged clips'], resizeClips: ['Trimming clips', 'Trimmed clips'], setBlendMode: ['Adjusting compositing', 'Adjusted compositing'],
-  transformClip: ['Adjusting framing', 'Adjusted framing'], cropClip: ['Cropping footage', 'Cropped footage'], resetVisual: ['Resetting framing', 'Reset framing'], fitClip: ['Fitting footage', 'Fitted footage'],
-  setVolume: ['Adjusting sound', 'Adjusted sound'], setAspectRatio: ['Resizing canvas', 'Resized canvas'], followSubject: ['Following subject', 'Applied subject tracking'], alignCutsToBeat: ['Matching cuts to beats', 'Matched cuts to beats'], matchMusic: ['Matching the music', 'Matched the music'],
-  addLayer: ['Adding track', 'Added track'], deleteEmptyLayer: ['Removing empty track', 'Removed empty track'], closeGaps: ['Closing gaps', 'Closed gaps'], cleanSpeech: ['Cleaning up speech', 'Cleaned up speech'], setSplitEdits: ['Adding J and L cuts', 'Added J and L cuts'], removeEmptyLayers: ['Removing empty tracks', 'Removed empty tracks'],
-  useStrongestMoment: ['Choosing a moment', 'Added selected moment'], applyMotionPreset: ['Animating text', 'Animated text'], animateClip: ['Animating object', 'Animated object'], setVisualEffects: ['Adjusting visual effects', 'Adjusted visual effects'],
-  setPlaybackRate: ['Changing speed', 'Changed speed'], applyTextTemplate: ['Animating text', 'Animated text'], addTimedEffect: ['Adding an effect', 'Added an effect'],
-  planEffects:['Planning effects','Planned effects'],previewRender:['Reviewing rendered edit','Reviewed rendered samples'],
-  readSkill: ['Reading editing guide', 'Read editing guide'], askUser: ['Asking you', 'Asked you'], listVoices: ['Sampling voices', 'Sampled voices'], generateVoice: ['Recording narration', 'Recorded narration'], askBrandKit: ['Asking which brand', 'Asked which brand'], measureScreen: ['Measuring screen', 'Measured screen'], readFrames: ['Reading frames', 'Read frames'], traceShape: ['Tracing shape', 'Traced shape'], findIcon: ['Finding icon', 'Found icon'], compareReference: ['Comparing with the reference', 'Compared with the reference'], trackReference: ['Tracking motion', 'Tracked motion'], measureFrame: ['Measuring frame', 'Measured frame'], matchFont: ['Matching the font', 'Matched the font'], compareScreen: ['Comparing with screen', 'Compared with screen'], saveBlueprint: ['Saving blueprint', 'Saved blueprint'], listBlueprints: ['Checking blueprints', 'Checked blueprints'], getBlueprint: ['Loading blueprint', 'Loaded blueprint'], createBrandKit: ['Building brand kit', 'Saved brand kit'], remember: ['Saving to memory', 'Saved to memory'], forget: ['Removing from memory', 'Removed from memory'], updateBrandKit: ['Updating brand kit', 'Updated brand kit'], addScene: ['Adding scene', 'Added scene'], addScenes: ['Adding scenes', 'Added scenes'], addFilm: ['Building the film', 'Built the film'], patchScene: ['Editing scene code', 'Edited scene code'], editScene: ['Updating scene', 'Updated scene'],
-  inspectTimeline: ['Checking timeline', 'Checked timeline'], inspectClip: ['Checking clip', 'Checked clip'], inspectAssetAnalysis: ['Reading footage notes', 'Read footage notes'], analyzeMedia: ['Analyzing footage', 'Analyzed footage'], inspectVideo: ['Finding moments', 'Reviewed footage'], inspectFrames: ['Inspecting frames', 'Inspected frames'], inspectVideoFrames: ['Inspecting frames', 'Inspected frames'],
-};
 export { READ_ONLY_TOOLS };
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
@@ -185,7 +162,7 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
     groups.set(key, [...groups.get(key) ?? [], { ...step, staged }]);
   }
   return [...groups].map(([key, group]): ResultCard | null => {
-    const step = group[0], name = TOOL_LABELS[step.name] ?? ['Working on your edit', 'Updated your edit'];
+    const step = group[0], name = toolBehavior(step.name)?.label ?? ['Working on your edit', 'Updated your edit'];
     const save = toolSaveReceipt(step.output);
     if (step.state === 'error') return { key, title: save?.status === 'failed' ? `Could not save: ${step.name}` : save?.status === 'saved' ? `Changes saved; ${step.name} could not finish` : `Could not finish: ${step.name}`, detail: save?.status === 'failed' ? assistantErrorDetail(save.message) : step.detail, state: step.state, saveFailed: save?.status === 'failed' };
     if (step.state === 'running') return { key, title: name[0], state: step.state };

@@ -76,7 +76,7 @@ export const speakerAnalysis = z
   .discriminatedUnion("version", [
     speakerBase.extend({ version: z.literal(1) }),
     speakerBase.extend({
-      version: z.literal(2),
+      version: z.literal(SPEAKER_ANALYSIS_VERSION),
       framing: z.array(speakerFraming).min(1).max(10000),
     }),
   ])
@@ -89,7 +89,7 @@ export const speakerAnalysis = z
           turn.end > analysis.end + 0.001 ||
           (i > 0 && turn.start < analysis.turns[i - 1].start),
       ) ||
-      (analysis.version === 2 &&
+      (analysis.version === SPEAKER_ANALYSIS_VERSION &&
         analysis.framing.length > 0 &&
         (Math.abs(analysis.framing[0].start - analysis.start) > 0.001 ||
           Math.abs(analysis.framing.at(-1)!.end - analysis.end) > 0.001 ||
@@ -175,7 +175,7 @@ export function summarizeSpeakerFraming(
   end = analysis.end,
   timeAtSource: (time: number) => number = (time) => time,
 ) {
-  if (analysis.version !== 2) return null;
+  if (analysis.version !== SPEAKER_ANALYSIS_VERSION) return null;
   return ["shot-dominant", "turn-mouth", "identity-reuse", "fallback"].map(
     (method) => {
       const frames = analysis.framing.filter(

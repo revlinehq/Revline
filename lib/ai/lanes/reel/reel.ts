@@ -1,4 +1,4 @@
-import type { EditorSkill } from '../../skills';
+import type { EditorSkill } from '../../skills/types';
 export const reel: EditorSkill = {
   name: 'reel',
   description: 'Clean one talking-head take into a coherent short-form reel, with minimal synchronized subtitles by default.',

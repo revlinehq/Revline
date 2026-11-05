@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill, EditorSkillPage } from './index';
+import type { EditorSkill, EditorSkillPage } from './types';
 
 const montage: EditorSkillPage = {
   name: skillDocument("vfx/references/montage.md").name,

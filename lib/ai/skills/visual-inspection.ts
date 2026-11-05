@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill } from './index';
+import type { EditorSkill } from './types';
 
 export const visualInspection: EditorSkill = {
   name: skillDocument("visual-inspection/SKILL.md").name,

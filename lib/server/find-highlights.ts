@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { AnalysisError } from "../media-analysis/errors";
 import { findVideoHighlights } from "../media-analysis/gemini";
+import { geminiVideoModel } from "../media-analysis/gemini-model";
 import {
   extractVideoWindow,
   needsAnalysisVideoProxy,
@@ -11,6 +12,7 @@ import {
   probeMedia,
 } from "./analysis-video";
 import {
+  HIGHLIGHT_VERSION,
   highlightJudgment,
   highlightTracks,
   type HighlightJudgment,
@@ -98,7 +100,7 @@ export async function findSourceHighlights(
     );
     const fallback = (reason: string) =>
       highlightTracks.parse({
-        version: 3,
+        version: HIGHLIGHT_VERSION,
         judge: "fallback",
         unavailableReason: reason.slice(0, 1000),
         duration: input.duration,
@@ -221,11 +223,11 @@ export async function findSourceHighlights(
           .digest("hex");
         const descriptor = {
           kind: "highlight-judgment",
-          version: 3,
+          version: HIGHLIGHT_VERSION,
           start: window.start,
           end: window.end,
           sourceType: input.sourceType,
-          model: process.env.GEMINI_VIDEO_MODEL || "gemini-3.7-flash",
+          model: geminiVideoModel(),
           helperKey,
         };
         judgments[Math.floor(window.start / WINDOW)] = highlightJudgment.parse(
@@ -249,7 +251,7 @@ export async function findSourceHighlights(
     const detected =
       input.sourceType ?? [...votes].sort((a, b) => b[1] - a[1])[0][0];
     return highlightTracks.parse({
-      version: 3,
+      version: HIGHLIGHT_VERSION,
       judge: "gemini",
       duration: input.duration,
       sourceType: detected,

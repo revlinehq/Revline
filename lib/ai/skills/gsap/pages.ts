@@ -26,7 +26,7 @@ import { skillText, skillDocument } from '../documents';
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-import type { EditorSkillPage } from '../index';
+import type { EditorSkillPage } from '../types';
 
 export const gsapTimelinePage: EditorSkillPage = {
   name: skillDocument("gsap/references/gsap-timeline.md").name,

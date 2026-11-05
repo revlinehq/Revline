@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from './documents';
-import type { EditorSkill } from './index';
+import type { EditorSkill } from './types';
 import { EFFECT_RULES } from '../editor-style';
 
 // The footage-editing procedures that used to sit in the app's system prompt, moved here word for word so the prompt
