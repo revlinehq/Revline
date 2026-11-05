@@ -1,3 +1,7 @@
+## 2026-11-04
+
+- Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
