@@ -1,7 +1,7 @@
 import { skillText, skillDocument } from './documents';
 import { SCENE_FONT_FAMILIES, STARTER_SCENE_CODE } from '../../editor/scene-layers';
 import { SCENE_GSAP_PLUGINS } from '../../editor/scene-modules';
-import type { EditorSkill, EditorSkillPage } from './index';
+import type { EditorSkill, EditorSkillPage } from './types';
 
 const editLanesPage: EditorSkillPage = {
   name: skillDocument("scene-engine/references/edit-lanes.md").name,

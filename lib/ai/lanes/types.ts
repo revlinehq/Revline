@@ -1,5 +1,5 @@
 import type { Timeline } from '../../editor/types';
-import type { EditorSkill } from '../skills';
+import type { EditorSkill } from '../skills/types';
 import type { MotionCheck, MotionOff, MotionWindow } from '../motion-coverage';
 
 export const LANE_IDS = [
