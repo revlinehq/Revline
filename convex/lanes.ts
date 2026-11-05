@@ -76,7 +76,7 @@ export const current = query({
     return {
       internalDetailsEnabled:
         process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-      lane: row?.lane ?? 'edit',
+      lane: row?.lane === 'explainer' ? 'edit' : row?.lane ?? 'edit',
       manual: row?.manual ?? false,
       reason: row?.reason ?? 'General editing default',
       timelineId,
@@ -91,6 +91,7 @@ export const choose = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (args.lane === 'explainer') throw new ConvexError('Choose an available workflow.');
     const ownerId = await requireOwner(ctx),
       project = await requireProject(ctx, args.projectId, ownerId);
     if (project.aiRunning)
@@ -125,7 +126,7 @@ export const forRun = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane,
+          lane: row.lane === 'explainer' ? 'edit' : row.lane,
           manual: row.manual,
           reason: row.reason,
           timelineId,
@@ -148,7 +149,7 @@ export const forTab = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane,
+          lane: row.lane === 'explainer' ? 'edit' : row.lane,
           manual: row.manual,
           reason: row.reason,
           timelineId: args.timelineId,
@@ -284,7 +285,7 @@ export const switchLane = internalMutation({
       row.manual ?? false,
     );
     // Switching never resets attempts or manufactures completion evidence.
-    await ctx.db.patch(row._id, { lane: args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
+    await ctx.db.patch(row._id, { lane: args.lane === 'explainer' ? 'edit' : args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
     return null;
   },
 });
@@ -392,7 +393,7 @@ export const recordFinish = internalMutation({
     const attempt = row.attempts + 1,
       result = {
         ...args.result,
-        lane: row.lane,
+        lane: row.lane === 'explainer' ? 'edit' : row.lane,
         attempt,
         exhausted: !args.result.passed && attempt >= MAX_FINISH_ATTEMPTS,
       };

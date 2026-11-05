@@ -15,7 +15,7 @@ const eventSchema = z.object({
   event_data: z.object({
     transaction_id: identifier, original_transaction_id: identifier, product_id: identifier,
     purchased_at: timestamp, expiration_at: timestamp.nullable(), store: identifier, environment: identifier,
-    bundle_id: identifier.nullable(), is_refund: z.boolean().nullable().optional(), price: z.number().nullable().optional(),
+    period_type: identifier.nullable().optional(), is_trial_conversion: z.boolean().nullable().optional(), bundle_id: identifier.nullable(), is_refund: z.boolean().nullable().optional(), price: z.number().nullable().optional(),
   }).nullable(),
   subscriber: z.object({ app_user_id: identifier }).nullable().optional(),
   subscription: z.object({
@@ -50,8 +50,13 @@ export const webhook = internalAction({ args: { body: v.string(), id: v.string()
   if (!ownerId) return 503;
   if (!appleEnvironmentAllowed(ownerId, environment)) return 400;
   const refunded = event.type === 'refund' || data.is_refund === true || (data.price ?? 0) < 0;
+  const paidConversion = event.type === 'renewal' && data.is_trial_conversion === true && (data.price ?? 0) > 0;
+  const modelPayment = data.period_type === 'TRIAL' && !paidConversion ? 'free' :
+    data.price !== null && data.price !== undefined && data.price > 0 ? 'paid' :
+    data.price === 0 && ['initial_purchase', 'renewal'].includes(event.type) ? 'free' : undefined;
   if (data.expiration_at !== null) {
     await ctx.runMutation(internal.appleBilling.apply, {
+      modelPayment,
       source: 'superwall', eventId: event.id, ownerId, transactionId: data.transaction_id,
       originalTransactionId: data.original_transaction_id, productId: data.product_id, plan: appleProductPlan(data.product_id),
       environment, purchasedAt: data.purchased_at, expiresAt: data.expiration_at,
@@ -66,6 +71,7 @@ export const webhook = internalAction({ args: { body: v.string(), id: v.string()
   if (snapshot && snapshot.subscription_id === data.original_transaction_id && snapshot.store === 'app-store' && snapshot.expires_at !== null &&
       snapshot.environment === (environment === 'Production' ? 'live' : 'test')) {
     await ctx.runMutation(internal.appleBilling.apply, {
+      modelPayment: snapshot.transaction_id === data.transaction_id ? modelPayment : undefined,
       source: 'superwall', eventId: `${event.id}:snapshot`, ownerId, transactionId: snapshot.transaction_id,
       originalTransactionId: snapshot.subscription_id, productId: snapshot.product_id, plan: appleProductPlan(snapshot.product_id),
       environment, purchasedAt: snapshot.renewed_at ?? snapshot.starts_at, expiresAt: snapshot.expires_at,
