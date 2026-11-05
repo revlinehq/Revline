@@ -34,3 +34,5 @@
 .composer-header .composer-header-chip:hover,.composer-header .composer-header-chip[data-state=open]{background:#222;color:#ccc}
 .composer-attachment [data-slot=progress]{position:absolute;bottom:0;left:4px;width:calc(100% - 8px);height:2px}
 .composer-attachment [data-slot=progress-indicator]{background:var(--revline-accent)}
+
+.composer-header .composer-header-chip.aspect-ratio-trigger:hover,.composer-header .composer-header-chip.aspect-ratio-trigger[data-state=open]{background:transparent;color:#eee}

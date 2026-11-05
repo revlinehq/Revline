@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Composer: Remove the aspect ratio button’s hover background and brighten its label instead. Why: user disliked the outer picker highlight.
+
 - New edit: Increase space above the Start new edit section beneath the composer. Why: user requested more separation.
 
 - New edit: Add a small “Start new edit” heading above Upload footage beneath the composer. Why: user requested a clearer label for starting from footage.
