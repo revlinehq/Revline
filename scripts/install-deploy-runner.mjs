@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { mkdir, writeFile, access, rm, copyFile, chmod } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
+import { REPOSITORY } from '../lib/repository.mjs';
 
 const home = homedir();
 const directory = join(home, '.local/share/revline-actions-runner');
@@ -15,7 +16,7 @@ await mkdir(directory, { recursive: true, mode: 0o700 });
 let configured = false;
 try { await access(join(directory, '.runner')); configured = true; } catch {}
 if (!configured) {
-  const releases = JSON.parse(run('gh', ['api', 'repos/zuraHQ/revline-editor/actions/runners/downloads']));
+  const releases = JSON.parse(run('gh', ['api', `repos/${REPOSITORY}/actions/runners/downloads`]));
   const release = releases.find(item => item.os === 'linux' && item.architecture === 'x64');
   if (!release?.sha256_checksum) throw new Error('GitHub did not return a checksummed Linux x64 runner.');
   console.log(`Installing ${release.filename}.`);
@@ -27,8 +28,8 @@ if (!configured) {
   await writeFile(archive, bytes, { mode: 0o600 });
   run('tar', ['xzf', archive, '-C', directory]);
   await rm(archive);
-  const registration = JSON.parse(run('gh', ['api', '-X', 'POST', 'repos/zuraHQ/revline-editor/actions/runners/registration-token']));
-  run('./config.sh', ['--unattended', '--url', 'https://github.com/zuraHQ/revline-editor', '--token', registration.token, '--name', 'revline-deploy-pc', '--labels', 'revline-deploy-pc', '--work', '_work'], { cwd: directory });
+  const registration = JSON.parse(run('gh', ['api', '-X', 'POST', `repos/${REPOSITORY}/actions/runners/registration-token`]));
+  run('./config.sh', ['--unattended', '--url', `https://github.com/${REPOSITORY}`, '--token', registration.token, '--name', 'revline-deploy-pc', '--labels', 'revline-deploy-pc', '--work', '_work'], { cwd: directory });
 }
 const path = [dirname(process.execPath), join(home, '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':');
 // svc.sh normally copies this entry point while installing a system service.

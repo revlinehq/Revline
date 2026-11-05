@@ -9,6 +9,7 @@ import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
 import { workerCapacity } from '../lib/worker-capacity.mjs';
+import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
 import { verifyStagingPromotion } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
@@ -44,12 +45,12 @@ if (operation === 'plan' || (!values.apply && operation !== 'status')) {
 if (values.apply) {
   const branch = execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim();
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
-  const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
+  const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
   const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
   const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
   if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
-    const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '--repo', 'zuraHQ/Revline', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
+    const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '--repo', REPOSITORY, '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     if (pr.state !== 'OPEN' || pr.headRefName !== branch || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR head.');
   } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
@@ -71,9 +72,9 @@ if (operation === 'build') {
   try {
     for (const kind of kinds) {
       const name = kind === 'processor' ? 'processor' : 'exports';
-      const tag = `ghcr.io/zurahq/revline-railway-${name}${config.environment === 'dev' ? '-dev' : ''}:${git('rev-parse', 'HEAD')}`;
+      const tag = `${IMAGE_REGISTRY}/revline-railway-${name}${config.environment === 'dev' ? '-dev' : ''}:${git('rev-parse', 'HEAD')}`;
       const file = join(metadata, `${name}.json`);
-      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'infra/media-worker/Dockerfile', '--tag', tag, '--build-arg', `REVLINE_BUILD_COMMIT=${git('rev-parse', 'HEAD')}`, '--metadata-file', file, '--push', '.'], { cwd: context, env });
+      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'infra/media-worker/Dockerfile', '--tag', tag, '--build-arg', `REVLINE_BUILD_COMMIT=${git('rev-parse', 'HEAD')}`, '--label', `org.opencontainers.image.source=https://github.com/${REPOSITORY}`, '--metadata-file', file, '--push', '.'], { cwd: context, env });
       const digest = z.object({ 'containerimage.digest': z.string().regex(/^sha256:[a-f0-9]{64}$/) }).parse(JSON.parse(await readFile(file, 'utf8')))['containerimage.digest'];
       config = railwayConfig({ ...config, [`${name}Image`]: `${tag.slice(0, tag.lastIndexOf(':'))}@${digest}`, [`${name}Commit`]: git('rev-parse', 'HEAD') });
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
