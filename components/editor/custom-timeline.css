@@ -48,7 +48,7 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline{--timeline-selectio
 .custom-timeline.timeline-with-playback .timeline-view-actions{justify-self:end;max-width:100%;justify-content:flex-start}
 .custom-timeline.timeline-with-playback .timeline-playback-controls{justify-content:center}
 .custom-timeline .timeline-playback-controls .preview-playback{gap:4px;height:30px}
-.custom-timeline .timeline-playback-controls .preview-time{margin-left:6px;font-size:10px}
+.custom-timeline .timeline-playback-controls .preview-time{margin-left:0;font-size:10px}
 @container timeline (max-width:760px){.custom-timeline.timeline-with-playback .timeline-toolbar{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:'edit view' 'play play';padding-block:3px;gap:0 8px}.custom-timeline .timeline-edit-actions{grid-area:edit}.custom-timeline .timeline-view-actions{grid-area:view}.custom-timeline .timeline-playback-controls{grid-area:play}}
 @container timeline (max-width:600px){.custom-timeline.timeline-with-playback .timeline-toolbar{grid-template-columns:minmax(0,1fr);grid-template-areas:'play' 'view' 'edit';gap:0}.custom-timeline.timeline-with-playback .timeline-edit-actions:empty{display:none}.custom-timeline.timeline-with-playback .timeline-view-actions{justify-self:stretch;width:100%}}
 @media(max-width:600px),(pointer:coarse){.custom-timeline .timeline-toolbar button{display:inline-flex;align-items:center;justify-content:center;width:44px;min-width:44px;height:44px;min-height:44px;flex-shrink:0}.custom-timeline .timeline-playback-controls .preview-playback{height:44px}.custom-timeline .timeline-toolbar input[type=range]{min-height:44px;flex-shrink:0}}
