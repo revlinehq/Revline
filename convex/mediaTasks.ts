@@ -55,26 +55,18 @@ const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
 
-/** Shape tracing (traceShape) came after plain frame reads. */
-export const TRACE_PROCESSOR_VERSION = 14;
-/** Font matching (matchFont) came after shape tracing. */
-export const FONT_PROCESSOR_VERSION = 15;
 /** Importing a start to end range of a long link came after font matching. */
 const RANGE_IMPORT_PROCESSOR_VERSION = 16;
 /** Pacing checks (checkPacing) came after range imports. */
 export const PACING_PROCESSOR_VERSION = 17;
 /** Listening to a range (getSound, checkSound) came after pacing checks. */
 export const SOUND_PROCESSOR_VERSION = 18;
-/** Listening to a reference video (listenReference) came after timeline listening. */
-export const REFERENCE_SOUND_PROCESSOR_VERSION = 19;
 /** The visual guard (a proposed scene change rendered beside the saved timeline) came after reference listening. */
 export const GUARD_PROCESSOR_VERSION = 20;
 /** Reading how a film moves (motionMap: camera, transitions, elements, content) came after the visual guard. */
 export const MOTION_PROCESSOR_VERSION = 23;
 /** Frozen comparison crops, displayed rotation and bounded sound capture. */
 export const RECREATION_PROCESSOR_VERSION = 23;
-/** Interpolated reference crops must never run on workers that ignore keyframes. */
-export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
 
 /** FIFO admission for recreation checks only. Waiting jobs hold no active slot and start no workflow. */
