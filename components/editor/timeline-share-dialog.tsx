@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { PrimaryButton } from '@/components/workspace/primary-button';
 import { formatTime, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { timelineCover } from '@/lib/editor/timeline-cover';
+import { timelineSharePath } from '@/lib/editor/timeline-share';
 import type { ShareChatPreview, ShareChatPreviewMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
@@ -23,8 +24,6 @@ type Props = {
   chatPreview?: ShareChatPreview; onChatPreviewChange?: (enabled: boolean) => void;
 };
 const ratios = { landscape: '16:9', vertical: '9:16', square: '1:1', classic: '4:3', 'portrait-feed': '4:5' };
-export function timelineSharePath(shareId: string) { return `/editor/showcase/${encodeURIComponent(shareId)}`; }
-export function timelineShareCover(timeline: Timeline, assets: MediaAsset[], sceneThumbs?: Record<string, { time: number; image: string }[]>) { return timelineCover(timeline, assets, sceneThumbs); }
 
 export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...props }: Omit<Props, 'status' | 'onPublish' | 'onRevoke'> & { projectId: Id<'projects'>; onBeforePublish: () => Promise<void> }) {
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -54,7 +53,7 @@ function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, scen
   function toggleTab(id: string, on: boolean) { setPicked((tabs ?? []).filter(tab => tab.id === id ? on : selected.includes(tab.id)).map(tab => tab.id)); setCopied(false); }
   const shareId = localId !== undefined ? localId : status?.published ? status._id : null;
   const url = shareId ? `${origin}${timelineSharePath(shareId)}` : '';
-  const cover = timelineShareCover(timeline, assets, sceneThumbs);
+  const cover = timelineCover(timeline, assets, sceneThumbs);
   const chatPending = includeChat && chatPreview === undefined, noTabs = multiTab && !selected.length;
   function toggleChat(enabled: boolean) { setIncludeChat(enabled); onChatPreviewChange?.(enabled); setCopied(false); }
   async function publish() {
