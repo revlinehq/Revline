@@ -250,7 +250,8 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     } else if (data.type === 'seek') {
       try { if (adapter) void adapter.seekFrame(Math.round(data.time * fps)); else master?.seek(origin + data.time, false); } catch (error) { fail(error); }
       const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps), adapter?.settle()]).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
+      // Three VideoTextures must upload the decoded video frame before their final draw.
+      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => adapter?.settle()).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
     }
   });
   post({ type: 'ready' });
