@@ -105,6 +105,7 @@ import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_sound_validator from "../lib/sound_validator.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
 import type * as lib_timeline from "../lib/timeline.js";
+import type * as lib_timeline_history from "../lib/timeline_history.js";
 import type * as lib_toolSaveReceipts from "../lib/toolSaveReceipts.js";
 import type * as lib_tool_write_receipt from "../lib/tool_write_receipt.js";
 import type * as lib_video_unavailable from "../lib/video_unavailable.js";
@@ -249,6 +250,7 @@ declare const fullApi: ApiFromModules<{
   "lib/sound_validator": typeof lib_sound_validator;
   "lib/storage_accounting": typeof lib_storage_accounting;
   "lib/timeline": typeof lib_timeline;
+  "lib/timeline_history": typeof lib_timeline_history;
   "lib/toolSaveReceipts": typeof lib_toolSaveReceipts;
   "lib/tool_write_receipt": typeof lib_tool_write_receipt;
   "lib/video_unavailable": typeof lib_video_unavailable;
