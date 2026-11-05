@@ -13,8 +13,13 @@ export function check(context: LaneCheckContext): string[] {
     )
     .map((item) => {
       const match = /^([\d.]+)-([\d.]+)s$/.exec(String(item.output.range));
+      // The last sample stands for the frames until the next one: at most 30 samples a second never reach
+      // within one frame of a 60 fps film's end, so a range covers one sample interval past its last sample.
+      // A pass that stopped short of the film's end never reaches past the end it requested.
+      const sampleFps = Number(/ at ([\d.]+) fps/.exec(String(item.output.samples))?.[1]) || 10;
+      const requestedEnd = typeof item.input.end === 'number' ? item.input.end : Infinity;
       return match
-        ? { start: Number(match[1]), end: Number(match[2]) }
+        ? { start: Number(match[1]), end: Math.min(Number(match[2]) + 1 / sampleFps, requestedEnd) }
         : { start: 0, end: 0 };
     })
     .sort((a, b) => a.start - b.start);
