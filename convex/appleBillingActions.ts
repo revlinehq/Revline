@@ -6,7 +6,7 @@ import { ConvexError, v } from 'convex/values';
 import { z } from 'zod';
 import { internal } from './_generated/api';
 import { action, internalAction, type ActionCtx } from './_generated/server';
-import { appleBillingConfiguration, appleEnvironmentAllowed, appleProductPlan } from './lib/apple_entitlements';
+import { appleModelPayment, appleBillingConfiguration, appleEnvironmentAllowed, appleProductPlan } from './lib/apple_entitlements';
 import { APPLE_ROOT_CERTIFICATES } from './lib/apple_roots';
 
 function verifier(environment: 'Sandbox' | 'Production' = appleBillingConfiguration().environment) {
@@ -45,6 +45,7 @@ async function persist(ctx: ActionCtx, transaction: JWSTransactionDecodedPayload
   const expired = ['EXPIRED', 'GRACE_PERIOD_EXPIRED'].includes(details.notificationType ?? '');
   await ctx.runMutation(internal.appleBilling.apply, {
     source: 'apple', eventId: details.eventId, ownerId, transactionId, originalTransactionId, productId,
+    modelPayment: appleModelPayment(transaction),
     plan: appleProductPlan(productId), environment, purchasedAt: purchaseDate, expiresAt: expiresDate,
     accessUntil: revokedAt ? 0 : Math.max(expiresDate, expired ? 0 : graceUntil ?? 0), eventAt,
     ...(transaction.isUpgraded ? { supersededAt: purchaseDate } : {}),

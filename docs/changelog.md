@@ -1,3 +1,7 @@
+## 2026-11-04
+
+- Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
+
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
@@ -6,6 +10,12 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Clip planning: Return all quote and acceptance errors with exact word windows, current IDs and range limits. Why: the podcast benchmark repeated rejected plans after vague diagnostics and candidate replacement.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
 - Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
+- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
+- Motion design: Carry visual anchors across scenes and choose restrained motion for each action. Why: the user's continuity guidance conflicted with blanket overshoot and anticipation rules in the agent skill.
+- Assistant: Show Working between steps while preserving the elapsed timer and resume/stop statuses. Why: the user requested a shorter activity label.
+- Incident delivery: Route agent reports to durable, deduplicated GitHub Issues with bounded leases and explicit backlog delivery. Why: the user needs saved reports surfaced without launching fix agents.
+- Assistant models: Keep free/trial accounts on Terra Low with visible locked upgrades; unlock existing choices from verified paid terms. Why: model entitlement must be separate from editing access.
+- Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
