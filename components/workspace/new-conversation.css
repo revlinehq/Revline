@@ -21,14 +21,17 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-compose-group{position:relative;min-width:0}
 .new-conversation-empty .new-conversation-intro{align-self:end;align-items:center;padding-bottom:24px;text-align:center}
 .new-conversation-empty .new-conversation-intro h1{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--landing-font-head),sans-serif;font-size:36px;font-weight:500;line-height:1.12;color:#f2f2f2}
-.new-conversation-empty .composer-input-group{min-height:112px;border-radius:8px;border-color:#363636;background:#2a2a2a}
-.new-conversation-empty .composer-input-group>[data-slot=input-group-control]{min-height:66px;padding:12px 14px 8px;font-family:var(--font-geist),sans-serif;font-size:14px;line-height:20px}
+.new-conversation-empty .composer-input-group{min-height:88px;border-radius:8px}
+.new-conversation-empty .composer-input-group>[data-slot=input-group-control]{min-height:42px;padding:12px 14px 8px;font-family:var(--font-geist),sans-serif;font-size:14px;line-height:20px}
 .new-conversation-empty .composer-input-group>[data-slot=input-group-control]::placeholder{color:#aaa}
 .new-conversation-empty .edit-composer-actions{min-height:44px;padding:4px 8px 8px 6px;gap:12px}
 .new-conversation-empty .composer-submit{border-radius:8px}
 .new-conversation-empty .new-conversation-error{position:absolute;top:100%;z-index:1}
-.new-conversation-guidance{position:absolute;top:100%;left:0;width:100%;min-width:0;padding-top:20px}
-.new-conversation-empty .composer-input-group{box-shadow:0 1px 3px #0000001f,0 6px 12px #0000001f,0 12px 24px #0000001a}
+.new-conversation-guidance{position:absolute;top:100%;left:0;width:100%;min-width:0;padding-top:12px}
+.new-conversation-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.new-conversation-actions .new-conversation-action{height:40px;min-width:0;justify-content:center;gap:10px;padding:3px 12px;border:1px solid #2b2b2b;border-radius:4px;background:#1f1f1f;color:#b5b5b5;font-family:var(--font-geist),sans-serif;font-size:14px;font-weight:400;box-shadow:none}
+.new-conversation-action span{overflow:hidden;text-overflow:ellipsis}
+.new-conversation-actions .new-conversation-action:hover:not(:disabled){border-color:#3b3b3b;background:#262626;color:#eee}
 .new-conversation-empty .new-conversation-entry[data-dragging] .composer-input-group{outline:1px dashed #ffffff40;outline-offset:4px}
 .new-conversation-empty .edit-composer-actions{gap:4px}
 .new-conversation-empty .composer-add{color:#aaa;background:transparent}

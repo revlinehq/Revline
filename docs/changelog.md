@@ -1,6 +1,7 @@
 ## 2026-11-05
 
 - Repository: Remove unused design source and preview images and ignore local design drafts. Why: the user requested excluding design working files from the public source.
+- Composer: Add the compact home composer with centered upload/clip icons and a `/clip [ENTER YOUTUBE URL]` shortcut; keep the editor flat. Why: user approved the design and requested centered icon actions.
 - Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
 - Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
 

@@ -19,7 +19,7 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { rememberOpeningRequest } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
-import { Plus, Upload, Link2 } from 'lucide-react';
+import { Plus, Upload, Link2, Scissors } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
@@ -30,7 +30,6 @@ import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
 import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
-import { RecentProjects } from './recent-projects';
 import { WorkspaceNav } from './workspace-nav';
 import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from './project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
@@ -283,6 +282,15 @@ export function NewConversation() {
     setDraft(value); brief.current = value;
     try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
   }
+  function startClipping() {
+    const prompt = '/clip [ENTER YOUTUBE URL]';
+    changeDraft(prompt);
+    requestAnimationFrame(() => {
+      const field = picker.current?.parentElement?.querySelector('textarea');
+      field?.focus();
+      field?.setSelectionRange('/clip '.length, prompt.length);
+    });
+  }
   async function submit() {
     if (!draftReady || !settings || busy || submitting.current) return;
     if (hasMedia) { await processFootage(); return; }
@@ -314,7 +322,10 @@ export function NewConversation() {
 
   return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}`} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
-    {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={<RecentProjects/>}>
+    {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={<section className="new-conversation-actions" aria-label="Start a video">
+      <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
+      <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={startClipping}><Scissors aria-hidden="true"/><span>Start clipping</span></Button>
+    </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>

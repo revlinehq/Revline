@@ -4,6 +4,7 @@
 .revline-primary[data-slot=button]{--primary:var(--revline-primary-background);--primary-foreground:#fff}
 .revline-primary .filled-play-icon{width:14px;height:14px}
 .edit-composer{position:relative;width:100%;display:flex;flex-direction:column;gap:6px}
+.edit-composer[data-appearance=raised] .composer-input-group{border:1px solid transparent;background:linear-gradient(#1e1e1e,#1e1e1e) padding-box,linear-gradient(180deg,#2d2d2d,#262626) border-box;box-shadow:0 1px 2px #00000042}
 
 
 .composer-attachments{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0;max-width:100%}.composer-attachment{position:relative;display:flex;align-items:center;gap:7px;padding:4px 4px 4px 4px;height:32px;width:166px;max-width:100%;background:var(--ws-chip,#f2f2f2);border-radius:8px;color:var(--ws-chip-text,#555);min-width:0;flex-shrink:0}.composer-attachment>img,.composer-attachment>video{width:24px;height:24px;object-fit:cover;border-radius:4px;flex-shrink:0}.composer-attachment>svg{width:24px;color:var(--ws-faint,#777);flex-shrink:0}.composer-attachment>span{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1}.composer-attachment progress{position:absolute;bottom:0;left:4px;width:calc(100% - 8px);height:2px;accent-color:var(--revline-accent)}.composer-error{font-size:12px;color:#b43a42;margin:0}.composer-media-sheet{background:var(--ws-bg,#fff);color:var(--ws-text,#292929);font-family:var(--font-inter),Inter,sans-serif}.composer-sheet-attachments{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 24px}
