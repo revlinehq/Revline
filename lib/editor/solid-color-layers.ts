@@ -1,6 +1,7 @@
 import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { cssMotionBlur } from './camera-motion-blur';
-import { motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
+import { solidColorSettings, visibleMotion } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { trackOf, type Clip } from './types';
 
 export type SolidColorSource = { clip:Clip; index:number };

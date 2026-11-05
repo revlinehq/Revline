@@ -1,7 +1,9 @@
-import { visibleMotion, NEUTRAL_MOTION } from './clip-effects';
+import { visibleMotion } from './clip-effects';
+import { NEUTRAL_MOTION } from './motion-path';
 import { boundedCameraMotion } from './camera-framing';
 import { compositionIndex } from './composition-node';
-import { calculateVisualRect, trimmedFocus } from './composition';
+import { trimmedFocus } from './composition';
+import { calculateVisualRect } from './visual-source-geometry';
 import { playbackRateOf, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type Clip, type MediaAsset, type Timeline } from './types';
 import type { CompositionWindow } from './composition-window';

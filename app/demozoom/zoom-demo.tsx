@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { zoomEase } from '@/lib/editor/smooth-zoom';
+import { motionEase as zoomEase } from '@/lib/editor/motion-path';
 
 // These spring studies are isolated from the editor's supported easing schema.
 const STYLES = [

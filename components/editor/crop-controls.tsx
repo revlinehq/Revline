@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent } from 'react';
-import { calculateVisualRect } from '@/lib/editor/composition';
+import { calculateVisualRect } from '@/lib/editor/visual-source-geometry';
 import { cropSelectionRect, dragSourceCrop, sameSourceCrop, type CropHandle } from '@/lib/editor/source-crop';
 import { DEFAULT_CROP, type SourceCrop } from '@/lib/editor/types';
 import './visual-controls.css';

@@ -14,7 +14,8 @@ import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-set
 import type { HyperframesPlayer } from '@hyperframes/player';
 import { LoaderCircle, Play, Pause } from 'lucide-react';
 import { createPortal } from 'react-dom';
-import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
+import { compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
+import { calculateVisualRect } from '@/lib/editor/visual-source-geometry';
 import { dimensions,normalizeTimeline,type Timeline,type MediaAsset,type Clip,type VisualTransform } from '@/lib/editor/types';
 import { VisualHandles } from './visual-controls';
 import { CropControls, type CropControlsHandle } from './crop-controls';

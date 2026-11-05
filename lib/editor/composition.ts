@@ -8,7 +8,8 @@ import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
 import { focusAt } from './focus-path';
-import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
+import { cinematicBarSettings, validateClipEffects, visibleMotion } from './clip-effects';
+import { NEUTRAL_MOTION, type MotionKeyframe } from './motion-path';
 import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
 import { maskSources } from './masks';
@@ -73,7 +74,6 @@ export function compositionTrackIndex(clip: Pick<Clip, 'kind' | 'track'>) {
   return (clip.kind === 'audio' ? 24 : 0) + trackOf(clip) - 1;
 }
 
-export { calculateVisualRect } from './visual-source-geometry';
 
 function validateClip(clip: Clip) {
   if (![clip.start, clip.duration, clip.sourceStart].every(Number.isFinite) || clip.start < 0 || clip.duration <= 0 || clip.sourceStart < 0) {

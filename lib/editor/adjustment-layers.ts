@@ -1,6 +1,7 @@
 import type { CompositionClockHost } from './composition-clock';
 import { drawTextureOverlay, DEFAULT_OVERLAY } from './montage-vfx';
-import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
+import { cinematicBarSettings, solidColorSettings, visibleMotion } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { trackOf, type Clip } from './types';
 import { isTransitionClip } from './clip-transitions';
 

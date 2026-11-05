@@ -18,7 +18,8 @@ import { shiftSpeedRamp } from './speed-ramp';
 import { validateMask } from './masks';
 import { validateAudioReactive } from './audio-reactive';
 import { validateColorFinish } from './color-finish';
-export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
+// lib/ai/object-motion.ts still reads MotionKeyframe from here.
+export type { MotionKeyframe } from './motion-path';
 
 export { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS };
 export type { BlendMode, CinematicBarSettings, EffectPreset, FrameShrinkSettings, SolidColorSettings, TimedEffectPreset, ZoomSettings };
