@@ -11,7 +11,7 @@ import {dimensions} from '../editor/types';
 import {VISUAL_FADE_MAX_SECONDS} from '../editor/visual-fades';
 import {STOCK_AUDIO_CATALOG} from '../editor/stock-audio';
 
-/** Pure shared metadata: backend instructions and the UI read the same implemented inventory. */
+/** Pure shared metadata: the implemented inventory the effects and text-styling skills embed. */
 export function editorCapabilities(){
   return {
     ideation:{skill:'motion-design',page:'ideation',rule:'Agree one message, one audience tension and 3–5 visible angles, each with Hooks because. An accepted angle (yes/do it) means BUILD immediately. Never approve finished work on the user’s behalf.'},
