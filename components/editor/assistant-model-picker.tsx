@@ -14,7 +14,7 @@ import './assistant-model-picker.css';
 /** The provider's mark beside each model. */
 const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : id.startsWith('gemini') ? <GoogleLogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
-/** On Pro these run only through MCP (Claude Code, Claude Desktop), not in the editor chat. */
+/** Compatibility with servers that still route Claude choices through MCP. */
 const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
 const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high' };
 /** X-high shimmers in the brand gradient so the strongest effort reads as powerful. */
