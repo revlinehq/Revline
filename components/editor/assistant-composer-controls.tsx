@@ -8,7 +8,8 @@ import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { storeDraftEffort, storeDraftModel, storedDraftEffort, storedDraftModel } from '@/lib/editor/opening-request';
 
-type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'catalogModels' | 'defaultModelChoice'>> & { catalogModels?: readonly ClaudeModelChoice[]; allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
+/** The model and effort choices the server offers this user's composer. */
+export type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'catalogModels' | 'defaultModelChoice'>> & { catalogModels?: readonly ClaudeModelChoice[]; allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
 
 export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   settings: ComposerSettings; draftKey?: string; disabled: boolean;
