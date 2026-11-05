@@ -11,12 +11,12 @@ import { createContext, useContext, useEffect, useLayoutEffect, useId, useRef, u
 import { ArrowUp, Film, LoaderCircle, Music2, Plus, Square, X } from 'lucide-react';
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { cn } from '@/lib/utils';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import './composer-upload-swap.css';
 
 // Scoped by EditorShell so custom conversation panels share the active timeline control.
 export const EditComposerHeaderContext = createContext<ReactNode>(null);
 
-export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string };
 export type EditComposerProps = {
   value: string; onChange: (value: string) => void; onSubmit: () => void | Promise<void>;
   attachControl?: ReactNode; onAttach?: () => void; attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void;

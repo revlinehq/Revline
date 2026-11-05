@@ -174,7 +174,7 @@ html { scroll-behavior: smooth; }
   --audio-track: #98B99B;
 }
 
-body:has(.editor-app:not(.embedded-editor)),
+body:has(.editor-app),
 body:has(.workspace) {
   --font-ui: var(--font-inter);
   --font-sans: var(--font-inter);

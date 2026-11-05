@@ -34,8 +34,10 @@ import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
 import type { UploadProgress } from './footage-panel';
 import type { ClaudeModelChoice,EditorReasoningEffort,EditorSpeedMode } from '@/lib/ai/claude-model';
-import { AssistantPanel, type ChatMessage } from './assistant-panel';
-import type { ComposerAttachment } from '@/components/workspace/edit-composer';
+import type { ComposerSettings } from './assistant-composer-controls';
+import { AssistantPanel } from './assistant-panel';
+import type { ChatMessage } from './chat-types';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import type { TimelineTab, TimelineTabActions } from './timeline-tabs';
@@ -48,8 +50,7 @@ import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { MediaFileDropOverlay, useMediaFileDrop } from './media-file-drop';
 import { SegmentedTabs } from './segmented-tabs';
-import { useEditorModePreference } from './use-editor-mode-preference';
-import { useInspectorPreference } from './use-inspector-preference';
+import { readStoredPreference, useStoredPreference, writeStoredPreference } from './use-stored-preference';
 import { TextFontStyles } from './text-font-styles';
 import './editor-mode.css';
 import './live-edit.css';
@@ -65,9 +66,9 @@ export type EditorShellProps = {
   onAttachUpload?: (files: File[]) => Promise<void>;
   footageProgress?: number; saving: boolean; saveFailed?: boolean; onRetrySave?: () => void; upload: UploadProgress; error: string; onError: (message: string) => void;
   onUndo: () => void; onRedo: () => void; canUndo: boolean; canRedo: boolean;
-  conversation?:{projectId:import('@/convex/_generated/dataModel').Id<'projects'>;threadId:string}; messages: ChatMessage[]; aiRunning: boolean; externalAgent?: string | null; aiEditing?:boolean; aiWorkflowActive?:boolean; aiConfigured: boolean; catalogModels?: readonly ClaudeModelChoice[]; modelAccessNeedsSync?: boolean; paidModelAccess?: boolean; modelSwitcher?: boolean; effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort; allowedModels?:readonly ClaudeModelChoice[];
-  /** On a free trial, Opus and Sonnet show as MCP-only in the model picker. */
-  claudeViaMcp?:boolean; defaultModelChoice?:ClaudeModelChoice; defaultReasoningEffort?:EditorReasoningEffort; aiError?: string | null; draftKey?:string;
+  conversation?:{projectId:import('@/convex/_generated/dataModel').Id<'projects'>;threadId:string}; messages: ChatMessage[]; aiRunning: boolean; externalAgent?: string | null; aiEditing?:boolean; aiWorkflowActive?:boolean; aiConfigured: boolean;
+  /** The model and effort choices offered in the conversation's composer. */
+  assistantSettings?: ComposerSettings; aiError?: string | null; draftKey?:string;
   onSend: (text: string, context?: EditContext) => Promise<void>;
   composerAttachments?: ComposerAttachment[]; composerBusy?: boolean; onRemoveComposerAttachment?: (id:string)=>void;
   onStop?: () => Promise<void>;
@@ -78,9 +79,9 @@ export type EditorShellProps = {
   canResumeEdit?:boolean;
   assistantEditSnapshot?:AssistantEditSnapshot;
   assistantPanel?: ReactNode;
-  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; /** The app connected over MCP (its name), null when none is, undefined while loading. */ mcpConnection?: string | null; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean; embedded?: boolean;
+  onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; /** The app connected over MCP (its name), null when none is, undefined while loading. */ mcpConnection?: string | null; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
-  projectId?: string; workspaceOnly?: boolean; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
+  projectId?: string; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
   /** Sends media already in the project with the next chat message. */
@@ -93,6 +94,10 @@ export type EditorShellProps = {
 };
 
 const TIMELINE_MIN_HEIGHT = 160;
+const INSPECTOR_OPEN_KEY = 'revline-inspector-open';
+const SAFE_AREA_KEY = 'revline.safeArea';
+const MCP_CHAT_CLOSED_KEY = 'revline.mcpChatClosed';
+const decodeOpen = (stored: string | null) => stored === 'true';
 const TIMELINE_MAX_SHARE = .65;
 /** A panel's imperative API throws until its group has measured it (first paint, leaving compact); until then there is nothing to read or move. */
 const measured = <T,>(read: () => T): T | undefined => { try { return read(); } catch { return undefined; } };
@@ -135,8 +140,8 @@ export function EditorShell(p: EditorShellProps) {
   const [clipboard, setClipboard] = useState<Clip[]>([]);
   // Safe-area preview is a per-browser viewing preference, not part of the edit.
   const [safeArea,setSafeArea]=useState<SafeAreaPlatform|null>(null);
-  useEffect(()=>{const saved=localStorage.getItem('revline.safeArea');if(saved==='instagram'||saved==='tiktok')setSafeArea(saved);},[]);
-  const changeSafeArea=useCallback((next:SafeAreaPlatform|null)=>{setSafeArea(next);if(next)localStorage.setItem('revline.safeArea',next);else localStorage.removeItem('revline.safeArea');},[]);
+  useEffect(()=>{const saved=readStoredPreference(SAFE_AREA_KEY);if(saved==='instagram'||saved==='tiktok')setSafeArea(saved);},[]);
+  const changeSafeArea=useCallback((next:SafeAreaPlatform|null)=>{setSafeArea(next);writeStoredPreference(SAFE_AREA_KEY,next);},[]);
   useEffect(() => { setClipboard([]); }, [p.projectId]);
   const [croppingClip, setCroppingClip] = useState<string | null>(null);
   useEffect(() => { if (editing) setCroppingClip(null); }, [editing]);
@@ -173,16 +178,12 @@ export function EditorShell(p: EditorShellProps) {
     else await start({...settings,...(exportClipId?{clipId:exportClipId}:{})});
     return started;
   };
-  const [, setDesktopMode] = useEditorModePreference();
-  // An embedded editor (the landing hero) opens on the preview; the app opens on the conversation.
-  const [mobileConversation, setMobileChat] = useState(!p.embedded);
+  // Phones open on the conversation.
+  const [mobileConversation, setMobileChat] = useState(true);
   const mobileChat = compact && mobileConversation;
   // The media panel stays mounted so it can slide open and closed; widths animate only during a toggle, never while dragging.
   const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);const [inspectorMotion,setInspectorMotion]=useState(false);const inspectorMoving=useRef(false);inspectorMoving.current=inspectorMotion;
-  const [preferredInspectorOpen, saveInspectorOpen] = useInspectorPreference();
-  const [embeddedInspectorOpen, setEmbeddedInspectorOpen] = useState(params.get('panel') === 'footage');
-  const inspectorOpen = p.embedded ? embeddedInspectorOpen : preferredInspectorOpen;
-  const setInspectorOpen = p.embedded ? setEmbeddedInspectorOpen : saveInspectorOpen;
+  const [inspectorOpen, setInspectorOpen] = useStoredPreference(INSPECTOR_OPEN_KEY, decodeOpen, String);
   useEffect(() => { if (params.get('panel') === 'footage') setInspectorOpen(true); }, [params, setInspectorOpen]);
   useEffect(() => { const panel = inspectorPanel.current; if (panel && !compact && inspectorOpen === measured(() => panel.isCollapsed())) setInspectorMotion(true); }, [inspectorOpen, compact, inspectorPanel]);
   useEffect(() => {
@@ -202,7 +203,7 @@ export function EditorShell(p: EditorShellProps) {
   const timelinePanel=usePanelRef();const timelineInitialized=useRef(false);const expandedTimelineHeight=useRef<number|null>(null);const collapsed=useEditorState(s=>s.timelineCollapsed);
   const toggleTimeline=()=>{
     const panel=timelinePanel.current;if(!panel)return;
-    if(collapsed){if(expandedTimelineHeight.current!==null)panel.resize(expandedTimelineHeight.current);else panel.resize(p.embedded ? 266 : 360);}
+    if(collapsed){if(expandedTimelineHeight.current!==null)panel.resize(expandedTimelineHeight.current);else panel.resize(360);}
     else{expandedTimelineHeight.current=panel.getSize().inPixels;panel.collapse();}
     store.setState({timelineCollapsed:!collapsed});
   };
@@ -224,7 +225,6 @@ export function EditorShell(p: EditorShellProps) {
   // Empty edits are still projects: keep the conversation, stop button and timeline mounted.
   const pendingImport=p.videoImports?.some(task=>!['failed','completed','cancelled'].includes(task.status));
   const preparing = !p.assistantPanel && !p.aiRunning && (!workspace.current.opened || !timeline.clips.length&&!!pendingImport);
-  const modeAvailable = !p.workspaceOnly && !p.embedded;
   // Desktop has one layout: chat on the left, each side minimizable. Phones switch between the two.
   const mode = compact ? mobileConversation ? 'agentic' : 'tracks' : 'agentic';
   const conversationVisible = compact ? mobileChat : true;
@@ -238,20 +238,20 @@ export function EditorShell(p: EditorShellProps) {
     const panel = chatPanel.current;
     panel?.expand();
     // A chat first opened at width 0 (MCP mode) expands to its minimum; give it the usual width.
-    if (panel && panel.getSize().inPixels < 310) panel.resize(p.embedded ? 356 : 400);
+    if (panel && panel.getSize().inPixels < 310) panel.resize(400);
   }, [compact, conversationVisible, preparing, chatPanel]);
   // While an outside agent edits over MCP, the chat stays closed if the user closed it last time.
   const mcpChatReady=useRef(false);
   useLayoutEffect(()=>{
     mcpChatReady.current=false;
     if(!p.externalAgent||compact)return;
-    if(localStorage.getItem('revline.mcpChatClosed')==='1'){chatPanel.current?.collapse();}
-    const settle=requestAnimationFrame(()=>{if(localStorage.getItem('revline.mcpChatClosed')==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
+    if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1'){chatPanel.current?.collapse();}
+    const settle=requestAnimationFrame(()=>{if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
     return ()=>cancelAnimationFrame(settle);
   },[p.externalAgent,compact,conversationVisible,preparing,chatPanel]);
   useEffect(()=>{
     if(!p.externalAgent||compact||!mcpChatReady.current)return;
-    if(chatCollapsed)localStorage.setItem('revline.mcpChatClosed','1');else localStorage.removeItem('revline.mcpChatClosed');
+    writeStoredPreference(MCP_CHAT_CLOSED_KEY,chatCollapsed?'1':null);
   },[chatCollapsed,p.externalAgent,compact]);
   useLayoutEffect(() => {
     const body = bodyRef.current;
@@ -291,7 +291,7 @@ export function EditorShell(p: EditorShellProps) {
       measured(()=>{if(panel.isCollapsed())panel.collapse();else panel.resize(collapsedTimelineHeight);});
     }
   },[collapsed,collapsedTimelineHeight,preparing,timelinePanel]);
-  const modeSwitch = modeAvailable && !preparing && compact ? <SegmentedTabs label="Editor mode" className="editor-mode-switch" value={mode} onChange={value => compact ? setMobileChat(value === 'agentic') : setDesktopMode(value)} options={[
+  const modeSwitch = !preparing && compact ? <SegmentedTabs label="Editor mode" className="editor-mode-switch" value={mode} onChange={value => setMobileChat(value === 'agentic')} options={[
     { value: 'agentic', label: 'Agentic', id: 'editor-agentic-tab', panelId: 'editor-mode-view', icon: <MessageSquare size={13}/> },
     { value: 'tracks', label: 'Tracks', id: 'editor-tracks-tab', panelId: 'editor-mode-view', icon: <Film size={13}/> },
   ]}/> : null;
@@ -312,7 +312,7 @@ export function EditorShell(p: EditorShellProps) {
   const hasVisual=timeline.clips.some(clip=>clip.kind==='video'||clip.kind==='image');
   const openedOnce=useRef(false);
   const initialAnalysis=!openedOnce.current?p.preparationActivity:undefined;
-  const opening=!openedOnce.current&&!p.demo&&!p.embedded&&!preparing&&timeline.clips.length>0&&(!playbackReady||!audioPrepared||!!initialAnalysis||(hasVisual&&!thumbnailsReady&&!thumbnailsTimedOut));
+  const opening=!openedOnce.current&&!p.demo&&!preparing&&timeline.clips.length>0&&(!playbackReady||!audioPrepared||!!initialAnalysis||(hasVisual&&!thumbnailsReady&&!thumbnailsTimedOut));
   const footageProgress=useFootageProgress(p.projectId?`project:${p.projectId}`:undefined,Math.min(99,(p.footageProgress??0)+(!preparing&&timeline.clips.length?(playbackReady?4:0)+(thumbnailsReady||thumbnailsTimedOut?6:thumbnailProgress.total?6*thumbnailProgress.ready/thumbnailProgress.total:0):0)));
   useEffect(()=>{
     if(!opening||!playbackReady||!audioPrepared||initialAnalysis||thumbnailsReady)return;
@@ -327,11 +327,11 @@ export function EditorShell(p: EditorShellProps) {
   },[preparing,opening,timeline.clips.length,p.onOpened]);
   const openingLog=useRef<{phase:string;started:number}|null>(null);
   useEffect(()=>{
-    if(p.demo||p.embedded)return;
+    if(p.demo)return;
     const previous=openingLog.current;
     if(opening){const phase=p.preparationActivity||(!audioPrepared?'Preparing audio':!playbackReady?'Loading playback':'Loading timeline thumbnails');if(previous?.phase!==phase){const started=previous?.started??Date.now();openingLog.current={phase,started};console.info(`[import] ${new Date().toISOString()} ${phase}; editor opening ${((Date.now()-started)/1000).toFixed(1)}s.`);}}
     else if(previous){console.info(`[import] ${new Date().toISOString()} Editor ready with playback, audio and thumbnails; opening took ${((Date.now()-previous.started)/1000).toFixed(1)}s.`);openingLog.current=null;}
-  },[opening,audioPrepared,playbackReady,p.demo,p.embedded,p.preparationActivity]);
+  },[opening,audioPrepared,playbackReady,p.demo,p.preparationActivity]);
   useEffect(()=>{
     if(!opening||!editorRoot.current)return;
     const root=editorRoot.current;
@@ -418,7 +418,6 @@ export function EditorShell(p: EditorShellProps) {
     keyboardHandler.current = (e: KeyboardEvent) => {
       if (!(e.target instanceof HTMLElement) || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
       const target = e.target;
-      if (p.embedded && !editorRoot.current?.contains(target)) return;
       // The native player's controls sit in its shadow root, so events arrive retargeted to the
       // player itself. Judge the control that actually has focus: its buttons keep editor shortcuts.
       const path = e.composedPath()[0], focused = path instanceof HTMLElement ? path : target;
@@ -495,22 +494,22 @@ export function EditorShell(p: EditorShellProps) {
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
   const ratioControl = <AspectRatioControl value={timeline.aspectRatio} onChange={changeAspectRatio} safeArea={safeArea} onSafeAreaChange={changeSafeArea} />;
   const chat=(<aside className={`editor-sidebar ${mobileChat ? 'mobile-open' : ''}`} aria-label="Editing conversation" hidden={!conversationVisible}>
-        {p.assistantPanel ?? <AssistantPanel referenceMedia={referenceMedia} externalAgent={p.externalAgent} attachments={p.composerAttachments} composerBusy={p.composerBusy} onRemoveAttachment={p.onRemoveComposerAttachment} conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} canResumeEdit={p.canResumeEdit} messages={p.messages} running={p.aiRunning} editing={aiWorking} configured={p.aiConfigured} catalogModels={p.catalogModels} modelAccessNeedsSync={p.modelAccessNeedsSync} paidModelAccess={p.paidModelAccess} modelSwitcher={p.modelSwitcher} effortSwitcher={p.effortSwitcher} liveEffort={p.liveEffort} allowedModels={p.allowedModels} claudeViaMcp={p.claudeViaMcp} defaultModelChoice={p.defaultModelChoice} defaultReasoningEffort={p.defaultReasoningEffort} error={p.aiError} onSend={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onRetry={promptMessageId => p.onSend('', {playhead:readPlaybackTime(),retryPromptMessageId:promptMessageId})} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={browseComposer} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} activityStartedAt={p.analysisStartedAt} budgetUsed={p.assistantBudgetUsed} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice, reasoningEffort, speedMode) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}
+        {p.assistantPanel ?? <AssistantPanel referenceMedia={referenceMedia} externalAgent={p.externalAgent} attachments={p.composerAttachments} composerBusy={p.composerBusy} onRemoveAttachment={p.onRemoveComposerAttachment} conversation={p.conversation} editSnapshot={p.assistantEditSnapshot} canResumeEdit={p.canResumeEdit} messages={p.messages} running={p.aiRunning} editing={aiWorking} configured={p.aiConfigured} settings={p.assistantSettings} error={p.aiError} onSend={(text, modelChoice, reasoningEffort, speedMode) => p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clip?.id, selectedClipIds:selectedIds, playhead: readPlaybackTime() })} onRetry={promptMessageId => p.onSend('', {playhead:readPlaybackTime(),retryPromptMessageId:promptMessageId})} onStop={p.onStop} hasClips={!!timeline.clips.length} demo={!!p.demo} onLoadMore={p.onLoadMore} canLoadMore={p.canLoadMore} onAttach={browseComposer} activity={p.analysisBusy} activitySource={p.analysisSource} activityProgress={p.analysisProgress} activityStartedAt={p.analysisStartedAt} budgetUsed={p.assistantBudgetUsed} draftKey={p.draftKey} suggestions={sourceSuggestions} onSuggestion={async (text, clipId, modelChoice, reasoningEffort, speedMode) => { const target = timeline.clips.find(item => item.id === clipId && item.kind === 'video'); if (!target) throw new Error('This clip is no longer on the timeline.'); setSelected(clipId); await p.onSend(text, { modelChoice, reasoningEffort, speedMode, selectedClipId: clipId, selectedClipIds: [clipId], playhead: target.start }); }} />}
       </aside>);
-  return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} onPointerDownCapture={e => { const interactive = (e.target as HTMLElement).closest('input,textarea,button,a,select,[tabindex]'); if (p.embedded) { if (!interactive || interactive === e.currentTarget || !e.currentTarget.contains(interactive)) editorRoot.current?.focus({ preventScroll: true }); else if (interactive.matches('[tabindex]') && !interactive.matches('input,textarea,button,a,select')) (interactive as HTMLElement).focus({ preventScroll: true }); } }} className={`editor-app conversation-editor ${p.embedded ? 'embedded-editor' : ''}`}>
+  return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} className="editor-app conversation-editor">
     <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    {!p.workspaceOnly && <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>}
+    <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
-    {!preparing&&<>{compact&&!p.workspaceOnly && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
+    {!preparing&&<>{compact && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
     <section ref={bodyRef} id="editor-mode-view" data-mode={mode} data-chat-collapsed={!compact && chatCollapsed || undefined} className="editor-body" role={modeSwitch ? "tabpanel" : undefined} aria-labelledby={modeSwitch ? `editor-${mode}-tab` : undefined} aria-hidden={opening} inert={opening}><ResizablePanelGroup orientation="vertical" className="editor-canvas-panels"><ResizablePanel id="preview" className="editor-preview-row" defaultSize="70%" minSize={180}><ResizablePanelGroup orientation="horizontal" className="editor-horizontal-panels">
       {/* Dragging keeps the chat between 300 and 600px; only phone layouts collapse it. */}
-      {p.workspaceOnly?null:<ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); setChatCollapsed(size.inPixels === 0); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={p.embedded ? 356 : 400} minSize={300} maxSize={600}>{chat}</ResizablePanel>}
-      {!p.workspaceOnly&&<ResizableHandle aria-label="Resize conversation" className="chat-resize-handle" disabled={compact || !conversationVisible} style={compact || !conversationVisible ? {display:"none"} : undefined}/>}
+      <ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); setChatCollapsed(size.inPixels === 0); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={400} minSize={300} maxSize={600}>{chat}</ResizablePanel>
+      <ResizableHandle aria-label="Resize conversation" className="chat-resize-handle" disabled={compact || !conversationVisible} style={compact || !conversationVisible ? {display:"none"} : undefined}/>
 
       <ResizablePanel id="workspace" minSize={compact?0:320}><div className="editor-workspace">
-        <ResizablePanelGroup orientation="horizontal" className="preview-layout" data-inspector-motion={inspectorMotion || undefined}><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings onShowChat={!compact && !p.workspaceOnly && chatCollapsed ? () => chatPanel.current?.expand() : undefined} onHideChat={!compact && !p.workspaceOnly && !chatCollapsed ? () => { flushSync(() => setChatCollapsed(true)); chatPanel.current?.collapse(); } : undefined}>{!ratioOnFrame && ratioControl}</CanvasSettings>
+        <ResizablePanelGroup orientation="horizontal" className="preview-layout" data-inspector-motion={inspectorMotion || undefined}><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings onShowChat={!compact && chatCollapsed ? () => chatPanel.current?.expand() : undefined} onHideChat={!compact && !chatCollapsed ? () => { flushSync(() => setChatCollapsed(true)); chatPanel.current?.collapse(); } : undefined}>{!ratioOnFrame && ratioControl}</CanvasSettings>
         <div className="editor-stage">
 
           <div className="preview-player"><div className="stage-center" data-ratio-on-frame={ratioOnFrame || undefined} style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{previewTimeline.clips.length ? <><PreviewViewport><Preview controls={collapsed} safeArea={safeArea} onPlaybackAssets={onPlaybackAssets} onSlowLoad={onSlowLoad} onReady={onPlaybackReady} onThumbnail={onLoadingThumbnail} debugId={p.projectId} ref={preview} timeline={previewTimeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={previewError} onRefreshMedia={p.onRefreshMedia} muted={muted} onMutedChange={setMuted} selectedClip={editing ? undefined : clip} cropping={cropping && !editing} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { changeClip(id,{crop}); setCroppingClip(null); } }} onSelectClip={selectClip} onEditClip={selectClip} onEditText={editText} onClipChange={changeClip} onVisualChange={patch=>{if(clip)changeClip(clip.id,patch);}} /></PreviewViewport><PreviewFrameOverlay above={ratioOnFrame ? ratioControl : undefined}/></> : editing ? <div className="empty-canvas" role="status" aria-live="polite"><div className="scene-placeholder" style={{'--scene-hue': 222} as React.CSSProperties}><i/></div><div className="empty-canvas-copy"><h2>Building your film</h2><p>Each scene appears here as Revline makes it.</p></div></div> : <div className="empty-drop"><div className="empty-drop-copy"><h2>Start with a clip or an idea</h2><Button type="button" className="empty-drop-add" onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14}/>}Add footage</Button><p>Drop files anywhere in the editor</p>{p.upload && <Progress aria-label="Footage preparation progress" max={100} value={p.upload.percent} />}</div></div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>

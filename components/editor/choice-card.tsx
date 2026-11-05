@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Field, FieldContent, FieldDescription, FieldLabel, FieldLegend, FieldSet, FieldTitle } from '@/components/ui/field';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { standaloneSvg } from '@/lib/editor/brand-kit';
-import type { ChatTool } from './assistant-results';
+import type { ChatTool } from './chat-types';
 import './choice-card.css';
 
 type Choice = { value: string; title: string; description?: string; logo?: string; image?: string; audio?: string; reply: string };

@@ -6,12 +6,8 @@ import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
 import { SAVED_ELSEWHERE, hasSaveEvidence, toolSaveReceipt, needsSaveConfirmation } from '@/lib/ai/save-confirmation';
 import { mediaErrorMessage } from '@/lib/media-analysis/errors';
 import { toolBehavior } from '@/lib/ai/tool-definitions';
-export type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
+import type { ChatBlock, ChatMessage, ChatTool, ResultCard } from './chat-types';
 
-export type ChatTool = { id?: string; name: string; state: 'running' | 'done' | 'error' | 'stopped'; detail?: string; staged?: boolean; input?: Record<string, unknown>; output?: Record<string, unknown> };
-export type ChatBlock = { type:'text'; text:string } | { type:'tools'; steps:ChatTool[] } | { type:'thinking'; text:string };
-export type ChatMessage = { turnError?:string;turnResuming?:boolean;turnState?:'running'|'completed'|'failed'|'stopped';id:string;sourceId?:string;threadId?:string;role:string;text:string;status?:string;tools?:string[];steps?:ChatTool[];blocks?:ChatBlock[];publicationReceipt?:TimelinePublicationReceipt };
-export type ResultCard = { key: string; title: string; detail?: string; state: ChatTool['state']; staged?: boolean; saveFailed?: boolean };
 const chatMessageKey = (message: { id: string; key?: string }) => message.key ?? message.id;
 export type AssistantEditSnapshot = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedDraft:boolean };
 export type SavedEditComparison = { before:Timeline;after:Timeline;revision:number;canUndo:boolean;publishedRevision?:number };

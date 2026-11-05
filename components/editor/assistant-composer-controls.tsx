@@ -5,8 +5,10 @@ import type { FunctionReturnType } from 'convex/server';
 import type { api } from '@/convex/_generated/api';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, PRODUCTION_CLAUDE_MODEL_CHOICES, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { AssistantModelPicker } from './assistant-model-picker';
+import { storeDraftEffort, storeDraftModel, storedDraftEffort, storedDraftModel } from '@/lib/editor/opening-request';
 
-type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'catalogModels' | 'defaultModelChoice'>> & { catalogModels?: readonly ClaudeModelChoice[]; allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
+/** The model and effort choices the server offers this user's composer. */
+export type ComposerSettings = Partial<Omit<FunctionReturnType<typeof api.assistant.composerSettings>, 'allowedModels' | 'catalogModels' | 'defaultModelChoice'>> & { catalogModels?: readonly ClaudeModelChoice[]; allowedModels?: readonly ClaudeModelChoice[]; defaultModelChoice?: ClaudeModelChoice };
 
 export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   settings: ComposerSettings; draftKey?: string; disabled: boolean;
@@ -23,19 +25,19 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
 
   useEffect(() => {
     try {
-      const model = draftKey ? localStorage.getItem(`${draftKey}:model`) : null;
-      const effort = draftKey ? sessionStorage.getItem(`${draftKey}:effort`) : null;
+      const model = draftKey ? storedDraftModel(draftKey) : null;
+      const effort = draftKey ? storedDraftEffort(draftKey) : null;
       setModelChoice(EDITOR_MODELS.find(item => item.id === model)?.id);
       setEffortChoice(EDITOR_REASONING_EFFORTS.find(item => item === effort));
     } catch { /* Use the deployment defaults when storage is unavailable. */ }
   }, [draftKey]);
   const chooseModel = useCallback((value: ClaudeModelChoice) => {
     setModelChoice(value);
-    try { if (draftKey) localStorage.setItem(`${draftKey}:model`, value); } catch { /* The choice holds for this visit. */ }
+    try { if (draftKey) storeDraftModel(draftKey, value); } catch { /* The choice holds for this visit. */ }
   }, [draftKey]);
   const chooseEffort = useCallback((value: EditorReasoningEffort) => {
     setEffortChoice(value);
-    try { if (draftKey) sessionStorage.setItem(`${draftKey}:effort`, value); } catch { /* The choice holds for this visit. */ }
+    try { if (draftKey) storeDraftEffort(draftKey, value); } catch { /* The choice holds for this visit. */ }
   }, [draftKey]);
 
   const actions = <div className="assistant-model-controls">

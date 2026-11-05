@@ -11,9 +11,6 @@
 .source-media-row>.media-thumbnail{flex:0 0 48px;height:32px;border-radius:3px}.source-media-details{flex:1;min-width:0}.footage-content-inspector .source-media-row .source-media-details strong{margin:0;font-size:11px}.source-media-row>svg{flex:none;color:var(--ws-muted)}
 .source-media-row:focus-visible{outline:none;outline-offset:3px}@media(hover:hover){.footage-content-inspector .source-media-row:not(:disabled):hover{background:var(--ws-hover)}}
 .asset-card:disabled{opacity:.5;cursor:not-allowed}
-.asset-card:disabled .asset-add{display:none}
-.footage-content-inspector .asset-thumbnail{height:auto;aspect-ratio:4/3;background:var(--ws-surface,#f5f5f5);border:1px solid var(--ws-border,#e5e5e5);border-radius:6px}
-.footage-content-inspector .asset-ready{display:none}
 .footage-content-inspector .asset-card strong{display:block;margin-top:6px;font-size:10px;line-height:1.4;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .footage-content-inspector .asset-card small{display:block;margin-top:2px;font-size:10px;color:var(--ws-muted)}
 .footage-content-inspector .footage-empty{padding:24px 0;gap:12px}
@@ -43,7 +40,6 @@
 .footage-content-inspector .source-asset-inspector .source-media-row{flex:1;min-width:0;border:0;background:transparent}
 .source-asset-menu{flex:none;color:var(--ws-muted)}
 .source-asset-menu:hover{color:var(--ws-text);background:var(--ws-hover)}
-.source-asset-sheet .source-asset-menu{position:absolute;top:5px;right:5px;background:var(--ws-bg)}
 .source-remove-actions{display:flex;justify-content:flex-end;gap:8px}.source-remove-error{font-size:12px;color:var(--destructive)}
 
 .preview-inspector .footage-content-library{min-width:0;gap:12px}
