@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Motion lane: Films load only motion-design, gsap, scene-engine and reference-footage (no footage, caption or sound-effect skills), no longer need checkPacing to finish, and default to music only cut on bar lines. Why: the user found the shared skills and pacing check produced dark, stop-start films.
+
 - Skills: Add measured timing and easing rules to motion-design (moves about 0.38 s, exits faster than entrances, beats about 2.45 s) and scope overall-styling to graphics over footage, no longer loaded for motion films. Why: the user found film pacing slow and the dark house look leaking into launch films.
 
 - Skills: Motion films take length and structure from the request (no fixed 30–40 s proof structure), rebuild product UI only when asked, and drop the qualitative motion-feel rules pending measured pacing rules. Why: the user found the old defaults hurt pacing and look.

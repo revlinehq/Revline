@@ -45,6 +45,12 @@ Measured from 151 tweens and 87 shots across the user's saved launch films (reru
 5. **Typing and UI demos run fast.** Type at 2–3× real speed: a prompt of 40–50 characters takes at most 1 s.
 6. **Check it in code.** Before getFrames, scan the timeline for durations: every tween outside the camera over 0.6 s and every exit at least as long as its entrance is a fix, not a choice.
 
+## Sound
+1. **Music only by default.** A new film gets one music track and no generated sound effects. Add effects with generateSound only when the user asks for them; a few mistimed effects make the film feel stop-start.
+2. **The user's track wins.** When the user names or uploads a song, use it (addMedia) and say once that publishing it needs a license. Otherwise suggest a track with matchMusic and let the user hear it before building around it.
+3. **Cut on the bar.** markMusicBeats on the track, then put section starts and big moves on bar lines: one bar = 4 × 60 / BPM s (1.88–2.0 s at 120–128 BPM). Beats of 1–2 bars match the 1.75–3.5 s beat length above. Since a film is one clip, move its sections in code to the bar times; never run alignCutsToBeat on it.
+4. **Levels.** Music at about -14 LUFS for a film with no speech; under speech, duck it 8–10 dB.
+
 ## Recreating a video (clone, remake, copy, "shot for shot")
 The video is the brief. New recreations use the recreate lane, which runs full checks. Read reference-footage page `recreation` before building a copy or making a full-lane edit. It owns the workflow: numbered effect inventories, exact content, camera behavior per layer, one section at a time, rendered comparisons across every transition, and close-out against every inventory item. Follow its measured behavior over this skill's motion defaults. Use scene-engine for implementation and its checklist for final checks.
 

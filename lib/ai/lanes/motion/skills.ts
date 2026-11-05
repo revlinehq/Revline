@@ -1,22 +1,9 @@
-import { vfx } from '../../skills/vfx';
-import { vfxRecipes } from '../../skills/vfx-recipes';
-import { footageEditing } from '../../skills/footage-editing';
-import { effects } from '../../skills/effects';
-import { textStyling } from '../../skills/text-styling';
-import { colorGrading } from '../../skills/color-grading';
-import { musicAndSound } from '../../skills/music-and-sound';
 import { motionDesign } from '../../skills/motion-design';
 import { gsapSkill } from '../../skills/gsap';
 import { sceneEngine } from '../../skills/scene-engine';
 import { referenceFootage } from '../../skills/reference-footage';
+// Films made from scratch read only the film skills; footage, caption and sound-effect skills belong to the footage lanes.
 export const skills = [
-  vfx,
-  vfxRecipes,
-  footageEditing,
-  effects,
-  textStyling,
-  colorGrading,
-  musicAndSound,
   motionDesign,
   gsapSkill,
   sceneEngine,
