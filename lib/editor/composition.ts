@@ -74,7 +74,6 @@ export function compositionTrackIndex(clip: Pick<Clip, 'kind' | 'track'>) {
   return (clip.kind === 'audio' ? 24 : 0) + trackOf(clip) - 1;
 }
 
-
 function validateClip(clip: Clip) {
   if (![clip.start, clip.duration, clip.sourceStart].every(Number.isFinite) || clip.start < 0 || clip.duration <= 0 || clip.sourceStart < 0) {
     throw new Error('Every clip must have a valid start, duration, and source offset.');
