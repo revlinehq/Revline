@@ -5,7 +5,7 @@ import { internal } from './_generated/api';
 import { mediaTaskCredentials, requireMediaTask } from './lib/media_task_auth';
 import { referenceReadResult } from './schema';
 import { AnalysisError } from '../lib/media-analysis/errors';
-import { retryMediaOperation } from '../lib/media-analysis/network';
+import { isTransientMediaError, retryMediaOperation } from '../lib/media-analysis/network';
 
 export const readLease = internalQuery({ args: mediaTaskCredentials, returns: v.boolean(), handler: async (ctx,args) => {
   const saved=await ctx.db.get(args.taskId);
@@ -34,19 +34,26 @@ export const completeRead = action({ args: {...mediaTaskCredentials,result:refer
 }});
 
 /** Only the owner of the pending read can consume its file, and cleanup removes the file too. */
-export const consumeRead = internalAction({ args: {ownerId:v.string(),readId:v.id('referenceReads')}, returns:referenceReadResult, handler: async (ctx,args):Promise<Infer<typeof referenceReadResult>> => {
-  const read=await ctx.runQuery(internal.referenceReads.get,args);
+export const consumeRead = internalAction({ args: {ownerId:v.string(),readId:v.id('referenceReads'),retain:v.optional(v.boolean()),deadline:v.optional(v.number())}, returns:referenceReadResult, handler: async (ctx,args):Promise<Infer<typeof referenceReadResult>> => {
+  const read=await ctx.runQuery(internal.referenceReads.get,{ownerId:args.ownerId,readId:args.readId});
   if(read.status!=='completed')throw new ConvexError('The reference reading is not complete.');
   if(read.result)return read.result;
   if(!read.resultStorageId)throw new ConvexError('The reference reading is unavailable.');
   const url=await ctx.storage.getUrl(read.resultStorageId);
   if(!url)throw new ConvexError('The reference reading is unavailable.');
-  const result=await retryMediaOperation(async()=>{
-    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(30_000)});
+  const load=async()=>{
+    const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(Math.max(1,Math.min(30_000,(args.deadline??Infinity)-Date.now())))});
     if(!response.ok){await response.body?.cancel();throw new AnalysisError(`The reference reading could not load (HTTP ${response.status}).`,response.status);}
     return parse(referenceReadResult,await response.json());
-  });
-  await ctx.runMutation(internal.referenceReads.discard,{readId:args.readId});
+  };
+  let result: Infer<typeof referenceReadResult>;
+  try { result=args.deadline ? await load() : await retryMediaOperation(load); }
+  catch(error) {
+    // Preserve transport classification across the action boundary without signed URLs.
+    if(isTransientMediaError(error))throw new ConvexError({code:'REFERENCE_READ_DOWNLOAD_RETRY',message:'The saved reference reading could not be downloaded yet.'});
+    throw new ConvexError({code:'REFERENCE_READ_INVALID',message:'The saved reference reading is invalid or unavailable. Start a new reading.'});
+  }
+  if(!args.retain)await ctx.runMutation(internal.referenceReads.discard,{readId:args.readId});
   return result;
 }});
 

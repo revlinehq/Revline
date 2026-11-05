@@ -19,7 +19,7 @@ import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenc
 const box = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
 const window = { assetId: z.string().min(1), start: z.number().min(0).describe('SOURCE seconds.'), end: z.number().min(0).describe('SOURCE seconds.') };
 export const READ_TOOL_INPUTS = {
-  readFrames: z.object({ ...window, checkId: z.string().optional().describe("Resume the saved source read using exactly the original arguments from nextAction."), times:z.array(z.number().nonnegative()).min(1).max(30).optional().describe('Explicit SOURCE seconds instead of evenly spaced count. Batch up to 12 sparse stills across shortlisted clipping candidates; set start/end to the first/last time and stillsOnly:true.'), count: z.number().int().min(1).max(30).optional().describe('Frames spread evenly from start to end (default 8, up to 30).'), fps: z.number().min(1).max(120).optional().describe('Consecutive source frames at this rate, up to 30 per call. For recreation use the source fps returned by an initial read; shorten each window to fit 30 frames.'), stillsOnly: z.boolean().optional().describe('Return only the requested still frames; skip the automatic 10 fps motion map. Use true for clipping context and framing.'), momentsOnly: z.boolean().optional().describe('Return only the map, no image: every moment (up to 80) and every hold (a second or more where the picture all but stops) from start to end. Cheap on any length, so read a long clip whole this way first.'), crop: box.optional().describe('Zoom into this part of the frame, in source pixels, to read small type, icons and edges.') }).strict(),
+  readFrames: z.object({ ...window, checkId: z.string().min(1).optional().describe("Resume the saved source read using exactly the original arguments from nextAction."), times:z.array(z.number().nonnegative()).min(1).max(30).optional().describe('Explicit SOURCE seconds instead of evenly spaced count. Batch up to 12 sparse stills across shortlisted clipping candidates; set start/end to the first/last time and stillsOnly:true.'), count: z.number().int().min(1).max(30).optional().describe('Frames spread evenly from start to end (default 8, up to 30).'), fps: z.number().min(1).max(120).optional().describe('Consecutive source frames at this rate, up to 30 per call. For recreation use the source fps returned by an initial read; shorten each window to fit 30 frames.'), stillsOnly: z.boolean().optional().describe('Return only the requested still frames; skip the automatic 10 fps motion map. Use true for clipping context and framing.'), momentsOnly: z.boolean().optional().describe('Return only the map, no image: every moment (up to 80) and every hold (a second or more where the picture all but stops) from start to end. Cheap on any length, so read a long clip whole this way first.'), crop: box.optional().describe('Zoom into this part of the frame, in source pixels, to read small type, icons and edges.') }).strict(),
   listenReference: z.object({ ...window }).strict(),
   trackReference: z.object({ ...window, box: box.describe('The element box in source pixels at frameTime (default start).'), frameTime: z.number().min(0).optional().describe('SOURCE time of a visible seed frame inside the window. Tracks both directions from this frame.'), backgroundTime: z.number().min(0).optional().describe('SOURCE time with a clean background and the element absent. Requires a fully opaque seed at frameTime; enables calibrated opacity.') }).strict(),
   measureFrame: z.object({ assetId: z.string().min(1), time: z.number().min(0).describe('SOURCE seconds.'), points: z.array(z.object({ x: z.number(), y: z.number(), label: z.string().max(60).optional() })).max(60).optional(), lines: z.array(z.object({ axis: z.enum(['x', 'y']).describe('y = horizontal row (fixed y=at, scan x); x = vertical column (fixed x=at, scan y). Bounds follow the scanned axis.'), at: z.number(), from: z.number(), to: z.number(), label: z.string().max(60).optional() })).max(20).optional() }).strict().refine(input => (input.points?.length ?? 0) + (input.lines?.length ?? 0) > 0, { message: 'Measure at least one point or line.' }),
@@ -114,9 +114,16 @@ async function runSourceFrames(ctx: ActionCtx, ownerId: string, projectId: Id<'p
     }
     if (state.status === 'completed') {
       // Poll without taking: validation and file retrieval must succeed before cleanup.
-      const result = parse(referenceReadResult, state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead, { ownerId, readId }) : state.result);
-      await ctx.runMutation(internal.referenceReads.discard, { readId });
-      return result;
+      try {
+        const result = parse(referenceReadResult, state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead, { ownerId, readId, retain: true, deadline }) : state.result);
+        await ctx.runMutation(internal.referenceReads.discard, { readId });
+        return result;
+      } catch (error) {
+        const data = (error as { data?: { code?: string } })?.data;
+        if (data?.code === 'REFERENCE_READ_DOWNLOAD_RETRY') break;
+        await ctx.runMutation(internal.referenceReads.discard, { readId });
+        throw error;
+      }
     }
     await new Promise(resolve => setTimeout(resolve, Math.min(1500, Math.max(0, deadline - Date.now()))));
   }
@@ -213,19 +220,23 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<ReadResult | null> {
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false, continuation?: {readId?: Id<'referenceReads'>; save: (readId: Id<'referenceReads'>) => Promise<void>}): Promise<ReadResult | null> {
   if (Date.now() >= deadline) return null;
   const cached = await ctx.runAction(internal.frameCache.readResult, {ownerId,projectId,assetId,snapshotId,work:{mode:'compare',start:Math.min(...times),end:Math.max(...times),times,...(compareCrop?{compareCrop}:{}),...(cropKeyframes?{referenceCropKeyframes:cropKeyframes}:{})}});
   if (cached) return cached as ReadResult;
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  const readId = continuation?.readId ?? await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  if (continuation && !continuation.readId) await continuation.save(readId);
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
       if (state.status === 'failed') throwReadFailure(state.error, 'The comparison could not be made');
-      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
+      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId,retain:!!continuation,deadline}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
     return null;
-  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+  } catch (error) {
+    if (continuation && !signal?.aborted && (error as { data?: { code?: string } })?.data?.code === 'REFERENCE_READ_DOWNLOAD_RETRY') return null;
+    throw error;
+  } finally { if (!continuation || signal?.aborted) await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
