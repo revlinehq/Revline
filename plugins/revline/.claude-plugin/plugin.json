@@ -9,6 +9,9 @@
   },
   "homepage": "https://tryrevline.com",
   "privacyPolicyUrl": "https://tryrevline.com/privacy",
+  "termsOfServiceUrl": "https://tryrevline.com/terms",
+  "supportUrl": "https://github.com/revlinehq/revline-claude-plugin/issues",
+  "documentationUrl": "https://github.com/revlinehq/revline-claude-plugin#readme",
   "repository": "https://github.com/revlinehq/Revline",
   "license": "Apache-2.0",
   "keywords": ["video", "video-editing", "captions", "motion-graphics", "mcp", "revline"]
