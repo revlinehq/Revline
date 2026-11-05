@@ -109,13 +109,15 @@ function editTarget(input: unknown) {
   return '';
 }
 
+function clipPlanStage(input: unknown) { return Array.isArray(record(input).found) ? 'found' : 'accepted'; }
+
 function motionWindowTarget(tool: string | undefined, input: unknown) {
   const args = record(input);
   return (tool === 'motionMap' || tool === 'compareMotion') && typeof args.assetId === 'string' && typeof args.start === 'number' && typeof args.end === 'number' ? stable({ assetId: args.assetId, start: args.start, end: args.end }) : undefined;
 }
 
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; tool?: string; target?: string; motionWindow?: string; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; tool?: string; target?: string; motionWindow?: string; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement; clipPlan?: 'found' | 'accepted' }>();
   let revision:number|undefined,editEpoch=0;
   const plans=new Map<string,string>();
   for (const step of steps) for (const value of step.content) {
@@ -130,9 +132,12 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     else if ((part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) && !reviewUnavailable(part)) {
       const failure=part.error??output.error??record(part.output).value;
       const rejectedPlans=record(input).plans;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], tool: part.toolName, target: editTarget(input), motionWindow: motionWindowTarget(part.toolName, input), ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], tool: part.toolName, target: editTarget(input), ...(part.toolName === 'planClips' ? { clipPlan: clipPlanStage(input) } : {}), motionWindow: motionWindowTarget(part.toolName, input), ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
     } else if (part.type === 'tool-result') {
       if(!pending.get(key)?.review)pending.delete(key);
+      if (part.toolName === 'planClips' && output.planSaved === true && output.stage === clipPlanStage(input)) {
+        for (const [failedKey, failure] of pending) if (failure.tool === 'planClips' && failure.clipPlan === output.stage) pending.delete(failedKey);
+      }
       // A persisted timed OFF declaration resolves failures of this exact source window only.
       const motionWindow = motionWindowTarget(part.toolName, input);
       if (motionWindow && output.off === true && output.matched === false && Array.isArray(output.motionOff) && output.motionOff.some(item => { const off = record(item), args = record(input); return off.start === args.start && off.end === args.end && typeof off.reason === 'string' && off.reason.length >= 12; })) for (const [failedKey, failure] of pending) if (failure.motionWindow === motionWindow) pending.delete(failedKey);
