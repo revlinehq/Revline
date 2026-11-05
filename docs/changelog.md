@@ -1,6 +1,6 @@
 ## 2026-11-05
 
-- Composer: Share a thin grey border, inner highlight and layered shadow across composer placements. Why: user requested the Kino reference's border and shadow.
+- Composer: Apply the approved compact composer, distinct shelf edges and two start cards. Why: user approved the Kino-inspired Pen design while keeping production controls.
 
 ## 2026-11-04
 
