@@ -7,6 +7,7 @@ import { internal } from './_generated/api';
 import { requireEditorAccess } from './lib/billing_access';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { hydrateAsset } from './lib/asset_analysis';
+import { projectMediaPrefix } from './lib/media_storage';
 import type { Id } from './_generated/dataModel';
 
 const scope = { ownerId: v.string(), projectId: v.id('projects'), runId: v.string() };
@@ -29,7 +30,7 @@ export const prepare = internalMutation({ args: { ...scope, count: v.number() },
 export const cleanup = internalMutation({ args: { ...scope, keys: v.array(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
   for (const key of args.keys) {
-    if (!key.startsWith(`media/${args.ownerId}/${args.projectId}/`)) throw new ConvexError('Generated image key is outside this project');
+    if (!key.startsWith(projectMediaPrefix(args.ownerId, args.projectId))) throw new ConvexError('Generated image key is outside this project');
     const saved = await ctx.db.query('assets').withIndex('by_owner_project_r2Key', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId).eq('r2Key', key)).first();
     if (!saved) await ctx.scheduler.runAfter(0, internal.r2.deleteObject, { key });
   }
@@ -44,7 +45,7 @@ export const save = internalMutation({
     await requireCapacity(ctx, args, args.images.length);
     const saved = [];
     for (const [index, image] of args.images.entries()) {
-      if (!image.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`)) throw new ConvexError('Generated image key is outside this project');
+      if (!image.r2Key.startsWith(projectMediaPrefix(args.ownerId, args.projectId))) throw new ConvexError('Generated image key is outside this project');
       const id = await ctx.db.insert('assets', { ownerId: args.ownerId, projectId: args.projectId, ...image, fileName: `Generated plate ${index + 1}.png`, contentType: 'image/png', kind: 'image', imageGeneration: args.provenance, createdAt: Date.now() });
       const asset = (await ctx.db.get(id))!;
       await recordAssetStorage(ctx, asset);

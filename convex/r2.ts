@@ -8,7 +8,7 @@ import { internal } from './_generated/api';
 import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
-import { storageControl, hasPreview, PREVIEW_VERSION } from './lib/media_storage';
+import { storageControl, hasPreview, newProjectMediaKey, PREVIEW_VERSION } from './lib/media_storage';
 import { PROJECT_MEDIA_LIMIT, partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './lib/media_queue';
@@ -129,7 +129,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   const partSize = uploadPartSize(args.size);
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
-  const key = `media/${ownerId}/${args.projectId}/${crypto.randomUUID()}`;
+  const key = newProjectMediaKey(ownerId, args.projectId);
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   const multipartId = created.uploadId;

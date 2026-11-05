@@ -22,6 +22,7 @@ import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { transportAsset, storeAnalysis } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
+import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
 import { importVideoFor } from './mediaTasks';
@@ -501,7 +502,7 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  if(!args.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`))throw new ConvexError('Generated sound key is outside this project');
+  if(!args.r2Key.startsWith(projectMediaPrefix(args.ownerId,args.projectId)))throw new ConvexError('Generated sound key is outside this project');
   const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(args.waveform);
