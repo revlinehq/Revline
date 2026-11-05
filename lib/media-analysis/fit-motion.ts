@@ -1,6 +1,6 @@
 // Fit timing and signed progress together, including the holds on either side of a move.
-export type TrackSample = { time: number; x: number; y: number; w: number; h: number; scale: number; rotation: number; confidence: number; visible?: boolean; opacity?: number; opacityConfidence?: number; sharpness?: number };
-type Pose = { x: number; y: number; scale: number; rotation: number; opacity?: number };
+export type TrackSample = { time: number; x: number; y: number; w: number; h: number; scale: number; scaleX?: number; scaleY?: number; corners?: number[][]; registrationBox?: { x: number; y: number; w: number; h: number }; rotation: number; confidence: number; visible?: boolean; opacity?: number; opacityConfidence?: number; sharpness?: number };
+type Pose = { x: number; y: number; scale: number; scaleX?: number; scaleY?: number; rotation: number; opacity?: number };
 export type FittedMove = { start: number; end: number; duration: number; from: Pose; to: Pose; ease: string; fit: number; gsap: string };
 type Curve = { name: string; at: (t: number, extra: number[]) => number; initial: number[]; bounds: [number, number][] };
 const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
@@ -95,14 +95,19 @@ function jointFit(times: number[], values: number[]) {
   const progress = ts.map(t => best.curve.at(clamp((t - best.p[0]) / best.p[1]), best.p.slice(2)));
   return { start: first + best.p[0] * span, end: first + (best.p[0] + best.p[1]) * span, ease: curveName(best.curve, best.p.slice(2)), error: Math.sqrt(best.error), namedError, progress };
 }
-const pose = (s: TrackSample): Pose => ({ x: s.x + s.w / 2, y: s.y + s.h / 2, scale: s.scale, rotation: s.rotation });
-function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 0): FittedMove[] {
+const pose = (s: TrackSample): Pose => {
+  const box = s.registrationBox ?? s;
+  return { x: box.x + box.w / 2, y: box.y + box.h / 2, scale: s.scale, scaleX: s.scaleX ?? s.scale, scaleY: s.scaleY ?? s.scale, rotation: s.rotation };
+};
+function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 0, channel?: 'x' | 'y' | 'scaleX' | 'scaleY' | 'rotation'): FittedMove[] {
   if (samples.length < 5) return [];
-  const fields = opacity ? ['opacity'] as const : ['x', 'y', 'scale', 'rotation'] as const;
+  const axes = samples.some(s => s.scaleX !== undefined && s.scaleY !== undefined && Math.abs(s.scaleX - s.scaleY) > .01);
+  if (axes && !opacity && !channel) return (['x', 'y', 'scaleX', 'scaleY', 'rotation'] as const).flatMap(field => fitRun(samples, span, false, depth, field));
+  const fields = channel ? [channel] : opacity ? ['opacity'] as const : ['x', 'y', 'scale', 'rotation'] as const;
   const poses = samples.map(s => opacity ? { opacity: s.opacity! } : pose(s));
   const channels = fields.map(field => poses.map(p => (p as Record<string, number>)[field]));
   const ranges = channels.map(v => Math.max(...v) - Math.min(...v));
-  const weights = opacity ? [1] : [1 / span, 1 / span, 1, 1 / 90];
+  const weights = channel ? [channel === 'x' || channel === 'y' ? 1 / span : channel === 'rotation' ? 1 / 90 : 1] : opacity ? [1] : [1 / span, 1 / span, 1, 1 / 90];
   const dominant = ranges.map((v, i) => v * weights[i]).reduce((best, v, i, all) => v > all[best] ? i : best, 0);
   if (ranges[dominant] * weights[dominant] < (opacity ? .02 : .002)) return [];
   const times = samples.map(s => s.time), values = channels[dominant], fit = jointFit(times, values);
@@ -123,8 +128,14 @@ function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 
     if (hold) {
       // Keep the entire easing tail and some hold on both sides of the split.
       const split = Math.floor((hold.first + hold.last) / 2);
-      return [...fitRun(samples.slice(0, split + 1), span, opacity, depth + 1), ...fitRun(samples.slice(split), span, opacity, depth + 1)];
+      return [...fitRun(samples.slice(0, split + 1), span, opacity, depth + 1, channel), ...fitRun(samples.slice(split), span, opacity, depth + 1, channel)];
     }
+  }
+  // A box can reverse direction while its independent dimensions continue growing.
+  // Keep measured segments when one easing curve cannot describe that channel.
+  if (channel && fit.error > .015 && depth < 6 && samples.length >= 10) {
+    const split = Math.floor(samples.length / 2);
+    return [...fitRun(samples.slice(0, split + 1), span, opacity, depth + 1, channel), ...fitRun(samples.slice(split), span, opacity, depth + 1, channel)];
   }
   // Very poor tracks do not become authoritative tweens.
   if (fit.error > .12) return [];
@@ -133,7 +144,7 @@ function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 
   const confidence = samples.reduce((s, p) => s + (opacity ? p.opacityConfidence ?? 0 : p.confidence), 0) / samples.length;
   const start = round(fit.start), end = round(fit.end), duration = round(end - start);
   const text = (p: Record<string, number>) => fields.filter((f, i) => opacity || f === 'x' || f === 'y' || Math.abs(b[f] - a[f]) * weights[i] >= .001).map(f => `${f}: ${p[f]}`).join(', ');
-  const from = opacity ? { ...pose(samples[0]), opacity: a.opacity } : a as Pose, to = opacity ? { ...pose(samples.at(-1)!), opacity: b.opacity } : b as Pose;
+  const from = opacity ? { ...pose(samples[0]), opacity: a.opacity } : { ...pose(samples[0]), ...a }, to = opacity ? { ...pose(samples.at(-1)!), opacity: b.opacity } : { ...pose(samples.at(-1)!), ...b };
   return [{ start, end, duration, from, to, ease: fit.ease, fit: round((1 - fit.error) * confidence, 3), gsap: `tl.fromTo(el, { ${text(a)} }, { ${text(b)}, duration: ${duration}, ease: ${gsapEase(fit.ease)} }, ${start})` }];
 }
 /** All callers share this fitter. Confidence gaps split runs; invisible geometry never joins two moves. */
