@@ -16,16 +16,20 @@ export async function editorSubscriptions(ctx: QueryCtx | MutationCtx | ActionCt
   return (await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId })).filter(isEditorSubscription);
 }
 
-export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+/** An operator grant that is neither revoked nor expired. */
+async function activeComplimentaryEntitlement(ctx: QueryCtx | MutationCtx, ownerId: string) {
   const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
-  return !!entitlement && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now());
+  return entitlement && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now()) ? entitlement : null;
+}
+
+export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  return !!await activeComplimentaryEntitlement(ctx, ownerId);
 }
 
 /** Ultra comes from an active Ultra subscription, or an operator grant on an active complimentary entitlement. */
 export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if ((await activeAppleEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
-  const entitlement = await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', ownerId)).unique();
-  if (!!entitlement && entitlement.plan === 'ultra' && entitlement.revokedAt === undefined && (entitlement.expiresAt === undefined || entitlement.expiresAt > Date.now())) return true;
+  if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   if (!billingEnabled() || !ultraBillingConfigured()) return false;
   return (await editorSubscriptions(ctx, ownerId)).some(sub => isUltraSubscription(sub) && hasEditorAccess(sub));
 }
@@ -40,9 +44,13 @@ export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: 
   }
 }
 
-/** Model upgrades require a current paid term; trial and complimentary access only grant editing. */
+/** Model upgrades require a current paid term or an operator-granted Ultra plan; trials and other
+ * complimentary access only grant editing. Deployments without billing (development, agent
+ * worktrees, self-hosted) meter no one, so every account keeps the configured models there. */
 export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  if (!billingEnabled()) return true;
   if (await hasPaidAppleModelAccess(ctx, ownerId)) return true;
+  if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   if (!billingConfigured()) return false;
   return (await editorSubscriptions(ctx, ownerId)).some(hasPaidEditorSubscriptionTerm);
 }
