@@ -48,7 +48,7 @@ import { copyTimelineClips, pasteTimelineClips } from '@/lib/editor/clipboard';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { MediaFileDropOverlay, useMediaFileDrop } from './media-file-drop';
 import { SegmentedTabs } from './segmented-tabs';
-import { useInspectorPreference } from './use-inspector-preference';
+import { readStoredPreference, useStoredPreference, writeStoredPreference } from './use-stored-preference';
 import { TextFontStyles } from './text-font-styles';
 import './editor-mode.css';
 import './live-edit.css';
@@ -92,6 +92,10 @@ export type EditorShellProps = {
 };
 
 const TIMELINE_MIN_HEIGHT = 160;
+const INSPECTOR_OPEN_KEY = 'revline-inspector-open';
+const SAFE_AREA_KEY = 'revline.safeArea';
+const MCP_CHAT_CLOSED_KEY = 'revline.mcpChatClosed';
+const decodeOpen = (stored: string | null) => stored === 'true';
 const TIMELINE_MAX_SHARE = .65;
 /** A panel's imperative API throws until its group has measured it (first paint, leaving compact); until then there is nothing to read or move. */
 const measured = <T,>(read: () => T): T | undefined => { try { return read(); } catch { return undefined; } };
@@ -134,8 +138,8 @@ export function EditorShell(p: EditorShellProps) {
   const [clipboard, setClipboard] = useState<Clip[]>([]);
   // Safe-area preview is a per-browser viewing preference, not part of the edit.
   const [safeArea,setSafeArea]=useState<SafeAreaPlatform|null>(null);
-  useEffect(()=>{const saved=localStorage.getItem('revline.safeArea');if(saved==='instagram'||saved==='tiktok')setSafeArea(saved);},[]);
-  const changeSafeArea=useCallback((next:SafeAreaPlatform|null)=>{setSafeArea(next);if(next)localStorage.setItem('revline.safeArea',next);else localStorage.removeItem('revline.safeArea');},[]);
+  useEffect(()=>{const saved=readStoredPreference(SAFE_AREA_KEY);if(saved==='instagram'||saved==='tiktok')setSafeArea(saved);},[]);
+  const changeSafeArea=useCallback((next:SafeAreaPlatform|null)=>{setSafeArea(next);writeStoredPreference(SAFE_AREA_KEY,next);},[]);
   useEffect(() => { setClipboard([]); }, [p.projectId]);
   const [croppingClip, setCroppingClip] = useState<string | null>(null);
   useEffect(() => { if (editing) setCroppingClip(null); }, [editing]);
@@ -177,7 +181,7 @@ export function EditorShell(p: EditorShellProps) {
   const mobileChat = compact && mobileConversation;
   // The media panel stays mounted so it can slide open and closed; widths animate only during a toggle, never while dragging.
   const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);const [inspectorMotion,setInspectorMotion]=useState(false);const inspectorMoving=useRef(false);inspectorMoving.current=inspectorMotion;
-  const [inspectorOpen, setInspectorOpen] = useInspectorPreference();
+  const [inspectorOpen, setInspectorOpen] = useStoredPreference(INSPECTOR_OPEN_KEY, decodeOpen, String);
   useEffect(() => { if (params.get('panel') === 'footage') setInspectorOpen(true); }, [params, setInspectorOpen]);
   useEffect(() => { const panel = inspectorPanel.current; if (panel && !compact && inspectorOpen === measured(() => panel.isCollapsed())) setInspectorMotion(true); }, [inspectorOpen, compact, inspectorPanel]);
   useEffect(() => {
@@ -239,13 +243,13 @@ export function EditorShell(p: EditorShellProps) {
   useLayoutEffect(()=>{
     mcpChatReady.current=false;
     if(!p.externalAgent||compact)return;
-    if(localStorage.getItem('revline.mcpChatClosed')==='1'){chatPanel.current?.collapse();}
-    const settle=requestAnimationFrame(()=>{if(localStorage.getItem('revline.mcpChatClosed')==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
+    if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1'){chatPanel.current?.collapse();}
+    const settle=requestAnimationFrame(()=>{if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
     return ()=>cancelAnimationFrame(settle);
   },[p.externalAgent,compact,conversationVisible,preparing,chatPanel]);
   useEffect(()=>{
     if(!p.externalAgent||compact||!mcpChatReady.current)return;
-    if(chatCollapsed)localStorage.setItem('revline.mcpChatClosed','1');else localStorage.removeItem('revline.mcpChatClosed');
+    writeStoredPreference(MCP_CHAT_CLOSED_KEY,chatCollapsed?'1':null);
   },[chatCollapsed,p.externalAgent,compact]);
   useLayoutEffect(() => {
     const body = bodyRef.current;
