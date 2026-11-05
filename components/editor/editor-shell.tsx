@@ -36,7 +36,7 @@ import type { UploadProgress } from './footage-panel';
 import type { ClaudeModelChoice,EditorReasoningEffort,EditorSpeedMode } from '@/lib/ai/claude-model';
 import { AssistantPanel } from './assistant-panel';
 import type { ChatMessage } from './chat-types';
-import type { ComposerAttachment } from '@/components/workspace/edit-composer';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import type { AssistantEditSnapshot } from './assistant-results';
 import { ExportDialog, type ExportSettings, type ExportState } from './export-dialog';
 import type { TimelineTab, TimelineTabActions } from './timeline-tabs';

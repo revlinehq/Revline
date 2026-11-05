@@ -13,7 +13,7 @@ import { HORMOZI_DEMO_ASSET, hormoziDemoPlan } from '@/lib/editor/hormozi-demo';
 import { RACING_DEMO_ASSETS, racingDemoPlan } from '@/lib/editor/racing-demo';
 import { F1_RECORDING_ASSETS, f1RecordingDemoPlan } from '@/lib/editor/f1-recording-demo';
 import {timelineDuration,type MediaAsset,type Timeline} from '@/lib/editor/types';
-import type { ComposerAttachment } from '@/components/workspace/edit-composer';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import { stockAudioAsset } from '@/lib/editor/stock-audio';
 import { userError } from '@/lib/user-error';
 import { TIMELINE_BASE_PX } from '@/lib/editor/timeline-zoom';

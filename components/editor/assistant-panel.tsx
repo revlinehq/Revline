@@ -11,7 +11,8 @@ import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useM
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { useAssistantComposerControls } from './assistant-composer-controls';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
-import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
+import { EditComposer } from '@/components/workspace/edit-composer';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
 import { useQuery, useMutation } from 'convex/react';
