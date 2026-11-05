@@ -11,14 +11,13 @@ import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotio
 import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
 import { maskSources } from './masks';
-import { audioReactiveSources, hasReactiveEffects } from './audio-reactive';
-import { colorFinishSource } from './color-finish';
+import { audioReactiveSources } from './audio-reactive';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { validateVisualFade } from './visual-fades';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
-import { validateVisualEffects, visualEffectsOf } from './visual-effects';
-import { cameraGlideBlurSource } from './camera-motion-blur';
+import { validateVisualEffects } from './visual-effects';
+import { clipVisualEffectSource } from './visual-effect-sources';
 import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
@@ -281,7 +280,7 @@ const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip), parallax:clip.parallax, cameraGlideBlur:cameraGlideBlurSource(clip), effectKeyframes:clip.effectKeyframes, motionOffset:clip.motionOffset, ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}), ...(colorFinishSource(clip, timeline.luts) ? { colorFinish: colorFinishSource(clip, timeline.luts) } : {}) }] : []), fps, resolution)}
+${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...clipVisualEffectSource(clip, timeline.luts) }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColorSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});window.__revlineVisualEffects.installAudioReactive(${JSON.stringify(audioReactiveSources(timeline.clips)).replace(/</g, '\\u003c')});

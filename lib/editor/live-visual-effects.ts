@@ -1,13 +1,11 @@
-import { cameraGlideBlurSource } from './camera-motion-blur';
 import { compositionIndex } from './composition-node';
 import type { Clip, Timeline } from './types';
-import { validateVisualEffects, visualEffectsOf } from './visual-effects';
+import { validateVisualEffects } from './visual-effects';
+import { clipVisualEffectSource as effects } from './visual-effect-sources';
 import type { VisualEffectsController } from './visual-effects-runtime';
 import { maskSources, type MaskController } from './masks';
-import { audioReactiveSources, hasReactiveEffects, type AudioReactiveController } from './audio-reactive';
-import { colorFinishSource, type TimelineLut } from './color-finish';
-
-const effects = (clip:Clip,luts?:TimelineLut[])=>({...visualEffectsOf(clip),parallax:clip.parallax,cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset,...(hasReactiveEffects(clip.audioReactive)?{audioReactive:clip.audioReactive}:{}),...(colorFinishSource(clip,luts)?{colorFinish:colorFinishSource(clip,luts)}:{})});
+import { audioReactiveSources, type AudioReactiveController } from './audio-reactive';
+import type { TimelineLut } from './color-finish';
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null, luts?: TimelineLut[]): boolean {
   const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
