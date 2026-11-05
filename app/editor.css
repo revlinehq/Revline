@@ -320,25 +320,4 @@ body:has(.conversation-editor) :is(.visual-number,.visual-control-note){color:va
 .empty-drop-copy p{margin:0;font-size:12px;line-height:16px;color:#8c8c8c}
 .empty-drop-copy progress{width:180px;height:3px}
 
-.editor-app .hyperframes-host hyperframes-player{
-  --hfp-controls-bg:linear-gradient(transparent,#00000066);
-  --hfp-controls-gap:6px;
-  --hfp-controls-padding:2px 8px;
-  --hfp-color:#ddd;
-  --hfp-font:var(--font-geist),var(--font-inter),sans-serif;
-  --hfp-font-size:11px;
-  --hfp-accent:#eee;
-  --hfp-scrubber-bg:#ffffff30;
-  --hfp-scrubber-height:2px;
-  --hfp-scrubber-height-hover:2px;
-  --hfp-scrubber-radius:2px;
-  --hfp-speed-btn-bg:transparent;
-  --hfp-speed-btn-bg-hover:#ffffff0a;
-  --hfp-speed-btn-radius:4px;
-  --hfp-menu-bg:#222;
-  --hfp-menu-border:#363636;
-  --hfp-menu-radius:4px;
-  --hfp-menu-shadow:none;
-  --hfp-menu-color:#b5b5b5;
-  --hfp-menu-hover-bg:#2a2a2a;
-}
+.editor-app .hyperframes-host hyperframes-player{--hfp-scrubber-height:8px;--hfp-scrubber-height-hover:10px}

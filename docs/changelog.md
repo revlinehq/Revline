@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Player: Keep controls visible, thicken the seek bar, simplify play/pause icons, and show standalone playback in the track toolbar. Why: user requested simpler icons and an easy-to-use seek bar.
+
 - Player: Simplify controls with a thin white progress line, lighter spacing, and a subtle transparent backdrop. Why: user requested a minimal appearance.
 
 - Player: Match native Hyperframes controls to Revline’s fonts, neutral surfaces, compact spacing, and accent color. Why: user requested a customized player.

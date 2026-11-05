@@ -12,7 +12,8 @@ import { useEffect, useLayoutEffect, useRef, useState, useMemo, forwardRef, useI
 import { resolvedAudioTimeline } from '@/lib/editor/audio-normalization';
 import { audioFadeAttributes, audioVolumeEnvelope } from '@/lib/editor/audio-settings';
 import type { HyperframesPlayer } from '@hyperframes/player';
-import { LoaderCircle } from 'lucide-react';
+import { LoaderCircle, Play, Pause } from 'lucide-react';
+import { createPortal } from 'react-dom';
 import { calculateVisualRect, compositionTrackIndex, generateComposition, layerZIndex } from '@/lib/editor/composition';
 import { dimensions,normalizeTimeline,type Timeline,type MediaAsset,type Clip,type VisualTransform } from '@/lib/editor/types';
 import { VisualHandles } from './visual-controls';
@@ -52,7 +53,7 @@ function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as (Window&{__timelines?:{revline?:{time():number}}})|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
-export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
+export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;controls?:boolean;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,controls=true,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
   timeline=useMemo(()=>resolvedAudioTimeline(normalizeTimeline(committedTimeline)),[committedTimeline]);
   const selectedClip=inputSelectedClip?timeline.clips.find(clip=>clip.id===inputSelectedClip.id):undefined;
@@ -71,6 +72,24 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
   const mutedRef=useRef(muted);mutedRef.current=muted;
   useEffect(()=>{if(player.current)player.current.muted=muted;},[muted]);
   const [buffering,setBuffering]=useState(false);const [ready,setReady]=useState(false);const [revision,setRevision]=useState(0);const [reloadRevision,setReloadRevision]=useState(0);const [playerVersion,setPlayerVersion]=useState(0);const seekPosition=useRef(time);const seekRequest=useRef(0);const seekOwned=useRef(false);
+  const [controlIcons,setControlIcons]=useState<{play:HTMLElement;pause:HTMLElement}|null>(null);
+  useEffect(()=>{
+    const active=player.current;
+    if(!active)return;
+    active.toggleAttribute('controls',controls);
+    const shadow=active.shadowRoot;
+    if(shadow&&!shadow.querySelector('[data-revline-controls]')){
+      const style=document.createElement('style');
+      style.dataset.revlineControls='';
+      style.textContent='.hfp-controls.hfp-hidden{opacity:1!important;pointer-events:auto!important}';
+      shadow.append(style);
+    }
+    const play=active.shadowRoot?.querySelector<HTMLElement>('.hfp-ico-play');
+    const pause=active.shadowRoot?.querySelector<HTMLElement>('.hfp-ico-pause');
+    if(!controls||!play||!pause){setControlIcons(null);return;}
+    play.replaceChildren();pause.replaceChildren();
+    setControlIcons({play,pause});
+  },[controls,playerVersion]);
   // An unsettled seek leaves the runtime reporting its last settled time, so a
   // paused seek owns the preview clock until playback starts again.
   const playbackTime=(p:HyperframesPlayer|null)=>seekOwned.current&&(p?.paused??true)?seekPosition.current:frameTime(p,seekPosition.current);
@@ -268,7 +287,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     ? calculateVisualRect(asset.width,asset.height,canvas.width,canvas.height,selectedClip.crop,undefined,selectedClip.fit).window
     : {left:0,top:0,width:canvas.width,height:canvas.height};
   const cropActive=cropping&&ready&&selectedClip&&(selectedClip.kind==='image'||selectedClip.kind==='video')&&asset?.width&&asset?.height&&onCropCommit&&onCropCancel;
-  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview"><div ref={container} className="hyperframes-host" onPointerDownCapture={()=>{seekOwned.current=false;}} onKeyDownCapture={()=>{seekOwned.current=false;}}/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
+  return <div className={`preview-canvas aspect-${timeline.aspectRatio}`} data-testid="preview">{controlIcons&&<>{createPortal(<Play size={18} strokeWidth={1.5}/>,controlIcons.play)}{createPortal(<Pause size={18} strokeWidth={1.5}/>,controlIcons.pause)}</>}<div ref={container} className="hyperframes-host" onPointerDownCapture={()=>{seekOwned.current=false;}} onKeyDownCapture={()=>{seekOwned.current=false;}}/>{ready&&!cropActive&&onSelectClip&&<button type="button" className="preview-hit-surface" aria-label="Select footage in preview" onClick={event=>{
     event.stopPropagation();const rect=event.currentTarget.getBoundingClientRect();
     const point=event.detail===0?{x:canvas.width/2,y:canvas.height/2}:{x:(event.clientX-rect.left)/rect.width*canvas.width,y:(event.clientY-rect.top)/rect.height*canvas.height};
     const doc=player.current?.iframeElement?.contentDocument,composition=doc?.getElementById('composition')?.getBoundingClientRect();
