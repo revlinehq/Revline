@@ -672,7 +672,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const guardRender = async (baseline: Timeline, candidate: Timeline, times: number[]) => {
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
-      const deadline = Date.now() + 420_000;
+      // MCP transport expires before the in-app guard budget. Refuse before any save.
+      const deadline = Date.now() + (run.runId.startsWith('mcp-') ? 170_000 : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
