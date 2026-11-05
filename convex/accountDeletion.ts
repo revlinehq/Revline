@@ -6,7 +6,7 @@ import { internalMutation, type MutationCtx } from './_generated/server';
 import { beginProjectDeletion } from './projects';
 import { stopOwnedProject } from './assistant';
 import { releaseMediaObjects } from './lib/shared_media';
-import { cancelMediaTask } from './mediaTasks';
+import { cancelMediaTask } from './lib/media_queue';
 
 function isTable(name: string): name is TableNames { return Object.hasOwn(schema.tables, name); }
 const tables = Object.keys(schema.tables).filter(isTable).filter(name => name !== 'accountDeletions' && name !== 'accountDeletionRefs');

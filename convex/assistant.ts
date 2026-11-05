@@ -44,7 +44,7 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
-import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
 import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';

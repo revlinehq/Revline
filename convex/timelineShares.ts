@@ -6,7 +6,7 @@ import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
 import { internalAction,internalQuery,internalMutation,mutation,query } from './_generated/server';
 import { internal } from './_generated/api';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { timelineDuration } from '../lib/editor/types';
 import type { Id,Doc } from './_generated/dataModel';
 import { requireOwner,requireProject } from './lib/auth';

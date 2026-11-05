@@ -7,7 +7,7 @@ import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { compositionReviewBudget, compositionReviewWindow, countedReviewPlanIds, currentReviewPlanIds, MAX_COMPOSITION_REVIEW_ATTEMPTS } from '../lib/ai/composition-review';
 import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
-import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask } from './lib/media_queue';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 

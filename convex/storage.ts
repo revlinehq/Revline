@@ -4,7 +4,7 @@ import { addMediaClip } from '../lib/editor/operations';
 import { normalizeTimeline } from '../lib/editor/types';
 import { validateTimeline } from './lib/timeline';
 import { writeProject } from './lib/project_data';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity,uploadPreparationTasks } from './lib/account_limits';
 import { releaseAccountStorage,recordAssetStorage } from './lib/storage_accounting';
 import { releaseMediaObjects } from './lib/shared_media';

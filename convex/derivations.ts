@@ -11,7 +11,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { readProject } from './lib/project_data';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { editingWorkflowActive } from './lib/assistant_workflow';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { sourceEndOf } from '../lib/editor/playback-rate';
 
 /**

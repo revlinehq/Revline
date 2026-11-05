@@ -11,7 +11,7 @@ import { assetKind, r2UploadDocument } from './schema';
 import { mediaConfig, storageControl, hasPreview, PREVIEW_VERSION } from './lib/media_storage';
 import { signMediaToken } from '../lib/storage/media-tokens';
 import { requireMediaTask } from './lib/media_task_auth';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks, UPLOAD_RESERVATION_MS } from './lib/account_limits';
 import { releaseMediaObjects } from './lib/shared_media';
 import { releaseAccountStorage } from './lib/storage_accounting';

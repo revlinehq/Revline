@@ -22,7 +22,7 @@ import { parseShots } from '../lib/media-analysis/shots';
 import { validateReference } from '../lib/media-analysis/reference';
 import { serializedBytes, validateFocus } from "./lib/timeline";
 import { consumeUpload, issueUpload } from "./uploads";
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { stockAudio } from '../lib/editor/stock-audio';
 import { signMediaToken } from '../lib/storage/media-tokens';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';

@@ -2,7 +2,7 @@ import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { requireOwner } from './lib/auth';
 import { brandFileUrl, fontUrl } from './brandKits';

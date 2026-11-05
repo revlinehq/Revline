@@ -7,7 +7,7 @@ import { projectIdentity } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { currentTimeline } from './lib/timeline';
-import { cancelMediaTask, enqueueMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
 import type { Timeline } from '../lib/editor/types';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { sceneThumbKey } from '../lib/editor/scene-thumb-key';
