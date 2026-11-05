@@ -2,7 +2,8 @@ import { ConvexError, v } from 'convex/values';
 import { mutation, internalQuery, httpAction, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc } from './_generated/dataModel';
-import { mediaTaskCredentials, requireMediaTask } from './lib/media_task_auth';
+import { requireMediaTask } from './lib/media_task_auth';
+import { mediaTaskCredentials } from './lib/media_task_contract';
 import { pixelTrackHeaderValidator, pixelTrackSampleValidator, pixelTrackReferenceValidator, pixelTrackPageValidator } from './lib/pixel_track_validator';
 import { pixelTrackHeader, pixelTrackChunk, summarizePixelTrack, type PixelTrackPage } from '../lib/media-analysis/pixel-track';
 

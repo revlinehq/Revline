@@ -1,6 +1,6 @@
 import type { ConvexHttpClient } from 'convex/browser';
 import { api } from '../../convex/_generated/api';
-import type { MediaWorkItem } from '../../convex/mediaTasks';
+import type { MediaWorkItem } from '../../convex/lib/media_task_contract';
 import { MEDIA_PROCESSOR_VERSION } from '../media-analysis/processor-version';
 import { cacheJson } from '../media-analysis/frame-cache';
 import { retryMediaOperation } from '../media-analysis/network';

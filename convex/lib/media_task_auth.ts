@@ -1,10 +1,8 @@
-import { ConvexError, v } from 'convex/values';
+import { ConvexError } from 'convex/values';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 import { projectIdentity } from './project_data';
 import { MEDIA_LEASE_LOST } from '../../lib/media-analysis/errors';
-
-export const mediaTaskCredentials = { taskId: v.id('mediaTasks'), leaseToken: v.string() };
 
 /** Each worker type has its own credential: RENDER_WORKER_SECRET for the media processor
  *  (Cloudflare, local dev) and MEDIA_WORKER_SECRET_EXPORTS for dedicated export workers. An export

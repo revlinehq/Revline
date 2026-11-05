@@ -83,6 +83,7 @@ import type * as lib_lane_validators from "../lib/lane_validators.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
+import type * as lib_media_task_contract from "../lib/media_task_contract.js";
 import type * as lib_media_task_data from "../lib/media_task_data.js";
 import type * as lib_normalization_validator from "../lib/normalization_validator.js";
 import type * as lib_pacing_validator from "../lib/pacing_validator.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mcp_origin": typeof lib_mcp_origin;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;
+  "lib/media_task_contract": typeof lib_media_task_contract;
   "lib/media_task_data": typeof lib_media_task_data;
   "lib/normalization_validator": typeof lib_normalization_validator;
   "lib/pacing_validator": typeof lib_pacing_validator;

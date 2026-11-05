@@ -1,20 +1,15 @@
 import { geminiBillingUnavailable, recordGeminiBilling, usesGemini } from './lib/gemini_billing';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { readHighlights } from '../lib/media-analysis/highlights';
-import { clipCheckRequestValidator } from './lib/clipping_validator';
 import { recordClipCheck } from './clipping';
 import { frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { processorBackend } from './lib/processor_backend';
-import { subjectSelectionValidator } from './lib/pixel_track_validator';
-import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
-import { normalizationRequestValidator, normalizationResultValidator } from './lib/normalization_validator';
 import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchMediaTask, deleteMediaTask, scheduleCapacityAdmission } from './lib/media_task_data';
 import { hasMediaTaskCapacity } from './lib/account_limits';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
-import { compositionReviewResult,effectPlanValidator } from './lib/effect_plan';
 import { hydrateAsset,transportAsset } from './lib/asset_analysis';
 import { shouldUnderstandFootage } from '../lib/media-analysis/overview-policy';
 import { TRANSCRIPT_VERSION } from '../lib/media-analysis/transcript';
@@ -25,11 +20,12 @@ import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/work
 import { internal } from './_generated/api';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { highlightSourceTypeValidator, speakerRequestValidator, referenceBox,referenceCropKeyframesValidator, referenceReadResult, analysisValidator, assetWithUrl, frameInspectionValidator, frameRequestValidator, videoInspectionValidator, videoRequestValidator, mediaTaskKind, mediaTaskStatus, mediaTaskActivity, timelineValidator, waveformValidator, blueprintCheckResultValidator, blueprintLineValidator, blueprintPointValidator } from './schema';
+import { assetWithUrl, mediaTaskKind, mediaTaskStatus, mediaTaskActivity } from './schema';
 import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspection';
 import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspection';
 import { requireOwner, requireProject } from './lib/auth';
-import { mediaTaskCredentials, requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
+import { requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
+import { mediaTaskCredentials, workItem, taskResult, renderSnapshot, timelineFrames, reviewSnapshot, blueprintWork, type MediaWorkItem } from './lib/media_task_contract';
 import { mediaWorkflow } from './lib/workflows';
 import { hasPreview, mediaUrl, previewUrl, PREVIEW_VERSION } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
@@ -46,8 +42,6 @@ import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
-import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
-import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 
@@ -59,17 +53,6 @@ const IMPORT_PLACEMENT_DELAY_MS = 10_000, IMPORT_PLACEMENT_ATTEMPTS = 360;
 const FAIR_RUNNING_PER_OWNER = 1, FAIR_CLAIM_SCAN = 64;
 const eventResult = v.object({ success: v.boolean(), retryable: v.boolean(), error: v.optional(v.string()) });
 const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, status: mediaTaskStatus, progress: v.number(), attempt: v.number(), error: v.optional(v.string()), assetId: v.optional(v.id('assets')),activity:v.optional(mediaTaskActivity),activityStartedAt:v.optional(v.number()) });
-const renderSnapshot = v.object({ timeline: timelineValidator, assets: v.array(assetWithUrl), resolution: v.number(), fps: v.number(), quality: v.string() });
-const timelineFrames=v.object({resolution:v.optional(v.union(v.literal(720),v.literal(1080))),clipCheck:v.optional(clipCheckRequestValidator),cacheIdentity:v.optional(v.string()),normalization:v.optional(normalizationRequestValidator),comparison:v.optional(v.object({crop:v.optional(referenceBox),aspectRatio:v.optional(v.number())})),timeline:timelineValidator,baseline:v.optional(timelineValidator),assets:v.array(assetWithUrl),times:v.array(v.number()),card:v.optional(v.object({title:v.string()})),pacing:v.optional(pacingRequestValidator),motion:v.optional(v.object({start:v.number(),end:v.number()})),sound:v.optional(soundRequestValidator)});
-const reviewSnapshot=v.object({timeline:timelineValidator,reference:timelineValidator,plans:v.array(effectPlanValidator),assets:v.array(assetWithUrl),revision:v.number(),start:v.number(),end:v.number()});
-// A blueprint check: render scene code at an exact size, read pixels, or diff against a kit screen.
-const blueprintWork = v.object({ mode: v.union(v.literal('measure'), v.literal('compare'), v.literal('render')), width: v.number(), height: v.number(), code: v.optional(v.string()), brand: v.any(), screenUrl: v.optional(v.string()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-// A reading of a source video: a labeled frame sheet (with how much each frame changed), a tracked box, or pixels measured.
-const readWork = v.object({ comparisonIdentity:v.optional(v.string()), renderedUrl: v.optional(v.string()), mode: v.union(v.literal('sheet'), v.literal('track'), v.literal('measure'), v.literal('compare'), v.literal('trace'), v.literal('font'), v.literal('sounds'), v.literal('motion')), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), color: v.optional(v.string()), tolerance: v.optional(v.number()), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), rendered: v.optional(v.array(v.object({ time: v.number(), image: v.string() }))), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) });
-const workItem = v.object({previewRanges:v.optional(v.array(v.object({start:v.number(),end:v.number()}))),read:v.optional(readWork),review:v.optional(reviewSnapshot),snapshot:v.optional(timelineFrames),blueprint:v.optional(blueprintWork),cutout:v.optional(v.object({selection:v.optional(subjectSelectionValidator),start:v.number(),end:v.number(),fps:v.optional(v.number()),mode:v.optional(v.union(v.literal('person'),v.literal('foreground')))})),derive:v.optional(v.object({op:v.union(v.literal('freeze'),v.literal('slowmo'),v.literal('upscale'),v.literal('stats'),v.literal('parallax'),v.literal('pixelTrack')),tracking:v.optional(pixelTrackRequestValidator),start:v.number(),end:v.number(),selection:v.optional(subjectSelectionValidator),backgroundPrompt:v.optional(v.string()),time:v.optional(v.number()),times:v.optional(v.array(v.number())),factor:v.optional(v.number()),target:v.optional(v.number())})), ...mediaTaskCredentials, projectId: v.id('projects'), aiRunId:v.optional(v.string()), kind: mediaTaskKind, sourceUrl: v.optional(v.string()), importRange: v.optional(v.object({ start: v.number(), end: v.number() })), highlightSkipGemini:v.optional(v.string()),highlightSourceType:v.optional(highlightSourceTypeValidator),speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator), asset: v.optional(assetWithUrl), transcriptionAsset: v.optional(assetWithUrl), outputAssetId: v.optional(v.id('assets')), outputStored: v.optional(v.boolean()), render: v.optional(renderSnapshot), renderJobId: v.optional(v.id('renderJobs')) });
-export type MediaWorkItem = Infer<typeof workItem>;
-export const taskResult = v.object({pixelTrack:v.optional(pixelTrackResultValidator),read:v.optional(referenceReadResult),blueprint:v.optional(blueprintCheckResultValidator),colorStats:v.optional(v.array(v.any())),review:v.optional(compositionReviewResult),snapshot:v.optional(v.object({clipCheck:v.optional(v.string()),normalization:v.optional(normalizationResultValidator),frames:v.array(v.object({time:v.number(),image:v.string(),width:v.optional(v.number()),height:v.optional(v.number())})),differences:v.optional(v.array(v.number())),pacing:v.optional(pacingResultValidator),motion:v.optional(v.any()),sound:v.optional(soundResultValidator)})), analysis: v.optional(analysisValidator), frameInspection: v.optional(frameInspectionValidator), videoInspection: v.optional(videoInspectionValidator), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator) });
-export type MediaTaskResult = Infer<typeof taskResult>;
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.

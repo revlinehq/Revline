@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import puppeteer from 'puppeteer';
-import type { MediaWorkItem } from '../../convex/mediaTasks';
+import type { MediaWorkItem } from '../../convex/lib/media_task_contract';
 import { workerToolPath } from './worker-tool-path';
 
 const run = promisify(execFile);
