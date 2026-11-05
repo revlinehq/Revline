@@ -1,0 +1,7 @@
+# Exact historical false positives only. New commits and changed lines are scanned.
+# Documented API SHA-256 hashes, a GitHub Actions cache key, and public Clerk keys.
+1b45d70db565b9dfa3bf8311e4f4de0cb806952e:docs/isolated-development.md:generic-api-key:73
+4926e17af70bd4783fbf67747aeba18ac5d915ce:docs/isolated-development.md:generic-api-key:73
+5b31713b80e946b92ce0e918a1125388a76aa5b5:.github/workflows/ci.yml:generic-api-key:82
+e60deb24eed6c0250c724cb5a675e3e1ebf94c09:wrangler.jsonc:generic-api-key:43
+84725d48a6fee105b046932a73d404af83360b41:.github/workflows/ci.yml:generic-api-key:12
