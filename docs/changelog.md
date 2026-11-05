@@ -1,5 +1,12 @@
 ## 2026-11-04
 
+- Source frames: Reject empty receipts and return saved handles after transient result downloads. Why: first-call download failures hid resumable work (#87).
+
+- Reference comparison: Resume pending renders and pixel comparisons on the original frozen revision with scoped receipts. Why: #86 restarted cancelled work after MCP timeouts.
+
+- Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.
+
+- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
 - Editor skills: Author prose in Markdown and bundle it for all runtimes; sharpen measured recreation guidance. Why: user requested reviewable skills without changing readSkill.
 - Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
 
@@ -25,8 +32,6 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
-- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
-- Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.

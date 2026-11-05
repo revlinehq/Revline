@@ -29,6 +29,7 @@ import type * as brandKits from "../brandKits.js";
 import type * as brandScrape from "../brandScrape.js";
 import type * as briefs from "../briefs.js";
 import type * as clipping from "../clipping.js";
+import type * as comparisonContinuations from "../comparisonContinuations.js";
 import type * as compositionReview from "../compositionReview.js";
 import type * as crons from "../crons.js";
 import type * as cutouts from "../cutouts.js";
@@ -168,6 +169,7 @@ declare const fullApi: ApiFromModules<{
   brandScrape: typeof brandScrape;
   briefs: typeof briefs;
   clipping: typeof clipping;
+  comparisonContinuations: typeof comparisonContinuations;
   compositionReview: typeof compositionReview;
   crons: typeof crons;
   cutouts: typeof cutouts;

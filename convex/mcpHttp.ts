@@ -7,7 +7,7 @@ import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { requestMcpOrigin } from './lib/mcp_origin';
-import { REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
+import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
 // the OAuth 2.1 authorization server MCP clients discover from it.
@@ -62,7 +62,7 @@ function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, compa
 }
 
 const mcpHandler = httpAction(async (ctx, request) => {
-  const comparisonDeadline = Date.now() + REFERENCE_COMPARISON_BUDGET_MS;
+  const comparisonDeadline = Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS;
   let body: unknown;
   try { body = await request.json(); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
   // MCP 2025-06-18 removed JSON-RPC batching; one message per request keeps rate limits exact.
