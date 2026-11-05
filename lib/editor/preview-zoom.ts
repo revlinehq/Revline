@@ -1,5 +1,5 @@
 // Adapted from OpenCut's preview-viewport.tsx and zoom.ts.
-// MIT attribution: third-party/OpenCut-LICENSE.
+// MIT attribution: OpenCut-LICENSE.
 export const PREVIEW_ZOOM_PRESETS = [25, 50, 100, 150, 200] as const;
 export const PREVIEW_ZOOM_STEP = 1.25;
 export const PREVIEW_ZOOM_MIN = .01;

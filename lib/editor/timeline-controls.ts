@@ -3,7 +3,7 @@ import { textAnimationTimingPatch } from './text-animation-timing';
 import { anchoredFadeTimingPatch } from './fade-clock';
 import { textTemplateTimingPatch } from './remotion-text';
 // Adapted from OpenCut Classic's playhead, zoom, and edge-scroll controllers.
-// Copyright 2025–2026 OpenCut. MIT: third-party/OpenCut-LICENSE.
+// Copyright 2025–2026 OpenCut. MIT: OpenCut-LICENSE.
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, freeLayer, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
