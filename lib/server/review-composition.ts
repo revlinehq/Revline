@@ -57,7 +57,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
-  const resolution=snapshot.comparison&&!snapshot.motion?1080:720,size=dimensions(timeline.aspectRatio,resolution);
+  const resolution=snapshot.resolution??(snapshot.comparison&&!snapshot.motion?1080:720),size=dimensions(timeline.aspectRatio,resolution);
   await writeComposition(path,timeline,assets,assetUrls,resolution,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
   if(baseline)return guardFrames(snapshot,baseline,directory,path,assets,assetUrls,audioSourceOffsets,signal,onProgress);
@@ -136,6 +136,13 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     if(!meta.width||!meta.height)throw new AnalysisError('The comparison frame has no dimensions.',500);
     return sharp(image).extract(cropBounds(crop,meta.width,meta.height)).png().toBuffer();
   }));
+  if(snapshot.resolution===1080){
+    for(const quality of [85,75,65,55,45,35]){
+      const images=await Promise.all(pngs.map(png=>sharp(png).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
+      if(images.reduce((sum,image)=>sum+image.length,0)<=700_000)return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index],width:size.width,height:size.height}))};
+    }
+    throw new AnalysisError('The 1080p frame exceeds the inspection image budget; use a preview or inspect a different time.',400);
+  }
   for(const [size,quality] of (snapshot.comparison?[[1920,85],[1280,85],[1080,80],[768,75],[640,65],[512,55],[384,45]]:[[768,70],[640,60],[512,50],[384,45]])){
     const images=await Promise.all(pngs.map(png=>sharp(png).resize(size,size,{fit:'inside',withoutEnlargement:true}).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
     if(images.reduce((sum,image)=>sum+image.length,0)<=(snapshot.comparison?600_000:700_000))return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};

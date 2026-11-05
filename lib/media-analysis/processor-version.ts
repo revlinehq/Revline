@@ -9,4 +9,5 @@
 // 40: integrated highlight/clip checks with the reference motion runtime.
 // 41: lossless chunked transcript transport across worker and agent RPC boundaries.
 // 42: keep tracked crop keyframes on the extracted review/render source clock.
-export const MEDIA_PROCESSOR_VERSION = 42;
+// 43: explicit 1080p inspection must never be handled as a 720p preview.
+export const MEDIA_PROCESSOR_VERSION = 43;
