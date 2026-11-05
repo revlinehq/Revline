@@ -12,6 +12,7 @@ import { useAssistantComposerControls, type ComposerSettings } from './assistant
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import type { ComposerAttachment } from '@/lib/editor/composer-media';
+import { storeDraftText, storedDraftText } from '@/lib/editor/opening-request';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
 import { useQuery, useMutation } from 'convex/react';
@@ -173,14 +174,14 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
-  useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
+  useEffect(() => { try { setPrompt(draftKey ? storedDraftText(draftKey) : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
     const newUser = latestUser && latestUser.id !== pendingReply.previousUserId;
     const replied = newUser && messages.slice(messages.indexOf(latestUser) + 1).some(message => message.role !== 'user' && (message.text || message.steps?.length || message.tools?.length || message.status === 'success' || message.status === 'failed' || message.status === 'aborted'));
     if ((newUser && (running || replied)) || (error && error !== pendingReply.previousError)) setPendingReply(null);
   }, [messages, running, error, pendingReply]);
-  function changePrompt(value: string) { setPrompt(value); try { if (draftKey) sessionStorage.setItem(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
+  function changePrompt(value: string) { setPrompt(value); try { if (draftKey) storeDraftText(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
 
   async function stop() {
     setLocalError('');

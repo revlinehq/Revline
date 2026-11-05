@@ -18,6 +18,8 @@ import type { Transcript } from '../media-analysis/transcript';
 const ASPECT_RATIO_SHAPES = [['vertical', 9, 16], ['portrait-feed', 4, 5], ['square', 1, 1], ['classic', 4, 3], ['landscape', 16, 9]] as const;
 export type AspectRatio = typeof ASPECT_RATIO_SHAPES[number][0];
 export const ASPECT_RATIOS: readonly AspectRatio[] = ASPECT_RATIO_SHAPES.map(([ratio]) => ratio);
+/** The frame's width-to-height label, such as "16:9". */
+export function aspectRatioLabel(ratio: AspectRatio) { const [, width, height] = ASPECT_RATIO_SHAPES.find(([name]) => name === ratio)!; return `${width}:${height}`; }
 
 // Clip settings data. Validation and defaults live in the named settings module.
 

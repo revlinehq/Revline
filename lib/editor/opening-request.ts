@@ -24,6 +24,9 @@ export const storedDraftModel = (draftKey: string) => localStorage.getItem(`${dr
 export const storeDraftModel = (draftKey: string, value: string) => localStorage.setItem(`${draftKey}:model`, value);
 export const storedDraftEffort = (draftKey: string) => sessionStorage.getItem(`${draftKey}:effort`);
 export const storeDraftEffort = (draftKey: string, value: string) => sessionStorage.setItem(`${draftKey}:effort`, value);
+// The draft text itself lasts for the browser session. Both throw when storage is unavailable.
+export const storedDraftText = (draftKey: string) => sessionStorage.getItem(draftKey) ?? '';
+export const storeDraftText = (draftKey: string, value: string) => sessionStorage.setItem(draftKey, value);
 
 // New-project draft. Readers and writers throw when storage is unavailable; callers decide the fallback.
 export const newProjectBrief = () => sessionStorage.getItem(NEXT_BRIEF_KEY) ?? '';

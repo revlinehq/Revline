@@ -8,8 +8,9 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { PrimaryButton } from '@/components/workspace/primary-button';
-import { formatTime, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
+import { aspectRatioLabel, formatTime, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { timelineCover } from '@/lib/editor/timeline-cover';
+import { timelineSharePath } from '@/lib/editor/timeline-share';
 import type { ShareChatPreview, ShareChatPreviewMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
@@ -22,9 +23,6 @@ type Props = {
   onPublish: (chat?: ShareChatPreviewMessage[], timelineIds?: string[]) => Promise<string>; tabs?: ShareableTab[]; onRevoke: () => Promise<unknown>; publishDisabled?: boolean;
   chatPreview?: ShareChatPreview; onChatPreviewChange?: (enabled: boolean) => void;
 };
-const ratios = { landscape: '16:9', vertical: '9:16', square: '1:1', classic: '4:3', 'portrait-feed': '4:5' };
-export function timelineSharePath(shareId: string) { return `/editor/showcase/${encodeURIComponent(shareId)}`; }
-export function timelineShareCover(timeline: Timeline, assets: MediaAsset[], sceneThumbs?: Record<string, { time: number; image: string }[]>) { return timelineCover(timeline, assets, sceneThumbs); }
 
 export function ConnectedTimelineShareDialog({ projectId, onBeforePublish, ...props }: Omit<Props, 'status' | 'onPublish' | 'onRevoke'> & { projectId: Id<'projects'>; onBeforePublish: () => Promise<void> }) {
   const [previewEnabled, setPreviewEnabled] = useState(false);
@@ -54,7 +52,7 @@ function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, scen
   function toggleTab(id: string, on: boolean) { setPicked((tabs ?? []).filter(tab => tab.id === id ? on : selected.includes(tab.id)).map(tab => tab.id)); setCopied(false); }
   const shareId = localId !== undefined ? localId : status?.published ? status._id : null;
   const url = shareId ? `${origin}${timelineSharePath(shareId)}` : '';
-  const cover = timelineShareCover(timeline, assets, sceneThumbs);
+  const cover = timelineCover(timeline, assets, sceneThumbs);
   const chatPending = includeChat && chatPreview === undefined, noTabs = multiTab && !selected.length;
   function toggleChat(enabled: boolean) { setIncludeChat(enabled); onChatPreviewChange?.(enabled); setCopied(false); }
   async function publish() {
@@ -79,7 +77,7 @@ function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, scen
     <DialogContent className="timeline-share-dialog workspace-dialog">
       <DialogTitle>Share timeline</DialogTitle>
       <DialogDescription>Let people watch your edit and explore its timeline.</DialogDescription>
-      <div className="timeline-share-summary"><div className="timeline-share-cover">{cover ? <img src={cover} alt=""/> : <Film size={24} strokeWidth={1.25}/>}</div><div><strong>{title}</strong><span>{formatTime(timelineDuration(timeline))} · {ratios[timeline.aspectRatio]}</span></div></div>
+      <div className="timeline-share-summary"><div className="timeline-share-cover">{cover ? <img src={cover} alt=""/> : <Film size={24} strokeWidth={1.25}/>}</div><div><strong>{title}</strong><span>{formatTime(timelineDuration(timeline))} · {aspectRatioLabel(timeline.aspectRatio)}</span></div></div>
       <div className="timeline-share-access"><span><Globe size={16}/>Anyone with the link can view</span><p>Use timeline includes the edit and its original footage.</p></div>
       {multiTab && <fieldset className="timeline-share-tabs" disabled={!!busy}><legend>Timelines</legend><p>Viewers can switch between the timelines you include.</p>{tabs!.map(tab => <label key={tab.id}><input type="checkbox" checked={selected.includes(tab.id)} onChange={event => toggleTab(tab.id, event.currentTarget.checked)}/><span>{tab.name}</span><small>{formatTime(tab.duration)}</small></label>)}</fieldset>}
       <div className="timeline-share-chat"><label><span>Include chat history</span><input type="checkbox" role="switch" checked={includeChat} onChange={event => toggleChat(event.currentTarget.checked)} disabled={!!busy}/></label><p>{includeChat ? 'Only the messages in this preview will be shared. Later messages stay private.' : status?.published && status.includesChat ? 'This link already includes a chat snapshot. Update with this off to remove it.' : 'Your conversation stays private.'}</p>{includeChat && (chatPreview === undefined ? <p role="status">Loading chat preview…</p> : chatPreview.messages.length ? <details><summary>Preview {chatPreview.messages.length} messages</summary><SharedChatMessages messages={chatPreview.messages}/>{chatPreview.truncated && <p>Showing recent messages. Long messages may be shortened.</p>}</details> : <p>No messages to share.</p>)}</div>

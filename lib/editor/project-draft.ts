@@ -1,4 +1,4 @@
-import { FOOTAGE_DRAFT_KEY } from '@/lib/editor/opening-request';
+import { FOOTAGE_DRAFT_KEY } from './opening-request';
 
 // Browser-session draft footage. File objects remain local until an owned upload.
 const databaseName = 'revline-drafts';

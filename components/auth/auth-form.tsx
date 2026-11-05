@@ -8,7 +8,7 @@ import { LoaderCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PrimaryButton } from '@/components/workspace/primary-button';
-import { prepareExternalAuthRedirect } from '@/components/workspace/project-draft';
+import { prepareExternalAuthRedirect } from '@/lib/editor/project-draft';
 import { AuthFrame } from './auth-frame';
 import { OtpCodeInput } from './otp-code-input';
 import { safeAuthRedirect, sendEmailCode, verifyEmailCode } from './email-auth-flow';
