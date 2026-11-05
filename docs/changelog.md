@@ -1,5 +1,6 @@
 ## 2026-11-05
 
+- Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
 - Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
 
 ## 2026-11-04
