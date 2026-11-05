@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '@/convex/_generated/api';
-import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, PRODUCTION_CLAUDE_MODEL_CHOICES, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
+import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, OPENAI_EDIT_CHOICES as PRODUCTION_CLAUDE_MODEL_CHOICES, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { storeDraftEffort, storeDraftModel, storedDraftEffort, storedDraftModel } from '@/lib/editor/opening-request';
 
