@@ -8,7 +8,7 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, runAuthorLabel } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
@@ -458,7 +458,7 @@ export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),rev
   const fixes=row.fixes??[],existing=fixes.find(fix=>fix.clipId===args.clipId&&fix.summary===summary&&fix.verification===verification);
   if(existing)return {revision:row.revision,timelineId,fix:existing};
   if(fixes.length>=20)throw new ConvexError('This revision already has 20 fix records. Keep further details in the next saved fix.');
-  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:run.aiRunId?.startsWith('mcp-')?run.aiAgentName??'AI agent':'Revline agent'};
+  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:runAuthorLabel(run.aiRunId,run.aiAgentName)};
   await ctx.db.patch(row._id,{fixes:[...fixes,fix]});
   return {revision:row.revision,timelineId,fix};
 }});

@@ -1,4 +1,5 @@
 import { ConvexError, v } from "convex/values";
+import { isMcpRun } from "./lib/run_ids";
 import {
   internalMutation,
   internalQuery,
@@ -50,7 +51,7 @@ const runArgs = {
 const runKey = (runId: string) =>
   runId.startsWith("mcp-task:")
     ? runId
-    : runId.startsWith("mcp-")
+    : isMcpRun(runId)
       ? "mcp-clipping"
       : runId;
 const rowFor = (
