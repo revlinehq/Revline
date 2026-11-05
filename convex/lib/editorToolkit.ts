@@ -1,3 +1,4 @@
+import { retryAbortedTransaction } from './retry_aborted_transaction';
 import { materializeTranscript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
@@ -254,6 +255,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal, isReferenceAsset((input as { assetId?: string }).assetId));
+    if ('status' in result) {
+      const timelineId = readRunTab(run.runId);
+      return { ...result, nextAction: { ...result.nextAction, arguments: { ...result.nextAction.arguments, ...(timelineId ? { timelineId } : {}) } }, images: [] };
+    }
     let acrossCuts: string[] = [];
     if (name === 'readFrames') {
       const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number; crop?: object; momentsOnly?: boolean };
@@ -453,7 +458,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // Healthy worker heartbeats extend the durable request, but must not extend
     // an MCP call past its transport budget while it holds the edit lock.
     const waitDeadline = run.runId.startsWith('mcp-') ? Date.now() + 170_000 : Infinity;
-    const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
+    const requestId = await retryAbortedTransaction(() => ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection }), abortSignal);
     try {
       while (true) {
         abortSignal.throwIfAborted();
