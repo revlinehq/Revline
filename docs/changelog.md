@@ -8,6 +8,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
 - Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
