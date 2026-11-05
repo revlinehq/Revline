@@ -1,4 +1,5 @@
-import { EFFECT_CATALOG, type EffectPreset } from './clip-effects';
+import { EFFECT_CATALOG } from './clip-effects';
+import type { EffectPreset } from './types';
 import type { VisualEffects } from './visual-effects';
 type EffectIconName = Exclude<keyof VisualEffects, 'frameCorners' | 'lightSweep' | 'bloom'> | Exclude<EffectPreset, 'none' | 'zoom-blur'> | 'speed-up';
 

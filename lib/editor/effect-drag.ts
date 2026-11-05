@@ -1,7 +1,6 @@
-import { EFFECT_PRESETS, type EffectPreset } from './clip-effects';
 import { addEffectClip, patchClip } from './operations';
 import { visualEffectsPatch, VISUAL_EFFECT_KEYS, type VisualEffects } from './visual-effects';
-import { layerGroup, trackOf, type Timeline, type LayerGroup } from './types';
+import { EFFECT_PRESETS, layerGroup, trackOf, type EffectPreset, type Timeline, type LayerGroup } from './types';
 import { isTransitionPreset } from './clip-transitions';
 import { placeTransitionAt } from './transition-placement';
 

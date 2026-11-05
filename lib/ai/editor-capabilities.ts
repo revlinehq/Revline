@@ -1,13 +1,13 @@
 import { EFFECT_GUIDANCE,VISUAL_EFFECT_GUIDANCE,TEXT_ANIMATION_GUIDANCE,TEXT_APPEARANCE_GUIDANCE } from '../editor/effect-guidance';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES } from '../editor/effect-catalog';
-import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset, type TimedEffectPreset } from '../editor/clip-effects';
+import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset } from '../editor/clip-effects';
 import { TEXT_ANIMATION_LABELS,TEXT_ANIMATION_DESCRIPTIONS, TEXT_ANIMATION_PRESETS } from '../editor/text-effects';
 import { TEXT_LOOKS } from '../editor/text-looks';
 import { TEXT_FONTS } from '../editor/text-fonts';
 import { AUDIO_ROLES } from '../editor/audio-settings';
 import {TEXT_APPEARANCE_LIMITS,TEXT_TYPOGRAPHY_LIMITS} from '../editor/text-style';
 import {VISUAL_CANVAS_REFERENCE,VISUAL_TRANSFORM_LIMITS,MAX_SOURCE_CROP} from '../editor/visual-inputs';
-import {dimensions} from '../editor/types';
+import {dimensions, type TimedEffectPreset} from '../editor/types';
 import {VISUAL_FADE_MAX_SECONDS} from '../editor/visual-fades';
 import {STOCK_AUDIO_CATALOG} from '../editor/stock-audio';
 

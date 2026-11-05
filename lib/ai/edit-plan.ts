@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { TIMED_EFFECT_PRESETS } from '../editor/clip-effects';
+import { TIMED_EFFECT_PRESETS } from '../editor/types';
 import { TRANSITION_PRESETS } from '../editor/clip-transitions';
 import { TEXT_ANIMATION_PRESETS } from '../editor/text-effects';
 import { TEXT_LOOKS } from '../editor/text-looks';
