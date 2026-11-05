@@ -74,23 +74,11 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
-/** A tab's saved timeline with its scene code, for reading a tab without opening it. */
-export const tabTimeline = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  const timeline = args.timelineId === activeTabOf(project) ? currentTimeline(project) : await storedTabTimeline(ctx, project, args.timelineId);
-  if (!timeline) throw new ConvexError('That timeline no longer exists.');
-  return loadSceneCode(ctx, timeline);
-}});
-
 export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.id('projects'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
 }});
 
-/** How long the editor keeps showing an MCP agent as working after its last call. Agents
- * think between calls, and writing a film part for patchScene or addFilm can take several
- * minutes, so a short window drops the status mid-request and invites the user to edit over it. */
-export const AGENT_ACTIVE_MS = MCP_AGENT_IDLE_MS;
 /** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
  * and rewrites the marker only once it is half spent. */
 export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), taskId: v.optional(v.string()), agentClientId: v.optional(v.id('mcpConnections')), startedAt: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
@@ -98,14 +86,16 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   if (!id) return null;
   try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
+  // The editor keeps showing the agent as working for MCP_AGENT_IDLE_MS after its last call. Agents think between calls,
+  // and writing a film part for patchScene or addFilm can take several minutes, so a short window drops the status mid-request.
   if(args.taskId)await touchTaskAgent(ctx,args.ownerId,args.taskId,name,args.agentClientId,args.startedAt);
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
-  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
+  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return null;
   if (run) {
-    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
-    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+AGENT_ACTIVE_MS});
+    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
+    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+MCP_AGENT_IDLE_MS});
   }
-  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
   return null;
 }});
 
