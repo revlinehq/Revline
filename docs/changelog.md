@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Player: Simplify controls with a thin white progress line, lighter spacing, and a subtle transparent backdrop. Why: user requested a minimal appearance.
+
 - Player: Match native Hyperframes controls to Revline’s fonts, neutral surfaces, compact spacing, and accent color. Why: user requested a customized player.
 
 - Composer: Remove the aspect ratio button’s hover background and brighten its label instead. Why: user disliked the outer picker highlight.

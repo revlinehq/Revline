@@ -321,24 +321,24 @@ body:has(.conversation-editor) :is(.visual-number,.visual-control-note){color:va
 .empty-drop-copy progress{width:180px;height:3px}
 
 .editor-app .hyperframes-host hyperframes-player{
-  --hfp-controls-bg:#1e1e1ef2;
-  --hfp-controls-gap:8px;
-  --hfp-controls-padding:6px 10px;
-  --hfp-color:#e5e5e5;
+  --hfp-controls-bg:linear-gradient(transparent,#00000066);
+  --hfp-controls-gap:6px;
+  --hfp-controls-padding:2px 8px;
+  --hfp-color:#ddd;
   --hfp-font:var(--font-geist),var(--font-inter),sans-serif;
   --hfp-font-size:11px;
-  --hfp-accent:var(--revline-accent);
-  --hfp-scrubber-bg:#414141;
-  --hfp-scrubber-height:3px;
-  --hfp-scrubber-height-hover:4px;
+  --hfp-accent:#eee;
+  --hfp-scrubber-bg:#ffffff30;
+  --hfp-scrubber-height:2px;
+  --hfp-scrubber-height-hover:2px;
   --hfp-scrubber-radius:2px;
   --hfp-speed-btn-bg:transparent;
-  --hfp-speed-btn-bg-hover:#2a2a2a;
+  --hfp-speed-btn-bg-hover:#ffffff0a;
   --hfp-speed-btn-radius:4px;
   --hfp-menu-bg:#222;
   --hfp-menu-border:#363636;
-  --hfp-menu-radius:8px;
-  --hfp-menu-shadow:0 8px 24px #00000042;
+  --hfp-menu-radius:4px;
+  --hfp-menu-shadow:none;
   --hfp-menu-color:#b5b5b5;
   --hfp-menu-hover-bg:#2a2a2a;
 }
