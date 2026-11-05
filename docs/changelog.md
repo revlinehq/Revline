@@ -1,5 +1,6 @@
 ## 2026-11-05
 
+- Web app: the top nav links to the Revline Discord outside the editor. Why: give users one place to reach the community.
 - Editing harness: Replace the Fast/Precise choice with per-lane check recipes, raised to full checks only for export, publish or double-check requests, and serve one stable MCP tool list. Why: the founder made the lane the only thing that changes agent checks, and Codex never re-fetches tools/list.
 
 - Motion lane: Count each pacing sample's interval toward film coverage so 60 fps films can finish. Why: harness verification found fully checked films failing finish.

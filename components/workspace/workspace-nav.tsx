@@ -17,6 +17,7 @@ import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { Button } from '@/components/ui/button';
 import { WorkspaceAccountMenu } from './account-menu';
+import { DiscordLink } from './discord-link';
 import { Input } from '@/components/ui/input';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -144,6 +145,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
       {onShare && !demo && <Button variant="outline" size="md" className="workspace-nav-share" onClick={onShare} disabled={shareDisabled} aria-description={shareDisabled ? 'Add a clip to share' : 'Share a link to this timeline'}><Link2 size={14} /><span>Share</span></Button>}
       {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
+      {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
       <WorkspaceAccountMenu active={active} error={accountError} />
     </div>
   </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
