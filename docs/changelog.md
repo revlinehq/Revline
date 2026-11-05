@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Railway builds: Install the checksum-pinned beat model inside Docker instead of copying a generated model directory. Why: repository builds must not depend on a local prepared cache.
+
 - Worker hosting: Name Railway configuration mutations and preserve existing repository links. Why: Railway rejected the anonymous update during real staging.
 
 - Worker hosting: Permit exact-PR isolated staging queue validation, scoped-key CLI targeting, repository runtime checks and bounded chunk concurrency. Why: staging must prove real jobs before production promotion.
