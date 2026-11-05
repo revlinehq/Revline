@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ProcessingStatus } from './processing-status';
 import { parseVideoLink } from '@/lib/editor/video-link';
+import { readStoredPreference, writeStoredPreference } from '@/lib/stored-preference';
 import { MAX_MEDIA_TASK_ATTEMPTS } from '@/lib/media-analysis/errors';
 import './video-link-import.css';
 import { transferProgress } from '@/lib/editor/footage-progress';
@@ -61,8 +62,7 @@ export function VideoImportProgress({ task, onUpload, progressKey }: { task: Vid
   const submitting = useRef(false);
   const storageKey = `revline:import-notice:${task._id}`;
   useEffect(() => {
-    try { setDismissed(failed && localStorage.getItem(storageKey) === 'dismissed'); }
-    catch { setDismissed(false); }
+    setDismissed(failed && readStoredPreference(storageKey) === 'dismissed');
   }, [storageKey, failed]);
   if (task.status === 'completed' || task.status === 'cancelled' || failed && dismissed) return null;
   const attempt = Math.max(1, task.attempt);
@@ -83,7 +83,7 @@ export function VideoImportProgress({ task, onUpload, progressKey }: { task: Vid
       if (upload) onUpload();
       else {
         setDismissed(true);
-        try { localStorage.setItem(storageKey, 'dismissed'); } catch { /* Dismiss works without storage. */ }
+        writeStoredPreference(storageKey, 'dismissed');
       }
     } catch (error) { setActionError(userError(error, 'Could not stop this import. Please try again.')); }
     finally { submitting.current = false; setBusy(false); }
