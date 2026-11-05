@@ -25,13 +25,12 @@ import { projectPreviewBounds } from '@/lib/editor/preview-zoom';
 import type { SourceCrop } from '@/lib/editor/types';
 import { previewContentKey } from '@/lib/editor/preview-content-key';
 import { compositionNode, compositionIndex } from '@/lib/editor/composition-node';
-import { needsLiveMediaSync, updateLiveMediaContent } from '@/lib/editor/live-media-content';
+import { needsLiveMediaSync } from '@/lib/editor/live-media-content';
 import { updateLiveTextEffects } from '@/lib/editor/live-preview-effects';
-import { updateLiveScenes } from '@/lib/editor/live-scenes';
-import { previewVisualEffects, updateLiveVisualEffects } from '@/lib/editor/live-visual-effects';
-import { updateLiveVisualGeometry } from '@/lib/editor/live-visual-geometry';
+import { updateLivePreview } from '@/lib/editor/live-preview';
+import { previewVisualEffects } from '@/lib/editor/live-visual-effects';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
-import { previewAdjustmentEffect, updateLiveAdjustmentEffects } from '@/lib/editor/live-adjustment-effects';
+import { previewAdjustmentEffect } from '@/lib/editor/live-adjustment-effects';
 import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
 /** Assets the preview must load: every clip's media plus images and videos shown inside scenes. */
 const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>([...timeline.clips.map(clip=>clip.assetId),...sceneMediaAssetIds(timeline)]);
@@ -167,7 +166,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       const before=renderedTimeline.current??previous;
       const resolved=mediaSession.current?.resolveAssets(playbackAssets)??playbackAssets;
       const sourceChanged=current.clips.some(clip=>clip.assetId&&renderedAssets.current.find(asset=>asset._id===clip.assetId)?.url!==resolved.find(asset=>asset._id===clip.assetId)?.url);
-      const retained=updateLiveMediaContent(doc,before,current,resolved)&&updateLiveAdjustmentEffects(doc,before,current)&&updateLiveTextEffects(doc,before,current)&&updateLiveVisualEffects(doc,before,current)&&updateLiveVisualGeometry(doc,before,current,resolved)&&updateLiveScenes(doc,before,current);
+      const retained=updateLivePreview(doc,before,current,resolved);
       if(retained){
         mediaSession.current?.update(current,playbackAssets);updateLayers(active,current);
         if(sourceChanged||needsLiveMediaSync(before,current)){
@@ -276,7 +275,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
           const doc=p.iframeElement?.contentDocument;if(!doc)return;
           await loadPreviewRemotion(doc,current);
           if(cancelled)return;
-          updateLiveMediaContent(doc,stagedTimeline,current,prepared);updateLiveTextEffects(doc,stagedTimeline,current);updateLiveVisualEffects(doc,stagedTimeline,current);updateLiveVisualGeometry(doc,stagedTimeline,current,prepared);updateLiveScenes(doc,stagedTimeline,current);updateLiveAdjustmentEffects(doc,stagedTimeline,current);stagedTimeline=current;
+          updateLivePreview(doc,stagedTimeline,current,prepared,{continueAfterFailure:true});stagedTimeline=current;
           // Seeks while this replacement loads only reach the displayed player.
           const requested=seekRequest.current;
           playbackAssets=prepared;session.update(current,prepared);session.seek(seekPosition.current);updateLayers(p,current);
