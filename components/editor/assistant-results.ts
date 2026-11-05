@@ -113,7 +113,7 @@ export function liveActivity(replies: readonly ChatMessage[]): { label: string; 
   if (last?.type === 'thinking') return { label: 'Thinking' };
   if (last?.type === 'text') return { label: 'Writing the reply' };
   const step = last?.type === 'tools' ? last.steps.at(-1) : undefined;
-  if (!step || step.state !== 'running') return { label: 'Thinking about the next step' };
+  if (!step || step.state !== 'running') return { label: 'Working' };
   const title = typeof step.input?.title === 'string' ? step.input.title : undefined;
   if (step.name === 'addScene' || step.name === 'addScenes' || step.name === 'addFilm' || step.name === 'editScene' || step.name === 'patchScene') return { label: step.name === 'editScene' || step.name === 'patchScene' ? 'Changing scene code' : step.name === 'addFilm' ? 'Writing the film' : 'Writing scene code', ...(title ? { detail: title } : {}) };
   return { label: TOOL_LABELS[step.name]?.[0] ?? 'Running a step' };

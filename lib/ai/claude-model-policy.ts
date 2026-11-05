@@ -8,6 +8,7 @@ export const ANTHROPIC_EDIT_CHOICES = ['sonnet', 'opus'] as const;
 const ANTHROPIC_EDIT_MODEL_IDS = ['claude-sonnet-5-5', 'claude-opus-5-5'];
 /** Gemini editing models, offered when GOOGLE_GENERATIVE_AI_API_KEY is configured. */
 export const GOOGLE_EDIT_CHOICES = ['gemini-4-argon'] as const;
+export const EDITOR_MODEL_CATALOG = [...PRODUCTION_CLAUDE_MODEL_CHOICES, ...ANTHROPIC_EDIT_CHOICES, ...GOOGLE_EDIT_CHOICES] as const;
 export const GPT_ONLY_EDITING_ERROR = 'Revline editing supports GPT-6.1 Sol, GPT-6 Astra, GPT-6.1 Terra, Sonnet 5.5, Opus 5.5 and Gemini 4 Argon. Choose a supported model.';
 
 export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ((typeof PRODUCTION_CLAUDE_MODEL_CHOICES)[number] | (typeof ANTHROPIC_EDIT_CHOICES)[number] | (typeof GOOGLE_EDIT_CHOICES)[number])[] {
