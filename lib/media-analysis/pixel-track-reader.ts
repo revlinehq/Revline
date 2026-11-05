@@ -1,4 +1,5 @@
-import { pixelTrackPage, pixelTrackFileIndex, pixelTrackSample, type PixelTrackReference, type PixelTrackPage } from './pixel-track';
+import { pixelTrackPage, pixelTrackFileIndex, pixelTrackSample, type PixelTrackPage } from './pixel-track';
+import type { PixelTrackReference } from '../editor/types';
 import { z } from 'zod';
 import { abortableDelay } from './network';
 export type CompletedTrackPage = Extract<PixelTrackPage, { status: 'completed' }>;
