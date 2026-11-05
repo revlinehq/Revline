@@ -47,3 +47,5 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
   .new-conversation-empty .edit-composer-actions{gap:4px}
   .new-conversation-empty .assistant-model-picker .inspector-select-trigger{padding-inline:4px}
 }
+
+.new-conversation-actions-title{margin:0;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:500;line-height:18px;color:#aaa}

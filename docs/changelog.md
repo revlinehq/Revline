@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- New edit: Add a small “Start new edit” heading above Upload footage beneath the composer. Why: user requested a clearer label for starting from footage.
+
 - Storage uploads: Replace the blocking dialog with a compact, minimizable progress panel, readable filenames, total progress, and retries. Why: user reported the upload experience was confusing.
 
 - Storage: Remove the filter menu’s nested scrollbar and wrap media filters on small screens. Why: user reported awkward scrolling on the storage page.
