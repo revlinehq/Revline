@@ -144,6 +144,12 @@ function drawStill(video: HTMLVideoElement) {
   canvas.className = video.className;
   canvas.style.cssText = video.style.cssText;
   canvas.hidden = video.hidden;
+  // The hidden video retains its layout box. Overlay that box instead of
+  // placing a second normal-flow box after it (outside clipped containers).
+  const computed = getComputedStyle(video);
+  if (computed.position !== 'absolute' && computed.position !== 'fixed') {
+    Object.assign(canvas.style, { position: 'absolute', left: `${video.offsetLeft}px`, top: `${video.offsetTop}px`, margin: '0' });
+  }
   const width = video.offsetWidth, height = video.offsetHeight;
   Object.assign(canvas.style, { width: `${width}px`, height: `${height}px`, boxSizing: 'border-box', pointerEvents: 'none' });
   // Rasterized at the size it is drawn on screen, so a camera zoomed into the scene keeps the footage sharp.
@@ -153,7 +159,7 @@ function drawStill(video: HTMLVideoElement) {
   if (canvas.height !== pixelHeight) canvas.height = pixelHeight;
   const context = canvas.getContext('2d');
   if (!context) return;
-  const computed = getComputedStyle(video), fit = objectFitBox(computed.objectFit, computed.objectPosition, { width: video.videoWidth, height: video.videoHeight }, { width, height });
+  const fit = objectFitBox(computed.objectFit, computed.objectPosition, { width: video.videoWidth, height: video.videoHeight }, { width, height });
   context.setTransform(scale, 0, 0, scale, 0, 0);
   context.clearRect(0, 0, width, height);
   context.drawImage(video, fit.x, fit.y, fit.width, fit.height);
@@ -176,6 +182,10 @@ function syncVideos(time: number, fps: number) {
         const decoded = decodedVideoFrame(video, target, fps);
         video.currentTime = target;
         await Promise.all([seeked, decoded]);
+      } else if (!stillFrames.has(video)) {
+        // At source time zero there is no seek event. Wait for the initial
+        // decoded frame before freezing it into the canvas as well.
+        await decodedVideoFrame(video, target, fps);
       }
       // Seeked can land before the frame at the new time is decoded.
       if (video.readyState < 2 && !video.error) await mediaEvent(video, ['loadeddata', 'canplay', 'error'], 4000);
@@ -240,7 +250,8 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     } else if (data.type === 'seek') {
       try { if (adapter) void adapter.seekFrame(Math.round(data.time * fps)); else master?.seek(origin + data.time, false); } catch (error) { fail(error); }
       const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps), adapter?.settle()]).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
+      // Three VideoTextures must upload the decoded video frame before their final draw.
+      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => adapter?.settle()).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
     }
   });
   post({ type: 'ready' });
