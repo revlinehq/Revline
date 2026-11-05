@@ -21,6 +21,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - MCP: Resolve sessionless calls by an unambiguous explicit project and timeline. Why: transport session IDs are optional, so task context must remain addressable without borrowing another conversation.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
+- Analysis tools: Preserve exact sound range endpoints and overlap sub-minimum continuation tails; return compact effect-plan acknowledgments. Why: rounded bounds produced invalid follow-ups and repeated plans inflated context.
+- Analysis tools: Require exact brand names or aliases and accept small UI capture dimensions. Why: substring matches returned unrelated logos and valid composer captures were refused.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
 - Reel and captions: Clean one-take rough cuts at their natural duration and default new subtitles to minimal text without a background. Why: fixed duration, forced normalization and boxed subtitles distorted the intended edit.
 - Deployment: Retry reset connections when reading Fly preflight status within its existing deadline. Why: a transient TLS reset aborted the latest main release after its image upload.
