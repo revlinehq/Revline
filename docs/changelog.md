@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Assistant models: Unlock every configured in-app model for paid subscriptions, including Sonnet and Opus, while trials stay on Terra Low. Why: the user wants model choice after trial conversion without an Ultra-only Claude restriction.
+
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
 
 - Frame reads: Round whole-source motion-scan timeouts to integer milliseconds. Why: Fractional media durations must produce valid Node process deadlines.
