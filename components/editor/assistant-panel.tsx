@@ -26,14 +26,14 @@ import { Message, MessageContent } from '@/components/ui/message';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
+import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot } from './assistant-results';
+import type { ChatMessage } from './chat-types';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { AssistantActivity } from './assistant-activity';
 import { AssistantHistoryExpansion } from './assistant-history-pagination';
-export type { ChatTool, ChatMessage } from './assistant-results';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};

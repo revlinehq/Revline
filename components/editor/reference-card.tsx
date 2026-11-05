@@ -1,6 +1,6 @@
 'use client';
 import { useRef, useState } from 'react';
-import type { ChatTool } from './assistant-results';
+import type { ChatTool } from './chat-types';
 import './reference-card.css';
 
 type Shot = { id: string; start: number; end: number; duration: number; transition: string; camera: string; onBeat?: boolean; description: string; parts: string[]; titles?: string[] };
