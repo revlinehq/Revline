@@ -40,7 +40,7 @@ These are Convex function paths, not URL paths. Their arguments and return types
 
 Project, media, export and task functions validate identity and ownership on the server. Sending a project ID does not grant access. The app never supplies a user ID to impersonate an owner. Published share lookup is deliberately public; omit `chat` when publishing unless the user explicitly includes selected conversation messages.
 
-The Next.js `/api/analyze`, `/api/extract-audio`, `/api/waveform`, `/api/beats`, and `/api/render` routes are web conveniences with browser-session authentication. A native app calls the corresponding Convex functions above directly. It does not need those cookie-based wrappers to be changed.
+There are no Next.js media or export routes to call: a native app calls the Convex functions above directly, as the web editor does.
 
 ## Upload sequence
 
