@@ -1,9 +1,10 @@
 ## 2026-11-04
 
-- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
-
+- Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
+- Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
 - MCP: Bound visual-guard waits and cancel abandoned guard renders before releasing edits. Why: Transport expiry could leave scoped patches holding the edit lock.
 - Scene capture: Decode bound video before the final Three draw and invalidate older captures. Why: #100 and #120 legacy playback captured black VideoTexture frames.
+- Video import: Route public X status links through the supported downloader. Why: #114 treated supported video posts as direct MP4 files.
 
 - Scene video: Overlay decoded still frames on video boxes and wait for the first decoded frame at zero. Why: original #100 captures omitted bound mascot imagery.
 - Assistant models: Unlock every configured in-app model for paid subscriptions, including Sonnet and Opus, while trials stay on Terra Low. Why: the user wants model choice after trial conversion without an Ultra-only Claude restriction.
@@ -21,6 +22,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
