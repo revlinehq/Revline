@@ -89,6 +89,39 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     if(!controls||!play||!pause){setControlIcons(null);return;}
     play.replaceChildren();pause.replaceChildren();
     setControlIcons({play,pause});
+    const scrubber=shadow?.querySelector('.hfp-scrubber');
+    let scrubbing=false,resumeAfterScrub=false,frame=0;
+    const begin=()=>{
+      cancelAnimationFrame(frame);
+      scrubbing=true;
+      resumeAfterScrub=mediaSession.current?.isPlaying()??!active.paused;
+    };
+    const finish=()=>{
+      if(!scrubbing)return;
+      scrubbing=false;
+      frame=requestAnimationFrame(()=>{
+        if(player.current!==active)return;
+        seekOwned.current=false;seekPosition.current=active.currentTime;
+        callbacks.current.onTime(active.currentTime);
+        if(resumeAfterScrub){
+          if(mediaSession.current)mediaSession.current.play();else active.play();
+        }else callbacks.current.onPlaying(false);
+      });
+    };
+    scrubber?.addEventListener('mousedown',begin,true);
+    scrubber?.addEventListener('touchstart',begin,{capture:true,passive:true});
+    document.addEventListener('mouseup',finish);
+    document.addEventListener('touchend',finish);
+    document.addEventListener('touchcancel',finish);
+    return()=>{
+      cancelAnimationFrame(frame);
+      scrubber?.removeEventListener('mousedown',begin,true);
+      scrubber?.removeEventListener('touchstart',begin,true);
+      document.removeEventListener('mouseup',finish);
+      document.removeEventListener('touchend',finish);
+      document.removeEventListener('touchcancel',finish);
+    };
+
   },[controls,playerVersion]);
   // An unsettled seek leaves the runtime reporting its last settled time, so a
   // paused seek owns the preview clock until playback starts again.

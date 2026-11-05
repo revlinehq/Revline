@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Player: Preserve play or pause state when using the preview seek bar. Why: user reported seeking unexpectedly paused playback.
+
 - Timeline: Keep playback, edit, and view controls aligned in one toolbar row at narrower widths. Why: user reported playback was separated below the other controls.
 
 - Timeline: Remove the inherited margin before the playback time. Why: user requested tighter toolbar controls.
