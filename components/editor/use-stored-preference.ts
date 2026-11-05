@@ -1,23 +1,12 @@
 'use client';
 
 import { useCallback, useSyncExternalStore } from 'react';
+import { readStoredPreference, writeStoredPreference } from '@/lib/stored-preference';
 
-// Per-browser viewing preferences. Storage can be unavailable (private mode,
-// blocked site data), so every read and write is guarded and the current
-// session keeps the latest choice in memory.
+// Per-browser viewing preferences. Reads and writes are guarded, and the
+// current session keeps the latest choice in memory when storage is unavailable.
 const sessionValues = new Map<string, string | null>();
 const changedEvent = 'revline:preference-changed';
-
-export function readStoredPreference(key: string): string | null {
-  try { return localStorage.getItem(key); }
-  catch { return null; }
-}
-
-/** null removes the preference. */
-export function writeStoredPreference(key: string, value: string | null) {
-  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); }
-  catch { /* Keep the preference for this session when storage is unavailable. */ }
-}
 
 function currentValue(key: string) {
   return sessionValues.has(key) ? sessionValues.get(key)! : readStoredPreference(key);
