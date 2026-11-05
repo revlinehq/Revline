@@ -80,6 +80,7 @@ import type * as lib_incidents from "../lib/incidents.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
 import type * as lib_laneFinish from "../lib/laneFinish.js";
 import type * as lib_lane_validators from "../lib/lane_validators.js";
+import type * as lib_mcp_limits from "../lib/mcp_limits.js";
 import type * as lib_mcp_origin from "../lib/mcp_origin.js";
 import type * as lib_media_storage from "../lib/media_storage.js";
 import type * as lib_media_task_auth from "../lib/media_task_auth.js";
@@ -225,6 +226,7 @@ declare const fullApi: ApiFromModules<{
   "lib/inspectTimeline": typeof lib_inspectTimeline;
   "lib/laneFinish": typeof lib_laneFinish;
   "lib/lane_validators": typeof lib_lane_validators;
+  "lib/mcp_limits": typeof lib_mcp_limits;
   "lib/mcp_origin": typeof lib_mcp_origin;
   "lib/media_storage": typeof lib_media_storage;
   "lib/media_task_auth": typeof lib_media_task_auth;

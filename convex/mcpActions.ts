@@ -18,14 +18,13 @@ import { createEditorToolkit } from './lib/editorToolkit';
 import { toolBehavior } from '../lib/ai/tool-definitions';
 import { mediaDownloadUrl } from './lib/media_storage';
 import { readRunId } from './lib/run_ids';
+import { CALL_LIMIT_MS } from './lib/mcp_limits';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 import { startLocalUpload, mediaKind } from './mcpUploads';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
-// An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
-const CALL_LIMIT_MS = 9 * 60_000;
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 // These shared tools resolve their target from an owner-checked upload/job ID,
 // not a lane task. Their IDs must never be interpreted as lane task IDs.

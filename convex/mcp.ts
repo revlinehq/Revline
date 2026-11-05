@@ -31,6 +31,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
 import { touchTaskAgent } from './mcpConnections';
 import { MCP_AGENT_IDLE_MS } from '../lib/mcp/agent-identity';
+import { MCP_RUN_LIMIT } from './lib/mcp_limits';
 
 // Project-level work for the MCP server. Every function receives the owner the
 // bearer token resolved to; nothing here trusts a client-supplied identity.
@@ -70,7 +71,6 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 }
 
 /** One MCP tool call is one AI run: the same lock, live preview and undo group as an in-app edit. */
-const MCP_RUN_LIMIT = 11 * 60_000;
 const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
