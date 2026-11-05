@@ -6,7 +6,7 @@ description: "The user shares a video to remake or to take style from (an edit, 
 
 The user shares a finished video and wants either a **remake** (the same edit made with their own material) or a **style borrow** (one or more parts of it applied to their edit).
 
-For original work inspired by a reference, read motion-design page `taste`: extract the reasons behind its choices and find a new expression. The remake and borrow workflows below apply when the user asks to reproduce or apply specific parts.
+For original work inspired by a reference, follow motion-design "A style reference": borrow the reasons behind its choices, never its imagery, layout or timing.
 
 ## 1. Break it down
 - Run analyzeMedia with mode reference on the shared video. It measures the cuts and beats, then splits every shot into parts: transition in, camera, look, the screen's parts (background, footage, ui, title, caption, logo, product, person, cursor, shape, emoji, overlay) and title styles. It also writes the five-line style direction and the signatures (the moves that define the style).

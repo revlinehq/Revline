@@ -1,4 +1,5 @@
 ## 2026-11-05
+- Motion skills: taste page removed (user likes/dislikes moved into motion-design); blueprints now cover only screenshot-to-HTML rebuilds. Why: the user wanted no motion guidance outside motion-design.
 - Motion skills: motion guidance now lives only in motion-design (gsap is now a pure library reference; transition recipes moved out of it; taste keeps only user preferences and reference learning). Why: the user wants one place that controls how films move.
 - Motion skills: frame-clock rules now live only in gsap page revline; taste no longer repeats ideation; the React example uses measured timing instead of the 0.8 s blur. Why: repeated and conflicting rules confused the agent.
 - Motion skills: removed rules repeated across motion-design, scene-engine and the checklist (brief, build/edit mechanics, timing and sound checks, reference workflow). Why: duplicates made the agent read the same instruction twice.
