@@ -1,7 +1,7 @@
 import { deriveTracks, normalizeTimeline, trackOf, type Timeline } from './types';
 import { isTransitionClip } from './clip-transitions';
 // OpenCut Classic timeline/components/layout.ts and track-layout.ts.
-// MIT notice: OpenCut-LICENSE.
+// MIT notice: NOTICE.
 export const TIMELINE_RULER_HEIGHT=28;
 // Time zero starts flush against the timeline lane's left edge.
 export const TIMELINE_ORIGIN=0;
