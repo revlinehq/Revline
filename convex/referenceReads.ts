@@ -7,8 +7,7 @@ import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
-import type { MotionMap } from '../lib/inspo-motion/motion-map';
-import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceReadResult, referenceCropKeyframesValidator } from './schema';
+import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceCropKeyframesValidator } from './schema';
 import { READ_TOOL_INPUTS } from './lib/reference_reads';
 
 // The reference-read rows and their lifecycle. The runners that queue a read and wait for the worker are in lib/reference_reads.

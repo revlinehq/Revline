@@ -32,7 +32,7 @@ export const READ_TOOL_DESCRIPTIONS = {
 export type ReadToolName = keyof typeof READ_TOOL_INPUTS;
 type ReadResult = Infer<typeof referenceReadResult>;
 
-export type PendingFrames = { status: 'pending'; checkId: string; nextAction: { tool: 'readFrames'; arguments: Record<string, unknown> }; note: string };
+type PendingFrames = { status: 'pending'; checkId: string; nextAction: { tool: 'readFrames'; arguments: Record<string, unknown> }; note: string };
 
 async function runSourceFrames(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, input: object, signal?: AbortSignal, recreation = false): Promise<ReadResult | PendingFrames> {
   const deadline = Date.now() + 45_000;
