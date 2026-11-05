@@ -2,6 +2,7 @@ import { comparisonCrop, referenceCropKeyframes, type ComparisonCrop, type Refer
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { ConvexError, v, type Infer } from 'convex/values';
 import { z } from 'zod';
+import { parse } from 'convex-helpers/validators';
 import { internalMutation, internalQuery, type ActionCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
@@ -18,7 +19,7 @@ import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenc
 const box = z.object({ x: z.number().min(0), y: z.number().min(0), w: z.number().positive(), h: z.number().positive() });
 const window = { assetId: z.string().min(1), start: z.number().min(0).describe('SOURCE seconds.'), end: z.number().min(0).describe('SOURCE seconds.') };
 export const READ_TOOL_INPUTS = {
-  readFrames: z.object({ ...window, times:z.array(z.number().nonnegative()).min(1).max(30).optional().describe('Explicit SOURCE seconds instead of evenly spaced count. Batch up to 12 sparse stills across shortlisted clipping candidates; set start/end to the first/last time and stillsOnly:true.'), count: z.number().int().min(1).max(30).optional().describe('Frames spread evenly from start to end (default 8, up to 30).'), fps: z.number().min(1).max(120).optional().describe('Consecutive source frames at this rate, up to 30 per call. For recreation use the source fps returned by an initial read; shorten each window to fit 30 frames.'), stillsOnly: z.boolean().optional().describe('Return only the requested still frames; skip the automatic 10 fps motion map. Use true for clipping context and framing.'), momentsOnly: z.boolean().optional().describe('Return only the map, no image: every moment (up to 80) and every hold (a second or more where the picture all but stops) from start to end. Cheap on any length, so read a long clip whole this way first.'), crop: box.optional().describe('Zoom into this part of the frame, in source pixels, to read small type, icons and edges.') }).strict(),
+  readFrames: z.object({ ...window, checkId: z.string().min(1).optional().describe("Resume the saved source read using exactly the original arguments from nextAction."), times:z.array(z.number().nonnegative()).min(1).max(30).optional().describe('Explicit SOURCE seconds instead of evenly spaced count. Batch up to 12 sparse stills across shortlisted clipping candidates; set start/end to the first/last time and stillsOnly:true.'), count: z.number().int().min(1).max(30).optional().describe('Frames spread evenly from start to end (default 8, up to 30).'), fps: z.number().min(1).max(120).optional().describe('Consecutive source frames at this rate, up to 30 per call. For recreation use the source fps returned by an initial read; shorten each window to fit 30 frames.'), stillsOnly: z.boolean().optional().describe('Return only the requested still frames; skip the automatic 10 fps motion map. Use true for clipping context and framing.'), momentsOnly: z.boolean().optional().describe('Return only the map, no image: every moment (up to 80) and every hold (a second or more where the picture all but stops) from start to end. Cheap on any length, so read a long clip whole this way first.'), crop: box.optional().describe('Zoom into this part of the frame, in source pixels, to read small type, icons and edges.') }).strict(),
   listenReference: z.object({ ...window }).strict(),
   trackReference: z.object({ ...window, box: box.describe('The element box in source pixels at frameTime (default start).'), frameTime: z.number().min(0).optional().describe('SOURCE time of a visible seed frame inside the window. Tracks both directions from this frame.'), backgroundTime: z.number().min(0).optional().describe('SOURCE time with a clean background and the element absent. Requires a fully opaque seed at frameTime; enables calibrated opacity.') }).strict(),
   measureFrame: z.object({ assetId: z.string().min(1), time: z.number().min(0).describe('SOURCE seconds.'), points: z.array(z.object({ x: z.number(), y: z.number(), label: z.string().max(60).optional() })).max(60).optional(), lines: z.array(z.object({ axis: z.enum(['x', 'y']).describe('y = horizontal row (fixed y=at, scan x); x = vertical column (fixed x=at, scan y). Bounds follow the scanned axis.'), at: z.number(), from: z.number(), to: z.number(), label: z.string().max(60).optional() })).max(20).optional() }).strict().refine(input => (input.points?.length ?? 0) + (input.lines?.length ?? 0) > 0, { message: 'Measure at least one point or line.' }),
@@ -65,6 +66,70 @@ export const get = internalQuery({ args: { ownerId: v.string(), readId: v.id('re
   return { status: read.status, ...(read.error ? { error: read.error } : {}), ...(read.result ? { result: read.result } : {}), ...(read.resultStorageId ? { resultStorageId: read.resultStorageId } : {}) };
 }});
 
+/** Source evidence is independent of the editor timeline, but bound to its original source request. */
+export const resumeFrames = internalQuery({
+  args: { ownerId: v.string(), projectId: v.id('projects'), checkId: v.string(), input: v.any() },
+  returns: v.id('referenceReads'),
+  handler: async (ctx, args) => {
+    await requireEditorAccess(ctx, args.ownerId);
+    await requireProject(ctx, args.projectId, args.ownerId, false);
+    const id = ctx.db.normalizeId('referenceReads', args.checkId);
+    const read = id ? await ctx.db.get(id) : null;
+    const input = READ_TOOL_INPUTS.readFrames.parse(args.input);
+    const assetId = ctx.db.normalizeId('assets', input.assetId);
+    const asset = assetId ? await ctx.db.get(assetId) : null;
+    if (!read || read.ownerId !== args.ownerId || read.projectId !== args.projectId || read.assetId !== assetId || read.mode !== 'sheet' || read.createdAt + 600_000 <= Date.now() || !asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId) throw new ConvexError('Source frame check not found for this request.');
+    for (const key of ['start', 'end', 'times', 'count', 'fps', 'stillsOnly', 'momentsOnly', 'crop'] as const) {
+      if (JSON.stringify(key === 'crop' && read.crop ? [read.crop.x, read.crop.y, read.crop.w, read.crop.h] : read[key]) !== JSON.stringify(key === 'crop' && input.crop ? [input.crop.x, input.crop.y, input.crop.w, input.crop.h] : input[key])) throw new ConvexError('Resume source frames with the original arguments from nextAction.');
+    }
+    return read._id;
+  },
+});
+
+export type PendingFrames = { status: 'pending'; checkId: string; nextAction: { tool: 'readFrames'; arguments: Record<string, unknown> }; note: string };
+
+async function runSourceFrames(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, input: object, signal?: AbortSignal, recreation = false): Promise<ReadResult | PendingFrames> {
+  const deadline = Date.now() + 45_000;
+  const { checkId, assetId, ...work } = READ_TOOL_INPUTS.readFrames.parse(input);
+  let readId = checkId ? await ctx.runQuery(internal.referenceReads.resumeFrames, { ownerId, projectId, checkId, input }) : undefined;
+  if (!readId) {
+    const cached = await ctx.runAction(internal.frameCache.readResult, { ownerId, projectId, assetId, work: { mode: 'sheet', ...work } });
+    if (cached) return parse(referenceReadResult, cached);
+    for (let attempt = 0; !readId; attempt++) {
+      if (signal?.aborted) throw new Error('Stopped.');
+      try { readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'sheet', ...work, ...(recreation ? { recreation } : {}) }); }
+      catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (Date.now() + 2000 >= deadline || (!/too many media jobs processing/i.test(message) && !(attempt < 5 && /changed while this mutation was being run/i.test(message)))) throw error;
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  while (Date.now() < deadline) {
+    if (signal?.aborted) throw new Error('Stopped.');
+    const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
+    if (state.status === 'failed') {
+      await ctx.runMutation(internal.referenceReads.discard, { readId });
+      throwReadFailure(state.error, 'The frames could not be read');
+    }
+    if (state.status === 'completed') {
+      // Poll without taking: validation and file retrieval must succeed before cleanup.
+      try {
+        const result = parse(referenceReadResult, state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead, { ownerId, readId, retain: true, deadline }) : state.result);
+        await ctx.runMutation(internal.referenceReads.discard, { readId });
+        return result;
+      } catch (error) {
+        const data = (error as { data?: { code?: string } })?.data;
+        if (data?.code === 'REFERENCE_READ_DOWNLOAD_RETRY') break;
+        await ctx.runMutation(internal.referenceReads.discard, { readId });
+        throw error;
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, Math.min(1500, Math.max(0, deadline - Date.now()))));
+  }
+  return { status: 'pending', checkId: readId, nextAction: { tool: 'readFrames', arguments: { projectId, assetId, ...work, checkId: readId } }, note: 'The saved source read keeps running. Follow nextAction with the original arguments to retrieve it; no new job is started. The check expires 10 minutes after creation.' };
+}
+
 /** get, deleting a finished or failed reading as it is read, so its images are read once instead of again by discard. */
 export const take = internalMutation({ args: { ownerId: v.string(), readId: v.id('referenceReads') }, returns: v.any(), handler: async (ctx, args) => {
   const read = await ctx.db.get(args.readId);
@@ -86,8 +151,9 @@ function throwReadFailure(error: string | undefined, prefix: string): never {
 }
 
 /** Queue a reading for a read tool's input and wait for the worker; the result carries the sheet image when there is one. */
-export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, name: ReadToolName, input: object, signal?: AbortSignal, recreation = false): Promise<ReadResult> {
-  const mode = name === 'listenReference' ? 'sounds' : name === 'readFrames' ? 'sheet' : name === 'trackReference' ? 'track' : name === 'traceShape' ? 'trace' : name === 'matchFont' ? 'font' : 'measure';
+export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, name: ReadToolName, input: object, signal?: AbortSignal, recreation = false): Promise<ReadResult | PendingFrames> {
+  if (name === 'readFrames') return runSourceFrames(ctx, ownerId, projectId, input, signal, recreation);
+  const mode = name === 'listenReference' ? 'sounds' : name === 'trackReference' ? 'track' : name === 'traceShape' ? 'trace' : name === 'matchFont' ? 'font' : 'measure';
   const { assetId, time, ...rest } = READ_TOOL_INPUTS[name].parse(input) as { assetId: string; time?: number; start?: number; end?: number };
   const start = time ?? rest.start!, end = time ?? rest.end!;
   if (mode !== 'sounds' && mode !== 'font') {
@@ -154,19 +220,23 @@ export function readSummary(name: ReadToolName, result: ReadResult) {
 
 /** The reference beside the timeline at the same moments: snapshotId holds the timeline frames already rendered at
  * those moments (plus any offset), times are the reference's seconds. One grid image, a difference score per moment. */
-export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false): Promise<ReadResult | null> {
+export async function runCompare(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], snapshotId: Id<'frameSnapshots'>, deadline: number, signal?: AbortSignal, compareCrop?: ComparisonCrop, cropKeyframes?: ReferenceCropKeyframe[], recreation = false, continuation?: {readId?: Id<'referenceReads'>; save: (readId: Id<'referenceReads'>) => Promise<void>}): Promise<ReadResult | null> {
   if (Date.now() >= deadline) return null;
   const cached = await ctx.runAction(internal.frameCache.readResult, {ownerId,projectId,assetId,snapshotId,work:{mode:'compare',start:Math.min(...times),end:Math.max(...times),times,...(compareCrop?{compareCrop}:{}),...(cropKeyframes?{referenceCropKeyframes:cropKeyframes}:{})}});
   if (cached) return cached as ReadResult;
-  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  const readId = continuation?.readId ?? await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, mode: 'compare', ...(recreation ? { recreation } : {}), start: Math.min(...times), end: Math.max(...times), times, snapshotId, ...(compareCrop ? { compareCrop } : {}), ...(cropKeyframes ? { referenceCropKeyframes: cropKeyframes } : {}) });
+  if (continuation && !continuation.readId) await continuation.save(readId);
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
       if (state.status === 'failed') throwReadFailure(state.error, 'The comparison could not be made');
-      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId}) as ReadResult : state.result as ReadResult;
+      if (state.status === 'completed') return state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead,{ownerId,readId,retain:!!continuation,deadline}) as ReadResult : state.result as ReadResult;
       await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
     }
     return null;
-  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+  } catch (error) {
+    if (continuation && !signal?.aborted && (error as { data?: { code?: string } })?.data?.code === 'REFERENCE_READ_DOWNLOAD_RETRY') return null;
+    throw error;
+  } finally { if (!continuation || signal?.aborted) await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
