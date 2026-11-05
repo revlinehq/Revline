@@ -10,10 +10,8 @@
  *
  * THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-import { offsetClipMotion, resizeEffectMotion } from './clip-effects';
-import { textAnimationTimingPatch } from './text-animation-timing';
+import { offsetClipMotion, ownClockTimingPatch, resizeEffectMotion } from './clip-effects';
 import { anchoredFadeTimingPatch } from './fade-clock';
-import { textTemplateTimingPatch } from './remotion-text';
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, freeLayer, linkedClipIds } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
@@ -350,7 +348,8 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const tolerance=Number.EPSILON*Math.max(1,clip.duration,Math.abs(dt))*8;
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
-    return side==='right'?{...clip,...textTemplateTimingPatch(clip),...textAnimationTimingPatch(clip),...anchoredFadeTimingPatch(clip,{start:clip.start,duration}),duration}:{...clip,...offsetClipMotion(clip,dt),...anchoredFadeTimingPatch(clip,{start:clip.start+dt,duration}),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+    // The fade clocks are re-anchored to the moved edge, replacing their frozen copies.
+    return side==='right'?{...clip,...ownClockTimingPatch(clip),...anchoredFadeTimingPatch(clip,{start:clip.start,duration}),duration}:{...clip,...offsetClipMotion(clip,dt),...anchoredFadeTimingPatch(clip,{start:clip.start+dt,duration}),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
   });
   if(!rippling)return reconcileTransitionEdits(timeline,{...timeline,clips});
   // A lane without room for the ripple keeps the ordinary, neighbor-bounded trim.

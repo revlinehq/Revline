@@ -195,8 +195,27 @@ export function motionPreset(clip: Clip, preset: MotionPreset | EffectPreset): P
   return { motion, motionOffset: 0, ...(clip.kind === 'effect' ? { effectPreset: preset, zoom, impact: preset === 'impact-frame' ? {...DEFAULT_IMPACT,...clip.impact} : undefined, overlay: preset === 'texture-overlay' ? {...DEFAULT_OVERLAY,...clip.overlay} : undefined, overlayTiming: preset === 'texture-overlay' ? {duration:clip.duration,offset:0} : undefined, flash: preset === 'flash' ? { ...flashSettings(propertyClip) } : undefined, punch: preset === 'punch' ? { ...punchSettings(clip) } : undefined, shake: preset === 'shake' ? { ...shakeSettings(clip) } : undefined, pop: preset === 'pop' ? { ...popSettings(clip) } : undefined, transition: isTransitionPreset(preset) ? clip.transition : undefined, solidColor: preset === 'solid-color' ? { ...solidColorSettings(clip) } : undefined, cinematicBars: preset === 'cinematic-bars' ? { ...cinematicBarSettings(clip) } : undefined, frameShrink:preset==='frame-shrink'?{...frameShrinkSettings(clip)}:undefined, zoomBlur: preset === 'zoom-blur' ? {...DEFAULT_ZOOM_BLUR,...clip.zoomBlur,enabled:true} : undefined } : {}), ...(clip.kind === 'caption' || clip.kind === 'graphic' ? { animation: 'none' as const,textAnimationTiming:undefined } : {}) };
 }
 
+/**
+ * Clip settings that run on their own frozen `{duration, offset}` clock, keyed by the field that holds it.
+ * Changing a clip's length freezes each clock (delta 0); moving its start shifts each offset by delta.
+ * A text gradient is not here: its clock is an offset only (its animation loops on its own duration),
+ * so a length change leaves it alone and only a moved start shifts it (see offsetClipMotion).
+ */
+export const OWN_CLOCK_SETTINGS = [
+  ['textTemplate', textTemplateTimingPatch],
+  ['textAnimationTiming', textAnimationTimingPatch],
+  ['audioFadeTiming', audioFadeTimingPatch],
+  ['visualFadeTiming', visualFadeTimingPatch],
+] as const;
+export type OwnClockSetting = typeof OWN_CLOCK_SETTINGS[number][0];
+
+/** Freeze (delta 0) or shift every own-clock setting the clip carries, except those `keep` names. */
+export function ownClockTimingPatch(clip: Clip, delta = 0, keep: (setting: OwnClockSetting) => boolean = () => false): Partial<Clip> {
+  return Object.assign({}, ...OWN_CLOCK_SETTINGS.map(([setting, patch]) => keep(setting) ? {} : patch(clip, delta)));
+}
+
 export function offsetClipMotion(clip: Clip, delta: number): Partial<Clip> {
-  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax || clip.pixelTracking ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...textTemplateTimingPatch(clip, delta),...textGradientTimingPatch(clip,delta),...textAnimationTimingPatch(clip,delta),...audioFadeTimingPatch(clip,delta),...visualFadeTimingPatch(clip,delta) };
+  return { ...(clip.speedRamp?.length ? { speedRamp: shiftSpeedRamp(clip.speedRamp, delta) } : {}), ...(clip.motion?.length || clip.effectKeyframes?.length || clip.mask || clip.parallax || clip.pixelTracking ? { motionOffset: (clip.motionOffset ?? 0) + delta } : {}), ...(clip.overlay ? {overlayTiming:{duration:clip.overlayTiming?.duration??clip.duration,offset:(clip.overlayTiming?.offset??0)+delta}} : {}), ...ownClockTimingPatch(clip, delta), ...textGradientTimingPatch(clip,delta) };
 }
 
 /** Effect handles stretch the currently visible pulse, including a previously split segment. */
