@@ -282,6 +282,15 @@ export function NewConversation() {
     setDraft(value); brief.current = value;
     try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
   }
+  function startClipping() {
+    const prompt = '/clip [ENTER YOUTUBE URL]';
+    changeDraft(prompt);
+    requestAnimationFrame(() => {
+      const field = picker.current?.parentElement?.querySelector('textarea');
+      field?.focus();
+      field?.setSelectionRange('/clip '.length, prompt.length);
+    });
+  }
   async function submit() {
     if (!draftReady || !settings || busy || submitting.current) return;
     if (hasMedia) { await processFootage(); return; }
@@ -315,7 +324,7 @@ export function NewConversation() {
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={<section className="new-conversation-actions" aria-label="Start a video">
       <Button type="button" variant="ghost" className="new-conversation-action new-conversation-upload-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
-      <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => { if (!draft.trim()) changeDraft('Find the strongest moments in this footage and turn them into short clips.'); picker.current?.click(); }}><img src="/landing/clippers-theo.webp" alt="" width={54} height={32}/><span>Start clipping</span></Button>
+      <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={startClipping}><img src="/landing/clippers-theo.webp" alt="" width={54} height={32}/><span>Start clipping</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
           <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy || !settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>

@@ -1,6 +1,6 @@
 ## 2026-11-05
 
-- Composer: Apply the compact home composer with Upload footage and Start clipping cards; keep the editor flat through a prop. Why: user approved the Pen design and requested a direct upload label.
+- Composer: Add the compact home composer, direct upload and a Start clipping shortcut that fills `/clip [ENTER YOUTUBE URL]`; keep the editor flat. Why: user approved the design and requested the clipping prompt.
 
 ## 2026-11-04
 
