@@ -13,6 +13,9 @@ export type ElementMove = { start: number; end: number; duration: number; region
 export type ContentChange = { start: number; end: number; kind: 'appear' | 'disappear' | 'change'; region: Box; area: number };
 export type MotionMap = {
   start: number; end: number; fps: number;
+  samplingFps?: number; sourceFps?: number;
+  context?: { start: number; end: number; note: string };
+  registration?: { backgroundOwnership: 'unverified'; note: string };
   camera: CameraMove[]; transitions: MotionTransition[]; elements: ElementMove[]; changes: ContentChange[];
   holds: { start: number; end: number }[];
   /** Content changes the camera did not answer with a move (in a reference: held on purpose; in ours: maybe missed). */
@@ -300,7 +303,9 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
 
   return {
     start: round(start, 2), end: at(n - 1), fps,
-    camera, transitions, elements: elements.slice(0, 40), changes: contentChanges.slice(0, 40), holds, unanswered,
+    samplingFps: fps,
+    registration: { backgroundOwnership: 'unverified', note: 'Registration measures shared image motion; foreground layers and wipes can dominate it. Verify a static background region with a crop before applying camera GSAP to the whole scene.' },
+    camera: camera.map(move => ({ ...move, flag: [move.flag, 'Candidate image registration only: background ownership is unverified; confirm with a background crop before using camera GSAP.'].filter(Boolean).join(' ') })), transitions, elements: elements.slice(0, 40), changes: contentChanges.slice(0, 40), holds, unanswered,
     track: cumulative.map((t, i) => ({ time: at(i), ...poseOf(t, width, height) })),
   };
 }
@@ -311,7 +316,7 @@ export type MotionDifference = { time: number; issue: string; fix?: string };
 /** Read with neighbouring context, but report only the requested section on its original clock. */
 export function motionWindow(map: MotionMap, start: number, end: number): MotionMap {
   const overlaps = (item: { start: number; end: number }) => item.end >= start && item.start <= end;
-  return { ...map, start, end, camera: map.camera.filter(overlaps), transitions: map.transitions.filter(overlaps), elements: map.elements.filter(overlaps), changes: map.changes.filter(overlaps), holds: map.holds.filter(overlaps).map(hold => ({ start: Math.max(start, hold.start), end: Math.min(end, hold.end) })), unanswered: map.unanswered.filter(event => event.time >= start && event.time <= end) };
+  return { ...map, start, end, context: { start: map.start, end: map.end, note: 'Overlapping moves retain their full context timing, poses, ease and GSAP; they may begin before or end after this window. Track samples and holds are bounded to the requested window.' }, track: map.track.filter(sample => sample.time >= start && sample.time <= end), camera: map.camera.filter(overlaps), transitions: map.transitions.filter(overlaps), elements: map.elements.filter(overlaps), changes: map.changes.filter(overlaps), holds: map.holds.filter(overlaps).map(hold => ({ start: Math.max(start, hold.start), end: Math.min(end, hold.end) })), unanswered: map.unanswered.filter(event => event.time >= start && event.time <= end) };
 }
 const easeParts = (ease: string) => { const name = ease.replace(/^custom \(closest named: (.*)\)$/, '$1'), [family, way = 'none'] = name.split('.'); return { family: family.replace(/\(.*$/, ''), way: way.replace(/\(.*$/, '') }; };
 const zoomOf = (move: CameraMove) => Math.log(move.to.scale / move.from.scale);
