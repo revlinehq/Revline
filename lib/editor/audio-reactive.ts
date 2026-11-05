@@ -1,6 +1,7 @@
 import { effectControlRange } from './effect-keyframes';
 import type { VisualEffects } from './visual-effects';
 import { VISUAL_EFFECT_DEFAULTS } from './visual-effects';
+import type { AudioReactive, ReactiveTarget } from './types';
 
 /**
  * Audio-reactive motion and effects: a level curve (0..1 at `rate` Hz from timeline second `start`), baked
@@ -10,8 +11,7 @@ import { VISUAL_EFFECT_DEFAULTS } from './visual-effects';
  */
 export const CSS_REACTIVE_TARGETS = ['scale', 'shake', 'rotate'] as const;
 export type CssReactiveTarget = typeof CSS_REACTIVE_TARGETS[number];
-export type ReactiveTarget = { property: string; amount: number };
-export type AudioReactive = { rate: number; start: number; levels: string; targets: ReactiveTarget[] };
+export type { AudioReactive, ReactiveTarget };
 export const MAX_REACTIVE_SAMPLES = 7200, MAX_REACTIVE_TARGETS = 4, REACTIVE_RATE = 30;
 const CSS_LIMITS: Record<CssReactiveTarget, [number, number]> = { scale: [-.5, .5], shake: [0, .1], rotate: [-20, 20] };
 

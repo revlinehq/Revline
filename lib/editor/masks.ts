@@ -1,5 +1,5 @@
 import { motionEase, isMotionEasing, type MotionEasing } from './motion-path';
-import type { Clip } from './types';
+import { MASK_SHAPES, type Clip, type ClipMask, type MaskGeometry, type MaskKey, type MaskShape } from './types';
 
 /**
  * A clip mask: a rectangle, ellipse, freehand polygon or text shape that hides the rest of a video or
@@ -7,11 +7,8 @@ import type { Clip } from './types';
  * clip's frame (center x/y, width/height), keyed in the clip's motion path time so trims keep it aligned.
  * Drawn as a CSS mask from an SVG, by one runtime shared by preview and export.
  */
-export const MASK_SHAPES = ['rectangle', 'ellipse', 'polygon', 'text'] as const;
-export type MaskShape = typeof MASK_SHAPES[number];
-export type MaskGeometry = { x: number; y: number; width: number; height: number; rotation: number; feather: number };
-export type MaskKey = MaskGeometry & { time: number };
-export type ClipMask = { shape: MaskShape; invert?: boolean; radius?: number; points?: number[][]; text?: string; active?: { start: number; end: number }; keys: MaskKey[] };
+export { MASK_SHAPES };
+export type { ClipMask, MaskGeometry, MaskKey, MaskShape };
 export type MaskAnchor = MaskKey & { easing?: MotionEasing };
 
 const GEOMETRY = ['x', 'y', 'width', 'height', 'rotation', 'feather'] as const;

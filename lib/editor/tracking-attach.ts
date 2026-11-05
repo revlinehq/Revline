@@ -1,4 +1,4 @@
-import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from '../media-analysis/pixel-track';
+import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
 import { boundedCameraMotion } from './camera-framing';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from '../ai/object-motion';

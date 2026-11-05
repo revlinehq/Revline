@@ -1,20 +1,9 @@
-import { dimensions, trackOf, type Clip, type Timeline } from './types';
+import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneFilm, type SceneMedia, type SceneSource, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
 import { isReactScene, isSceneTransition, sceneRuntimeNames, SCENE_RUNTIME_BUNDLES, type SceneRuntimeName } from './scene-modules';
 
-/** A TypeScript module that builds HTML once and animates it on a GSAP timeline; the composition seeks it to clip-local time. */
-/** A project image a scene uses, by the name its code reads from `media`. */
-export type SceneMedia = { name: string; assetId: string };
-/** A brand's UI rebuilt as a scene module with named parts, mounted inside a scene with blueprint(name, container). */
-export type SceneBlueprint = { name: string; code: string; codeRef?: string };
-/**
- * A film is one scene module whose animation runs on film time; its beat clips share that code and each shows
- * its own window: `sourceStart` is where the clip starts in the film, and every clip gets the film's whole
- * duration. So motion flows across clip edges, and an edit to the code changes every beat at once.
- */
-export type SceneFilm = { duration: number; builtThrough?: number; referenceAssetId?: string; referenceStart?: number };
-export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
+export type { SceneBlueprint, SceneFilm, SceneMedia, SceneSource };
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
 // Scene code has no length limit; only titles are capped.

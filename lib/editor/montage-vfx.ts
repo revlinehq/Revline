@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { Clip } from './types';
 
 export const IMPACT_PRESETS = ['invert', 'black-white', 'posterize', 'manga'] as const;
 const OVERLAY_PRESETS = ['light-leak', 'film-burn', 'lens-flare', 'dust', 'grain'] as const;
@@ -27,7 +26,9 @@ export const DEFAULT_IMPACT: ImpactSettings = { preset: 'manga', intensity: 1, t
 export const DEFAULT_OVERLAY: OverlaySettings = { preset: 'light-leak', blend: 'screen', intensity: .65, color: '#ff803e', seed: 17, speed: 1, fade: .25 };
 export const DEFAULT_PARALLAX: ParallaxSettings = { duration: 2, amount: .035, panX: .7, panY: -.2, orbit: 2, zoom: 1.08 };
 
-export function validateMontageVfx(clip: Clip) {
+/** The clip fields montage VFX read, written out so this module never imports the timeline types it feeds. */
+type MontageVfxClip = { kind: string; effectPreset?: string; impact?: unknown; overlay?: unknown; overlayTiming?: { duration: number; offset: number }; parallax?: unknown };
+export function validateMontageVfx(clip: MontageVfxClip) {
   if (clip.impact !== undefined) {
     if (clip.kind !== 'effect' || clip.effectPreset !== 'impact-frame') throw new Error('Impact settings belong to an impact-frame FX clip.');
     impactSettingsSchema.parse(clip.impact);

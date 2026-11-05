@@ -1,11 +1,11 @@
 import { DEFAULT_IMPACT, DEFAULT_OVERLAY, validateMontageVfx } from './montage-vfx';
 import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
-import type { Clip } from './types';
+import { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS, type BlendMode, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 import { validatePlaybackRate } from './playback-rate';
-import { isTransitionPreset, TRANSITION_PRESETS, validateTransitionSettings } from './clip-transitions';
+import { isTransitionPreset, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
@@ -20,18 +20,12 @@ import { validateAudioReactive } from './audio-reactive';
 import { validateColorFinish } from './color-finish';
 export { NEUTRAL_MOTION, motionAt, type MotionKeyframe } from './motion-path';
 
-export const BLEND_MODES = ['normal', 'screen', 'multiply', 'overlay', 'plus-lighter', 'difference'] as const;
-export type BlendMode = typeof BLEND_MODES[number];
+export { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS };
+export type { BlendMode, CinematicBarSettings, EffectPreset, FrameShrinkSettings, SolidColorSettings, TimedEffectPreset, ZoomSettings };
 const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
-export const TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'pop', 'cinematic-bars', 'quick-zoom-in', 'quick-zoom-out', 'zoom-blur', 'solid-color', 'impact-frame', 'texture-overlay'] as const;
-export type TimedEffectPreset=typeof TIMED_EFFECT_PRESETS[number];
 /** Presets offered for new edits; the rest stay renderable in saved projects. */
 export const OFFERED_TIMED_EFFECT_PRESETS = ['punch', 'shake', 'flash', 'zoom-blur', 'quick-zoom-in', 'quick-zoom-out', 'solid-color', 'impact-frame', 'texture-overlay'] as const satisfies readonly TimedEffectPreset[];
-/** Retired presets remain valid for saved projects; new choices use the active catalog. */
-export const EFFECT_PRESETS = ['fade', 'frame-shrink', ...TIMED_EFFECT_PRESETS, ...TRANSITION_PRESETS] as const;
-export type EffectPreset = typeof EFFECT_PRESETS[number];
-export type SolidColorSettings = { color: string; width: number; height: number; x: number; y: number; opacity: number };
 export const DEFAULT_SOLID_COLOR: SolidColorSettings = { color: '#2563eb', width: 1, height: 1, x: .5, y: .5, opacity: 1 };
 export const SOLID_COLOR_LIMITS = { width: [.01, 2], height: [.01, 2], x: [0, 1], y: [0, 1], opacity: [0, 1] } as const;
 /** Saved FX rectangles retain their original compositing until explicitly moved to V. */
@@ -42,13 +36,10 @@ export function solidColorPatch(clip:Clip,changes:Partial<SolidColorSettings>):P
   validateClipEffects({...clip,solidColor});
   return {solidColor};
 }
-export type CinematicBarSettings = { size: number; speed: number };
 const DEFAULT_CINEMATIC_BARS: CinematicBarSettings = { size: .12, speed: 1 };
 const CINEMATIC_BAR_LIMITS = { size: [0, .5], speed: [.25, 4] } as const;
-export type FrameShrinkSettings = { size: number; speed: number };
 const DEFAULT_FRAME_SHRINK: FrameShrinkSettings = { size: .12, speed: 1 };
 const FRAME_SHRINK_LIMITS = { size: [0, .45], speed: [.25, 4] } as const;
-export type ZoomSettings = { direction: 'in' | 'out'; amount: number; speed: number; centerX: number; centerY: number };
 export const ZOOM_LIMITS = { amount: [1, 3], speed: [.25, 4], centerX: [0, 1], centerY: [0, 1] } as const;
 export function isZoomPreset(preset: unknown): preset is 'quick-zoom-in' | 'quick-zoom-out' { return preset === 'quick-zoom-in' || preset === 'quick-zoom-out'; }
 function zoomSettings(clip: Pick<Clip, 'effectPreset' | 'zoom' | 'motion'>): ZoomSettings {
