@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Workspace: Make the home composer one text row taller. Why: the user asked for more room to type.
+
 - Workspace: Show recent projects with an Upload new button on the home screen; keep Start new edit for empty accounts. Why: the user asked to restore recent projects.
 
 - Web app: the top nav links to the Revline Discord outside the editor. Why: give users one place to reach the community.
