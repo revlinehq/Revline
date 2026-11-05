@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { AnalysisError } from "../media-analysis/errors";
 import { findVideoHighlights } from "../media-analysis/gemini";
+import { geminiVideoModel } from "../media-analysis/gemini-model";
 import {
   extractVideoWindow,
   needsAnalysisVideoProxy,
@@ -225,7 +226,7 @@ export async function findSourceHighlights(
           start: window.start,
           end: window.end,
           sourceType: input.sourceType,
-          model: process.env.GEMINI_VIDEO_MODEL || "gemini-3.7-flash",
+          model: geminiVideoModel(),
           helperKey,
         };
         judgments[Math.floor(window.start / WINDOW)] = highlightJudgment.parse(
