@@ -28,7 +28,7 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-empty .composer-submit{border-radius:8px}
 .new-conversation-empty .new-conversation-error{position:absolute;top:100%;z-index:1}
 .new-conversation-guidance{position:absolute;top:100%;left:0;width:100%;min-width:0;padding-top:12px}
-.new-conversation-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.new-conversation-actions{display:grid;grid-template-columns:minmax(0,1fr);gap:12px}
 .new-conversation-actions .new-conversation-action{height:40px;min-width:0;justify-content:center;gap:10px;padding:3px 12px;border:1px solid #2b2b2b;border-radius:4px;background:#1f1f1f;color:#b5b5b5;font-family:var(--font-geist),sans-serif;font-size:14px;font-weight:400;box-shadow:none}
 .new-conversation-action span{overflow:hidden;text-overflow:ellipsis}
 .new-conversation-actions .new-conversation-action:hover:not(:disabled){border-color:#3b3b3b;background:#262626;color:#eee}

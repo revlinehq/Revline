@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Composer: Remove Start clipping and make Upload footage fill the action row. Why: user requested a single full-width upload action.
+
 - Code cleanup: Remove unused modules and design studies, share browser/backend helpers, repair audio-tool references and preserve workflow guards across repository renames. Why: the user requested a whole-repository dead-code and reuse audit.
 - Worker hosting: Remove Fly controllers, deployment scripts and rendering branches; keep shared queue demand and capacity limits independent of the host. Why: production now runs on Railway.
 
