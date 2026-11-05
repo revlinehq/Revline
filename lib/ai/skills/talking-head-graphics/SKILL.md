@@ -1,8 +1,8 @@
 ---
-name: "overall-styling"
+name: "talking-head-graphics"
 description: "House look for graphics over footage: isometric line diagrams beside a talking head (near-black panels, outlined blocks, hatching, one accent edge, dimension lines), minimal subtitles and layout around the speaker. Includes a working example. Not for motion films made from scratch (motion-design). User direction and measured recreations override these defaults."
 ---
-# Overall styling
+# Talking-head graphics
 
 House defaults apply to invented graphics. Explicit user direction and measured literal references override them; confirmed brand fonts/colors override remaining defaults. Why: copying a reference and inventing a film require different choices.
 
