@@ -1,8 +1,6 @@
+import { clampOrFallback as bounded } from '../math';
 import { DEFAULT_CROP, type SourceCrop } from './types';
 
-function bounded(value: number | undefined, fallback: number, min: number, max: number) {
-  return Number.isFinite(value) ? Math.min(max, Math.max(min, value!)) : fallback;
-}
 
 /** Crop masks the source without changing its existing scale or placement. */
 export function calculateVisualRect(sourceWidth: number, sourceHeight: number, frameWidth: number, frameHeight: number, crop: SourceCrop = DEFAULT_CROP, focus?: { x: number; y: number }, fit: 'cover' | 'contain' = 'cover') {

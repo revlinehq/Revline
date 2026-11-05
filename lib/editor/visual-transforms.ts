@@ -1,7 +1,7 @@
+import { clamp } from '../math';
 import { VISUAL_TRANSFORM_LIMITS } from './visual-inputs';
 import { DEFAULT_TRANSFORM, type SourceCrop, type VisualTransform } from './types';
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 export type VisualCorner = 'nw' | 'ne' | 'sw' | 'se';
 export type VisualRect = { left: number; top: number; width: number; height: number };
 export type VisualBounds = { cx: number; cy: number; width: number; height: number; rotation: number };

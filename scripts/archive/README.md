@@ -1,5 +1,6 @@
-# Archived scripts
+# Audio asset tools
 
-Stock audio authoring and upload tools from earlier work. Nothing in the app, the deploy
-scripts, CI or the workers runs them, and they are kept only for reference. Run one from
-the repository root (for example `npx tsx scripts/archive/<name>.ts`).
+These manual tools preserve the source of the stock audio and support uploads to a separately configured media gateway. The app and release pipeline do not run them.
+
+- `node scripts/archive/author-stock-audio.mjs`: regenerate Revline originals with FFmpeg.
+- `node --import tsx scripts/archive/upload-stock-audio.mjs ...`: upload catalog assets using an explicitly selected environment.

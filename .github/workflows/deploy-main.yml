@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   release:
-    if: github.repository == 'zuraHQ/revline-editor' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    if: github.repository_id == '1412697447' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
     runs-on: [self-hosted, Linux, X64, revline-deploy-pc]
     timeout-minutes: 360
     env:

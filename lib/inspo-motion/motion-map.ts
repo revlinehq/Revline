@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 // Inspo Motion: reads how a film moves, not what it shows. From small grayscale frames at a steady rate it separates
 // three layers: the camera (what the whole frame does: zoom, pan, tilt, rotate), the elements (what moves against the
 // background), and content (what changes in place: text swaps, things appearing, transitions, cuts). Camera moves and
@@ -26,7 +27,6 @@ export type MotionMap = {
 /** A region as percent of the frame. */
 type Box = { left: number; top: number; width: number; height: number };
 
-const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
 const COLUMNS = 16, BLOCK = 16, SEARCH = 4, TEXTURE = 6, CHANGED = 14, MOVED = .6;
 
 type Frame = Uint8Array;
@@ -36,7 +36,7 @@ const apply = (t: Similarity, x: number, y: number) => ({ x: t.a * x - t.b * y +
 /** u then v. */
 const compose = (u: Similarity, v: Similarity): Similarity => ({ a: v.a * u.a - v.b * u.b, b: v.b * u.a + v.a * u.b, tx: v.a * u.tx - v.b * u.ty + v.tx, ty: v.b * u.tx + v.a * u.ty + v.ty });
 const invert = (t: Similarity): Similarity => { const d = t.a * t.a + t.b * t.b, a = t.a / d, b = -t.b / d; return { a, b, tx: -(a * t.tx - b * t.ty), ty: -(b * t.tx + a * t.ty) }; };
-const poseOf = (t: Similarity, width: number, height: number): Pose => ({ scale: round(Math.hypot(t.a, t.b), 3), x: round(t.tx / width * 100, 2), y: round(t.ty / height * 100, 2), rotation: round(Math.atan2(t.b, t.a) * 180 / Math.PI, 2) });
+const poseOf = (t: Similarity, width: number, height: number): Pose => ({ scale: roundTo(Math.hypot(t.a, t.b), 3), x: roundTo(t.tx / width * 100, 2), y: roundTo(t.ty / height * 100, 2), rotation: roundTo(Math.atan2(t.b, t.a) * 180 / Math.PI, 2) });
 const relativePose = (pose: Pose, origin: Pose): Pose => {
   const scale = pose.scale / origin.scale, rotation = pose.rotation - origin.rotation, angle = rotation * Math.PI / 180, a = scale * Math.cos(angle), b = scale * Math.sin(angle);
   return { x: pose.x - (a * origin.x - b * origin.y), y: pose.y - (b * origin.x + a * origin.y), scale, rotation };
@@ -101,7 +101,7 @@ function texture(frame: Frame, width: number, x: number, y: number) {
 /** Read how a window moves. frames are grayscale (width x height), sampled at fps from `start` seconds. */
 export function mapMotion(frames: Frame[], width: number, height: number, start: number, fps: number): MotionMap {
   const { rows, blocks } = grid(width, height), cx = width / 2, cy = height / 2, n = frames.length;
-  const at = (index: number) => round(start + index / fps, 3);
+  const at = (index: number) => roundTo(start + index / fps, 3);
   const textures = frames.map(frame => blocks.map(block => texture(frame, width, block.x, block.y)));
 
   // A cut is a discontinuity between adjacent frames, even when the following frames are still animating.
@@ -162,17 +162,17 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   const boxOf = (indices: number[]): Box => {
     const cols = indices.map(i => blocks[i].col), rws = indices.map(i => blocks[i].row);
     const left = Math.min(...cols) / COLUMNS, top = Math.min(...rws) / rows, right = (Math.max(...cols) + 1) / COLUMNS, bottom = (Math.max(...rws) + 1) / rows;
-    return { left: round(left * 100, 1), top: round(top * 100, 1), width: round((right - left) * 100, 1), height: round((bottom - top) * 100, 1) };
+    return { left: roundTo(left * 100, 1), top: roundTo(top * 100, 1), width: roundTo((right - left) * 100, 1), height: roundTo((bottom - top) * 100, 1) };
   };
   const where = (box: Box) => `${box.top + box.height / 2 < 34 ? 'top' : box.top + box.height / 2 > 66 ? 'bottom' : 'middle'}${box.left + box.width / 2 < 34 ? ' left' : box.left + box.width / 2 > 66 ? ' right' : ''}`;
 
   // 3. Transitions: most of the frame changes in place. One step is a cut; a run is a fade, a wipe or another transition.
   const transitions: MotionTransition[] = [];
   for (let t = 0; t < steps.length; t++) {
-    if (hardCuts.has(t)) { transitions.push({ start: at(t + 1), end: at(t + 1), duration: 0, kind: 'cut', area: round(raw[t].share * 100, 0) }); continue; }
+    if (hardCuts.has(t)) { transitions.push({ start: at(t + 1), end: at(t + 1), duration: 0, kind: 'cut', area: roundTo(raw[t].share * 100, 0) }); continue; }
     if (steps[t].changedShare < .45) continue;
     let last = t; while (last + 1 < steps.length && !hardCuts.has(last + 1) && steps[last + 1].changedShare >= .2) last++;
-    const run = steps.slice(t, last + 1), area = round(Math.max(...run.map(s => s.changedShare)) * 100, 0);
+    const run = steps.slice(t, last + 1), area = roundTo(Math.max(...run.map(s => s.changedShare)) * 100, 0);
     if (run.length === 1) { hardCuts.add(t); transitions.push({ start: at(t + 1), end: at(t + 1), duration: 0, kind: 'cut', area }); }
     else {
       // A wipe's changing band travels across the frame; a fade changes everything a little at once.
@@ -185,7 +185,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
       const total = run.reduce((sum, s) => sum + s.meanCost, 0);
       let done = 0;
       const points = run.map((s, k) => { done += s.meanCost; return { u: (k + 1) / run.length, p: total ? done / total : (k + 1) / run.length }; });
-      transitions.push({ start: at(t), end: at(last + 1), duration: round((last + 1 - t) / fps, 2), kind, ...(direction ? { direction } : {}), ease: bestEase([{ u: 0, p: 0 }, ...points]).name, area });
+      transitions.push({ start: at(t), end: at(last + 1), duration: roundTo((last + 1 - t) / fps, 2), kind, ...(direction ? { direction } : {}), ease: bestEase([{ u: 0, p: 0 }, ...points]).name, area });
     }
     t = last;
   }
@@ -216,7 +216,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   const contentChanges: ContentChange[] = changes.map(change => {
     const cells = [...change.cells], before = cells.reduce((s, i) => s + textures[change.first][i], 0) / cells.length, after = cells.reduce((s, i) => s + textures[Math.min(n - 1, change.last + 1)][i], 0) / cells.length;
     const kind: ContentChange['kind'] = before < TEXTURE && after >= TEXTURE * 1.5 ? 'appear' : after < TEXTURE && before >= TEXTURE * 1.5 ? 'disappear' : 'change';
-    return { start: at(change.first), end: at(change.last + 1), kind, region: boxOf(cells), area: round(cells.length / blocks.length * 100, 1) };
+    return { start: at(change.first), end: at(change.last + 1), kind, region: boxOf(cells), area: roundTo(cells.length / blocks.length * 100, 1) };
   }).filter(change => change.area >= 1 || change.end - change.start >= .2);
 
   // 5. Elements: regions that move against the background, followed step to step and fitted as GSAP tweens.
@@ -236,15 +236,15 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
       if (!track) { tracks.push(target); target.samples.push({ time: at(t), x: 0, y: 0, w: 0, h: 0, scale: 1, rotation: 0, confidence: 1 }); }
       const previous = target.samples[target.samples.length - 1];
       target.x += dx / width * 100; target.y += dy / height * 100;
-      target.samples.push({ time: at(t + 1), x: round(target.x, 2), y: round(target.y, 2), w: 0, h: 0, scale: round(previous.scale * Math.hypot(spread.a, spread.b), 3), rotation: round(previous.rotation + Math.atan2(spread.b, spread.a) * 180 / Math.PI, 1), confidence: 1 });
+      target.samples.push({ time: at(t + 1), x: roundTo(target.x, 2), y: roundTo(target.y, 2), w: 0, h: 0, scale: roundTo(previous.scale * Math.hypot(spread.a, spread.b), 3), rotation: roundTo(previous.rotation + Math.atan2(spread.b, spread.a) * 180 / Math.PI, 1), confidence: 1 });
       target.cells = new Set(group); target.last = t; target.region = [...new Set([...target.region, ...group])];
     }
   }
   const elements: ElementMove[] = tracks.flatMap(track => fitMotion(track.samples, { width: 100, height: 100 }).filter(move => move.duration >= .1).map(move => {
     const dx = move.to.x - move.from.x, dy = move.to.y - move.from.y, ds = move.to.scale - move.from.scale;
     const kind = Math.abs(ds) > .08 && Math.abs(ds) * 50 > Math.hypot(dx, dy) ? (ds > 0 ? 'scales up' : 'scales down') : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'slides right' : 'slides left') : (dy > 0 ? 'slides down' : 'slides up');
-    const fields = (p: { x: number; y: number; scale: number }) => `xPercent: ${round(p.x, 1)}, yPercent: ${round(p.y, 1)}${ds ? `, scale: ${p.scale}` : ''}`;
-    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${round(Math.hypot(dx, dy), 1)}% of the frame)`, from: move.from, to: move.to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: ${gsapEase(move.ease)} }, ${move.start})` };
+    const fields = (p: { x: number; y: number; scale: number }) => `xPercent: ${roundTo(p.x, 1)}, yPercent: ${roundTo(p.y, 1)}${ds ? `, scale: ${p.scale}` : ''}`;
+    return { start: move.start, end: move.end, duration: move.duration, region: boxOf(track.region), kind: `${kind} (${roundTo(Math.hypot(dx, dy), 1)}% of the frame)`, from: move.from, to: move.to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(el, { ${fields({ ...move.from, x: 0, y: 0 })} }, { ${fields({ ...move.to, x: dx, y: dy })}, duration: ${move.duration}, ease: ${gsapEase(move.ease)} }, ${move.start})` };
   })).sort((a, b) => a.start - b.start);
 
   // 6. Camera moves: where the accumulated pose changes, split where its speed jumps (a slow drift that bursts at a change).
@@ -271,7 +271,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
     const relative = relativePose(to, from);
     const dz = Math.log(relative.scale), dx = relative.x, dy = relative.y, dr = relative.rotation;
     // Named the way the camera turns: the picture slides the other way (picture moving down = the camera tilting up).
-    const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'left' : 'right'} ${Math.abs(round(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'up' : 'down'} ${Math.abs(round(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${round(dr, 1)}°` : ''].filter(Boolean);
+    const parts = [Math.abs(dz) > .01 ? (dz > 0 ? `zoom in ${Math.round((Math.exp(dz) - 1) * 100)}%` : `zoom out ${Math.round((1 - Math.exp(dz)) * 100)}%`) : '', Math.abs(dx) > .8 ? `pan ${dx > 0 ? 'left' : 'right'} ${Math.abs(roundTo(dx, 1))}%` : '', Math.abs(dy) > .8 ? `tilt ${dy > 0 ? 'up' : 'down'} ${Math.abs(roundTo(dy, 1))}%` : '', Math.abs(dr) > .5 ? `rotate ${roundTo(dr, 1)}°` : ''].filter(Boolean);
     const pose = (p: Pose) => `scale: ${p.scale}, xPercent: ${p.x}, yPercent: ${p.y}${from.rotation !== to.rotation ? `, rotation: ${p.rotation}` : ''}`;
     camera.push({ start: move.start, end: move.end, duration, kind: parts.join(' + ') || 'drift', from, to, ease: move.ease, fit: move.fit, gsap: `tl.fromTo(camera, { ${pose(from)} }, { ${pose(to)}, duration: ${duration}, ease: ${gsapEase(move.ease)} }, ${move.start})` });
   }
@@ -302,7 +302,7 @@ export function mapMotion(frames: Frame[], width: number, height: number, start:
   }
 
   return {
-    start: round(start, 2), end: at(n - 1), fps,
+    start: roundTo(start, 2), end: at(n - 1), fps,
     samplingFps: fps,
     registration: { backgroundOwnership: 'unverified', note: 'Registration measures shared image motion; foreground layers and wipes can dominate it. Verify a static background region with a crop before applying camera GSAP to the whole scene.' },
     camera: camera.map(move => ({ ...move, flag: [move.flag, 'Candidate image registration only: background ownership is unverified; confirm with a background crop before using camera GSAP.'].filter(Boolean).join(' ') })), transitions, elements: elements.slice(0, 40), changes: contentChanges.slice(0, 40), holds, unanswered,
@@ -329,7 +329,7 @@ const gist = (move: CameraMove) => { const zoom = zoomOf(move), { x, y, rotation
  *  ease, timing or amount, a missing or different transition, and moves where the reference holds still. ours.start lines up
  *  with reference.start. */
 export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDifference[] {
-  const offset = ours.start - reference.start, shift = (time: number) => round(time + offset, 2), found: MotionDifference[] = [];
+  const offset = ours.start - reference.start, shift = (time: number) => roundTo(time + offset, 2), found: MotionDifference[] = [];
   const timing = 2 / Math.min(reference.fps, ours.fps);
   const poseAt = (map: MotionMap, time: number) => {
     const next = map.track.findIndex(pose => pose.time >= time);
@@ -348,7 +348,7 @@ export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDiff
     used.add(match);
     const r = easeParts(move.ease), o = easeParts(match.ease), notes: string[] = [];
     if (r.way !== o.way || r.family !== o.family) notes.push(`ease ${match.ease} where the reference uses ${move.ease}`);
-    if (Math.abs(match.start - start) > timing) notes.push(`starts ${round(match.start - start, 2) > 0 ? `${round(match.start - start, 2)}s late` : `${round(start - match.start, 2)}s early`}`);
+    if (Math.abs(match.start - start) > timing) notes.push(`starts ${roundTo(match.start - start, 2) > 0 ? `${roundTo(match.start - start, 2)}s late` : `${roundTo(start - match.start, 2)}s early`}`);
     const ratio = size(match) / size(move);
     if (ratio < .85 || ratio > 1.15) notes.push(`${ratio < 1 ? 'smaller' : 'bigger'} (${match.kind} vs ${move.kind})`);
     if (Math.abs(match.duration - move.duration) > Math.max(timing, move.duration * .15)) notes.push(`${match.duration}s long vs ${move.duration}s`);
@@ -361,7 +361,7 @@ export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDiff
       const rp = relativePose(r, refOrigin), op = relativePose(o, ourOrigin);
       pathError = Math.max(pathError, Math.hypot(op.x - rp.x, op.y - rp.y) / 100, Math.abs(Math.log(op.scale / rp.scale)), Math.abs(op.rotation - rp.rotation) / 90);
     }
-    if (pathError > .025) notes.push(`camera path, overshoot or settle differs (peak residual ${round(pathError * 100, 1)}%)`);
+    if (pathError > .025) notes.push(`camera path, overshoot or settle differs (peak residual ${roundTo(pathError * 100, 1)}%)`);
     if (notes.length) found.push({ time: match.start, issue: `Camera move differs from the reference: ${notes.join('; ')}.`, fix: shifted(move) });
   }
   for (const move of ours.camera.filter(m => !used.has(m) && size(m) >= .02)) {
@@ -388,7 +388,7 @@ export function compareMotion(reference: MotionMap, ours: MotionMap): MotionDiff
     if (!match) { found.push({ time: start, issue: `Missing element motion: ${element.kind}, ${element.duration}s, ${element.ease} (${whereRegion(element.region)}).`, fix: element.gsap.replace(/, ([\d.]+)\)$/, `, ${start})`) }); continue; }
     usedElements.add(match);
     const ratio = size(match) / Math.max(.001, size(element));
-    if (Math.abs(match.start - start) > timing || Math.abs(match.duration - element.duration) > Math.max(timing, element.duration * .15) || match.ease !== element.ease || match.kind.split(' (')[0] !== element.kind.split(' (')[0] || ratio < .85 || ratio > 1.15) found.push({ time: match.start, issue: `Element motion differs: ${match.kind} at ${match.start}s, ${match.duration}s, ${match.ease}; reference ${element.kind} at ${start}s, ${element.duration}s, ${element.ease} (motion amount ratio ${round(ratio, 2)}).` });
+    if (Math.abs(match.start - start) > timing || Math.abs(match.duration - element.duration) > Math.max(timing, element.duration * .15) || match.ease !== element.ease || match.kind.split(' (')[0] !== element.kind.split(' (')[0] || ratio < .85 || ratio > 1.15) found.push({ time: match.start, issue: `Element motion differs: ${match.kind} at ${match.start}s, ${match.duration}s, ${match.ease}; reference ${element.kind} at ${start}s, ${element.duration}s, ${element.ease} (motion amount ratio ${roundTo(ratio, 2)}).` });
   }
   for (const element of ours.elements) if (!usedElements.has(element)) found.push({ time: element.start, issue: `Extra element motion: ${element.kind} (${whereRegion(element.region)}).` });
   return found.sort((a, b) => a.time - b.time);

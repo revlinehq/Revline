@@ -1,4 +1,6 @@
 "use node";
+import { bytesToBase64 } from '../lib/encoding';
+
 import { v } from 'convex/values';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -14,12 +16,6 @@ async function get(url: string, referer?: string, limit = 3_000_000) {
   return downloadPublicHttps(url, { maxBytes: limit, headers: { 'user-agent': BROWSER, accept: '*/*', ...(referer ? { referer } : {}) } });
 }
 const text = (data: ArrayBuffer) => new TextDecoder().decode(data);
-
-function base64(data: ArrayBuffer) {
-  const bytes = new Uint8Array(data); let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
-}
 
 /** Google serves every script subset per weight; keep the latin ones. */
 function latinOnly(css: string) {
@@ -62,7 +58,7 @@ async function logoFrom(urls: string[], referer: string) {
       const file = await get(url, referer, 400_000);
       if (/svg/i.test(file.type) || /\.svg(\?|$)/i.test(url)) { const svg = cleanSvg(firstSvg(text(file.data)) ?? ''); if (svg && svg.length <= BRAND_LIMITS.logo) return svg; continue; }
       const kind = file.type.match(/image\/(png|jpeg|webp)/i)?.[1]?.toLowerCase();
-      const encoded = kind ? `data:image/${kind};base64,${base64(file.data)}` : '';
+      const encoded = kind ? `data:image/${kind};base64,${bytesToBase64(new Uint8Array(file.data))}` : '';
       if (encoded && encoded.length <= BRAND_LIMITS.logo) return encoded;
     } catch { /* try the next candidate */ }
   }

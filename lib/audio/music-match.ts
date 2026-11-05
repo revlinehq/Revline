@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 import type { BeatMap } from '../media-analysis/beat-map';
 import type { AudioWaveform } from '../editor/types';
 import { decodeWaveform } from '../editor/audio-waveform';
@@ -7,7 +8,6 @@ import { STOCK_MUSIC_CATALOG, type StockMusic } from '../editor/stock-music';
 // Measuring a reference's music to match it: tempo and beat grid from its beat map, an energy curve from its
 // waveform, a feel from both; then the phase that puts a new track's downbeats on the film's main moments.
 
-const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 const median = (values: number[]) => { const sorted = [...values].sort((a, b) => a - b); return sorted.length ? sorted[sorted.length >> 1] : 0; };
 
 /** Loudness 0..1 per window of `seconds`, relative to the loud parts of the track. */
@@ -20,7 +20,7 @@ export function energyCurve(waveform: AudioWaveform, duration: number, seconds: 
     return b > a ? Math.sqrt(sum / (b - a)) : 0;
   });
   const loud = [...raw].sort((x, y) => x - y)[Math.floor(raw.length * .9)] || 1;
-  return { values: raw.map(value => round(Math.min(1, value / loud), 2)), level: round(median(raw) / 255, 3) };
+  return { values: raw.map(value => roundTo(Math.min(1, value / loud), 2)), level: roundTo(median(raw) / 255, 3) };
 }
 
 export function feelOf(bpm: number, energy: number[]): MusicFeel {
@@ -43,7 +43,7 @@ export function beatGrid(beats: BeatMap) {
   // The phase that best fits the measured downbeats (or beats, every 4th) on a constant grid.
   const anchors = beats.downbeats?.length ? beats.downbeats : beats.beats.filter((_, index) => index % 4 === 0);
   const phase = anchors.length ? circularMean(anchors.map(time => ((time % bar) + bar) % bar), bar) : 0;
-  return { period: round(period, 4), bar: round(bar, 4), phase: round(phase), bpm: round(60 / period, 2) };
+  return { period: roundTo(period, 4), bar: roundTo(bar, 4), phase: roundTo(phase, 3), bpm: roundTo(60 / period, 2) };
 }
 
 function circularMean(values: number[], cycle: number) {
@@ -65,12 +65,12 @@ export function phaseForMoments(moments: number[], period: number) {
     }, 0);
     if (cost < best.cost) best = { phase, cost };
   }
-  return round(best.phase);
+  return roundTo(best.phase, 3);
 }
 
 /** How far each moment sits from the nearest downbeat and beat of a grid. */
 export function momentFit(moments: number[], period: number, phase: number) {
-  const bar = period * 4, off = (time: number, cycle: number) => round(((time - phase) % cycle + cycle * 1.5) % cycle - cycle / 2, 3);
+  const bar = period * 4, off = (time: number, cycle: number) => roundTo(((time - phase) % cycle + cycle * 1.5) % cycle - cycle / 2, 3);
   return moments.map(time => ({ time, fromDownbeat: off(time, bar), fromBeat: off(time, period) }));
 }
 
@@ -87,7 +87,7 @@ export function rankStockMusic(target: { bpm: number; energy: number[]; level?: 
     const sameFeel = 1 - Math.abs(feels.indexOf(trackFeel) - feels.indexOf(feel)) / 3;
     const haystack = [track.genre, ...track.tags].join(' ').toLowerCase();
     const style = words.length ? words.filter(word => haystack.includes(word)).length / words.length : .5;
-    return { track, rate: Math.round(rate * 10000) / 10000, fits: Math.abs(rate - 1) <= .08, score: round(.55 * tempo + .25 * sameFeel + .2 * style, 3) };
+    return { track, rate: Math.round(rate * 10000) / 10000, fits: Math.abs(rate - 1) <= .08, score: roundTo(.55 * tempo + .25 * sameFeel + .2 * style, 3) };
   }).sort((a, b) => Number(b.fits) - Number(a.fits) || b.score - a.score);
 }
 
@@ -107,7 +107,7 @@ export function placeStockMusic(track: StockMusic, rate: number, phase: number, 
     const score = (energy.length ? correlation(a, b) : 0) + 2 * (room - 1) - .15 * sourceStart / track.duration;
     if (score > best.score) best = { sourceStart, score };
   }
-  return { sourceStart: round(best.sourceStart), rate: Math.abs(rate - 1) < .004 ? 1 : rate };
+  return { sourceStart: roundTo(best.sourceStart, 3), rate: Math.abs(rate - 1) < .004 ? 1 : rate };
 }
 
 function correlation(a: number[], b: number[]) {

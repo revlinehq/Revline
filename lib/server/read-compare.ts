@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 import type { FrameCache } from './frame-cache';
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
@@ -6,7 +7,6 @@ import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
 import { frameAt, imageSource, probe, sheet } from './read-reference';
 
 type Work = NonNullable<MediaWorkItem['read']>;
-const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 
 /** How different two pictures are, 0 (the same) to 1. Most of a motion frame is plain background, so a whole-frame
  * average says "nearly identical" while the keys sit in the wrong place: compare the content instead. Each frame's
@@ -52,8 +52,8 @@ export async function readCompare(path: string, directory: string, work: Work, s
     // Comparison snapshots crop the render before compression; the reference is cropped here on its displayed axes.
     const meta = await sharp(reference).metadata();
     const yours = await sharp(Buffer.from(rendered[index].image, 'base64')).resize(meta.width!, meta.height!, { fit: 'fill' }).png().toBuffer();
-    const score = round(await difference(reference, yours));
-    scores.push({ time: round(time), difference: score });
+    const score = roundTo(await difference(reference, yours), 3);
+    scores.push({ time: roundTo(time, 3), difference: score });
     // Pairs sit side by side: the sheet lays out an even number of columns, so a reference and its render share a row.
     tiles.push({ image: reference, label: `${index + 1}  ${time.toFixed(2)}s  reference` }, { image: yours, label: `${index + 1}  yours  diff ${Math.round(score * 100)}%` });
     onProgress(10 + Math.round(70 * (index + 1) / times.length));
@@ -65,5 +65,5 @@ export async function readCompare(path: string, directory: string, work: Work, s
   const count = Math.ceil(tiles.length / 6), budget = Math.floor(880_000 / count);
   const firstCrop = referenceCropAt(times[0], work.compareCrop, work.referenceCropKeyframes);
   for (let first = 0; first < tiles.length; first += 6) sheets.push(await sheet(tiles.slice(first, first + 6), (firstCrop ? source.width * firstCrop.w / (source.height * firstCrop.h) : source.width / source.height), 2, budget));
-  return { ...sheets[0], ...(sheets.length > 1 ? { extraImages: sheets.slice(1).map(item => item.image) } : {}), sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps), frames: times.map(time => ({ time: round(time) })), scores };
+  return { ...sheets[0], ...(sheets.length > 1 ? { extraImages: sheets.slice(1).map(item => item.image) } : {}), sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: times.map(time => ({ time: roundTo(time, 3) })), scores };
 }

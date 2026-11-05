@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 import type { FrameCache } from './frame-cache';
 import { runMediaCommand as run } from './media-command';
 import { readFile } from 'node:fs/promises';
@@ -25,7 +26,6 @@ type Source = { width: number; height: number; fps: number; duration: number };
 const SHEET_WIDTH = 1600, GAP = 8, LABEL = 30, MAX_IMAGE = 880_000, MAX_FRAMES = 30;
 /** A pixel counts as changed between frames when its gray level moves more than this (of 255). */
 const CHANGE = 24;
-const round = (value: number, places = 2) => Math.round(value * 10 ** places) / 10 ** places;
 const sourceProbe = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive(), r_frame_rate: z.string().optional(), side_data_list: z.array(z.object({ rotation: z.number().optional() })).optional(), tags: z.object({ rotate: z.string().optional() }).optional() })).optional(), format: z.object({ duration: z.string().optional() }).optional() });
 
 export async function probe(path: string, signal: AbortSignal, cache?: FrameCache): Promise<Source> {
@@ -59,7 +59,7 @@ const clampBox = (box: Box, source: Source): Box => {
 const timesIn = (start: number, end: number, count: number, source: Source) => {
   // Times past the end read the last frames instead of failing.
   const last = Math.max(0, source.duration - 1 / source.fps), from = Math.min(start, last), to = Math.min(Math.max(end, from), last);
-  return Array.from({ length: count }, (_, index) => round(count === 1 ? from : from + (to - from) * index / (count - 1), 3));
+  return Array.from({ length: count }, (_, index) => roundTo(count === 1 ? from : from + (to - from) * index / (count - 1), 3));
 };
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
 
@@ -106,21 +106,21 @@ async function readSheet(path: string, directory: string, source: Source, work: 
       const delta = Math.abs(current.data[y * width + x] - previous.data[y * width + x]); sum += delta;
       if (delta > CHANGE) { left = Math.min(left, x); right = Math.max(right, x); top = Math.min(top, y); bottom = Math.max(bottom, y); }
     }
-    const change = round(sum / (width * height * 255), 3);
+    const change = roundTo(sum / (width * height * 255), 3);
     return right < 0 ? { time, change } : { time, change, changed: { x: Math.round(area.x + left * factor), y: Math.round(area.y + top * factor), w: Math.round((right - left + 1) * factor), h: Math.round((bottom - top + 1) * factor) } };
   });
   onProgress(80);
   const tiles = images.map((image, index) => ({ image, label: `${index + 1}  ${times[index].toFixed(2)}s${frames[index].change !== undefined ? `  change ${Math.round(frames[index].change! * 100)}%` : ''}` }));
   const result = await sheet(tiles, area.w / area.h);
   const { moments } = work.stillsOnly ? { moments: [] } : await findMoments(path, work.start, work.end, source, area, signal, 12, cache).catch(error => { if (signal.aborted) throw error; return { moments: [] }; });
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames, moments };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames, moments };
 }
 
 /** Only the map of a long window: every moment and every hold, no frames and no image (cheap on a long talking-head clip). */
 async function readMoments(path: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
   const area = work.crop ? clampBox(work.crop, source) : { x: 0, y: 0, w: source.width, h: source.height };
   const { moments, holds } = await findMoments(path, work.start, work.end, source, area, signal, 80, cache);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], moments, holds };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [], moments, holds };
 }
 
 /** Where the picture changes in a window, from every frame at 10 fps (cheap: small gray frames, no images for the model):
@@ -168,7 +168,7 @@ async function findMoments(path: string, start: number, end: number, source: Sou
     const run = steps.slice(index, last + 1), peak = Math.max(...run.map(step => step.change));
     const boxes = run.flatMap(step => step.box ? [step.box] : []);
     const region = boxes.length ? { x: Math.round(area.x + Math.min(...boxes.map(b => b.left)) * factor), y: Math.round(area.y + Math.min(...boxes.map(b => b.top)) * factor), w: Math.round((Math.max(...boxes.map(b => b.right)) - Math.min(...boxes.map(b => b.left)) + 1) * factor), h: Math.round((Math.max(...boxes.map(b => b.bottom)) - Math.min(...boxes.map(b => b.top)) + 1) * factor) } : undefined;
-    moments.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2), peak: round(peak, 3), kind: run.length === 1 && peak > .25 ? 'cut' : 'motion', ...(region ? { region } : {}) });
+    moments.push({ start: roundTo(from + index / rate, 2), end: roundTo(from + (last + 1) / rate, 2), peak: roundTo(peak, 3), kind: run.length === 1 && peak > .25 ? 'cut' : 'motion', ...(region ? { region } : {}) });
     index = last;
   }
   // Holds: a second or more where the picture all but stops, well under this video's resting level (a frozen face, a held still).
@@ -177,7 +177,7 @@ async function findMoments(path: string, start: number, end: number, source: Sou
     if (steps[index].change >= still || steps[index].moved >= movedFloor) continue;
     let last = index; while (last + 1 < steps.length && steps[last + 1].change < still && steps[last + 1].moved < movedFloor) last++;
     // Slow drift adds up: a stretch whose first and last frames differ is moving, however small each step.
-    if (last - index + 1 >= rate && differs(index, last + 1) < movedFloor) holds.push({ start: round(from + index / rate, 2), end: round(from + (last + 1) / rate, 2) });
+    if (last - index + 1 >= rate && differs(index, last + 1) < movedFloor) holds.push({ start: roundTo(from + index / rate, 2), end: roundTo(from + (last + 1) / rate, 2) });
     index = last;
   }
   // The strongest ones, in time order.
@@ -189,7 +189,7 @@ async function readMeasure(path: string, directory: string, source: Source, work
   const [time] = timesIn(work.start, work.start, 1, source);
   const { data, info } = await sharp(await frameAt(path, directory, time, undefined, 'measure', signal, cache)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const { colors, edges } = measure({ data, width: info.width, height: info.height }, work);
-  return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
+  return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
 }
 
 /** The Google Fonts closest to the type in a crop, with the crop above each candidate drawn in the crop's colors. */
@@ -199,7 +199,7 @@ async function readFont(path: string, directory: string, source: Source, work: W
   const crop = await frameAt(path, directory, time, box, 'font', signal, cache);
   const found = await matchFont(crop, work.text, { categories: work.categories as FontCategory[] | undefined, signal, onProgress });
   const result = await sheet(found.tiles, found.aspect, 1);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], fonts: found.matches, fontColors: { ink: found.inkColor, background: found.background } };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], fonts: found.matches, fontColors: { ink: found.inkColor, background: found.background } };
 }
 
 /** One shape in a box traced to SVG paths; the sheet sets the crop beside the trace drawn over the background. */
@@ -214,7 +214,7 @@ async function readTrace(path: string, directory: string, source: Source, work: 
   const spine = trace.centerline ? `<path d="${trace.centerline.d}" fill="none" stroke="#ff3b30" stroke-width="${Math.max(2, width / 200)}"/>` : '';
   const drawn = await sharp(Buffer.from(trace.svg.replace('<svg ', `<svg width="${width}" height="${height}" `).replace('>', `><rect width="${width}" height="${height}" fill="${trace.background}"/>`).replace('</svg>', `${spine}</svg>`))).png().toBuffer();
   const result = await sheet([{ image: crop, label: `crop ${time.toFixed(2)}s` }, { image: drawn, label: `trace ${trace.paths.length} paths, spine in red` }], width / height, 2);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [{ time }], trace: { box, ...trace } };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], trace: { box, ...trace } };
 }
 
 /** Footage is textured: every grain of concrete is a small color step. Keep the jumps that stand out along the line, in order. */
@@ -243,7 +243,7 @@ async function readTrack(path: string, directory: string, source: Source, work: 
     return { image: images[order], label: `${index + 1}  ${item.time.toFixed(2)}s  ${item.rotation}°  ×${item.scale}  conf ${item.confidence}`, overlay: boxOverlay(item, source) };
   });
   const result = await sheet(tiles, source.width / source.height);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source), trackingNotes: ['Geometry is frozen and excluded from fitting when invisible or lost.', 'Sharpness is relative to the seed frame; it is not blur in pixels.', ...(work.backgroundTime === undefined ? ['Opacity unavailable: provide a clean backgroundTime and a fully visible frameTime to calibrate alpha.'] : ['Opacity is a registered background/foreground blend; use only samples with opacityConfidence >= 0.5.'])] };
+  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source), trackingNotes: ['Geometry is frozen and excluded from fitting when invisible or lost.', 'Sharpness is relative to the seed frame; it is not blur in pixels.', ...(work.backgroundTime === undefined ? ['Opacity unavailable: provide a clean backgroundTime and a fully visible frameTime to calibrate alpha.'] : ['Opacity is a registered background/foreground blend; use only samples with opacityConfidence >= 0.5.'])] };
 }
 
 /** Hear a reference: every sound effect's measured onset, length and level, the picture change it lands on, and what it
@@ -281,9 +281,9 @@ async function readSounds(path: string, directory: string, source: Source, work:
   const sounds = measured.map(sound => {
     const hit = hits.reduce<typeof hits[number] | undefined>((best, item) => Math.abs(item.time - sound.time) <= .15 && (!best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time)) ? item : best, undefined);
     const described = heard?.sounds.reduce<typeof heard.sounds[number] | undefined>((best, item) => !best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time) ? item : best, undefined);
-    return { time: round(from + sound.time, 3), end: round(from + sound.end, 3), level: round(sound.level, 1), ...(hit ? { hit: round(from + hit.time, 3) } : {}), ...(described && Math.abs(described.time - sound.time) <= .25 ? { kind: described.kind, description: described.description, prompt: described.prompt, onScreen: described.onScreen } : {}) };
+    return { time: roundTo(from + sound.time, 3), end: roundTo(from + sound.end, 3), level: roundTo(sound.level, 1), ...(hit ? { hit: roundTo(from + hit.time, 3) } : {}), ...(described && Math.abs(described.time - sound.time) <= .25 ? { kind: described.kind, description: described.description, prompt: described.prompt, onScreen: described.onScreen } : {}) };
   });
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], sounds, ...(heard ? { music: heard.music } : {}), silentHits: hits.filter(hit => !measured.some(sound => Math.abs(sound.time - hit.time) <= .15)).map(hit => round(from + hit.time, 3)) };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [], sounds, ...(heard ? { music: heard.music } : {}), silentHits: hits.filter(hit => !measured.some(sound => Math.abs(sound.time - hit.time) <= .15)).map(hit => roundTo(from + hit.time, 3)) };
 }
 
 /** How a reference moves (motionMap): camera keyframes with eases, transitions, element tweens and content changes,
@@ -308,7 +308,7 @@ async function readMotion(path: string, source: Source, work: Work, signal: Abor
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
   onProgress(40);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: { ...motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)), sourceFps: round(source.fps, 3) } };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [], motion: { ...motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)), sourceFps: roundTo(source.fps, 3) } };
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
@@ -349,6 +349,6 @@ export async function readReference(path: string, directory: string, work: Work,
 export async function videoMoments(path: string, signal: AbortSignal) {
   const source = await probe(path, signal);
   const { moments } = await findMoments(path, 0, source.duration, source, { x: 0, y: 0, w: source.width, h: source.height }, signal, 40);
-  const share = (value: number, total: number) => round(Math.min(1, value / total), 3);
+  const share = (value: number, total: number) => roundTo(Math.min(1, value / total), 3);
   return moments.map(({ region, ...moment }) => ({ ...moment, ...(region ? { box: { left: share(region.x, source.width), top: share(region.y, source.height), right: share(region.x + region.w, source.width), bottom: share(region.y + region.h, source.height) } } : {}) }));
 }

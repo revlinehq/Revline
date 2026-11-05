@@ -1,7 +1,7 @@
 "use node";
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
-import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools, type LaneId } from '../lib/ai/lanes';
+import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools } from '../lib/ai/lanes';
 import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
 import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';

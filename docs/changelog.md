@@ -1,5 +1,6 @@
 ## 2026-11-05
 
+- Code cleanup: Remove unused modules and design studies, share browser/backend helpers, repair audio-tool references and preserve workflow guards across repository renames. Why: the user requested a whole-repository dead-code and reuse audit.
 - Repository: Remove unused design source and preview images and ignore local design drafts. Why: the user requested excluding design working files from the public source.
 - Worker hosting: Verify standard and Ultra jobs before promoting single-worker Railway exports; require remote chunk proof only when enabled. Why: Hobby repository builds must not depend on private registry support.
 

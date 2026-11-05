@@ -1,3 +1,4 @@
+import { usageCountOrNull as count } from './usage-counts';
 export const costRecordingEnabled = (env: Record<string, string | undefined> = process.env) => env.AI_COST_DASHBOARD_ENABLED === 'true';
 export const costDashboardEnabled = (env: Record<string, string | undefined> = process.env) => costRecordingEnabled(env) && env.MODEL_SWITCHER_ENABLED === 'true';
 
@@ -24,7 +25,6 @@ export type EditorCostRecord = {
   budgetUsed?: number | null;
 };
 const text = (value: unknown) => typeof value === 'string' && value.length <= 160 ? value : null;
-const count = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 export function costHistoryRecord(event: Record<string, unknown>): EditorCostRecord | null {
   if (event.event !== 'model-step' && event.event !== 'run-summary') return null;
   const recordedAt = typeof event.timestamp === 'string' ? Date.parse(event.timestamp) : NaN;

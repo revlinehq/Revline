@@ -1,4 +1,3 @@
-import type { LaneId } from './lanes/types';
 import { EFFECT_GUIDANCE,VISUAL_EFFECT_GUIDANCE,TEXT_ANIMATION_GUIDANCE,TEXT_APPEARANCE_GUIDANCE } from '../editor/effect-guidance';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES } from '../editor/effect-catalog';
 import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset, type TimedEffectPreset } from '../editor/clip-effects';
@@ -46,26 +45,5 @@ masks:{tool:'setMask',shapes:['rectangle (corner radius)','ellipse','polygon (fr
     markers:{controls:['add a free cue at user-provided timeline seconds with an optional user label','move an exact marker ID to requested seconds','remove exact IDs or clear all'],source:'Frame-snapped manual cues; measured music hits use the separate beat-analysis tools'},
     audio:{roles:AUDIO_ROLES,controls:['volume0..2','fade in/out in timeline seconds','lower music under explicitly labeled audible voice clips with amount/attack/release'],ducking:'Uses voice-clip coverage, not speech detection; preserves original source/audio timing'},
     solidColor:'Independent V color frame/rectangle; put below footage for a background or above it for an overlay. Editable color, normalized width/height/x/y and opacity; saved legacy FX solids remain valid until explicitly converted',
-  };
-}
-
-/** What the model sees on every turn: names only. Guidance, controls and the sound library live in
- *  the effects, vfx-recipes, text-styling, color-grading and music-and-sound skills, read on demand with readSkill. */
-export function editorCapabilityIndex(lane:LaneId='edit',skills?:{name:string;description:string}[]){
-  const catalog=editorCapabilities();
-  return {
-    skills:skills??catalog.skills,
-    details:'Names only. Read the effects skill before applying effects, timed FX, transitions, layouts, camera or object motion; vfx for gameplay montages, kill edits, impact frames, procedural overlays, depth parallax and pixel tracking; vfx-recipes for other creative styling and effect combinations; text-styling before adding or styling text and captions; color-grading for any color work; music-and-sound before music or sounds.',
-    soundEffects:{skill:catalog.soundEffects.skill,rule:catalog.soundEffects.rule,generated:catalog.soundEffects.generated,libraryTool:catalog.soundEffects.libraryTool},
-    ...(['motion','recreate'].includes(lane)?{scenes:catalog.scenes}:{}),
-    editing:catalog.editing,
-    effects:catalog.effects.map(group=>({category:group.category,items:group.items.map(item=>item.name)})),
-    timedFX:catalog.timedFX.map(({preset,name})=>({preset,name})),
-    visual:Object.keys(catalog.visual),
-    tracking:{tools:['trackPoints','getTrack','attachToTrack'],skill:'vfx',page:'tracking'},
-    objectMotion:{tool:catalog.objectMotion.tool},
-    cameraMotion:{tool:catalog.cameraMotion.tool},
-    text:{animations:catalog.text.animations.map(({preset,name})=>({preset,name})),looks:catalog.text.looks.map(({id,name})=>({id,name})),fonts:catalog.text.fonts.map(({id,name})=>({id,name}))},
-    captions:catalog.captions,markers:catalog.markers,audio:catalog.audio,solidColor:catalog.solidColor,
   };
 }

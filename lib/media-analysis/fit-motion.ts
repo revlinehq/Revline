@@ -1,10 +1,10 @@
+import { roundTo, clamp as clampRange } from '../math';
 // Fit timing and signed progress together, including the holds on either side of a move.
 export type TrackSample = { time: number; x: number; y: number; w: number; h: number; scale: number; scaleX?: number; scaleY?: number; corners?: number[][]; registrationBox?: { x: number; y: number; w: number; h: number }; rotation: number; confidence: number; visible?: boolean; opacity?: number; opacityConfidence?: number; sharpness?: number };
 type Pose = { x: number; y: number; scale: number; scaleX?: number; scaleY?: number; rotation: number; opacity?: number };
 export type FittedMove = { start: number; end: number; duration: number; from: Pose; to: Pose; ease: string; fit: number; gsap: string };
 type Curve = { name: string; at: (t: number, extra: number[]) => number; initial: number[]; bounds: [number, number][] };
-const clamp = (x: number, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, x));
-const round = (v: number, n = 6) => Math.round(v * 10 ** n) / 10 ** n;
+const clamp = (x: number, lo = 0, hi = 1) => clampRange(x, lo, hi);
 const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
 const curves: Curve[] = [{ name: 'none', at: t => t, initial: [], bounds: [] }];
 for (const base of ['power1', 'power2', 'power3', 'power4', 'expo', 'circ', 'sine', 'back']) for (const direction of ['in', 'out', 'inOut']) {
@@ -26,7 +26,7 @@ const cubic: Curve = { name: 'cubic-bezier', initial: [.25, .1, .75, .9], bounds
   for (let i = 0; i < 24; i++) { const mid = (low + high) / 2; if (b(mid, x1, x2) < x) low = mid; else high = mid; }
   return b((low + high) / 2, y1, y2);
 } };
-const curveName = (curve: Curve, extra: number[]) => curve.name === 'cubic-bezier' ? `cubic-bezier(${extra.map(v => round(v, 5)).join(',')})` : curve.name.startsWith('back') ? `${curve.name}(${round(extra[0], 5)})` : curve.name;
+const curveName = (curve: Curve, extra: number[]) => curve.name === 'cubic-bezier' ? `cubic-bezier(${extra.map(v => roundTo(v, 5)).join(',')})` : curve.name.startsWith('back') ? `${curve.name}(${roundTo(extra[0], 5)})` : curve.name;
 /** Use a CustomEase expression for measured Beziers; named GSAP eases stay strings. */
 export function gsapEase(name: string) {
   if (!name.startsWith('cubic-bezier(')) return `'${name}'`;
@@ -140,12 +140,12 @@ function fitRun(samples: TrackSample[], span: number, opacity: boolean, depth = 
   // Very poor tracks do not become authoritative tweens.
   if (fit.error > .12) return [];
   const a: Record<string, number> = {}, b: Record<string, number> = {};
-  channels.forEach((v, i) => { const reg = regression(fit.progress, v); a[fields[i]] = round(reg.offset); b[fields[i]] = round(reg.offset + reg.amplitude); });
+  channels.forEach((v, i) => { const reg = regression(fit.progress, v); a[fields[i]] = roundTo(reg.offset, 6); b[fields[i]] = roundTo(reg.offset + reg.amplitude, 6); });
   const confidence = samples.reduce((s, p) => s + (opacity ? p.opacityConfidence ?? 0 : p.confidence), 0) / samples.length;
-  const start = round(fit.start), end = round(fit.end), duration = round(end - start);
+  const start = roundTo(fit.start, 6), end = roundTo(fit.end, 6), duration = roundTo(end - start, 6);
   const text = (p: Record<string, number>) => fields.filter((f, i) => opacity || f === 'x' || f === 'y' || Math.abs(b[f] - a[f]) * weights[i] >= .001).map(f => `${f}: ${p[f]}`).join(', ');
   const from = opacity ? { ...pose(samples[0]), opacity: a.opacity } : { ...pose(samples[0]), ...a }, to = opacity ? { ...pose(samples.at(-1)!), opacity: b.opacity } : { ...pose(samples.at(-1)!), ...b };
-  return [{ start, end, duration, from, to, ease: fit.ease, fit: round((1 - fit.error) * confidence, 3), gsap: `tl.fromTo(el, { ${text(a)} }, { ${text(b)}, duration: ${duration}, ease: ${gsapEase(fit.ease)} }, ${start})` }];
+  return [{ start, end, duration, from, to, ease: fit.ease, fit: roundTo((1 - fit.error) * confidence, 3), gsap: `tl.fromTo(el, { ${text(a)} }, { ${text(b)}, duration: ${duration}, ease: ${gsapEase(fit.ease)} }, ${start})` }];
 }
 /** All callers share this fitter. Confidence gaps split runs; invisible geometry never joins two moves. */
 export function fitMotion(track: TrackSample[], size: { width: number; height: number }): FittedMove[] {

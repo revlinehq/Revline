@@ -561,7 +561,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-light",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#whoosh-light",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/4c7d4cc61503067685438ea6efedf8e1ea73bf234433990d2bd980a20c996b47",
@@ -585,7 +585,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-fast",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#whoosh-fast",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/2f69e09479ec8d4bf8036b97ced7cca1a641ec480b75cbd1e554f8b613b17483",
@@ -609,7 +609,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-air",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#whoosh-air",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/e9103394e48d6a06e6b646cd43e7689e68b311efebe9d71c83206e6a24c31c9a",
@@ -633,7 +633,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#whoosh-deep",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#whoosh-deep",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/73252600bc36116a262b7c7829d2e350eb35e345ac5b6ebaa2a9dec534f05204",
@@ -657,7 +657,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#riser-short",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#riser-short",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/8872a17cfdd0b39df75812e2a976ac74e55e81a95d39c7aeedbee0605c7ce987",
@@ -681,7 +681,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#riser-air",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#riser-air",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/830aad9ea0e76fd3390233ca6dcd515c1a6d426e67b59bb0156c49b5606ce514",
@@ -705,7 +705,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#riser-tonal",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#riser-tonal",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/5f94c9b67d07968ce4c1b9d46d1d6ed0fb3af41ca683f43fff2b4e06354e7434",
@@ -729,7 +729,7 @@
       "original"
     ],
     "pack": "Revline originals",
-    "sourceFile": "scripts/author-stock-audio.mjs#riser-deep",
+    "sourceFile": "scripts/archive/author-stock-audio.mjs#riser-deep",
     "sourceUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "license": "CC0-1.0",
     "r2Key": "media/stock/audio-fx-v1/ae3ec929c5a88f9c9d6ea7396ecc8a21893d14fb9e4476bf9294e0f29eb01ccb",

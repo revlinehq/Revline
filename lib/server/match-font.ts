@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -28,7 +29,6 @@ const EXTRAS: Record<FontCategory, string[]> = {
 };
 const PER_CATEGORY = 26, REFINE = 6, HEIGHT = 72;
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
-const round = (value: number, places = 3) => Math.round(value * 10 ** places) / 10 ** places;
 
 async function cached(key: string, maxAgeMs: number, load: () => Promise<Buffer>) {
   const path = join(CACHE, key);
@@ -240,7 +240,7 @@ export async function matchFont(crop: Buffer, text: string, options: { categorie
   };
   const results: FontMatch[] = [];
   const tryFace = async (face: Face) => {
-    try { results.push({ ...face, score: round(await score(face)) }); } catch (error) { if (options.signal.aborted) throw error; }
+    try { results.push({ ...face, score: roundTo(await score(face), 3) }); } catch (error) { if (options.signal.aborted) throw error; }
   };
 
   // Coarse: every family at its regular weight (or its only style).

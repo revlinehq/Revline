@@ -12,7 +12,7 @@ import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imag
 import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest, type PixelTrackReference } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
-import { readHighlights, sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
+import { sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
