@@ -44,7 +44,7 @@ import { completeDerivation } from './derivations';
 import { flyRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
-import { MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
+import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
@@ -235,7 +235,7 @@ async function releaseRenderSeat(ctx: MutationCtx, task: Doc<'mediaTasks'>) {
   if (task.kind === 'render' && flyRendersEnabled()) await ctx.scheduler.runAfter(0, internal.flyRender.dispatch, {});
 }
 async function failTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, error: string, retryable: boolean) {
-  retryable = retryable && task.attempt < MAX_ATTEMPTS;
+  retryable = retryable && !isMediaDiskFull(error) && task.attempt < MAX_ATTEMPTS;
   await patchMediaTask(ctx, task, { status: retryable ? 'retrying' : 'failed', error: error.slice(0, 1000), leaseToken: undefined, leaseExpiresAt: undefined, updatedAt: Date.now() });
   await releaseRenderSeat(ctx, task);
   await signalResult(ctx, task, { success: false, retryable, error: error.slice(0, 1000) });
