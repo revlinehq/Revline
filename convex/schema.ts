@@ -362,6 +362,7 @@ export default defineSchema({
     plan: v.union(v.literal('pro'), v.literal('ultra')), environment: v.union(v.literal('Sandbox'), v.literal('Production')),
     purchasedAt: v.number(), expiresAt: v.number(), accessUntil: v.number(), eventAt: v.number(), supersededAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()), refundReversedAt: v.optional(v.number()), autoRenew: v.optional(v.boolean()), billingIssue: v.optional(v.boolean()),
+    modelPayment: v.optional(v.union(v.literal('paid'), v.literal('free'))), modelPaymentSource: v.optional(v.union(v.literal('apple'), v.literal('superwall'))),
     superwallSequence: v.optional(v.number()), source: v.union(v.literal('apple'), v.literal('superwall')), updatedAt: v.number(),
   }).index('by_transaction', ['transactionId']).index('by_original', ['originalTransactionId']).index('by_owner_access', ['ownerId', 'accessUntil']),
   appleBillingEvents: defineTable({ source: v.union(v.literal('apple'), v.literal('superwall')), eventId: v.string(), transactionId: v.string(), receivedAt: v.number() }).index('by_source_event', ['source', 'eventId']),
