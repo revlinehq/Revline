@@ -8,9 +8,9 @@ import { parseEnv } from 'node:util';
 import { command, mask, redact, logTail } from './release-command.mjs';
 import { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend } from './release-verify.mjs';
 import { releaseRailway, verifyRailway } from './release-railway.mjs';
+import { REPOSITORY as repo, isRevlineRepository } from '../lib/repository.mjs';
 
 const dry = process.argv.includes('--dry-run');
-const repo = 'zuraHQ/revline-editor';
 const state = join(homedir(), '.local/state/revline-deploy');
 const primary = join(homedir(), 'Developer/revline-main');
 const productionFile = join(primary, '.env.production.local');
@@ -68,7 +68,7 @@ async function restartDevelopment() {
 }
 
 try {
-  if (!dry && (env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== 'refs/heads/main' || env.GITHUB_REPOSITORY !== repo || env.GITHUB_SHA !== sha)) throw new Error('Live releases require the main push workflow at its exact commit. Use --dry-run for dispatch.');
+  if (!dry && (env.GITHUB_EVENT_NAME !== 'push' || env.GITHUB_REF !== 'refs/heads/main' || !isRevlineRepository(env.GITHUB_REPOSITORY) || env.GITHUB_SHA !== sha)) throw new Error('Live releases require the main push workflow at its exact commit. Use --dry-run for dispatch.');
   step = 'Check required PC production environment file';
   let production;
   try { production = parseEnv(await readFile(productionFile, 'utf8')); }

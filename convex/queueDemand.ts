@@ -1,17 +1,21 @@
 import { v } from 'convex/values';
 import { internalQuery } from './_generated/server';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
-import { seatedRenders } from './lib/render_seats';
+import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
+import type { FilterBuilder, GenericTableInfo } from 'convex/server';
 
 const LANES = ['ultra', 'standard'] satisfies Array<'ultra' | 'standard'>;
 
 export const processingDemand = internalQuery({ args: {}, returns: v.object({ waiting: v.number(), running: v.number() }), handler: async ctx => {
+  // Processors also claim exports unless dedicated Railway export workers run them,
+  // so a queued export must wake a processor when RENDER_PROVIDER is local.
+  const processorWork = (q: FilterBuilder<GenericTableInfo>) => q.and(hostedRendersEnabled() ? q.neq(q.field('kind'), 'render') : true, q.or(q.eq(q.field('requiredProcessorVersion'), undefined), q.lte(q.field('requiredProcessorVersion'), MEDIA_PROCESSOR_VERSION)));
   const waiting = await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created', q => q.eq('status', 'queued').eq('claimable', true))
-    .filter(q => q.and(q.neq(q.field('kind'), 'render'), q.or(q.eq(q.field('requiredProcessorVersion'), undefined), q.lte(q.field('requiredProcessorVersion'), MEDIA_PROCESSOR_VERSION)))).take(8);
+    .filter(processorWork).take(8);
   const legacy = waiting.length < 8 ? await ctx.db.query('mediaTasks').withIndex('by_status_createdAt', q => q.eq('status', 'queued'))
-    .filter(q => q.and(q.eq(q.field('claimable'), undefined), q.gt(q.field('attempt'), 0), q.neq(q.field('workflowId'), undefined), q.neq(q.field('kind'), 'render'), q.or(q.eq(q.field('requiredProcessorVersion'), undefined), q.lte(q.field('requiredProcessorVersion'), MEDIA_PROCESSOR_VERSION)))).take(8 - waiting.length) : [];
+    .filter(q => q.and(q.eq(q.field('claimable'), undefined), q.gt(q.field('attempt'), 0), q.neq(q.field('workflowId'), undefined), processorWork(q))).take(8 - waiting.length) : [];
   const running = await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created', q => q.eq('status', 'running').eq('claimable', false))
-    .filter(q => q.neq(q.field('kind'), 'render')).take(100);
+    .filter(q => hostedRendersEnabled() ? q.neq(q.field('kind'), 'render') : true).take(100);
   return { waiting: waiting.length + legacy.length, running: running.length };
 } });
 

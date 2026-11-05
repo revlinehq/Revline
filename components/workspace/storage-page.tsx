@@ -6,9 +6,9 @@ import { useDeferredValue,useState,useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CloudUpload } from './cloud-upload';
-import { useConvexAuth,useMutation,usePaginatedQuery,useQuery } from 'convex/react';
+import { useAction,useConvexAuth,useMutation,usePaginatedQuery,useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { ArrowDown,ArrowUpRight,Box,Download,Film,ImageIcon,LoaderCircle,LockKeyhole,Music2,Search,Trash2 } from 'lucide-react';
+import { ArrowDown,ArrowUpRight,Box,Download,Film,ImageIcon,LoaderCircle,LockKeyhole,Music2,Search,Trash2,Upload } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Dialog,DialogContent,DialogDescription,DialogTitle } from '@/components/ui/dialog';
@@ -23,6 +23,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 type StorageFile=FunctionReturnType<typeof api.storage.files>['page'][number];
+type UnfinishedUpload=FunctionReturnType<typeof api.cloudMedia.unfinished>[number];
 type Summary=FunctionReturnType<typeof api.storage.summary>;
 type Filters={kind:'all'|'video'|'audio'|'image'|'model'|'export';search:string;sort:'largest'|'newest';unused:boolean};
 const defaultFilters:Filters={kind:'all',search:'',sort:'largest',unused:false};
@@ -30,6 +31,43 @@ const categories=[['all','All'],['video','Video'],['audio','Audio'],['image','Im
 const icons={video:Film,audio:Music2,image:ImageIcon,model:Box,export:Download};
 const breakdown=[['videoBytes','Video'],['audioBytes','Audio'],['imageBytes','Images'],['modelBytes','Models'],['exportBytes','Exports']] as const;
 function formatStorageBytes(bytes:number){if(bytes===0)return '0 GB';if(bytes<1_000_000)return `${Math.max(1,Math.round(bytes/1_000))} KB`;if(bytes<1_000_000_000)return `${Math.round(bytes/1_000_000)} MB`;return `${Number((bytes/1_000_000_000).toFixed(1))} GB`;}
+function formatElapsed(ms:number){const minutes=Math.floor(ms/60_000);if(minutes<1)return 'under a minute';if(minutes<60)return `${minutes} min`;const hours=Math.floor(minutes/60);return hours<24?`${hours} h`:`${Math.floor(hours/24)} d`;}
+/** Parts are up to 95 MB, so only a long silence suggests a closed tab rather than a slow link. */
+const QUIET_MS=30*60_000;
+
+function UnfinishedUploads({reservedBytes}:{reservedBytes:number}){
+  const {isAuthenticated}=useConvexAuth();
+  const uploads=useQuery(api.cloudMedia.unfinished,isAuthenticated?{}:'skip');
+  const abort=useAction(api.cloudMedia.abort);
+  const [open,setOpen]=useState(false),[cancelling,setCancelling]=useState<ReadonlySet<string>>(()=>new Set()),[error,setError]=useState('');
+  const [now,setNow]=useState(()=>Date.now());
+  const count=uploads?.length??0;
+  // Close once nothing is left, so a later upload never reopens the dialog by itself.
+  useEffect(()=>{if(!count)setOpen(false);},[count]);
+  async function cancel(items:UnfinishedUpload[]){
+    const ids=items.map(item=>item.uploadId).filter(id=>!cancelling.has(id));if(!ids.length)return;
+    setError('');setCancelling(current=>new Set([...current,...ids]));
+    const results=await Promise.allSettled(ids.map(uploadId=>abort({uploadId})));
+    setCancelling(current=>{const next=new Set(current);for(const id of ids)next.delete(id);return next;});
+    const failed=results.find(result=>result.status==='rejected');
+    if(failed)setError(userError(failed.reason,'Could not cancel every upload. Please retry.'));
+  }
+  return <div className="storage-reserved">
+    <p>{formatStorageBytes(reservedBytes)} reserved for uploads in progress.</p>
+    {count>0&&<Button variant="outline" size="sm" onClick={()=>{setError('');setNow(Date.now());setOpen(true);}}>Review {count} unfinished {count===1?'upload':'uploads'}</Button>}
+    <Dialog open={open} onOpenChange={setOpen}><DialogContent className="workspace-dialog storage-unfinished-dialog">
+      <DialogTitle>Unfinished uploads</DialogTitle>
+      <DialogDescription>Uploads that stop sending data are cleared automatically after 2 hours. Cancel them now to free their space. Cancelling an upload still running in another tab stops it.</DialogDescription>
+      <ul className="storage-unfinished-list">{uploads?.map(upload=>{const quiet=now-upload.activeAt>=QUIET_MS,busy=cancelling.has(upload.uploadId);return <li key={upload.uploadId}>
+        <span className="storage-file-icon"><Upload size={15}/></span>
+        <div><strong title={upload.fileName}>{upload.fileName}</strong><small>{formatStorageBytes(upload.size)} · started {formatElapsed(now-upload.createdAt)} ago · {quiet?`no new data for ${formatElapsed(now-upload.activeAt)}`:'uploading'}</small></div>
+        <Button variant="ghost" size="sm" disabled={busy} aria-label={`Cancel upload of ${upload.fileName}`} onClick={()=>void cancel([upload])}>{busy?<LoaderCircle size={13} className="animate-spin"/>:'Cancel'}</Button>
+      </li>;})}</ul>
+      {error&&<p className="workspace-inline-error" role="alert">{error}</p>}
+      <div className="workspace-dialog-actions"><Button variant="outline" size="md" onClick={()=>setOpen(false)}>Close</Button>{count>1&&<PrimaryButton disabled={cancelling.size>0} onClick={()=>void cancel(uploads??[])}>{cancelling.size>0&&<LoaderCircle size={13} className="animate-spin"/>}Cancel all {count}</PrimaryButton>}</div>
+    </DialogContent></Dialog>
+  </div>;
+}
 
 export function StoragePage(){
   const {isAuthenticated}=useConvexAuth();
@@ -68,7 +106,7 @@ function StorageBrowser({summary,files,filters,onFilters,loading,loadingMore,has
         {breakdown.map(([field],index)=><span key={field} className={`storage-color-${index}`} style={{width:`${ready&&summary.usedBytes>0?summary[field]/summary.usedBytes*100:0}%`}}/>)}
       </div>
       <div className="storage-breakdown">{breakdown.map(([field,label],index)=><span key={field}><i className={`storage-color-${index}`}/>{label}<b>·</b>{ready?formatStorageBytes(summary[field]):<Skeleton as="span" style={{display:'inline-block',height:11,width:35}}/>}</span>)}</div>
-      {ready&&summary.reservedBytes>0&&<p className="storage-reserved">{formatStorageBytes(summary.reservedBytes)} reserved for uploads in progress.</p>}
+      {ready&&summary.reservedBytes>0&&<UnfinishedUploads reservedBytes={summary.reservedBytes}/>}
     </section>
     {(deleting||cleanupProjects.length>0)&&<div className="storage-selection" role={cleanup==='failed'?'alert':'status'}><span>{cleanupError||(cleanup==='failed'?'Project cleanup stopped. Retry to finish removing its files.':cleanupProjects.length&&cleanup!=='complete'?'Finishing project cleanup…':'Deletion complete. Storage used is up to date.')}</span>{cleanup==='failed'&&<Button variant="outline" size="md" disabled={retrying} onClick={()=>void retryCleanup()}>{retrying?'Retrying…':'Retry cleanup'}</Button>}</div>}
     <section className="storage-library" aria-label="Stored media" aria-busy={loading}>
