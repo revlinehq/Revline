@@ -22,7 +22,7 @@ import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renam
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
 import { briefFor } from './briefs';
-import { enqueueMediaTask, GUARD_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { enqueueMediaTask, GUARD_PROCESSOR_VERSION } from './mediaTasks';
 import { referenceBox } from './schema';
 import { comparisonCrop } from '../lib/ai/reference-comparison';
 import { soundRequestValidator } from './lib/sound_validator';
@@ -260,7 +260,7 @@ export const requestFrames = internalMutation({ args: { resolution:v.optional(v.
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
   const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
-  const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
+  const requiredProcessorVersion=MEDIA_PROCESSOR_VERSION;
   const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);
   if (taskId) await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison&&taskId?{cancelTaskId:taskId}:{})});
