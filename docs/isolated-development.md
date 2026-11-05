@@ -74,3 +74,9 @@ function API SHA-256: 8963e2a3969a7299e9705b3f64c800fec08699659524a7cd8455a28267
 compiled config SHA: f5c2076dd35e12efb674e0928367c8e4ed8afd1f37bc24fa1c7408181a176e82
 lastDeployTime:       1793750385779
 ```
+
+## Faithful project snapshots
+
+For a cached-analysis development baseline, use `npm run dev:isolated -- --snapshot --project=<source-project-id> --source-owner=<source-owner-id>` (add `--setup-only` to avoid starting services). This reads the complete current timeline, saved tabs and hydrated asset analysis through existing owner-checked queries. It imports a new private project, remaps media IDs and links, and borrows original and preview R2 objects read-only. It never writes the source or transfers credentials. Source scene code is materialized before import. Undo history, chats, running jobs and revision-bound verification are not imported.
+
+All source media must use R2, with fewer than 200 assets and at most ten tabs; unsupported or missing references fail the transaction. Legacy deployment-local thumbnails are omitted. Convex transaction and argument limits still apply: oversized imports fail rather than truncate analysis. Snapshot reads reject concurrent timeline changes; stop source editing and analysis before importing. Repeat startup retains the imported project's edits. Add `--fresh-snapshot` to create another baseline without replacing the previous private project. Stop only that worktree's services before setup, as usual.

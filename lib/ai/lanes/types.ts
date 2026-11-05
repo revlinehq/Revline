@@ -6,11 +6,11 @@ export const LANE_IDS = [
   'edit',
   'motion',
   'recreate',
-  'explainer',
   'clip',
   'reel',
 ] as const;
-export type LaneId = (typeof LANE_IDS)[number];
+// Legacy stored lane values remain readable without becoming selectable.
+export type LaneId = (typeof LANE_IDS)[number] | 'explainer';
 export type LaneEvidence = {
   tool: string;
   timelineId: string;

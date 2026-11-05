@@ -79,6 +79,10 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) return timeline;
+  if (clip.kind === 'scene' && clip.scene?.film && (patch.duration !== undefined || patch.sourceStart !== undefined)) {
+    const sourceStart = patch.sourceStart ?? clip.sourceStart, duration = patch.duration ?? clip.duration;
+    if (sourceStart + duration > clip.scene.film.duration + 1e-6) throw new TimelineGestureRejection(`This film is ${clip.scene.film.duration}s long. Keep source start plus clip duration within that length. Trimming selects a window of the existing film; it cannot extend the scene code or retime the shared film clock.`);
+  }
   if (isTransitionClip(clip) && patch.duration !== undefined && patch.start === undefined) {
     const pair = transitionPair(timeline.clips, clip.transition!);
     patch = { ...patch, ...boundedTransitionRange(timeline, pair.from, pair.to, patch.duration,clip.id) };

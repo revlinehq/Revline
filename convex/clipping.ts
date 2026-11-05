@@ -38,6 +38,7 @@ import {
 import { timelineDuration, type Timeline } from "../lib/editor/types";
 import { timelineValidator } from "./schema";
 import { loadSceneCode } from "./lib/scene_code";
+import { clipQuoteProblems, clipChoiceProblems } from '../lib/media-analysis/clip-plan-feedback';
 
 const runArgs = {
   ownerId: v.string(),
@@ -210,7 +211,7 @@ export const begin = internalMutation({
             next: transcriptOnly ? "Select distinct hooks/payoffs from this transcript, then register planClips found. Use inspectAssetAnalysis only for exact boundary word windows; do not reread the full source. Preserve source framing/aspect, skip normalization unless requested, finishClipping and finish validate data inline without checkClip. No source frames, Gemini, speaker tracking or rendered verification is required." : "Propose candidates from the transcript and existing audio/shot helpers. For visually dependent moments, inspectVideo with explicit SOURCE start/end (up to 60s) and a focused question; extend only uncertain candidates. For silent footage, inspect a bounded sparse set of short video windows, then refine observed events; report inspected coverage. Stills/cuts alone cannot prove action. Register grounded planClips found moments. The server returns candidate IDs; accept/drop those IDs in the next planClips call. Never stop at suggestions when clips were requested.",
           }
         : {}),
-      note: "Review top 8-10. Call planClips with accepted IDs and named tabs; give reasons for rejected reviewed candidates. checkClip each tab, then finishClipping. Never pad to the count.",
+      note: "Review top 8-10. Call planClips with current accepted IDs and named tabs; give reasons for rejected reviewed candidates. Build accepted tabs, then finishClipping and finish directly; checkClip is optional. Never pad to the count.",
     };
   },
 });
@@ -255,11 +256,6 @@ export const review = internalMutation({
       const source = await hydrateAsset(ctx, raw),
         tracks = row.targeted || row.reviewMode === 'transcript' ? transcriptHighlightTracks(source.duration ?? 0, source.analysis?.transcript, 'talk', row.reviewMode === 'transcript') : readHighlights(source.analysis?.highlights);
       if (!tracks) throw new ConvexError("Source helper analysis is missing.");
-      const normalize = (text: string) =>
-        text
-          .toLowerCase()
-          .replace(/[^\p{L}\p{N}]+/gu, " ")
-          .trim();
       const moments = args.found.map((raw) => {
         const m = semanticMoment.parse(raw);
         if (row.reviewMode === 'transcript' && (m.kind === 'action' || !m.hook.text.trim() || !m.payoff.text.trim()))
@@ -289,21 +285,12 @@ export const review = internalMutation({
           });
           if (!observed) throw new ConvexError('Action candidates require saved targeted video observations covering the payoff; stills, scene cuts and commentary alone do not establish the action.');
         }
-        for (const line of [m.hook, m.payoff])
-          if (line.text.trim()) {
-            const measured = (source.analysis?.transcript?.words ?? [])
-              .filter(
-                (w) => w.start >= line.start - 0.2 && w.end <= line.end + 0.2,
-              )
-              .map((w) => w.text)
-              .join(" ");
-            if (!normalize(measured).includes(normalize(line.text)))
-              throw new ConvexError(
-                "Fallback hook/payoff quotes must match the saved word timings. Leave non-verbal lines empty and describe checked source frames.",
-              );
-          }
         return m;
       });
+      const quoteErrors = moments.flatMap((moment, index) => clipQuoteProblems(moment, source.analysis?.transcript?.words ?? [])
+        .map(problem => ({ index, title: moment.title, ...problem })));
+      if (quoteErrors.length) return { success: false, saved: false, errors: quoteErrors,
+        next: 'Correct every listed hook/payoff using the saved word timings. Retry found with the complete candidate set; nothing was replaced. For truncated windows, read only that source window with inspectAssetAnalysis.' };
       const candidates = rankHighlights(
         { ...tracks, judge: "fallback", moments },
         source.analysis?.transcript,
@@ -319,13 +306,15 @@ export const review = internalMutation({
         recommendedCount,
       });
       return {
+        planSaved: true,
+        stage: 'found',
         found: candidates.length,
         qualified,
         recommendedCount,
         sourceLengthTarget:targetCount(row,tracks.duration),
         candidates: candidates.slice(0, 10),
         geminiUnavailableReason: row.unavailableReason,
-        next: "Accept or drop each returned candidate ID with planClips, then build exactly the accepted tabs, then call finishClipping and finish directly. Cheap data checks run inline; heavy QA is optional.",
+        next: "This found call replaced the candidate set. Use only these returned IDs and suggested start/end ranges; another found call must include the complete replacement set. Accept or drop each reviewed ID with planClips, then build the accepted tabs and call finishClipping and finish directly. Heavy QA is optional.",
       };
     }
     const candidates = candidatesOf(row),
@@ -339,28 +328,17 @@ export const review = internalMutation({
       throw new ConvexError(
         "Each accepted clip needs its own distinct tab name.",
       );
-    for (const choice of args.accepted) {
+    const choiceErrors = args.accepted.flatMap(choice => {
       const candidate = candidates.find((c) => c.id === choice.candidateId);
-      if (!candidate || !candidate.qualified || ids.has(choice.candidateId))
-        throw new ConvexError(
-          "Accept distinct candidates that pass the quality bar.",
-        );
-      if (
-        !choice.name.trim() ||
-        choice.name.length > 60 ||
-        ![choice.start, choice.end].every(Number.isFinite) ||
-        choice.end - choice.start < 15 ||
-        choice.end - choice.start > 60 ||
-        choice.start > candidate.hook.start + 0.1 ||
-        choice.end < candidate.payoff.end - 0.03 ||
-        Math.abs(choice.start - candidate.start) > 12 ||
-        Math.abs(choice.end - candidate.end) > 12
-      )
-        throw new ConvexError(
-          `Invalid clean range or missing hook/payoff for ${choice.candidateId}.`,
-        );
+      const errors = clipChoiceProblems(choice, candidate);
+      if (ids.has(choice.candidateId)) errors.push('Accept each candidate ID only once.');
       ids.add(choice.candidateId);
-    }
+      return errors.length ? [{ candidateId: choice.candidateId, errors,
+        ...(candidate ? { suggestedRange: { start: candidate.start, end: candidate.end } } : {}) }] : [];
+    });
+    if (choiceErrors.length) return { success: false, saved: false, errors: choiceErrors,
+      candidates: candidates.slice(0, 10).map(({ id, start, end, qualified }) => ({ id, start, end, qualified })),
+      next: 'Correct every listed choice and retry the complete accepted/dropped plan. Use the current candidate IDs and suggested ranges; the saved plan has not changed.' };
     for (const drop of args.dropped) {
       if (
         !candidates.some((c) => c.id === drop.candidateId) ||
@@ -456,6 +434,8 @@ export const review = internalMutation({
       }),
     });
     return {
+      planSaved: true,
+      stage: 'accepted',
       ...(row.unavailableReason
         ? { geminiUnavailableReason: row.unavailableReason }
         : {}),

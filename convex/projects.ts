@@ -1,4 +1,4 @@
-import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
+import { remapTimelineAssets } from '../lib/editor/copy-timeline';
 import { shareAnalysis } from './lib/asset_analysis';
 import { writeProject,createProject,readProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, sceneCodeText } from './lib/scene_code';
@@ -87,28 +87,22 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
   const copyId = await createProject(ctx, { title: projectTitle(title ?? `${project.title} copy`), aspectRatio: project.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline: normalizeTimeline({ clips: [], fps: timeline.fps, aspectRatio: timeline.aspectRatio }), revision: 0, history: [] });
   const ids = new Map<string, Id<'assets'>>();
   for (const asset of assets) {
-    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, derivedOf: _derived, ...metadata } = await shareAnalysis(ctx, asset);
+    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, derivedOf: _derived, ...metadata } = asset;
     ids.set(String(_id), await ctx.db.insert('assets', { ...metadata, projectId: copyId, createdAt: now }));
   }
   // Links between media (extracted audio, background-removed cutouts) point at the copies.
   for (const asset of assets) {
     const link = (id?: Id<'assets'>) => id ? ids.get(String(id)) : undefined;
     const audioAssetId = link(asset.audioAssetId), cutoutOf = link(asset.cutoutOf), derivedOf = link(asset.derivedOf);
-    if (audioAssetId || cutoutOf || derivedOf) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}), ...(derivedOf ? { derivedOf } : {}) });
+    const imageGeneration = asset.imageGeneration ? { ...asset.imageGeneration, referenceAssetIds: asset.imageGeneration.referenceAssetIds.map(id => link(id) ?? id) } : undefined;
+    if (audioAssetId || cutoutOf || derivedOf || imageGeneration) await ctx.db.patch(ids.get(String(asset._id))!, { ...(audioAssetId ? { audioAssetId } : {}), ...(cutoutOf ? { cutoutOf } : {}), ...(derivedOf ? { derivedOf } : {}), ...(imageGeneration ? { imageGeneration } : {}) });
   }
   for (const id of ids.values()) await recordAssetStorage(ctx, (await ctx.db.get(id))!);
   // Clips and the images a scene draws both point at the copies, so the new project never reads the original's media.
   const copied = (id: string) => ids.get(id) ?? id;
-  const remap = (item: Timeline): Timeline => {
-    const next={...item,...(item.audioNormalization?{audioNormalization:{...item.audioNormalization,assetId:copied(item.audioNormalization.assetId)}}:{}),clips:item.clips.map(clip=>({...clip,...(clip.assetId?{assetId:copied(clip.assetId)}:{}),...(clip.normalizedAudio?{normalizedAudio:{...clip.normalizedAudio,assetId:copied(clip.normalizedAudio.assetId)}}:{}),...(clip.scene?.media?{scene:{...clip.scene,media:clip.scene.media.map(entry=>({...entry,assetId:copied(entry.assetId)}))}}:{})}))};
-    const baked={...next,clips:next.clips.map((clip,i)=>clip.normalizedAudio&&item.clips[i].normalizedAudio?.key===audioNormalizationKey(item,item.clips[i])?{...clip,normalizedAudio:{...clip.normalizedAudio,key:audioNormalizationKey(next,clip)}}:clip)};
-    const master=item.audioNormalization;
-    if(master?.key===timelineNormalizationKey(item)&&baked.audioNormalization)baked.audioNormalization.key=timelineNormalizationKey(baked);
-    return baked;
-  };
   const tabs = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', project._id)).take(10);
-  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: await storeSceneCode(ctx,remap(row.timeline)) });
-  await writeProject(ctx, copyId, { timeline: remap(timeline), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
+  for (const row of tabs) await ctx.db.insert('projectTimelines', { projectId: copyId, ownerId, timelineId: row.timelineId, timeline: await storeSceneCode(ctx,remapTimelineAssets(row.timeline, copied)) });
+  await writeProject(ctx, copyId, { timeline: remapTimelineAssets(timeline, copied), aspectRatio: timeline.aspectRatio, ...(project.timelineTabs ? { timelineTabs: project.timelineTabs, activeTimelineId: project.activeTimelineId } : {}) });
   return copyId;
 }
 export async function renameProjectFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, title: string) {

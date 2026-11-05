@@ -16,7 +16,7 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { parseVideoLink } from "../editor/video-link";
-import { AnalysisError } from "../media-analysis/errors";
+import { AnalysisError, isMediaDiskFull } from "../media-analysis/errors";
 import { workerToolPath } from "./worker-tool-path";
 import { z } from "zod";
 
@@ -336,6 +336,7 @@ export async function importVideoLink(
     throw new AnalysisError(
       "The media worker needs more free disk space before importing a video.",
       503,
+      false,
     );
   const source = join(directory, "download.mp4");
   let title = "Imported video";
@@ -353,7 +354,7 @@ export async function importVideoLink(
       );
       title = stdout.trim().split("\n").at(-1) || title;
     } catch (error) {
-      if (signal.aborted) throw error;
+      if (signal.aborted || isMediaDiskFull(error)) throw error;
       const stderr = String((error as { stderr?: string }).stderr ?? "");
       if (
         /sign in|confirm.*bot|private video|not available|unavailable|copyright|age.restricted/i.test(

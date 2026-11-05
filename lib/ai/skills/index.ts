@@ -1,5 +1,3 @@
-import { explainerScenes } from './explainer-scenes';
-import { explainer } from './explainer';
 import { overallStyling } from './overall-styling';
 import { musicAndSound } from './music-and-sound';
 import { effects } from './effects';
@@ -20,7 +18,7 @@ import { vfx } from './vfx';
 export type EditorSkillPage = { name: string; description: string; body: string };
 export type EditorSkill = { name: string; description: string; body: string; pages?: EditorSkillPage[] };
 
-export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, explainerScenes, overallStyling, explainer, motionDesign, referenceFootage, musicAndSound, visualInspection];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, overallStyling, motionDesign, referenceFootage, musicAndSound, visualInspection];
 
 /** The always-visible index: names and when to read each skill. */
 export function editorSkillIndex() {
