@@ -21,7 +21,7 @@ Automated scans reduce risk but cannot prove that software has no vulnerabilitie
 
 ## Automated checks
 
-GitHub Actions is enabled for this repository. The Security workflow runs a redacted Gitleaks scan of all reachable history and root and agent-runner production dependency audits on every pull request, every push to main and weekly. It and the Validate workflow run only on GitHub-hosted runners. To run the same checks locally before publishing changes:
+GitHub Actions is enabled for this repository; individual workflows can still be disabled from the Actions tab, and a disabled workflow runs nothing. When enabled, the Security workflow runs a redacted Gitleaks scan of all reachable history and root and agent-runner production dependency audits on every pull request, every push to main and weekly. It and the Validate workflow run only on GitHub-hosted runners. To run the same checks locally before publishing changes:
 
 ```sh
 npm audit --omit=dev --audit-level=moderate
@@ -35,7 +35,7 @@ Install Gitleaks from its official release before using the scan command. Fetch 
 
 ## Release runner
 
-Production releases run from `deploy-main.yml` on the maintainer's self-hosted `revline-deploy-pc` runner, which shares a machine with production environment files. Its job refuses anything except the owner's push or manual dispatch on `main` of `revlinehq/Revline`. That guard lives in a workflow file, and a pull request can edit workflow files, so it cannot stop a fork's own job from targeting the runner. The repository settings are the boundary:
+Production releases run from `deploy-main.yml` on the maintainer's self-hosted `revline-deploy-pc` runner, which shares a machine with production environment files. Its job refuses anything except the owner's push or manual dispatch on `main` of `revlinehq/Revline`. That guard lives in a workflow file, and a pull request can edit or add workflow files, so it cannot stop a fork's own job from targeting the runner. Disabling existing workflows does not help either, because a newly added workflow file is not disabled. The repository settings are the boundary:
 
 - Require approval for fork pull request workflows from all external contributors.
 - Keep the runner in an organization runner group whose workflow access is limited to `revlinehq/Revline/.github/workflows/deploy-main.yml@refs/heads/main`, or remove it from this public repository.
