@@ -1,7 +1,6 @@
-import type { Clip, Timeline } from './types';
+import type { Clip, SceneBlueprint, Timeline } from './types';
 import { checkSceneCode } from './scene-compile';
 import { isReactScene, splitExportDeclarations } from './scene-modules';
-import type { SceneBlueprint } from './scene-layers';
 
 /**
  * A film's shared code: one React module (the product UI components, type helpers, stage, palette) that every

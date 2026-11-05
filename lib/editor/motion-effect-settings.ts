@@ -1,7 +1,6 @@
 import type { Clip, FlashSettings, PopSettings, PunchSettings, ShakeSettings } from './types';
 import type { MotionKeyframe } from './motion-path';
 
-export type { FlashSettings, PopSettings, PunchSettings, ShakeSettings };
 export type MotionEffectChanges = { flash?: Partial<FlashSettings>; punch?: Partial<PunchSettings>; shake?: Partial<ShakeSettings>; pop?: Partial<PopSettings> };
 const PROPERTY_EFFECT_PRESETS = ['flash', 'punch', 'shake', 'pop'] as const;
 export type PropertyEffectPreset = typeof PROPERTY_EFFECT_PRESETS[number];

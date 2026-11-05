@@ -1,6 +1,5 @@
 import type { Clip, Timeline, VisualFadeSettings } from './types';
 
-export type { VisualFadeSettings };
 export const VISUAL_FADE_MAX_SECONDS = 86400;
 const DEFAULT_VISUAL_FADE: Readonly<VisualFadeSettings> = { fadeIn: 0, fadeOut: 0 };
 type FadeClip = Pick<Clip, 'kind' | 'duration' | 'visualFade' | 'visualFadeTiming'>;

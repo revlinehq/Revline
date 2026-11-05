@@ -1,7 +1,7 @@
 import { DEFAULT_IMPACT, DEFAULT_OVERLAY, validateMontageVfx } from './montage-vfx';
 import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
-import { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS, type BlendMode, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
+import { BLEND_MODES, EFFECT_PRESETS, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
 import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
 import { validatePlaybackRate } from './playback-rate';
@@ -18,11 +18,6 @@ import { shiftSpeedRamp } from './speed-ramp';
 import { validateMask } from './masks';
 import { validateAudioReactive } from './audio-reactive';
 import { validateColorFinish } from './color-finish';
-// lib/ai/object-motion.ts still reads MotionKeyframe from here.
-export type { MotionKeyframe } from './motion-path';
-
-export { BLEND_MODES, EFFECT_PRESETS, TIMED_EFFECT_PRESETS };
-export type { BlendMode, CinematicBarSettings, EffectPreset, FrameShrinkSettings, SolidColorSettings, TimedEffectPreset, ZoomSettings };
 const MOTION_PRESETS = ['none', 'fade', 'punch', 'shake', 'flash', 'pop'] as const;
 export type MotionPreset = typeof MOTION_PRESETS[number];
 /** Presets offered for new edits; the rest stay renderable in saved projects. */

@@ -1,4 +1,5 @@
 import { READ_ONLY_TOOLS } from './read-only-tools';
+import { ASPECT_RATIOS } from '../editor/types';
 /** Continue a larger edit only while tools keep producing verified changes. */
 export const EDITOR_SOFT_STEPS = 50;
 export const EDITOR_HARD_STEPS = 100;
@@ -19,7 +20,7 @@ export function hasRecentEditProgress(steps: Steps) {
     if (output.success === false || output.unchanged === true || output.saved !== true && output.staged !== true) return false;
     return Array.isArray(output.changedClips) && output.changedClips.some(clip => typeof record(clip).id === 'string' && String(record(clip).id).length > 0)
       || ids(output.removedClipIds) || ids(output.removedMarkerIds) || ids(output.changedMarkerIds)
-      || part.toolName === 'setAspectRatio' && ['vertical', 'square', 'landscape', 'portrait-feed', 'classic'].includes(String(output.aspectRatio));
+      || part.toolName === 'setAspectRatio' && (ASPECT_RATIOS as readonly string[]).includes(String(output.aspectRatio));
   }));
 }
 export function editStepStopReason(steps: Steps): 'hard_step_limit' | 'no_recent_edit_progress' | null {

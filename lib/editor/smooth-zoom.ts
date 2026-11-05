@@ -1,8 +1,8 @@
 import { NEUTRAL_MOTION, sampleMotionAnchors, type EasedMotionAnchor } from './motion-path';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
-import { validateSmoothZoom, type SmoothZoomSettings } from './smooth-zoom-settings';
-import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
+import { validateSmoothZoom } from './smooth-zoom-settings';
+import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset, type SmoothZoomSettings } from './types';
 
 /** Source coordinates are mapped through the same fit/crop geometry as playback/export. */
 export function smoothZoomFocus(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, point: { centerX: number; centerY: number }) {

@@ -1,7 +1,6 @@
 import type { CameraMotionSettings, Clip } from './types';
 import { CAMERA_ZOOM_RANGE, SMOOTH_ZOOM_EASINGS } from './smooth-zoom-settings';
 
-export type { CameraMotionSettings };
 
 /** Recipe times retain motion's original clip-local origin through trims and splits. */
 export function validateCameraMotion(clip: Pick<Clip, 'kind' | 'cameraMotion' | 'smoothZoom'>) {

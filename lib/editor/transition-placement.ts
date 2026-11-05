@@ -1,7 +1,7 @@
 import { addTransitionClip, snapTime, splitClip } from './operations';
-import { isTransitionClip, transitionPair, transitionSources, type ClipTransition, type TransitionPreset } from './clip-transitions';
+import { isTransitionClip, transitionPair, transitionSources } from './clip-transitions';
 import { TimelineGestureRejection } from './timeline-edit-errors';
-import { normalizeTimeline, trackOf, type Timeline } from './types';
+import { normalizeTimeline, trackOf, type ClipTransition, type Timeline, type TransitionPreset } from './types';
 
 type PlacementOptions = { aboveClipId?: string; visualTrack?: number; track?: number; duration?: number } & Partial<Omit<ClipTransition,'fromClipId'|'toClipId'>>;
 const tolerance = 1e-6;

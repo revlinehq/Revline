@@ -1,7 +1,5 @@
 import type { Bloom, Clip, ColorGrade, DirectionalBlur, Dither, FilmOverlay, FrameCorners, FrameDistortion, Glitch, InvertColors, LensDistortion, LightLeak, LightSweep, SoftBlur, TurbulentDisplace, Vhs, ZoomBlur } from './types';
 import { DEFAULT_NEON_EDGES, NEON_EDGE_LIMITS, validateNeonEdges, type NeonEdges } from './neon-edges';
-export type { NeonEdges } from './neon-edges';
-export type { Bloom, ColorGrade, DirectionalBlur, Dither, FilmOverlay, FrameCorners, FrameDistortion, Glitch, InvertColors, LensDistortion, LightLeak, LightSweep, SoftBlur, TurbulentDisplace, Vhs, ZoomBlur };
 
 export type VisualEffects = { bloom?: Bloom; colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; vhs?: Vhs; lightLeak?: LightLeak; directionalBlur?: DirectionalBlur; turbulentDisplace?: TurbulentDisplace; lightSweep?: LightSweep; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
 export type VisualEffectsPatch = { [K in keyof VisualEffects]?: Partial<NonNullable<VisualEffects[K]>> };

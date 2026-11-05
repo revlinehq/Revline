@@ -1,6 +1,6 @@
-import { isMotionEasing, sampleMotionAnchors, type MotionEasing } from './motion-path';
+import { isMotionEasing, sampleMotionAnchors, type MotionEasing, type MotionKeyframe } from './motion-path';
 import { shiftEffectKeyframes } from './effect-keyframes';
-import { validateClipEffects, type MotionKeyframe } from './clip-effects';
+import { validateClipEffects } from './clip-effects';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type Timeline } from './types';
 
 export type ObjectMotionAnchor = MotionKeyframe & {easing?:MotionEasing};

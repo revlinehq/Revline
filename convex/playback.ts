@@ -1,5 +1,5 @@
 import { previewSegmentUrl } from './schema';
-import type { PreviewSegment } from '../lib/editor/preview-segments';
+import type { PreviewSegment } from '../lib/editor/types';
 import { ConvexError, v } from 'convex/values';
 import { action, internalQuery, mutation } from './_generated/server';
 import { internal } from './_generated/api';

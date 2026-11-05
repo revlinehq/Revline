@@ -15,11 +15,11 @@ type LiveUpdater = (document: Document, previous: Timeline, next: Timeline, asse
  */
 const LIVE_UPDATERS: readonly LiveUpdater[] = [
   updateLiveMediaContent,
-  (document, previous, next) => updateLiveAdjustmentEffects(document, previous, next),
-  (document, previous, next) => updateLiveTextEffects(document, previous, next),
-  (document, previous, next) => updateLiveVisualEffects(document, previous, next),
+  updateLiveAdjustmentEffects,
+  updateLiveTextEffects,
+  updateLiveVisualEffects,
   updateLiveVisualGeometry,
-  (document, previous, next) => updateLiveScenes(document, previous, next),
+  updateLiveScenes,
 ];
 
 /**

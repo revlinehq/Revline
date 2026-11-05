@@ -1,6 +1,6 @@
 import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { motionEase, isMotionEasing, type MotionEasing } from './motion-path';
-import { MASK_SHAPES, type Clip, type ClipMask, type MaskGeometry, type MaskKey, type MaskShape } from './types';
+import { MASK_SHAPES, type Clip, type ClipMask, type MaskGeometry, type MaskKey } from './types';
 
 /**
  * A clip mask: a rectangle, ellipse, freehand polygon or text shape that hides the rest of a video or
@@ -8,8 +8,6 @@ import { MASK_SHAPES, type Clip, type ClipMask, type MaskGeometry, type MaskKey,
  * clip's frame (center x/y, width/height), keyed in the clip's motion path time so trims keep it aligned.
  * Drawn as a CSS mask from an SVG, by one runtime shared by preview and export.
  */
-export { MASK_SHAPES };
-export type { ClipMask, MaskGeometry, MaskKey, MaskShape };
 export type MaskAnchor = MaskKey & { easing?: MotionEasing };
 
 const GEOMETRY = ['x', 'y', 'width', 'height', 'rotation', 'feather'] as const;

@@ -1,10 +1,9 @@
-import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
+import type { ClipMask, MaskShape, PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
 import { boundedCameraMotion } from './camera-framing';
 import { focusAt } from './focus-path';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from './object-motion';
 import { solidColorSettings, visibleMotion } from './clip-effects';
-import { bakeMaskAnchors, type ClipMask, type MaskShape } from './masks';
 import { sourceTimeAt, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
 import { calculateVisualRect } from './visual-source-geometry';
@@ -107,7 +106,6 @@ export function attachMaskPatch(target: Clip, footage: Clip, asset: Pick<MediaAs
   return { pixelTracking: undefined, mask: { ...(samples.some(sample => sample.confidence !== undefined) ? { active: { start: keys[0].time, end: options.visibleUntil === undefined ? keys[keys.length - 1].time + 1 / (options.fps ?? 60) : timelineTimeAtSource(footage, options.visibleUntil) - target.start + offset } } : {}), shape: shape.shape, ...(shape.invert ? { invert: true } : {}), ...(shape.radius !== undefined ? { radius: shape.radius } : {}), ...(shape.text ? { text: shape.text } : {}), keys } };
 }
 
-export { bakeMaskAnchors };
 function geometry(clip: Clip): TrackGeometry {
   const { id, kind, assetId, start, duration, sourceStart, playbackRate, speedRamp, focus, transform, crop, fit, motion, motionOffset, cameraMotion, smoothZoom } = clip;
   return { id, kind, start, duration, sourceStart, ...(assetId === undefined ? {} : { assetId }), ...(playbackRate === undefined ? {} : { playbackRate }), ...(speedRamp ? { speedRamp } : {}), ...(focus ? { focus } : {}), ...(transform ? { transform } : {}), ...(crop ? { crop } : {}), ...(fit ? { fit } : {}), ...(motion ? { motion } : {}), ...(motionOffset === undefined ? {} : { motionOffset }), ...(cameraMotion ? { cameraMotion } : {}), ...(smoothZoom ? { smoothZoom } : {}) };

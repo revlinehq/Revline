@@ -1,6 +1,6 @@
 import { DEFAULT_CAPTION_STYLE } from './text-style';
 import { DEFAULT_PARALLAX } from './montage-vfx';
-import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, ownClockTimingPatch, resizeEffectMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
+import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, ownClockTimingPatch, resizeEffectMotion,validateClipEffects } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { audioFadeTimingPatch } from './audio-settings';
 import { anchoredFadeTimingPatch } from './fade-clock';
@@ -8,8 +8,8 @@ import { rescaleSmoothZoom } from './smooth-zoom-settings';
 import { rescaleCameraMotion } from './camera-motion-settings';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { bakeSpeedRamp, meanRampRate, rampSpan, MAX_RAMP_RATE, MIN_RAMP_RATE, type RampAnchor } from './speed-ramp';
-import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type ClipTransition, type TransitionDirection, type TransitionPreset } from './clip-transitions';
-import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
+import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources } from './clip-transitions';
+import { Clip, Timeline, type BlendMode, type ClipTransition, type EffectPreset, type TransitionDirection, type TransitionPreset, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
   const selected = new Set(ids);

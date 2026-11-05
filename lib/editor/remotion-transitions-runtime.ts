@@ -1,6 +1,6 @@
-import { transitionSampleTime, transitionWipeSettings, type TransitionPreset, type transitionSources } from './clip-transitions';
+import { transitionSampleTime, transitionWipeSettings, type transitionSources } from './clip-transitions';
 import { createPresentation, type PresentationBridge } from './remotion-transition-presentation';
-import type { Clip } from './types';
+import type { Clip, TransitionPreset } from './types';
 
 export type TransitionSource = ReturnType<typeof transitionSources>[number];
 export type TransitionController = {

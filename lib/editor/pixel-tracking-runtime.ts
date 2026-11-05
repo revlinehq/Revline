@@ -1,9 +1,9 @@
 import type { CompositionClock, CompositionClockHost } from './composition-clock';
-import type { Clip } from './types';
+import type { Clip, ClipMask } from './types';
 import { dimensions } from './types';
 import { attachOverlayPatch, attachMaskPatch } from './tracking-attach';
 import { motionAt } from './motion-path';
-import { maskAt, maskSvg, type ClipMask } from './masks';
+import { maskAt, maskSvg } from './masks';
 import { sourceTimeAt } from './playback-rate';
 import { localPixelTrackReader, readPixelTrackPage, waitForTrackPoll, type CompletedTrackPage } from '../media-analysis/pixel-track-reader';
 

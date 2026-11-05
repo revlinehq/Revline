@@ -1,6 +1,5 @@
 import { motionAt, type MotionKeyframe } from './motion-path';
-import type { Clip } from './types';
-import type { DirectionalBlur, ZoomBlur } from './visual-effects';
+import type { Clip, DirectionalBlur, ZoomBlur } from './types';
 
 export type CameraGlideBlurSource = {start:number;duration:number;motionOffset:number;amount:number;motion:MotionKeyframe[]};
 
