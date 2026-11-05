@@ -78,7 +78,7 @@ brief is retained in that worktree's ignored `.data/save-incident-brief.txt`.
 The invocation uses the requested local binary and model:
 
 ```sh
-/Users/zuramakaradze/.bun/bin/codex exec \
+codex exec \
   --dangerously-bypass-approvals-and-sandbox \
   -m gpt-6.1-sol -c model_reasoning_effort=high -C WORKTREE -
 ```
