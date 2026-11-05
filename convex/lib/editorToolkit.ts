@@ -15,7 +15,8 @@ import { readHighlights, sourceType, semanticMoment } from '../../lib/media-anal
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { editModeInstructions, PRECISE_ONLY_TOOLS, type EditorEditMode } from '../../lib/ai/edit-mode';
-import { FastFrameReview } from '../../lib/ai/fast-frame-review';
+import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
+import { FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence } from '../../lib/ai/fast-frame-review';
 import { effectPlanInput,validateEffectPlan,mergeEffectPlans,effectReviewBindings,type EffectPlan,type EffectEvidence } from '../../lib/ai/edit-plan';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { applyTwoRowLayout } from '../../lib/editor/two-row-layout';
@@ -956,7 +957,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
-      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      const frameTask=editMode==='fast'&&lane==='reel'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
+      const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
+      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
       finishResult=await check();
       if(finishResult.passed){
         try{
@@ -1210,8 +1213,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return { assetId: input.assetId, ...evidence,targets, coverage, precision: input.precision ?? 'sampled', inspectedFrameCount: evidence.frames.length, scope: 'Decoded still images only; timestamps identify sampled frames, not continuous event boundaries or audio evidence.', timelineOccurrences: editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId === input.assetId).map(clip => ({ clipId: clip.id, sourceStart: clip.sourceStart, timelineStart: clip.start, duration: clip.duration, playbackRate: playbackRateOf(clip), ...frameEvidenceOnClip(evidence, clip) })).filter(clip => clip.frames.length > 0) };
       }, { frameRequest }));
     } }),
-    editText: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editText, description: "Change an existing caption or graphic's text and save immediately. Preserve its timing and style.", inputSchema: z.object({ clipId: z.string(), text: z.string().max(2000) }), execute: async (_ctx, input) => checkpoint(t => {
+    editText: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editText, description: "Change an existing caption or graphic's text and save immediately. Preserve its timing and style. With saved speech evidence, captions must match the measured phrase inside that timing; case and punctuation corrections are allowed. Use setCaptionTiming first when moving phrase boundaries; never add unspoken words.", inputSchema: z.object({ clipId: z.string(), text: z.string().max(2000) }), execute: async (_ctx, input) => checkpoint(t => {
       const clip = find(t, input.clipId); if (clip.kind !== "caption" && clip.kind !== "graphic") throw new Error("Choose a caption or text graphic");
+      if (clip.kind === 'caption') {
+        const words = retainedSpeechWords(t, assets);
+        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false })[0] : undefined;
+        if (mismatch) throw new Error(`${mismatch} Keep that measured phrase, or use setCaptionTiming to realign its boundaries before editing the text.`);
+      }
       return patchClip(t, input.clipId, { text: input.text });
     }) }),
     styleCaptions: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.styleCaptions, description: "Batch-style existing captions and text graphics using exact clipIds. Without IDs, target captions only. Compose a custom style with installed font, size, weight, italic, spacing, line height, alignment, text-box padding/radius, solid colors, position, rotation, blend, stroke/shadow/glow and optional textCase in one call. Presets are optional starting points, not a requirement. Preserve words unless textCase is explicitly requested, and always preserve timing. Preserve its animation unless explicitly supplied; animation replaces the prior selection independently of appearance. Save immediately.", inputSchema: z.object({ clipIds: z.array(z.string()).min(1).max(200).optional(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), rotation:z.number().min(-360).max(360).optional(),textStyle:textStyleInput.optional(), textCase:z.enum(['sentence','upper','lower']).optional(), animation:z.enum(TEXT_ANIMATION_PRESETS).optional() }), execute: async (_ctx, input) => checkpoint(t => {
@@ -2085,10 +2093,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const execute = tool.execute;
     if (!execute) continue;
     tool.execute = async function (this: unknown, ...args: never[]) {
-      const input = (args[0] ?? {}) as { mode?: string; name?: string; page?: string; start?: number; end?: number; scope?: ScopeInput | ScopeInput[]; clipId?: string };
+      const input = (args[0] ?? {}) as { mode?: string; name?: string; page?: string; start?: number; end?: number; scope?: ScopeInput | ScopeInput[]; clipId?: string; times?: number[]; count?: number; fps?: number; stillsOnly?: boolean; momentsOnly?: boolean };
       if (['addFilm', 'addScene', 'addScenes'].includes(name) || name === 'analyzeMedia' && input.mode === 'reference' || name === 'readSkill' && input.name === 'reference-footage' && input.page === 'recreation') await requirePrecise();
       if (editMode === 'fast' && PRECISE_ONLY_TOOLS.has(name)) return { success: false, error: 'This is a Precise check. Fast uses getFrames at the changed spot and one frame either side. Use usePreciseMode only for a build, recreation or final delivery.' };
-      if (editMode === 'fast' && lane !== 'clip' && name === 'readFrames' && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: 'Fast reads only a named source window up to three seconds. Reuse saved analysis; no full-video sweeps.' };
+      const batchedReelStills = lane === 'reel' && input.stillsOnly === true && input.fps === undefined && !input.momentsOnly && (input.times ? input.times.length <= 30 : (input.count ?? 8) <= 12);
+      if (editMode === 'fast' && lane !== 'clip' && name === 'readFrames' && !batchedReelStills && (input.start === undefined || input.end === undefined || input.end - input.start > 3)) return { success: false, error: 'Fast reads a named source window up to three seconds. Reel visual cleanup may use one stillsOnly overview (count up to 12) or batched explicit join frames (up to 30 times), without fps or momentsOnly. Reuse saved frames; no dense full-video sweeps.' };
       const before = editSession.timeline;
       runningTools.set(name, (runningTools.get(name) ?? 0) + 1);
       try {
@@ -2096,7 +2105,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (output?.staged === true) stagedTools.add(name);
         if (editMode === 'fast' && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const clip = input.clipId ? editSession.timeline.clips.find(clip => clip.id === input.clipId) : undefined;
-          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : undefined;
+          const moments = clip?.scene && input.scope !== undefined ? resolveScope(editSession.timeline, clip, input.scope).map(range => timelineTimeAtSource(clip, (range.start + range.end) / 2)) : lane === 'reel' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
           fastReview.changed(before, editSession.timeline, moments);
           return { ...output, editMode, pendingFrameTimes: fastReview.times() };
         }
@@ -2241,6 +2250,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         if(task?.result?.exhausted)throw new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${task.result.failures.join(' ')}`);
+        if(editMode==='fast'&&task){
+          const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
+          if(saved!==undefined)fastReview.restore(saved);
+        }
         await ensureBaseline();
       }
       noteToolIntent(name);
@@ -2249,6 +2262,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const output=await execute.apply(this??tool,args) as Record<string,unknown>;
       const after=await timelineHistoryKey(editSession.timeline);
       if(before!==after||name==='createTimeline'||name==='openTimeline'||referenceMotionEnabled()&&['motionMap','compareMotion','compareReference'].includes(name))finishResult=undefined;
+      if(taskId&&editMode==='fast'&&(before!==after||name==='getFrames'||name==='finish'))
+        await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:fastFrameEvidence(timelineId,after,fastReview.times())});
       if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after){
         const {images:_images,...evidence}=output;
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:{tool:name,timelineId,fingerprint:after,input,output:evidence}});

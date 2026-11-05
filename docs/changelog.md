@@ -7,6 +7,8 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
+- Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
 - Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
 - Motion design: Carry visual anchors across scenes and choose restrained motion for each action. Why: the user's continuity guidance conflicted with blanket overshoot and anticipation rules in the agent skill.
 - Assistant: Show Working between steps while preserving the elapsed timer and resume/stop statuses. Why: the user requested a shorter activity label.
