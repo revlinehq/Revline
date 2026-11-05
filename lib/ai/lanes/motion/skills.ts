@@ -8,7 +8,6 @@ import { musicAndSound } from '../../skills/music-and-sound';
 import { motionDesign } from '../../skills/motion-design';
 import { gsapSkill } from '../../skills/gsap';
 import { sceneEngine } from '../../skills/scene-engine';
-import { overallStyling } from '../../skills/overall-styling';
 import { referenceFootage } from '../../skills/reference-footage';
 export const skills = [
   vfx,
@@ -21,6 +20,5 @@ export const skills = [
   motionDesign,
   gsapSkill,
   sceneEngine,
-  overallStyling,
   { ...referenceFootage, body: 'For a film already bound to a reference, read page recreation. A new reference remake belongs in the recreate lane.', pages: referenceFootage.pages?.filter(page => page.name === 'recreation') },
 ];

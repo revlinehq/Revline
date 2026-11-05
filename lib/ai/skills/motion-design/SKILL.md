@@ -1,6 +1,6 @@
 ---
 name: "motion-design"
-description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page \"taste\"), and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Every film follows overall-styling (the user's house look). Scenes themselves: scene-engine."
+description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page \"taste\"), and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Scenes themselves: scene-engine."
 ---
 # Motion design: launch and feature films
 
@@ -26,6 +26,24 @@ Films are React scenes (readSkill name "scene-engine" page "react-scenes"):
 - **Edit with patchScene; never retype the film.** Every change after the first build uses small patchScene edits. Read inspectClip with section or lines for short numbered blocks, then patch scoped snippets or line ranges with expectedRevision from that read (scene-engine, page `react-scenes`). Keep transitions that span sections on their shared timeline and check both sides when shared-code warnings appear. Never resend the film with editScene or rebuild a section as its own scene.
 - **All motion is GSAP on the frame clock.** Every move, even a single fade, is a GSAP tween in a `useTimeline` timeline, one per section: connected parts are the same tween, opens and closes overlap through position parameters (`"<"`, `"-=0.2"`), staggers come from GSAP, and SplitText, MorphSVG and DrawSVG run in it (read the gsap skill, readSkill name "gsap"). Never hand-time moves with `progress()` and `mix()` at typed seconds: that is what makes holds freeze, parts drift out of sync and moves jump.
 - **Correctness lives in scene-engine:** the frame clock, flash frames and preview speed (page `react-scenes`). This skill decides what to make; scene-engine decides how it renders correctly.
+
+## Timing and easing (measured)
+Measured from 151 tweens and 87 shots across the user's saved launch films (rerun, shipper, rightnowai, krea, allophone, juampitech, Deepusleepy, firecrawl ×3). These are defaults for original films; the user's direction and a reference being copied win.
+
+| Move | Duration | Ease | Example |
+|---|---|---|---|
+| Typical move (anything) | 0.25–0.6 s, aim 0.38 s | | A card sliding 120 px: 0.4 s |
+| Entrance | 0.25–0.55 s, aim 0.35 s | `power3.out` (default), `power2.out` | Headline in: 0.35 s power3.out |
+| Exit | 0.2–0.4 s, aim 0.3 s | `power2.in` | Headline out: 0.28 s power2.in |
+| Between two resting spots | 0.35–0.6 s, aim 0.5 s | `power2.inOut` | Panel docking to the sidebar: 0.5 s |
+| Camera move (push, pan, pull-back) | 0.8–1.4 s | `power3.inOut` or `power2.inOut` | Push-in to the composer: 1.0 s |
+
+1. **Exits are always faster than entrances.** An element leaves in about 0.8× its entrance time with an ease-in (enter 0.35 s power3.out → exit 0.28 s power2.in). Never exit with the entrance's ease or duration, and never with a slow fade.
+2. **Nothing but the camera runs past 1 s.** A non-camera tween over 0.6 s needs a reason (a progress bar, a long draw-on); over 1 s, split it or speed it up. Example of what fails: a 1.8 s zoom on a UI element, 1.75 s of typing.
+3. **Curve mix.** Use `power3.out` for most moves, then `power2.out` and `power2.in`. `back.out` and `expo.out` are each about 3% of measured moves: at most one or two per film, for one deliberate snap or playful landing, never as the default.
+4. **Beats are short.** A beat (one idea on screen: a title, a UI state, a feature) lasts 1.75–3.5 s, aim 2.45 s. Over 4 s is rare: a beat that long needs a second action inside it (a camera move, a new element, a state change), not a held frame.
+5. **Typing and UI demos run fast.** Type at 2–3× real speed: a prompt of 40–50 characters takes at most 1 s.
+6. **Check it in code.** Before getFrames, scan the timeline for durations: every tween outside the camera over 0.6 s and every exit at least as long as its entrance is a fix, not a choice.
 
 ## Recreating a video (clone, remake, copy, "shot for shot")
 The video is the brief. New recreations use the recreate lane, which runs full checks. Read reference-footage page `recreation` before building a copy or making a full-lane edit. It owns the workflow: numbered effect inventories, exact content, camera behavior per layer, one section at a time, rendered comparisons across every transition, and close-out against every inventory item. Follow its measured behavior over this skill's motion defaults. Use scene-engine for implementation and its checklist for final checks.
