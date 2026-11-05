@@ -33,16 +33,18 @@ export function renderResources() {
   const memory = limit > 0 ? Math.min(limit, totalmem()) : totalmem();
   const lowMemory = memory < LOW_MEMORY_BYTES;
   const cpus = Math.max(1, availableParallelism());
-  const flyCpus = process.env.FLY_APP_NAME || process.env.RAILWAY_SERVICE_ID ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
+  const hostedCpus = process.env.RAILWAY_SERVICE_ID
+    ? Math.min(cpus, boundedInteger('MEDIA_PROCESSOR_THREADS', Math.min(64, cpus), 64))
+    : process.env.FLY_APP_NAME ? Math.min(FLY_WORKER_GUEST.cpus, cpus) : null;
   // Two capture workers use both vCPUs of the hosted profile; more would
   // contend with the encoder and need re-measuring against the memory budget.
   // Fly overrides must fit this machine, including settings inherited from an old image.
-  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), flyCpus ?? 16);
+  const workers = boundedInteger('REVLINE_RENDER_WORKERS', lowMemory ? 1 : Math.min(2, cpus), hostedCpus ?? 16);
   return {
     workers,
     lowMemory,
-    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), flyCpus ?? 8),
-    encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), flyCpus ?? 16),
+    ffmpegSlots: boundedInteger('REVLINE_RENDER_FFMPEG_SLOTS', lowMemory ? 1 : Math.min(2, cpus), hostedCpus ?? 8),
+    encodeThreads: boundedInteger('REVLINE_RENDER_ENCODE_THREADS', Math.min(4, cpus), hostedCpus ?? 16),
     memoryMb: Math.floor(memory / MIB),
   };
 }

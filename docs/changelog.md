@@ -1,3 +1,7 @@
+## 2026-11-05
+
+- Worker hosting: Size Railway render threads from its allocation instead of applying Fly’s four-thread ceiling. Why: the real 4K staging export rejected eight threads.
+
 ## 2026-11-04
 
 - Worker hosting: Preserve dashboard CPU and memory limits for permanent Railway services and size worker threads from actual CPU allocation. Why: manual resource changes must not block deployment.
