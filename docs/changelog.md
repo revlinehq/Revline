@@ -1,6 +1,6 @@
 ## 2026-11-05
 
-- Composer: Apply the approved compact composer, distinct shelf edges and two start cards. Why: user approved the Kino-inspired Pen design while keeping production controls.
+- Composer: Apply the approved compact home composer and two start cards; keep the editor flat through an appearance prop. Why: user approved the Pen design for new workspaces only.
 
 ## 2026-11-04
 

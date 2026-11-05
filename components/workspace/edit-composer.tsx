@@ -21,11 +21,11 @@ export type EditComposerProps = {
   value: string; onChange: (value: string) => void; onSubmit: () => void | Promise<void>;
   attachControl?: ReactNode; onAttach?: () => void; attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void;
   placeholder?: string; disabled?: boolean; running?: boolean; allowQueue?:boolean; onStop?: () => void | Promise<void>; stopping?: boolean;
-  className?: string; variant?: 'landing' | 'studio' | 'compact'; attachmentLimit?: number; emptyHint?: string;
+  className?: string; variant?: 'landing' | 'studio' | 'compact'; appearance?: 'raised' | 'flat'; attachmentLimit?: number; emptyHint?: string;
   header?: ReactNode; slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
 };
 
-export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header: suppliedHeader }: EditComposerProps) {
+export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', appearance = 'raised', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header: suppliedHeader }: EditComposerProps) {
   const timelineHeader = useContext(EditComposerHeaderContext);
   const header = suppliedHeader ?? timelineHeader;
   const commandListId = useId();
@@ -148,7 +148,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     </PopoverContent></Popover>
     {(error || attachmentError) && <p className="composer-error" role="alert">{error || `${attachmentError!.name}: ${attachmentError!.error}`}</p>}
   </>;
-  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', header && 'has-composer-header', uploadOnHover && 'composer-height-transition', className)} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
+  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', header && 'has-composer-header', uploadOnHover && 'composer-height-transition', className)} data-appearance={appearance} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
     {header && <Card className="composer-header" role="group" aria-label="Video settings">{header}</Card>}
     <div ref={fields} className="composer-edit-fields" aria-hidden={showUpload || undefined} inert={showUpload} onFocusCapture={() => setFieldsFocused(true)} onBlurCapture={e => { if (!fields.current?.contains(e.relatedTarget as Node | null)) setFieldsFocused(false); }}>{editFields}</div>
     <div className="composer-upload-swap" aria-hidden={!showUpload} inert={!showUpload}>
@@ -156,5 +156,5 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
         <span><Plus size={24} strokeWidth={2} aria-hidden="true" />{uploadState === 'dragging' ? 'Drop your footage' : 'New video'}<span className="composer-video-badge">AI</span></span>
       </button>
     </div>
-  </form><Sheet open={sheetOpen} onOpenChange={setSheetOpen}><SheetContent className="composer-media-sheet" onCloseAutoFocus={event => { event.preventDefault(); textarea.current?.focus({ preventScroll: true }); }}><SheetTitle>Your footage</SheetTitle><SheetDescription>{attachments.length ? 'Clips attached to this conversation.' : 'Add footage to continue your edit.'}</SheetDescription><div className="composer-sheet-attachments">{attachments.map(chip)}</div><EditComposer slashCommands={slashCommands} requireMedia={mediaMissing} value={value} onChange={onChange} onSubmit={async () => { if (mediaMissing || mediaInvalid) return; await onSubmit(); setSheetOpen(false); }} onAttach={onAttach} actions={actions} running={running} allowQueue={allowQueue} disabled={disabled} onStop={onStop} /></SheetContent></Sheet></>;
+  </form><Sheet open={sheetOpen} onOpenChange={setSheetOpen}><SheetContent className="composer-media-sheet" onCloseAutoFocus={event => { event.preventDefault(); textarea.current?.focus({ preventScroll: true }); }}><SheetTitle>Your footage</SheetTitle><SheetDescription>{attachments.length ? 'Clips attached to this conversation.' : 'Add footage to continue your edit.'}</SheetDescription><div className="composer-sheet-attachments">{attachments.map(chip)}</div><EditComposer appearance={appearance} slashCommands={slashCommands} requireMedia={mediaMissing} value={value} onChange={onChange} onSubmit={async () => { if (mediaMissing || mediaInvalid) return; await onSubmit(); setSheetOpen(false); }} onAttach={onAttach} actions={actions} running={running} allowQueue={allowQueue} disabled={disabled} onStop={onStop} /></SheetContent></Sheet></>;
 }
