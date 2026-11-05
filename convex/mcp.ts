@@ -24,7 +24,7 @@ import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renam
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
 import { briefFor } from './briefs';
-import { GUARD_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { GUARD_PROCESSOR_VERSION } from './mediaTasks';
 import { enqueueMediaTask } from './lib/media_queue';
 import { referenceBox } from './schema';
 import { comparisonCrop } from '../lib/ai/reference-comparison';
@@ -34,6 +34,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
 import { touchTaskAgent } from './mcpConnections';
 import { MCP_AGENT_IDLE_MS } from '../lib/mcp/agent-identity';
+import { MCP_RUN_LIMIT } from './lib/mcp_limits';
 
 // Project-level work for the MCP server. Every function receives the owner the
 // bearer token resolved to; nothing here trusts a client-supplied identity.
@@ -73,27 +74,14 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 }
 
 /** One MCP tool call is one AI run: the same lock, live preview and undo group as an in-app edit. */
-const MCP_RUN_LIMIT = 11 * 60_000;
 const mcpRunStarted = (runId?: string) => runId && isMcpRun(runId) ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
-/** A tab's saved timeline with its scene code, for reading a tab without opening it. */
-export const tabTimeline = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  const timeline = args.timelineId === activeTabOf(project) ? currentTimeline(project) : await storedTabTimeline(ctx, project, args.timelineId);
-  if (!timeline) throw new ConvexError('That timeline no longer exists.');
-  return loadSceneCode(ctx, timeline);
-}});
-
 export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.id('projects'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
 }});
 
-/** How long the editor keeps showing an MCP agent as working after its last call. Agents
- * think between calls, and writing a film part for patchScene or addFilm can take several
- * minutes, so a short window drops the status mid-request and invites the user to edit over it. */
-export const AGENT_ACTIVE_MS = MCP_AGENT_IDLE_MS;
 /** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
  * and rewrites the marker only once it is half spent. */
 export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), taskId: v.optional(v.string()), agentClientId: v.optional(v.id('mcpConnections')), startedAt: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
@@ -101,14 +89,16 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   if (!id) return null;
   try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
+  // The editor keeps showing the agent as working for MCP_AGENT_IDLE_MS after its last call. Agents think between calls,
+  // and writing a film part for patchScene or addFilm can take several minutes, so a short window drops the status mid-request.
   if(args.taskId)await touchTaskAgent(ctx,args.ownerId,args.taskId,name,args.agentClientId,args.startedAt);
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
-  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
+  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return null;
   if (run) {
-    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
-    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+AGENT_ACTIVE_MS});
+    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
+    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+MCP_AGENT_IDLE_MS});
   }
-  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
   return null;
 }});
 
@@ -273,7 +263,7 @@ export const requestFrames = internalMutation({ args: { resolution:v.optional(v.
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
   const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
-  const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
+  const requiredProcessorVersion=MEDIA_PROCESSOR_VERSION;
   const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);
   if (taskId) await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison&&taskId?{cancelTaskId:taskId}:{})});

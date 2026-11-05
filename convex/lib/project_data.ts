@@ -5,7 +5,7 @@ import type { MutationCtx,QueryCtx } from '../_generated/server';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { HISTORY_KEY_VERSION, timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
-import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline';
+import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline_history';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './scene_code';
 import { recordRevision, type RevisionNote } from './revision_log';
 type Context=MutationCtx|QueryCtx;

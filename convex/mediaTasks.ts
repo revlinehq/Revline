@@ -57,16 +57,8 @@ const taskState = v.object({ _id: v.id('mediaTasks'), kind: mediaTaskKind, statu
 
 /** Importing a start to end range of a long link came after font matching. */
 const RANGE_IMPORT_PROCESSOR_VERSION = 16;
-/** Pacing checks (checkPacing) came after range imports. */
-export const PACING_PROCESSOR_VERSION = 17;
-/** Listening to a range (getSound, checkSound) came after pacing checks. */
-export const SOUND_PROCESSOR_VERSION = 18;
 /** The visual guard (a proposed scene change rendered beside the saved timeline) came after reference listening. */
 export const GUARD_PROCESSOR_VERSION = 20;
-/** Reading how a film moves (motionMap: camera, transitions, elements, content) came after the visual guard. */
-export const MOTION_PROCESSOR_VERSION = 23;
-/** Frozen comparison crops, displayed rotation and bounded sound capture. */
-export const RECREATION_PROCESSOR_VERSION = 23;
 
 
 /** FIFO admission for recreation checks only. Waiting jobs hold no active slot and start no workflow. */

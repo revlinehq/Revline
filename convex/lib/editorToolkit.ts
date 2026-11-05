@@ -4,8 +4,9 @@ import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { laneBaseline, LaneFinishError } from '../../lib/ai/lanes/task';
-import { finishLane, type FinishResult, type LaneTask } from './laneFinish';
+import { laneBaseline } from '../../lib/ai/lanes/task';
+import { exhaustedLaneError, finishLane, type FinishResult } from './laneFinish';
+import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imageGenerationSize, IMAGE_MODEL } from '../../lib/ai/image-generation';
@@ -56,10 +57,11 @@ import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
 import { boundRunTab, isMcpRun } from "./run_ids";
+import { MCP_WORKER_WAIT_MS } from "./mcp_limits";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
 import { placeClip, TIMELINE_ROW } from "./revision_log";
-import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "../referenceReads";
+import { READ_TOOL_DESCRIPTIONS, READ_TOOL_INPUTS, readSummary, runRead, type ReadToolName } from "./reference_reads";
 import { BLEND_MODES, ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_TIMED_EFFECT_PRESETS,configureTimedEffectPatch, solidColorPatch } from '../../lib/editor/clip-effects';
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { SCENE_BLUEPRINT_LIMIT, SCENE_LIMITS } from '../../lib/editor/scene-layers';
@@ -80,7 +82,7 @@ import { generateSoundEffect, soundEffectInput, type SoundEffectRequest } from '
 import { NARRATION_VOICES, VOICE_LIMITS, generateNarration, generateVoiceSample, voiceInput } from '../../lib/audio/voice';
 import { BRAND_LIMITS } from '../../lib/editor/brand-kit';
 import { cleanColors, googleFonts, sceneBrandSnapshot, scrapeBrand } from './brandKitBuild';
-import { mediaConfig, mediaUrl } from './media_storage';
+import { mediaConfig, mediaUrl, newProjectMediaKey } from './media_storage';
 import { encodeWav, soundWaveform } from '../../lib/audio/wav';
 import { SR } from '../../lib/audio/dsp';
 import { MUSIC_BED_LIMITS, renderMusicBed } from '../../lib/audio/music-bed';
@@ -111,7 +113,8 @@ import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
 import { DEFAULT_CAPTION_STYLE, resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
-import { runCompare } from '../referenceReads';
+import { runCompare } from './reference_reads';
+import { aspectRatio as aspectRatioValidator } from '../schema';
 import { comparisonCropFields, referenceCropAt, cropBounds, comparisonSamples, referenceComparisonInput, REFERENCE_COMPARISON_BUDGET_MS, type ComparisonCrop, type ComparisonCrops } from '../../lib/ai/reference-comparison';
 import type { MotionMap } from '../../lib/inspo-motion/motion-map';
 import { missingMotionWindow, motionRange, motionReport, motionTimelineKey, type MotionOff } from '../../lib/ai/motion-coverage';
@@ -119,12 +122,13 @@ import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import type { ActionCtx } from "../_generated/server";
 
 export class AnalysisStepError extends Error {}
+/** Export settings, shared by the in-app and MCP exportVideo tools; startRenderFor checks the plan allows them. */
+export const EXPORT_SETTINGS_INPUT = { resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() };
 async function reportAnalysisFailure<T>(work: () => Promise<T>) {
   try { return await work(); }
   catch (error) { if (error instanceof AnalysisStepError) return { success: false as const, error: error.message.slice(0, 1000) }; throw error; }
 }
 
-export type EditorRun = { projectId: Id<'projects'>; ownerId: string; runId: string };
 type EditorToolkitOptions = {
   run: EditorRun;
   project: Doc<'projects'>;
@@ -402,7 +406,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   // Blueprint checks run on the media worker; wait for one like getFrames waits for frames.
   const blueprintCheck = async (checkId: Id<'blueprintChecks'>) => {
-    const deadline = Date.now() + 170_000;
+    const deadline = Date.now() + MCP_WORKER_WAIT_MS;
     while (Date.now() < deadline) {
       if (abortSignal?.aborted) throw new Error('Stopped.');
       const state = await ctx.runQuery(internal.blueprints.checkState, { ownerId: run.ownerId, checkId });
@@ -472,7 +476,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
     // Healthy worker heartbeats extend the durable request, but must not extend
     // an MCP call past its transport budget while it holds the edit lock.
-    const waitDeadline = isMcpRun(run.runId) ? Date.now() + 170_000 : Infinity;
+    const waitDeadline = isMcpRun(run.runId) ? Date.now() + MCP_WORKER_WAIT_MS : Infinity;
     const requestId = await retryAbortedTransaction(() => ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection }), abortSignal);
     try {
       while (true) {
@@ -655,7 +659,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Generate with ElevenLabs, upload to the project's R2 media like an upload, and register an ordinary audio asset holding its request.
   const reserveAudio = async () => { abortSignal.throwIfAborted(); await ctx.runMutation(internal.assistant.reserveAudioRequest, run); abortSignal.throwIfAborted(); };
   const createGeneratedSound = async (request: SoundEffectRequest, name?: string) => {
-    const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+    const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = newProjectMediaKey(run.ownerId, run.projectId);
     const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
     try {
       const asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? 'Generated sound').replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration: samples[0].length / rate, waveform: soundWaveform(samples, rate), recipe: JSON.stringify(request) });
@@ -665,7 +669,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   // Choice-card previews (voice samples, rendered stills) live in the project's R2 media without becoming assets; the card reads them through a signed URL.
   const publishPreview = async (bytes: Uint8Array<ArrayBuffer>, contentType: string) => {
-    const key = `media/${run.ownerId}/${run.projectId}/preview-${crypto.randomUUID()}`;
+    const key = newProjectMediaKey(run.ownerId, run.projectId, 'preview-');
     await putMediaObject(key, bytes, contentType);
     return (await mediaUrl(ctx, { r2Key: key }))!;
   };
@@ -693,7 +697,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
       // MCP transport expires before the in-app guard budget. Refuse before any save.
-      const deadline = Date.now() + (isMcpRun(run.runId) ? 170_000 : 420_000);
+      const deadline = Date.now() + (isMcpRun(run.runId) ? MCP_WORKER_WAIT_MS : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
@@ -950,7 +954,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         try {
           for (const image of generated.images) {
             abortSignal.throwIfAborted();
-            const r2Key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+            const r2Key = newProjectMediaKey(run.ownerId, run.projectId);
             const size = await putMediaObject(r2Key, image.bytes, 'image/png');
             uploaded.push({ r2Key, size, width: image.width, height: image.height });
           }
@@ -1027,7 +1031,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         await new Promise(resolve=>setTimeout(resolve,Math.min(1500,deadline-Date.now())));
       }
     } }),
-    exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Render a saved timeline to MP4 only when explicitly requested. timelineId selects a tab from listTimelines; omit for the open tab. Call once per requested timeline. Finish all timeline edits before exporting.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }), execute: async (_ctx, input) => {
+    exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Render a saved timeline to MP4 only when explicitly requested. timelineId selects a tab from listTimelines; omit for the open tab. Call once per requested timeline. Finish all timeline edits before exporting.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), ...EXPORT_SETTINGS_INPUT }), execute: async (_ctx, input) => {
       await verifyCurrentTimeline();
       await editSession.publish();
       return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
@@ -1413,7 +1417,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         asset = assets.find(item => item.fileName === stockMusicFileName(track)) ?? await (async () => {
           const response = await fetch(track.url, { headers: { referer: MIXKIT_REFERER, 'user-agent': 'Mozilla/5.0 (Revline)' }, signal: AbortSignal.any([abortSignal, AbortSignal.timeout(60_000)]) });
           if (!response.ok) throw new Error(`Mixkit did not return ${track.title} (${response.status}). Try another trackId or synth:true.`);
-          const bytes = new Uint8Array(await response.arrayBuffer()), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+          const bytes = new Uint8Array(await response.arrayBuffer()), key = newProjectMediaKey(run.ownerId, run.projectId);
           const size = await putMediaObject(key, bytes, 'audio/mpeg');
           try {
             const saved = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: stockMusicFileName(track), contentType: 'audio/mpeg', size, duration: track.duration, waveform: track.waveform, beats: { beats: track.beats, bpm: track.bpm, confidence: track.confidence, engine: BEAT_ANALYSIS_ENGINE, downbeats: track.downbeats, accents: track.accents, dropCandidates: [] } });
@@ -1427,7 +1431,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const firstBar = Math.floor(-phase / grid.bar);
         const perBar = reference.waveform ? energyCurve(reference.waveform, Math.max(reference.duration ?? duration, duration), grid.bar, from + phase + firstBar * grid.bar).values : undefined;
         const bed = renderMusicBed({ duration, bpm: grid.bpm, feel, phase, energy: perBar });
-        const key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`, size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
+        const key = newProjectMediaKey(run.ownerId, run.projectId), size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
         try { asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `Music bed ${Math.round(bed.bpm)} BPM ${feel}.wav`, size, duration: bed.samples[0].length / SR, waveform: soundWaveform(bed.samples), beats: { beats: bed.beats, bpm: bed.bpm, confidence: 1, engine: BEAT_ANALYSIS_ENGINE, downbeats: bed.downbeats, accents: [], dropCandidates: [] } }); }
         catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
         assets.push(asset);
@@ -1827,7 +1831,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
     generateVoice: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.generateVoice, description: "Speak a narration script with an ElevenLabs voice (listVoices) and place it as one voice clip on a free A layer at timeline seconds at (frame-snapped); save immediately. The words are saved as the clip's transcript (inspectAssetAnalysis, addSubtitlesFromTranscript). Returns its duration and every word's timeline start and end: time the film's beats to these, so each visual lands on its spoken word. Write the script exactly as it should be read. To change the wording or voice, delete the clip and generate again. If generation fails nothing is placed: say so.", inputSchema: voiceInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional().describe('Clip volume 0..2, default 1.'), name: z.string().trim().min(1).max(60).optional() }).strict(), execute: async (_ctx, { at, gain = 1, name, ...request }) => {
       const { samples, rate, words } = await generateNarration(request, abortSignal, reserveAudio), duration = samples[0].length / rate;
-      const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+      const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = newProjectMediaKey(run.ownerId, run.projectId);
       const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
       let asset: (typeof assets)[number];
       try {
@@ -2086,7 +2090,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     applyLayout:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.applyLayout,description:"Apply the Two rows composition preset to exact existing video/image clips: supporting clips in topClipIds, explanation/narrator in bottomClipIds. Each row fills half the current canvas without stretching the source. Preserve source ranges, timing, sound, effects and all unselected clips. Set detectedRegions:true to use saved facecam rectangles for the top row and gameplay for the bottom automatically, refusing uncertain or changing layouts. This only sets framing; arrange overlapping row footage on separate V layers with explicit timeline tools when needed. Existing custom object motion/legacy follow crop must be resolved explicitly first; do not silently remove it.",inputSchema:z.object({layout:z.literal('two-rows'),detectedRegions:z.boolean().optional(),topClipIds:z.array(z.string().min(1)).max(100),bottomClipIds:z.array(z.string().min(1)).max(100)}).refine(input=>input.topClipIds.length+input.bottomClipIds.length>0,{message:'Choose footage for at least one row.'}),execute:async(_ctx,{topClipIds,bottomClipIds,detectedRegions})=>{if(detectedRegions)for(const id of new Set([...topClipIds,...bottomClipIds].map(id=>find(editSession.timeline,id).assetId))){if(!id)throw new Error('Choose source footage.');await analyze(id,'facecam');}return checkpoint(t=>applyTwoRowLayout(t,assets,{topClipIds,bottomClipIds,detectedRegions}));}}),
     fitClip: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.fitClip, description: "Fit a video/image into its frame (contain, preserving the complete source) or fill the frame (cover, cropping overflow); save immediately.", inputSchema: z.object({ clipId: z.string(), fit: z.enum(["cover", "contain"]) }), execute: async (_ctx, input) => checkpoint(t => { const clip = find(t, input.clipId); if (clip.kind !== "video" && clip.kind !== "image") throw new Error("Choose a video or image"); return patchClip(t, clip.id, { fit: input.fit }); }) }),
     resetVisual: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.resetVisual, description: "Reset a video/image's position, scale, rotation, opacity, and edge crop to defaults; save immediately.", inputSchema: z.object({ clipId: z.string() }), execute: async (_ctx, input) => checkpoint(t => { const clip = find(t, input.clipId); if (clip.kind !== "video" && clip.kind !== "image") throw new Error("Choose a video or image"); return patchClip(t, clip.id, { transform: undefined, crop: undefined, fit: undefined }); }) }),
-    setAspectRatio: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setAspectRatio, description: "Set the canvas aspect ratio; save immediately.", inputSchema: z.object({ aspectRatio: z.enum(["vertical", "square", "landscape", "portrait-feed", "classic"]) }), execute: async (_ctx, input) => checkpoint(t => ({ ...t, aspectRatio: input.aspectRatio })) }),
+    setAspectRatio: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setAspectRatio, description: "Set the canvas aspect ratio; save immediately.", inputSchema: z.object({ aspectRatio: z.enum(aspectRatioValidator.members.map(member => member.value)) }), execute: async (_ctx, input) => checkpoint(t => ({ ...t, aspectRatio: input.aspectRatio })) }),
     followSubject: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.followSubject, description: "Enable subject-follow crop on a video clip, requesting real background tracking when absent. mode active-speaker first detects camera cuts on CPU and holds a dominant face for each shot, including profiles with obscured mouths. Wide shots use whole-turn mouth activity with Deepgram diarization and remembered face identities. Short backchannels and uncertain/offscreen matches never trigger a switch. Crop changes cut at camera cuts and ease only between confirmed speakers inside a shot. Returns retained seconds and confidence by shot-dominant, turn-mouth, identity-reuse and fallback. Shot dominance is framing evidence, not voice identity. No Gemini or GPU is required. Set enabled:false to turn off existing follow crop immediately without any analysis. Preserve source/timing and other crop/transform controls.", inputSchema: z.object({ clipId: z.string(),enabled:z.boolean().optional(),mode:z.enum(['face','active-speaker']).optional() }), execute: async (_ctx, input) => {
       if(input.enabled===false)return checkpoint(t=>{const clip=find(t,input.clipId);if(clip.kind!=='video')throw new Error('Choose a video clip.');return patchClip(t,clip.id,{focus:undefined,framingCuts:undefined})});
       const selected = find(editSession.timeline, input.clipId); const source = selected.assetId?await loadAsset(selected.assetId):undefined;
@@ -2297,7 +2301,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(taskId){
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
-        if(task?.result?.exhausted)throw new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${task.result.failures.join(' ')}`);
+        if(task?.result?.exhausted)throw exhaustedLaneError(lane,task.result.failures.join(' '));
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
           if(saved!==undefined)fastReview.restore(saved);

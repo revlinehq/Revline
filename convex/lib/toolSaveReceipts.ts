@@ -6,7 +6,8 @@ import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
 import { toolBehavior, type ToolBehavior } from '../../lib/ai/tool-definitions';
 import type { ToolSaveReceipt } from '../../lib/ai/save-confirmation';
-import type { EditorRun } from './editorToolkit';
+import type { EditorRun } from './run_types';
+import { savesNothing } from './tool_write_receipt';
 
 type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; writeFailed?: string; interrupted?: string; responseLost?: boolean };
 class RecoveredWrite extends Error {}
@@ -67,7 +68,7 @@ export class ToolSaveReceipts {
   context(ctx: ActionCtx): ActionCtx {
     const runMutation: ActionCtx['runMutation'] = async (ref, ...args) => {
       const execution = this.active.getStore();
-      if (!execution || execution.behavior.effect === 'read' || execution.behavior.effect === 'analysis') return ctx.runMutation(ref, ...args);
+      if (!execution || savesNothing(execution.behavior.effect)) return ctx.runMutation(ref, ...args);
       const input=args[0]??{},functionName=getFunctionName(ref);
       const ordinal=execution.writes.get(functionName)??0;
       execution.writes.set(functionName,ordinal+1);
@@ -109,10 +110,10 @@ export class ToolSaveReceipts {
       let output: unknown;
       try { output = await execute(); }
       catch (error) {
-        if (behavior.effect === 'read' || behavior.effect === 'analysis') throw error;
+        if (savesNothing(behavior.effect)) throw error;
         output = { success: false, error: message(error) };
       }
-      if (behavior.effect === 'read' || behavior.effect === 'analysis') return output;
+      if (savesNothing(behavior.effect)) return output;
       if (execution.receipt?.kind === 'timeline' && execution.receipt.status === 'saved' && (execution.responseLost||execution.receipt.revision > revision())) await reconcile();
       if (execution.responseLost && execution.receipt) output = { recovered: true, note: 'The write committed. Its response was interrupted; inspect the saved state before continuing.' };
       const kind = behavior.effect;
@@ -122,7 +123,7 @@ export class ToolSaveReceipts {
             : { kind, status: 'unchanged', revision: revision() });
       return this.stamp(output, receipt);
     });
-    if(behavior.effect!=='read'&&behavior.effect!=='analysis')this.completed.set(key,pending);
+    if(!savesNothing(behavior.effect))this.completed.set(key,pending);
     try {
       const result=await pending;
       if(result&&typeof result==='object'&&'success' in result&&result.success===false)this.completed.delete(key);
