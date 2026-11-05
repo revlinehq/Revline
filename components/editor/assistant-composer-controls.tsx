@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '@/convex/_generated/api';
-import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, OPENAI_EDIT_CHOICES as PRODUCTION_CLAUDE_MODEL_CHOICES, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
+import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, DEFAULT_EDITOR_MODEL, OPENAI_EDIT_CHOICES, normalizeEditorReasoningEffort, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { AssistantModelPicker } from './assistant-model-picker';
 import { storeDraftEffort, storeDraftModel, storedDraftEffort, storedDraftModel } from '@/lib/editor/opening-request';
 
@@ -15,12 +15,12 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
 }) {
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
-  const { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES } = settings;
+  const { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels = OPENAI_EDIT_CHOICES } = settings;
   const restricted = settings.paidModelAccess !== true;
   const supportedModels = useMemo(() => EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => model.id), [allowedModels]);
-  const availableModels: readonly typeof EDITOR_MODELS[number]['id'][] = supportedModels.length ? supportedModels : PRODUCTION_CLAUDE_MODEL_CHOICES;
+  const availableModels: readonly typeof EDITOR_MODELS[number]['id'][] = supportedModels.length ? supportedModels : OPENAI_EDIT_CHOICES;
   const selectedModelChoice = availableModels.find(choice => choice === modelChoice);
-  const effectiveModelChoice = restricted ? FREE_EDITOR_MODEL_CHOICE : selectedModelChoice ?? (availableModels.find(choice => choice === defaultModelChoice) ?? (availableModels.includes('gpt-6.1-sol') ? 'gpt-6.1-sol' : availableModels[0] ?? 'gpt-6.1-sol'));
+  const effectiveModelChoice = restricted ? FREE_EDITOR_MODEL_CHOICE : selectedModelChoice ?? (availableModels.find(choice => choice === defaultModelChoice) ?? (availableModels.includes(DEFAULT_EDITOR_MODEL) ? DEFAULT_EDITOR_MODEL : availableModels[0] ?? DEFAULT_EDITOR_MODEL));
   const effectiveEffort = restricted ? 'low' : effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
 
   useEffect(() => {
