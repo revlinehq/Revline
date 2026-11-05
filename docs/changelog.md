@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Worker hosting: Verify standard and Ultra jobs before promoting single-worker Railway exports; require remote chunk proof only when enabled. Why: Hobby repository builds must not depend on private registry support.
+
 - Worker hosting: Refresh cached Railway deployments after dashboard resource changes and fit capture concurrency to CPU allocation. Why: reused deployment snapshots retained the old CPU limit.
 
 - Worker hosting: Size Railway render threads from its allocation instead of applying Fly’s four-thread ceiling. Why: the real 4K staging export rejected eight threads.
@@ -17,6 +19,13 @@
 - Worker hosting: Decode Railway structured runtime logs and reserve capacity while builds are pending. Why: real staging passed its limits but the controller missed parsed log attributes.
 
 - Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.
+- Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
+- Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
+
+## 2026-11-04
+
+- Security: Add Apache 2.0 notices, contributor and vulnerability reporting guidance, local credential scanning and patched dependencies. Why: the user requested open-source publication readiness.
+
 - MCP frame reads: Return a resumable handle while frames render and retain results until download succeeds. Why: Timeout retries queued duplicate work and could discard unread images.
 - Source frames: Reject empty receipts and return saved handles after transient result downloads. Why: first-call download failures hid resumable work (#87).
 
@@ -111,7 +120,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Reference motion: Track full-resolution elements and calibrated opacity, and fit complete GSAP timing/eases in Motion and Recreate. Why: the user-approved benchmark found missed motion and trimmed easing tails.
 - Development: Give each agent worktree an expiring Convex backend, seeded footage and private Workers. Why: the user reported agents overwriting shared dev functions and schema.
 - Editor: Read rendered frames without following redirects in Cloudflare Workers. Why: isolated verification exposed an unsupported fetch mode that stopped editor turns.
-- Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on this PC's missing IPv6 route.
+- Deployments: Keep runner Node connections on IPv4. Why: Fly preflight failed on the deployment host's missing IPv6 route.
 - Deployments: Release changed production and development services in order on the PC after main merges, then restart the main dev server. Why: the user kept finding merged main changes undeployed.
 - Editing agent: Integrate persisted motion evidence and timed off exits into recreate and bound-reference motion lane checks. Why: the lane registry merged while PR #51 awaited approval.
 - Agent: Let the editing agent choose its lane before exposing tools, with manual choices, isolated skills and bounded finish checks. Why: the user requested agent reasoning instead of keyword routing and premature completion claims.

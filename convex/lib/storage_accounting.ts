@@ -58,12 +58,13 @@ export async function ownedObjectReferences(ctx:Context,ownerId:string,source:St
     const asset=segment?await ctx.db.get(segment.assetId):null;
     if(asset&&!attachments.some(item=>item._id===asset._id))attachments.push(asset);
   }
-  return {attachments,shares,tooMany:attachments.length>200||shares.length>200};
+  const library=source.r2Key&&!thumbnail?await ctx.db.query('cloudMedia').withIndex('by_r2Key',q=>q.eq('r2Key',source.r2Key!)).first():null;
+  return {attachments,shares,library,tooMany:attachments.length>200||shares.length>200};
 }
 export async function releaseAccountStorage(ctx:MutationCtx,ownerId:string,source:StoredObject,thumbnail:boolean|'preview'=false) {
   if(!objectKey(source))return;
   const refs=await ownedObjectReferences(ctx,ownerId,source,thumbnail);
-  if(!refs.attachments.length&&!refs.shares.length)await forgetStorageObject(ctx,ownerId,source);
+  if(!refs.attachments.length&&!refs.shares.length&&!refs.library)await forgetStorageObject(ctx,ownerId,source);
 }
 export async function activeExportGroups(ctx:Context,ownerId:string,projectId:Id<'projects'>) {
   return Promise.all((['queued','rendering'] as const).map(status=>ctx.db.query('renderJobs').withIndex('by_owner_project_status',q=>q.eq('ownerId',ownerId).eq('projectId',projectId).eq('status',status)).take(2)));

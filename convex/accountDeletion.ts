@@ -68,6 +68,7 @@ export const batch = internalMutation({ args: { ownerId: v.string() }, returns: 
       await ctx.db.patch(job._id, { table: 0, cursor: null, changed: false }); await again(); return null;
     }
     if(await ctx.db.query('r2Uploads').withIndex('by_owner_completed',q=>q.eq('ownerId',ownerId).eq('completed',false)).first()){await again(60_000);return null;}
+    if(await ctx.db.query('cloudMedia').withIndex('by_owner_completed',q=>q.eq('ownerId',ownerId).eq('completed',false)).first()){await again(60_000);return null;}
     const refs = await ctx.db.query('accountDeletionRefs').withIndex('by_owner_resource', q => q.eq('ownerId', ownerId)).take(100);
     if (refs.length) { for (const ref of refs) await ctx.db.delete(ref._id); await again(); return null; }
     const subjectHash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(ownerId))),b=>b.toString(16).padStart(2,'0')).join('');
@@ -96,6 +97,11 @@ export const batch = internalMutation({ args: { ownerId: v.string() }, returns: 
     for (const key of ['threadId', 'runId']) {
       const value = Reflect.get(row, key);
       if (typeof value === 'string') await remember(ctx, ownerId, value);
+    }
+    if (table === 'cloudMedia' && !Reflect.get(row, 'completed')) {
+      const id = ctx.db.normalizeId('cloudMedia',row._id);
+      if(id)await ctx.scheduler.runAfter(0,internal.cloudMedia.cleanup,{uploadId:id,force:true});
+      continue;
     }
     if (table === 'r2Uploads' && !Reflect.get(row, 'completed')) {
       const id = ctx.db.normalizeId('r2Uploads', row._id);

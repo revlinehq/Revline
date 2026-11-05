@@ -9,7 +9,7 @@ flowchart LR
   Failure --> Convex[Deduplicated incidents]
   Convex -->|subscription| PC[Linux systemd listener]
   PC --> Claim[Atomic claim]
-  Claim -->|OAuth MCP| T3[T3 server on this PC]
+  Claim -->|OAuth MCP| T3[T3 server on the deployment host]
   T3 --> Sol[Codex Sol xhigh in its own worktree]
   Sol --> PR[Incident: draft PR]
   PR -->|record-pr.ts or monitor recovery| Convex
@@ -21,7 +21,7 @@ Use Node 22+, GitHub CLI signed in with repository access, and the existing T3 C
 
 Run `npm run incidents:install`. The installer:
 
-- Signs the listener into this PC's `/mcp` endpoint using T3's [outside-agents OAuth flow](https://github.com/pingdotgg/t3code/blob/main/docs/user/outside-agents.md): dynamic registration, PKCE, scoped one-use pairing approval, and a code exchange. It uses the local `t3 auth pairing create` command for approval, never the thread CLI for launches.
+- Signs the listener into the deployment host's `/mcp` endpoint using T3's [outside-agents OAuth flow](https://github.com/pingdotgg/t3code/blob/main/docs/user/outside-agents.md): dynamic registration, PKCE, scoped one-use pairing approval, and a code exchange. It uses the local `t3 auth pairing create` command for approval, never the thread CLI for launches.
 - Grants the documented full-access MCP mode for unattended fixes. Its explicit scopes are `orchestration:read`, `orchestration:operate`, `settings:write`, and `source-control:write`; no general access-management credential is stored.
 - Saves the OAuth credential in `~/.revline-incidents/t3-mcp.json`, the existing GitHub credential in `github-token`, and listener settings in `config.json` (files 0600, directory 0700). Tokens never appear in briefs or logs. T3 sign-ins expire after 30 days: rerun the installer and enable the service again to renew, or revoke the listener in T3's Sharing & access settings.
 - Finds the T3 project by its shared Git repository, generates/preserves the dev listener secret, and sets only dev's `INCIDENT_LISTENER_SECRET`. A new installation subscribes only to dev; production credentials and configuration remain separate.
@@ -33,7 +33,7 @@ After review, enable the PC listener with:
 systemctl --user enable --now revline-incidents.service
 ```
 
-Linger is already enabled on this PC, so the enabled user service starts after reboot without a login. The unit starts after/wants `t3code.service`, restarts a failed listener and writes private logs under `~/.revline-incidents`. Linux uses a kernel-held abstract socket for a single listener per user; crashes leave no stale lock. The optional Mac implementation retains `shlock`.
+Linger is already enabled on the deployment host, so the enabled user service starts after reboot without a login. The unit starts after/wants `t3code.service`, restarts a failed listener and writes private logs under `~/.revline-incidents`. Linux uses a kernel-held abstract socket for a single listener per user; crashes leave no stale lock. The optional Mac implementation retains `shlock`.
 
 T3's runtime file identifies the server on this machine. When T3 binds only its own VPN address, the client makes a temporary loopback HTTP forward to that local address. OAuth and MCP requests use localhost; no additional network-facing listener or T3 server restart is needed. MCP preserves the server's host header so saved thread links use its stable address. The forward closes with each MCP connection.
 
@@ -59,7 +59,7 @@ For each incident, the monitor fetches `origin/main`, then calls MCP `t3_thread_
 }
 ```
 
-The initial launch is idle so T3 can prepare and bind its own worktree first. The monitor reads that thread, links and validates only the dev environment, writes `.data/incident-brief.md`, then sends the brief through MCP. Stable claim-derived request IDs protect launch/send retries. Jobs persist the thread link, run ID and actual T3 worktree path. Threads appear in this PC's T3 sidebar and stay accessible from its linked Mac. T3 owns the Sol session; restarting the listener or losing a monitor does not start another Sol or release its concurrency slot. The listener reattaches a monitor to the saved thread.
+The initial launch is idle so T3 can prepare and bind its own worktree first. The monitor reads that thread, links and validates only the dev environment, writes `.data/incident-brief.md`, then sends the brief through MCP. Stable claim-derived request IDs protect launch/send retries. Jobs persist the thread link, run ID and actual T3 worktree path. Threads appear in the deployment host's T3 sidebar and stay accessible from its linked Mac. T3 owns the Sol session; restarting the listener or losing a monitor does not start another Sol or release its concurrency slot. The listener reattaches a monitor to the saved thread.
 
 The brief requires AGENTS.md, installed Next.js docs, typechecks/build, real runtime verification, a changelog entry and a draft `Incident:` PR. It forbids production data, credentials and deployment. Its `github.ts` helper supplies the cached GitHub credential only to fetch, incident-branch push and `gh pr` commands, so T3 threads can complete the PR flow before the desktop keyring is unlocked. Git fetch/push use HTTPS credentials even when `origin` uses SSH. `record-pr.ts` independently verifies the draft, branch and fingerprint on GitHub before writing back its URL. The monitor also recovers the draft when the T3 turn finishes. A turn without a matching PR is retained for inspection instead of being automatically repeated.
 
@@ -81,7 +81,7 @@ Production rollout requires the user's merge/deployment approval, its own backen
 
 ## Verified on development, 2026-11-02
 
-The installed systemd user service claimed synthetic incident `v97athk3mn4zrhe30rmnxndm3h8he2md` and launched one MCP-created T3 thread on this PC. Its `codex` provider used `gpt-6.1-sol` with `reasoningEffort: xhigh`; the matching Codex rollout's turn context independently recorded `"effort":"xhigh"`. The worktree's initial HEAD matched `origin/main` (`58f89dab83d101341fd68a6e485d4eda1bc0867c`). Replaying the launch request retained the same thread and one run. The synthetic Sol was interrupted and its incident resolved after verification; no audit PR was created.
+The installed systemd user service claimed synthetic incident `v97athk3mn4zrhe30rmnxndm3h8he2md` and launched one MCP-created T3 thread on the deployment host. Its `codex` provider used `gpt-6.1-sol` with `reasoningEffort: xhigh`; the matching Codex rollout's turn context independently recorded `"effort":"xhigh"`. The worktree's initial HEAD matched `origin/main` (`58f89dab83d101341fd68a6e485d4eda1bc0867c`). Replaying the launch request retained the same thread and one run. The synthetic Sol was interrupted and its incident resolved after verification; no audit PR was created.
 
 The existing dev HTTP 402 report was explicitly retried through the scoped systemd listener and finished locally without a thread, with its non-defect reason retained on the incident. Direct classifier inspection also confirmed the empty-export validation refusal and an agent's “No product defect” report are skipped, while an application exception remains eligible. Other pending incidents were left queued.
 

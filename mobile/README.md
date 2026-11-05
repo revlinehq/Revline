@@ -30,7 +30,7 @@ xcrun devicectl device process launch --device "$REVLINE_IPHONE_UDID" com.revlin
 
 There are no test targets, test files, mock services, or sample backend records. Verify using `npm run typecheck`, `npm run build`, `xcodebuild`, and the running app. Build products, downloaded packages, local configuration, and screenshots are ignored. Remove only `mobile/.build/DerivedData` when finished to reclaim build space. Keep the watched Simulator running while verifying the interface.
 
-Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `ClerkRuntime`, which does not compile with this Mac's Swift 6.2.1. Convex 0.8.2 documents its Rust client as thread-safe but has no Sendable declaration; `ConvexConcurrency.swift` supplies that compatibility conformance. Reassess both when upgrading the packages. SDK source is not patched. A build phase adjusts the bundled English authentication copy to Revline’s punctuation style.
+Clerk is pinned to **1.5.8** because 1.5.9 through 1.6.2 use `weak let` in `ClerkRuntime`, which does not compile with Swift 6.2.1. Convex 0.8.2 documents its Rust client as thread-safe but has no Sendable declaration; `ConvexConcurrency.swift` supplies that compatibility conformance. Reassess both when upgrading the packages. SDK source is not patched. A build phase adjusts the bundled English authentication copy to Revline’s punctuation style.
 
 ## Environments
 
@@ -64,7 +64,7 @@ Clerk subjects are strings such as `user_...`, while Apple's `appAccountToken` m
 
 The iPhone app offers one subscription, `com.revline.app.monthly`: $39.00 USD/month with a one-week free trial for eligible new subscribers. Apple supplies localized pricing and eligibility. Configure only this product in Superwall's **`onboarding_paywall`**, mapped to `pro`, with Restore, Privacy, Terms and the trial-to-recurring-price disclosure. Legacy Pro/Ultra identifiers may remain on the server for existing receipts; they are not sold in the app.
 
-See [App Store setup](AppStore/README.md), [subscription configuration](AppStore/subscription.json), [review checklist](AppStore/review-checklist.md) and [actual external changes](AppStore/asc-changes.md). Fastlane uses the owner's private App Store Connect key directly from its local path. No lane submits for App Review.
+See [App Store setup](AppStore/README.md), [subscription configuration](AppStore/subscription.json), [review checklist](AppStore/review-checklist.md). Fastlane uses the owner's private App Store Connect key directly from its local path. No lane submits for App Review.
 
 ## Backend setup, after an authorized deployment
 
@@ -112,13 +112,9 @@ The interface uses native system controls in dark appearance, including launch a
 
 Primary actions use `borderedProminent`; secondary actions use native bordered, borderless or row buttons. NavigationStack, toolbars, sheets, confirmation dialogs, Photos, Files and share sheets retain system behaviour. Typography uses Dynamic Type text styles, targets are at least 44 points, and the send action uses native sensory feedback. Empty states use ContentUnavailableView and loading uses ProgressView. Shared named assets match the website’s dark tokens; system controls retain native interaction and animation. New project lives in the separate trailing tab on iOS 26; iOS 17 and 18 use a standard third tab. Opening and cancelling creation preserves the previous tab. Clerk uses its default adaptive interface. The WKWebView remains the only web surface. AI-sharing permission is requested before the first edit or import and can be withdrawn in Account.
 
-Before/after captures for this change are local in `Screenshots/native-after`, excluded from Git. `before-` images record the previous custom styling; `after-` images record the native interface. Account/profile captures may contain private information and should not be used as public marketing images.
-
 ## Verification
 
-The physical iPhone signing path currently requires the paid team's account holder to accept Apple's updated Program License Agreement. Use the existing Revline iPhone Simulator for the current UI pass; do not shut it down while the user is watching. The project targets device family 1 only. Keep one build job on this 8 GB Mac. Debug and Release Simulator builds passed during the native interface work, before the switch to the physical iPhone. Device signing, installation and launch are verified separately using the connected phone; a Simulator build does not verify device provisioning.
-
-The development renderer can reuse the existing port 3001 server through the ignored Debug local configuration. Do not edit or restart that server. Debug uses the development Convex deployment; Release retains the exact production deployment and website. The existing App Store setup and sandbox billing checks above remain required.
+Use your own development configuration for renderer and backend verification. Debug and Release builds must be checked independently. Verify device signing, account access, purchases, restores, exports and account deletion with dedicated accounts. Do not include private account captures in public marketing material.
 
 ### Unsigned Simulator builds
 
@@ -126,8 +122,4 @@ Build with `CODE_SIGNING_ALLOWED=NO` into `mobile/.build/DerivedData`, then inst
 
 The old unsigned build lacked that section, so Clerk returned OSStatus -34018 and never finished loading its client. Startup now also presents a native retry state when Clerk refresh fails. No SDK source or authentication backend was changed.
 
-On this Mac, the local Debug config points `REVLINE_SIMULATOR_ENTITLEMENTS` at an ignored plist containing the earlier Simulator app's Keychain group. This restores the existing Clerk session through the SDK rather than creating another local identity. The checked-in default has no personal team identifier. Keep the local override and its plist together when cleaning build artifacts.
-
-Validation for the current follow-up is recorded in [App Store review checklist](AppStore/review-checklist.md) and the pull request evidence. Earlier build checks are not proof of the new end-to-end editing, deletion or purchase flows. Production legal pages and backend changes still require the normal reviewed release; development deployment never changes the production backend.
-
-The latest native pass restores default iOS labels and blue accents while retaining the website's dark surfaces. Onboarding/sign-in footers share their background with the safe area. At wider regular size classes the editor places conversation beside the preview; narrow windows retain the bottom drawer and composer controls reflow. Full-screen iPhone Duo validation requires Xcode 27.1, which is not installed on this Mac. See [current store handoff](AppStore/current-handoff.md). The latest pass used build-only verification and left the Simulator shut down.
+Local Simulator entitlement overrides belong in ignored configuration files and must match your own signing identity. Do not commit personal team identifiers or copy another operator's Keychain configuration.
