@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Frame capture: Retain video before sparse source windows so final audio tails can hold the last picture. Why: A valid final-frame request could otherwise trim an audio-only intermediate and fail repeatedly.
+
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.

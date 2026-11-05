@@ -11,4 +11,5 @@
 // 42: keep tracked crop keyframes on the extracted review/render source clock.
 // 43: explicit 1080p inspection must never be handled as a 720p preview.
 // 44: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
-export const MEDIA_PROCESSOR_VERSION = 44;
+// 45: sparse capture windows retain video before an audio tail for final-frame holds.
+export const MEDIA_PROCESSOR_VERSION = 45;
