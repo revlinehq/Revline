@@ -66,7 +66,7 @@ export const claim = mutation({ args: { ...identity, claimToken: v.string() }, h
 } });
 export const recordPR = mutation({ args: { ...claimed, prUrl: v.string() }, handler: async (ctx, args) => {
   authorize(args.secret);
-  if (!/^https:\/\/github\.com\/zuraHQ\/revline-editor\/pull\/[1-9]\d*$/.test(args.prUrl)) throw new ConvexError('Invalid incident PR');
+  if (!/^https:\/\/github\.com\/(?:revlinehq\/Revline|zuraHQ\/(?:Revline|revline-editor))\/pull\/[1-9]\d*$/.test(args.prUrl)) throw new ConvexError('Invalid incident PR');
   const row = await ctx.db.get(args.id);
   if (!row || row.generation !== args.generation || row.claimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
   await ctx.db.patch(row._id, { ...(row.status === 'resolved' ? {} : { status: 'pr_open' as const }), delivery: 'finished', prUrl: args.prUrl });
@@ -123,7 +123,7 @@ export const finishIssue = mutation({ args: { ...claimed, issueUrl: v.optional(v
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
   if (!row || row.kind !== 'agent-report' || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
-  if (args.issueUrl && !/^https:\/\/github\.com\/zuraHQ\/revline-editor\/issues\/[1-9]\d*$/.test(args.issueUrl)) throw new ConvexError('Invalid incident issue');
+  if (args.issueUrl && !/^https:\/\/github\.com\/(?:revlinehq\/Revline|zuraHQ\/(?:Revline|revline-editor))\/issues\/[1-9]\d*$/.test(args.issueUrl)) throw new ConvexError('Invalid incident issue');
   await ctx.db.patch(row._id, args.issueUrl ? { issueUrl: args.issueUrl, issueDeliveredCount: args.count, issueDelivery: 'finished', issueAttempts: 0, issueNextAttempt: undefined } :
     { issueDelivery: 'failed', issueNextAttempt: Date.now() + Math.min(3600_000, 60_000 * 2 ** (row.issueAttempts ?? 1)) });
 } });

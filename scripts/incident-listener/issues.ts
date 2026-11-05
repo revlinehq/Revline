@@ -1,11 +1,12 @@
 import type { FunctionReturnType } from 'convex/server';
 import { ConvexHttpClient } from 'convex/browser';
+import { ConvexError } from 'convex/values';
 import { setTimeout } from 'node:timers/promises';
 import { parseArgs } from 'node:util';
 import { z } from 'zod';
 import { api } from '../../convex/_generated/api';
 import { incidentText } from '../../lib/incidents';
-import { config, githubToken, repo, run } from './shared';
+import { publisherConfig, githubToken, repo, run } from './shared';
 
 const { values } = parseArgs({ options: {
   dispatch: { type: 'boolean', default: false }, watch: { type: 'boolean', default: false }, deployment: { type: 'string' }, deliver: { type: 'boolean', default: false },
@@ -13,7 +14,7 @@ const { values } = parseArgs({ options: {
 } });
 const deployment = z.enum(['dev', 'prod']).parse(values.deployment);
 const limit = z.coerce.number().int().min(1).max(100).parse(values.limit);
-const endpoint = (await config()).endpoints.find(item => item.deployment === deployment);
+const endpoint = (await publisherConfig()).endpoints.find(item => item.deployment === deployment);
 if (!endpoint) throw new Error('Deployment is not configured');
 const client = new ConvexHttpClient(endpoint.url);
 const secret = endpoint.secret;
@@ -43,7 +44,8 @@ try {
     const page: FunctionReturnType<typeof api.incidents.issueQueue> = await client.query(api.incidents.issueQueue, { secret, paginationOpts: { cursor, numItems: 100 } });
     for (const row of page.page) {
       if (row.deployment !== deployment) throw new Error('Incident deployment mismatch');
-      if (values.dispatch && row.issueUrl && !row.prUrl && row.status !== 'resolved' && !row.issueDispatchReady && issues.some(issue => issue.html_url === row.issueUrl && issue.state === 'open') && dispatchReady < Math.min(2, limit)) {
+      const savedIssueUrl = row.issueUrl?.replace(/^https:\/\/github\.com\/zuraHQ\/(?:Revline|revline-editor)\//, `https://github.com/${repo}/`);
+      if (values.dispatch && row.issueUrl && !row.prUrl && row.status !== 'resolved' && !row.issueDispatchReady && issues.some(issue => issue.html_url === savedIssueUrl && issue.state === 'open') && dispatchReady < Math.min(2, limit)) {
         dispatchReady++;
         if (values.deliver) await client.mutation(api.incidents.dispatchIssue, { secret, id: row._id, generation: row.generation });
       }
@@ -57,7 +59,7 @@ try {
       attempted++;
       try {
         const marker = `<!-- revline-agent-report:${deployment}:${row.fingerprint} -->`;
-        let issueUrl = row.issueUrl ?? issues.find(issue => issue.body?.includes(marker))?.html_url;
+        let issueUrl = savedIssueUrl ?? issues.find(issue => issue.body?.includes(marker))?.html_url;
         {
           // Only scrubbed diagnostic text is public; no raw context, prompts or local logs.
           const evidence = `${marker}\nAgent report saved in ${deployment}. Occurrences: ${row.count}. Incident: ${row._id}. Fingerprint: ${row.fingerprint}. First seen: ${new Date(row.firstSeen).toISOString()}. Latest: ${new Date(row.lastSeen).toISOString()}.\n\n${incidentText(row.message)}\n\nLatest diagnostic:\n${row.samples.map(sample => `${new Date(sample.at).toISOString()}: ${diagnostic(sample.context)}`).join('\n')}`;
@@ -71,7 +73,13 @@ try {
           issues.push(created);
           issueUrl = created.html_url;
         }
-        await client.mutation(api.incidents.finishIssue, { ...args, issueUrl, count: row.count });
+        try {
+          await client.mutation(api.incidents.finishIssue, { ...args, issueUrl, count: row.count });
+        } catch (error) {
+          // Older deployed backends accept only the repository's redirect URL.
+          if (!(error instanceof ConvexError) || error.data !== 'Invalid incident issue') throw error;
+          await client.mutation(api.incidents.finishIssue, { ...args, issueUrl: issueUrl.replace(`https://github.com/${repo}/`, 'https://github.com/zuraHQ/revline-editor/'), count: row.count });
+        }
         delivered++;
       } catch {
         // Never print subprocess errors: they can contain credentials or request bodies.

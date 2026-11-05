@@ -88,3 +88,11 @@ The existing dev HTTP 402 report was explicitly retried through the scoped syste
 App and agent-runner typechecks and the build passed. `npm run dev -- --port 3005` reported both web and media-worker readiness. The listener was stopped and disabled, its temporary incident scope removed, and the Mac listener and production left untouched. Dev deployment used `.data/incident-dev-deploy`, retaining existing consent fields, the iOS queue field and account-deletion tables; keep that integration checkout when assembling later dev deployments.
 
 The private GitHub helper read draft PR #25 and fetched `origin/main` with the keyring unavailable and an empty GitHub CLI configuration. It rejected a push to main and a PR merge command before accessing credentials. Reinstall after rotating the cached GitHub credential.
+
+## Publish agent reports without fixer dispatch
+
+Run `npm run incidents:issues -- --deployment prod --deliver --watch` from the current checkout. Without `--watch`, it performs one bounded pass; without `--deliver`, it is a dry run. It needs only the deployment endpoint and matching `INCIDENT_LISTENER_SECRET` in the private listener config, plus the cached GitHub credential. T3 project registration is required only by the separate fixer executor. Never pass `--dispatch` when only publishing reports.
+
+Keep one supervised publisher per deployment. Its host service must use this checkout's `scripts/incident-listener/issues.ts`, not the older executor-only checkout. On macOS, use a dedicated LaunchAgent with `RunAtLoad`, `KeepAlive`, and private stdout/stderr logs. Check both the GitHub issue and the incident's `issueDeliveredCount` after starting it; a saved report alone does not establish GitHub delivery.
+
+The repository is now `revlinehq/Revline`. The backend accepts its current URL and the earlier `zuraHQ/Revline` and `zuraHQ/revline-editor` redirect URLs for existing records. During a rolling backend update, the publisher retries only the explicit old-validator rejection with the redirect URL, preserving the same issue and lease. Existing fingerprints are reconciled against all GitHub issue pages before creating anything.

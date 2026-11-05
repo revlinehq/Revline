@@ -11,6 +11,13 @@
 - Blog: Add editing guides with article metadata, RSS and automatic sitemap entries. Why: the user requested a small blog with Google search enhancements.
 
 - Search: Add use-case pages, crawl rules, sitemap links and canonical HTTPS redirects; defer offscreen illustrations and mobile video playback. Why: the user requested fixing the public SEO audit findings.
+
+- Imports: Keep resumable downloads in writable worker scratch instead of the application directory. Why: production imports failed with permission-denied errors.
+
+- Repository: Remove the third-party directory and consolidate retained attribution into NOTICE and OpenCut-LICENSE. Why: user requested the folder be removed.
+
+- Incidents: Separate GitHub publishing from fixer setup and accept renamed repository URLs. Why: saved agent reports were not reaching GitHub.
+
 - Chat: Reduce sent user message corners from 12px to 6px. Why: user requested less rounded bubbles.
 
 - Player: Preserve play or pause state when using the preview seek bar. Why: user reported seeking unexpectedly paused playback.
