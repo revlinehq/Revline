@@ -14,6 +14,8 @@
 
 - Railway workers: Count queued exports as processor demand when no export pool exists. Why: a code review found exports never woke a Railway processor with local RENDER_PROVIDER.
 
+- MCP: normalizeAudio measures the requested tab; sessionless calls only continue a live, unfinished task and never export on an inferred one; agent presence writes at most every five minutes. Why: a code review of merged MCP commits found wrong-tab gain, stale export confirmation and excess presence writes.
+
 - Blog: Remove the visible RSS subscription link. Why: the user requested cleaner customer-facing navigation.
 
 - Repository: Remove the separate OpenCut license file and retain its notice inside NOTICE. Why: the user requested a single project license file.
