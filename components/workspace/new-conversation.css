@@ -21,8 +21,8 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 .new-conversation-compose-group{position:relative;min-width:0}
 .new-conversation-empty .new-conversation-intro{align-self:end;align-items:center;padding-bottom:24px;text-align:center}
 .new-conversation-empty .new-conversation-intro h1{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--landing-font-head),sans-serif;font-size:36px;font-weight:500;line-height:1.12;color:#f2f2f2}
-.new-conversation-empty .composer-input-group{min-height:88px;border-radius:8px}
-.new-conversation-empty .composer-input-group>[data-slot=input-group-control]{min-height:42px;padding:12px 14px 8px;font-family:var(--font-geist),sans-serif;font-size:14px;line-height:20px}
+.new-conversation-empty .composer-input-group{min-height:108px;border-radius:8px}
+.new-conversation-empty .composer-input-group>[data-slot=input-group-control]{min-height:62px;padding:12px 14px 8px;font-family:var(--font-geist),sans-serif;font-size:14px;line-height:20px}
 .new-conversation-empty .composer-input-group>[data-slot=input-group-control]::placeholder{color:#aaa}
 .new-conversation-empty .edit-composer-actions{min-height:44px;padding:4px 8px 8px 6px;gap:12px}
 .new-conversation-empty .composer-submit{border-radius:8px}
