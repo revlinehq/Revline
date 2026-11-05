@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
 # Changelog
