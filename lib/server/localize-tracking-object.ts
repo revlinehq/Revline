@@ -2,13 +2,12 @@ import { execFile } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { createFalClient } from '@fal-ai/client';
 import { z } from 'zod';
 import { trackBox } from '../media-analysis/pixel-track';
 import { AnalysisError } from '../media-analysis/errors';
 import { locateTrackingObject } from '../media-analysis/gemini';
 import { optionalGeminiVision } from './optional-gemini-vision';
-import { subscribe } from './derive-media';
+import { configuredFal, subscribe } from './fal';
 
 const run = promisify(execFile);
 const frameInfo = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive() })).min(1) });
@@ -30,11 +29,10 @@ export async function localizeTrackingObject(source: string, directory: string, 
     const { width, height } = frameInfo.parse(JSON.parse(info.stdout)).streams[0];
     const data = await readFile(path);
     let found: { box: z.infer<typeof trackBox>; provider: 'fal-florence-2' | 'gemini' } | undefined;
-    const key = process.env.FAL_KEY;
+    const fal = configuredFal();
     let failure = 'Configure FAL_KEY on the media processor, or provide an inspected point or box.';
-    if (key) {
+    if (fal) {
       try {
-        const fal = createFalClient({ credentials: key });
         const raw = await subscribe(fal, OBJECT_GROUNDING_ENDPOINT, { image_url: `data:image/jpeg;base64,${data.toString('base64')}`, text_input: noun }, signal);
         const boxes = grounding.parse(raw).results.bboxes;
         if (boxes.length !== 1) throw new AnalysisError('The noun was absent or matched multiple boxes. Choose an inspected source point or box.', 422);
