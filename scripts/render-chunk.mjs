@@ -5,7 +5,7 @@ import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderChunk } from '@hyperframes/producer/distributed';
-import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, renderResources } from '../lib/render-resources.mjs';
 import { getTar, putFile } from './render-artifacts.mjs';
 
 const { REVLINE_CHUNK_PLAN_KEY: planKey, REVLINE_CHUNK_INDEX: rawIndex, REVLINE_CHUNK_OUT_KEY: outKey, REVLINE_CHUNK_QUALITY: quality = 'standard' } = process.env;

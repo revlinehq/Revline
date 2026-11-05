@@ -6,7 +6,7 @@ import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createConsoleLogger, resolveConfig } from '@hyperframes/producer';
 import { assemble, plan, renderChunk, resolvePlanAudioPath } from '@hyperframes/producer/distributed';
-import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, renderResources } from '../lib/render-resources.mjs';
 import { exists, getFile, putFile, remove } from './render-artifacts.mjs';
 import { exportChunkResources } from '../lib/export-chunk-resources.mjs';
 import { randomUUID } from 'node:crypto';

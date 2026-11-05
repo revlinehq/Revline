@@ -1,7 +1,7 @@
 // HyperFrames' internal Hono server replaces global Request/Response. Keep it
 // inside this isolated, awaited process so Next's HTTP constructors stay intact.
 import { createRenderJob, executeRenderJob, createConsoleLogger, resolveConfig } from '@hyperframes/producer';
-import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, renderResources } from '../lib/render-resources.mjs';
 
 const controller = new AbortController();
 process.on('SIGTERM', () => controller.abort());

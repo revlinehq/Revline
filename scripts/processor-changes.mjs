@@ -14,7 +14,7 @@ export const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/ed
 export const RUNTIME_PREFIXES = [
   'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',
   'scripts/track-pixels.py', 'scripts/detect-beats.py', 'scripts/detect-shots.py', 'scripts/install-beat-model.mjs', 'scripts/copy-vendor.mjs',
-  'scripts/detect-facecam.py', 'scripts/render-worker.mjs', 'scripts/render-distributed.mjs', 'scripts/render-chunk.mjs', 'scripts/render-artifacts.mjs', 'scripts/render-resources.mjs', 'scripts/render-ffmpeg.sh', 'scripts/composition-review-worker.mjs', 'scripts/hyperframes-playback-compat.mjs',
+  'scripts/detect-facecam.py', 'scripts/render-worker.mjs', 'scripts/render-distributed.mjs', 'scripts/render-chunk.mjs', 'scripts/render-artifacts.mjs', 'lib/render-resources.mjs', 'scripts/render-ffmpeg.sh', 'scripts/composition-review-worker.mjs', 'scripts/hyperframes-playback-compat.mjs',
   'scripts/beat-tracking-requirements.txt', 'scripts/scene-detection-requirements.txt', 'scripts/video-import-requirements.txt',
   'package.json', 'package-lock.json', 'tsconfig.json',
   'lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs', 'scripts/render-railway-chunks.mjs',
