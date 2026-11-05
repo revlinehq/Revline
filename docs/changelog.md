@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
 # Changelog
@@ -7,7 +8,6 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
-- Developer isolation: Add explicit faithful snapshots of saved tabs, hydrated analysis and media relationships. Why: metadata-only seeds cannot serve as cached-analysis development baselines.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
@@ -25,6 +25,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Deployment: Retry reset connections when reading Fly preflight status within its existing deadline. Why: a transient TLS reset aborted the latest main release after its image upload.
 - Media preparation: Share prepared audio with transcription, stage audio inputs locally, bound speech-provider waits and report non-retryable disk shortages. Why: rough cuts reread large video sources and hid slow stages.
 - Deployment: Package reference tracking and its shared frame reader in processor images. Why: the main release failed its image runtime check before deployment.
+- Developer isolation: Add explicit faithful snapshots of saved tabs, hydrated analysis and media relationships. Why: metadata-only seeds cannot serve as cached-analysis development baselines.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
 - Snapshot recovery: Recover same-lease cache reservations, retain completed clip checks across lease handoffs, and bound transport retries. Why: lost responses could make a worker wait on itself or repeat finished work.
 - Clipping: Activate delivery when candidates are accepted and keep completion guidance on inline data checks. Why: the single real podcast benchmark exposed candidate-only accounting despite built tabs.
