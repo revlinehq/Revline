@@ -14,4 +14,5 @@
 // 45: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
 // 46: sparse capture windows retain video before an audio tail for final-frame holds.
 // 47: route public X status pages through the supported downloader before import.
-export const MEDIA_PROCESSOR_VERSION = 47;
+// 49: report genuine Gemini billing failures and honor durable admission cooldowns.
+export const MEDIA_PROCESSOR_VERSION = 49;

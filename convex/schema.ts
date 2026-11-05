@@ -272,6 +272,7 @@ export const publicMediaAsset = v.object({
 export const sharedChatMessage = v.object({role:v.union(v.literal('user'),v.literal('assistant')),text:v.string()});
 export const shareChatPreviewMessage = v.object({id:v.string(),...sharedChatMessage.fields});
 export default defineSchema({
+  geminiBillingCooldowns: defineTable({ ownerId: v.string(), keyHash: v.string(), until: v.number() }).index("by_owner", ["ownerId"]),
   incidents: defineTable({
     fingerprint: v.string(), source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), deployment: v.string(),
     count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),

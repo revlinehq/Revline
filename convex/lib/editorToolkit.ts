@@ -1040,7 +1040,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const deadline=Date.now()+180000;
         while(true){abortSignal.throwIfAborted();const review=await ctx.runQuery(internal.compositionReview.get,{...run,reviewId});
           // An environment without the review service cannot review; report it plainly instead of failing.
-          if(review.status==='failed'&&/composition review is not configured/i.test(review.error??'')){reviewServiceMissing=true;return reviewUnavailableResult;}
+          if(review.status==='failed'&&/composition review is not configured|Gemini.*HTTP 402/i.test(review.error??'')){reviewServiceMissing=true;return {...reviewUnavailableResult,reason:review.error};}
           if(review.status==='failed')throw new AnalysisStepError(review.error??'Rendered review failed.');
           if(review.status==='completed'){const current=await ctx.runQuery(internal.assistant.getRunTimeline,run),stale=current.revision!==review.result?.revision;return {reviewed:!stale,stale,currentRevision:current.revision,scope:stale?'The timeline changed during review. Inspect the latest state; this receipt describes the earlier snapshot.':'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};}
           if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');

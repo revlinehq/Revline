@@ -63,7 +63,7 @@ async function googleResponse(response: Response, key: string) {
       : response.status === 429 ? 'Media analysis is temporarily busy. Please try again later.'
       : response.status >= 500 ? 'Media analysis is temporarily unavailable. Please try again later.'
       : 'The media analysis request was rejected.';
-    throw new AnalysisError(message, response.status, retryable);
+    throw new AnalysisError(message, response.status, retryable, response.status === 402);
   }
   return response;
 }
