@@ -1,5 +1,8 @@
 ## 2026-11-04
 
+- Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
+- Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
+
 - Frame reads: Round whole-source motion-scan timeouts to integer milliseconds. Why: Fractional media durations must produce valid Node process deadlines.
 - MCP: Bound analysis waits while durable jobs continue saving results. Why: Healthy worker heartbeats could keep edit locks held after the caller lost its response.
 - Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.

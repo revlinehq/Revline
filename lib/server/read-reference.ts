@@ -308,7 +308,7 @@ async function readMotion(path: string, source: Source, work: Work, signal: Abor
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
   onProgress(40);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)) };
+  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: round(source.fps, 3), frames: [], motion: { ...motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)), sourceFps: round(source.fps, 3) } };
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
