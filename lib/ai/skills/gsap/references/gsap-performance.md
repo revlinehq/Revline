@@ -12,7 +12,7 @@ Revline: add tweens to the supplied paused `tl` inside useTimeline/scene; the en
 Animating **transform** (`x`, `y`, `scaleX`, `scaleY`, `rotation`, `rotationX`, `rotationY`, `skewX`, `skewY`) and **opacity** keeps work on the compositor and avoids layout and most paint. Avoid animating layout-heavy properties when a transform can achieve the same effect.
 
 - ✅ Prefer: **x**, **y**, **scale**, **rotation**, **opacity**.
-- For movement use transforms. One bordered panel may tween width/height for <1 s; inspect mid-move edges (revline).
+- For movement use transforms.
 
 GSAP’s **x** and **y** use transforms (translate) by default; use them instead of **left**/**top** for movement.
 

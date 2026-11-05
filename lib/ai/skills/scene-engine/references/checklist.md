@@ -6,8 +6,6 @@ description: "Full checks for builds and full-lane edits. Existing edits start w
 
 For an existing scene or film edit, follow page `edit-lanes` first. Run every item below for a new build or full-lane edit: the motion and recreate lanes, and final checks in any lane. Local checks in other lanes follow edit-lanes instead. Render frames with getFrames (up to six per call) and look at them. Timing is set while writing: original films follow motion-design "Timing and easing" and are not re-paced afterwards. Never report a film as done from the code alone.
 
-For original/restyled work, report timestamp, visible defect, correction and recheck on these frames (motion-design/taste).
-
 1. **First frames.** The clip's first frame and the next one (start and start + 1/fps). Nothing shows that should still be hidden. A part hidden at its first frame starts hidden where it is built (page `react-scenes`, Motion; for GSAP specifics, the gsap skill).
 2. **Every cut.** Each cut minus one frame, on the cut, and plus one frame. No flash, no jump; where the beats are meant to connect, the two sides match.
 3. **Every beat.** One frame at each beat's key moment. Inspect vertical output at 360×640: essential text ≥16 displayed px, settled hold ≥max(1 s, words/3), excluding entrance/exit. Increase size/hold if inspection fails. Keep text inside frame without unintended overlaps; one claim per shot.

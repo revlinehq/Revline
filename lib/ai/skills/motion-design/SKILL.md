@@ -1,6 +1,6 @@
 ---
 name: "motion-design"
-description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, original design judgment (page \"taste\"), and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Scenes themselves: scene-engine."
+description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Scenes themselves: scene-engine."
 ---
 # Motion design: launch and feature films
 
@@ -12,13 +12,15 @@ Follow the user's request first. A video to recreate goes through "Recreating a 
 
 **Background before the first addFilm.** For a new film or a background restyle, read page `backgrounds`: build base, structure and accent from the brand kit, write the one-line choice into the brief, and keep its shadows and limits.
 
-For original motion design, creative restyling or learning from a style reference, read page `taste` before choosing the composition. It owns design judgments and the short rendered critique; copying uses the recreation workflow.
 
 ## Length and structure come from the request
 Length, number of sections and what the film shows follow the user's request and brief. There is no default structure or required proof beat. When the user gives no length, ask once in the ideation message with a suggestion sized to the content (for example "about 20 s: title, three features, end card"). Pacing rules apply at any length.
 
 ## How films are built
 A film is one React scene clip built with addFilm and changed with patchScene. How to write, split and edit it lives in scene-engine page `react-scenes`; this skill decides what the film shows. Split a film into clips only when the user asks.
+
+## Moves and transitions
+Named transitions (letter reveal, write-on, mask wipe, blur-in, morph, typing, fly-off) each have a recipe page; page `transitions` maps motion words to them. Their timing follows the table below unless a reference is being copied.
 
 ## Timing and easing (measured)
 Measured from 151 tweens and 87 shots across the user's saved launch films (rerun, shipper, rightnowai, krea, allophone, juampitech, Deepusleepy, firecrawl ×3). These are defaults for original films; the user's direction and a reference being copied win.
@@ -48,13 +50,18 @@ The video is the brief. New recreations use the recreate lane, which runs full c
 
 ## A new film for the user's own brand
 1. **Brand kit for the look:** find or create the brand kit (page `brand-kit`) and use its fonts, colors and logo. Skip the product-text interview unless the film states product facts the user has not given.
-2. **Product UI only when asked:** rebuild the user's real product UI (blueprints, kit screens, measureScreen, compareScreen) only when the user asks to show their product, page or components. Otherwise design the film's own UI and objects freely in the brand's fonts and colors. When product UI is shown in several sections, build it once and reuse it.
+2. **Product UI only when asked:** rebuild the user's real product UI (blueprints, kit screens, measureScreen, compareScreen) only when the user asks to show their product, page or components. Otherwise design the film's own UI and objects freely in the brand's fonts and colors. When product UI is shown in several sections, build it once and reuse it. Per shot: when the whole UI moves or holds, use the screenshot (`media.<screen>`); when something inside it moves, it zooms past 2× or its text changes, use the kit's blueprint (page `blueprints` builds a missing one).
 
 ## Never speculate
 In a new film, every fact on screen comes from what the user wrote or listed in the request, the confirmed product text, or the brief (in a recreation, from the video): names, features, numbers, claims, prices, dates, availability, the URL. Missing? Ask. Never invent a statistic, customer, feature or UI the product does not have. The wording around the facts is yours to write; never paste website headings or section labels as captions just because they are true.
+
+## The user's taste
+Saved feedback from this user (latest explicit feedback wins; recallMemory for a saved style's full recipe, remember for a new lasting verdict with its scope):
+- Liked: the isometric line diagram style (thin white isometric outlines on near-black, hatching on one face, one thin accent edge, dimension ticks, small sans labels) where structure is the subject.
+- Disliked: cheap cursors (a cursor appears only to demonstrate an interaction), bright brand-purple fills, sparkles or AI-magic icons, stock-template looks.
 
 ## Direction and feedback
 - **Exact direction from the user:** do exactly that. Never override the user.
 - **Approved work is off-limits** (how: scene-engine page `react-scenes`). When the user approves a section, mark it with approveClip (markerId of its section) and their words as the note; never approve on their behalf.
 - **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
-- **A style reference** (a film or brand they like, not one to recreate): use page `taste` to extract why its choices work and express those principles in new imagery and staging.
+- **A style reference** (a film or brand they like, not one to recreate): readFrames its whole arc, then note for each choice you borrow: what it does → why it works → how this film expresses it differently. Never reuse its imagery, layout or timing.

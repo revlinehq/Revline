@@ -1,22 +1,12 @@
 ---
 name: "blueprints"
-description: "Product UI that moves: rebuild a kit screen as a blueprint (live HTML with named parts) by measuring it, scoring the rebuild against it, and saving it to the kit; then mount it in scenes and animate its parts. When to use the screenshot instead."
+description: "Rebuild a product screenshot as a pixel-perfect blueprint (live HTML with named parts): measure it, score it against the screenshot, save it to the brand kit, and mount it in a scene."
 ---
-# Blueprints: the product's real UI, rebuilt to move
+# Blueprints: screenshot to pixel-perfect HTML
 
 A blueprint is a kit screen rebuilt as a responsive scene module: every piece (header, sidebar, composer, tab, clip, button) is HTML with a `data-part` name, measured from the screen's pixels and scored against it. Once saved in the brand kit, every film for that brand can mount it.
 
-## Showing the product
-When something inside the UI has to move, use the kit's blueprint or build one (below); when the whole UI just moves or holds, use the screenshot. Real screenshots and screen recordings beat mockups: they show the actual product and build trust. First use the brand kit's screens (getBrandKit); they reach every scene with the kit attached as `media.<name>`. Otherwise ask the user for screenshots or short recordings of the screens the script shows (or offer to use ones already in the project's media), upload them, and attach them to scenes as `media` (scene-engine, Project media). A recording shows a real interaction; a screenshot with animated HTML on top shows a controlled one. Crop and magnify the part that matters, move a camera over them, tilt them, and layer animated HTML on top (a typed prompt, a highlight, a cursor) to show the action.
-Without screenshots, build the UI as HTML mockups in the brand's fonts and colors: windows, inputs, cards, lists, timelines. Show only what the product text describes, with generic sample content.
-
-## Screenshot or blueprint, per shot
-Decide shot by shot:
-- **The UI moves as a whole** (pan, tilt, zoom, held as a backdrop): use the **screenshot** (`media.<screen>`). It is exact and free.
-- **Something inside the UI moves** (the composer types, clips slide in, a button is pressed, a panel lifts out): use the **blueprint**.
-- Also the blueprint when the shot **zooms deep** (HTML stays sharp, a screenshot blurs past 2x), needs a **size the screenshot lacks**, or shows **changed text** (a different prompt, the user's own content).
-- **Mixing is fine:** open on the screenshot and cut to the blueprint when interaction starts; at a 95%+ match the swap is invisible.
-If the kit already has a blueprint for that screen (listBlueprints), use it; build one only when it is missing.
+If the kit already has a blueprint for that screen (listBlueprints), use it; build one only when it is missing. Whether a film shows product UI at all, and how it moves, is decided in motion-design.
 
 ## Building one
 Fonts and the logo come from the kit; colors and positions come from the screen. Never type a size, color or radius by eye.
@@ -31,5 +21,5 @@ Fonts and the logo come from the kit; colors and positions come from the screen.
 ## Using one in a scene
 - Attach it: addFilm, addScene or editScene with `brandKitId` and `blueprints: ['Editor']`.
 - Mount it: `const ui = blueprint('Editor', container, { width: 1600, height: 1000 })` builds the whole UI inside `container` and returns its root. Scale or tilt the container to frame it.
-- Animate its parts: `ui.querySelector('[data-part=composer]')`. Typical moves: show the whole dashboard, then lift one part out (scale up, shadow, the rest dims); replace a part's content (type a new prompt, swap a clip); transition one part into the next shot; build the UI part by part.
-- Keep the blueprint static itself; all motion lives in the scene.
+- Animate its parts: `ui.querySelector('[data-part=composer]')`.
+- The blueprint itself stays static; motion is written in the scene.
