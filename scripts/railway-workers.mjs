@@ -97,7 +97,7 @@ if (operation === 'preflight' || operation === 'stage-repository') {
 }
 if (!settings.CONVEX_DEPLOY_KEY) delete env.CONVEX_DEPLOY_KEY;
 if (env.CONVEX_DEPLOY_KEY && !env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deployment}|`)) throw new Error('Convex deploy key belongs to another deployment.');
-const convex = (args, input) => command(process.execPath, ['node_modules/convex/bin/main.js', ...args, '--deployment', deployment], { env, input, quiet: true });
+const convex = (args, input) => command(process.execPath, ['node_modules/convex/bin/main.js', ...args, ...(env.CONVEX_DEPLOY_KEY ? [] : ['--deployment', deployment])], { env, input, quiet: true });
 const remote = parseEnv(await convex(['env', 'list']));
 mask(remote);
 if (config.environment === 'staging' && remote.REVLINE_ISOLATED !== 'true') throw new Error('Staging queue operations require the dedicated isolated backend.');
