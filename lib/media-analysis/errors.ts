@@ -17,8 +17,27 @@ export function mediaErrorMessage(error: unknown) {
   return message.replace(/https?:\/\/[^\s<>"']+/g, '[media URL]').replace(/\/(?:home|tmp|app)\/[^\s:'"]+/g, '[worker path]').slice(0, 1000);
 }
 
+/** Match actual disk exhaustion, including FFmpeg stderr, without classifying network errors as permanent. */
+export function isMediaDiskFull(error: unknown): boolean {
+  const pending: unknown[] = [error];
+  const seen = new Set<unknown>();
+  while (pending.length) {
+    const value = pending.pop();
+    if (typeof value === 'string' && /\b(?:ENOSPC|SQLITE_FULL)\b|No space left on device|database or disk is full|needs more free disk space/i.test(value)) return true;
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    if ('code' in value && (value.code === 'ENOSPC' || value.code === 'SQLITE_FULL')) return true;
+    for (const key of ['message', 'stderr', 'cause', 'data']) {
+      if (key in value) pending.push(Reflect.get(value, key));
+    }
+    if ('errors' in value && Array.isArray(value.errors)) pending.push(...value.errors);
+  }
+  return false;
+}
+
 /** Explicit provider policy wins over status defaults, including throttling. */
 export function isRetryableAnalysisError(error: unknown) {
+  if (isMediaDiskFull(error)) return false;
   return !(error instanceof AnalysisError) || (error.retryable ?? error.status >= 500);
 }
 

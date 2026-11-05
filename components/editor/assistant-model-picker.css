@@ -29,3 +29,28 @@ html[data-workspace-theme=dark] .assistant-model-picker,html[data-workspace-them
 html[data-workspace-theme=light] .assistant-effort-xhigh{background-image:linear-gradient(90deg,#e5484d,#f76b15,#d6a000,#30a46c,#0090ff,#8e4ec6,#d6409f,#e5484d)}
 @keyframes assistant-effort-shimmer{to{background-position:-200% 0}}
 @media(prefers-reduced-motion:reduce){.assistant-effort-xhigh{animation:none;background-position:30% 0}}
+
+.assistant-picker-menu [data-locked="true"] {
+  background: rgb(128 128 128 / 8%);
+  color: #999;
+  opacity: .5;
+  pointer-events: none;
+}
+.assistant-picker-menu [data-locked="true"] small {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  color: inherit;
+}
+
+.assistant-picker-menu [data-locked="true"] .assistant-effort-xhigh {
+  background: none;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+}
+
+.assistant-picker-menu .assistant-model-restore {
+  max-width: 240px;
+  white-space: normal;
+}

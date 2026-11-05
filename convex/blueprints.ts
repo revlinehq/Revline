@@ -76,7 +76,7 @@ export const requestCheck = internalMutation({
     if ((args.points?.length ?? 0) > 60 || (args.lines?.length ?? 0) > 20) throw new ConvexError('Measure at most 60 points and 20 lines at a time.');
     // Compare at the screen's own size unless another size is asked for.
     const width = Math.round(args.width ?? screen?.width ?? 1920), height = Math.round(args.height ?? screen?.height ?? 1080);
-    if (width < 200 || height < 200 || width > MAX_SIZE || height > MAX_SIZE) throw new ConvexError(`Choose a size between 200 and ${MAX_SIZE} pixels.`);
+    if (width < 1 || height < 1 || width > MAX_SIZE || height > MAX_SIZE) throw new ConvexError(`Choose a size between 1 and ${MAX_SIZE} pixels.`);
     await requireMediaTaskCapacity(ctx, args.ownerId, 1);
     const checkId = await ctx.db.insert('blueprintChecks', { ownerId: args.ownerId, projectId: project._id, kitId: kit._id, mode: args.mode, ...(screen ? { screen: screen.name } : {}), ...(args.code ? { code: args.code } : {}), width, height, ...(args.points ? { points: args.points } : {}), ...(args.lines ? { lines: args.lines } : {}), status: 'queued', createdAt: Date.now() });
     const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'blueprint', blueprintCheckId: checkId });

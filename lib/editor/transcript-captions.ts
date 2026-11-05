@@ -6,7 +6,8 @@ import { DEFAULT_CAPTION_STYLE } from './text-style';
 /** Caption retained speech, never the discarded words of an intersecting segment. */
 export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, fps: number, createId: () => string): Clip[] {
   const sourceEnd = sourceEndOf(clip), rate = playbackRateOf(clip), frame = 1 / fps;
-  const retained = (word: TranscriptWord) => word.start >= clip.sourceStart - 1e-7 && word.start < sourceEnd - 1e-7 && word.end <= sourceEnd + 1e-7 && word.text.trim();
+  // Speech cuts round measured edges to milliseconds; provider floats must not drop boundary words.
+  const retained = (word: TranscriptWord) => word.start >= clip.sourceStart - .001 && word.start < sourceEnd - 1e-7 && word.end <= sourceEnd + .001 && word.text.trim();
   const caption = (group: TranscriptWord[]): Clip => {
     const first = timelineTimeAtSource(clip, group[0].start);
     const last = timelineTimeAtSource(clip, Math.max(...group.map(word => word.end)));

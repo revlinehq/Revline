@@ -8,12 +8,13 @@ const editLanesPage: EditorSkillPage = {
   body: `# Editing existing footage, captions, scenes or films
 
 - New scene/film or recreation: Precise full checks, even if Fast was selected; keep mode metadata in tool results. MCP defaults to Precise unless editMode is passed.
-- Existing static/text/asset change or named speech cut: local checks in either mode.
+- Plain talking-head speech cleanup in Fast reel: saved-data checks; sample new/changed caption styling or framing once. No frames at every speech cut or compulsory listening. Explicit visual requests and uncertain joins still get targeted checks.
+- Other existing static/text/asset change or named speech cut: local checks in either mode.
 - Existing motion/timing/camera/transition edit: local checks in Fast; full changed-range checks in Precise. Story restructuring and whole-video review also use full checks.
 
-Local checks use getFrames at each changed moment and ±1/fps; no full sweeps, reference compares or repeated finishing passes. Reuse loaded skills and project context. Full checks use checklist and, for copies, reference-footage/recreation. Rendered checks are required in both modes because code cannot prove the pixels.
+Local checks use getFrames at each changed moment and ±1/fps; no full sweeps, reference compares or repeated finishing passes. Reuse loaded skills and project context. Full checks use checklist and, for copies, reference-footage/recreation. Rendered checks are required for visual changes in both modes; plain Fast reel speech cleanup uses the data checks above.
 
-**Footage and captions:** read only the transcript around the affected SOURCE range with inspectAssetAnalysis start/end or batched windows. Use the fewest calls: batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup. Ripple the actual removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material and batch moveClips by shared time delta. retainSourceRanges compacts only the linked pair; closeGaps works per layer, so neither alone synchronizes overlays. Preserve unrelated speech and styling. Verify with inspectTimeline: new duration meets the target, no gaps or orphaned captions. Use getFrames at each changed cut point or caption moment and one frame either side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the timeline).
+**Footage and captions:** read only the transcript around the affected SOURCE range with inspectAssetAnalysis start/end or batched windows. Use the fewest calls: batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup. Ripple the actual removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material and batch moveClips by shared time delta. retainSourceRanges compacts only the linked pair; closeGaps works per layer, so neither alone synchronizes overlays. Preserve unrelated speech and styling. Verify with inspectTimeline: new duration meets the target, no gaps or orphaned captions. Except for the plain Fast reel path above, use getFrames at each changed cut point or caption moment and one frame either side (\`t - 1/fps\`, \`t\`, \`t + 1/fps\`, within the timeline).
 
 **Scenes:** find code with inspectClip search, then read only the affected \`section\` (or \`lines\` without section markers). Make one patchScene call where possible, with the same section and expectedRevision. Check getFrames at the changed moment and one frame either side. Review diffScene for edits outside scope and shared-component consumers; inspect adjacent boundaries. Report sampled scope, not whole-film visual equivalence. In Fast, skip compareReference, motionMap and checkPacing; in Precise, follow the full lane when scene motion changed. Review saved changes with diffScene using revisions from listRevisions, then attach the actual verification evidence with recordFix.`,
 };
@@ -90,7 +91,7 @@ Only components that read time re-render; static parts render once. A useTimelin
 
 export const sceneEngine: EditorSkill = {
   name: 'scene-engine',
-  description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene, explainer-scenes for explainers and overlays on footage).',
+  description: 'How scene clips work, for every kind of scene: the module contract, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene).',
   body: `# Scene engine
 
 For edits to an existing scene or film, start with page \`edit-lanes\` and follow its workflow instead of the build guidance below.
@@ -99,11 +100,11 @@ For edits to an existing scene or film, start with page \`edit-lanes\` and follo
 
 A scene is a TypeScript module that builds plain HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, and the editor renders it frame by frame for preview and export. Transparent areas show the layers below.
 
-Launch and feature films use **React scenes** instead: one film, one clip, built with addFilm, components for structure, GSAP motion seeked through useTimeline (page \`react-scenes\`). The rest of this page describes GSAP scenes, used for explainers and overlays on footage.
+Launch and feature films use **React scenes** instead: one film, one clip, built with addFilm, components for structure, GSAP motion seeked through useTimeline (page \`react-scenes\`). The rest of this page describes GSAP scenes, used for overlays on footage.
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- A film (React scenes): write it with addFilm as one clip (page \`react-scenes\`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. An explainer of GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- A film (React scenes): write it with addFilm as one clip (page \`react-scenes\`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. For GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
 - Changing any existing scene or film: inspectClip with section or lines for a short numbered read, then patchScene with scoped snippets or line edits and expectedRevision (page \`react-scenes\`). Use inspectClip kit: true for the shared film kit. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 - Going back to a version of a scene the user liked: listRevisions (with its clipId) finds the revision, then restoreClip puts that one clip back exactly, leaving every other clip as it is now. Use it, not chains of undoLatestEdit, which also take back later approved work.
 
