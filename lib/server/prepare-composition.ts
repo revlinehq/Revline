@@ -46,7 +46,12 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
       if(clips.length){
         const spans=clips.flatMap(c=>windows.filter(w=>c.start<w.end&&c.start+c.duration>w.start).map(w=>({start:sourceTimeAt(c,Math.max(c.start,w.start)),end:sourceTimeAt(c,Math.min(c.start+c.duration,w.end))})));
         if(!spans.length)return;
-        const start=Math.max(0,Math.min(...spans.map(s=>s.start))),end=Math.max(...spans.map(s=>s.end));
+        const requestedStart=Math.max(0,Math.min(...spans.map(s=>s.start))),end=Math.max(...spans.map(s=>s.end));
+        // Keep video before a sparse capture: audio can outlast the final video
+        // frame, and trimming from that timestamp alone creates an audio-only file.
+        // The source offset preserves the requested clock; the renderer can then
+        // hold the real last frame through the tail instead of probing an empty stream.
+        const start=asset.kind==='video'?Math.max(0,requestedStart-1):requestedStart;
         const source=ownedMediaUrl(asset.url!,new URL(convexUrl).origin);
         if(asset.kind==='audio'){
           const name=`asset-${index}-decoded.wav`;

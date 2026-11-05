@@ -11,4 +11,7 @@
 // 42: keep tracked crop keyframes on the extracted review/render source clock.
 // 43: explicit 1080p inspection must never be handled as a 720p preview.
 // 44: decode bound scene video before the final Three VideoTexture draw.
-export const MEDIA_PROCESSOR_VERSION = 44;
+// 45: independent-axis reference tracks and their saved geometry must bypass older workers/caches.
+// 46: sparse capture windows retain video before an audio tail for final-frame holds.
+// 47: native small-logo topology must bypass older trace workers and caches.
+export const MEDIA_PROCESSOR_VERSION = 47;

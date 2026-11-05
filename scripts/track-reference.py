@@ -1,4 +1,4 @@
-"""Full-resolution rigid-element registration. NDJSON progress and samples to the media worker."""
+"""Full-resolution element registration. NDJSON progress and samples to the media worker."""
 import json
 import math
 import signal
@@ -80,6 +80,28 @@ def register(frame, template, previous):
     return local, float(np.clip(score, 0, 1))
 
 
+def silhouette(frame, box, previous=None):
+    """Measure an enclosing panel only if the seed contour matches the selected box."""
+    _, mask = cv2.threshold(frame, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    choices = []
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area < box['w'] * box['h'] * .3:
+            continue
+        hull = cv2.convexHull(contour)
+        if area / max(1., cv2.contourArea(hull)) < .9:
+            continue
+        x, y, w, h = cv2.boundingRect(contour)
+        tx, ty, tw, th = previous if previous is not None else [box[k] for k in ('x', 'y', 'w', 'h')]
+        overlap = max(0, min(x+w, tx+tw)-max(x, tx)) * max(0, min(y+h, ty+th)-max(y, ty))
+        iou = overlap / max(1., w*h + tw*th-overlap)
+        corners = cv2.approxPolyDP(hull, .02 * cv2.arcLength(hull, True), True)
+        if iou >= (.5 if previous is not None else .6) and len(corners) >= 4:
+            choices.append((iou, [float(x), float(y), float(w), float(h)], corners[:, 0].tolist()))
+    return max(choices, key=lambda value: value[0]) if choices else None
+
+
 def track(path, args, source):
     seed = source.seed()
     frame = source.read(seed)
@@ -107,10 +129,27 @@ def track(path, args, source):
     if background is not None and denominator / template.size < .0001:
         raise ValueError('Calibration frames do not show an absent and a fully visible element.')
     sharp_variance = float(cv2.Laplacian(template, cv2.CV_32F).var())
+    panel = silhouette(frame, box) if 'backgroundTime' not in args and bw * bh < width * height * .8 else None
+    panel_previous = panel[1] if panel else None
     done = 0
 
     def sample(point, frame, previous):
-        nonlocal done
+        nonlocal done, panel_previous
+        if panel is not None:
+            found = silhouette(frame, box, panel_previous)
+            if found is not None:
+                _, panel_previous, corners = found
+            px, py, pw, ph = panel_previous
+            sx, sy = pw / panel[1][2], ph / panel[1][3]
+            px += (x - panel[1][0]) * sx
+            py += (y - panel[1][1]) * sy
+            pw, ph = bw * sx, bh * sy
+            emit(dict(sample=dict(time=point[1], x=px, y=py, w=pw, h=ph,
+                scale=math.sqrt(sx*sy), scaleX=sx, scaleY=sy, rotation=0.,
+                registrationBox=dict(zip(("x", "y", "w", "h"), panel_previous)),
+                corners=corners if found is not None else [],
+                confidence=float(found[0]) if found is not None else 0., visible=found is not None)))
+            return previous
         old_patch = crop_at(frame, previous, template.shape)
         # Before registration: fully transparent elements have no measurable pose. Freeze, never wander.
         alpha = float(np.clip(np.sum((old_patch - background) * delta) / denominator, 0, 1)) if background is not None else None
@@ -138,9 +177,10 @@ def track(path, args, source):
         warp = candidate if visible and confidence >= .65 else previous
         c = warp[:, :2] @ center + warp[:, 2]
         scale = float(np.sqrt(abs(np.linalg.det(warp[:, :2]))))
+        sx, sy = np.linalg.norm(warp[:, :2], axis=0)
         rotation = math.degrees(math.atan2(warp[1, 0], warp[0, 0]))
-        value = dict(time=point[1], x=float(c[0] - bw * scale / 2), y=float(c[1] - bh * scale / 2),
-                     w=bw * scale, h=bh * scale, scale=scale, rotation=rotation,
+        value = dict(time=point[1], x=float(c[0] - bw * sx / 2), y=float(c[1] - bh * sy / 2),
+                     w=float(bw * sx), h=float(bh * sy), scale=scale, scaleX=float(sx), scaleY=float(sy), rotation=rotation,
                      confidence=confidence if visible else 0., visible=visible)
         if alpha is not None:
             value.update(opacity=alpha, opacityConfidence=opacity_confidence)
@@ -157,6 +197,7 @@ def track(path, args, source):
         for point, image in batch:
             previous = sample(point, image, previous)
     previous = initial.copy()
+    panel_previous = panel[1] if panel else None
     for batch in source.batches(seed, -1):
         for point, image in batch:
             previous = sample(point, image, previous)
