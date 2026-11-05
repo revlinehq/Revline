@@ -15,7 +15,7 @@ import { syncProjectAgent, projectIdentity, projectRun, projectRunContext, write
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
-import { aspectRatio } from './schema';
+import { aspectRatio, frameResolution } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { cancelMediaTask } from './lib/media_queue';
@@ -47,7 +47,7 @@ function projectIdOf(ctx: QueryCtx, projectId: string) {
 const editorUrl = (projectId: string) => `${process.env.APP_ORIGIN ?? ''}/editor/${projectId}`;
 
 export const resolveFrameRead = internalQuery({
-  args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), checkId: v.string(), times: v.array(v.number()), resolution: v.optional(v.union(v.literal(720), v.literal(1080))), revision: v.optional(v.number()) },
+  args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), checkId: v.string(), times: v.array(v.number()), resolution: v.optional(frameResolution), revision: v.optional(v.number()) },
   returns: v.id('frameSnapshots'),
   handler: async (ctx, args) => {
     await requireEditorAccess(ctx, args.ownerId);
@@ -214,7 +214,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { resolution:v.optional(v.union(v.literal(720),v.literal(1080))), ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { resolution:v.optional(frameResolution), ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   if(args.resolution===1080&&(args.times.length!==1||args.clipCheck||args.normalization||args.sourceSnapshotId||args.comparison||args.pacing||args.motion||args.sound))throw new ConvexError('1080p inspection accepts one composited frame per call.');
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
