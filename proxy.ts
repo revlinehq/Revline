@@ -22,6 +22,18 @@ async function forwardToMcp(request: NextRequest) {
 }
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
+  const url = request.nextUrl;
+  const hostname = request.headers.get('host')?.split(':')[0] ?? url.hostname;
+  const forwardedProtocol = request.headers.get('x-forwarded-proto');
+  const protocol = forwardedProtocol === 'http' || forwardedProtocol === 'https' ? `${forwardedProtocol}:` : url.protocol;
+  const publicPage = ['/', '/pricing', '/podcast-clips', '/ai-video-captions', '/reference-video-recreation', '/robots.txt', '/sitemap.xml'].includes(url.pathname);
+  if (['tryrevline.com', 'editor.tryrevline.com'].includes(hostname) && (protocol === 'http:' || (hostname === 'editor.tryrevline.com' && publicPage))) {
+    const destination = url.clone();
+    destination.protocol = 'https:';
+    destination.hostname = publicPage ? 'tryrevline.com' : hostname;
+    destination.port = '';
+    return NextResponse.redirect(destination, 308);
+  }
   // This public renderer shell authenticates project reads with the native Convex JWT.
   // A web-session handshake would navigate WKWebView outside its pinned player URL.
   if (/^\/mobile\/player\/[^/]+\/?$/.test(request.nextUrl.pathname)) return NextResponse.next();

@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Search: Add use-case pages, crawl rules, sitemap links and canonical HTTPS redirects; defer offscreen illustrations and mobile video playback. Why: the user requested fixing the public SEO audit findings.
+
 - Player: Preserve play or pause state when using the preview seek bar. Why: user reported seeking unexpectedly paused playback.
 
 - Timeline: Keep playback, edit, and view controls aligned in one toolbar row at narrower widths. Why: user reported playback was separated below the other controls.

@@ -7,7 +7,7 @@ import { LandingProductMenu } from './product-menu';
 
 const links = [
   { label: 'Pricing', href: '/pricing' },
-  { label: 'FAQ', href: '#faq' },
+  { label: 'FAQ', href: '/#faq' },
 ];
 
 export function LandingNav() {
