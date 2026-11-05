@@ -50,6 +50,7 @@ import type * as incidentDelivery from "../incidentDelivery.js";
 import type * as incidents from "../incidents.js";
 import type * as lanes from "../lanes.js";
 import type * as lib_account_limits from "../lib/account_limits.js";
+import type * as lib_active_run from "../lib/active_run.js";
 import type * as lib_ai_cost from "../lib/ai_cost.js";
 import type * as lib_apple_account_revocation from "../lib/apple_account_revocation.js";
 import type * as lib_apple_entitlements from "../lib/apple_entitlements.js";
@@ -194,6 +195,7 @@ declare const fullApi: ApiFromModules<{
   incidents: typeof incidents;
   lanes: typeof lanes;
   "lib/account_limits": typeof lib_account_limits;
+  "lib/active_run": typeof lib_active_run;
   "lib/ai_cost": typeof lib_ai_cost;
   "lib/apple_account_revocation": typeof lib_apple_account_revocation;
   "lib/apple_entitlements": typeof lib_apple_entitlements;

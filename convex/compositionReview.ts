@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
 import { projectRun } from './lib/project_data';
@@ -11,7 +12,6 @@ import { enqueueMediaTask, cancelMediaTask } from './lib/media_queue';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
-const runArgs={projectId:v.id('projects'),ownerId:v.string(),runId:v.string()};
 async function active(ctx:MutationCtx|QueryCtx,args:{projectId:Id<'projects'>;ownerId:string;runId:string}) {
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(!run.aiRunning||run.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active.');

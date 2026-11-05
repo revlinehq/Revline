@@ -3,6 +3,7 @@ import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { subjectSelection, subjectSelectionKey, pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
+import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
@@ -92,7 +93,6 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
   return { derivationId, status: 'queued' as const, estimatedUsd: Math.max(input.op === 'freeze' ? 0 : .01, Math.round(estimatedUsd * 100) / 100) };
 }
 
-const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 async function requireRun(ctx: MutationCtx | import('./_generated/server').QueryCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
   if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');

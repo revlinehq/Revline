@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { projectRun } from './lib/project_data';
@@ -15,7 +16,6 @@ export const MAX_USER_MEMORIES = 60, MAX_PROJECT_MEMORIES = 20, MAX_MEMORY_LENGT
 const kind = v.union(v.literal('preference'), v.literal('style'));
 const topic = v.union(v.literal('captions'), v.literal('platforms'), v.literal('editing'));
 const summary = v.object({ memoryId: v.id('agentMemories'), scope: v.union(v.literal('user'), v.literal('project')), kind, topic: v.optional(topic), name: v.optional(v.string()), text: v.string(), hasRecipe: v.boolean(), source: v.optional(v.string()), uses: v.number() });
-const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 
 /** A source project's title from its catalog row; the project document carries the whole timeline. */
 async function sourceTitle(ctx: QueryCtx, projectId: Id<'projects'> | undefined) {

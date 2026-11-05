@@ -2,7 +2,7 @@ import { v, convexToJson, type ObjectType } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import { assistantRunArgs } from './lib/assistant_run';
-import { projectRun } from './lib/project_data';
+import { runArgs, runIsActive } from './lib/active_run';
 import { resumeInterruptedTurn,turnForRun } from './assistantTurnRecovery';
 import { RUNNER_REQUEST_WINDOW_MS, runToken, runnerSignature } from './lib/runner_auth';
 
@@ -15,7 +15,6 @@ const MAX_ATTEMPTS = 3;
 const HEARTBEAT_STALE_MS = 3 * 60_000;
 const WATCH_INTERVAL_MS = 60_000;
 const INTERRUPTED = 'The editing request was interrupted. Your saved edits are still here. Retry unfinished steps to continue.';
-const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 /** A run's files the runner may read back: message attachments and what it stored itself. */
 const MAX_STORAGE_GRANTS = 500;
 
@@ -58,17 +57,13 @@ export async function stopRunnerTurn(ctx: MutationCtx, runId: string) {
   if (agentRunnerConfigured() && await turnRow(ctx, runId)) await ctx.scheduler.runAfter(0, internal.agentRunner.stop, { runId });
 }
 
-const isActive = async (ctx: QueryCtx, args: ObjectType<typeof runArgs>) => {
-  const run = await projectRun(ctx, args.projectId, args.ownerId).catch(() => null);
-  return !!run && run.aiRunning === true && run.aiRunId === args.runId;
-};
 const turnRow = (ctx: QueryCtx, runId: string) => ctx.db.query('agentRunnerTurns').withIndex('by_runId', q => q.eq('runId', runId)).unique();
 
 /** The runner's first call of each attempt. Null when the run is over; otherwise which attempt this is. Later
  * calls must carry this claim, so an attempt Cloudflare replaced can no longer act for the run. */
 export const claim = internalMutation({ args: { ...runArgs, claimId: v.string() }, returns: v.union(v.null(), v.object({ attempt: v.number(), maxAttempts: v.number() })), handler: async (ctx, args) => {
   const row = await turnRow(ctx, args.runId);
-  if (!row || !await isActive(ctx, args)) return null;
+  if (!row || !await runIsActive(ctx, args)) return null;
   if(row.claimId===args.claimId)return {attempt:0,maxAttempts:MAX_ATTEMPTS};
   if(row.attempts>0){
     if(!await resumeInterruptedTurn(ctx,args.runId,INTERRUPTED))await ctx.runMutation(internal.assistant.finish,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,error:INTERRUPTED});
@@ -109,7 +104,7 @@ export const projectStorage = internalQuery({ args: { ownerId: v.string(), proje
 /** The runner's last call for a run it finished: nothing may act for it any more. */
 export const release = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {
   const row = await turnRow(ctx, args.runId);
-  if (row && !await isActive(ctx, args)) await ctx.db.delete(row._id);
+  if (row && !await runIsActive(ctx, args)) await ctx.db.delete(row._id);
   return null;
 }});
 
@@ -118,7 +113,7 @@ export const heartbeat = internalMutation({ args: runArgs, returns: v.boolean(),
   const row = await turnRow(ctx, args.runId);
   if (!row) return false;
   await ctx.db.patch(row._id, { seenAt: Date.now() });
-  return await isActive(ctx, args);
+  return await runIsActive(ctx, args);
 }});
 
 /** The runner ended without finishing the run itself (a crash, or too many restarts). */
@@ -127,7 +122,7 @@ export const settle = internalMutation({ args: { ...runArgs, error: v.optional(v
   if(args.segment!==undefined&&turn&&turn.segment!==args.segment)return null;
   const row = await turnRow(ctx, args.runId);
   if (row) await ctx.db.delete(row._id);
-  if (await isActive(ctx, args)&&!await resumeInterruptedTurn(ctx,args.runId,args.error??INTERRUPTED)) await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: args.error ?? INTERRUPTED });
+  if (await runIsActive(ctx, args)&&!await resumeInterruptedTurn(ctx,args.runId,args.error??INTERRUPTED)) await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: args.error ?? INTERRUPTED });
   return null;
 }});
 
@@ -136,7 +131,7 @@ export const watch = internalMutation({ args: { runId: v.string() }, returns: v.
   const row = await turnRow(ctx, runId);
   if (!row) return null;
   const run = { projectId: row.projectId, ownerId: row.ownerId, runId };
-  if (!await isActive(ctx, run)) { await ctx.db.delete(row._id); return null; }
+  if (!await runIsActive(ctx, run)) { await ctx.db.delete(row._id); return null; }
   if (Date.now() - row.seenAt > HEARTBEAT_STALE_MS) {
     console.error(`[agent-runner] ${JSON.stringify({ event: 'runner-silent', projectId: row.projectId, runId, attempts: row.attempts })}`);
     await ctx.db.delete(row._id);

@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
 import { projectRun } from './lib/project_data';
@@ -10,7 +11,6 @@ import { READ_ONLY_RUN_PREFIX } from './lib/run_ids';
  * keep it current: a new direction replaces the rule it supersedes instead of piling up beside it.
  */
 export const BRIEF_RULES = 40, BRIEF_RULE_LENGTH = 300, BRIEF_WORDS_LENGTH = 600;
-const runArgs = { projectId: v.id('projects'), ownerId: v.string(), runId: v.string() };
 
 async function requireRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }, reading = false) {
   const run = await projectRun(ctx, args.projectId, args.ownerId);

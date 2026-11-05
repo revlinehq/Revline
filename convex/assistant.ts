@@ -9,6 +9,7 @@ import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
 import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, runAuthorLabel } from './lib/run_ids';
+import { runArgs, holdsRun, runIsActive } from './lib/active_run';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
@@ -259,7 +260,6 @@ export const messages = query({
     return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
-const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
 // Both switches belong to one transaction: subscribers only see the original selection.
 const scopedRunMutation = customMutation(internalMutation, {
   args: runArgs,
@@ -327,13 +327,13 @@ export const recordBudget = internalMutation({ args: { ...runArgs, used: v.numbe
 }});
 async function requireRunState(ctx: QueryCtx | MutationCtx, args: {projectId:Doc<'projects'>['_id'];ownerId:string;runId:string}) {
   const project=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
+  if(!holdsRun(project,args.runId))throw new ConvexError('AI run is no longer active');
   return project;
 }
 /** Project tools used inside an existing editor run keep its lock and ownership checks. */
 async function requireActiveRun(ctx: QueryCtx | MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.deleting || project.ownerId !== args.ownerId || !project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  if (!project || project.deleting || project.ownerId !== args.ownerId || !holdsRun(project, args.runId)) throw new ConvexError('AI run is no longer active');
   return project;
 }
 export const listRunTimelines = internalQuery({ args: runArgs, handler: async (ctx, args) => {
@@ -403,10 +403,7 @@ export const modelForRun = internalQuery({
     return validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
   },
 });
-export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
-  const project = await projectRun(ctx,args.projectId,args.ownerId).catch(()=>null);
-  return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
-}});
+export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: (ctx, args) => runIsActive(ctx, args) });
 export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);

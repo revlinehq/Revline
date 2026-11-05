@@ -1,5 +1,6 @@
 import { ConvexError, v } from "convex/values";
 import { isMcpRun } from "./lib/run_ids";
+import { runArgs } from "./lib/active_run";
 import {
   internalMutation,
   internalQuery,
@@ -43,11 +44,6 @@ import { timelineValidator } from "./schema";
 import { loadSceneCode } from "./lib/scene_code";
 import { clipQuoteProblems, clipChoiceProblems } from '../lib/media-analysis/clip-plan-feedback';
 
-const runArgs = {
-  ownerId: v.string(),
-  projectId: v.id("projects"),
-  runId: v.string(),
-};
 const runKey = (runId: string) =>
   runId.startsWith("mcp-task:")
     ? runId
