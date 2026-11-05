@@ -31,11 +31,17 @@ export const hasActive = internalQuery({ args: { ownerId: v.string() }, returns:
 /** Both verified providers upsert the same transaction row. Cancellation retains paid access. */
 export const apply = internalMutation({ args: appleEntitlementEvent, returns: v.null(), handler: async (ctx, event) => {
   const receipt = await ctx.db.query('appleBillingEvents').withIndex('by_source_event', q => q.eq('source', event.source).eq('eventId', event.eventId)).unique();
-  if (receipt) return null;
   const previous = await ctx.db.query('appleEntitlements').withIndex('by_transaction', q => q.eq('transactionId', event.transactionId)).unique();
   const chain = await ctx.db.query('appleEntitlements').withIndex('by_original', q => q.eq('originalTransactionId', event.originalTransactionId)).collect();
   if ((previous && previous.ownerId !== event.ownerId) || chain.some(row => row.ownerId !== event.ownerId)) throw new ConvexError('App Store subscription already belongs to another account');
-  const { eventId, refundReversed, forwardBody, ...fields } = event;
+  // Reverified legacy receipts may add payment evidence even when delivery was already handled.
+  // Payment belongs to the immutable transaction, not the latest renewal/snapshot in its chain.
+  const acceptsPayment = event.modelPayment !== undefined && (event.source === 'apple' || previous?.modelPaymentSource !== 'apple');
+  const payment = acceptsPayment ? { modelPayment: event.modelPayment, modelPaymentSource: event.source } :
+    { modelPayment: previous?.modelPayment, modelPaymentSource: previous?.modelPaymentSource };
+  if (previous && acceptsPayment) await ctx.db.patch(previous._id, payment);
+  if (receipt) return null;
+  const { eventId, refundReversed, forwardBody, modelPayment: _payment, ...fields } = event;
   const staleSequence = event.source === 'superwall' && event.superwallSequence !== undefined && previous?.superwallSequence !== undefined && event.superwallSequence < previous.superwallSequence;
   const staleTime = previous && event.eventAt < previous.eventAt;
   const appleWinsTie = previous?.source === 'apple' && event.source === 'superwall' && event.eventAt === previous.eventAt;
@@ -48,7 +54,7 @@ export const apply = internalMutation({ args: appleEntitlementEvent, returns: v.
     const revokedAt = refundReversed && event.source === 'apple' ? undefined : newRevocation ? event.revokedAt : previous?.revokedAt;
     const supersededAt = Math.min(event.supersededAt ?? Infinity, previous?.supersededAt ?? Infinity,
       ...chain.filter(row => row.purchasedAt > event.purchasedAt).map(row => row.purchasedAt));
-    const value = { ...fields, revokedAt, supersededAt: Number.isFinite(supersededAt) ? supersededAt : undefined,
+    const value = { ...fields, ...payment, revokedAt, supersededAt: Number.isFinite(supersededAt) ? supersededAt : undefined,
       accessUntil: revokedAt === undefined ? Math.min(event.accessUntil, supersededAt) : 0,
       ...(refundReversed && event.source === 'apple' ? { refundReversedAt: event.eventAt } : previous?.refundReversedAt ? { refundReversedAt: previous.refundReversedAt } : {}),
       ...(event.superwallSequence === undefined && previous?.superwallSequence !== undefined ? { superwallSequence: previous.superwallSequence } : {}), updatedAt: Date.now() };
