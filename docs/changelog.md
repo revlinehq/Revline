@@ -1,6 +1,7 @@
 ## 2026-11-04
 
-- Reference tracing: Require processor contract 47 for native logo topology and its caches. Why: Older workers could claim the new trace work under the previous contract.
+- Reference tracing: Require processor contract 48 for native logo topology and its caches. Why: Older workers could claim the new trace work under the previous contract.
+- Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
 
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
 - Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
