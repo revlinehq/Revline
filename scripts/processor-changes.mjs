@@ -6,6 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { PROCESSOR_SCRIPTS } from './processor-runtime.mjs';
 
 export const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/edge/cloudflare.ts',
   // Browser runtimes copy-vendor.mjs bundles into public/vendor for exports.
@@ -13,11 +14,9 @@ export const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/ed
 // Read, spawned or copied into the image without a static import.
 export const RUNTIME_PREFIXES = [
   'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',
-  'scripts/track-pixels.py', 'scripts/detect-beats.py', 'scripts/detect-shots.py', 'scripts/install-beat-model.mjs', 'scripts/copy-vendor.mjs',
-  'scripts/detect-facecam.py', 'scripts/render-worker.mjs', 'scripts/render-distributed.mjs', 'scripts/render-chunk.mjs', 'scripts/render-artifacts.mjs', 'scripts/render-resources.mjs', 'scripts/render-ffmpeg.sh', 'scripts/composition-review-worker.mjs', 'scripts/hyperframes-playback-compat.mjs',
-  'scripts/beat-tracking-requirements.txt', 'scripts/scene-detection-requirements.txt', 'scripts/video-import-requirements.txt',
+  ...PROCESSOR_SCRIPTS.map(name => `scripts/${name}`), 'scripts/processor-runtime.mjs', 'lib/render-resources.mjs',
   'package.json', 'package-lock.json', 'tsconfig.json',
-  'lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs', 'scripts/render-railway-chunks.mjs',
+  'lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs',
 ];
 
 function report(changed, reason, files = []) {

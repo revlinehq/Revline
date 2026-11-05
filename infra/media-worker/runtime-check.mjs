@@ -6,7 +6,7 @@ import { SCENE_RUNTIME_BUNDLES } from '../../lib/editor/scene-modules.ts';
 execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });
 execFileSync('flock', ['--version'], { stdio: 'ignore' });
-if (!existsSync('scripts/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
+if (!existsSync('lib/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
 // Exercise the packaged TypeScript import graph without claiming work or calling
 // providers. This catches missing server files and aliases during the image build.
 execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`

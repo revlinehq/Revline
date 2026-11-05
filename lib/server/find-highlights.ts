@@ -9,7 +9,7 @@ import {
   needsAnalysisVideoProxy,
   prepareVideo,
   probeMedia,
-} from "../media-analysis/io";
+} from "./analysis-video";
 import {
   highlightJudgment,
   highlightTracks,

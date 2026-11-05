@@ -1,6 +1,5 @@
-import { runMediaCommand as run } from '../server/media-command';
-import { processingThreads } from '../server/processing-resources';
-export { downloadOwnedMedia } from '../server/owned-media';
+import { runMediaCommand as run } from './media-command';
+import { processingThreads } from './processing-resources';
 
 export type AnalysisVideoPurpose = 'overview' | 'inspection';
 const analysisProfiles = {

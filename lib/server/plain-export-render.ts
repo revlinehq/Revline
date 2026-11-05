@@ -2,7 +2,7 @@ import { execFile, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import type { PlainExportPlan } from '../editor/plain-export';
-import { RENDER_X264, renderResources } from '../../scripts/render-resources.mjs';
+import { RENDER_X264, renderResources } from '../render-resources.mjs';
 
 const run = promisify(execFile);
 type Quality = keyof typeof RENDER_X264;
