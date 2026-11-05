@@ -1,6 +1,6 @@
 ## 2026-11-05
 
-- Composer: Apply the approved compact home composer and two start cards; keep the editor flat through an appearance prop. Why: user approved the Pen design for new workspaces only.
+- Composer: Apply the compact home composer with Upload footage and Start clipping cards; keep the editor flat through a prop. Why: user approved the Pen design and requested a direct upload label.
 
 ## 2026-11-04
 
