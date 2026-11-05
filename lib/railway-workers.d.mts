@@ -30,3 +30,5 @@ export function deployRailwaySlot(args: Slot): Promise<string>;
 export function createRailwayService(args: Target & { name: string }): Promise<string>;
 export function deleteRailwayService(args: Slot): Promise<void>;
 export function reapRailwayServices(args: Target): Promise<void>;
+
+export function railwayLogEvents(raw: unknown): Array<{ event: string; image?: string; commit?: string; role?: string; taskId?: string; projectId?: string; machines?: number; cpus?: number; memoryBytes?: number; environment?: string }>;

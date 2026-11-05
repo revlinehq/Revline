@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
 import { verifyStagingPromotion } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
-import { railwayConfig, railway, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
+import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
@@ -134,13 +134,11 @@ async function preflight(kind, existingServiceId) {
     const id = await deployRailwaySlot({ ...target(), serviceId });
     const deadline = Date.now() + 15 * 60_000;
     while (Date.now() < deadline) {
-      const result = z.object({ deployment: z.object({ status: z.string(), deploymentStopped: z.boolean() }), deploymentLogs: z.array(z.object({ message: z.string() })) }).parse(await railway({ token,
-        query: 'query($id: String!) { deployment(id: $id) { status deploymentStopped } deploymentLogs(deploymentId: $id, limit: 500) { message } }', variables: { id },
+      const result = z.object({ deployment: z.object({ status: z.string(), deploymentStopped: z.boolean() }), deploymentLogs: z.unknown() }).parse(await railway({ token,
+        query: 'query($id: String!) { deployment(id: $id) { status deploymentStopped } deploymentLogs(deploymentId: $id, limit: 500) { message attributes { key value } } }', variables: { id },
       }));
       if (['FAILED', 'CRASHED', 'REMOVED'].includes(result.deployment.status)) throw new Error(`${kind}: Railway runtime preflight failed; dispatch unchanged.`);
-      const verified = result.deploymentLogs.some(({ message }) => {
-        try { const event = JSON.parse(message); return event.event === 'railway-runtime-verified' && event.image === image && event.commit === config[kind === 'processor' ? 'processorCommit' : 'exportsCommit'] && event.role === kind; } catch { return false; }
-      });
+      const verified = railwayLogEvents(result.deploymentLogs).some(event => event.event === 'railway-runtime-verified' && event.image === image && event.commit === config[kind === 'processor' ? 'processorCommit' : 'exportsCommit'] && event.role === kind);
       if (verified && result.deployment.deploymentStopped) { console.log(`Verified ${kind} runtime on Railway: ${image}. No queue connection or media/model task.`); return; }
       await wait(10_000);
     }
@@ -152,10 +150,10 @@ async function verifyQueueConnection(serviceId) {
   const id = await deployRailwaySlot({ ...target(), serviceId });
   const deadline = Date.now() + 15 * 60_000;
   while (Date.now() < deadline) {
-    const result = z.object({ deployment: z.object({ status: z.string(), deploymentStopped: z.boolean() }), deploymentLogs: z.array(z.object({ message: z.string() })) }).parse(await railway({ token,
-      query: 'query($id: String!) { deployment(id: $id) { status deploymentStopped } deploymentLogs(deploymentId: $id, limit: 500) { message } }', variables: { id },
+    const result = z.object({ deployment: z.object({ status: z.string(), deploymentStopped: z.boolean() }), deploymentLogs: z.unknown() }).parse(await railway({ token,
+      query: 'query($id: String!) { deployment(id: $id) { status deploymentStopped } deploymentLogs(deploymentId: $id, limit: 500) { message attributes { key value } } }', variables: { id },
     }));
-    const events = result.deploymentLogs.flatMap(({ message }) => { try { return [JSON.parse(message)]; } catch { return []; } });
+    const events = railwayLogEvents(result.deploymentLogs);
     if (events.some(event => event.event === 'media-started')) throw new Error('A staged worker claimed a task while paused. Hold cutover and inspect queue routing.');
     if (['FAILED', 'CRASHED', 'REMOVED'].includes(result.deployment.status)) throw new Error('Railway staged consumer failed; queue remains paused.');
     if (events.some(event => event.event === 'railway-queue-verified') && events.some(event => event.event === 'media-ready') && result.deployment.deploymentStopped) return;

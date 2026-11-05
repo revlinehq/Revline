@@ -3,7 +3,7 @@ import { parseEnv } from 'node:util';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
-import { railway, railwayConfig, verifyRailwayTarget } from '../lib/railway-workers.mjs';
+import { railway, railwayConfig, railwayLogEvents, verifyRailwayTarget } from '../lib/railway-workers.mjs';
 
 const receiptSchema = z.object({
   config: z.unknown(), projectId: z.string(), processorTaskId: z.string(), exportTaskId: z.string(), distributedTaskId: z.string(),
@@ -31,12 +31,12 @@ export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFi
     const expectedTask = entry.role === 'processor' ? receipt.processorTaskId : entry.role === 'export' ? receipt.exportTaskId : receipt.distributedTaskId;
     const slots = processor ? staging.processorServices : [...staging.standardServices, ...staging.ultraServices];
     if (entry.taskId !== expectedTask || !slots.includes(entry.serviceId)) throw new Error('Staging job/deployment evidence does not match its lane.');
-    const data = z.object({ deployment: z.object({ serviceId: z.string(), environmentId: z.string(), meta: z.object({ commitHash: z.string() }) }), deploymentLogs: z.array(z.object({ message: z.string() })) }).parse(await railway({ token,
-      query: 'query($id: String!) { deployment(id: $id) { serviceId environmentId meta } deploymentLogs(deploymentId: $id, limit: 500) { message } }', variables: { id: entry.deploymentId },
+    const data = z.object({ deployment: z.object({ serviceId: z.string(), environmentId: z.string(), meta: z.object({ commitHash: z.string() }) }), deploymentLogs: z.unknown() }).parse(await railway({ token,
+      query: 'query($id: String!) { deployment(id: $id) { serviceId environmentId meta } deploymentLogs(deploymentId: $id, limit: 500) { message attributes { key value } } }', variables: { id: entry.deploymentId },
     }));
     const commit = processor ? staging.processorCommit : staging.exportsCommit;
     if (data.deployment.serviceId !== entry.serviceId || data.deployment.environmentId !== staging.environmentId || data.deployment.meta.commitHash !== commit) throw new Error('Staging deployment has a different source revision or target.');
-    const events = data.deploymentLogs.flatMap(({ message }) => { try { return [JSON.parse(message.slice(message.indexOf('{')))]; } catch { return []; } });
+    const events = railwayLogEvents(data.deploymentLogs);
     if (!events.some(event => event.event === 'railway-runtime-verified' && event.commit === commit) || !events.some(event => event.event === 'media-completed' && event.taskId === entry.taskId && event.projectId === receipt.projectId)) throw new Error('Authenticated Railway logs do not prove completion of the staging job on the verified build.');
     if (entry.role === 'distributed' && (!events.some(event => event.event === 'chunks-launched' && event.machines >= 1) || !events.some(event => event.event === 'remote-chunks-done') || !events.some(event => event.event === 'assembled'))) throw new Error('Staging evidence must prove remote chunks and successful assembly.');
   }
