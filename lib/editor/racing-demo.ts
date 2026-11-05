@@ -1,6 +1,6 @@
 import shots from '../../public/demo/racing/manifest.json';
 import { DEFAULT_AUDIO_SETTINGS } from './audio-settings';
-import { NEUTRAL_MOTION } from './clip-effects';
+import { NEUTRAL_MOTION } from './motion-path';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
 import { EMPTY_SCRIPTED_DEMO, type DemoBuildStep } from './scripted-demo';
 import { normalizeTimeline, type Clip, type MediaAsset } from './types';

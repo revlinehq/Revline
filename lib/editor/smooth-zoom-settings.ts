@@ -1,9 +1,8 @@
-import type { Clip } from './types';
+import type { Clip, SmoothZoomSettings } from './types';
 
 import { MOTION_EASINGS } from './motion-path';
 export const SMOOTH_ZOOM_EASINGS = MOTION_EASINGS;
 export const CAMERA_ZOOM_RANGE = [1, 10] as const;
-export type SmoothZoomSettings = { start: number; inDuration: number; holdDuration: number; outDuration: number; scale: number; centerX: number; centerY: number; framing?: 'anchor' | 'center'; easing: typeof SMOOTH_ZOOM_EASINGS[number] };
 
 /** Recipe times share motion's original clip-local timeline origin, including after trims. */
 export function validateSmoothZoom(clip: Pick<Clip, 'kind' | 'smoothZoom'>) {

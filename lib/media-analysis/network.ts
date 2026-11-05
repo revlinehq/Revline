@@ -11,6 +11,15 @@ export function isTransientMediaError(error: unknown): boolean {
     || !!detail?.cause && isTransientMediaError(detail.cause);
 }
 
+/** Wait `ms`; an abort rejects at once with the signal's reason, or with `cancelled()` when given. */
+export function abortableDelay(ms: number, signal?: AbortSignal, cancelled: () => unknown = () => signal?.reason) {
+  return new Promise<void>((resolve, reject) => {
+    const abort = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(cancelled()); };
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', abort); resolve(); }, ms);
+    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+  });
+}
+
 export async function retryMediaOperation<T>(work: () => Promise<T>, signal?: AbortSignal): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     signal?.throwIfAborted();
@@ -22,13 +31,7 @@ export async function retryMediaOperation<T>(work: () => Promise<T>, signal?: Ab
       const detail = error as { status?: number; code?: string; cause?: { code?: string } };
       const code = detail.code ?? detail.cause?.code;
       console.warn('[media-network] Transient media request interrupted; retrying.', { attempt: attempt + 2, delayMs: Math.round(delay), ...(typeof detail.status === 'number' ? { status: detail.status } : {}), ...(code && /^[A-Z0-9_]+$/.test(code) ? { code } : {}) });
-      await new Promise<void>((resolve, reject) => {
-        const done = () => { signal?.removeEventListener('abort', abort); resolve(); };
-        const timer = setTimeout(done, delay);
-        const abort = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort); reject(signal?.reason); };
-        signal?.addEventListener('abort', abort, { once: true });
-        if (signal?.aborted) abort();
-      });
+      await abortableDelay(delay, signal);
     }
   }
 }

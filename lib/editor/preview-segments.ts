@@ -1,8 +1,6 @@
 import { sourceEndOf } from './playback-rate';
-import type { MediaAsset, Timeline } from './types';
+import type { MediaAsset, SourceRange, Timeline } from './types';
 
-export type SourceRange = { start: number; end: number };
-export type PreviewSegment = SourceRange & { url: string; size: number };
 const PREVIEW_CHUNK_SECONDS = 30;
 const PADDING_SECONDS = 2;
 

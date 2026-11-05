@@ -2,8 +2,7 @@
 
 import { useState } from 'react';
 import { ChevronDown, LockKeyhole } from 'lucide-react';
-import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
-import { EDITOR_MODEL_CATALOG } from '@/lib/ai/claude-model-policy';
+import { EDITOR_MODEL_CATALOG, EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
 import { ClaudeLogo, GoogleLogo, McpLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { McpConnectorDialog } from '@/components/workspace/mcp-connector-section';
 import { Button } from '@/components/ui/button';
@@ -39,7 +38,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
   const [mcpOpen, setMcpOpen] = useState(false);
   const mcpOnly = (id: ClaudeModelChoice) => claudeViaMcp && MCP_ONLY_MODELS.includes(id);
   const models = EDITOR_MODELS.filter(model => EDITOR_MODEL_CATALOG.some(choice => choice === model.id));
-  const locked = (id: ClaudeModelChoice) => restricted ? id !== 'gpt-6.1-terra' : !allowedModels.includes(id) && !mcpOnly(id);
+  const locked = (id: ClaudeModelChoice) => restricted ? id !== FREE_EDITOR_MODEL_CHOICE : !allowedModels.includes(id) && !mcpOnly(id);
   const selected = EDITOR_MODELS.find(model => model.id === value);
   const effortLabel = effort ? <EffortText value={effort.value}/> : undefined;
   return <div className="assistant-model-picker assistant-combined-model-picker">

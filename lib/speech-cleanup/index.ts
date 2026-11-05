@@ -1,12 +1,12 @@
 import { acousticCuts } from './acoustic';
 import { analyzeFrames } from './frames';
-import { speechEdges, type WordEdge } from './edges';
+import { speechEdges } from './edges';
 import { fillerWordCuts, restartCuts, retakeCuts } from './restarts';
-import { DEFAULT_CLEANUP_OPTIONS, SPEECH_CLEANUP_VERSION, type CleanupCut, type CleanupOptions, type SpeechWord } from './types';
+import { DEFAULT_CLEANUP_OPTIONS, SPEECH_CLEANUP_VERSION, type CleanupCut, type CleanupOptions, type SpeechWord, type WordEdge } from './types';
 
 export * from './types';
 export { analyzeFrames } from './frames';
-export { speechEdges, type WordEdge } from './edges';
+export { speechEdges } from './edges';
 
 /** The cleanup cuts plus each word's measured edges (in the given word order), from one pass over the audio. */
 export function analyzeSpeech(words: SpeechWord[], samples: Float32Array, sampleRate: number, options: Partial<CleanupOptions> = {}) {

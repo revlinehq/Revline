@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import ts from 'typescript';
-import { ENTRIES, RUNTIME_PREFIXES } from './processor-changes.mjs';
+import { ENTRIES, RUNTIME_PREFIXES, WORKER_RUNTIME_FILES } from './processor-changes.mjs';
 
 export function releasePlan(base) {
   const root = process.cwd();
@@ -42,7 +42,7 @@ export function releasePlan(base) {
     convex: { graph: imports(tracked.filter(file => file.startsWith('convex/') && file.endsWith('.ts'))), paths: ['convex/', 'convex.json'] },
     media: { graph: imports(['cloudflare/media/worker.ts']), paths: ['cloudflare/media/'] },
     agent: { graph: imports(['cloudflare/agent-runner/worker.ts']), paths: ['cloudflare/agent-runner/', 'lib/ai/', 'convex/lib/editorTurn.ts', 'scripts/sync-agent-runner-env.mjs'] },
-    exports: { graph: imports(['infra/media-worker/consumer.ts', ...ENTRIES.slice(2)]), paths: ['infra/media-worker/', 'public/vendor/', 'public/fonts/', 'scripts/render-', 'scripts/composition-review-worker.mjs', 'scripts/copy-vendor.mjs', 'scripts/hyperframes-playback-compat.mjs', 'lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs'] },
+    exports: { graph: imports(['infra/media-worker/consumer.ts', ...ENTRIES.slice(2)]), paths: ['infra/media-worker/', 'public/vendor/', 'public/fonts/', 'scripts/render-', 'scripts/composition-review-worker.mjs', 'scripts/copy-vendor.mjs', 'scripts/hyperframes-playback-compat.mjs', 'lib/render-resources.mjs', ...WORKER_RUNTIME_FILES] },
     frontend: { graph: new Set(), paths: ['app/', 'components/', 'lib/', 'public/', 'landing/', 'next.config.ts', 'vite.config.ts', 'wrangler.jsonc', 'postcss.config.mjs', 'proxy.ts', 'scripts/cloudflare-frontend.mjs', 'scripts/copy-vendor.mjs'] },
   };
   const plan = {};

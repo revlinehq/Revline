@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
-import { paddedPreviewRanges, type SourceRange } from '../editor/preview-segments';
+import { paddedPreviewRanges } from '../editor/preview-segments';
+import type { SourceRange } from '../editor/types';
 
 /** Boundaries land on source frames, including VFR, so a segment never shows the next frame early. */
 export async function previewChunkBoundaries(

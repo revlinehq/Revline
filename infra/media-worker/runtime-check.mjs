@@ -6,7 +6,7 @@ import { SCENE_RUNTIME_BUNDLES } from '../../lib/editor/scene-modules.ts';
 execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });
 execFileSync('flock', ['--version'], { stdio: 'ignore' });
-if (!existsSync('scripts/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
+if (!existsSync('lib/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
 // Exercise the packaged TypeScript import graph without claiming work or calling
 // providers. This catches missing server files and aliases during the image build.
 execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
@@ -27,7 +27,7 @@ if (!exportsOnly) {
   if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
 }
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');
-for (const path of ['public/vendor/remotion-runtime.js', 'public/vendor/remotion-text.js', 'public/vendor/remotion-transitions.js', 'public/vendor/visual-effects.js', ...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle => `public/vendor/${bundle.file}`), 'public/vendor/lucide-icons.json', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
+for (const path of ['public/vendor/remotion-runtime.js', 'public/vendor/visual-effects.js', ...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle => `public/vendor/${bundle.file}`), 'public/vendor/lucide-icons.json', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
   if (!existsSync(path)) throw new Error(`Required preview/export asset is missing: ${path}`);
 }
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });

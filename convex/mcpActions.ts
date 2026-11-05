@@ -7,25 +7,24 @@ import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
 import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
-import type { LaneTask } from './lib/laneFinish';
+import type { LaneTask } from './lib/run_types';
 import { v } from 'convex/values';
 import { z } from 'zod';
 import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
-import { createEditorToolkit } from './lib/editorToolkit';
+import { createEditorToolkit, EXPORT_SETTINGS_INPUT } from './lib/editorToolkit';
 import { toolBehavior } from '../lib/ai/tool-definitions';
 import { mediaDownloadUrl } from './lib/media_storage';
-import { readRunId } from './lib/run_ids';
+import { newMcpTaskId, readRunId } from './lib/run_ids';
+import { CALL_LIMIT_MS } from './lib/mcp_limits';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 import { startLocalUpload, mediaKind } from './mcpUploads';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
 // Choice cards only exist in the editor's chat; MCP clients ask in their own way.
-// An MCP call still runs in one Convex action; stop before its ten-minute limit with a clear message.
-const CALL_LIMIT_MS = 9 * 60_000;
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 // These shared tools resolve their target from an owner-checked upload/job ID,
 // not a lane task. Their IDs must never be interpreted as lane task IDs.
@@ -49,7 +48,7 @@ const PROJECT_TOOLS = {
   renameTimeline: { description: 'Rename a timeline tab (its name also labels its exports).', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1), name: z.string().min(1).max(60) }) },
   deleteTimeline: { description: 'Delete a timeline tab and its undo history; media stays in the project. A project keeps at least one timeline. Only when the user asks.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1) }) },
   getMediaTask: { description: 'Status and progress of an import or media-processing task.', inputSchema: z.object({ taskId: z.string().min(1) }) },
-  exportVideo: { description: 'Render the saved timeline to MP4: the open tab, or another tab with timelineId (from listTimelines). Call once per timeline to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional(), resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() }) },
+  exportVideo: { description: 'Render the saved timeline to MP4: the open tab, or another tab with timelineId (from listTimelines). Call once per timeline to export several; they queue and render in turn. 2160 (4K) needs the Ultra plan. Returns a jobId to poll with getExport.', inputSchema: z.object({ projectId: projectIdField, timelineId: z.string().min(1).optional(), ...EXPORT_SETTINGS_INPUT }) },
   getFrames: { description: 'If a read returns pending, follow nextAction with its checkId to retrieve the same frozen render. Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision: look at an earlier version the user refers to before bringing it back with restoreSection or restoreClip.', inputSchema: z.object({ checkId: z.string().min(1).optional().describe('Resume the pending frame read returned by this tool; retain its original arguments.'), resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing; use only for precise layout inspection.'), projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to render instead of the current timeline.') }) },
   listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
@@ -147,7 +146,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const {project}=await ctx.runQuery(internal.assistant.getRun,{ownerId:args.ownerId,projectId,runId:readRunId(request.timelineId)});
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
-    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=`mcp-task:${crypto.randomUUID()}`;
+    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=newMcpTaskId();
     const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
@@ -352,7 +351,6 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const rawOutput = await tool.execute.call({ ...tool, ctx }, parsed.data, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
-    if(name==='switchLane'&&laneSession)await ctx.runMutation(internal.lanes.setMcpSession,{ownerId,connectionId:laneSession.connectionId,projectId,taskId:laneSession.taskId,timelineId:laneSession.timelineId,lane:toolkit.lane(),laneChosen:toolkit.laneChosen()});
     const output = rawOutput && typeof rawOutput === 'object' ? { ...rawOutput, checkLevel: toolkit.checkLevel() } : rawOutput;
     // A destructive edit is staged privately; publish it as this call's one saved edit.
     const published = failed(output) ? false : await toolkit.editSession.complete('stop');

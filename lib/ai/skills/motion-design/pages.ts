@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from '../documents';
-import type { EditorSkillPage } from '../index';
+import type { EditorSkillPage } from '../types';
 
 /** A new film for the user's own brand starts here: nothing is designed before the brand is known. */
 export const brandPage: EditorSkillPage = {

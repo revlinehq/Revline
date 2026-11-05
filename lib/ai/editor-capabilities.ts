@@ -1,21 +1,18 @@
 import { EFFECT_GUIDANCE,VISUAL_EFFECT_GUIDANCE,TEXT_ANIMATION_GUIDANCE,TEXT_APPEARANCE_GUIDANCE } from '../editor/effect-guidance';
 import { EFFECT_LIBRARY_CATALOG, EFFECT_LIBRARY_CATEGORIES } from '../editor/effect-catalog';
-import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset, type TimedEffectPreset } from '../editor/clip-effects';
+import { EFFECT_CATALOG, OFFERED_TIMED_EFFECT_PRESETS, isZoomPreset } from '../editor/clip-effects';
 import { TEXT_ANIMATION_LABELS,TEXT_ANIMATION_DESCRIPTIONS, TEXT_ANIMATION_PRESETS } from '../editor/text-effects';
 import { TEXT_LOOKS } from '../editor/text-looks';
 import { TEXT_FONTS } from '../editor/text-fonts';
-import { AUDIO_ROLES } from '../editor/audio-settings';
 import {TEXT_APPEARANCE_LIMITS,TEXT_TYPOGRAPHY_LIMITS} from '../editor/text-style';
 import {VISUAL_CANVAS_REFERENCE,VISUAL_TRANSFORM_LIMITS,MAX_SOURCE_CROP} from '../editor/visual-inputs';
-import {dimensions} from '../editor/types';
+import {AUDIO_ROLES, dimensions, type TimedEffectPreset} from '../editor/types';
 import {VISUAL_FADE_MAX_SECONDS} from '../editor/visual-fades';
-import {editorSkillIndex} from './skills';
 import {STOCK_AUDIO_CATALOG} from '../editor/stock-audio';
 
-/** Pure shared metadata: backend instructions and the UI read the same implemented inventory. */
+/** Pure shared metadata: the implemented inventory the effects and text-styling skills embed. */
 export function editorCapabilities(){
   return {
-    skills:editorSkillIndex(),
     ideation:{skill:'motion-design',page:'ideation',rule:'Agree one message, one audience tension and 3–5 visible angles, each with Hooks because. An accepted angle (yes/do it) means BUILD immediately. Never approve finished work on the user’s behalf.'},
     imagePlates:{tool:'generateImage',skill:'motion-design',page:'image-plates',rule:'Generate isolated photoreal or illustrative hands, objects, products and photos as project media; use findIcon for logos, traceShape for hand-made shapes and scene code for drawable graphics. Bind saved plates as scene media and animate with GSAP. Never reproduce reference-video frames.'},
     soundEffects:{skill:'music-and-sound',rule:'Generate every sound by default with generateSound/editSound: describe it in words and ElevenLabs makes real sound design, timed to the motion. Every scene you add or rework gets generated sounds on its key beats in the same turn right after building it, unless the user wants silence or speech plays under it (music is no reason to skip). Use library recordings with addSoundEffect only when the user explicitly asks for a realistic or recorded sound the library has (shutter, phone, clock, ambience) or names one; never on your own initiative. If none matches, say so and generate the closest sound. If generation fails, place nothing and say so: no sound beats a bad one. Use a time the user gives exactly.',generated:{tools:['generateSound','editSound'],engine:'ElevenLabs text to sound effects'},libraryTool:'addSoundEffect',library:STOCK_AUDIO_CATALOG.reduce<Record<string,string[]>>((groups,sound)=>({...groups,[sound.category]:[...groups[sound.category]??[],`${sound.id}: ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`]}),{})},

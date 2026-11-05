@@ -4,7 +4,9 @@ import { Fragment, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, Brain, Check, CircleCheck, CircleStop, LoaderCircle, Minus } from 'lucide-react';
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog';
-import { READ_ONLY_TOOLS, toolImages, type ChatTool } from './assistant-results';
+import { toolImages } from './assistant-results';
+import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
+import type { ChatTool } from './chat-types';
 
 type Row = { key: string; tool: string; args: string; state: ChatTool['state']; detail?: string; count: number; span?: [number, number]; images: { label: string; src: string }[] };
 

@@ -5,7 +5,6 @@ import { check } from './check';
 const full: CheckRecipe = { frames: 'full', fullTools: true, boundedReads: false, instructions: 'Full checks plus reference comparison: follow reference-footage page recreation and the scene-engine checklist. Run compareReference and compareMotion across every rebuilt section, or mark an unmeasurable window OFF with its time and reason, before finish.' };
 export const definition: LaneDefinition = {
   id: 'recreate',
-  label: 'Recreate',
   description: 'Rebuild the motion and timing of a reference video.',
   skills,
   tools,

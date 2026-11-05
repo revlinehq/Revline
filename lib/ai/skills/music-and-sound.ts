@@ -2,7 +2,7 @@ import { skillText, skillDocument } from './documents';
 import { SOUND_EFFECT_LIMITS } from '../../audio/sound-effect';
 import { STOCK_AUDIO_CATALOG } from '../../editor/stock-audio';
 import { MIXKIT_LICENSE, STOCK_MUSIC_CATALOG } from '../../editor/stock-music';
-import type { EditorSkill } from './index';
+import type { EditorSkill } from './types';
 
 const library = STOCK_AUDIO_CATALOG.map(sound => `- \`${sound.id}\` (${sound.category}): ${sound.name}, ${sound.duration.toFixed(2)} s [${sound.tags.join(' ')}]`).join('\n');
 

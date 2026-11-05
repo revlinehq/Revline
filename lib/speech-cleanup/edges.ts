@@ -1,11 +1,6 @@
 import { frameAt, timeAt, type Frames } from './frames';
 import { levels } from './acoustic';
-import type { SpeechWord } from './types';
-
-/** Where each word's sound measurably begins and its decay ends, in source seconds.
- * A transcriber's times are close but can miss a soft onset or a trailing "s"; a join
- * snapped to these edges keeps the whole word and none of the room tone around it. */
-export type WordEdge = { start: number; end: number };
+import type { SpeechWord, WordEdge } from './types';
 
 const MAX_REACH = .3;
 

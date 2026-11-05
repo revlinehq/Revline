@@ -6,12 +6,13 @@ import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
-import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import { useAssistantComposerControls } from './assistant-composer-controls';
+import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
-import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
+import { EditComposer } from '@/components/workspace/edit-composer';
+import type { ComposerAttachment } from '@/lib/editor/composer-media';
+import { storeDraftText, storedDraftText } from '@/lib/editor/opening-request';
 import { McpLogo } from '@/components/workspace/ai-app-logos';
 import { AgentLogo } from '@/components/workspace/agent-logo';
 import { useQuery, useMutation } from 'convex/react';
@@ -26,20 +27,21 @@ import { Message, MessageContent } from '@/components/ui/message';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot, type ChatMessage } from './assistant-results';
+import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot } from './assistant-results';
+import type { ChatMessage } from './chat-types';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
 import { AssistantActivity } from './assistant-activity';
 import { AssistantHistoryExpansion } from './assistant-history-pagination';
-export type { ChatTool, ChatMessage } from './assistant-results';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
 type PanelProps = ComponentProps<typeof AssistantPanelBody> & {conversation?:Conversation};
 type QueuedMessage={id:Id<'assistantQueue'>;prompt:string;error?:string};
 type ConversationState = {queued:QueuedMessage[];queuePaused:boolean;onRemoveQueued:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue:()=>Promise<unknown>;threadId:string;messages:ChatMessage[];canLoadMore:boolean;onLoadMore:()=>void};
 const LIVE_PAGE_MESSAGES=12,OPENING_MESSAGES=40;
+const NO_SETTINGS:ComposerSettings={};
 const ConnectedConversation = memo(function ConnectedConversation({conversation,onUpdate}:{conversation:Conversation;onUpdate:(state:ConversationState)=>void}) {
   const queue=useQuery(api.assistant.queued,{projectId:conversation.projectId});
   const remove=useMutation(api.assistant.removeQueued),resume=useMutation(api.assistant.resumeQueue);
@@ -101,18 +103,11 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, defaultModelChoice, defaultReasoningEffort, catalogModels, modelAccessNeedsSync, paidModelAccess, modelSwitcher = false, effortSwitcher = false, claudeViaMcp, allowedModels = PRODUCTION_CLAUDE_MODEL_CHOICES, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
-  catalogModels?: readonly ClaudeModelChoice[];
-  modelAccessNeedsSync?: boolean;
-  paidModelAccess?: boolean;
-  modelSwitcher?: boolean;
-  /** Development only: choose a fixed effort for each request. */
-  effortSwitcher?: boolean; liveEffort?: EditorReasoningEffort; defaultReasoningEffort?: EditorReasoningEffort;
-  defaultModelChoice?:ClaudeModelChoice;
-  allowedModels?: readonly ClaudeModelChoice[];
-  claudeViaMcp?: boolean;
+  /** Model and effort choices; effortSwitcher (development only) picks a fixed effort for each request. */
+  settings?: ComposerSettings;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (promptMessageId:string) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
@@ -139,7 +134,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
-  const composerControls = useAssistantComposerControls({ settings: { catalogModels, modelAccessNeedsSync, paidModelAccess, modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels }, draftKey, disabled: answering });
+  const composerControls = useAssistantComposerControls({ settings: settings ?? NO_SETTINGS, draftKey, disabled: answering });
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
@@ -179,14 +174,14 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const retryTurnId=canResumeEdit?groups.findLast(group=>group.cards.some(card=>card.key==='turn-failure'))?.id:turnId;
   const showSuggestions=!conversationStarted&&!latestUser&&!waiting&&!externalAgent;
   const visibleError=!groups.length?(localError||(!waiting?error:null)):null;
-  useEffect(() => { try { setPrompt(draftKey ? sessionStorage.getItem(draftKey) ?? '' : ''); } catch { setPrompt(''); } }, [draftKey]);
+  useEffect(() => { try { setPrompt(draftKey ? storedDraftText(draftKey) : ''); } catch { setPrompt(''); } }, [draftKey]);
   useEffect(() => {
     if (!pendingReply) return;
     const newUser = latestUser && latestUser.id !== pendingReply.previousUserId;
     const replied = newUser && messages.slice(messages.indexOf(latestUser) + 1).some(message => message.role !== 'user' && (message.text || message.steps?.length || message.tools?.length || message.status === 'success' || message.status === 'failed' || message.status === 'aborted'));
     if ((newUser && (running || replied)) || (error && error !== pendingReply.previousError)) setPendingReply(null);
   }, [messages, running, error, pendingReply]);
-  function changePrompt(value: string) { setPrompt(value); try { if (draftKey) sessionStorage.setItem(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
+  function changePrompt(value: string) { setPrompt(value); try { if (draftKey) storeDraftText(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
 
   async function stop() {
     setLocalError('');

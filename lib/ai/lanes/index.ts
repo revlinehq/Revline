@@ -6,7 +6,7 @@ import { definition as reel } from './reel/definition';
 import { BASE_TOOLS, PROJECT_BASE_TOOLS, SKILL_TOOLS } from './base-tools';
 import { editorSkills } from '../skills';
 import { LANE_IDS, type LaneId } from './types';
-export { LANE_IDS, type LaneId } from './types';
+export type { LaneId } from './types';
 // Persisted legacy tasks use shared editing; this alias is never advertised.
 export const LANES = { edit, motion, recreate, clip, reel, explainer: edit };
 export const isLane = (value: unknown): value is LaneId =>
@@ -55,7 +55,7 @@ export function capabilitySummary(name: string) {
   if (!skill) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
   return { name, kind: 'skill', description: skill.description, tools: capabilityTools(name) };
 }
-export function laneSkill(_lane: LaneId, name: string, page?: string) {
+export function laneSkill(name: string, page?: string) {
   const skill = allSkills().find(skill => skill.name === name);
   if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
   const found = page ? skill.pages?.find(item => item.name === page) : undefined;

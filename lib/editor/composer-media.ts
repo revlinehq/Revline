@@ -1,5 +1,7 @@
 import type { MediaAsset } from './types';
-import type { ComposerAttachment } from '@/components/workspace/edit-composer';
+
+/** A source shown as a chip in the composer while it is attached to the next request. */
+export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string };
 
 /** Only newly attached sources belong here; extracted audio is not a second upload. */
 export function composerMedia(assets: readonly MediaAsset[], ids: readonly string[]): ComposerAttachment[] {

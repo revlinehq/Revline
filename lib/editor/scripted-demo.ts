@@ -1,5 +1,5 @@
 import { normalizeTimeline, type Clip, type MediaAsset, type Timeline } from './types';
-import type { MotionKeyframe } from './clip-effects';
+import type { MotionKeyframe } from './motion-path';
 import { addTransitionClip } from './operations';
 import { audioSettings } from './audio-settings';
 

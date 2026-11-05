@@ -8,12 +8,13 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab, isMcpRun, runAuthorLabel } from './lib/run_ids';
+import { runArgs, holdsRun, runIsActive } from './lib/active_run';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {cancelTurn} from './assistantWorkflow';
-import {stopRunnerTurn} from './agentRunner';
+import {stopRunnerTurn} from './lib/runner_turns';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
@@ -21,6 +22,7 @@ import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { transportAsset, storeAnalysis } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
+import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
 import { importVideoFor } from './mediaTasks';
@@ -33,6 +35,7 @@ import { abortStream, createThread, listStreams, listUIMessages, saveMessage, sy
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
+import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
@@ -44,19 +47,17 @@ import { validateVideoInspectionInput } from '../lib/media-analysis/video-inspec
 import { normalizeTimeline } from '../lib/editor/types';
 import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
-import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
-import { allowedClaudeModelChoices, enforceClaudeModelPolicy } from '../lib/ai/claude-model-policy';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
 import { sceneCodeSource } from '../lib/editor/scene-code-edits';
 import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
-const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel('gpt-6.1-terra')), 'medium');
-const providerReason = "Configure OPENAI_API_KEY (GPT-6.1 Sol, GPT-6 Astra) or ANTHROPIC_API_KEY (Sonnet 5.5, Opus 5.5) in Convex to edit.";
+const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(FREE_EDITOR_MODEL_CHOICE)), 'medium');
 function configured(paidModelAccess = true) {
   try{assertEditorModelConfigured(paidModelAccess ? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
 }
@@ -84,7 +85,7 @@ async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const catalogModels = [...allowedClaudeModelChoices()];
   const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
-  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: ['gpt-6.1-terra'] satisfies ClaudeModelChoice[], defaultModelChoice: 'gpt-6.1-terra' as const, defaultReasoningEffort: 'low' as const };
+  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
   const choices = editorModelChoices();
   return {
@@ -125,7 +126,7 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
   const activity=active?task?.status==='retrying'||task?.status==='queued'&&(task.attempt>1)?'Retrying analysis…':task?.status==='queued'?'Queued for analysis…':task&&(task.activity||task.kind==='transcribe')?mediaTaskActivityLabel(task):labels[active.mode]:editing?'Applying edits…':null;
   const externalAgents=await projectWorkingAgents(ctx,ownerId,project._id), latestAgent=externalAgents[0];
-  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && !!project.aiRunId?.startsWith('mcp-') } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : providerReason, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
+  return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && isMcpRun(project.aiRunId) } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
 /** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
@@ -148,7 +149,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const mobile = args.clientPlatform === 'ios';
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
-  if (mobile && (args.modelChoice !== 'gpt-6.1-terra' || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
+  if (mobile && (args.modelChoice !== FREE_EDITOR_MODEL_CHOICE || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
   if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(args.modelChoice)) throw new ConvexError('This AI model is not available.');
   let pinnedModel;
@@ -166,7 +167,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if (args.selectedClipIds.some(id => !clipIds.has(id))) throw new ConvexError("Selected clips must belong to this project");
   }
   if (args.playhead !== undefined && (!Number.isFinite(args.playhead) || args.playhead < 0)) throw new ConvexError("Playhead must be a finite, nonnegative time");
-  if (!mobile && !configured(paidModelAccess)) throw new ConvexError(providerReason);
+  if (!mobile && !configured(paidModelAccess)) throw new ConvexError(EDITOR_PROVIDER_REASON);
   const prompt = args.prompt.trim(); if (!prompt || prompt.length > 8000) throw new ConvexError("Write a prompt between 1 and 8000 characters");
   let command: ReturnType<typeof parseEditorCommand>;
   try { command = parseEditorCommand(prompt); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid command.'); }
@@ -259,7 +260,6 @@ export const messages = query({
     return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
-const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
 // Both switches belong to one transaction: subscribers only see the original selection.
 const scopedRunMutation = customMutation(internalMutation, {
   args: runArgs,
@@ -327,13 +327,13 @@ export const recordBudget = internalMutation({ args: { ...runArgs, used: v.numbe
 }});
 async function requireRunState(ctx: QueryCtx | MutationCtx, args: {projectId:Doc<'projects'>['_id'];ownerId:string;runId:string}) {
   const project=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
+  if(!holdsRun(project,args.runId))throw new ConvexError('AI run is no longer active');
   return project;
 }
 /** Project tools used inside an existing editor run keep its lock and ownership checks. */
 async function requireActiveRun(ctx: QueryCtx | MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.deleting || project.ownerId !== args.ownerId || !project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  if (!project || project.deleting || project.ownerId !== args.ownerId || !holdsRun(project, args.runId)) throw new ConvexError('AI run is no longer active');
   return project;
 }
 export const listRunTimelines = internalQuery({ args: runArgs, handler: async (ctx, args) => {
@@ -403,16 +403,13 @@ export const modelForRun = internalQuery({
     return validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
   },
 });
-export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
-  const project = await projectRun(ctx,args.projectId,args.ownerId).catch(()=>null);
-  return !!project && project.ownerId === args.ownerId && project.aiRunId === args.runId && project.aiRunning === true;
-}});
+export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: (ctx, args) => runIsActive(ctx, args) });
 export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);
   // Full model context still needs recovery/request text; run-state checks deliberately do not.
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
-  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
   const tab=boundRunTab(args.runId);
   if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
@@ -458,7 +455,7 @@ export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),rev
   const fixes=row.fixes??[],existing=fixes.find(fix=>fix.clipId===args.clipId&&fix.summary===summary&&fix.verification===verification);
   if(existing)return {revision:row.revision,timelineId,fix:existing};
   if(fixes.length>=20)throw new ConvexError('This revision already has 20 fix records. Keep further details in the next saved fix.');
-  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:run.aiRunId?.startsWith('mcp-')?run.aiAgentName??'AI agent':'Revline agent'};
+  const fix={id:crypto.randomUUID(),clipId:args.clipId,summary,verification,at:Date.now(),by:runAuthorLabel(run.aiRunId,run.aiAgentName)};
   await ctx.db.patch(row._id,{fixes:[...fixes,fix]});
   return {revision:row.revision,timelineId,fix};
 }});
@@ -505,9 +502,9 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  if(!args.r2Key.startsWith(`media/${args.ownerId}/${args.projectId}/`))throw new ConvexError('Generated sound key is outside this project');
-  const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
-  if(count.length>=200)throw new ConvexError('A project supports up to 200 media files');
+  if(!args.r2Key.startsWith(projectMediaPrefix(args.ownerId,args.projectId)))throw new ConvexError('Generated sound key is outside this project');
+  const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
+  if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(args.waveform);
   const id=await ctx.db.insert('assets',{ownerId:args.ownerId,projectId:args.projectId,kind:'audio',fileName:args.fileName,r2Key:args.r2Key,contentType:args.contentType??'audio/wav',size:args.size,duration:args.duration,waveform:args.waveform,...(args.recipe?{soundRecipe:args.recipe}:{}),createdAt:Date.now()});
   // A music bed knows its beats exactly, and narration its words: they are saved as its analysis, like measured ones.

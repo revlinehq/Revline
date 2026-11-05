@@ -7,18 +7,19 @@ import { resolvedAudioTimeline } from './audio-normalization';
 import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
 import { calculateVisualRect } from './visual-source-geometry';
-import { NEUTRAL_MOTION, cinematicBarSettings, validateClipEffects, visibleMotion, type MotionKeyframe } from './clip-effects';
+import { focusAt } from './focus-path';
+import { cinematicBarSettings, validateClipEffects, visibleMotion } from './clip-effects';
+import { NEUTRAL_MOTION, type MotionKeyframe } from './motion-path';
 import { adjustmentSources } from './adjustment-layers';
 import { solidColorSources } from './solid-color-layers';
 import { maskSources } from './masks';
-import { audioReactiveSources, hasReactiveEffects } from './audio-reactive';
-import { colorFinishSource } from './color-finish';
+import { audioReactiveSources } from './audio-reactive';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { validateVisualFade } from './visual-fades';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
-import { validateVisualEffects, visualEffectsOf } from './visual-effects';
-import { cameraGlideBlurSource } from './camera-motion-blur';
+import { validateVisualEffects } from './visual-effects';
+import { clipVisualEffectSource } from './visual-effect-sources';
 import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { textLayerSources } from './text-layers';
@@ -40,8 +41,6 @@ export type CompositionOptions = {
   fps?: 24 | 30 | 60;
   gsapUrl?: string;
   visualEffectsUrl?: string;
-  remotionTextUrl?: string;
-  remotionTransitionsUrl?: string;
   remotionRuntimeUrl?: string;
   sceneRuntimeUrl?: string;
   fontUrl?: string;
@@ -75,8 +74,6 @@ export function compositionTrackIndex(clip: Pick<Clip, 'kind' | 'track'>) {
   return (clip.kind === 'audio' ? 24 : 0) + trackOf(clip) - 1;
 }
 
-export { calculateVisualRect } from './visual-source-geometry';
-
 function validateClip(clip: Clip) {
   if (![clip.start, clip.duration, clip.sourceStart].every(Number.isFinite) || clip.start < 0 || clip.duration <= 0 || clip.sourceStart < 0) {
     throw new Error('Every clip must have a valid start, duration, and source offset.');
@@ -90,15 +87,8 @@ export function trimmedFocus(clip: Clip) {
     if (![sample.time, sample.x, sample.y].every(Number.isFinite) || sample.time < 0 || sample.x < 0 || sample.x > 1 || sample.y < 0 || sample.y > 1 || (index > 0 && sample.time <= samples[index - 1].time)) throw new Error('Focus samples must have increasing source times and normalized positions.');
   }
   if (!samples.length) return [];
-  function at(time: number) {
-    const after = samples.findIndex(sample => sample.time >= time);
-    if (after <= 0) return { ...(after === -1 ? samples[samples.length - 1] : samples[0]), time };
-    const previous = samples[after - 1], next = samples[after];
-    const mix = (time - previous.time) / (next.time - previous.time);
-    return { time, x: previous.x + (next.x - previous.x) * mix, y: previous.y + (next.y - previous.y) * mix };
-  }
   const end = sourceEndOf(clip);
-  return [at(clip.sourceStart), ...samples.filter(sample => sample.time > clip.sourceStart && sample.time < end), at(end)];
+  return [focusAt(samples, clip.sourceStart)!, ...samples.filter(sample => sample.time > clip.sourceStart && sample.time < end), focusAt(samples, end)!];
 }
 
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */
@@ -240,12 +230,11 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const safeDuration = Math.max(duration, 1 / fps);
   const gsapUrl = mediaUrl(options.gsapUrl ?? '/vendor/gsap.min.js');
   const visualEffectsUrl = mediaUrl(options.visualEffectsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/visual-effects.js', options.gsapUrl).href : '/vendor/visual-effects.js'));
-  const remotionTextUrl = mediaUrl(options.remotionTextUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-text.js', options.gsapUrl).href : '/vendor/remotion-text.js'));
-  const remotionTransitionsUrl = mediaUrl(options.remotionTransitionsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/remotion-transitions.js', options.gsapUrl).href : '/vendor/remotion-transitions.js'));
   const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
   const hasText=timeline.clips.some(clip=>clip.kind==='caption'||clip.kind==='graphic');
-  const sharedRuntimeUrl=options.remotionRuntimeUrl||!options.remotionTextUrl&&!options.remotionTransitionsUrl?mediaUrl(options.remotionRuntimeUrl??(/^https?:/i.test(options.gsapUrl??'')?new URL('/vendor/remotion-runtime.js',options.gsapUrl).href:'/vendor/remotion-runtime.js')):undefined;
-  const sceneScripts=sharedRuntimeUrl?(hasText||transitions.length?`<script src="${sharedRuntimeUrl}"></script>`:''):`${hasText?`<script src="${remotionTextUrl}"></script>`:''}${transitions.length?`<script src="${remotionTransitionsUrl}"></script>`:''}`;
+  // One bundle carries the text and transition renderers; the preview loads it on demand from the meta tag.
+  const sharedRuntimeUrl=mediaUrl(options.remotionRuntimeUrl??(/^https?:/i.test(options.gsapUrl??'')?new URL('/vendor/remotion-runtime.js',options.gsapUrl).href:'/vendor/remotion-runtime.js'));
+  const sceneScripts=hasText||transitions.length?`<script src="${sharedRuntimeUrl}"></script>`:'';
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
@@ -276,12 +265,12 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 .scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style>${sharedRuntimeUrl?`<meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">`:''}${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style><meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
 window.__timelines=window.__timelines||{};window.__timelines.revline=timeline;
-${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...visualEffectsOf(clip), parallax:clip.parallax, cameraGlideBlur:cameraGlideBlurSource(clip), effectKeyframes:clip.effectKeyframes, motionOffset:clip.motionOffset, ...(hasReactiveEffects(clip.audioReactive) ? { audioReactive: clip.audioReactive } : {}), ...(colorFinishSource(clip, timeline.luts) ? { colorFinish: colorFinishSource(clip, timeline.luts) } : {}) }] : []), fps, resolution)}
+${visualEffectsRuntimeScript(timeline.clips.flatMap((clip, index) => clip.kind === 'video' || clip.kind === 'image' ? [{ id: `clip-${index}`, ...clipVisualEffectSource(clip, timeline.luts) }] : []), fps, resolution)}
 window.__revlineVisualEffects.installAdjustmentLayers(${JSON.stringify(adjustmentSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColorSources(timeline.clips)).replace(/</g, '\\u003c')});
 window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});window.__revlineVisualEffects.installAudioReactive(${JSON.stringify(audioReactiveSources(timeline.clips)).replace(/</g, '\\u003c')});

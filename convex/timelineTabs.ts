@@ -1,4 +1,5 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
+import { isMcpRun } from './lib/run_ids';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
@@ -6,7 +7,8 @@ import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { projectIdentity, writeProject } from './lib/project_data';
-import { currentTimeline, serializedBytes } from './lib/timeline';
+import { currentTimeline } from './lib/timeline';
+import { serializedBytes } from './lib/timeline_history';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
@@ -56,7 +58,7 @@ async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId:
   }
   // An in-app turn works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.
   // MCP runs are single calls; their own tab switch happens as the run takes the lock.
-  if (project.aiRunning && !project.aiRunId?.startsWith('mcp-') || await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
+  if (project.aiRunning && !isMcpRun(project.aiRunId) || await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   return project;
 }
 

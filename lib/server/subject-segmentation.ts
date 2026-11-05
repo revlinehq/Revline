@@ -1,12 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import sharp from "sharp";
-import { createFalClient } from "@fal-ai/client";
 import { z } from "zod";
 import { type PixelTrackRequest } from "../media-analysis/pixel-track";
 import { AnalysisError } from "../media-analysis/errors";
 import { localizeTrackingObject } from "./localize-tracking-object";
-import { download, subscribe } from "./derive-media";
+import { download, subscribe, type FalClient } from "./fal";
 
 export type SubjectSelection = Pick<PixelTrackRequest, "time" | "seed">;
 const imageResult = z.object({ image: z.object({ url: z.string().url() }) });
@@ -62,7 +61,7 @@ export async function subjectPrompt(
 
 /** Return a grayscale alpha mask, retaining native subject pixels for compositing. */
 export async function foregroundMask(
-  fal: ReturnType<typeof createFalClient>,
+  fal: FalClient,
   frame: string,
   directory: string,
   signal: AbortSignal,

@@ -19,7 +19,7 @@ export type MediaWorkerOptions = {
   workerSecret: string;
   slots: number;
   /** Which tasks this worker claims: an export lane, or dedicated exports only. */
-  claim: { projectId?: import('../../convex/_generated/dataModel').Id<'projects'>; lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'railway' | 'cloudflare' | 'local'; renderProvider?: 'railway'; excludedKinds?: import('../../convex/mediaTasks').MediaWorkItem['kind'][] };
+  claim: { projectId?: import('../../convex/_generated/dataModel').Id<'projects'>; lane?: 'ultra' | 'any'; rendersOnly?: boolean; processorBackend?: 'railway' | 'cloudflare' | 'local'; renderProvider?: 'railway'; excludedKinds?: import('../../convex/lib/media_task_contract').MediaWorkItem['kind'][] };
   deadlineMs: number;
   signal: AbortSignal;
   /** A draining worker finishes its current tasks and claims no more. */

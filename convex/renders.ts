@@ -1,5 +1,4 @@
 import { recordIncident, incidentDeployment } from './lib/incidents';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
@@ -17,7 +16,7 @@ import { currentTimeline, validateTimeline } from "./lib/timeline";
 import { renderSummaryDocument } from "./schema";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { timelineDuration } from '../lib/editor/types';
-import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './mediaTasks';
+import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './lib/media_queue';
 import { accountLimit } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
@@ -49,7 +48,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: dedicated Ultra export workers.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...((timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio))?{requiredProcessorVersion:MEDIA_PROCESSOR_VERSION}:{}), ...(ultra ? { lane: 'ultra' as const } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'render', renderJobId: jobId, ...(ultra ? { lane: 'ultra' as const } : {}) });
   await ctx.db.patch(jobId, { taskId });
   return jobId;
 }

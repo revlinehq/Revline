@@ -1,12 +1,13 @@
 import { previewSegmentUrl } from './schema';
-import type { PreviewSegment } from '../lib/editor/preview-segments';
+import type { PreviewSegment } from '../lib/editor/types';
 import { ConvexError, v } from 'convex/values';
 import { action, internalQuery, mutation } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
-import { enqueueMediaTask } from './mediaTasks';
-import { mediaTaskCredentials, requireMediaTask } from './lib/media_task_auth';
+import { enqueueMediaTask } from './lib/media_queue';
+import { requireMediaTask } from './lib/media_task_auth';
+import { mediaTaskCredentials } from './lib/media_task_contract';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { hasPreview, mediaUrl, previewUrl } from './lib/media_storage';

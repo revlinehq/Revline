@@ -1,4 +1,4 @@
-import { uploadPartSize } from '../lib/editor/limits';
+import { PROJECT_MEDIA_LIMIT, uploadPartSize } from '../lib/editor/limits';
 import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import type { Doc, Id } from './_generated/dataModel';
@@ -8,17 +8,16 @@ import { internal } from './_generated/api';
 import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
-import { mediaConfig, storageControl, hasPreview, PREVIEW_VERSION } from './lib/media_storage';
-import { signMediaToken } from '../lib/storage/media-tokens';
+import { storageControl, hasPreview, newProjectMediaKey, PREVIEW_VERSION } from './lib/media_storage';
+import { partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
 import { requireMediaTask } from './lib/media_task_auth';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks, UPLOAD_RESERVATION_MS } from './lib/account_limits';
 import { releaseMediaObjects } from './lib/shared_media';
 import { releaseAccountStorage } from './lib/storage_accounting';
 import { isStockAudioKey } from '../lib/editor/stock-audio';
 
 const metadata = { fileName: v.string(), contentType: v.string(), kind: assetKind, size: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) };
-const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string() }));
 const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number() });
 const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optional(v.string()) };
 const previewUpload = { previewRange:v.optional(v.object({start:v.number(),end:v.number()})), purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
@@ -29,7 +28,7 @@ function uprightDimensions(source:Pick<Doc<'assets'>,'width'|'height'>,width:num
 }
 export const repairPreviewDimensions=internalMutation({args:{projectId:v.id('projects')},returns:v.array(v.id('assets')),handler:async(ctx,args)=>{
   const project=await ctx.db.get(args.projectId);if(!project)throw new ConvexError('Project not found');
-  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',project.ownerId).eq('projectId',project._id)).take(200);
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',project.ownerId).eq('projectId',project._id)).take(PROJECT_MEDIA_LIMIT);
   const repaired:Id<'assets'>[]=[];
   for(const asset of assets){
     if(asset.kind!=='video'||!hasPreview(asset)||!asset.previewWidth||!asset.previewHeight)continue;
@@ -62,7 +61,7 @@ async function retryOnWriteConflict<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
+export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
   const ownerId = task?.ownerId ?? args.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
@@ -73,11 +72,8 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
     if(!snapshot?.normalization||args.jobId||args.kind!=='audio'||args.contentType!=='audio/wav')throw new ConvexError('Only normalization tasks can upload a normalized WAV.');
   }
   if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import', 'cutout', 'derive', 'snapshot'].includes(task.kind) || (task.kind === 'derive' && (args.jobId || !(args.kind === 'video' && args.contentType === 'video/mp4' || args.kind === 'image' && /^image\/(jpeg|png)$/.test(args.contentType)))) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'cutout' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/webm')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
-  if (args.jobId && !task) {
-    if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');
-    const job = await ctx.db.get(args.jobId);
-    if (!job || job.ownerId !== ownerId || job.projectId !== args.projectId || job.status !== 'rendering') throw new ConvexError('Render is not accepting an upload');
-  }
+  // Export uploads come from the media worker's render task.
+  if (args.jobId && !task) throw new ConvexError('Render worker authentication required');
   const pending = await ctx.db.query('r2Uploads').withIndex('by_projectId_completed', q => q.eq('projectId', args.projectId).eq('completed', false)).take(101);
   if (pending.filter(upload => !upload.completed && upload.expiresAt > Date.now()).length >= 100) throw new ConvexError('Finish the pending uploads first');
   // Fail fast before opening the multipart upload; createLease is authoritative.
@@ -118,11 +114,11 @@ export const beginAbort = internalMutation({args:{uploadId:v.id('r2Uploads'),...
   return {...lease,aborting:true};
 }});
 
-const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, ...metadata };
+const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, ...metadata };
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
 export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
-  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
+  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}) });
   if(!args.purpose&&(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
@@ -133,7 +129,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   const partSize = uploadPartSize(args.size);
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
-  const key = `media/${ownerId}/${args.projectId}/${crypto.randomUUID()}`;
+  const key = newProjectMediaKey(ownerId, args.projectId);
   const created = await storageControl({ action: 'create', key, contentType: args.contentType });
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   const multipartId = created.uploadId;
@@ -148,12 +144,8 @@ export const partUrl = action({ args: { uploadId: v.id('r2Uploads'), partNumber:
 }});
 /** A one-hour URL that accepts exactly one part's bytes by PUT. */
 export async function signPartUrl(lease: Doc<'r2Uploads'>, partNumber: number) {
-  const count = Math.ceil(lease.size / lease.partSize);
-  if (lease.completed || !Number.isInteger(partNumber) || partNumber < 1 || partNumber > count) throw new ConvexError('Invalid upload part');
-  const { url, secret } = mediaConfig();
-  const size = Math.min(lease.partSize, lease.size - (partNumber - 1) * lease.partSize);
-  const token = await signMediaToken(secret, { operation: 'part', key: lease.key, uploadId: lease.uploadId, partNumber, size, expires: Date.now() + 3600_000 });
-  return `${url}/part?token=${token}`;
+  if (lease.completed || !validPartNumber(partNumber, lease.size, lease.partSize)) throw new ConvexError('Invalid upload part');
+  return signedPartUrl(lease, partNumber);
 }
 export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), size: v.number(), contentType: v.string() }, returns: v.union(v.id('assets'), v.null()), handler: async (ctx, args) => {
   const lease = await ctx.db.get(args.uploadId);
@@ -198,8 +190,8 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
     await ctx.db.patch(job._id, { outputSize:lease.size, outputR2Key: lease.key, status: lease.taskId ? 'rendering' : 'completed', progress: lease.taskId ? 99 : 100, updatedAt: Date.now() });
     await ctx.db.patch(lease._id, { completed: true }); return null;
   }
-  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', lease.ownerId).eq('projectId', project._id)).take(200);
-  if (count.length >= 200) throw new ConvexError('A project supports up to 200 media files');
+  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', lease.ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT);
+  if (count.length >= PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   const assetId = await ctx.db.insert('assets', { ownerId: lease.ownerId, projectId: lease.projectId, r2Key: lease.key, fileName: lease.fileName, contentType: lease.contentType, kind: lease.kind, size: lease.size, createdAt: Date.now(), ...(lease.duration !== undefined ? { duration: lease.duration } : {}), ...(lease.width !== undefined ? { width: lease.width } : {}), ...(lease.height !== undefined ? { height: lease.height } : {}) });
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   await ctx.db.patch(lease._id, { completed: true, assetId });
@@ -223,7 +215,7 @@ export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: par
 export async function completeUpload(ctx: ActionCtx, lease: Doc<'r2Uploads'>, parts: { partNumber: number; etag: string }[]): Promise<Id<'assets'> | null> {
   const args = { uploadId: lease._id, parts };
   if (lease.completed) return lease.assetId ?? null;
-  if (args.parts.length !== Math.ceil(lease.size / lease.partSize) || args.parts.some((part, i) => part.partNumber !== i + 1 || !part.etag || part.etag.length > 256)) throw new ConvexError('Upload parts are incomplete');
+  if (!partsComplete(args.parts, lease.size, lease.partSize)) throw new ConvexError('Upload parts are incomplete');
   const file = await storageControl({ action: 'complete', key: lease.key, uploadId: lease.uploadId, parts: args.parts });
   if (file.size === undefined || !file.contentType) throw new ConvexError('Cloudflare did not return media metadata');
   // The bytes are already assembled in R2; a lost write race must not discard them.

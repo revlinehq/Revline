@@ -2,11 +2,11 @@ import { clipCheckRequestValidator } from './lib/clipping_validator';
 import { motionTimelineKey } from '../lib/ai/motion-coverage';
 import { cacheHash, frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { mediaUrl } from './lib/media_storage';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { generatedImageSummary } from './lib/generated_image_summary';
 import { normalizationRequestValidator } from './lib/normalization_validator';
 import { memoriesFor } from './memories';
 import { ConvexError, v } from 'convex/values';
+import { isMcpRun } from './lib/run_ids';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { requireProject } from './lib/auth';
@@ -14,15 +14,17 @@ import { requireEditorAccess } from './lib/billing_access';
 import { syncProjectAgent, projectIdentity, projectRun, projectRunContext, writeRunState, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
-import { aspectRatio } from './schema';
+import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
+import { aspectRatio, frameResolution } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
-import { cancelMediaTask, importVideoFor } from './mediaTasks';
+import { importVideoFor } from './mediaTasks';
+import { cancelMediaTask } from './lib/media_queue';
 import { exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
 import { briefFor } from './briefs';
-import { enqueueMediaTask, GUARD_PROCESSOR_VERSION, MOTION_PROCESSOR_VERSION, PACING_PROCESSOR_VERSION, SOUND_PROCESSOR_VERSION, RECREATION_PROCESSOR_VERSION } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { referenceBox } from './schema';
 import { comparisonCrop } from '../lib/ai/reference-comparison';
 import { soundRequestValidator } from './lib/sound_validator';
@@ -31,6 +33,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { internal } from './_generated/api';
 import { touchTaskAgent } from './mcpConnections';
 import { MCP_AGENT_IDLE_MS } from '../lib/mcp/agent-identity';
+import { MCP_RUN_LIMIT } from './lib/mcp_limits';
 
 // Project-level work for the MCP server. Every function receives the owner the
 // bearer token resolved to; nothing here trusts a client-supplied identity.
@@ -44,7 +47,7 @@ function projectIdOf(ctx: QueryCtx, projectId: string) {
 const editorUrl = (projectId: string) => `${process.env.APP_ORIGIN ?? ''}/editor/${projectId}`;
 
 export const resolveFrameRead = internalQuery({
-  args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), checkId: v.string(), times: v.array(v.number()), resolution: v.optional(v.union(v.literal(720), v.literal(1080))), revision: v.optional(v.number()) },
+  args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), checkId: v.string(), times: v.array(v.number()), resolution: v.optional(frameResolution), revision: v.optional(v.number()) },
   returns: v.id('frameSnapshots'),
   handler: async (ctx, args) => {
     await requireEditorAccess(ctx, args.ownerId);
@@ -70,27 +73,14 @@ async function clearLivePreview(ctx: MutationCtx, projectId: Id<'projects'>) {
 }
 
 /** One MCP tool call is one AI run: the same lock, live preview and undo group as an in-app edit. */
-const MCP_RUN_LIMIT = 11 * 60_000;
-const mcpRunStarted = (runId?: string) => runId?.startsWith('mcp-') ? Number(runId.split('-')[1]) : undefined;
+const mcpRunStarted = (runId?: string) => runId && isMcpRun(runId) ? Number(runId.split('-')[1]) : undefined;
 
 /** Access check for read-only tools, which run alongside edits instead of taking the project lock. */
-/** A tab's saved timeline with its scene code, for reading a tab without opening it. */
-export const tabTimeline = internalQuery({ args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
-  const timeline = args.timelineId === activeTabOf(project) ? currentTimeline(project) : await storedTabTimeline(ctx, project, args.timelineId);
-  if (!timeline) throw new ConvexError('That timeline no longer exists.');
-  return loadSceneCode(ctx, timeline);
-}});
-
 export const readRun = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.id('projects'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   return (await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false))._id;
 }});
 
-/** How long the editor keeps showing an MCP agent as working after its last call. Agents
- * think between calls, and writing a film part for patchScene or addFilm can take several
- * minutes, so a short window drops the status mid-request and invites the user to edit over it. */
-export const AGENT_ACTIVE_MS = MCP_AGENT_IDLE_MS;
 /** Runs on every MCP tool call, so it reads only the small access and run rows, never the project document,
  * and rewrites the marker only once it is half spent. */
 export const touchAgent = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), agentName: v.optional(v.string()), taskId: v.optional(v.string()), agentClientId: v.optional(v.id('mcpConnections')), startedAt: v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
@@ -98,14 +88,16 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   if (!id) return null;
   try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
+  // The editor keeps showing the agent as working for MCP_AGENT_IDLE_MS after its last call. Agents think between calls,
+  // and writing a film part for patchScene or addFilm can take several minutes, so a short window drops the status mid-request.
   if(args.taskId)await touchTaskAgent(ctx,args.ownerId,args.taskId,name,args.agentClientId,args.startedAt);
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
-  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + AGENT_ACTIVE_MS / 2) return null;
+  if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return null;
   if (run) {
-    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
-    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+AGENT_ACTIVE_MS});
+    await ctx.db.patch(run._id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
+    await syncProjectAgent(ctx,id,{...run,aiAgentName:name,aiAgentActiveUntil:now+MCP_AGENT_IDLE_MS});
   }
-  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + AGENT_ACTIVE_MS });
+  else await writeProject(ctx, id, { aiAgentName: name, aiAgentActiveUntil: now + MCP_AGENT_IDLE_MS });
   return null;
 }});
 
@@ -114,7 +106,7 @@ export const beginRun = internalMutation({ args: { ownerId: v.string(), projectI
   const project = await projectRunContext(ctx, projectIdOf(ctx, args.projectId), args.ownerId);
   // An MCP call outlives its 10-minute action limit only if its action died; take its lock over.
   const started = mcpRunStarted(project.aiRunId), stale = started !== undefined && Date.now() - started > MCP_RUN_LIMIT;
-  if (project.aiRunning && !stale) throw new ConvexError(project.aiRunId?.startsWith('mcp-') ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
+  if (project.aiRunning && !stale) throw new ConvexError(isMcpRun(project.aiRunId) ? 'Another MCP edit is still running on this project. Wait for it to finish.' : 'The in-app AI is editing this project. Wait for it to finish, or stop it in the editor.');
   const timelineId = args.timelineId ?? activeTabOf(project);
   if (!await storedTabTimeline(ctx, (await ctx.db.get(project._id))!, timelineId)) throw new ConvexError('That timeline no longer exists.');
   const runId = `mcp-${Date.now()}-${crypto.randomUUID()}:tab:${timelineId}`;
@@ -134,7 +126,7 @@ export const listProjects = internalQuery({ args: { ownerId: v.string(), limit: 
 export const projectOverview = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const timeline = currentTimeline(project);
-  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).take(200);
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT);
   return {
     projectId: project._id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision ?? 0,
     duration: Math.round(timelineDuration(timeline) * 1000) / 1000, clipCount: timeline.clips.length, aiRunning: !!project.aiRunning, editorUrl: editorUrl(project._id),
@@ -222,7 +214,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { resolution:v.optional(v.union(v.literal(720),v.literal(1080))), ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { resolution:v.optional(frameResolution), ownerId: v.string(), projectId: v.string(), recreation:v.optional(v.boolean()), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), comparison: v.optional(v.object({ crop: v.optional(referenceBox), aspectRatio: v.optional(v.number()) })), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), motion: v.optional(v.object({ start: v.number(), end: v.number() })), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   if(args.resolution===1080&&(args.times.length!==1||args.clipCheck||args.normalization||args.sourceSnapshotId||args.comparison||args.pacing||args.motion||args.sound))throw new ConvexError('1080p inspection accepts one composited frame per call.');
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
@@ -270,8 +262,7 @@ export const requestFrames = internalMutation({ args: { resolution:v.optional(v.
   // Comparisons keep one immutable source across batches, drafts and concurrent edits. Scene code stays stored by hash.
   const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), ...(args.comparison ? { comparison: args.comparison } : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound || motion ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(motion ? { motion, motionKey: await motionTimelineKey(timeline) } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
-  const requiredProcessorVersion=Math.max(MEDIA_PROCESSOR_VERSION,normalization||timeline.audioNormalization||timeline.clips.some(c=>c.normalizedAudio)?MEDIA_PROCESSOR_VERSION:0,pacing?PACING_PROCESSOR_VERSION:0,motion?MOTION_PROCESSOR_VERSION:0,sound?Math.max(SOUND_PROCESSOR_VERSION,RECREATION_PROCESSOR_VERSION):0,args.comparison?RECREATION_PROCESSOR_VERSION:0);
-  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion }, undefined, recreation);
+  const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId }, undefined, recreation);
   if (taskId) await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:!!(pacing||sound),...(args.comparison&&taskId?{cancelTaskId:taskId}:{})});
   // Measurements are saved verification records, kept until the project is deleted.
@@ -295,7 +286,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   if (!args.times.length || args.times.length > 24 || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError('The guard renders 1 to 24 times.');
   const baseline = await storeSceneCode(ctx, args.baseline as Timeline), candidate = await storeSceneCode(ctx, args.candidate as Timeline);
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
-  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
+  const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
   await ctx.db.patch(snapshotId, { taskId });
   await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false,cancelTaskId:taskId});
   await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });

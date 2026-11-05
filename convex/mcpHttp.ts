@@ -22,8 +22,6 @@ const json = (body: unknown, status = 200, headers: Record<string, string> = {})
 
 export const MCP_INSTRUCTIONS = `Keep check-level, cost and method metadata in tool results. User-facing replies have zero "How it was made", check-level or cost footers; explain how or cost only when asked. Never approve finished work on the user’s behalf.
 
-If a Revline tool unexpectedly fails, returns wrong or inconsistent results, or contradicts its documented contract, call reportIssue once with its name, a minimal input summary, what happened and what you expected. Never include credentials, tokens, user text or media. Do not report ordinary validation failures or unsupported requests. Continue safely and describe any unresolved limitation honestly.
-
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.
 
 Start with listProjects -> getProject -> startTask(projectId, timelineId, request, lane?, reason?, taskType?). Keep the returned taskId and pass it with projectId on subsequent tools. Alternatively pass projectId and timelineId on every call. Basic trims, captions, audio and timeline edits work without setLane. Style is optional. Use setLane only to change the primary deliverable. /clip and explicit user style remain authoritative.

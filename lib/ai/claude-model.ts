@@ -1,15 +1,11 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
-import { enforceClaudeModelPolicy, GPT_ONLY_EDITING_ERROR } from './claude-model-policy';
-
-const CLAUDE_MODEL = 'claude-sonnet-5-5';
-const CLAUDE_GATEWAY_MODEL = 'anthropic/claude-sonnet-5.5';
 
 export const CLAUDE_EDIT_MODELS = [
-  { id: 'haiku', label: 'Haiku 5.5', modelId: 'claude-haiku-5-5', gatewayModelId: 'anthropic/claude-haiku-5.5' },
-  { id: 'sonnet', label: 'Sonnet 5.5', modelId: CLAUDE_MODEL, gatewayModelId: CLAUDE_GATEWAY_MODEL },
-  { id: 'opus', label: 'Opus 5.5', modelId: 'claude-opus-5-5', gatewayModelId: 'anthropic/claude-opus-5.5' },
+  { id: 'haiku', label: 'Haiku 5.5', modelId: 'claude-haiku-5-5' },
+  { id: 'sonnet', label: 'Sonnet 5.5', modelId: 'claude-sonnet-5-5' },
+  { id: 'opus', label: 'Opus 5.5', modelId: 'claude-opus-5-5' },
 ] as const;
 // Native OpenAI Standard rates, USD / 1M tokens, verified 2026-10-15.
 // https://developers.openai.com/api/docs/models/gpt-6.1-sol
@@ -31,6 +27,49 @@ const GOOGLE_EDIT_MODELS = [
   { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon 4', modelId: 'gemini-4-argon' },
 ] as const;
 export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
+
+type ModelPolicyEnvironment = Readonly<Record<string, string | undefined>>;
+/** The GPT editing models, always offered; running them needs OPENAI_API_KEY. */
+export const OPENAI_EDIT_CHOICES = [OPENAI_EDIT_MODELS[0].id, OPENAI_EDIT_MODELS[1].id, OPENAI_EDIT_MODELS[2].id] as const;
+/** The model editing uses when neither the request nor EDITOR_DEFAULT_MODEL names one: GPT-6.1 Sol. */
+export const DEFAULT_EDITOR_MODEL = OPENAI_EDIT_MODELS[0].id;
+/** The model free accounts edit with: GPT-6.1 Terra. */
+export const FREE_EDITOR_MODEL_CHOICE = OPENAI_EDIT_MODELS[2].id;
+/** Claude editing models, offered when ANTHROPIC_API_KEY is configured. */
+const ANTHROPIC_EDIT_CHOICES = [CLAUDE_EDIT_MODELS[1].id, CLAUDE_EDIT_MODELS[2].id] as const;
+const ANTHROPIC_EDIT_MODEL_IDS: readonly string[] = [CLAUDE_EDIT_MODELS[1].modelId, CLAUDE_EDIT_MODELS[2].modelId];
+/** Gemini editing models, offered when GOOGLE_GENERATIVE_AI_API_KEY is configured. */
+const GOOGLE_EDIT_CHOICES = [GOOGLE_EDIT_MODELS[0].id] as const;
+export const EDITOR_MODEL_CATALOG = [...OPENAI_EDIT_CHOICES, ...ANTHROPIC_EDIT_CHOICES, ...GOOGLE_EDIT_CHOICES] as const;
+const modelLabels = (ids: readonly string[]) => ids.map(id => EDITOR_MODELS.find(model => model.id === id)!.label);
+const listLabels = (labels: readonly string[]) => `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`;
+export const GPT_ONLY_EDITING_ERROR = `Revline editing supports ${listLabels(modelLabels(EDITOR_MODEL_CATALOG))}. Choose a supported model.`;
+/** Which backend key enables which models, for the not-configured message. */
+export const EDITOR_PROVIDER_REASON = `Configure OPENAI_API_KEY (${modelLabels(OPENAI_EDIT_CHOICES).join(', ')}), ANTHROPIC_API_KEY (${modelLabels(ANTHROPIC_EDIT_CHOICES).join(', ')}) or GOOGLE_GENERATIVE_AI_API_KEY (${modelLabels(GOOGLE_EDIT_CHOICES).join(', ')}) in Convex to edit.`;
+
+export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ((typeof OPENAI_EDIT_CHOICES)[number] | (typeof ANTHROPIC_EDIT_CHOICES)[number] | (typeof GOOGLE_EDIT_CHOICES)[number])[] {
+  return [...OPENAI_EDIT_CHOICES, ...(env.ANTHROPIC_API_KEY?.trim() ? ANTHROPIC_EDIT_CHOICES : []), ...(env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ? GOOGLE_EDIT_CHOICES : [])];
+}
+
+export function enforceClaudeModelPolicy(selection: ClaudeModelSelection, env: ModelPolicyEnvironment = process.env): ClaudeModelSelection {
+  const choice = selection.modelChoice;
+  if (selection.provider === 'openai') {
+    if (!OPENAI_EDIT_CHOICES.some(item => item === selection.modelId) || (choice !== undefined && !OPENAI_EDIT_CHOICES.some(item => item === choice))) throw new Error(GPT_ONLY_EDITING_ERROR);
+    if (!env.OPENAI_API_KEY?.trim()) throw new Error('OpenAI editing requires OPENAI_API_KEY in this Convex environment. Configure the backend key before editing.');
+    return selection;
+  }
+  if (selection.provider === 'anthropic') {
+    if (!ANTHROPIC_EDIT_MODEL_IDS.includes(selection.modelId) || (choice !== undefined && !ANTHROPIC_EDIT_CHOICES.some(item => item === choice))) throw new Error(GPT_ONLY_EDITING_ERROR);
+    if (!env.ANTHROPIC_API_KEY?.trim()) throw new Error('Claude editing requires ANTHROPIC_API_KEY in this Convex environment.');
+    return selection;
+  }
+  if (selection.provider === 'google') {
+    if (!GOOGLE_EDIT_CHOICES.some(item => item === selection.modelId) || (choice !== undefined && !GOOGLE_EDIT_CHOICES.some(item => item === choice))) throw new Error(GPT_ONLY_EDITING_ERROR);
+    if (!env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()) throw new Error('Gemini editing requires GOOGLE_GENERATIVE_AI_API_KEY in this Convex environment.');
+    return selection;
+  }
+  throw new Error(GPT_ONLY_EDITING_ERROR);
+}
 export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
 export type EditorReasoningEffort = typeof EDITOR_REASONING_EFFORTS[number];
 export const EDITOR_SPEED_MODES = ['standard', 'fast'] as const;
@@ -52,7 +91,7 @@ export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process
 
 export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (modelChoice !== undefined && !claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
-  const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || 'gpt-6.1-sol');
+  const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || DEFAULT_EDITOR_MODEL);
   const selected = OPENAI_EDIT_MODELS.find(model => model.id === choice);
   if (selected) return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
   const gemini = GOOGLE_EDIT_MODELS.find(model => model.id === choice);
@@ -94,7 +133,7 @@ export function validatePinnedClaudeModel(input: Omit<ClaudeModelSelection, 'rea
 
 /** The free policy is a server default, independent of manual picker feature flags. */
 export function freeEditorModel(env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
-  return enforceClaudeModelPolicy({ provider: 'openai', modelId: 'gpt-6.1-terra', modelChoice: 'gpt-6.1-terra', reasoningEffort: 'low' }, env);
+  return enforceClaudeModelPolicy({ provider: 'openai', modelId: FREE_EDITOR_MODEL_CHOICE, modelChoice: FREE_EDITOR_MODEL_CHOICE, reasoningEffort: 'low' }, env);
 }
 
 /** Capture manual effort with the model so a queued run cannot change settings. */

@@ -6,15 +6,14 @@ import type { ReactNode } from 'react';
 type Segment<Value extends string> = { value: Value; label: string; id: string; panelId: string; icon?: ReactNode };
 
 /** Shared option navigation for the inspector and its tool library. */
-export function SegmentedTabs<Value extends string>({ label, options, value, onChange, className = '', appearance = 'segmented' }: {
+export function SegmentedTabs<Value extends string>({ label, options, value, onChange, className = '' }: {
   label: string;
   options: readonly [Segment<Value>, Segment<Value>, ...Segment<Value>[]];
   value: Value;
   onChange: (value: Value) => void;
   className?: string;
-  appearance?: 'segmented' | 'navigation';
 }) {
-  return <div className={`segmented-tabs ${className}`} style={{gridTemplateColumns:`repeat(${options.length},minmax(0,1fr))`}} data-appearance={appearance} role="tablist" aria-label={label} onKeyDown={event => {
+  return <div className={`segmented-tabs ${className}`} style={{gridTemplateColumns:`repeat(${options.length},minmax(0,1fr))`}} role="tablist" aria-label={label} onKeyDown={event => {
     if (!(event.target as HTMLElement).matches('[role="tab"]')) return;
     const current = options.findIndex(option => option.value === value);
     const index = event.key === 'ArrowRight' ? (current + 1) % options.length : event.key === 'ArrowLeft' ? (current + options.length - 1) % options.length : event.key === 'Home' ? 0 : event.key === 'End' ? options.length - 1 : undefined;

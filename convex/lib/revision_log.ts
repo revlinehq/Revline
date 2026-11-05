@@ -3,6 +3,7 @@ import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Clip, Timeline } from '../../lib/editor/types';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { loadSceneCode } from './scene_code';
+import { runAuthorLabel } from './run_ids';
 
 /** Revisions kept per project. Each row is small (scene code is stored by hash), so this covers weeks of editing. */
 const REVISION_RETENTION = 2000;
@@ -64,7 +65,7 @@ export async function recordRevision(ctx: MutationCtx, project: Doc<'projects'>,
   for (const [clipId, old] of before) if (!remaining.has(clipId)) changes.push({ clipId, before: old.clip, index: old.index });
   if (!same(restOf(previous), restOf(next))) changes.push({ clipId: TIMELINE_ROW, before: null, rest: restOf(previous) });
   if (!changes.length) return;
-  const by = project.aiRunning ? project.aiRunId?.startsWith('mcp-') ? project.aiAgentName ?? 'AI agent' : 'Revline agent' : 'Editor';
+  const by = project.aiRunning ? runAuthorLabel(project.aiRunId, project.aiAgentName) : 'Editor';
   await ctx.db.insert('revisionLog', { projectId: project._id, timelineId, revision, at: Date.now(), by, ...(note?.tool ? { tool: note.tool.slice(0, 120) } : {}), summary: describe(changes, next), clipIds: changes.map(change => change.clipId).filter(id => id !== TIMELINE_ROW) });
   for (const change of changes) await ctx.db.insert('revisionClips', { projectId: project._id, timelineId, revision, ...change });
   // Drop the oldest revisions past retention, a few per edit.

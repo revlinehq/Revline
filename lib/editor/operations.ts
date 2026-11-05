@@ -1,18 +1,15 @@
 import { DEFAULT_CAPTION_STYLE } from './text-style';
 import { DEFAULT_PARALLAX } from './montage-vfx';
-import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, resizeEffectMotion,validateClipEffects, type BlendMode,type EffectPreset } from './clip-effects';
+import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, ownClockTimingPatch, resizeEffectMotion,validateClipEffects } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
-import { textTemplateTimingPatch } from './remotion-text';
-import { textAnimationTimingPatch } from './text-animation-timing';
 import { audioFadeTimingPatch } from './audio-settings';
-import { visualFadeTimingPatch } from './visual-fades';
 import { anchoredFadeTimingPatch } from './fade-clock';
 import { rescaleSmoothZoom } from './smooth-zoom-settings';
 import { rescaleCameraMotion } from './camera-motion-settings';
 import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { bakeSpeedRamp, meanRampRate, rampSpan, MAX_RAMP_RATE, MIN_RAMP_RATE, type RampAnchor } from './speed-ramp';
-import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources, type ClipTransition, type TransitionDirection, type TransitionPreset } from './clip-transitions';
-import { Clip, Timeline, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
+import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources } from './clip-transitions';
+import { Clip, Timeline, type BlendMode, type ClipTransition, type EffectPreset, type TransitionDirection, type TransitionPreset, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
 export function snapTime(time: number, fps: number) { return Math.round(Math.max(0, time) * fps) / fps; }
 export function linkedClipIds(timeline: Timeline, ids: string[]): string[] {
   const selected = new Set(ids);
@@ -61,7 +58,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
   const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
-    { ...c, ...textTemplateTimingPatch(c),...textAnimationTimingPatch(c),...audioFadeTimingPatch(c),...visualFadeTimingPatch(c), duration: offset },
+    { ...c, ...ownClockTimingPatch(c), duration: offset },
     { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' || c.kind === 'solid' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
   ]) };
   // Only the outgoing piece touching the original cut inherits that transition.
@@ -91,7 +88,7 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   for (const key of ['start', 'duration', 'sourceStart', 'playbackRate'] as const) if (patch[key] !== undefined || (key === 'playbackRate' && key in patch)) timing[key] = patch[key];
   const volumeTarget = clip.kind === 'video' && clip.linkedClipId ? clip.linkedClipId : id;
   return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.map(c => {
-    let next = c.id === id ? { ...c, ...(patch.duration !== undefined && !('textTemplate' in patch) ? textTemplateTimingPatch(c) : {}),...(patch.duration!==undefined&&!('textAnimationTiming' in patch)?textAnimationTimingPatch(c):{}),...(patch.duration!==undefined&&!('audioFadeTiming' in patch)?audioFadeTimingPatch(c):{}),...(patch.duration!==undefined&&!('visualFadeTiming' in patch)?visualFadeTimingPatch(c):{}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
+    let next = c.id === id ? { ...c, ...(patch.duration !== undefined ? ownClockTimingPatch(c, 0, setting => setting in patch) : {}), ...patch, id: c.id } : c.id === clip.linkedClipId ? { ...c, ...timing,...(patch.duration!==undefined?audioFadeTimingPatch(c):{}) } : c;
     if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('smoothZoom' in patch))next={...next,smoothZoom:undefined};
     if(c.id===id&&['motion','crop','fit','focus','assetId'].some(key=>key in patch)&&!('cameraMotion' in patch))next={...next,cameraMotion:undefined};
     if(c.id===id&&c.pixelTracking&&!('pixelTracking' in patch)&&(c.pixelTracking.mode==='mask'?'mask' in patch:['motion','cameraMotion','smoothZoom'].some(key=>key in patch)))next={...next,pixelTracking:undefined};

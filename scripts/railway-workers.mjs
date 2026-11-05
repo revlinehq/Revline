@@ -209,7 +209,7 @@ if (operation === 'status') {
       ...(exportsOnly ? { MEDIA_RENDERS_ONLY: 'true', ...(pool.name === 'ultra' ? { MEDIA_LANE: 'ultra' } : {}) } : { MEDIA_PROCESSOR_BACKEND: 'railway' }),
       ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(maxChunks), PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
     };
-    if (!exportsOnly) for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_VIDEO_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK']) {
+    if (!exportsOnly) for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_VIDEO_MODEL', 'GEMINI_FRAME_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK']) {
       const value = settings[name] || remote[name];
       if (value) variables[name] = value;
       else if (name.endsWith('_KEY')) throw new Error(`Selected environment lacks ${name}.`);

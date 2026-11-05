@@ -1,8 +1,9 @@
-import type { Clip } from './types';
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
+import type { Clip, ClipMask } from './types';
 import { dimensions } from './types';
 import { attachOverlayPatch, attachMaskPatch } from './tracking-attach';
 import { motionAt } from './motion-path';
-import { maskAt, maskSvg, type ClipMask } from './masks';
+import { maskAt, maskSvg } from './masks';
 import { sourceTimeAt } from './playback-rate';
 import { localPixelTrackReader, readPixelTrackPage, waitForTrackPoll, type CompletedTrackPage } from '../media-analysis/pixel-track-reader';
 
@@ -11,8 +12,7 @@ export const pixelTrackingSources = (clips: Clip[]): Source[] => clips.flatMap((
 
 /** Only neighboring data chunks are live. The producer's seek-completion hook awaits their paint. */
 export function installPixelTracking(sources: Source[], endpoint: string, files: Record<string, string>, fps: number, resolution: number) {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback(name: string, callback?: () => void): unknown; __hfReal?: Clock };
-  const host = window as unknown as { __timelines: { revline: Clock }; __hfWaitForSeekCompletion?: () => Promise<void> };
+  const host = window as unknown as CompositionClockHost & { __hfWaitForSeekCompletion?: () => Promise<void> };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline, abort = new AbortController();
   const entries = sources.map(source => {
     const file = files[source.clip.pixelTracking!.reference.trackId];
@@ -96,7 +96,7 @@ export function installPixelTracking(sources: Source[], endpoint: string, files:
     }
   }
   const originalRender = clock.render, originalUpdate = clock.eventCallback('onUpdate') as (() => void) | null;
-  const render: Clock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
+  const render: CompositionClock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
   const update = () => { originalUpdate?.(); paint(); };
   clock.render = render; clock.eventCallback('onUpdate', update); paint();
   const dispose = () => { disposed = true; abort.abort(); if (clock.render === render) clock.render = originalRender; if (clock.eventCallback('onUpdate') === update) clock.eventCallback('onUpdate', originalUpdate ?? undefined); };

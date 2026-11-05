@@ -3,6 +3,7 @@ import { normalizeTimeline, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
 import { equalTimelineValue } from './timeline-equality';
 import { LOCAL_UNDO_LIMIT } from './timeline-history-key';
+import { readStoredPreference, writeStoredPreference } from '@/lib/stored-preference';
 
 export type EditorState = {
   timeline: Timeline; history: Timeline[]; future: Timeline[];
@@ -20,8 +21,9 @@ export type EditorState = {
 
 const RIPPLE_STORAGE_KEY = 'revline-timeline-ripple';
 /** Auto-join is a personal editing preference, so it survives reloads and projects. */
-function savedRipple() { try { return typeof window !== 'undefined' && localStorage.getItem(RIPPLE_STORAGE_KEY) === 'true'; } catch { return false; } }
-export function setRipplePreference(on: boolean) { try { localStorage.setItem(RIPPLE_STORAGE_KEY, String(on)); } catch { /* The toggle still applies to this session. */ } }
+function savedRipple() { return readStoredPreference(RIPPLE_STORAGE_KEY) === 'true'; }
+/** The toggle still applies to this session when storage is unavailable. */
+export function setRipplePreference(on: boolean) { writeStoredPreference(RIPPLE_STORAGE_KEY, String(on)); }
 
 // One store per open project. Convex remains the source for saved revisions.
 export function createEditorStore(timeline: Timeline, history: Timeline[] = []) {

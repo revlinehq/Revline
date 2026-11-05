@@ -5,13 +5,12 @@ import {
   subjectPrompt,
   type SubjectSelection,
 } from "./subject-segmentation";
-import { download, subscribe } from "./derive-media";
+import { download, requireFal, subscribe } from "./fal";
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createFalClient } from "@fal-ai/client";
 import { AnalysisError } from "@/lib/media-analysis/errors";
 
 const run = promisify(execFile);
@@ -34,12 +33,9 @@ export async function removeBackground(
   signal: AbortSignal,
   onProgress: (value: number) => void,
 ) {
-  const key = process.env.FAL_KEY;
-  if (!key)
-    throw new AnalysisError(
-      "Background removal is not configured on the media worker.",
-      503,
-    );
+  const fal = requireFal(
+    "Background removal is not configured on the media worker.",
+  );
   const clip = join(directory, "cutout-source.mp4");
   // fal bills per frame: never send more frames than the project plays.
   const { stdout: rate } = await run(
@@ -100,7 +96,6 @@ export async function removeBackground(
     { signal, timeout: 600_000, maxBuffer: 1024 * 1024 },
   );
   onProgress(20);
-  const fal = createFalClient({ credentials: key });
   const url = await fal.storage.upload(
     new Blob([await readFile(clip)], { type: "video/mp4" }),
   );

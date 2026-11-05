@@ -4,7 +4,6 @@ import { tools } from './tools';
 import { check } from './check';
 export const definition: LaneDefinition = {
   id: 'clip',
-  label: 'Clip',
   description: 'Long streams and podcasts into separate shorts.',
   skills,
   tools,

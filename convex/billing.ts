@@ -8,7 +8,6 @@ import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
 import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, hasUltraPlan, isEditorSubscription, ultraBillingConfigured } from './lib/billing_access';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
 
-const hasAccess = hasEditorAccess;
 function ready() { return billingEnabled() && billingConfigured(); }
 function requireBilling(plan: 'pro' | 'ultra' = 'pro') {
   if (!ready()) throw new ConvexError("Billing is not active");
@@ -18,18 +17,12 @@ function requireBilling(plan: 'pro' | 'ultra' = 'pro') {
   if (!process.env.STRIPE_PRO_PRICE_ID!.startsWith("price_")) throw new ConvexError("Billing price is not configured");
   return origin.origin;
 }
-export const isSubscribed = query({ args: {}, returns: v.boolean(), handler: async (ctx) => {
-  const identity = await ctx.auth.getUserIdentity(); if (!identity) return false;
-  if (await activeAppleEntitlement(ctx, identity.subject)) return true;
-  if (!ready()) return false;
-  return (await editorSubscriptions(ctx, identity.subject)).some(hasAccess);
-}});
 export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), ultraAvailable: v.boolean() }), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let paymentIssue = false;
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
   const ultra = !!identity && await hasUltraPlan(ctx, identity.subject);
   const apple = identity ? await activeAppleEntitlement(ctx, identity.subject) : null;
-  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasAccess); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
+  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasEditorAccess); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
   const stripeSubscribed = subscribed;
   const subscriptionSource: 'apple' | 'stripe' | undefined = apple ? 'apple' : stripeSubscribed ? 'stripe' : undefined;
   subscribed ||= !!apple;
@@ -98,7 +91,7 @@ export const createCheckout = action({ args: { plan: v.union(v.literal("pro"), v
   if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Your subscription is managed in the App Store.');
   const origin = requireBilling(plan); const stripe = new StripeSubscriptions(components.stripe, {});
   const subscriptions = await editorSubscriptions(ctx, identity.subject);
-  if (subscriptions.some(hasAccess)) throw new ConvexError(plan === 'ultra' ? "You already have a subscription. Upgrade it to Ultra from billing." : "You already have a subscription. Manage it in billing.");
+  if (subscriptions.some(hasEditorAccess)) throw new ConvexError(plan === 'ultra' ? "You already have a subscription. Upgrade it to Ultra from billing." : "You already have a subscription. Manage it in billing.");
   if (subscriptions.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status))) throw new ConvexError('Update your existing subscription in billing before creating a new one.');
   // Only identity.subject selects a customer. Email fallback can alias unrelated identities.
   const customer = await stripe.getOrCreateCustomer(ctx, { userId: identity.subject });

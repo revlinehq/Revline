@@ -6,10 +6,10 @@ import { deleteRenderSnapshot } from './lib/render_snapshots';
 import { v } from 'convex/values';
 import { internalMutation } from './_generated/server';
 import { components,internal } from './_generated/api';
-import { cancelMediaTask } from './mediaTasks';
+import { cancelMediaTask } from './lib/media_queue';
 import { forgetStorageObject } from './lib/storage_accounting';
 import { removeMediaAttachment,removeProjectShares } from './lib/shared_media';
-import { HISTORY_LIMIT } from './lib/timeline';
+import { HISTORY_LIMIT } from './lib/timeline_history';
 import { deleteRevisionBatch } from './lib/revision_log';
 
 /** Hiding the project blocks new work; each transaction reclaims a bounded page. */

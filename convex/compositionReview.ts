@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
 import { projectRun } from './lib/project_data';
@@ -7,11 +8,10 @@ import { clipValidator, timelineValidator } from './schema';
 import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan';
 import { compositionReviewBudget, compositionReviewWindow, countedReviewPlanIds, currentReviewPlanIds, MAX_COMPOSITION_REVIEW_ATTEMPTS } from '../lib/ai/composition-review';
 import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
-import { enqueueMediaTask, cancelMediaTask } from './mediaTasks';
+import { enqueueMediaTask, cancelMediaTask } from './lib/media_queue';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 
-const runArgs={projectId:v.id('projects'),ownerId:v.string(),runId:v.string()};
 async function active(ctx:MutationCtx|QueryCtx,args:{projectId:Id<'projects'>;ownerId:string;runId:string}) {
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(!run.aiRunning||run.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active.');
@@ -84,7 +84,7 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   const assetIds=[];
   for(const value of used){const id=ctx.db.normalizeId('assets',value!);const asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Review source media is unavailable.');assetIds.push(asset._id);}
   const reviewId=await ctx.db.insert('compositionReviews',{...runFields(args),revision:args.expectedRevision,timeline:args.timeline,reference,plans:bound,assetIds,start,end,status:'queued',createdAt:Date.now()});
-  const taskId=await enqueueMediaTask(ctx,{ownerId:args.ownerId,projectId:args.projectId,kind:'review',reviewId,requiredProcessorVersion:2});
+  const taskId=await enqueueMediaTask(ctx,{ownerId:args.ownerId,projectId:args.projectId,kind:'review',reviewId});
   await ctx.db.patch(reviewId,{taskId});await ctx.db.patch(saved._id,{reviews:saved.reviews+1});return reviewId;
 }});
 function runFields(args:{projectId:Id<'projects'>;ownerId:string;runId:string}){return {projectId:args.projectId,ownerId:args.ownerId,runId:args.runId};}

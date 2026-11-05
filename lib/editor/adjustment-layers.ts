@@ -1,5 +1,7 @@
+import type { CompositionClockHost } from './composition-clock';
 import { drawTextureOverlay, DEFAULT_OVERLAY } from './montage-vfx';
-import { cinematicBarSettings, motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
+import { cinematicBarSettings, solidColorSettings, visibleMotion } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { trackOf, type Clip } from './types';
 import { isTransitionClip } from './clip-transitions';
 
@@ -22,8 +24,7 @@ export function adjustmentFrame(clip: Clip, time: number) {
 
 export type AdjustmentController = { setSources(sources: AdjustmentSource[]): void; preview(id:string,patch:Partial<Clip>|null):boolean; dispose():void };
 export function installAdjustmentLayers(initial: AdjustmentSource[]): AdjustmentController {
-  type Clock={time():number;render:(...args:unknown[])=>unknown;eventCallback(name:string,callback?:()=>void):unknown;__hfReal?:Clock};
-  const host=window as unknown as {__timelines:{revline:Clock};__revlineEffects?:{setTimedEffects(clips:Clip[]):void};__revlineAdjustmentController?:AdjustmentController};
+  const host=window as unknown as CompositionClockHost&{__revlineEffects?:{setTimedEffects(clips:Clip[]):void};__revlineAdjustmentController?:AdjustmentController};
   const clock=host.__timelines.revline.__hfReal??host.__timelines.revline;
   const composition=document.getElementById('composition')!;
   const entries=new Map<string,{clip:Clip;node:HTMLElement}>(), drafts=new Map<string,Partial<Clip>>();

@@ -1,9 +1,9 @@
 import { validateClipEffects } from './clip-effects';
 import { boundedCameraMotion } from './camera-framing';
 import { NEUTRAL_MOTION, sampleMotionAnchors } from './motion-path';
-import { validateCameraMotion, type CameraMotionSettings } from './camera-motion-settings';
+import { validateCameraMotion } from './camera-motion-settings';
 import { smoothZoomFocus } from './smooth-zoom';
-import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
+import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type CameraMotionSettings, type Clip, type MediaAsset } from './types';
 
 /** Compile source targets into the same sampled motion used by preview and export. */
 export function cameraMotionPatch(clip: Clip, asset: MediaAsset, aspectRatio: AspectRatio, settings: CameraMotionSettings, options: { replace?: boolean } = {}): Pick<Clip, 'cameraMotion' | 'motion' | 'motionOffset' | 'smoothZoom'> {

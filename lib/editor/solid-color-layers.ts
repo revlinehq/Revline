@@ -1,5 +1,7 @@
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { cssMotionBlur } from './camera-motion-blur';
-import { motionAt, NEUTRAL_MOTION, solidColorSettings, visibleMotion } from './clip-effects';
+import { solidColorSettings, visibleMotion } from './clip-effects';
+import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { trackOf, type Clip } from './types';
 
 export type SolidColorSource = { clip:Clip; index:number };
@@ -8,8 +10,7 @@ export type SolidColorController = {setSources(sources:SolidColorSource[]):void;
 
 /** Standalone V layers use the same clock and rectangle recipe in preview and export. */
 export function installSolidColorLayers(initial:SolidColorSource[]):SolidColorController {
-  type Clock={time():number;render:(...args:unknown[])=>unknown;eventCallback(name:string,callback?:()=>void):unknown;__hfReal?:Clock};
-  const host=window as unknown as {__timelines:{revline:Clock};__revlineSolidColorController?:SolidColorController};
+  const host=window as unknown as CompositionClockHost&{__revlineSolidColorController?:SolidColorController};
   const clock=host.__timelines.revline.__hfReal??host.__timelines.revline,composition=document.getElementById('composition')!;
   const entries=new Map<string,{clip:Clip;index:number;node:HTMLElement}>(),drafts=new Map<string,Partial<Clip>>();
   let signature='',disposed=false;
@@ -56,7 +57,7 @@ export function installSolidColorLayers(initial:SolidColorSource[]):SolidColorCo
     paint();
   }
   const originalRender=clock.render,originalUpdate=clock.eventCallback('onUpdate') as (()=>void)|null;
-  const render:Clock['render']=function(...args){const result=originalRender.apply(clock,args);paint();return result;};
+  const render:CompositionClock['render']=function(...args){const result=originalRender.apply(clock,args);paint();return result;};
   const update=()=>{originalUpdate?.();paint();};clock.render=render;clock.eventCallback('onUpdate',update);
   const controller:SolidColorController={setSources,preview:(id,patch)=>{if(!entries.has(id))return false;if(patch)drafts.set(id,patch);else drafts.delete(id);paint();return true;},dispose:()=>{disposed=true;if(clock.render===render)clock.render=originalRender;if(clock.eventCallback('onUpdate')===update)clock.eventCallback('onUpdate',originalUpdate??undefined);}};
   host.__revlineSolidColorController=controller;setSources(initial);window.addEventListener('pagehide',controller.dispose,{once:true});return controller;

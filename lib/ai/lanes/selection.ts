@@ -1,4 +1,4 @@
-import { type LaneId } from './index';
+import type { LaneId } from './types';
 
 /** Only explicit controls seed the task. The editing agent reasons about every other request. */
 export function initialLaneSelection(command?: { name: string }, previous?: LaneId, manual = false, explicit?: LaneId) {

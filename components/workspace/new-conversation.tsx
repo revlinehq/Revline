@@ -7,18 +7,18 @@ import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
-import { useAction, useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useConvex, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { AspectRatio } from '@/lib/editor/types';
 import { createProjectImportSession, type ImportFile, type ProjectImportProgress } from '@/lib/editor/project-import';
 import { clearProjectImportJob, getOrCreateProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
-import { uploadMediaThumbnail } from '@/lib/editor/upload-thumbnail';
+import { useSourceUpload } from '@/components/editor/use-source-upload';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
-import { rememberOpeningRequest } from '@/lib/editor/opening-request';
+import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, rememberOpeningReference, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -34,14 +34,11 @@ import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { WorkspaceNav, chatRecency, useWorkspaceChats } from './workspace-nav';
 import { ProjectCover } from './project-cover';
-import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from './project-draft';
+import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from '@/lib/editor/project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
 import './shared.css';
 import './new-conversation.css';
 
-const briefKey = 'revline:next-brief';
-const ratioKey = 'revline:next-aspect-ratio';
-const cloudKey = 'revline:next-cloud-footage';
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
 export function NewConversation() {
@@ -54,10 +51,7 @@ export function NewConversation() {
   const importVideo = useMutation(api.mediaTasks.importVideo);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
-  const startUpload = useAction(api.r2.start);
-  const partUrl = useAction(api.r2.partUrl);
-  const finishUpload = useAction(api.r2.complete);
-  const abortUpload = useAction(api.r2.abort);
+  const sourceUpload = useSourceUpload();
   const submitting = useRef(false);
   const unsavedSignInWarned = useRef(false);
   const mounted = useRef(false);
@@ -70,8 +64,6 @@ export function NewConversation() {
   const [files, setFiles] = useState<ImportFile[]>([]);
   const posters = useRef(new Map<File, Blob>());
   const posterUrls = useRef(new Set<string>());
-  const thumbnailUpload = useMutation(api.assets.generateUploadUrl);
-  const attachThumbnail = useMutation(api.assets.attachThumbnail);
   const [previews, setPreviews] = useState<FootageProcessingFile[]>([]);
   const [cloudIds, setCloudIds] = useState<Id<'assets'>[]>([]);
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
@@ -85,7 +77,7 @@ export function NewConversation() {
   const { chats: recentProjects, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
-  const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? `revline:next-composer:${userId}` : undefined, disabled: !draftReady || busy || !settings });
+  const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? newProjectComposerKey(userId) : undefined, disabled: !draftReady || busy || !settings });
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
   useEffect(() => {
@@ -96,11 +88,11 @@ export function NewConversation() {
 
   useEffect(() => {
     if (!isLoaded) return;
-    try { brief.current = sessionStorage.getItem(briefKey) ?? ''; } catch { /* Uploads can still start in this page. */ }
+    try { brief.current = newProjectBrief(); } catch { /* Uploads can still start in this page. */ }
     setDraft(brief.current);
     try {
-      const saved = sessionStorage.getItem(ratioKey);
-      if (saved === 'landscape' || saved === 'vertical' || saved === 'square' || saved === 'portrait-feed' || saved === 'classic') setAspectRatio(saved);
+      const saved = newProjectAspectRatio();
+      if (saved) setAspectRatio(saved);
     } catch { /* Format selection also works without draft storage. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
@@ -114,8 +106,8 @@ export function NewConversation() {
       return;
     }
     try {
-      const saved: unknown = JSON.parse(sessionStorage.getItem(cloudKey) ?? '[]');
-      if (Array.isArray(saved) && saved.length <= 200 && saved.every(id => typeof id === 'string' && /^[a-z0-9]{32}$/.test(id))) setCloudIds(saved);
+      const saved = newProjectCloudFootage();
+      if (saved) setCloudIds(saved);
     } catch { /* Saved uploads can be chosen again. */ }
     let active = true;
     const epoch = draftEpoch.current;
@@ -173,7 +165,7 @@ export function NewConversation() {
     const remaining = files.filter(item => item.id !== id);
     const remainingCloud = cloudIds.filter(value => value !== id);
     setFiles(remaining); setCloudIds(remainingCloud); setError('');
-    try { if (remainingCloud.length) sessionStorage.setItem(cloudKey, JSON.stringify(remainingCloud)); else sessionStorage.removeItem(cloudKey); } catch { /* The selection stays in memory. */ }
+    try { saveNewProjectCloudFootage(remainingCloud); } catch { /* The selection stays in memory. */ }
     void stashFiles(remaining.map(item => item.file));
   }
 
@@ -221,11 +213,7 @@ export function NewConversation() {
         stage: stashFiles,
         create: (value, assetIds) => createProject({ title: value, aspectRatio: activeJob.input.aspectRatio ?? aspectRatio, ...(assetIds.length ? { assetIds } : {}), ...(activeJob.input.placeOnTimeline === false ? { placeOnTimeline: false } : {}) }),
         project: async projectId => { const project = await convex.query(api.projects.get, { projectId }); if (!project) throw new Error('This project is no longer available. Start a new project to retry.'); return { timeline: project.timeline, revision: project.revision ?? 0 }; },
-        upload: (projectId, file, progress) => uploadSourceFile(file, {
-          start: metadata => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...metadata }),
-          partUrl: (uploadId, partNumber) => partUrl({ uploadId, partNumber }),
-          complete: (uploadId, parts) => finishUpload({ uploadId, parts }),
-          abort: uploadId => abortUpload({ uploadId }),
+        upload: (projectId, file, progress) => uploadSourceFile(file, sourceUpload.transport(projectId, file, {
           onThumbnail: image => {
             posters.current.set(file, image);
             if (!mounted.current) return;
@@ -233,10 +221,7 @@ export function NewConversation() {
             const sourceId = activeJob.input.files.find(item => item.file === file)?.id;
             setPreviews(previous => previous.map(item => item.id === sourceId ? {...item, thumbnail: url} : item));
           },
-          saveThumbnail: (assetId, image) => uploadMediaThumbnail(image, {
-            uploadUrl: () => thumbnailUpload({ projectId }), attach: storageId => attachThumbnail({ assetId, storageId }),
-          }),
-        }, progress),
+        }), progress),
         asset: (projectId, assetId) => convex.query(api.assets.get, { projectId, assetId }),
         prepare: (projectId, asset, onActivity) => prepareMediaForEditing(convex, projectId, asset._id as Id<'assets'>, onActivity),
         save: async (projectId, timeline, expectedRevision) => (await saveTimeline({ projectId, timeline, expectedRevision })).revision,
@@ -245,9 +230,8 @@ export function NewConversation() {
       if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
         rememberOpeningRequest(projectId, prompt, composerControls.request);
-        if (activeJob.input.placeOnTimeline === false) sessionStorage.setItem('revline:brief-reference:' + projectId, '1');
-        sessionStorage.removeItem(briefKey);
-        sessionStorage.removeItem(cloudKey);
+        if (activeJob.input.placeOnTimeline === false) rememberOpeningReference(projectId);
+        clearNewProjectSources();
       } catch { if (prompt) throw new Error('Your footage is saved, but this browser could not preserve your request. Open the editor to continue.'); }
       const first = activeJob.input.files[0]?.file;
       rememberOpeningFootage(projectId, first ? posters.current.get(first) ?? (first.type.startsWith('image/') ? first : undefined) : cloudMedia?.[0]?.thumbnailUrl ?? undefined, first?.name ?? cloudMedia?.[0]?.fileName);
@@ -276,16 +260,16 @@ export function NewConversation() {
     draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError(''); setStartingBlank(false);
     brief.current = ''; setDraft(''); setAspectRatio('landscape');
-    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); sessionStorage.removeItem(ratioKey); } catch { /* The current selection is cleared in memory. */ }
+    try { clearNewProjectDraft(); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
   function changeAspectRatio(value: AspectRatio) {
     setAspectRatio(value);
-    try { sessionStorage.setItem(ratioKey, value); } catch { /* Keep the selection in memory. */ }
+    try { saveNewProjectAspectRatio(value); } catch { /* Keep the selection in memory. */ }
   }
   function changeDraft(value: string) {
     setDraft(value); brief.current = value;
-    try { if (value) sessionStorage.setItem(briefKey, value); else sessionStorage.removeItem(briefKey); } catch { /* The draft stays in this page. */ }
+    try { saveNewProjectBrief(value); } catch { /* The draft stays in this page. */ }
   }
   async function submit() {
     if (!draftReady || !settings || busy || submitting.current) return;
@@ -296,14 +280,14 @@ export function NewConversation() {
     try {
       const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio });
       rememberOpeningRequest(projectId, prompt, composerControls.request);
-      sessionStorage.removeItem(briefKey);
+      saveNewProjectBrief('');
       router.push('/editor/' + projectId);
     } catch (cause) { setError(userError(cause, 'Could not create the project.')); setStartingBlank(false); }
   }
   async function openPartialProject() {
     if (!session.current.projectId) return;
     await stashFiles(files.filter(item => !session.current.uploaded.has(item.id)).map(item => item.file));
-    try { sessionStorage.removeItem(briefKey); sessionStorage.removeItem(cloudKey); sessionStorage.removeItem(ratioKey); } catch { /* Opening does not need draft storage. */ }
+    try { clearNewProjectDraft(); } catch { /* Opening does not need draft storage. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) clearProjectImportJob(job);
     router.push('/editor/' + session.current.projectId);

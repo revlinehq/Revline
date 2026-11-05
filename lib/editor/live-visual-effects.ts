@@ -1,16 +1,14 @@
-import { cameraGlideBlurSource } from './camera-motion-blur';
+import type { CompositionWindow } from './composition-window';
 import { compositionIndex } from './composition-node';
 import type { Clip, Timeline } from './types';
-import { validateVisualEffects, visualEffectsOf } from './visual-effects';
-import type { VisualEffectsController } from './visual-effects-runtime';
-import { maskSources, type MaskController } from './masks';
-import { audioReactiveSources, hasReactiveEffects, type AudioReactiveController } from './audio-reactive';
-import { colorFinishSource, type TimelineLut } from './color-finish';
-
-const effects = (clip:Clip,luts?:TimelineLut[])=>({...visualEffectsOf(clip),parallax:clip.parallax,cameraGlideBlur:cameraGlideBlurSource(clip),effectKeyframes:clip.effectKeyframes,motionOffset:clip.motionOffset,...(hasReactiveEffects(clip.audioReactive)?{audioReactive:clip.audioReactive}:{}),...(colorFinishSource(clip,luts)?{colorFinish:colorFinishSource(clip,luts)}:{})});
+import { validateVisualEffects } from './visual-effects';
+import { clipVisualEffectSource as effects } from './visual-effect-sources';
+import { maskSources } from './masks';
+import { audioReactiveSources } from './audio-reactive';
+import type { TimelineLut } from './color-finish';
 
 export function previewVisualEffects(document: Document, clip: Clip, index: number, patch: Partial<Clip> | null, luts?: TimelineLut[]): boolean {
-  const controller = (document.defaultView as (Window & { __revlineEffects?: VisualEffectsController }) | null)?.__revlineEffects;
+  const controller = (document.defaultView as CompositionWindow | null)?.__revlineEffects;
   if (!controller) return false;
   const next = { ...clip, ...patch };
   validateVisualEffects(next);
@@ -28,11 +26,11 @@ export function updateLiveVisualEffects(document: Document, previous: Timeline, 
     if (!previewVisualEffects(document, clip, index, null, next.luts)) return false;
   }
   // Masks repaint on the shared clock; hand them the new timeline (rebuild if the runtime is missing).
-  const reactive = (document.defaultView as (Window & { __revlineAudioReactive?: AudioReactiveController }) | null)?.__revlineAudioReactive;
+  const reactive = (document.defaultView as CompositionWindow | null)?.__revlineAudioReactive;
   const reactiveSources = audioReactiveSources(next.clips);
   if (!reactive && reactiveSources.length) return false;
   reactive?.setSources(reactiveSources);
-  const masks = (document.defaultView as (Window & { __revlineMaskController?: MaskController }) | null)?.__revlineMaskController;
+  const masks = (document.defaultView as CompositionWindow | null)?.__revlineMaskController;
   const sources = maskSources(next.clips);
   if (!masks) return !sources.length;
   masks.setSources(sources);

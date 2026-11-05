@@ -1,5 +1,7 @@
-import { pixelTrackPage, pixelTrackFileIndex, pixelTrackSample, type PixelTrackReference, type PixelTrackPage } from './pixel-track';
+import { pixelTrackPage, pixelTrackFileIndex, pixelTrackSample, type PixelTrackPage } from './pixel-track';
+import type { PixelTrackReference } from '../editor/types';
 import { z } from 'zod';
+import { abortableDelay } from './network';
 export type CompletedTrackPage = Extract<PixelTrackPage, { status: 'completed' }>;
 
 export function pixelTrackEndpoint(backend: string) {
@@ -18,12 +20,7 @@ export async function readPixelTrackPage(endpoint: string, reference: PixelTrack
   return pixelTrackPage.parse(await response.json());
 }
 export function waitForTrackPoll(signal: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    signal.throwIfAborted();
-    const stop = () => { clearTimeout(timer); signal.removeEventListener('abort', stop); reject(signal.reason); };
-    const timer = setTimeout(() => { signal.removeEventListener('abort', stop); resolve(); }, 2000);
-    signal.addEventListener('abort', stop, { once: true });
-  });
+  return abortableDelay(2000, signal);
 }
 
 /** Local export files and preview HTTP pages share the same dense sample contract. */

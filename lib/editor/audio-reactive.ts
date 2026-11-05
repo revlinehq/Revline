@@ -1,6 +1,8 @@
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { effectControlRange } from './effect-keyframes';
 import type { VisualEffects } from './visual-effects';
 import { VISUAL_EFFECT_DEFAULTS } from './visual-effects';
+import type { AudioReactive } from './types';
 
 /**
  * Audio-reactive motion and effects: a level curve (0..1 at `rate` Hz from timeline second `start`), baked
@@ -10,8 +12,6 @@ import { VISUAL_EFFECT_DEFAULTS } from './visual-effects';
  */
 export const CSS_REACTIVE_TARGETS = ['scale', 'shake', 'rotate'] as const;
 export type CssReactiveTarget = typeof CSS_REACTIVE_TARGETS[number];
-export type ReactiveTarget = { property: string; amount: number };
-export type AudioReactive = { rate: number; start: number; levels: string; targets: ReactiveTarget[] };
 export const MAX_REACTIVE_SAMPLES = 7200, MAX_REACTIVE_TARGETS = 4, REACTIVE_RATE = 30;
 const CSS_LIMITS: Record<CssReactiveTarget, [number, number]> = { scale: [-.5, .5], shake: [0, .1], rotate: [-20, 20] };
 
@@ -115,8 +115,7 @@ export type AudioReactiveController = { setSources(sources: AudioReactiveSource[
 
 /** Paint scale, shake and rotate on the shared composition clock (preview and export). */
 export function installAudioReactive(initial: AudioReactiveSource[]): AudioReactiveController {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback(name: string, callback?: () => void): unknown; __hfReal?: Clock };
-  const host = window as unknown as { __timelines: { revline: Clock }; __revlineAudioReactive?: AudioReactiveController };
+  const host = window as unknown as CompositionClockHost & { __revlineAudioReactive?: AudioReactiveController };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline, composition = document.getElementById('composition')!;
   let sources = initial, decoded = new Map<string, Uint8Array>();
   const nodes = (id: string) => document.querySelectorAll<HTMLElement>(`[data-visual-clip="${CSS.escape(id)}"],[data-text-clip="${CSS.escape(id)}"]`);
@@ -143,7 +142,7 @@ export function installAudioReactive(initial: AudioReactiveSource[]): AudioReact
     }
   }
   const originalRender = clock.render, originalUpdate = clock.eventCallback('onUpdate') as (() => void) | null;
-  const render: Clock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
+  const render: CompositionClock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
   const update = () => { originalUpdate?.(); paint(); };
   clock.render = render; clock.eventCallback('onUpdate', update);
   const controller: AudioReactiveController = {

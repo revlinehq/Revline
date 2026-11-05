@@ -8,15 +8,10 @@ import { execFile } from "node:child_process";
 import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createFalClient } from "@fal-ai/client";
 import { z } from "zod";
 import { AnalysisError } from "../media-analysis/errors";
-import {
-  download,
-  subscribe,
-  freezeStill,
-  type DerivedFile,
-} from "./derive-media";
+import { download, requireFal, subscribe } from "./fal";
+import { freezeStill, type DerivedFile } from "./freeze-still";
 
 const run = promisify(execFile);
 const PARALLAX_MODELS = {
@@ -50,9 +45,7 @@ export async function freezeParallax(
   onProgress: (value: number) => void,
   selection?: SubjectSelection,
 ): Promise<DerivedFile> {
-  if (!process.env.FAL_KEY)
-    throw new AnalysisError("Parallax needs FAL_KEY on the media worker.", 503);
-  const fal = createFalClient({ credentials: process.env.FAL_KEY });
+  const fal = requireFal("Parallax needs FAL_KEY on the media worker.");
   const still =
     kind === "video"
       ? (await freezeStill(source, directory, time, signal)).path

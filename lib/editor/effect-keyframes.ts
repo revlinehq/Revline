@@ -1,4 +1,5 @@
 import { motionEase, isMotionEasing, type MotionEasing } from './motion-path';
+import type { EffectKey, EffectKeyframeLane } from './types';
 import { VISUAL_EFFECT_DEFAULTS, VISUAL_EFFECT_LIMITS, type VisualEffects } from './visual-effects';
 
 /**
@@ -6,8 +7,6 @@ import { VISUAL_EFFECT_DEFAULTS, VISUAL_EFFECT_LIMITS, type VisualEffects } from
  * "lightLeak.amount", ...). Keys are baked and linear, in the clip's path time (the same clock as
  * `motion`, so trims and splits keep effects in step with movement through `motionOffset`).
  */
-export type EffectKey = { time: number; value: number };
-export type EffectKeyframeLane = { control: string; keys: EffectKey[] };
 export type EffectAnchor = EffectKey & { easing?: MotionEasing };
 
 const MAX_EFFECT_LANES = 16, MAX_EFFECT_KEYS = 120;

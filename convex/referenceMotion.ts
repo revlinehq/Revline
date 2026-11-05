@@ -4,7 +4,7 @@ import { internal } from './_generated/api';
 import { requireProject } from './lib/auth';
 import { mergeMotionWindows } from '../lib/ai/motion-coverage';
 import { compareMotion, type MotionMap, type MotionDifference } from '../lib/inspo-motion/motion-map';
-import { runMotionRead } from './referenceReads';
+import { runMotionRead } from './lib/reference_reads';
 import { referenceBox, referenceCropKeyframesValidator } from './schema';
 import type { ComparisonCrop } from '../lib/ai/reference-comparison';
 

@@ -1,6 +1,7 @@
 import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PROCESSOR_SCRIPTS } from '../../scripts/processor-runtime.mjs';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const context = join(root, '.wrangler/media-processor-build');
@@ -15,7 +16,7 @@ for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'lib',
   await mkdir(dirname(join(context, name)), { recursive: true });
   await cp(join(root, name), join(context, name), { recursive: true, dereference: false, filter });
 }
-for (const name of ['render-worker.mjs', 'render-distributed.mjs', 'render-railway-chunks.mjs', 'render-chunk.mjs', 'render-artifacts.mjs', 'render-resources.mjs', 'render-ffmpeg.sh', 'composition-review-worker.mjs', 'track-reference.py', 'track-pixels.py', 'source_frames.py', 'detect-facecam.py', 'detect-shots.py', 'detect-beats.py', 'install-beat-model.mjs', 'copy-vendor.mjs', 'hyperframes-playback-compat.mjs', 'beat-tracking-requirements.txt', 'scene-detection-requirements.txt', 'video-import-requirements.txt']) {
+for (const name of PROCESSOR_SCRIPTS) {
   await mkdir(join(context, 'scripts'), { recursive: true });
   await cp(join(root, 'scripts', name), join(context, 'scripts', name));
 }

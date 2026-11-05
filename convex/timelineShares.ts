@@ -1,12 +1,12 @@
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
-import { audioNormalizationKey, timelineNormalizationKey } from '../lib/editor/audio-normalization';
+import { remapTimelineAssets } from '../lib/editor/copy-timeline';
 import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
 import { internalAction,internalQuery,internalMutation,mutation,query } from './_generated/server';
 import { internal } from './_generated/api';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { timelineDuration } from '../lib/editor/types';
 import type { Id,Doc } from './_generated/dataModel';
 import { requireOwner,requireProject } from './lib/auth';
@@ -141,9 +141,7 @@ export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timeline
   const projectId=await createProject(ctx,{ownerId,title:tab?`${share.title} · ${tab.name}`:share.title,aspectRatio:source.aspectRatio,createdAt:now,updatedAt:now,revision:0,history:[]}),ids=new Map<string,Id<'assets'>>();
   for(const pin of pins){const {_id,_creationTime,shareId:_,sourceId,audioAssetId,...media}=pin;const id=await ctx.db.insert('assets',{...media,projectId,ownerId,createdAt:now});await recordAssetStorage(ctx,(await ctx.db.get(id))!);ids.set(sourceId,id);}
   for(const pin of pins)if(pin.audioAssetId&&ids.has(pin.audioAssetId))await ctx.db.patch(ids.get(pin.sourceId)!,{audioAssetId:ids.get(pin.audioAssetId)!});
-  const timeline=normalizeTimeline({...source,...(source.audioNormalization?{audioNormalization:{...source.audioNormalization,assetId:ids.get(source.audioNormalization.assetId)!}}:{}),clips:source.clips.map(clip=>({...clip,...(clip.assetId?{assetId:ids.get(clip.assetId)!}:{}),...(clip.normalizedAudio?{normalizedAudio:{...clip.normalizedAudio,assetId:ids.get(clip.normalizedAudio.assetId)!}}:{}),...(clip.scene?.media?{scene:{...clip.scene,media:clip.scene.media.map(item=>({...item,assetId:ids.get(item.assetId)??item.assetId}))}}:{})}))});
-  const baked={...timeline,clips:timeline.clips.map((clip,i)=>clip.normalizedAudio&&source.clips[i].normalizedAudio?.key===audioNormalizationKey(source,source.clips[i])?{...clip,normalizedAudio:{...clip.normalizedAudio,key:audioNormalizationKey(timeline,clip)}}:clip)};
-  const master=source.audioNormalization;
-  if(master?.key===timelineNormalizationKey(source)&&baked.audioNormalization)baked.audioNormalization.key=timelineNormalizationKey(baked);
-  await writeProject(ctx,projectId,{timeline:baked});return projectId;
+  // Pinned references move to the copy. An unpinned scene image keeps its id; any other unpinned reference is dropped.
+  const timeline=normalizeTimeline(remapTimelineAssets(source,(assetId,reference)=>reference==='sceneMedia'?ids.get(assetId)??assetId:ids.get(assetId)!));
+  await writeProject(ctx,projectId,{timeline});return projectId;
 }});

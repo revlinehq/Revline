@@ -1,25 +1,6 @@
-import type { Clip } from './types';
+import type { Bloom, Clip, ColorGrade, DirectionalBlur, Dither, FilmOverlay, FrameCorners, FrameDistortion, Glitch, InvertColors, LensDistortion, LightLeak, LightSweep, SoftBlur, TurbulentDisplace, Vhs, ZoomBlur } from './types';
 import { DEFAULT_NEON_EDGES, NEON_EDGE_LIMITS, validateNeonEdges, type NeonEdges } from './neon-edges';
-export type { NeonEdges } from './neon-edges';
 
-export type ColorGrade = { enabled: boolean; exposure: number; contrast: number; saturation: number; temperature: number; tint: number; vibrance: number };
-export type ZoomBlur = { enabled: boolean; amount: number; centerX: number; centerY: number };
-export type Glitch = { enabled: boolean; intensity: number; blockSize: number; rgbSplit: number };
-export type InvertColors = { enabled: boolean; amount: number };
-export type Dither = { enabled: boolean; amount: number; levels: number; size: number; shadowColor?: string; highlightColor?: string };
-export type FrameDistortion = { enabled: boolean; horizontal: number; vertical: number; skew: number; bend?: number };
-export type FrameCorners = { enabled: boolean; amount: number };
-export type SoftBlur = { enabled: boolean; amount: number };
-export type LensDistortion = { enabled: boolean; amount: number; centerX: number; centerY: number; fringing: number };
-export type FilmOverlay = { enabled: boolean; amount: number; grain: number; dust: number; scratches: number; vignette: number; flicker: number; warmth: number };
-export type Vhs = { enabled: boolean; amount: number; scanlines: number; noise: number; bleed: number; tracking: number; speed: number };
-/** Position travels clockwise around the edge: left 0, top .25, right .5, bottom .75. */
-export type LightLeak = { enabled: boolean; amount: number; color: string; position: number; spread: number; speed: number };
-export type DirectionalBlur = { enabled: boolean; amount: number; angle: number };
-export type TurbulentDisplace = { enabled: boolean; amount: number; scale: number; speed: number };
-export type LightSweep = { enabled: boolean; amount: number; color: string; angle: number; position: number; width: number; speed: number };
-/** Glow around highlights: brightness above `threshold` spreads over `radius` pixels (at 1080p). */
-export type Bloom = { enabled: boolean; amount: number; threshold: number; radius: number };
 export type VisualEffects = { bloom?: Bloom; colorGrade?: ColorGrade; zoomBlur?: ZoomBlur; glitch?: Glitch; invert?: InvertColors; dither?: Dither; neonEdges?: NeonEdges; lensDistortion?: LensDistortion; filmOverlay?: FilmOverlay; vhs?: Vhs; lightLeak?: LightLeak; directionalBlur?: DirectionalBlur; turbulentDisplace?: TurbulentDisplace; lightSweep?: LightSweep; softBlur?: SoftBlur; frameDistortion?: FrameDistortion; frameCorners?: FrameCorners };
 export type VisualEffectsPatch = { [K in keyof VisualEffects]?: Partial<NonNullable<VisualEffects[K]>> };
 

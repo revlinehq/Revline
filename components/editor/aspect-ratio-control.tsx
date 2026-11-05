@@ -5,26 +5,22 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { type SafeAreaPlatform } from '@/lib/editor/safe-areas';
-import { dimensions, type AspectRatio } from '@/lib/editor/types';
+import { aspectRatioLabel, dimensions, type AspectRatio } from '@/lib/editor/types';
 import { Fragment } from 'react';
 import './aspect-ratio-control.css';
 
 /** Menu order and names follow the approved Pen design (eqEih): where each format is posted. */
-const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = [
-  { value: 'landscape', ratio: '16:9', label: 'YouTube' },
-  { value: 'vertical', ratio: '9:16', label: 'Reels·TikTok·Shorts' },
-  { value: 'square', ratio: '1:1', label: 'Square' },
-  { value: 'portrait-feed', ratio: '4:5', label: 'Feed' },
-  { value: 'classic', ratio: '4:3', label: 'Classic' },
-];
+const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = ([
+  { value: 'landscape', label: 'YouTube' },
+  { value: 'vertical', label: 'Reels·TikTok·Shorts' },
+  { value: 'square', label: 'Square' },
+  { value: 'portrait-feed', label: 'Feed' },
+  { value: 'classic', label: 'Classic' },
+] as const).map(format => ({ ...format, ratio: aspectRatioLabel(format.value) }));
 const SAFE_AREA_CHOICES: { value: SafeAreaPlatform | 'off'; label: string }[] = [{ value: 'off', label: 'Off' }, { value: 'tiktok', label: 'TikTok' }, { value: 'instagram', label: 'Reels' }];
 
-const RATIOS: Record<AspectRatio, string> = {
-  vertical: '9:16', 'portrait-feed': '4:5', square: '1:1', classic: '4:3', landscape: '16:9',
-};
-
 export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange, appearance = 'preview', disabled = false }: { appearance?: 'preview' | 'composer'; disabled?: boolean; value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
-  const ratio = RATIOS[value];
+  const ratio = aspectRatioLabel(value);
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>

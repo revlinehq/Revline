@@ -2,10 +2,9 @@ import { execFile } from "node:child_process";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createFalClient } from "@fal-ai/client";
 import { z } from "zod";
 import { AnalysisError } from "../media-analysis/errors";
-import { download, subscribe } from "./derive-media";
+import { download, subscribe, type FalClient } from "./fal";
 import { SUBJECT_MODELS, type subjectPrompt } from "./subject-segmentation";
 
 const run = promisify(execFile);
@@ -21,7 +20,7 @@ type Seed =
 /** Propagate from the selected frame in both directions. Each model call starts
  * with its conditioning frame, and reverse decoding buffers at most four seconds. */
 export async function segmentVideoSubject(
-  fal: ReturnType<typeof createFalClient>,
+  fal: FalClient,
   clip: string,
   directory: string,
   seed: Seed,

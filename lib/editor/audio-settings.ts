@@ -1,9 +1,5 @@
-import type { Clip,Timeline } from './types';
+import { AUDIO_ROLES, type AudioDucking, type AudioSettings, type Clip, type Timeline } from './types';
 
-export const AUDIO_ROLES=['original','voice','music'] as const;
-export type AudioRole=typeof AUDIO_ROLES[number];
-export type AudioDucking={enabled:boolean;amount:number;attack:number;release:number};
-export type AudioSettings={role:AudioRole;fadeIn:number;fadeOut:number;ducking:AudioDucking};
 export type AudioSettingsPatch=Partial<Omit<AudioSettings,'ducking'>>&{ducking?:Partial<AudioDucking>};
 export const AUDIO_LIMITS={fadeIn:[0,86400],fadeOut:[0,86400],amount:[0,1],attack:[0,5],release:[0,5]} as const;
 export const DEFAULT_AUDIO_SETTINGS:Readonly<AudioSettings>={role:'original',fadeIn:0,fadeOut:0,ducking:{enabled:false,amount:.65,attack:.12,release:.25}};

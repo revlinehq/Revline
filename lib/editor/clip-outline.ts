@@ -1,8 +1,5 @@
-import type { Clip } from './types';
+import type { Clip, ClipOutline } from './types';
 
-/** A stroke and glow traced around a clip's visible pixels. On a cut-out (alpha video)
- * it follows the subject's silhouette. Pixel sizes are measured at 1080 output height. */
-export type ClipOutline = { enabled: boolean; color: string; width: number; glow: number };
 export const DEFAULT_OUTLINE: Readonly<ClipOutline> = Object.freeze({ enabled: true, color: '#36f9f2', width: 5, glow: 28 });
 const OUTLINE_LIMITS = { width: [0, 24], glow: [0, 80] } as const;
 

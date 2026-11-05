@@ -1,7 +1,6 @@
 import { cameraMotionPatch } from '../editor/camera-motion';
 import { sourceTimeAt } from '../editor/playback-rate';
-import type { CameraMotionSettings } from '../editor/camera-motion-settings';
-import type { AspectRatio, Clip, MediaAsset } from '../editor/types';
+import type { AspectRatio, CameraMotionSettings, Clip, MediaAsset } from '../editor/types';
 import { resolveZoomFocus, type ZoomFocusInput, type ZoomTargetEvidence } from './zoom-targets';
 
 export type CameraMotionInput = {

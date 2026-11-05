@@ -8,7 +8,8 @@ import { resolve } from 'node:path';
 import { readFile, writeFile, rm } from 'node:fs/promises';
 import { z } from 'zod';
 import { forEachLimited } from './run-limited';
-import { previewChunks, type SourceRange } from '../editor/preview-segments';
+import { previewChunks } from '../editor/preview-segments';
+import type { SourceRange } from '../editor/types';
 
 const streamSchema = z.object({
   codec_type: z.string().optional(),

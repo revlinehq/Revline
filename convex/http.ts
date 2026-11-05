@@ -35,7 +35,7 @@ http.route({ path: "/uploads", method: "POST", handler: httpAction(async (ctx, r
   try {
     const reservation = await ctx.runMutation(internal.uploads.reserve, { token });
     const contentType = request.headers.get("Content-Type")?.split(";")[0];
-    if (!contentType || !(reservation.render ? contentType === "video/mp4" : /^(?:(video|audio|image)\/|model\/gltf-binary$)/.test(contentType))) throw new Error("Choose a supported media file");
+    if (!contentType || !/^(?:(video|audio|image)\/|model\/gltf-binary$)/.test(contentType)) throw new Error("Choose a supported media file");
     const blob = await request.blob();
     if (blob.size === 0 || blob.size > 100 * 1024 * 1024) throw new Error("Files must be between 1 byte and 100 MB");
     storageId = await ctx.storage.store(blob);

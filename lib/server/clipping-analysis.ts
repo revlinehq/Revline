@@ -1,4 +1,4 @@
-import { workerToolPath } from './worker-tool-path';
+import { sceneDetectPython } from './worker-tool-path';
 import { execFile } from 'node:child_process';
 import { readFile, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { AnalysisError } from '../media-analysis/errors';
 import { scanSourceFaces } from './source-face-evidence';
 import { matchSpeakingFaces } from './match-speaking-faces';
 import { optionalGeminiVision } from './optional-gemini-vision';
-import { detectShots } from '../media-analysis/detect-shots';
+import { detectShots } from './detect-shots';
 
 const run = promisify(execFile);
 export async function detectSourceFacecam(source: string, directory: string, duration: number, signal: AbortSignal, progress: (n: number) => void) {
@@ -21,7 +21,7 @@ export async function detectSourceFacecam(source: string, directory: string, dur
   await writeFile(path, JSON.stringify(evidence));
   let analysis;
   try {
-    const python = workerToolPath(process.env.SCENE_DETECT_PYTHON, '.data/scene-detection/bin/python');
+    const python = sceneDetectPython();
     const { stdout } = await run(python, [join(process.cwd(), 'scripts/detect-facecam.py'), source, path], { signal, maxBuffer: 8 * 1024 * 1024 });
     analysis = facecamAnalysis.parse(JSON.parse(stdout));
   } finally { await rm(path, { force: true }); }

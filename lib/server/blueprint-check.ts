@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import puppeteer from 'puppeteer';
 import { sceneRuntimeNames, SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
 import sharp from 'sharp';
-import type { MediaTaskResult, MediaWorkItem } from '@/convex/mediaTasks';
+import type { MediaTaskResult, MediaWorkItem } from '@/convex/lib/media_task_contract';
 import { AnalysisError } from '@/lib/media-analysis/errors';
 
 type Work = NonNullable<MediaWorkItem['blueprint']>;

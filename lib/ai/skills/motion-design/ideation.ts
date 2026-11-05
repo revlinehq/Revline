@@ -1,5 +1,5 @@
 import { skillText, skillDocument } from '../documents';
-import type { EditorSkillPage } from '../index';
+import type { EditorSkillPage } from '../types';
 
 export const ideationPage: EditorSkillPage = {
   name: skillDocument("motion-design/references/ideation.md").name,

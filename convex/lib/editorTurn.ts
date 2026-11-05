@@ -4,7 +4,8 @@ import { initialLaneSelection } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
 import { FULL_CHECK_TOOLS, checkInstructions, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
-import type { LaneTask } from './laneFinish';
+import type { LaneTask } from './run_types';
+import { exhaustedLaneError } from './laneFinish';
 import { editorCommandInstructions } from '../../lib/ai/slash-commands';
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
@@ -87,7 +88,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const laneScope={ownerId:args.ownerId,projectId:args.projectId,taskId:args.runId};
     await ctx.runMutation(internal.lanes.begin,{...laneScope,...selectionState,laneChosen:true,required:args.command?.name==='clip',...requestChecks(currentPrompt)});
     const laneTask=await ctx.runQuery(internal.lanes.task,laneScope) as LaneTask;
-    if(laneTask.result?.exhausted)throw new LaneFinishError(`The ${laneTask.lane} task stopped after three failed finish checks: ${laneTask.result.failures.join(' ')}`);
+    if(laneTask.result?.exhausted)throw exhaustedLaneError(laneTask.lane,laneTask.result.failures.join(' '));
     const initialLane:LaneId=laneTask.lane;
     // Stored editMode values on older turns are accepted and ignored: the lane and the task's request set the checks.
     const checkLevel=taskCheckLevel(laneTask);
@@ -174,7 +175,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // first, while their correction tools are still available.
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='finish'||!unresolved)&&(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
-            if(failed?.exhausted)throw new LaneFinishError(`The ${failed.lane} task stopped after three failed finish checks: ${JSON.stringify(failed.failures)}`);
+            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,JSON.stringify(failed.failures));
             return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nFinish is unavailable until these failed edits are corrected: ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
@@ -191,7 +192,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         steps.push(...completed);
         if (streamError) throw streamError;
         const terminalLaneFailure=toolkit.laneFailure();
-        if(terminalLaneFailure?.exhausted)throw new LaneFinishError(`The ${terminalLaneFailure.lane} task stopped after three failed finish checks: ${JSON.stringify(terminalLaneFailure.failures)}`);
+        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,JSON.stringify(terminalLaneFailure.failures));
         if(askedUser(steps)){await editSession.savePartial();break;}
         if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
         // Reuse only server-validated review snapshots of the current visible
@@ -200,7 +201,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const reviewState=!toolkit.recipe().fullTools?{plans:[],validReviews:[]}:toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
         reviewRequirements={...reviewState,revision:editSession.revision};
         const failedLane=toolkit.laneFailure();
-        if(failedLane?.exhausted)throw new LaneFinishError(`The ${failedLane.lane} task stopped after three failed finish checks: ${JSON.stringify(failedLane.failures)}`);
+        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,JSON.stringify(failedLane.failures));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
           if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();

@@ -1,6 +1,6 @@
 import { skillText, skillDocument } from './documents';
 import { HSL_BANDS, LUT_LOOKS } from '../../editor/color-finish';
-import type { EditorSkill } from './index';
+import type { EditorSkill } from './types';
 
 export const colorGrading: EditorSkill = {
   name: skillDocument("color-grading/SKILL.md").name,

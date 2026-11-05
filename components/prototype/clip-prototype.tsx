@@ -9,10 +9,12 @@ import { waitForDemoStep } from '@/lib/editor/scripted-demo-chat';
 import { timelineDuration, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { applyTwoRowLayout } from '@/lib/editor/two-row-layout';
 import { TIMELINE_BASE_PX } from '@/lib/editor/timeline-zoom';
+import { FREE_EDITOR_MODEL_CHOICE } from '@/lib/ai/claude-model';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { EditorShell } from '@/components/editor/editor-shell';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
-import { AssistantPanel, type ChatMessage, type ChatTool } from '@/components/editor/assistant-panel';
+import { AssistantPanel } from '@/components/editor/assistant-panel';
+import type { ChatMessage, ChatTool } from '@/components/editor/chat-types';
 import type { PreviewHandle } from '@/components/editor/preview';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { ConversationStart } from '@/components/workspace/conversation-start';
@@ -70,7 +72,7 @@ export function ClipPrototype() {
   const run = useRef<AbortController | null>(null), speed = useRef(1), preview = useRef<PreviewHandle | null>(null), playOnReady = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const sourceCuts = useRef(sourceTimeline);
-  const controls = useAssistantComposerControls({ settings: { modelSwitcher: true, effortSwitcher: true, defaultModelChoice: 'gpt-6.1-terra', defaultReasoningEffort: 'medium' }, disabled: running });
+  const controls = useAssistantComposerControls({ settings: { modelSwitcher: true, effortSwitcher: true, defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'medium' }, disabled: running });
   const ready = useCallback((handle: PreviewHandle) => { preview.current = handle; if (playOnReady.current) { handle.seek(0); handle.play(); } }, []);
   function show(next: Timeline, id: string) {
     playOnReady.current = id !== 'source';

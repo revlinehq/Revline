@@ -17,7 +17,7 @@ import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
 import { parseVideoLink } from "../editor/video-link";
 import { AnalysisError, isMediaDiskFull } from "../media-analysis/errors";
-import { workerToolPath } from "./worker-tool-path";
+import { videoImporterPath } from "./worker-tool-path";
 import { z } from "zod";
 
 const run = promisify(execFile);
@@ -341,11 +341,7 @@ export async function importVideoLink(
   const source = join(directory, "download.mp4");
   let title = "Imported video";
   if (link.kind !== "file") {
-    const executable = workerToolPath(
-      process.env.YT_DLP_PATH,
-      ".data/video-import/bin/yt-dlp",
-      "yt-dlp",
-    );
+    const executable = videoImporterPath();
     try {
       const stdout = await downloadYoutube(
         executable,

@@ -1,6 +1,6 @@
 import { linkedClipIds, placeOnFreeLayer } from './operations';
-import { layerGroup, maxTrackCount, normalizeTimeline, TIMELINE_LAYER_GROUPS, trackOf, type Clip, type Timeline } from './types';
-import { isTransitionClip, transitionSources, type TransitionPreset } from './clip-transitions';
+import { layerGroup, maxTrackCount, normalizeTimeline, TIMELINE_LAYER_GROUPS, trackOf, type Clip, type Timeline, type TransitionPreset } from './types';
+import { isTransitionClip, transitionSources } from './clip-transitions';
 import { placeTransitionAt } from './transition-placement';
 
 export function copyTimelineClips(timeline: Timeline, selectedIds: string[]): Clip[] {

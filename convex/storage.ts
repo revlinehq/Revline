@@ -2,9 +2,10 @@ import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { createProjectFor } from './projects';
 import { addMediaClip } from '../lib/editor/operations';
 import { normalizeTimeline } from '../lib/editor/types';
+import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { validateTimeline } from './lib/timeline';
 import { writeProject } from './lib/project_data';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity,uploadPreparationTasks } from './lib/account_limits';
 import { releaseAccountStorage,recordAssetStorage } from './lib/storage_accounting';
 import { releaseMediaObjects } from './lib/shared_media';
@@ -23,8 +24,8 @@ import { mediaUrl } from './lib/media_storage';
 import { allTabTimelines } from './timelineTabs';
 import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
 import { removeShareTabs } from './lib/shared_media';
+import { storageObjectKind as kind } from './schema';
 
-const kind=v.union(v.literal('video'),v.literal('audio'),v.literal('image'),v.literal('model'),v.literal('export'));
 const workspace=v.object({id:v.id('projects'),title:v.string()});
 const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null()),canCreateEdit:v.boolean(),cloudOnly:v.boolean()});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),modelBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
@@ -166,7 +167,7 @@ export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))}
         await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
       }
     }else{
-      const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(200);
+      const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(PROJECT_MEDIA_LIMIT);
       asset=candidates.find(asset=>(source.row.r2Key&&asset.r2Key===source.row.r2Key)||(source.row.storageId&&asset.storageId===source.row.storageId))??null;
     }
     if(!asset)throw new ConvexError('Could not attach this media.');

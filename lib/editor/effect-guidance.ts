@@ -1,4 +1,4 @@
-import type { EffectPreset } from './clip-effects';
+import type { EffectPreset } from './types';
 import type { TextAnimationPreset } from './text-effects';
 type Guide={purpose:string;anchor:string;typicalFramesAt30fps:readonly[number,number];energy:'low'|'medium'|'high';strength:string;pairing:string;avoid:string};
 const guide=(purpose:string,anchor:string,frames:readonly[number,number],energy:Guide['energy'],strength:string,pairing:string,avoid:string):Guide=>({purpose,anchor,typicalFramesAt30fps:frames,energy,strength,pairing,avoid});

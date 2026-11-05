@@ -1,0 +1,24 @@
+import { sceneDetectPython } from './worker-tool-path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { join } from 'node:path';
+import { AnalysisError } from '../media-analysis/errors';
+import { parseShots, type ShotDetection } from '../media-analysis/shots';
+
+const run = promisify(execFile);
+export async function detectShots(path: string, duration: number, signal: AbortSignal): Promise<ShotDetection> {
+  const python = sceneDetectPython();
+  let stdout: string;
+  try {
+    // Inspecting every source frame can take longer than a fixed short-clip
+    // budget. Cancellation and the worker lease govern this finite local scan.
+    ({ stdout } = await run(python, [join(process.cwd(), 'scripts/detect-shots.py'), path], { signal, maxBuffer: 2 * 1024 * 1024 }));
+  } catch (error) {
+    if (signal.aborted) throw error;
+    const detail = error as { code?: string; stderr?: string };
+    if (detail.code === 'ENOENT' || detail.stderr?.includes('ModuleNotFoundError')) throw new AnalysisError('Shot detection is not configured. Install the pinned Python worker dependencies on the server.', 503);
+    throw new AnalysisError('Could not detect shot changes in this video. Please try a shorter clip.', 502);
+  }
+  try { return parseShots(JSON.parse(stdout), duration); }
+  catch (error) { if (error instanceof AnalysisError) throw error; throw new AnalysisError('Shot detection returned unreadable boundaries.', 502); }
+}

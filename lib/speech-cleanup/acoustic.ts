@@ -1,6 +1,5 @@
 import { frameAt, timeAt, type Frames } from './frames';
-import type { CleanupCut, CleanupOptions, SpeechWord } from './types';
-import type { WordEdge } from './edges';
+import type { CleanupCut, CleanupOptions, SpeechWord, WordEdge } from './types';
 
 type FrameClass = 'silence' | 'breath' | 'hold' | 'speech';
 

@@ -3,7 +3,8 @@ import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import type { TransitionPresentation } from '@remotion/transitions';
 import { fade } from '@remotion/transitions/fade';
-import { transitionWipeSettings, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './clip-transitions';
+import { transitionWipeSettings } from './clip-transitions';
+import type { TransitionDirection, TransitionPreset, TransitionWipeSettings } from './types';
 
 export type RemotionTransitionPresentationProps = {
   preset: TransitionPreset; direction: TransitionDirection; progress: number; durationInFrames: number; outputHeight?: number;

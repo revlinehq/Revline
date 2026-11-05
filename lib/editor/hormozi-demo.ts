@@ -1,6 +1,6 @@
 import captions from './hormozi-demo-captions.json';
 import waveform from './hormozi-demo-waveform.json';
-import { NEUTRAL_MOTION } from './clip-effects';
+import { NEUTRAL_MOTION } from './motion-path';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
 import { addMediaClip, splitClip } from './operations';
 import { EMPTY_SCRIPTED_DEMO, scriptedDemoMedia, type DemoBuildStep } from './scripted-demo';

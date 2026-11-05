@@ -1,10 +1,11 @@
 import { ConvexError } from 'convex/values';
+import { isMcpRun } from './run_ids';
 import type { Doc,Id } from '../_generated/dataModel';
 import type { MutationCtx,QueryCtx } from '../_generated/server';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { HISTORY_KEY_VERSION, timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
-import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline';
+import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline_history';
 import { loadSceneCode, storeSceneCode, storedSceneCode } from './scene_code';
 import { recordRevision, type RevisionNote } from './revision_log';
 type Context=MutationCtx|QueryCtx;
@@ -136,7 +137,7 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
 }
 type AgentState=Pick<Doc<'projects'>,'aiAgentName'|'aiAgentActiveUntil'|'aiRunning'|'aiRunId'>;
 export function projectAgentSummary(project:AgentState) {
-  return project.aiAgentName?{name:project.aiAgentName.replace(/\s*\([^)]*\)\s*$/,'')||project.aiAgentName,until:project.aiAgentActiveUntil??0,running:!!project.aiRunning&&!!project.aiRunId?.startsWith('mcp-')}:null;
+  return project.aiAgentName?{name:project.aiAgentName.replace(/\s*\([^)]*\)\s*$/,'')||project.aiAgentName,until:project.aiAgentActiveUntil??0,running:!!project.aiRunning&&isMcpRun(project.aiRunId)}:null;
 }
 /** The catalog never joins prompt/recovery rows just to show the connected agent. */
 export async function syncProjectAgent(ctx:MutationCtx,projectId:Id<'projects'>,state:AgentState) {

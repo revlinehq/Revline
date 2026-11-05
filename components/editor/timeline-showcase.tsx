@@ -21,7 +21,8 @@ import { usePlaybackSources } from './use-playback-sources';
 import { PreviewViewport, PreviewZoomControls, PreviewZoomProvider } from './preview-zoom';
 import { PlaybackControls } from './playback-controls';
 import { TimelinePanel } from './timeline';
-import { timelineShareCover, timelineSharePath } from './timeline-share-dialog';
+import { timelineCover } from '@/lib/editor/timeline-cover';
+import { timelineSharePath } from '@/lib/editor/timeline-share';
 import type { SharedChatMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
@@ -64,7 +65,7 @@ function ShowcaseContent({ share, sceneThumbs, tabId, onTab, signedIn, useDisabl
   const playing = useEditorState(state => state.playing), muted = useEditorState(state => state.muted), selected = useEditorState(state => state.selectedId);
   const preview = useRef<PreviewHandle>(null), inFlight = useRef(false);
   const [copying, setCopying] = useState(false), [ready, setReady] = useState(false), [error, setError] = useState(''), [previewError, setPreviewError] = useState('');
-  const duration = timelineDuration(timeline), canvas = dimensions(timeline.aspectRatio), cover = timelineShareCover(timeline, assets, sceneThumbs);
+  const duration = timelineDuration(timeline), canvas = dimensions(timeline.aspectRatio), cover = timelineCover(timeline, assets, sceneThumbs);
   const readTime = () => preview.current?.currentTime() ?? store.getState().playhead;
   function seek(at: number) { preview.current?.pause(); store.setState({ playing: false, playhead: frameSeekTime(at, timeline.fps, duration) }); preview.current?.seek(store.getState().playhead); }
   function togglePlay() { if (!ready) return; if (store.getState().playing) preview.current?.pause(); else preview.current?.play(); }

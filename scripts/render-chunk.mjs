@@ -5,7 +5,7 @@ import { mkdir, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { renderChunk } from '@hyperframes/producer/distributed';
-import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, configureRenderX264, renderResources } from '../lib/render-resources.mjs';
 import { getTar, putFile } from './render-artifacts.mjs';
 
 const { REVLINE_CHUNK_PLAN_KEY: planKey, REVLINE_CHUNK_INDEX: rawIndex, REVLINE_CHUNK_OUT_KEY: outKey, REVLINE_CHUNK_QUALITY: quality = 'standard' } = process.env;
@@ -19,9 +19,7 @@ try {
   await mkdir(planDir);
   configureRenderFfmpeg(work, renderResources());
   // The same cheaper x264 searches as single-machine exports (see render-worker.mjs).
-  const x264 = RENDER_X264[quality] ?? RENDER_X264.standard;
-  if (x264.preset !== x264.producerPreset) process.env.REVLINE_RENDER_X264_PRESET = `${x264.producerPreset}=${x264.preset}`;
-  if (x264.crf !== x264.producerCrf) process.env.REVLINE_RENDER_X264_CRF = `${x264.producerCrf}=${x264.crf}`;
+  configureRenderX264(RENDER_X264[quality] ?? RENDER_X264.standard);
   await getTar(planKey, planDir, signal);
   log('chunk-plan-ready');
   const result = await renderChunk(planDir, index, join(work, 'chunk.mp4'));

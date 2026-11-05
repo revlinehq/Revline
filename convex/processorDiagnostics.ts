@@ -6,7 +6,7 @@ import { internalAction, internalMutation } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { validateTimeline } from './lib/timeline';
-import { enqueueMediaTask } from './mediaTasks';
+import { enqueueMediaTask } from './lib/media_queue';
 import type { Timeline } from '../lib/editor/types';
 
 const fixtureResult = v.object({ ownerId: v.string(), projectId: v.id('projects'), jobId: v.id('renderJobs'), taskId: v.id('mediaTasks') });

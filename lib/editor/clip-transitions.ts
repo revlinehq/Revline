@@ -1,17 +1,8 @@
-import type { Clip, Timeline } from './types';
-import { trackOf } from './types';
+import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS, trackOf, type Clip, type ClipTransition, type Timeline, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './types';
 import { playbackRateOf } from './playback-rate';
 
-export const TRANSITION_PRESETS = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe', 'whip-pan', 'zoom-through', 'film-burn'] as const;
-export type TransitionPreset = typeof TRANSITION_PRESETS[number];
 /** Offered in the timeline's transition menu; the rest are applied by the AI editor. */
 export const MANUAL_TRANSITION_PRESETS: readonly TransitionPreset[] = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'];
-export const TRANSITION_DIRECTIONS = ['clockwise', 'counter-clockwise'] as const;
-export type TransitionDirection = typeof TRANSITION_DIRECTIONS[number];
-export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
-export const IRIS_SHAPES = ['circle', 'ellipse'] as const;
-export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number] };
-export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<TransitionWipeSettings>;
 const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };
 export function transitionWipeSettings(settings: Partial<ClipTransition>): TransitionWipeSettings {
   return { wipeDirection: settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, softness: settings.softness ?? DEFAULT_TRANSITION_WIPE.softness, centerX: settings.centerX ?? DEFAULT_TRANSITION_WIPE.centerX, centerY: settings.centerY ?? DEFAULT_TRANSITION_WIPE.centerY, shape: settings.shape ?? DEFAULT_TRANSITION_WIPE.shape };
