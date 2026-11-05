@@ -128,7 +128,6 @@ export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number
 // Legacy: timelines saved while sections existed may still hold them; saving drops them.
 const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
 export const timelineValidator = v.object({ audioNormalization:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number()),outputLufs:v.optional(v.number()),measuredTruePeak:v.optional(v.number())})), clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)), sections: v.optional(v.array(timelineSectionValidator)), luts: v.optional(v.array(v.object({ id: v.string(), name: v.string(), size: v.number(), data: v.string() }))) });
-export { assistantRecoveryValidator } from './lib/assistant_run';
 export const aiStateFields = {
   aiQueuePaused:v.optional(v.boolean()), aiWorkflowId:v.optional(v.string()), aiRunning: v.optional(v.boolean()), aiEditing: v.optional(v.boolean()), aiError: v.optional(v.string()), aiRunId: v.optional(v.string()), aiUndoRecorded: v.optional(v.boolean()), aiCheckpointRevision: v.optional(v.number()),
   aiAnalysisUsage:v.optional(v.object({runId:v.string(),enqueued:v.number(),videoUnavailable:v.optional(v.string())})),

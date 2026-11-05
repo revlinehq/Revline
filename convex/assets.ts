@@ -21,7 +21,8 @@ import { assetWithUrl, assetKind, focusValidator, analysisValidator } from "./sc
 import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
 import { validateReference } from '../lib/media-analysis/reference';
-import { serializedBytes, validateFocus } from "./lib/timeline";
+import { validateFocus } from "./lib/timeline";
+import { serializedBytes } from "./lib/timeline_history";
 import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';

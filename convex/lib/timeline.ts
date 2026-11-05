@@ -18,7 +18,6 @@ import { TIMELINE_CONFLICT } from '../../lib/editor/timeline-sync';
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
-export { boundedEntries, HISTORY_BYTES, HISTORY_LIMIT, serializedBytes } from './timeline_history';
 /** Stored rows carry a current-version fingerprint; others fall back to hashing. */
 async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
   const loaded = entries.every(entry => entry.key || entry.timeline) ? entries : await historyTimelines(ctx, entries);
