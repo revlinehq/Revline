@@ -1,3 +1,4 @@
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { effectControlRange } from './effect-keyframes';
 import type { VisualEffects } from './visual-effects';
 import { VISUAL_EFFECT_DEFAULTS } from './visual-effects';
@@ -115,8 +116,7 @@ export type AudioReactiveController = { setSources(sources: AudioReactiveSource[
 
 /** Paint scale, shake and rotate on the shared composition clock (preview and export). */
 export function installAudioReactive(initial: AudioReactiveSource[]): AudioReactiveController {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback(name: string, callback?: () => void): unknown; __hfReal?: Clock };
-  const host = window as unknown as { __timelines: { revline: Clock }; __revlineAudioReactive?: AudioReactiveController };
+  const host = window as unknown as CompositionClockHost & { __revlineAudioReactive?: AudioReactiveController };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline, composition = document.getElementById('composition')!;
   let sources = initial, decoded = new Map<string, Uint8Array>();
   const nodes = (id: string) => document.querySelectorAll<HTMLElement>(`[data-visual-clip="${CSS.escape(id)}"],[data-text-clip="${CSS.escape(id)}"]`);
@@ -143,7 +143,7 @@ export function installAudioReactive(initial: AudioReactiveSource[]): AudioReact
     }
   }
   const originalRender = clock.render, originalUpdate = clock.eventCallback('onUpdate') as (() => void) | null;
-  const render: Clock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
+  const render: CompositionClock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
   const update = () => { originalUpdate?.(); paint(); };
   clock.render = render; clock.eventCallback('onUpdate', update);
   const controller: AudioReactiveController = {

@@ -1,13 +1,11 @@
 import { visibleMotion, NEUTRAL_MOTION } from './clip-effects';
 import { boundedCameraMotion } from './camera-framing';
 import { compositionIndex } from './composition-node';
-import type { gsap } from 'gsap';
 import { calculateVisualRect, trimmedFocus } from './composition';
 import { playbackRateOf, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type Clip, type MediaAsset, type Timeline } from './types';
-import type { VisualEffectsController } from './visual-effects-runtime';
+import type { CompositionWindow } from './composition-window';
 
-type PreviewWindow = Window & { gsap?: typeof gsap; __timelines?: { revline?: gsap.core.Timeline & { __hfReal?:gsap.core.Timeline } }; __revlineSourceTimelines?:Record<string,gsap.core.Timeline>; __revlineEffects?:VisualEffectsController };
 const geometry = ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, cameraMotion, smoothZoom }: Clip) => ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, camera: !!(cameraMotion || smoothZoom) });
 
 /** Change the retained source geometry without replacing its decoded media or clock. */
@@ -15,7 +13,7 @@ export function updateLiveVisualGeometry(document:Document, previous:Timeline, n
   const old = new Map(previous.clips.map(clip => [clip.id,clip]));
   const sources = new Map(assets.map(asset => [asset._id,asset]));
   const { width,height } = dimensions(next.aspectRatio);
-  const host = document.defaultView as PreviewWindow | null;
+  const host = document.defaultView as CompositionWindow | null;
   let changed = false;
   for (const [position,clip] of next.clips.entries()) {
     const index = compositionIndex(document, clip, position);

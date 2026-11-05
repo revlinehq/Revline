@@ -1,3 +1,4 @@
+import type { CompositionWindow } from './composition-window';
 import { guardPreviewBuffering } from './preview-buffering';
 import { waitForPreviewMedia } from './preview-readiness';
 import { warmPreviewMedia } from './preview-media-warmup';
@@ -123,7 +124,7 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
           const current = timeline.clips.find(clip => clip.id === media.dataset.sourceClip), time = readTime();
           return !transport.paused && !!current && time >= current.start && time < current.start + current.duration;
         },
-        redraw: () => (document.defaultView as (Window & { __revlineEffects?: { redraw(): void } }) | null)?.__revlineEffects?.redraw(),
+        redraw: () => (document.defaultView as CompositionWindow | null)?.__revlineEffects?.redraw(),
       });
     } catch (cause) {
       if (disposed || lifetime.signal.aborted || request.controller.signal.aborted) return;

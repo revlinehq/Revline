@@ -1,3 +1,4 @@
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
 import { motionEase, isMotionEasing, type MotionEasing } from './motion-path';
 import { MASK_SHAPES, type Clip, type ClipMask, type MaskGeometry, type MaskKey, type MaskShape } from './types';
 
@@ -80,8 +81,7 @@ export type MaskController = { setSources(sources: MaskSource[]): void; dispose(
 
 /** Paint every masked clip's frame on the shared composition clock (preview and export). */
 export function installClipMasks(initial: MaskSource[]): MaskController {
-  type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback(name: string, callback?: () => void): unknown; __hfReal?: Clock };
-  const host = window as unknown as { __timelines: { revline: Clock }; __revlineMaskController?: MaskController };
+  const host = window as unknown as CompositionClockHost & { __revlineMaskController?: MaskController };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline, composition = document.getElementById('composition')!;
   let sources = initial;
   const painted = new Map<string, string>();
@@ -104,7 +104,7 @@ export function installClipMasks(initial: MaskSource[]): MaskController {
     }
   }
   const originalRender = clock.render, originalUpdate = clock.eventCallback('onUpdate') as (() => void) | null;
-  const render: Clock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
+  const render: CompositionClock['render'] = function (...args) { const result = originalRender.apply(clock, args); paint(); return result; };
   const update = () => { originalUpdate?.(); paint(); };
   clock.render = render; clock.eventCallback('onUpdate', update);
   const controller: MaskController = {

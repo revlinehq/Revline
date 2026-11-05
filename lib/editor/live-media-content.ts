@@ -1,12 +1,10 @@
 import { previewSourceAt } from './preview-segments';
-import type { VisualFadeController } from './visual-fades-runtime';
+import type { CompositionWindow } from './composition-window';
 import { generateComposition } from './composition';
 import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
-import type { gsap } from 'gsap';
 
-type MediaWindow=Window&{gsap?:typeof gsap;__timelines?:{revline?:gsap.core.Timeline&{__hfReal?:gsap.core.Timeline}};__revlineDurationTween?:gsap.core.Tween;__revlineNextMediaIndex?:number;__revlineVisualFadeController?:VisualFadeController;__revlineEffects?:{set(id:string,effects:Partial<Clip>):void}};
 const mediaClip=(clip:Clip)=>clip.kind==='video'||clip.kind==='image'||clip.kind==='audio';
 const activeAt=(clip:Clip,time:number)=>time>=clip.start&&time<clip.start+clip.duration;
 
@@ -22,7 +20,7 @@ export function needsLiveMediaSync(previous:Timeline,next:Timeline):boolean {
 
 /** Reconcile trusted media nodes while retaining every surviving decoder and transport. */
 export function updateLiveMediaContent(document:Document,previous:Timeline,next:Timeline,assets:MediaAsset[]):boolean {
-  const host=document.defaultView as MediaWindow|null,clock=host?.__timelines?.revline?.__hfReal??host?.__timelines?.revline;
+  const host=document.defaultView as CompositionWindow|null,clock=host?.__timelines?.revline?.__hfReal??host?.__timelines?.revline;
   const composition=document.getElementById('composition');if(!host?.gsap||!clock||!composition)return false;
   if(!host.__revlineVisualFadeController&&next.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0))return false;
   if(previous.aspectRatio!==next.aspectRatio||previous.fps!==next.fps)return false;

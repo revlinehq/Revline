@@ -1,9 +1,9 @@
 import { validateVisualFade, visualFadeGain } from './visual-fades';
 import type { Clip } from './types';
 
-type Clock = { time(): number; render(...args: unknown[]): unknown; eventCallback(name: string, callback?: (() => void) | null): unknown; __hfReal?: Clock };
+import type { CompositionClock, CompositionClockHost } from './composition-clock';
 export type VisualFadeController = { setSources(clips: Clip[]): void; preview(id: string, patch: Partial<Clip> | null): boolean; dispose(): void };
-type FadeWindow = Window & { __timelines: { revline: Clock }; __revlineVisualFadeController?: VisualFadeController };
+type FadeWindow = CompositionClockHost & { __revlineVisualFadeController?: VisualFadeController };
 
 /** One opacity carrier beneath transform/motion covers media and its retained GPU output. */
 export function installVisualFades(clips: Clip[], projectFps?: number): VisualFadeController {
@@ -23,7 +23,7 @@ export function installVisualFades(clips: Clip[], projectFps?: number): VisualFa
     }
   }
   const previousRender = clock.render, previousUpdate = clock.eventCallback('onUpdate') as (() => void) | undefined;
-  const wrapped: Clock['render'] = function (...args) { const result = previousRender.apply(clock, args); paint(); return result; };
+  const wrapped: CompositionClock['render'] = function (...args) { const result = previousRender.apply(clock, args); paint(); return result; };
   const update = () => { previousUpdate?.call(clock); paint(); };
   clock.render = wrapped; clock.eventCallback('onUpdate', update);
   const controller: VisualFadeController = {

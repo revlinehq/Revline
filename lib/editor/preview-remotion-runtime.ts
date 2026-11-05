@@ -1,14 +1,14 @@
 import { isTransitionClip } from './clip-transitions';
 import type { Timeline } from './types';
 
-type RuntimeWindow = Window & { __revlineRemotionText?: unknown; __revlineRemotionTransitions?: unknown };
+import type { CompositionWindow } from './composition-window';
 const loading = new WeakMap<Document, Promise<void>>();
 
 /** First optional scene loads on this iframe; the native player and decoders stay mounted. */
 export function loadPreviewRemotion(document: Document, timeline: Timeline): Promise<void> | null {
   const text = timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic');
   const transitions = timeline.clips.some(isTransitionClip);
-  const host = document.defaultView as RuntimeWindow | null;
+  const host = document.defaultView as CompositionWindow | null;
   if ((!text || host?.__revlineRemotionText) && (!transitions || host?.__revlineRemotionTransitions)) return null;
   const pending = loading.get(document); if (pending) return pending;
   const url = document.querySelector<HTMLMetaElement>('meta[name="revline-remotion-runtime"]')?.content;
