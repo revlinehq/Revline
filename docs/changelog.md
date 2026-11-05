@@ -1,7 +1,5 @@
 ## 2026-11-04
 
-- Reference tracing: Require processor contract 47 for native logo topology and its caches. Why: Older workers could claim the new trace work under the previous contract.
-
 - Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
 - Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
 - MCP: Bound visual-guard waits and cancel abandoned guard renders before releasing edits. Why: Transport expiry could leave scoped patches holding the edit lock.
@@ -24,9 +22,10 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
-- Reference tracing: Preserve classified small-crop interiors through vector simplification. Why: The original #107 logo still split two holes into six after enlargement alone.
+- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.
+- Reference tracing: Require processor contract 47 for native logo topology and its caches. Why: Older workers could claim the new trace work under the previous contract.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
