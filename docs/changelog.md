@@ -1,13 +1,12 @@
-## 2026-11-04
-
-- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
-
 # Changelog
 
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
+- Motion design: Carry visual anchors across scenes and choose restrained motion for each action. Why: the user's continuity guidance conflicted with blanket overshoot and anticipation rules in the agent skill.
 - Assistant: Show Working between steps while preserving the elapsed timer and resume/stop statuses. Why: the user requested a shorter activity label.
+- Incident delivery: Route agent reports to durable, deduplicated GitHub Issues with bounded leases and explicit backlog delivery. Why: the user needs saved reports surfaced without launching fix agents.
 - Assistant models: Keep free/trial accounts on Terra Low with visible locked upgrades; unlock existing choices from verified paid terms. Why: model entitlement must be separate from editing access.
 - Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.

@@ -26,7 +26,7 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   const existing = await ctx.db.query('incidents').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
   const now = Date.now();
   const sample = { at: now, context, ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.runId ? { runId: incidentText(input.runId, 150) } : {}) };
-  const opens = !existing || existing.status === 'resolved';
+  const opens = !existing || (existing.status === 'resolved' && input.kind !== 'agent-report');
   const priority = (input.kind === 'turn-failure' || input.kind === 'export' || input.kind === 'save-confirmation' ? 1000 : 0) + Math.min(999, (existing?.count ?? 0) + 1);
   const value = {
     source: incidentText(input.source, 100), kind: incidentText(input.kind, 100), message,
@@ -36,8 +36,8 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
     samples: [...(existing?.samples ?? []).slice(-3), sample],
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
-  const id = existing?._id ?? await ctx.db.insert('incidents', { ...value, status: 'open', delivery: 'pending', generation });
+  const id = existing?._id ?? await ctx.db.insert('incidents', { ...value, status: 'open', delivery: 'pending', generation, ...(input.kind === 'agent-report' ? { issueAttempts: 0 } : {}) });
   if (existing) await ctx.db.patch(id, { ...value, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) });
-  if (opens && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
+  if (opens && input.kind !== 'agent-report' && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
   return id;
 }
