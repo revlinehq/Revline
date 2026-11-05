@@ -4,7 +4,7 @@ description: "Full checks for builds and full-lane edits. Existing edits start w
 ---
 # Checklist: before you hand it back
 
-For an existing scene or film edit, follow page `edit-lanes` first. Run every item below in Precise for a new build or full-lane edit. Fast follows edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
+For an existing scene or film edit, follow page `edit-lanes` first. Run every item below for a new build or full-lane edit: the motion and recreate lanes, and final checks in any lane. Local checks in other lanes follow edit-lanes instead. Render frames with getFrames (up to six per call) and look at them, and run checkPacing on the range you built or changed: stills cannot show speed, so motion that reads fine frame by frame can still be too fast to follow. Never report a film as done from the code alone.
 
 For original/restyled work, report timestamp, visible defect, correction and recheck on these frames (motion-design/taste).
 

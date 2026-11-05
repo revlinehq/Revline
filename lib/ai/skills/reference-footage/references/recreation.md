@@ -4,7 +4,7 @@ description: "The full recreation workflow: section inventories, exact content, 
 ---
 # Recreating a motion film
 
-For edits to an existing recreation, start with scene-engine page `edit-lanes`. The inventory, dense reads, comparisons and close-out below apply only in Precise. A new recreation always runs Precise; Fast changes to an existing recreation use local frame checks instead.
+For edits to an existing recreation, start with scene-engine page `edit-lanes`. The inventory, dense reads, comparisons and close-out below are the recreate lane's full checks, which that lane always runs. A small change made in the edit lane uses its local frame checks instead.
 
 The supplied video is the brief. Read motion-design and scene-engine for implementation. This page owns the recreation workflow. Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length. Rebuild graphics, UI and captions as editable layers; retain separately addressable footage where the requested workflow uses it. Do not flatten the remake into playback of the reference.
 
