@@ -135,7 +135,6 @@ export function toolImages(step: ChatTool): { label: string; src: string }[] {
   return [];
 }
 
-export { READ_ONLY_TOOLS };
 const count = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
 const isId = (value: unknown): value is string => typeof value === 'string' && value.length > 0;
 const noun = (n: number, singular: string, plural = `${singular}s`) => `${n} ${n === 1 ? singular : plural}`;
