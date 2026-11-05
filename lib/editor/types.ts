@@ -14,7 +14,10 @@ import type { RampPoint } from './speed-ramp';
 import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finish';
 import type { SceneBrand } from './brand-kit';
 import type { Transcript } from '../media-analysis/transcript';
-export type AspectRatio = 'vertical' | 'portrait-feed' | 'square' | 'classic' | 'landscape';
+/** Every project frame, as its name and the width:height of its shape, narrowest first. */
+const ASPECT_RATIO_SHAPES = [['vertical', 9, 16], ['portrait-feed', 4, 5], ['square', 1, 1], ['classic', 4, 3], ['landscape', 16, 9]] as const;
+export type AspectRatio = typeof ASPECT_RATIO_SHAPES[number][0];
+export const ASPECT_RATIOS: readonly AspectRatio[] = ASPECT_RATIO_SHAPES.map(([ratio]) => ratio);
 
 // Clip settings data. Validation and defaults live in the named settings module.
 
@@ -322,15 +325,15 @@ export function timelineDuration(timeline: Timeline) {
 }
 export function dimensions(ratio: AspectRatio, resolution = 1080) {
   const even = (value: number) => Math.round(value / 2) * 2;
-  if (ratio === 'vertical') return { width: resolution, height: even(resolution * 16 / 9) };
-  if (ratio === 'portrait-feed') return { width: resolution, height: even(resolution * 5 / 4) };
-  if (ratio === 'landscape') return { width: even(resolution * 16 / 9), height: resolution };
-  if (ratio === 'classic') return { width: even(resolution * 4 / 3), height: resolution };
-  return { width: resolution, height: resolution };
+  // The short side is `resolution`; the long side rounds to an even pixel count.
+  const shape = ASPECT_RATIO_SHAPES.find(([name]) => name === ratio);
+  if (!shape || shape[1] === shape[2]) return { width: resolution, height: resolution };
+  const [, width, height] = shape;
+  return width < height ? { width: resolution, height: even(resolution * height / width) } : { width: even(resolution * width / height), height: resolution };
 }
 /** The project frame closest to a source's shape, so new footage fills the frame it was shot for. */
 export function aspectRatioForSize(width: number, height: number): AspectRatio {
-  const shapes: [AspectRatio, number][] = [['vertical', 9 / 16], ['portrait-feed', 4 / 5], ['square', 1], ['classic', 4 / 3], ['landscape', 16 / 9]];
+  const shapes = ASPECT_RATIO_SHAPES.map(([name, width, height]): [AspectRatio, number] => [name, width / height]);
   const ratio = width / height;
   return shapes.reduce((best, shape) => Math.abs(Math.log(shape[1] / ratio)) < Math.abs(Math.log(best[1] / ratio)) ? shape : best)[0];
 }
