@@ -76,7 +76,7 @@ export const current = query({
     return {
       internalDetailsEnabled:
         process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-      lane: row?.lane ?? 'edit',
+      lane: row?.lane === 'explainer' ? 'edit' : row?.lane ?? 'edit',
       manual: row?.manual ?? false,
       reason: row?.reason ?? 'General editing default',
       timelineId,
@@ -91,6 +91,7 @@ export const choose = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    if (args.lane === 'explainer') throw new ConvexError('Choose an available workflow.');
     const ownerId = await requireOwner(ctx),
       project = await requireProject(ctx, args.projectId, ownerId);
     if (project.aiRunning)
@@ -125,7 +126,7 @@ export const forRun = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane,
+          lane: row.lane === 'explainer' ? 'edit' : row.lane,
           manual: row.manual,
           reason: row.reason,
           timelineId,
@@ -148,7 +149,7 @@ export const forTab = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane,
+          lane: row.lane === 'explainer' ? 'edit' : row.lane,
           manual: row.manual,
           reason: row.reason,
           timelineId: args.timelineId,
@@ -284,7 +285,7 @@ export const switchLane = internalMutation({
       row.manual ?? false,
     );
     // Switching never resets attempts or manufactures completion evidence.
-    await ctx.db.patch(row._id, { lane: args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
+    await ctx.db.patch(row._id, { lane: args.lane === 'explainer' ? 'edit' : args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
     return null;
   },
 });
@@ -392,7 +393,7 @@ export const recordFinish = internalMutation({
     const attempt = row.attempts + 1,
       result = {
         ...args.result,
-        lane: row.lane,
+        lane: row.lane === 'explainer' ? 'edit' : row.lane,
         attempt,
         exhausted: !args.result.passed && attempt >= MAX_FINISH_ATTEMPTS,
       };
@@ -412,7 +413,16 @@ export const mcpSession = internalQuery({
       if (!row || row.ownerId !== args.ownerId || args.projectId && row.projectId !== args.projectId) return null;
       return row;
     }
-    if (!args.connectionId) return null;
+    if (!args.connectionId) {
+      if (!args.projectId || !args.timelineId) return null;
+      const projectId = ctx.db.normalizeId('projects', args.projectId);
+      if (!projectId) return null;
+      const matches = await ctx.db.query('mcpLaneSessions').withIndex('by_target', q =>
+        q.eq('ownerId', args.ownerId).eq('projectId', projectId).eq('timelineId', args.timelineId!)
+      ).take(2);
+      const match = matches.length === 1 ? matches[0] : null;
+      return match?.connectionId === `task:${match?.taskId}` ? match : null;
+    }
     if (!args.projectId) return ctx.db.query('mcpLaneSessions').withIndex('by_connection', q => q.eq('ownerId', args.ownerId).eq('connectionId', args.connectionId!)).order('desc').first();
     const projectId = ctx.db.normalizeId('projects', args.projectId);
     if (!projectId) return null;

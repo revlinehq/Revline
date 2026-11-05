@@ -1,3 +1,4 @@
+import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query } from './_generated/server';
 import { incidentArgs, incidentDeployment, recordIncident } from './lib/incidents';
@@ -54,12 +55,12 @@ const claimed = { ...identity, claimToken: v.string() };
 
 export const undelivered = query({ args: credentials, handler: async (ctx, { secret }) => {
   authorize(secret);
-  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).order('desc').take(100);
+  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).filter(q => q.or(q.neq(q.field('kind'), 'agent-report'), q.eq(q.field('issueDispatchReady'), true))).order('desc').take(100);
 } });
 export const claim = mutation({ args: { ...identity, claimToken: v.string() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (!row || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
+  if (!row || (row.kind === 'agent-report' && !row.issueDispatchReady) || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
   await ctx.db.patch(row._id, { delivery: 'claimed', claimToken: args.claimToken, claimedAt: Date.now() });
   return true;
 } });
@@ -101,4 +102,37 @@ export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents')
     if (runner && runner.projectId === sample.projectId) lines.push(JSON.stringify({ event: 'runner-state', runId: sample.runId, attempts: runner.attempts, seenAt: runner.seenAt }));
   }
   return lines;
+} });
+
+// Separate leases on the same durable incident row; old listeners cannot claim these.
+export const issueQueue = query({ args: { ...credentials, paginationOpts: paginationOptsValidator }, handler: async (ctx, args) => {
+  authorize(args.secret);
+  return await ctx.db.query('incidents').withIndex('by_kind', q => q.eq('kind', 'agent-report')).paginate(args.paginationOpts);
+} });
+export const claimIssue = mutation({ args: { ...claimed, backfill: v.boolean() }, handler: async (ctx, args) => {
+  authorize(args.secret);
+  const row = await ctx.db.get(args.id);
+  const now = Date.now();
+  if (!row || row.kind !== 'agent-report' || row.generation !== args.generation || (row.issueUrl && (row.issueDeliveredCount ?? 0) >= row.count) ||
+    (row.issueAttempts === undefined && !args.backfill) || (row.issueAttempts ?? 0) >= 5 || (row.issueNextAttempt ?? 0) > now ||
+    (row.issueDelivery === 'claimed' && (row.issueClaimedAt ?? 0) > now - 600_000)) return false;
+  await ctx.db.patch(row._id, { issueDelivery: 'claimed', issueClaimToken: args.claimToken, issueClaimedAt: now, issueAttempts: (row.issueAttempts ?? 0) + 1 });
+  return true;
+} });
+export const finishIssue = mutation({ args: { ...claimed, issueUrl: v.optional(v.string()), count: v.number() }, handler: async (ctx, args) => {
+  authorize(args.secret);
+  const row = await ctx.db.get(args.id);
+  if (!row || row.kind !== 'agent-report' || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
+  if (args.issueUrl && !/^https:\/\/github\.com\/zuraHQ\/revline-editor\/issues\/[1-9]\d*$/.test(args.issueUrl)) throw new ConvexError('Invalid incident issue');
+  await ctx.db.patch(row._id, args.issueUrl ? { issueUrl: args.issueUrl, issueDeliveredCount: args.count, issueDelivery: 'finished', issueAttempts: 0, issueNextAttempt: undefined } :
+    { issueDelivery: 'failed', issueNextAttempt: Date.now() + Math.min(3600_000, 60_000 * 2 ** (row.issueAttempts ?? 1)) });
+} });
+
+// Explicit operator opt-in only. The existing executor owns concurrency and PR recovery.
+export const dispatchIssue = mutation({ args: identity, handler: async (ctx, args) => {
+  authorize(args.secret);
+  const row = await ctx.db.get(args.id);
+  if (!row || row.kind !== 'agent-report' || !row.issueUrl || row.prUrl || row.status === 'resolved' || row.generation !== args.generation || row.issueDispatchReady) return false;
+  await ctx.db.patch(row._id, { issueDispatchReady: true, delivery: 'pending', claimToken: undefined });
+  return true;
 } });

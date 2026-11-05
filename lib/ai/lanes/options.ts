@@ -3,7 +3,6 @@ export type { LaneId } from './types';
 export const LANE_OPTIONS = [
   { id: 'motion', label: 'Motion' },
   { id: 'recreate', label: 'Recreate' },
-  { id: 'explainer', label: 'Explainer' },
   { id: 'clip', label: 'Clip' },
   { id: 'reel', label: 'Reel' },
 ] as const;
