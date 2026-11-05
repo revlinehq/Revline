@@ -419,13 +419,17 @@ export function EditorShell(p: EditorShellProps) {
       if (!(e.target instanceof HTMLElement) || e.defaultPrevented || e.isComposing || e.keyCode === 229) return;
       const target = e.target;
       if (p.embedded && !editorRoot.current?.contains(target)) return;
-      if (target.isContentEditable || target.closest('input,textarea,select,hyperframes-player,[role="slider"],[role="menu"]')) return;
-      if (cropping) { if (e.key === 'Escape') setCroppingClip(null); if (e.code === 'Space' && !target.closest('button,a,[role="button"]')) e.preventDefault(); return; }
+      // The native player's controls sit in its shadow root, so events arrive retargeted to the
+      // player itself. Judge the control that actually has focus: its buttons keep editor shortcuts.
+      const path = e.composedPath()[0], focused = path instanceof HTMLElement ? path : target;
+      const within = (selector: string) => !!target.closest(selector) || !!focused.closest(selector);
+      if (target.isContentEditable || focused.isContentEditable || within('input,textarea,select,[role="slider"],[role="menu"]')) return;
+      if (cropping) { if (e.key === 'Escape') setCroppingClip(null); if (e.code === 'Space' && !within('button,a,[role="button"]')) e.preventDefault(); return; }
       const dialog = target.closest('[role="dialog"]');
       if (dialog && dialog !== editorRoot.current?.closest('[role="dialog"]')) return;
       // Let focused controls keep their native Space activation. Clips handle
       // Space locally, so selecting one never toggles preview playback.
-      if (e.code === 'Space' && target.closest('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
+      if (e.code === 'Space' && within('button,a,[role="button"],[role="menuitem"],[role="tab"],[role="checkbox"],[role="switch"]')) return;
       if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
       else if (['<','>',',','.'].includes(e.key) && !e.metaKey && !e.ctrlKey && !e.altKey) {
         e.preventDefault();
