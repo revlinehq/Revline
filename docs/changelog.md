@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- MCP frame reads: Return a resumable handle while frames render and retain results until download succeeds. Why: Timeout retries queued duplicate work and could discard unread images.
+
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
 
