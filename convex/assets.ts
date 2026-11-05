@@ -4,7 +4,7 @@ import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
 import { hydrateAsset,transportAsset,storeAnalysis,compactAnalysis } from './lib/asset_analysis';
 import { readHighlights } from '../lib/media-analysis/highlights';
-import { writeProject,projectIdentity,projectRun } from './lib/project_data';
+import { writeProject,projectIdentity } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaConfig, mediaUrl, previewUrl } from './lib/media_storage';
@@ -13,11 +13,11 @@ import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v, type Infer } from "convex/values";
 import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
 import type { Doc } from "./_generated/dataModel";
-import { action, mutation, internalMutation, internalQuery, query, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { action, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 import { requireOwner, requireProject } from "./lib/auth";
 import { MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL } from "../lib/speech-cleanup/types";
-import { assetWithUrl, assetKind, transcriptValidator, audioActivityValidator, understandingValidator, shotsValidator, beatsValidator, focusValidator, waveformValidator, analysisValidator } from "./schema";
+import { assetWithUrl, assetKind, focusValidator, analysisValidator } from "./schema";
 import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
 import { validateReference } from '../lib/media-analysis/reference';
@@ -145,67 +145,9 @@ export const get = query({ args: { projectId: v.id("projects"), assetId: v.id("a
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
   return { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset),...await previewUrl(ctx,asset),...await thumbnailUrl(ctx,asset) };
 }});
-export const saveExtractedAudio = internalMutation({
-  args: { projectId: v.id('projects'), assetId: v.id('assets'), audioAssetId: v.optional(v.id('assets')), waveform: v.optional(waveformValidator), workerSecret: v.string() },
-  returns: v.union(v.id('assets'), v.null()),
-  handler: async (ctx, args) => {
-    if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Media worker authentication required');
-    const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
-    const video = await ctx.db.get(args.assetId);
-    if (!video || video.ownerId !== ownerId || video.projectId !== args.projectId || video.kind !== 'video') throw new ConvexError('Video not found');
-    const audio = args.audioAssetId ? await ctx.db.get(args.audioAssetId) : null;
-    if (args.audioAssetId && (!audio || audio.ownerId !== ownerId || audio.projectId !== args.projectId || audio.kind !== 'audio')) throw new ConvexError('Audio must belong to this project');
-    if (args.waveform) {
-      validateWaveform(args.waveform);
-      if (!audio) throw new ConvexError('Waveforms require an audio source');
-      await ctx.db.patch(audio._id, { waveform: args.waveform });
-    }
-    // Concurrent requests may upload twice; keep one source and reclaim the other.
-    if (video.audioExtracted) {
-      if (audio && audio._id !== video.audioAssetId) await removeMediaAttachment(ctx, audio);
-      return video.audioAssetId ?? null;
-    }
-    await ctx.db.patch(video._id, { audioExtracted: true, ...(audio ? { audioAssetId: audio._id } : {}) });
-    return audio?._id ?? null;
-  },
-});
 export function validateWaveform(waveform: { peaks: string; samplesPerSecond: number }) {
   if (!Number.isFinite(waveform.samplesPerSecond) || waveform.samplesPerSecond <= 0 || waveform.samplesPerSecond > 100 || !waveform.peaks.length || waveform.peaks.length > 16_136 || !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(waveform.peaks)) throw new ConvexError('Invalid audio waveform');
 }
-export const saveWaveform = internalMutation({
-  args: { projectId: v.id('projects'), assetId: v.id('assets'), waveform: waveformValidator, workerSecret: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Media worker authentication required');
-    const ownerId = await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId);
-    const audio = await ctx.db.get(args.assetId);
-    if (!audio || audio.ownerId !== ownerId || audio.projectId !== args.projectId || audio.kind !== 'audio') throw new ConvexError('Audio not found');
-    validateWaveform(args.waveform);
-    await ctx.db.patch(audio._id, { waveform: args.waveform });
-    return null;
-  },
-});
-async function assistantWorkerOwner(ctx: QueryCtx | MutationCtx, projectId: Id<"projects">, aiRunId: string, workerSecret: string) {
-  const secret = process.env.RENDER_WORKER_SECRET;
-  if (!secret || secret !== workerSecret) throw new ConvexError("Media worker authentication required");
-  const project = await projectRun(ctx,projectId);
-  if (!project?.aiRunning || project.aiRunId !== aiRunId) throw new ConvexError("AI run is no longer active");
-  return project.ownerId;
-}
-// Server-only analysis bridge: a worker secret alone cannot read arbitrary media.
-// The requested media must belong to the project whose AI run is still active.
-export const getForAssistant = internalQuery({ args: { projectId: v.id("projects"), assetId: v.id("assets"), aiRunId: v.string(), workerSecret: v.string() }, returns: assetWithUrl, handler: async (ctx, args) => {
-  const ownerId = await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret);
-  const asset = await ctx.db.get(args.assetId);
-  if (!asset || asset.projectId !== args.projectId || asset.ownerId !== ownerId) throw new ConvexError("Media not found");
-  return { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset) };
-}});
-export const saveAnalysis = internalMutation({ args: { projectId: v.id("projects"), assetId: v.id("assets"), workerSecret: v.string(), aiRunId: v.optional(v.string()), transcript: v.optional(transcriptValidator), audioActivity: v.optional(audioActivityValidator), understanding: v.optional(understandingValidator), shots: v.optional(shotsValidator), beats: v.optional(beatsValidator), focus: v.optional(focusValidator) }, returns: v.null(), handler: async (ctx, args) => {
-  const secret = process.env.RENDER_WORKER_SECRET; if (!secret || secret !== args.workerSecret) throw new ConvexError("Media worker authentication required");
-  const ownerId = args.aiRunId ? await assistantWorkerOwner(ctx, args.projectId, args.aiRunId, args.workerSecret) : await requireOwner(ctx); await requireProject(ctx, args.projectId, ownerId); const asset = await ctx.db.get(args.assetId);
-  if (!asset || asset.ownerId !== ownerId || asset.projectId !== args.projectId) throw new ConvexError("Media not found");
-  return saveAssetAnalysis(ctx, asset, args);
-}});
 
 export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, changes: Infer<typeof analysisValidator>) {
   asset=await hydrateAsset(ctx,asset);
