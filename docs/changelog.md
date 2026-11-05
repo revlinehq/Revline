@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Repository: Remove the third-party directory and consolidate retained attribution into NOTICE and OpenCut-LICENSE. Why: user requested the folder be removed.
+
 - Incidents: Separate GitHub publishing from fixer setup and accept renamed repository URLs. Why: saved agent reports were not reaching GitHub.
 
 - Chat: Reduce sent user message corners from 12px to 6px. Why: user requested less rounded bubbles.
