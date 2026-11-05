@@ -82,6 +82,7 @@ if (operation === 'build') {
 if (settings.CONVEX_DEPLOYMENT !== `${config.environment === 'dev' ? 'dev' : 'prod'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== config.convexUrl) throw new Error('Use a separate environment file for the exact selected Convex deployment.');
 const token = settings.RAILWAY_API_TOKEN;
 const target = () => ({ token, config });
+const registryCredentials = { username: settings.RAILWAY_REGISTRY_USERNAME, password: settings.RAILWAY_REGISTRY_PASSWORD };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 if (operation === 'preflight' || operation === 'stage-repository') {
   await verifyRailwayTarget(target());
@@ -126,7 +127,7 @@ async function preflight(kind, existingServiceId) {
   const image = kind === 'processor' ? config.processorImage : config.exportsImage;
   const serviceId = existingServiceId || await createRailwayService({ ...target(), name: `preflight-${{ production: 'p', staging: 's', dev: 'd' }[config.environment]}-${Date.now()}-${randomUUID().slice(0, 6)}` });
   try {
-    await configureRailwaySlot({ ...target(), serviceId, image, variables: {
+    await configureRailwaySlot({ ...target(), serviceId, image, registryCredentials, variables: {
       ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
       MEDIA_WORKER_CONCURRENCY: '1', REVLINE_RAILWAY_MODE: 'preflight', REVLINE_RAILWAY_IMAGE: image,
     } });
@@ -202,7 +203,7 @@ if (operation === 'status') {
       RENDER_WORKER_SECRET: secret, MEDIA_WORKER_URL: remote.MEDIA_WORKER_URL, REVLINE_RAILWAY_IMAGE: pool.image,
       MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000', MEDIA_TASK_DEADLINE_MS: String(45 * 60_000),
       ...(exportsOnly ? { MEDIA_RENDERS_ONLY: 'true', ...(pool.name === 'ultra' ? { MEDIA_LANE: 'ultra' } : {}) } : { MEDIA_PROCESSOR_BACKEND: 'railway' }),
-      ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: '16', PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
+      ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: '16', PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
     };
     if (!exportsOnly) for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_VIDEO_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK']) {
       const value = settings[name] || remote[name];

@@ -25,7 +25,7 @@ export function verifyRailwayTarget(args: Target): Promise<void>;
 export function railwayInstance(args: Slot): Promise<Instance>;
 export function railwayActive(instance: Instance): boolean;
 export function verifyRailwaySlot(args: Slot & { image: string }): Promise<Instance>;
-export function configureRailwaySlot(args: Slot & { image: string; variables: Record<string, string> }): Promise<void>;
+export function configureRailwaySlot(args: Slot & { image: string; variables: Record<string, string>; registryCredentials?: { username: string; password: string } }): Promise<void>;
 export function deployRailwaySlot(args: Slot): Promise<string>;
 export function createRailwayService(args: Target & { name: string }): Promise<string>;
 export function deleteRailwayService(args: Slot): Promise<void>;

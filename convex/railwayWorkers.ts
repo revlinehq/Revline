@@ -17,7 +17,7 @@ export const releaseEvidence = query({
   args: { workerSecret: v.string(), projectId: v.id('projects'), processorTaskId: v.id('mediaTasks'), exportTaskId: v.id('mediaTasks'), distributedTaskId: v.id('mediaTasks') },
   returns: v.object({ checkedAt: v.number(), processorCommit: v.string(), exportsCommit: v.string(), processorImage: v.string(), exportsImage: v.string() }),
   handler: async (ctx, args) => {
-    requireMediaWorker(args.workerSecret);
+    if (requireMediaWorker(args.workerSecret) !== 'processor') throw new Error('Release evidence requires the staging processor credential.');
     if (String(process.env.CONVEX_SITE_URL) !== 'https://striped-starling-234.convex.site' || process.env.REVLINE_ISOLATED !== 'true') throw new Error('Release evidence belongs only to the isolated staging backend.');
     if (processorBackend() !== 'railway' || process.env.RENDER_PROVIDER !== 'railway') throw new Error('Staging must actually route processing and exports to Railway.');
     const ids = [args.processorTaskId, args.exportTaskId, args.distributedTaskId];

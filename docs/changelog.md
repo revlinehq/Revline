@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.
+
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
 

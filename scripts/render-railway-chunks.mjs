@@ -10,7 +10,7 @@ export async function launchRailwayChunk({ index, planKey, outKey, quality, chun
   const name = `render-${{ production: 'p', staging: 's', dev: 'd' }[selected.config.environment]}-${Date.now()}-${randomUUID().slice(0, 8)}`;
   const serviceId = await createRailwayService({ ...selected, name });
   try {
-    await configureRailwaySlot({ ...selected, serviceId, image: selected.config.exportsImage, variables: {
+    await configureRailwaySlot({ ...selected, serviceId, image: selected.config.exportsImage, registryCredentials: { username: process.env.RAILWAY_REGISTRY_USERNAME, password: process.env.RAILWAY_REGISTRY_PASSWORD }, variables: {
       ...chunkEnv, ...RAILWAY_CPU_ENV, PRODUCER_FORCE_SCREENSHOT: 'false',
       NEXT_PUBLIC_CONVEX_URL: selected.config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(selected.config),
       REVLINE_RAILWAY_IMAGE: selected.config.exportsImage, MEDIA_WORKER_CONCURRENCY: '1',
