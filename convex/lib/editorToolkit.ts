@@ -82,7 +82,7 @@ import { generateSoundEffect, soundEffectInput, type SoundEffectRequest } from '
 import { NARRATION_VOICES, VOICE_LIMITS, generateNarration, generateVoiceSample, voiceInput } from '../../lib/audio/voice';
 import { BRAND_LIMITS } from '../../lib/editor/brand-kit';
 import { cleanColors, googleFonts, sceneBrandSnapshot, scrapeBrand } from './brandKitBuild';
-import { mediaConfig, mediaUrl } from './media_storage';
+import { mediaConfig, mediaUrl, newProjectMediaKey } from './media_storage';
 import { encodeWav, soundWaveform } from '../../lib/audio/wav';
 import { SR } from '../../lib/audio/dsp';
 import { MUSIC_BED_LIMITS, renderMusicBed } from '../../lib/audio/music-bed';
@@ -656,7 +656,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Generate with ElevenLabs, upload to the project's R2 media like an upload, and register an ordinary audio asset holding its request.
   const reserveAudio = async () => { abortSignal.throwIfAborted(); await ctx.runMutation(internal.assistant.reserveAudioRequest, run); abortSignal.throwIfAborted(); };
   const createGeneratedSound = async (request: SoundEffectRequest, name?: string) => {
-    const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+    const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = newProjectMediaKey(run.ownerId, run.projectId);
     const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
     try {
       const asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? 'Generated sound').replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration: samples[0].length / rate, waveform: soundWaveform(samples, rate), recipe: JSON.stringify(request) });
@@ -666,7 +666,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   // Choice-card previews (voice samples, rendered stills) live in the project's R2 media without becoming assets; the card reads them through a signed URL.
   const publishPreview = async (bytes: Uint8Array<ArrayBuffer>, contentType: string) => {
-    const key = `media/${run.ownerId}/${run.projectId}/preview-${crypto.randomUUID()}`;
+    const key = newProjectMediaKey(run.ownerId, run.projectId, 'preview-');
     await putMediaObject(key, bytes, contentType);
     return (await mediaUrl(ctx, { r2Key: key }))!;
   };
@@ -951,7 +951,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         try {
           for (const image of generated.images) {
             abortSignal.throwIfAborted();
-            const r2Key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+            const r2Key = newProjectMediaKey(run.ownerId, run.projectId);
             const size = await putMediaObject(r2Key, image.bytes, 'image/png');
             uploaded.push({ r2Key, size, width: image.width, height: image.height });
           }
@@ -1414,7 +1414,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         asset = assets.find(item => item.fileName === stockMusicFileName(track)) ?? await (async () => {
           const response = await fetch(track.url, { headers: { referer: MIXKIT_REFERER, 'user-agent': 'Mozilla/5.0 (Revline)' }, signal: AbortSignal.any([abortSignal, AbortSignal.timeout(60_000)]) });
           if (!response.ok) throw new Error(`Mixkit did not return ${track.title} (${response.status}). Try another trackId or synth:true.`);
-          const bytes = new Uint8Array(await response.arrayBuffer()), key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+          const bytes = new Uint8Array(await response.arrayBuffer()), key = newProjectMediaKey(run.ownerId, run.projectId);
           const size = await putMediaObject(key, bytes, 'audio/mpeg');
           try {
             const saved = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: stockMusicFileName(track), contentType: 'audio/mpeg', size, duration: track.duration, waveform: track.waveform, beats: { beats: track.beats, bpm: track.bpm, confidence: track.confidence, engine: BEAT_ANALYSIS_ENGINE, downbeats: track.downbeats, accents: track.accents, dropCandidates: [] } });
@@ -1428,7 +1428,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const firstBar = Math.floor(-phase / grid.bar);
         const perBar = reference.waveform ? energyCurve(reference.waveform, Math.max(reference.duration ?? duration, duration), grid.bar, from + phase + firstBar * grid.bar).values : undefined;
         const bed = renderMusicBed({ duration, bpm: grid.bpm, feel, phase, energy: perBar });
-        const key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`, size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
+        const key = newProjectMediaKey(run.ownerId, run.projectId), size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
         try { asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `Music bed ${Math.round(bed.bpm)} BPM ${feel}.wav`, size, duration: bed.samples[0].length / SR, waveform: soundWaveform(bed.samples), beats: { beats: bed.beats, bpm: bed.bpm, confidence: 1, engine: BEAT_ANALYSIS_ENGINE, downbeats: bed.downbeats, accents: [], dropCandidates: [] } }); }
         catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
         assets.push(asset);
@@ -1828,7 +1828,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     } }),
     generateVoice: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.generateVoice, description: "Speak a narration script with an ElevenLabs voice (listVoices) and place it as one voice clip on a free A layer at timeline seconds at (frame-snapped); save immediately. The words are saved as the clip's transcript (inspectAssetAnalysis, addSubtitlesFromTranscript). Returns its duration and every word's timeline start and end: time the film's beats to these, so each visual lands on its spoken word. Write the script exactly as it should be read. To change the wording or voice, delete the clip and generate again. If generation fails nothing is placed: say so.", inputSchema: voiceInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional().describe('Clip volume 0..2, default 1.'), name: z.string().trim().min(1).max(60).optional() }).strict(), execute: async (_ctx, { at, gain = 1, name, ...request }) => {
       const { samples, rate, words } = await generateNarration(request, abortSignal, reserveAudio), duration = samples[0].length / rate;
-      const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = `media/${run.ownerId}/${run.projectId}/${crypto.randomUUID()}`;
+      const voice = NARRATION_VOICES.find(item => item.voiceId === request.voiceId)?.name, key = newProjectMediaKey(run.ownerId, run.projectId);
       const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
       let asset: (typeof assets)[number];
       try {

@@ -2,6 +2,11 @@ import { safeDownloadFileName, signMediaToken } from '../../lib/storage/media-to
 import type { QueryCtx, MutationCtx, ActionCtx } from '../_generated/server';
 import type { Id } from '../_generated/dataModel';
 
+/** The R2 prefix every media object of one project is stored under. */
+export function projectMediaPrefix(ownerId: string, projectId: string) { return `media/${ownerId}/${projectId}/`; }
+/** A new R2 key for one media object of a project; `label` (such as `preview-`) goes before its random part. */
+export function newProjectMediaKey(ownerId: string, projectId: string, label = '') { return `${projectMediaPrefix(ownerId, projectId)}${label}${crypto.randomUUID()}`; }
+
 export function mediaConfig() {
   const url = process.env.MEDIA_WORKER_URL, secret = process.env.MEDIA_SIGNING_SECRET;
   if (!url || !secret) throw new Error('Cloudflare media storage is not configured');
