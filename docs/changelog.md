@@ -1,3 +1,7 @@
+## 2026-11-05
+
+- Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
+
 ## 2026-11-04
 
 - Security: Add Apache 2.0 notices, contributor and vulnerability reporting guidance, local credential scanning and patched dependencies. Why: the user requested open-source publication readiness.
