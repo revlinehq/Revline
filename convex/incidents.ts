@@ -1,15 +1,43 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
-import { internalMutation, internalQuery, mutation, query } from './_generated/server';
+import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
 import { incidentArgs, incidentDeployment, recordIncident } from './lib/incidents';
 import { z } from 'zod';
 import { requireOwner, requireProject } from './lib/auth';
+import { incidentText } from '../lib/incidents';
 
 export const reportIncident = internalMutation({ args: incidentArgs, handler: recordIncident });
+
+// Agent reports are model-written free text and become public GitHub issues, so
+// one account or a burst of accounts cannot flood the table or the publisher.
+const DAY = 24 * 60 * 60_000;
+const AGENT_REPORT_LIMITS = [
+  { scope: 'owner', windowMs: 60_000, limit: 5 },
+  { scope: 'owner', windowMs: DAY, limit: 20 },
+  { scope: 'all', windowMs: 60_000, limit: 60 },
+  { scope: 'all', windowMs: DAY, limit: 1000 },
+] as const;
+async function allowAgentReport(ctx: MutationCtx, ownerId: string) {
+  const now = Date.now();
+  // Check every window before counting, so a refused report consumes no allowance.
+  const windows = await Promise.all(AGENT_REPORT_LIMITS.map(async ({ scope, windowMs, limit }) => {
+    const key = `incidents:agent:${windowMs}:${scope === 'owner' ? ownerId : '*'}`;
+    const usage = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();
+    const current = usage && now - usage.windowStart < windowMs;
+    return { key, usage, current, calls: current ? usage.calls : 0, limit };
+  }));
+  if (windows.some(window => window.calls >= window.limit)) return false;
+  for (const { key, usage, current, calls } of windows) {
+    if (usage) await ctx.db.patch(usage._id, { windowStart: current ? usage.windowStart : now, calls: calls + 1 });
+    else await ctx.db.insert('mcpUsage', { ownerId: key, windowStart: now, calls: 1 });
+  }
+  return true;
+}
 
 const runScope = { ownerId: v.string(), projectId: v.id('projects'), runId: v.string() };
 export const reportAgent = internalMutation({ args: { ...runScope, toolName: v.string(), inputSummary: v.string(), happened: v.string(), expected: v.string() }, handler: async (ctx, args) => {
   await requireProject(ctx, args.projectId, args.ownerId);
+  if (!await allowAgentReport(ctx, args.ownerId)) return null;
   return await recordIncident(ctx, { source: 'editing-agent', kind: 'agent-report', message: `${args.toolName}: ${args.happened}`, context: { location: 'editing-agent:reportIssue', toolName: args.toolName, inputSummary: args.inputSummary, happened: args.happened, expected: args.expected }, projectId: args.projectId, runId: args.runId, deployment: incidentDeployment() });
 } });
 export const reportRunner = internalMutation({ args: { ...runScope, message: v.string(), stack: v.optional(v.string()) }, handler: async (ctx, args) => {
@@ -26,7 +54,8 @@ export const reportClient = mutation({
   args: { source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), context: v.any(), projectId: v.optional(v.string()), runId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
-    if (JSON.stringify(args).length > 20_000) return null;
+    // Only reportAgent may create agent reports: they are published as public issues.
+    if (JSON.stringify(args).length > 20_000 || incidentText(args.kind, 100) === 'agent-report') return null;
     // Reuse the existing per-owner window store, with an independent namespace.
     const key = `incidents:${owner}`;
     const rate = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();

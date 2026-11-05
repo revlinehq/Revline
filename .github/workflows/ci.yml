@@ -1,18 +1,13 @@
 name: Validate
+# Runs pull request code, including from forks: GitHub-hosted runners only, never
+# the self-hosted release runner. Dispatch release dry runs from deploy-main.yml.
 on:
-  workflow_dispatch:
-    inputs:
-      base:
-        description: 'Dry-run comparison commit'
-        type: string
-        default: ''
   push:
   pull_request:
 permissions:
   contents: read
 jobs:
   checks:
-    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-24.04
     env:
       PUPPETEER_SKIP_DOWNLOAD: 'true'
@@ -36,13 +31,3 @@ jobs:
       - run: npm run typecheck:processor-edge
       - run: npm run build
 
-  # Dispatch bridge: ci.yml already exists on main, allowing the branch's new
-  # reusable release workflow to be exercised before it is merged.
-  release-dry-run:
-    if: github.event_name == 'workflow_dispatch'
-    permissions:
-      contents: write
-      issues: write
-    uses: ./.github/workflows/deploy-main.yml
-    with:
-      base: ${{ inputs.base }}

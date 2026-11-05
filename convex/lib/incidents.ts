@@ -37,7 +37,9 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
   const id = existing?._id ?? await ctx.db.insert('incidents', { ...value, status: 'open', delivery: 'pending', generation, ...(input.kind === 'agent-report' ? { issueAttempts: 0 } : {}) });
-  if (existing) await ctx.db.patch(id, { ...value, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) });
+  // A new occurrence gives an exhausted issue delivery a fresh budget; issue bodies are bounded now.
+  const issueRetry = input.kind === 'agent-report' && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
+  if (existing) await ctx.db.patch(id, { ...value, ...issueRetry, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) });
   if (opens && input.kind !== 'agent-report' && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
   return id;
 }

@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Security: Restrict the PC release runner to owner main releases, restore GitHub-hosted secret and dependency scans, publish agent-report issues with structured fields only and rate-limit agent reports. Why: a code review found risks after the repository became public.
+
 - Blog: Remove the visible RSS subscription link. Why: the user requested cleaner customer-facing navigation.
 
 - Repository: Remove the separate OpenCut license file and retain its notice inside NOTICE. Why: the user requested a single project license file.
