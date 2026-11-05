@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { z } from 'zod';
 import { AnalysisError } from './errors';
 import { geminiFrameModel, geminiVideoModel } from './gemini-model';
+import { abortableDelay } from './network';
 import { interactionText } from './transcript';
 import { parseUnderstanding, understandingJsonSchema, understandingPrompt, type Understanding } from './understanding';
 import { frameInspectionCoverage, frameInspectionJsonSchema, parseFrameInspection, type FrameInspectionInput, type FrameSample, type FrameGeometry } from './frame-inspection';
@@ -88,11 +89,7 @@ async function uploadFile(path: string, mimeType: string, key: string, signal: A
   try {
     if (file.state === 'PROCESSING') onActivity?.('preparing-gemini');
     for (let attempt = 0; file.state === 'PROCESSING' && attempt < 60; attempt++) {
-      await new Promise<void>((resolve, reject) => {
-        const timer = setTimeout(() => { signal.removeEventListener('abort', cancel); resolve(); }, 1000);
-        function cancel() { clearTimeout(timer); signal.removeEventListener('abort', cancel); reject(new Error('Analysis cancelled.')); }
-        if (signal.aborted) cancel(); else signal.addEventListener('abort', cancel, { once: true });
-      });
+      await abortableDelay(1000, signal, () => new Error('Analysis cancelled.'));
       const metadata = await googleResponse(await fetch(`${BASE}/v1beta/${file.name}`, { headers: headers(key), signal }), key);
       file = fileSchema.parse(await metadata.json());
     }
