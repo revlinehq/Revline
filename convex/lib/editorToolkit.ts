@@ -990,7 +990,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
       inputSchema: z.object({ toolName: z.string().min(1).max(100), inputSummary: z.string().max(600), happened: z.string().min(1).max(1000), expected: z.string().min(1).max(1000) }),
-      execute: async (_ctx, input) => ({ incidentId: await ctx.runMutation(internal.incidents.reportAgent, { ...run, ...input }) }),
+      execute: async (_ctx, input) => {
+        const incidentId = await ctx.runMutation(internal.incidents.reportAgent, { ...run, ...input });
+        return incidentId ? { incidentId } : { incidentId: null, saved: false, next: 'The report limit is reached and this report was not saved. Do not retry; continue safely or explain the limitation.' };
+      },
     }),
     listTimelines: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listTimelines, description: "List this project's timeline tabs, each a separate video sharing the project's sources. Editing tools act on the open tab.", inputSchema: z.object({}), execute: async () => ctx.runQuery(internal.assistant.listRunTimelines, run) }),
     createTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.createTimeline, description: "Create and open a blank timeline tab or duplicate the open tab. For clipping, use blank, the source aspect unless reframing was requested, and the clip's title. Publishes the current draft first; finish clipping directly after building accepted tabs; scoped heavy QA is optional. Never call alongside edits in parallel.", inputSchema: z.object({ from: z.enum(['blank', 'duplicate']), name: z.string().trim().min(1).max(60).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square']).optional() }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.createRunTimeline, { ...run, expectedRevision, ...input })) }),

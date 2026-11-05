@@ -33,15 +33,18 @@ export const readJob = (path: string) => readFile(path, 'utf8').then(text => job
 export function alive(pid: number | undefined) { if (!pid) return false; try { process.kill(pid, 0); return true; } catch { return false; } }
 export const run = promisify(execFile);
 export const repo = 'revlinehq/Revline';
-const prSchema = z.object({ url: z.string().url(), state: z.string(), isDraft: z.boolean(), headRefName: z.string(), body: z.string(), title: z.string() });
+const prSchema = z.object({ url: z.string().url(), state: z.string(), isDraft: z.boolean(), isCrossRepository: z.boolean(), headRefName: z.string(), body: z.string(), title: z.string() });
+const prFields = 'url,state,isDraft,isCrossRepository,headRefName,body,title';
 async function github(args: string[]) {
   return await run('gh', args, { env: { ...process.env, GH_TOKEN: await githubToken() }, timeout: 180_000, maxBuffer: 4_000_000 });
 }
+// Fingerprints are public in issues, so anyone could copy one into a fork PR body.
+// Only branches in this repository, pushable by collaborators, can satisfy an incident.
 export async function openPRs() {
-  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--json', 'url,state,isDraft,headRefName,body,title', '--limit', '1000']);
-  return z.array(prSchema).parse(JSON.parse(stdout));
+  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--json', prFields, '--limit', '1000']);
+  return z.array(prSchema).parse(JSON.parse(stdout)).filter(pr => !pr.isCrossRepository);
 }
 export async function branchPR(branch: string) {
-  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', 'url,state,isDraft,headRefName,body,title']);
-  return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => pr.headRefName === branch && pr.isDraft && pr.title.startsWith('Incident: '));
+  const { stdout } = await github(['pr', 'list', '--repo', repo, '--state', 'open', '--head', branch, '--json', prFields]);
+  return z.array(prSchema).parse(JSON.parse(stdout)).find(pr => !pr.isCrossRepository && pr.headRefName === branch && pr.isDraft && pr.title.startsWith('Incident: '));
 }
