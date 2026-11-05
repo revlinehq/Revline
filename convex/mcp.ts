@@ -43,6 +43,19 @@ function projectIdOf(ctx: QueryCtx, projectId: string) {
 
 const editorUrl = (projectId: string) => `${process.env.APP_ORIGIN ?? ''}/editor/${projectId}`;
 
+export const resolveFrameRead = internalQuery({
+  args: { ownerId: v.string(), projectId: v.string(), timelineId: v.string(), checkId: v.string(), times: v.array(v.number()), resolution: v.optional(v.union(v.literal(720), v.literal(1080))), revision: v.optional(v.number()) },
+  returns: v.id('frameSnapshots'),
+  handler: async (ctx, args) => {
+    await requireEditorAccess(ctx, args.ownerId);
+    const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
+    const id = ctx.db.normalizeId('frameSnapshots', args.checkId), snapshot = id ? await ctx.db.get(id) : null;
+    if (!snapshot || snapshot.ownerId !== args.ownerId || snapshot.projectId !== project._id || snapshot.timelineId !== args.timelineId || snapshot.clipCheck || snapshot.normalization || snapshot.pacing || snapshot.sound || snapshot.motion || snapshot.comparison || snapshot.guard) throw new ConvexError('This frame read is unavailable for this project and timeline.');
+    if (JSON.stringify(snapshot.times) !== JSON.stringify(args.times) || (snapshot.resolution ?? 720) !== (args.resolution ?? 720) || args.revision !== undefined && (snapshot.atRevision ?? snapshot.revision) !== args.revision) throw new ConvexError('Resume the frame read with its original times, resolution and revision.');
+    return snapshot._id;
+  },
+});
+
 export const normalizeSnapshotId = internalQuery({ args:{snapshotId:v.string(),ownerId:v.string(),projectId:v.id('projects'),kind:v.union(v.literal('pacing'),v.literal('sound')),timelineId:v.optional(v.string()),check:v.optional(v.boolean())},returns:v.id('frameSnapshots'),handler:async(ctx,args)=>{
   const id=ctx.db.normalizeId('frameSnapshots',args.snapshotId),snapshot=id?await ctx.db.get(id):null;
   if(!snapshot||snapshot.ownerId!==args.ownerId||snapshot.projectId!==args.projectId||!snapshot[args.kind])throw new ConvexError('This saved check is unavailable for this project.');
@@ -284,7 +297,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
   await ctx.db.patch(snapshotId, { taskId });
-  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false});
+  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false,cancelTaskId:taskId});
   await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});

@@ -1,5 +1,5 @@
 export class AnalysisError extends Error {
-  constructor(message: string, public status: number, public retryable?: boolean) { super(message); }
+  constructor(message: string, public status: number, public retryable?: boolean, public geminiBilling?: boolean) { super(message); }
 }
 
 /** Keep the reason useful without persisting signed URLs, commands or local paths. */

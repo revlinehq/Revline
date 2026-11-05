@@ -1,105 +1,35 @@
+import { skillText, skillDocument } from './documents';
 import type { EditorSkill, EditorSkillPage } from './index';
 
 export const CLIPPING_SKILL_ROUTING = 'For finding or making short clips from a longer source, load readSkill name "clipping" before the work. Route by intent, including "clip this", "make clips", "turn this into shorts", "find the best moments", or a long stream, podcast or VOD link (Twitch, Kick, YouTube) with a short-form ask. A link alone is not a clipping request. Small edits to an existing clip follow scene-engine page "edit-lanes"; do not restart a whole-source search.';
 
 const moments: EditorSkillPage = {
-  name: 'moments',
-  description: 'Scan the whole source, rank evidenced hooks and payoffs, and choose 15 to 60 second boundaries.',
-  body: `# Finding moments for clipping
-
-Use this search only for a clipping request. A local edit to an existing short follows scene-engine page \`edit-lanes\`.
-
-## Discover once, judge the top candidates
-1. Choose by the requested content, not by voice presence. Podcast/interview/talk and requested stream dialogue use transcript/voice evidence: pass speechLed:true (podcast/talk sourceType also defaults to speech-led). Read the saved timed transcript once, propose distinct self-contained hooks/payoffs, and register planClips found with exact quotes/times. For boundary words use inspectAssetAnalysis transcriptOnly:true with short SOURCE windows. No video judging or frames are required for these spoken moments. Gaming/sports commentary does not make the underlying visual action irrelevant.
-2. Gaming/streams/action: findHighlights returns existing transcript and lightweight source helpers without whole-video Gemini. Propose timestamped candidates from that evidence. Use inspectVideo with a focused question and explicit SOURCE start/end of at most 60s only where visual context matters; start with short windows and extend a specific uncertain event. The batch allows at most 12 distinct windows and 600 source seconds, reusing exact observations. Stills and scene cuts cannot establish continuous action. Register action candidates only after saved native-video observations cover their payoff. For silent visual content, sample a bounded set of short video windows across the source, refine observed events and disclose inspected coverage; never invent transcript-based rankings or claim unseen source coverage. If Gemini is unavailable, do not substitute stills as proof of action: deliver supported spoken moments or report unresolved visual candidates honestly.
-3. Default count = min(10, qualifying distinct moments, max(3, round(sourceSeconds/150))), subject to available tab slots. Examples: 8:16 with 4 good moments → 3; 45 min with 14 → 10; 8:16 with 2 → 2, with the specific reason no third qualified. The tool reports recommendedCount and a quality score threshold of 65/100 using the rubric below. Never pad. State any shortfall. If accepted is below sourceLengthTarget and no dropped-candidate reasons cover it, supply planClips shortfallReason (20–500 characters): e.g. "Other fights repeat the same payoff or need setup beyond 60 s." The server includes it in the final reply.
-4. Call planClips before building: accepted [{candidateId,name,start,end}], dropped [{candidateId,reason}]. Account for every returned top-10 candidate, even a strong moment left out because of the requested count; use a concrete reason ("same payoff as H…", "needs prior context", "lower-ranked than the three requested"). The name is its exact distinct tab title. Keep the clean in/out or improve them using word timings; preserve the grounded hook/payoff. Record critical HUD rectangles for gaming/sports when relevant. Update the plan if review later drops a candidate, with its reason. If dropping a built candidate, open a retained/original tab first, then update planClips: it removes that abandoned tab only when it was newly created by this batch and has no user-approved work. Empty/title-only tabs cannot count.
-
-## Rank, then cut
-Give each candidate a title, SOURCE start/end, hook, payoff, evidence and a viral-potential score out of 100: hook 0/12/25 = absent/after setup/in first 2 s; payoff 0/12/25 = absent/implied/resolved; clarity 0/10/20 = prior clip required/one missing detail/self-contained; surprise 0/10/20 = absent/stated/visible reaction; quotability 0/5/10 = absent/context-dependent/standalone line. Cite source times. Scores are editorial estimates, never promised views. Prefer distinct moments over several overlapping versions of the same joke. Keep uncertainty visible; do not fill a requested count with unsupported highlights.
-
-Each finished clip is 15 to 60 seconds. First sentence names its subject: “That’s why it failed” → retain “The upload stalled.” End after the payoff/reaction, before the reset. Read exact word timings around speech boundaries with inspectAssetAnalysis start/end or batched windows, preferably at most 30 s per window. Keep words and the thought complete, including the real reaction after a punchline. If a candidate cannot stand alone within 60 s, choose another or explain the constraint. Respect exact user timestamps and flag conflicts with the duration range. Recheck finished duration after any pacing changes.
-
-Finding moments alone is an inspection request: return the ranked candidates without changing timelines. When clips are requested, carry the ranked plan into page \`batching\`.
-`,
+  name: skillDocument("clipping/references/moments.md").name,
+  description: skillDocument("clipping/references/moments.md").description,
+  body: skillText("clipping/references/moments.md"),
 };
 
 const framing: EditorSkillPage = {
-  name: 'framing',
-  description: 'Gaming facecam above gameplay, or speaker-led podcast and IRL reframing in 9:16, using measured existing tools.',
-  body: `# Vertical framing
-
-Ordinary podcast/talk cuts preserve the source view. Use the aspectRatio returned by findHighlights for blank tabs and fitClip fit "contain" if needed to retain the full picture; do not auto-track, crop or analyze faces. Existing user framing stays intact. Only read the visual instructions below for gaming/action or explicit visual requests.
-
-Only when vertical visual reframing was requested, use a 9:16 canvas. Default every single-view video to fitClip fit "cover". Keep fit "contain" only when the user explicitly requests the complete wide frame; it leaves large empty bars on a vertical short. Read the effects skill for framing controls. After planClips, a needed source layout/crop check may use readFrames fps at source rate over at most 1 s and 30 frames. Requested finished-tab framing QA uses only the checkClip sheet. Reuse saved analysis across every clip. Source coordinates are normalized x/y/w/h rectangles, never preview-screen pixels.
-
-## Gaming: creator above gameplay
-Run detectFacecam once per source assetId: local MediaPipe faces plus OpenCV panel edges across native frames, without Gemini. It returns sampled source times, facecam PANEL and gameplay rectangles, confidence and kind overlay/creator-only/gameplay-only/uncertain. A face rectangle alone is not the webcam panel. Inspect readFrames at retained-range boundaries and layout changes; detection samples cannot prove intervening layout.
-
-For a confident overlay, make two synchronized video instances from the same asset and SOURCE range on separate V layers. Keep one audible source track: duplicateClips returns a video/audio pair; identify the returned audio ID and setVolume volume:0 on it. Deleting a linked audio also removes its video. If removal is needed, unlink the duplicate pair first, then delete only its audio and keep the returned video ID for crop/layout. Inspect saved facecam samples inside the retained range FIRST: if the layout kinds/boxes change, split the video at those confirmed SOURCE times before requesting the rows. Call applyLayout layout "two-rows", detectedRegions:true, creator IDs in topClipIds and gameplay IDs in bottomClipIds. It uses detected source boxes and sets crop/transform together, without guessing coordinates or stretching. Never call it across a known layout change: it refuses that range. Resolve a refused layout on the split sections before finish; do not delete one row and silently abandon the failed layout. cropClip remains available for a measured refinement; it masks source edges without recentering or enlarging them.
-
-For creator-only or gameplay-only, keep one source filling the vertical frame with the supported crop. Do not build a duplicate empty row. For uncertain detection or odd/unbordered layouts with no clear panel, use followSubject mode "face" on the retained video, inspect the affected source range, and keep a stable wider view if no face is clear. Never invent a panel from the face box. Never report a low-confidence panel as certain.
-
-## Explicit speaker-reframing requests and visual IRL cuts
-For a fixed single-speaker shot, use a measured stable crop first; do not run mouth matching on a person who never changes. For co-visible speakers that actually exchange turns, use fitClip fit "cover", then followSubject mode "active-speaker" on that retained video clip. Reuse saved framing if its coverage includes the clip; never analyze the whole source per tab. It analyzes the retained SOURCE window, up to 120 source seconds, reusing current saved coverage and diarized Deepgram words when available. Only missing range audio is diarized. The media processor runs the visual analysis entirely on CPU, without Gemini or a GPU.
-
-For a batch with co-visible speakers, first call analyzeMedia mode "speakers" for each accepted SOURCE start/end window, at most two calls concurrently. Do this before changing tabs. followSubject reuses those exact window results within the run, so framing analysis is not repeated per tab. Skip this precompute for fixed single-speaker shots.
-
-Camera shots come first: PySceneDetect finds cuts, and a clearly dominant visible face gets one fixed crop for that entire shot, including side-on views and microphones covering the mouth. This is a framing decision, not proof that the face owns the audio voice. Multi-face shots use mouth activity aggregated over whole diarization turns. Confident voice-to-face associations are remembered within the analyzed window; conservative appearance and position/size continuity let recurring faces reuse that association across later turns and shots. Short backchannels do not establish identities or trigger a switch. Competing, obscured and offscreen matches remain unresolved.
-
-The crop holds a fixed face anchor within a shot, cuts immediately at camera cuts and eases only for confirmed speaker changes inside a shot. Uncertain intervals hold the current crop within the shot; an uncertain new shot starts from the stable center. If all intervals are uncertain, followSubject refuses to apply a crop. Turn following off and retain a wider view if the crop follows the wrong person.
-
-Read the per-clip framing receipt: seconds and duration-weighted heuristic confidence for shot-dominant, turn-mouth, identity-reuse and fallback. Report fallback seconds explicitly. These scores are not calibrated probabilities and shot dominance does not verify a voice identity. inspectAssetAnalysis includes framing intervals with SOURCE start/end, shot, method, confidence, face and local faceId, alongside speakers.turns with speaker ID, face rectangle or null and matching confidence. Read around switches. Source speaker IDs come from the diarized source transcript; window speaker IDs and faceIds are local to that analysis window and must not be equated across separate windows. Never equate numeric voice IDs with real-world names.
-
-Use source readFrames only while measuring framing: panel edges, layout changes and active-speaker crops. Only for requested framing QA on the FINISHED tab, checkClip supplies one shot/switch framing sheet. Glance once for face/facecam/crop, mouths, key action and text visibility; fix an affected crop and rerun checkClip. Report sampled coverage and fallback seconds; never frame-by-frame finished-clip checking.
-`,
+  name: skillDocument("clipping/references/framing.md").name,
+  description: skillDocument("clipping/references/framing.md").description,
+  body: skillText("clipping/references/framing.md"),
 };
 
 const batching: EditorSkillPage = {
-  name: 'batching',
-  description: 'One project and shared source analysis, one titled timeline tab per clip, separate exports only when requested.',
-  body: `# A batch of separate clips
-
-One source, one project, shared assets and saved analysis. Never create a project or upload/transcribe the same source for each short. Reuse the current project when it contains the source. On MCP, use getProject and listTimelines first; createProject only if a project is needed. Bring a missing source in once with uploadMedia/finishUpload or importVideoLink and wait with getMediaTask. For a whole-source highlight search, import the full source rather than only the first candidate. Read source times from the imported asset: a ranged import starts at 0 at its original range start.
-
-YouTube, Twitch VODs, Kick recordings and public MP4 links use importVideoLink once. If a provider blocks a recording, request an upload/direct MP4. Never claim an unsupported/live stream was imported.
-
-1. Persist the accepted list with planClips: each candidate ID, title, SOURCE range and resulting timelineId. Inspect existing tabs on retries and resume completed work rather than duplicating it.
-2. Use createTimeline from "blank", aspectRatio from findHighlights (source aspect by default; change only for requested reframing), name set to the clip title (up to 60 characters). One tab holds one short, starting at timeline 0. Use openTimeline to revisit an existing clip when the editing surface needs it. Preserve unrelated tabs and edits.
-3. Add the chosen range with addMedia using the shared assetId, sourceStart, duration and start:0. Inspect the new clip IDs before reframing or optional polish. Each tab gets its own title and requested finish; transcript mode preserves source framing, while source analysis stays shared.
-4. On MCP, pass projectId and the intended timelineId explicitly to editing and inspection tools, including getFrames, so another session switching tabs cannot redirect work. Opening a tab changes what the user sees; prefer explicit timelineId for subsequent work.
-5. Preserve original audio. Never normalize automatically, including gaming/action. Call normalizeAudio only for an explicit audio-normalization/improvement request. Preserve source framing unless the user requests visual reframing. Heavy QA is optional for ALL clipping: use checkClip only for the user’s actual concern, with checks ["framing"], ["decode-health"] or ["loudness"] as appropriate. A framing-only request neither decodes source health nor requires normalized audio. Inspect its sampled scope honestly. Unchanged successful and failed receipts are reused; do not rerun the same full batch without relevant edits or an explicit scoped need.
-6. Call finishClipping directly, then finish. Completion performs cheap source bounds, nonempty timeline/coverage, accepted ranges, transcript boundaries where available, and accepted-versus-populated tab accounting INLINE. No checkClip ceremony, snapshots, Gemini or normalization job is required. A failed optional check remains an actual finding: fix the affected tab or report it; do not hide it or rerender unrelated passing tabs. Use the returned exact finalMessage. Unrequested checks are skipped, never marked passed.
-7. Export only when the user asks. Call exportVideo once per finished tab with its timelineId, then poll getExport for each job and label its download by title. Exports queue; listExports can show the batch. Never export the open tab repeatedly while assuming it selects different clips.
-
-Timeline-tab management, imports and exports are available in both MCP and the in-app editing turn. In the app, editing tools act on the tab opened by createTimeline or openTimeline. Tab changes publish pending drafts. Build all accepted tabs, then finishClipping and finish. Optional scoped checkClip requests use explicit timelineIds and reuse unchanged receipts. Never switch tabs in parallel with editing. Never call tab changes in parallel with edits. Do not substitute a montage in one tab or one project per clip. An optional overview can list title, source range, duration, score and tab/export link. Do not require approval of an overview before building requested clips.
-`,
+  name: skillDocument("clipping/references/batching.md").name,
+  description: skillDocument("clipping/references/batching.md").description,
+  body: skillText("clipping/references/batching.md"),
 };
 
 const finishing: EditorSkillPage = {
-  name: 'finishing',
-  description: 'Default social loudness plus optional captions, pacing, sound, hook text and niche styles, with restrained defaults and relevant checks.',
-  body: `# Optional finish
-
-Follow the clipper's explicit choices or selected style. Default for ALL clipping: hook-to-payoff cuts, original audio at 1×, source framing/aspect and original loudness. Normalize or visually reframe only when the user requests it. Captions, dead-air removal, speed-ups, zoom punches, hit effects, light music, hook text are optional. Do not force them into every clip or make their selection block delivery.
-
-- **Captions and hook text:** read text-styling and footage-editing. Use saved word timings and addSubtitlesFromTranscript after final cuts. Hook text comes from the actual moment, without invented claims. Keep text clear of faces, essential gameplay and platform controls.
-- **Pacing:** read footage-editing for speech cleanup and effects for zooms. Remove dead air or speed up only when requested or part of the selected style. Preserve comedic pauses, reactions and intelligible speech. Finalize timing before captions and overlays so they stay in sync. Check the final length remains 15 to 60 s.
-- **Sound:** read music-and-sound. Keep speech and important game/room sound intelligible; add hit effects or light music only when requested or selected. Use getSound/checkSound to inspect the mix, setVolume to balance clips and configureAudio for fades or music ducking. Only for an explicit audio-normalization/improvement request, after final timing, fades, ducking and mix choices, call normalizeAudio on each finished clip tab with no clipId: this normalizes the complete timeline mix to -14 LUFS integrated and at most -1 dBTP, including any music and effects. Pass clipId only when normalizing one linked sound clip is intended. The worker measures and verifies a two-pass normalization; preview and export use the same processed audio. Timeline normalization plays a verified master while preserving original editable sound. Later timing or mix changes automatically bypass the old master. Normalize again after those edits. Silence or failed measurement is not a successful normalized result. Respect an explicit request to preserve original loudness; use normalizeAudio enabled:false to remove an existing normalization when needed.
-- **Niche styles when selected:** gaming favors the facecam/gameplay stack and the real reaction; podcast favors clear speaker turns and intact thoughts; IRL favors stable subject framing and situational context; sports favors the action and its outcome, with essential ball/player/score context visible. Apply only the chosen style's useful embellishments.
-
-Finish uses cheap data checks inline. Use checkClip only for explicitly requested scoped QA; it never implies audio normalization. Report actual findings in the affected tab. Do not call checkPacing, 10 fps windows or getFrames sweeps on finished shorts. Small follow-up edits to a finished clip start with scene-engine page \`edit-lanes\` and use its quick lane where applicable. Do not repeat whole-source discovery for a local caption, trim or style fix.
-`,
+  name: skillDocument("clipping/references/finishing.md").name,
+  description: skillDocument("clipping/references/finishing.md").description,
+  body: skillText("clipping/references/finishing.md"),
 };
 
 export const clipping: EditorSkill = {
-  name: 'clipping',
-  description: 'Turn a long stream, VOD or podcast into separate shorts: "clip this", "make clips", "turn this into shorts", "find the best moments", or a Twitch, Kick or YouTube source link with a short-form ask. Source-wide transcript search, bounded targeted video discovery, ranked hooks, 15 to 60 second clips and one timeline tab per clip; facecam splits and speaker reframing only when requested. Small existing-clip edits use scene-engine page edit-lanes.',
-  body: `# Clipping long sources into shorts
-
-Read moments before findHighlights and batching before planClips. Choose by content: podcast/interview/talk or requested stream dialogue uses transcript/voice (speechLed:true); gaming/sports commentary does not remove the need to understand visual action. findHighlights returns saved words/helpers without a whole-source Gemini job. For visual candidates use short, explicit inspectVideo windows, extend only uncertainty, and reuse observations. Silent content uses bounded adaptive native-video discovery and honest inspected coverage. Stills/cuts alone cannot prove an action.
-
-Build 15–60s shorts in one project/shared upload, one named populated tab per accepted candidate. Preserve source framing and audio unless the user asks otherwise. NO automatic normalization or heavy QA for any clipping type. finishClipping performs cheap data checks directly; then finish closes the lane. checkClip is optional, scoped to an explicit concern, cached for unchanged tabs and never implicitly requires normalization. Pass timelineId on MCP; export only when asked. Never claim skipped checks passed or unsupported action was observed.
-`,
+  name: skillDocument("clipping/SKILL.md").name,
+  description: skillDocument("clipping/SKILL.md").description,
+  body: skillText("clipping/SKILL.md"),
   pages: [moments, framing, batching, finishing],
 };

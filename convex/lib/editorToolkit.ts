@@ -1,3 +1,4 @@
+import { retryAbortedTransaction } from './retry_aborted_transaction';
 import { materializeTranscript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
@@ -254,6 +255,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal, isReferenceAsset((input as { assetId?: string }).assetId));
+    if ('status' in result) {
+      const timelineId = readRunTab(run.runId);
+      return { ...result, nextAction: { ...result.nextAction, arguments: { ...result.nextAction.arguments, ...(timelineId ? { timelineId } : {}) } }, images: [] };
+    }
     let acrossCuts: string[] = [];
     if (name === 'readFrames') {
       const args = input as { assetId: string; start: number; end: number; fps?: number; count?: number; crop?: object; momentsOnly?: boolean };
@@ -450,14 +455,17 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
   const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
-    const requestId = await ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection });
+    // Healthy worker heartbeats extend the durable request, but must not extend
+    // an MCP call past its transport budget while it holds the edit lock.
+    const waitDeadline = run.runId.startsWith('mcp-') ? Date.now() + 170_000 : Infinity;
+    const requestId = await retryAbortedTransaction(() => ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection }), abortSignal);
     try {
       while (true) {
         abortSignal.throwIfAborted();
         const request = await ctx.runQuery(internal.assistant.analysisRequest, { ...run, requestId });
         if (request.status === "failed") throw new AnalysisStepError(request.error ?? "Media analysis could not complete");
         if (request.status === "completed") return await read(request);
-        if (request.expiresAt <= Date.now()) throw new AnalysisStepError("Media analysis is taking longer than this edit request allows. Its background job will save results; try the edit again once processing finishes.");
+        if (Math.min(request.expiresAt, waitDeadline) <= Date.now()) throw new AnalysisStepError("Media analysis is taking longer than this edit request allows. Its background job will save results; try the edit again once processing finishes.");
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     } finally { await ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId }); }
@@ -669,7 +677,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const guardRender = async (baseline: Timeline, candidate: Timeline, times: number[]) => {
     const snapshotId = await ctx.runMutation(internal.mcp.requestGuard, { ...run, baseline, candidate, times });
     try {
-      const deadline = Date.now() + 420_000;
+      // MCP transport expires before the in-app guard budget. Refuse before any save.
+      const deadline = Date.now() + (run.runId.startsWith('mcp-') ? 170_000 : 420_000);
       while (Date.now() < deadline) {
         if (abortSignal.aborted) throw new Error('Stopped.');
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
@@ -957,6 +966,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
+      if(lane==='reel'&&editSession.timeline.clips.some(clip=>clip.kind==='caption')){
+        const audibleIds=new Set(editSession.timeline.clips.filter(clip=>clip.volume!==0&&(clip.kind==='audio'||clip.kind==='video'&&!clip.audioSeparated)).map(clip=>clip.assetId));
+        // Each call starts with metadata rows; saved transcripts live in source analysis.
+        await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
+      }
       const frameTask=editMode==='fast'&&lane==='reel'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
@@ -1026,7 +1040,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const deadline=Date.now()+180000;
         while(true){abortSignal.throwIfAborted();const review=await ctx.runQuery(internal.compositionReview.get,{...run,reviewId});
           // An environment without the review service cannot review; report it plainly instead of failing.
-          if(review.status==='failed'&&/composition review is not configured/i.test(review.error??'')){reviewServiceMissing=true;return reviewUnavailableResult;}
+          if(review.status==='failed'&&/composition review is not configured|Gemini.*HTTP 402/i.test(review.error??'')){reviewServiceMissing=true;return {...reviewUnavailableResult,reason:review.error};}
           if(review.status==='failed')throw new AnalysisStepError(review.error??'Rendered review failed.');
           if(review.status==='completed'){const current=await ctx.runQuery(internal.assistant.getRunTimeline,run),stale=current.revision!==review.result?.revision;return {reviewed:!stale,stale,currentRevision:current.revision,scope:stale?'The timeline changed during review. Inspect the latest state; this receipt describes the earlier snapshot.':'Sampled composited timeline; no audio judgment',staged:editSession.staged,...review.result};}
           if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
@@ -1511,19 +1525,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a video or still image reference. For a still image, times are the timeline moments to compare with it (offset defaults 0). Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. After four minutes, returns finished samples and continueFrom; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
+    compareReference: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.compareReference, description: "Compare rendered pixels with a video or still image reference. For a still image, times are the timeline moments to compare with it (offset defaults 0). Give times for steady stretches, or start/end/fps (default 15) to compare every frame across a transition. Include padding before onset and after settle. Returns finished samples and a scoped receipt within the call budget; call nextAction to finish with the same fps, crop settings and offset. Use referenceCrop for a reference sub-panel and timelineCrop for its recreation (omit for full frame); regions are normalized on each displayed frame and scaled to match. crop remains shorthand for both, overridden by each explicit side. referenceCropKeyframes follows a moving panel with linearly interpolated crops in SOURCE seconds, holding endpoints outside its range. offset maps reference seconds to timeline seconds. The entire call uses one frozen timeline snapshot, so edits can continue while it runs. Returned revision identifies the saved source; rerun after edits. Scores are diagnostics, never a pass threshold: check each inventory item, first visible frame, count, exact content and motion. Fix big moves before polish, then compareMotion per section.", inputSchema: referenceComparisonInput, execute: async (_ctx, input) => {
       const stillReference = assets.find(asset => asset._id === input.assetId)?.kind === 'image';
       const deadline = Math.min(options.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS);
       await editSession.wait();
       const offset = input.offset ?? 0, requested = comparisonSamples(input), timelineId = readRunTab(run.runId);
       if (input.times ? input.times.some(time => time + offset < 0) : input.start! + offset < 0) throw new Error('The offset places a reference sample before the timeline starts.');
       const scores: { time: number; difference: number }[] = [], images: { label: string; data: string; mimeType: string }[] = [];
-      const snapshots: Id<'frameSnapshots'>[] = [];
-      const pending: { times: number[]; snapshotId: Id<'frameSnapshots'> }[] = [];
+      const {receipt: suppliedReceipt, cancel, ...work} = input;
+      if(cancel&&!suppliedReceipt)throw new Error("Cancel requires the original comparison receipt.");
+      const binding = JSON.stringify(work);
+      type Progress = { fingerprint:string; snapshots: Id<'frameSnapshots'>[]; pending: {times:number[];snapshotId:Id<'frameSnapshots'>;readId?:Id<'referenceReads'>}[]; queued:number; completed:number; revision:number|null };
+      const progress: Progress = suppliedReceipt ? JSON.parse(await ctx.runQuery(internal.comparisonContinuations.load,{ownerId:run.ownerId,projectId:run.projectId,timelineId:timelineId??'main',binding,receipt:suppliedReceipt})) : {fingerprint:await timelineHistoryKey(editSession.timeline),snapshots:[],pending:[],queued:0,completed:0,revision:null};
+      const receipt = suppliedReceipt as Id<'comparisonContinuations'> | undefined ?? await ctx.runMutation(internal.comparisonContinuations.create,{ownerId:run.ownerId,projectId:run.projectId,timelineId:timelineId??'main',binding,state:JSON.stringify(progress)});
+      if(cancel){await ctx.runMutation(internal.comparisonContinuations.expire,{id:receipt});return {status:'cancelled',samples:0,images:[]};}
+      const {snapshots,pending} = progress;
+      const save = () => ctx.runMutation(internal.comparisonContinuations.save,{id:receipt,state:JSON.stringify({...progress,queued,completed,revision})});
       const timelineCrop = input.timelineCrop ?? input.crop;
       // Leave room for scores and resume arguments below Convex's 16 MiB function return limit.
       const imageBudget = 8 * 1024 * 1024;
-      let revision: number | null = null, queued = 0, completed = 0, imageBytes = 0;
+      let revision: number | null = progress.revision, queued = progress.queued, completed = progress.completed, imageBytes = 0;
       const queueBatch = async () => {
         if (queued >= requested.count || Date.now() >= deadline) return;
         if (abortSignal.aborted) throw new Error('Stopped.');
@@ -1532,14 +1553,15 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         snapshots.push(snapshotId);
         pending.push({ times, snapshotId });
         queued += times.length;
+        await save();
       };
       try {
         // Two render batches in flight match the local worker's default slots. The first freezes the source;
         // every later batch copies it. Score in order so continueFrom never skips an unfinished sample.
-        await queueBatch();
-        await queueBatch();
+        if (!pending.length) await queueBatch();
         while (pending.length && Date.now() < deadline) {
-          const { times, snapshotId } = pending.shift()!;
+          const batch = pending[0];
+          const { times, snapshotId } = batch;
           let rendered = false;
           while (Date.now() < deadline) {
             if (abortSignal.aborted) throw new Error('Stopped.');
@@ -1550,7 +1572,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             await new Promise(resolve => setTimeout(resolve, Math.max(0, Math.min(1500, deadline - Date.now()))));
           }
           if (!rendered) break;
-          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes, isReferenceAsset(input.assetId));
+          const result = await runCompare(ctx, run.ownerId, run.projectId, input.assetId, times, snapshotId, deadline, abortSignal, input.referenceCrop ?? input.crop, input.referenceCropKeyframes, isReferenceAsset(input.assetId), {readId:batch.readId,save:async readId=>{batch.readId=readId;await save();}});
           if (!result) break;
           if (result.scores?.length !== times.length) throw new Error('The comparison returned incomplete scores. Retry this window.');
           scores.push(...result.scores.map((score, index) => ({ time: times[index], difference: Math.round(score.difference * 1000) / 10 })));
@@ -1559,17 +1581,23 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             imageBytes += data.length;
           }
           completed += times.length;
+          pending.shift();
+          await save();
+          if(batch.readId) await ctx.runMutation(internal.referenceReads.discard,{readId:batch.readId});
           if (imageBytes >= imageBudget) break;
           await queueBatch();
         }
-      } finally {
-        await Promise.all(snapshots.map(snapshotId => ctx.runMutation(internal.mcp.discardFrames, { snapshotId })));
+      } catch(error) {
+        if(abortSignal.aborted || (error as {data?:{code?:string}})?.data?.code==='REFERENCE_READ_INVALID' || (error instanceof Error && /could not be rendered|incomplete scores|comparison could not be made/.test(error.message))) await ctx.runMutation(internal.comparisonContinuations.expire,{id:receipt});
+        throw error;
       }
+      await save();
       const continueFrom = completed < requested.count ? requested.batch(completed)[0] : null;
       const { start, end, fps, times, ...settings } = input;
-      const nextAction = continueFrom === null ? undefined : { tool: 'compareReference', arguments: { projectId: run.projectId, ...(timelineId ? { timelineId } : {}), ...settings, ...(times ? { times: times.slice(completed) } : continueFrom < end! ? { start: continueFrom, end, fps: fps ?? 15 } : { times: [continueFrom] }) } };
-      return { status: nextAction ? 'partial' : 'completed', revision, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.referenceCrop ? { referenceCrop: input.referenceCrop } : {}), ...(input.timelineCrop ? { timelineCrop: input.timelineCrop } : {}), ...(input.referenceCropKeyframes ? { referenceCropKeyframes: input.referenceCropKeyframes } : {}), ...(input.times ? {} : { range: { start, end, fps: fps ?? 15 } }), requestedSamples: requested.count, samples: scores.length, scores, images, continueFrom, ...(nextAction ? { nextAction, reason: imageBytes >= imageBudget ? 'result_size' : 'time_budget' } : {}),
-        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. This call scored revision ${revision}; if you edit before resuming, the next call scores a new frozen revision. Inspect the returned pairs before continuing.` : stillReference ? 'Inspect the reference and built frame for composition, palette, hierarchy, materials and intent. Fix clear departures; exact pixels and a low difference score are not acceptance criteria. Check the planned motion separately with getFrames/checkPacing.' : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
+      const nextAction = continueFrom === null ? undefined : {tool:'compareReference',arguments:{projectId:run.projectId,...(timelineId?{timelineId}:{}),...(taskId?{taskId}:{}),...work,receipt}};
+      if(!nextAction) await ctx.runMutation(internal.comparisonContinuations.expire,{id:receipt});
+      return { status: nextAction ? (scores.length ? 'partial' : 'pending') : 'completed', revision, sourceFingerprint:progress.fingerprint, source: editSession.staged ? 'frozen draft' : 'frozen saved timeline', ...(input.crop ? { crop: input.crop } : {}), ...(input.referenceCrop ? { referenceCrop: input.referenceCrop } : {}), ...(input.timelineCrop ? { timelineCrop: input.timelineCrop } : {}), ...(input.referenceCropKeyframes ? { referenceCropKeyframes: input.referenceCropKeyframes } : {}), ...(input.times ? {} : { range: { start, end, fps: fps ?? 15 } }), requestedSamples: requested.count, samples: scores.length, scores, images, continueFrom, ...(nextAction ? { nextAction, reason: imageBytes >= imageBudget ? 'result_size' : 'time_budget' } : {}),
+        next: nextAction ? `${imageBytes >= imageBudget ? 'Image result size' : 'Time budget'} reached. Call compareReference again using nextAction.arguments, starting at reference ${continueFrom}s with the same fps, crop settings and offset. Frozen source revision: ${revision}; continuations keep scoring this original frozen revision even after edits. The receipt expires after 10 minutes; zero samples are pending work, not verification. Inspect the returned pairs before continuing.` : stillReference ? 'Inspect the reference and built frame for composition, palette, hierarchy, materials and intent. Fix clear departures; exact pixels and a low difference score are not acceptance criteria. Check the planned motion separately with getFrames/checkPacing.' : 'Inspect every pair against the numbered inventory. Fix missing or wrong transitions, onset, speed, layers, counts and content with patchScene before tuning colors or offsets. Compare cropped details and run compareMotion for the section. Recheck after edits; close out every item as matched or explicitly off. A low score alone never establishes a match.' };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (scenes, footage, text, effects), and see them as images. For existing edits follow scene-engine page edit-lanes for sampling; after builds use it at each key beat, to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreSection or restoreClip.", inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing for precise layout inspection.'), times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision, resolution }) => {
       await editSession.wait();
@@ -2264,7 +2292,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(before!==after||name==='createTimeline'||name==='openTimeline'||referenceMotionEnabled()&&['motionMap','compareMotion','compareReference'].includes(name))finishResult=undefined;
       if(taskId&&editMode==='fast'&&(before!==after||name==='getFrames'||name==='finish'))
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:fastFrameEvidence(timelineId,after,fastReview.times())});
-      if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after){
+      if(taskId&&['compareReference','compareMotion','checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after&&(name!=='compareReference'||(typeof output.samples==='number'&&output.samples>0&&output.sourceFingerprint===after&&output.revision===editSession.revision))){
         const {images:_images,...evidence}=output;
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:{tool:name,timelineId,fingerprint:after,input,output:evidence}});
       }

@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Worker hosting: Preserve dashboard CPU and memory limits for permanent Railway services and size worker threads from actual CPU allocation. Why: manual resource changes must not block deployment.
+
 - Railway builds: Install the checksum-pinned beat model inside Docker instead of copying a generated model directory. Why: repository builds must not depend on a local prepared cache.
 
 - Worker hosting: Name Railway configuration mutations and preserve existing repository links. Why: Railway rejected the anonymous update during real staging.
@@ -9,11 +11,31 @@
 - Worker hosting: Decode Railway structured runtime logs and reserve capacity while builds are pending. Why: real staging passed its limits but the controller missed parsed log attributes.
 
 - Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.
+- MCP frame reads: Return a resumable handle while frames render and retain results until download succeeds. Why: Timeout retries queued duplicate work and could discard unread images.
+- Source frames: Reject empty receipts and return saved handles after transient result downloads. Why: first-call download failures hid resumable work (#87).
+
+- Reference comparison: Resume pending renders and pixel comparisons on the original frozen revision with scoped receipts. Why: #86 restarted cancelled work after MCP timeouts.
+
+- Source frames: Resume saved readFrames jobs after a bounded wait with scoped check handles. Why: #87 lost long-running responses and queued duplicate reads.
+
+- Media tools: Retry aborted analysis and MCP frame enqueue transactions. Why: #102 reported task-slot conflicts escaping to callers.
+- Editor skills: Author prose in Markdown and bundle it for all runtimes; sharpen measured recreation guidance. Why: user requested reviewable skills without changing readSkill.
+- Media processors: Require the public X import release before claiming new import jobs. Why: Older processors could accept a status link without its supported extractor.
+
+- Brand lookup: Require canonical brand matches before selecting programming-pack logos by name. Why: the shorthand Apollo slug returned Apollo GraphQL for a company lookup (#101).
+- Reel completion: Load saved speech analysis before checking retained captions. Why: fresh tool calls lost separately stored video transcripts (#93).
+- MCP: Bound visual-guard waits and cancel abandoned guard renders before releasing edits. Why: Transport expiry could leave scoped patches holding the edit lock.
+- Scene capture: Decode bound video before the final Three draw and invalidate older captures. Why: #100 and #120 legacy playback captured black VideoTexture frames.
+- Video import: Route public X status links through the supported downloader. Why: #114 treated supported video posts as direct MP4 files.
+
+- Scene video: Overlay decoded still frames on video boxes and wait for the first decoded frame at zero. Why: original #100 captures omitted bound mascot imagery.
+- Assistant models: Unlock every configured in-app model for paid subscriptions, including Sonnet and Opus, while trials stay on Terra Low. Why: the user wants model choice after trial conversion without an Ultra-only Claude restriction.
 
 - Agent context: Reference repeated identical source transcripts within each user turn while preserving discovery metadata. Why: Repeated fallback discovery duplicated full speech evidence.
 - Reference analysis: Preserve small traced interiors and label motion sampling, context and unverified background ownership. Why: Original footage reproduced #105 and #107.
 
 - Frame reads: Round whole-source motion-scan timeouts to integer milliseconds. Why: Fractional media durations must produce valid Node process deadlines.
+- MCP: Bound analysis waits while durable jobs continue saving results. Why: Healthy worker heartbeats could keep edit locks held after the caller lost its response.
 - Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
@@ -27,6 +49,9 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Worker hosting: Shorten Railway temporary service names and validate nested container limits. Why: authenticated API inspection rejected long names and revealed the actual limit response.
 - Worker hosting: Allow exact published PR image builds and Railway-only temporary preflights without Convex access. Why: the authorized rollout must validate containers before merging backend changes.
 - Worker hosting: Add staged Railway processors, exports and distributed chunks with bounded resources and explicit cutover/rollback. Why: the user requested moving only Fly container hosting while retaining the existing app, backend and storage.
+- Media analysis: Pause fresh Gemini analysis and composition reviews per owner and configured key for 15 minutes after genuine billing rejections. Why: #111 repeated new runs downloaded and uploaded footage against an unfunded provider.
+- Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
+- Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.
 - MCP timelines: Bind scoped edits to their target tab and restore selection within each write. Why: issue #92 reported background edits switching the user’s visible timeline.
 - Project copies: Remap film references and generated-image provenance to copied assets across saved tabs. Why: project-owned media bindings must follow the copy rather than retain source-project IDs.
 - Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.

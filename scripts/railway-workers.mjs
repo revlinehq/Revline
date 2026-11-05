@@ -32,7 +32,7 @@ const selectedPools = () => [
   ...(kinds.includes('exports') ? [{ name: 'standard', ids: config.standardServices, image: config.exportsImage }, { name: 'ultra', ids: config.ultraServices, image: config.exportsImage }] : []),
 ];
 const hash = () => createHash('sha256').update(JSON.stringify(config)).digest('hex');
-console.log(`Target: Railway ${config.environment}, project ${config.projectId}, environment ${config.environmentId}; Convex ${deployment}. Maximum per container: 4 CPUs / 8192 MiB.`);
+console.log(`Target: Railway ${config.environment}, project ${config.projectId}, environment ${config.environmentId}; Convex ${deployment}. Permanent service CPU and memory limits are managed in the Railway dashboard.`);
 if (operation === 'plan' || (!values.apply && operation !== 'status')) {
   console.log(JSON.stringify({ operation, kinds, config, effect: 'No API calls, image builds, resources or environments changed. Pass --apply only after migration authorization.' }, null, 2));
   process.exit(0);

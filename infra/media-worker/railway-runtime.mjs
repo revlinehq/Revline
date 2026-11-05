@@ -23,7 +23,7 @@ if (process.env.REVLINE_CHUNK_INDEX !== undefined) {
 // or opening a queue connection. Never trust the account plan's default ceiling.
 const [quota, period] = (await readFile('/sys/fs/cgroup/cpu.max', 'utf8')).trim().split(/\s+/).map(Number);
 const memory = Number((await readFile('/sys/fs/cgroup/memory.max', 'utf8')).trim());
-if (!Number.isFinite(quota) || quota <= 0 || !period || quota / period > 4 || !Number.isFinite(memory) || memory <= 0 || memory > 8192 * 1024 * 1024) throw new Error('Railway cgroup exceeds 4 CPUs / 8192 MiB, or limits cannot be verified.');
+if (!Number.isFinite(quota) || quota <= 0 || !Number.isFinite(period) || period <= 0 || !Number.isFinite(memory) || memory <= 0) throw new Error('Railway CPU and memory allocation must be finite, positive and verifiable.');
 const disk = await statfs(process.env.TMPDIR || '/tmp');
 if (disk.bavail * disk.bsize < 20 * 1024 ** 3) throw new Error('Railway scratch needs at least 20 GiB free; use a paid plan with sufficient ephemeral storage.');
 execFileSync(process.execPath, ['infra/media-worker/runtime-check.mjs'], { stdio: 'inherit' });

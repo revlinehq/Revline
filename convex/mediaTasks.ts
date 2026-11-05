@@ -1,3 +1,4 @@
+import { geminiBillingUnavailable, recordGeminiBilling, usesGemini } from './lib/gemini_billing';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { readHighlights } from '../lib/media-analysis/highlights';
 import { clipCheckRequestValidator } from './lib/clipping_validator';
@@ -95,7 +96,7 @@ export const RECREATION_PROCESSOR_VERSION = 23;
 export const REFERENCE_CROP_PROCESSOR_VERSION = 33;
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'highlightSourceType' | 'highlightSkipGemini' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>, waitForCapacity = false): Promise<Id<'mediaTasks'>> {
-  const minimum = MIN_PROCESSOR_VERSION[input.kind];
+  const minimum = usesGemini(input.kind) ? MEDIA_PROCESSOR_VERSION : MIN_PROCESSOR_VERSION[input.kind];
   if (minimum) input = { ...input, requiredProcessorVersion: Math.max(minimum, input.requiredProcessorVersion ?? 0) };
   if(input.kind==='preview')input={...input,previewVersion:PREVIEW_VERSION};
   if(input.assetId&&input.kind==='preview'){const asset=await ctx.db.get(input.assetId);// A cut-out plays its own VP9 alpha file; an H.264 proxy would drop the transparency.
@@ -140,6 +141,16 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   }
   // Reused evidence and active tasks need no new provider capacity. Reserve
   // only when a fresh task will actually be inserted, in this transaction.
+  const billingReason = usesGemini(input.kind) ? await geminiBillingUnavailable(ctx, input.ownerId) : null;
+  if (billingReason) {
+    if (input.kind === 'highlights') input = { ...input, highlightSkipGemini: billingReason };
+    else {
+      const now = Date.now();
+      const taskId = await insertMediaTask(ctx, { ...input, status: 'failed', error: billingReason, attempt: 0, progress: 0, createdAt: now, updatedAt: now });
+      await markTerminal(ctx, taskId, 'failed', billingReason);
+      return taskId;
+    }
+  }
   await beforeEnqueue?.();
   const now = Date.now();
   const earlier = waitForCapacity && await ctx.db.query('mediaTasks').withIndex('by_owner_capacity_waiting', q => q.eq('ownerId', input.ownerId).eq('capacityWaiting', true)).first();
@@ -582,6 +593,11 @@ export const claim = mutation({ args: { projectId:v.optional(v.id('projects')),w
   const task=await firstClaimable(ctx,args.processorVersion,args.lane,args.rendersOnly||role==='exports',args.excludedKinds,args.projectId);if(!task)return null;
   try {await projectIdentity(ctx,task.projectId,task.ownerId);}catch{await failTask(ctx,task,'The project was removed.',false);return null;}
   if(!await analysisStillActive(ctx,task)){await markTerminal(ctx,task._id,'cancelled','The AI analysis request is no longer active.');await signalResult(ctx,task,{success:false,retryable:false,error:'The AI run stopped.'});return null;}
+  const billingReason = usesGemini(task.kind) ? await geminiBillingUnavailable(ctx, task.ownerId) : null;
+  if (billingReason) {
+    if (task.kind === 'highlights') { await ctx.db.patch(task._id, { highlightSkipGemini: billingReason }); task.highlightSkipGemini = billingReason; }
+    else { await failTask(ctx, task, billingReason, false); return null; }
+  }
   const leaseToken=crypto.randomUUID(),now=Date.now();
   await patchMediaTask(ctx, task,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,updatedAt:now});
   if(task.analysisRequestId)await ctx.db.patch(task.analysisRequestId,{status:'running'});
@@ -624,10 +640,11 @@ export const expire = internalMutation({ args: mediaTaskCredentials, returns: v.
   else await failTask(ctx, task, 'The media worker disconnected. Retrying from saved progress.', true);
   return null;
 }});
-export const fail = mutation({ args: { ...mediaTaskCredentials, error: v.string(), retryable: v.boolean() }, returns: v.null(), handler: async (ctx, args) => {
+export const fail = mutation({ args: { ...mediaTaskCredentials, error: v.string(), retryable: v.boolean(), geminiBilling: v.optional(v.boolean()), geminiKeyHash: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
+  if (args.geminiBilling && usesGemini(task.kind)) await recordGeminiBilling(ctx, task.ownerId, args.geminiKeyHash);
   // Billing cannot recover through retries, including reports from older workers.
-  await failTask(ctx, task, args.error, args.retryable && !/Gemini.*HTTP 402/i.test(args.error)); return null;
+  await failTask(ctx, task, args.error, args.retryable && !args.geminiBilling && !/Gemini.*HTTP 402/i.test(args.error)); return null;
 }});
 async function placeImportedVideo(ctx: MutationCtx, project: Doc<'projects'>, taskId: Id<'mediaTasks'>, output: Doc<'assets'> & { duration: number }) {
   const timeline = currentTimeline(project), clipId = `import-${taskId}`;
