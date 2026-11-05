@@ -2,8 +2,7 @@ import type { FrameInspection, FrameTarget } from '../media-analysis/frame-inspe
 import { validateFrameInspectionResult } from '../media-analysis/frame-inspection';
 import { sourceEndOf, timelineTimeAtSource } from '../editor/playback-rate';
 import { smoothZoomPatch } from '../editor/smooth-zoom';
-import type { SmoothZoomSettings } from '../editor/smooth-zoom-settings';
-import type { AspectRatio, Clip, MediaAsset } from '../editor/types';
+import type { AspectRatio, Clip, MediaAsset, SmoothZoomSettings } from '../editor/types';
 export type ZoomTargetEvidence = FrameTarget & {assetId:string;sourceWidth:number;sourceHeight:number;sourceFps?:number};
 export type ZoomFocusInput = {kind:'center'}|{kind:'coordinates';centerX:number;centerY:number;units?:'normalized'|'pixels'}|{kind:'target';targetId:string};
 export type ZoomTimingInput = {start:number;inDuration:number;holdDuration:number;outDuration:number;scale:number;easing:SmoothZoomSettings['easing'];framing?:SmoothZoomSettings['framing'];replaceMotion?:boolean};

@@ -1,9 +1,8 @@
-import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneFilm, type SceneMedia, type SceneSource, type Timeline } from './types';
+import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
 import { isReactScene, isSceneTransition, sceneRuntimeNames, SCENE_RUNTIME_BUNDLES, type SceneRuntimeName } from './scene-modules';
 
-export type { SceneBlueprint, SceneFilm, SceneMedia, SceneSource };
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
 // Scene code has no length limit; only titles are capped.

@@ -1,8 +1,6 @@
 import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS, trackOf, type Clip, type ClipTransition, type Timeline, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './types';
 import { playbackRateOf } from './playback-rate';
 
-export { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS };
-export type { ClipTransition, TransitionDirection, TransitionPreset, TransitionWipeSettings };
 /** Offered in the timeline's transition menu; the rest are applied by the AI editor. */
 export const MANUAL_TRANSITION_PRESETS: readonly TransitionPreset[] = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'];
 const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };

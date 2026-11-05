@@ -1,6 +1,5 @@
 import type { Clip, ClipOutline } from './types';
 
-export type { ClipOutline };
 export const DEFAULT_OUTLINE: Readonly<ClipOutline> = Object.freeze({ enabled: true, color: '#36f9f2', width: 5, glow: 28 });
 const OUTLINE_LIMITS = { width: [0, 24], glow: [0, 80] } as const;
 

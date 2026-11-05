@@ -1,10 +1,9 @@
-import type { PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
+import type { ClipMask, MaskShape, PixelTrackBinding, PixelTrackReference, TrackGeometry, TrackMaskSettings } from './types';
 import { boundedCameraMotion } from './camera-framing';
 import { focusAt } from './focus-path';
 import { motionAt, NEUTRAL_MOTION } from './motion-path';
 import { objectMotionPatch } from './object-motion';
 import { solidColorSettings, visibleMotion } from './clip-effects';
-import type { ClipMask, MaskShape } from './masks';
 import { sourceTimeAt, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type AspectRatio, type Clip, type MediaAsset } from './types';
 import { calculateVisualRect } from './visual-source-geometry';

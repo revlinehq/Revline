@@ -5,9 +5,9 @@ import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { addTransitionClip, deleteClip, patchClip } from '@/lib/editor/operations';
 import { EFFECT_CATALOG } from '@/lib/editor/clip-effects';
-import { boundedTransitionRange, transitionDurationLimit, MANUAL_TRANSITION_PRESETS, isTransitionPreset, type TransitionPreset } from '@/lib/editor/clip-transitions';
+import { boundedTransitionRange, transitionDurationLimit, MANUAL_TRANSITION_PRESETS, isTransitionPreset } from '@/lib/editor/clip-transitions';
 import { EFFECT_DRAG_TYPE, readEffectDrag } from '@/lib/editor/effect-drag';
-import type { Clip, Timeline } from '@/lib/editor/types';
+import type { Clip, Timeline, TransitionPreset } from '@/lib/editor/types';
 import { EffectIcon } from './effect-icon';
 import './timeline-transitions.css';
 

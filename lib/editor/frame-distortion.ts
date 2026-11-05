@@ -1,4 +1,4 @@
-import type { FrameDistortion } from './visual-effects';
+import type { FrameDistortion } from './types';
 
 /** Project a source point after a monotonic radial bend of the entire frame. */
 function frameDistortionPoint(x:number,y:number,{horizontal,vertical,skew,bend=0}:FrameDistortion) {

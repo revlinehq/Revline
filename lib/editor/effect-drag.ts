@@ -1,6 +1,6 @@
 import { addEffectClip, patchClip } from './operations';
 import { visualEffectsPatch, VISUAL_EFFECT_KEYS, type VisualEffects } from './visual-effects';
-import { EFFECT_PRESETS, layerGroup, trackOf, type EffectPreset, type Timeline, type LayerGroup } from './types';
+import { EFFECT_PRESETS, layerGroup, trackOf, type EffectPreset, type Timeline, type LayerGroup, type TransitionPreset } from './types';
 import { isTransitionPreset } from './clip-transitions';
 import { placeTransitionAt } from './transition-placement';
 
@@ -24,7 +24,7 @@ export function dropLibraryEffect(timeline: Timeline, effect: EffectDrag, at: nu
     }
     const transition=isTransitionPreset(effect.preset);
     if(transition&&group!=='visual'&&group!=='effects')throw new Error('Drop a transition onto a video/image cut or an FX track.');
-    if(transition)return placeTransitionAt(timeline,id,effect.preset as import('./clip-transitions').TransitionPreset,at,{track:group==='effects'?track:undefined,...(group==='visual'?{aboveClipId:targetId,visualTrack:track}:{})});
+    if(transition)return placeTransitionAt(timeline,id,effect.preset as TransitionPreset,at,{track:group==='effects'?track:undefined,...(group==='visual'?{aboveClipId:targetId,visualTrack:track}:{})});
     return addEffectClip(timeline, id, effect.preset, at, { track: group === 'effects' ? track : undefined,
       ...(transition&&group==='visual'?{aboveClipId:targetId,visualTrack:track}:{}),
     });
