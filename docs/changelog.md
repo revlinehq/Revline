@@ -1,5 +1,6 @@
 ## 2026-11-04
 
+- Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
 # Changelog
@@ -7,8 +8,7 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
-- Analysis tools: Preserve exact sound range endpoints and overlap sub-minimum continuation tails; return compact effect-plan acknowledgments. Why: rounded bounds produced invalid follow-ups and repeated plans inflated context.
-- Analysis tools: Require exact brand names or aliases and accept small UI capture dimensions. Why: substring matches returned unrelated logos and valid composer captures were refused.
+- Media processing: Stop retrying wrapped disk exhaustion and import free-space refusals, including SQLite disk-full errors. Why: exhausted workers repeated permanent failures three times.
 - Reel verification: Persist sparse checks through draft writes, reuse unchanged failures, keep boundary words, and stop disk-full retries. Why: the real Fast benchmark restored dense checks and lost caption coverage.
 - Reel: Use data checks for Fast speech assembly, batch source grids for visual cleanup, sample caption/framing once, and choose J/L cuts selectively. Why: shared render gates repeated work at every speech and caption edge.
 - Editor: Removed the explainer workflow and skills while retaining shared motion scenes and legacy records. Why: Narrower product scope and context keep footage workflows focused.
@@ -19,6 +19,8 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Landing: Remove the short-form editing showcase section. Why: simplify the landing page by dropping the unwanted Reel showcase.
 - Release validation: Declare shared Fly resource types, narrow optional machine settings and run all release typechecks in CI. Why: the agent-runner check blocked the approved cap release after ordinary CI passed.
 - Fly workers: Cap each processor, export, chunk and preflight at 4 CPUs/8192 MB, match volume placement, and honor zero-capacity holds. Why: the user's per-worker architectural budget must stay consistent across runtime and preflight.
+- Analysis tools: Preserve exact sound range endpoints and overlap sub-minimum continuation tails; return compact effect-plan acknowledgments. Why: rounded bounds produced invalid follow-ups and repeated plans inflated context.
+- Analysis tools: Require exact brand names or aliases and accept small UI capture dimensions. Why: substring matches returned unrelated logos and valid composer captures were refused.
 - Assistant workflows: Share basic edits, load supporting skills without replacing the deliverable, and retain source evidence across styles. Why: lane ownership coupled tools, task checks and conversation memory.
 - Reel and captions: Clean one-take rough cuts at their natural duration and default new subtitles to minimal text without a background. Why: fixed duration, forced normalization and boxed subtitles distorted the intended edit.
 - Deployment: Retry reset connections when reading Fly preflight status within its existing deadline. Why: a transient TLS reset aborted the latest main release after its image upload.

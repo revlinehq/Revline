@@ -19,9 +19,20 @@ export function mediaErrorMessage(error: unknown) {
 
 /** Match actual disk exhaustion, including FFmpeg stderr, without classifying network errors as permanent. */
 export function isMediaDiskFull(error: unknown): boolean {
-  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
-  const stderr = error && typeof error === 'object' && 'stderr' in error ? error.stderr : undefined;
-  return code === 'ENOSPC' || /\bENOSPC\b|No space left on device/i.test(`${error instanceof Error ? error.message : ''} ${typeof stderr === 'string' ? stderr : ''}`);
+  const pending: unknown[] = [error];
+  const seen = new Set<unknown>();
+  while (pending.length) {
+    const value = pending.pop();
+    if (typeof value === 'string' && /\b(?:ENOSPC|SQLITE_FULL)\b|No space left on device|database or disk is full|needs more free disk space/i.test(value)) return true;
+    if (!value || typeof value !== 'object' || seen.has(value)) continue;
+    seen.add(value);
+    if ('code' in value && (value.code === 'ENOSPC' || value.code === 'SQLITE_FULL')) return true;
+    for (const key of ['message', 'stderr', 'cause', 'data']) {
+      if (key in value) pending.push(Reflect.get(value, key));
+    }
+    if ('errors' in value && Array.isArray(value.errors)) pending.push(...value.errors);
+  }
+  return false;
 }
 
 /** Explicit provider policy wins over status defaults, including throttling. */
