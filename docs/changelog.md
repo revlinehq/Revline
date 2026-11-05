@@ -1,5 +1,7 @@
 ## 2026-11-04
 
+- Scene video: Overlay decoded still frames on video boxes and wait for the first decoded frame at zero. Why: original #100 captures omitted bound mascot imagery.
+
 - Film editing: Refuse trims beyond a film’s declared source length. Why: Split scene windows need valid coverage and one stable animation clock.
 - Frame inspection: Add explicit one-frame 1080p composition reads with pixel dimensions and bounded encoding. Why: Layout checks need full composition pixels without inflating routine previews.
 
