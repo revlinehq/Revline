@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { marketingPages } from '@/lib/marketing-pages';
 import { Brand } from '@/components/workspace/brand';
 
 export function LandingFooter() {
@@ -8,7 +7,6 @@ export function LandingFooter() {
     <nav aria-label="Footer navigation">
       <Link href="/pricing">Pricing</Link>
       <Link href="/blog">Blog</Link>
-      {marketingPages.map(page => <Link key={page.slug} href={`/${page.slug}`}>{page.title}</Link>)}
       <a href="/#faq">FAQ</a>
       <Link href="/privacy">Privacy</Link>
       <Link href="/terms">Terms</Link>

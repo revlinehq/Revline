@@ -1,6 +1,6 @@
 export const marketingPages = [
   {
-    slug: 'podcast-clips', title: 'AI podcast clip maker',
+    slug: 'podcast-clips', navigationLabel: 'Podcast clips', title: 'AI podcast clip maker',
     description: 'Turn a long podcast into short clips with Revline. Find moments, edit the cuts, add captions and reframe for vertical video.',
     heading: 'Turn your podcast into clips worth sharing.',
     intro: 'Give a long conversation a second life. Ask Revline to find useful moments, then review each clip in an editable timeline before publishing.',
@@ -13,7 +13,7 @@ export const marketingPages = [
     note: 'Clip selection is a starting point. Review context, names, caption accuracy and permissions before sharing someone else’s recording.',
   },
   {
-    slug: 'ai-video-captions', title: 'AI video captions and subtitle editor',
+    slug: 'ai-video-captions', navigationLabel: 'Captions', title: 'AI video captions and subtitle editor',
     description: 'Add and edit video captions with Revline. Review the transcript, adjust subtitle timing and style, then export your captioned video.',
     heading: 'Captions that follow your words.',
     intro: 'Ask for subtitles in the same conversation you use to edit your video. Keep the result editable so wording, timing and appearance stay under your control.',
@@ -26,7 +26,7 @@ export const marketingPages = [
     note: 'Speech recognition can miss words, especially with background noise or unfamiliar names. Always check the transcript before publishing.',
   },
   {
-    slug: 'reference-video-recreation', title: 'Reference video recreation with AI',
+    slug: 'reference-video-recreation', navigationLabel: 'Reference recreation', title: 'Reference video recreation with AI',
     description: 'Recreate a reference video as editable motion scenes in Revline. Inspect frames, measure movement and compare your rendered edit with the source.',
     heading: 'Rebuild the motion. Keep the layers editable.',
     intro: 'Use a reference to explain the timing and visual language you want. Revline can build editable motion scenes and compare the rendered result with that reference.',

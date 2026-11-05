@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Marketing: Widen workflow pages, use shared purple styling, and move their footer links into blog navigation. Why: the user requested consistent branding and clearer navigation.
+
 - Navigation: Keep Blog in the footer and remove it from the navbar. Why: the user requested footer-only blog navigation.
 
 - Blog: Widen the content area, remove small category labels and use the shared purple palette. Why: the user requested wider cards and consistent branding.
