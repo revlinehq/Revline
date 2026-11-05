@@ -6,6 +6,7 @@ import { accountLimit } from './account_limits';
 /** With RENDER_PROVIDER=fly, exports run on on-demand Fly.io machines; every
  * other media task stays on the regular processors, which then skip exports. */
 export const flyRendersEnabled = () => process.env.RENDER_PROVIDER === 'fly';
+export const hostedRendersEnabled = () => flyRendersEnabled() || process.env.RENDER_PROVIDER === 'railway';
 
 /** Exports one account renders at once; further exports wait in the queue.
  * Ultra exports carry lane 'ultra' from enqueue. */

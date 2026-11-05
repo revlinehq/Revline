@@ -1,17 +1,19 @@
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
-import { startMediaWorker } from '../../lib/server/media-worker-loop';
+import { startMediaWorker, type MediaWorkerOptions } from '../../lib/server/media-worker-loop';
 import { MEDIA_PROCESSOR_VERSION } from '../../lib/media-analysis/processor-version';
+import { api } from '../../convex/_generated/api';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
 if (!convexUrl || !workerSecret) throw new Error('Configure the production Convex URL and media worker secret.');
 const concurrency = Number(process.env.MEDIA_WORKER_CONCURRENCY ?? 1);
 // The Ultra slot claims only Ultra exports; regular slots leave them to it.
-const lane = { ...(process.env.MEDIA_PROCESSOR_BACKEND === 'fly' ? { processorBackend: 'fly' as const, lane: 'any' as const } : {}), ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' as const } : {}),
+const backend = process.env.MEDIA_PROCESSOR_BACKEND;
+const lane: MediaWorkerOptions['claim'] = { ...(backend === 'fly' || backend === 'railway' ? { processorBackend: backend, lane: 'any' } : {}), ...(process.env.MEDIA_LANE === 'ultra' ? { lane: 'ultra' } : {}),
   // Fly export machines claim only exports of their lane.
-  ...(process.env.MEDIA_RENDERS_ONLY === 'true' ? { rendersOnly: true } : {}) };
+  ...(process.env.MEDIA_RENDERS_ONLY === 'true' ? { rendersOnly: true, ...(process.env.RAILWAY_SERVICE_ID ? { renderProvider: 'railway' } : {}) } : {}) };
 // Staying warm after work spares the next export a container and Chromium cold
 // start; idle containers still bill memory/disk, so this stays bounded.
 const idleMs = Number(process.env.MEDIA_WORKER_IDLE_MS ?? 600_000);
@@ -25,6 +27,11 @@ if (!Number.isFinite(deadlineMs) || deadlineMs < 60_000 || deadlineMs > 2 * 3600
 
 const shutdown = new AbortController();
 const client = new ConvexHttpClient(convexUrl, { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(25_000), ...(init?.signal ? [init.signal] : [])]) }) });
+if (process.env.RAILWAY_SERVICE_ID) {
+  const contract = await client.query(api.railwayWorkers.contract, { workerSecret });
+  if (contract.processorVersion > MEDIA_PROCESSOR_VERSION) throw new Error('Railway image is older than the queue contract.');
+  console.log(JSON.stringify({ event: 'railway-queue-verified', processorVersion: MEDIA_PROCESSOR_VERSION }));
+}
 const subscriptions = new ConvexClient(convexUrl);
 let draining = false;
 const worker = startMediaWorker({
@@ -47,7 +54,10 @@ const server = createServer((request, response) => {
 });
 
 process.on('SIGINT', () => shutdown.abort());
-process.on('SIGTERM', () => shutdown.abort());
+process.on('SIGTERM', () => {
+  if (process.env.RAILWAY_SERVICE_ID) { draining = true; worker.wake(); }
+  else shutdown.abort();
+});
 const idleTimer = setInterval(() => {
   const { activeTasks, ready, lastWorkAt } = worker.state;
   if (activeTasks === 0 && (draining || (!ready && Date.now() - lastWorkAt >= idleMs))) shutdown.abort();

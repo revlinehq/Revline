@@ -1,6 +1,25 @@
 ## 2026-11-05
 
 - Repository: Remove unused design source and preview images and ignore local design drafts. Why: the user requested excluding design working files from the public source.
+- Worker hosting: Verify standard and Ultra jobs before promoting single-worker Railway exports; require remote chunk proof only when enabled. Why: Hobby repository builds must not depend on private registry support.
+
+- Worker hosting: Refresh cached Railway deployments after dashboard resource changes and fit capture concurrency to CPU allocation. Why: reused deployment snapshots retained the old CPU limit.
+
+- Worker hosting: Size Railway render threads from its allocation instead of applying Fly’s four-thread ceiling. Why: the real 4K staging export rejected eight threads.
+
+## 2026-11-04
+
+- Worker hosting: Preserve dashboard CPU and memory limits for permanent Railway services and size worker threads from actual CPU allocation. Why: manual resource changes must not block deployment.
+
+- Railway builds: Install the checksum-pinned beat model inside Docker instead of copying a generated model directory. Why: repository builds must not depend on a local prepared cache.
+
+- Worker hosting: Name Railway configuration mutations and preserve existing repository links. Why: Railway rejected the anonymous update during real staging.
+
+- Worker hosting: Permit exact-PR isolated staging queue validation, scoped-key CLI targeting, repository runtime checks and bounded chunk concurrency. Why: staging must prove real jobs before production promotion.
+
+- Worker hosting: Decode Railway structured runtime logs and reserve capacity while builds are pending. Why: real staging passed its limits but the controller missed parsed log attributes.
+
+- Worker hosting: Add persistent isolated Railway staging, readable service names/icons and live-job promotion checks. Why: the user requires staging success before production and clear dashboard roles.
 - Composer: Add the compact home composer with centered upload/clip icons and a `/clip [ENTER YOUTUBE URL]` shortcut; keep the editor flat. Why: user approved the design and requested centered icon actions.
 - Cloud storage: Upload media without creating a project, then create an edit from one or several saved files. Why: the user wants phone uploads ready for editing later on PC.
 - Documentation: Shorten the README and remove internal feature and roadmap notes. Why: the user requested a minimal public repository overview.
@@ -42,6 +61,11 @@
 Newest first. Each merged pull request adds its lines here, grouped by system.
 
 ## 2026-11-04
+- Worker hosting: Build permanent Railway services from explicit repository commits while chunks retain matching immutable artifacts. Why: the user requested repository integration without competing autodeploys or per-chunk builds.
+- Worker hosting: Verify Railway placement from its environment configuration. Why: the authenticated service API returns a null legacy region even when placement is explicitly configured.
+- Worker hosting: Shorten Railway temporary service names and validate nested container limits. Why: authenticated API inspection rejected long names and revealed the actual limit response.
+- Worker hosting: Allow exact published PR image builds and Railway-only temporary preflights without Convex access. Why: the authorized rollout must validate containers before merging backend changes.
+- Worker hosting: Add staged Railway processors, exports and distributed chunks with bounded resources and explicit cutover/rollback. Why: the user requested moving only Fly container hosting while retaining the existing app, backend and storage.
 - Media analysis: Pause fresh Gemini analysis and composition reviews per owner and configured key for 15 minutes after genuine billing rejections. Why: #111 repeated new runs downloaded and uploaded footage against an unfunded provider.
 - Reference tracking: Register expanding panel silhouettes and fit independent box axes through the worker and saved-result validators while retaining rigid transforms. Why: #104 lost the card as its contents and proportions changed.
 - Frame capture: Retain video preroll for sparse final-frame windows when source audio runs longer. Why: #117 lost the last video stream and retried valid end frames.

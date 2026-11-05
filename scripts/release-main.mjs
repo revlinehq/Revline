@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { parseEnv } from 'node:util';
 import { command, mask, redact, logTail } from './release-command.mjs';
 import { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend, verifyFly } from './release-verify.mjs';
+import { releaseRailway, verifyRailway } from './release-railway.mjs';
 
 const dry = process.argv.includes('--dry-run');
 const repo = 'zuraHQ/revline-editor';
@@ -18,7 +19,7 @@ let step = 'Initialize release';
 const sha = git('rev-parse', 'HEAD');
 const env = { ...process.env, PUPPETEER_SKIP_DOWNLOAD: 'true', PATH: [dirname(process.execPath), join(homedir(), '.fly/bin'), join(homedir(), '.local/bin'), '/usr/local/bin', '/usr/bin', '/bin'].join(':') };
 // Never inherit a deployment selection or provider token from another session.
-for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
+for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'CLOUDFLARE_API_TOKEN', 'FLY_API_TOKEN', 'RAILWAY_API_TOKEN', 'REVLINE_FRONTEND_ENV_FILE', 'REVLINE_ENV_FILE']) delete env[name];
 const targets = [
   { name: 'production', deployment: 'different-gnu-398', file: productionFile },
   { name: 'dev', deployment: 'majestic-alpaca-541', file: join(primary, '.env.local') },
@@ -119,20 +120,26 @@ try {
   console.log(`Comparing ${base || 'no successful release (full bootstrap)'} -> ${sha}. mobile/ excluded.`);
   for (const [name, service] of Object.entries(plan.services)) console.log(`${service.changed ? 'RELEASE' : 'SKIP'} ${name}: ${service.files.slice(0, 25).join(', ')}${service.files.length > 25 ? ', …' : ''}`);
   const changed = name => plan.services[name].changed;
-  const planText = `Release ${sha} (${dry ? 'DRY RUN — no deployments or restart' : 'main push'})\nBase: ${base || 'full bootstrap'}\nOrder: Fly processor → Convex → media / agent / exports → frontend → PC dev restart\n${Object.entries(plan.services).map(([name, service]) => `- ${name}: ${service.changed ? 'release' : 'skip'}`).join('\n')}`;
+  const planText = `Release ${sha} (${dry ? 'DRY RUN — no deployments or restart' : 'main push'})\nBase: ${base || 'full bootstrap'}\nOrder: selected processor host → Convex → media / agent / exports → frontend → PC dev restart\n${Object.entries(plan.services).map(([name, service]) => `- ${name}: ${service.changed ? 'release' : 'skip'}`).join('\n')}`;
   console.log(planText);
   if (env.GITHUB_STEP_SUMMARY) await writeFile(env.GITHUB_STEP_SUMMARY, planText);
   for (const name of ['typecheck', 'typecheck:agent-runner', 'typecheck:processor-edge']) await npm(name, ['run', name]);
   await npm('Build Next.js', ['run', 'build']);
-  // Resolve and mask each target's settings before any deploy command can log.
-  for (const target of targets) await remoteEnv(target.deployment, env);
+  // Resolve and mask each target independently. DEV local processing is retained.
+  const workerSettings = new Map();
+  for (const target of targets) workerSettings.set(target.deployment, await remoteEnv(target.deployment, env));
+  const railwayRole = (target, kind) => workerSettings.get(target.deployment)[kind === 'processor' ? 'MEDIA_PROCESSOR_BACKEND' : 'RENDER_PROVIDER'] === 'railway';
   if (changed('processor')) {
     if (!dry) {
-      await run('Verify Fly CLI login', 'flyctl', ['auth', 'whoami']);
+      if (targets.some(target => !railwayRole(target, 'processor'))) await run('Verify Fly CLI login', 'flyctl', ['auth', 'whoami']);
       await run('Restore pinned beat model', 'gh', ['release', 'download', 'beat-model-final0', '-R', repo, '-p', 'beat_this-final0.ckpt', '-D', '.data/beat-tracking-models/hub/checkpoints', '--clobber']);
       await node('Verify pinned beat model', ['scripts/install-beat-model.mjs']);
     }
     for (const target of targets) {
+      if (railwayRole(target, 'processor')) {
+        await check(`${target.name}: Railway processor image`, () => releaseRailway({ target, kind: 'processor', values: workerSettings.get(target.deployment), env, dry }));
+        continue;
+      }
       const options = { env: { ...env, REVLINE_ENV_FILE: target.file } };
       console.log(`Target: ${target.name} ${target.deployment}; Fly image BEFORE Convex.`);
       await npm(`${target.name}: Fly processor image`, ['run', target.name === 'production' ? 'deploy:production' : 'deploy:fly-processor', '--', ...(target.name === 'production' ? ['--processor-only'] : ['--skip-convex']), '--stage-only', '--image-first', ...(dry ? ['--dry-run'] : [])], options);
@@ -159,8 +166,14 @@ try {
         : await npm(`${target.name}: agent runner Worker`, ['run', target.name === 'production' ? 'deploy:agent-runner:production' : 'deploy:agent-runner']);
       if (!dry) await check(`${target.name}: verify agent Worker`, () => verifyWorker(config, output, env));
     }
-    if (changed('exports')) await npm(`${target.name}: Fly exports`, ['run', 'deploy:fly-exports', '--', ...(target.name === 'production' ? ['--prod'] : []), ...(dry ? ['--dry-run'] : [])], { env: { ...env, REVLINE_ENV_FILE: target.file } });
-    if (!dry) for (const kind of ['processor', 'exports']) if (changed(kind)) await check(`${target.name}: verify Fly ${kind}`, () => verifyFly(target.deployment, kind, env));
+    if (changed('exports')) {
+      if (railwayRole(target, 'exports')) await check(`${target.name}: Railway exports`, async () => releaseRailway({ target, kind: 'exports', values: await remoteEnv(target.deployment, env), env, dry }));
+      else await npm(`${target.name}: Fly exports`, ['run', 'deploy:fly-exports', '--', ...(target.name === 'production' ? ['--prod'] : []), ...(dry ? ['--dry-run'] : [])], { env: { ...env, REVLINE_ENV_FILE: target.file } });
+    }
+    if (!dry) for (const kind of ['processor', 'exports']) if (changed(kind)) {
+      if (railwayRole(target, kind)) await check(`${target.name}: verify Railway ${kind}`, async () => verifyRailway({ deployment: target.deployment, kind, values: await remoteEnv(target.deployment, env) }));
+      else await check(`${target.name}: verify Fly ${kind}`, () => verifyFly(target.deployment, kind, env));
+    }
   }
   if (changed('frontend')) {
     const options = { env };

@@ -42,7 +42,7 @@ export function releasePlan(base) {
     convex: { graph: imports(tracked.filter(file => file.startsWith('convex/') && file.endsWith('.ts'))), paths: ['convex/', 'convex.json'] },
     media: { graph: imports(['cloudflare/media/worker.ts']), paths: ['cloudflare/media/'] },
     agent: { graph: imports(['cloudflare/agent-runner/worker.ts']), paths: ['cloudflare/agent-runner/', 'lib/ai/', 'convex/lib/editorTurn.ts', 'scripts/sync-agent-runner-env.mjs'] },
-    exports: { graph: imports(['infra/media-worker/consumer.ts', ...ENTRIES.slice(2)]), paths: ['infra/media-worker/', 'public/vendor/', 'public/fonts/', 'scripts/render-', 'scripts/composition-review-worker.mjs', 'scripts/copy-vendor.mjs', 'scripts/hyperframes-playback-compat.mjs', 'scripts/deploy-fly-exports.mjs'] },
+    exports: { graph: imports(['infra/media-worker/consumer.ts', ...ENTRIES.slice(2)]), paths: ['infra/media-worker/', 'public/vendor/', 'public/fonts/', 'scripts/render-', 'scripts/composition-review-worker.mjs', 'scripts/copy-vendor.mjs', 'scripts/hyperframes-playback-compat.mjs', 'scripts/deploy-fly-exports.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs'] },
     frontend: { graph: new Set(), paths: ['app/', 'components/', 'lib/', 'public/', 'landing/', 'next.config.ts', 'vite.config.ts', 'wrangler.jsonc', 'postcss.config.mjs', 'proxy.ts', 'scripts/cloudflare-frontend.mjs', 'scripts/copy-vendor.mjs'] },
   };
   const plan = {};

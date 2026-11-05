@@ -128,6 +128,7 @@ import type * as projectDeletion from "../projectDeletion.js";
 import type * as projectTransfers from "../projectTransfers.js";
 import type * as projects from "../projects.js";
 import type * as r2 from "../r2.js";
+import type * as railwayWorkers from "../railwayWorkers.js";
 import type * as referenceMotion from "../referenceMotion.js";
 import type * as referenceReads from "../referenceReads.js";
 import type * as renderSnapshotMigration from "../renderSnapshotMigration.js";
@@ -270,6 +271,7 @@ declare const fullApi: ApiFromModules<{
   projectTransfers: typeof projectTransfers;
   projects: typeof projects;
   r2: typeof r2;
+  railwayWorkers: typeof railwayWorkers;
   referenceMotion: typeof referenceMotion;
   referenceReads: typeof referenceReads;
   renderSnapshotMigration: typeof renderSnapshotMigration;

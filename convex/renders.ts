@@ -3,7 +3,7 @@ import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
-import { flyRendersEnabled, queuedExportLimit } from './lib/render_seats';
+import { hostedRendersEnabled, queuedExportLimit } from './lib/render_seats';
 import { projectIdentity } from './lib/project_data';
 import { forgetStorageObject } from './lib/storage_accounting';
 import { internal } from './_generated/api';
@@ -39,7 +39,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
   // With Fly, seats bound concurrent renders; beyond them exports wait in a longer queue.
-  const limit = flyRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
+  const limit = hostedRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   // The indexed reads and insert share one transaction, so separate projects
   // cannot race past the account's outstanding-work limit.
   const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));

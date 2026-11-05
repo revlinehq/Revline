@@ -1,14 +1,16 @@
-// Distributed export on Fly.io, built on HyperFrames' distributed primitives:
-// plan once here, render chunks in parallel on short-lived Fly machines (this machine
+// Distributed export on Fly or Railway, built on HyperFrames' distributed primitives:
+// plan once here, render chunks in parallel on short-lived containers (this container
 // renders one too), then assemble. Same IPC contract as render-worker.mjs.
 import { spawn } from 'node:child_process';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { createConsoleLogger, resolveConfig } from '@hyperframes/producer';
 import { assemble, plan, renderChunk, resolvePlanAudioPath } from '@hyperframes/producer/distributed';
 import { RENDER_X264, configureRenderFfmpeg, renderResources } from './render-resources.mjs';
 import { exists, getFile, putFile, remove } from './render-artifacts.mjs';
 import { flyChunkResources } from '../lib/fly-worker-resources.mjs';
+import { randomUUID } from 'node:crypto';
+import { launchRailwayChunk, railwayChunkRunning, removeRailwayChunk } from './render-railway-chunks.mjs';
 
 const controller = new AbortController();
 process.on('SIGTERM', () => controller.abort());
@@ -38,7 +40,9 @@ function tar(directory, output) {
 }
 
 const launched = new Set();
+const onRailway = !!process.env.RAILWAY_SERVICE_ID;
 let keys = [];
+let scratch = [];
 try {
   const [directory, output, serialized] = process.argv.slice(2);
   const settings = JSON.parse(serialized);
@@ -68,7 +72,9 @@ try {
   log('planned', { chunks: count, frames: planned.totalFrames, ms: Date.now() - startedAt });
   report({ type: 'progress', progress: 10 });
   const chunkPaths = Array.from({ length: count }, (_, index) => `${directory}-chunk-${index}.mp4`);
-  const prefix = `exports/${settings.exportId}`;
+  scratch = [planDir, `${planDir}.tar`, ...chunkPaths];
+  const prefix = `exports/${settings.exportId}${onRailway ? `/${randomUUID()}` : ''}`;
+  if (onRailway) log('artifact-prefix', { prefix });
   const local = count - 1;
   const done = new Set();
   const progress = () => report({ type: 'progress', progress: 10 + Math.round(85 * done.size / count) });
@@ -82,11 +88,17 @@ try {
     await putFile(`${prefix}/plan.tar`, planTar, signal);
     keys.push(`${prefix}/plan.tar`);
     log('plan-uploaded', { ms: Date.now() - startedAt });
-    const machineFor = new Map(), attempts = new Map();
+    const machineFor = new Map(), attempts = new Map(), nextStatusAt = new Map();
     const launch = async index => {
       const key = `${prefix}/chunk-${index}.mp4`;
       if (!keys.includes(key)) keys.push(key);
       attempts.set(index, (attempts.get(index) ?? 0) + 1);
+      if (onRailway) {
+        signal.throwIfAborted();
+        const id = await launchRailwayChunk({ index, planKey: `${prefix}/plan.tar`, outKey: key, quality: settings.quality, chunkGuest, chunkEnv });
+        machineFor.set(index, id); launched.add(id);
+        return;
+      }
       const machine = await fly('POST', '/machines', { region: process.env.FLY_REGION || 'iad', config: {
         image: process.env.FLY_IMAGE_REF, guest: chunkGuest, restart: { policy: 'no' }, auto_destroy: true,
         metadata: { revline_role: 'chunk', revline_export: settings.exportId },
@@ -94,7 +106,13 @@ try {
       } });
       machineFor.set(index, machine.id); launched.add(machine.id);
     };
-    await Promise.all(Array.from({ length: count - 1 }, (_, index) => launch(index)));
+    if (onRailway) {
+      // Each launch makes several control requests. Avoid a 15-service API burst.
+      for (let index = 0; index < count - 1; index++) await launch(index);
+    } else {
+      const launches = await Promise.allSettled(Array.from({ length: count - 1 }, (_, index) => launch(index)));
+      for (const result of launches) if (result.status === 'rejected') throw result.reason;
+    }
     log('chunks-launched', { machines: count - 1, ms: Date.now() - startedAt });
     const deadline = Date.now() + 40 * 60_000;
     while (Array.from({ length: count - 1 }, (_, index) => index).some(index => !done.has(index))) {
@@ -104,8 +122,12 @@ try {
       for (let index = 0; index < count - 1; index++) {
         if (done.has(index)) continue;
         if (await exists(`${prefix}/chunk-${index}.mp4`, signal)) { done.add(index); progress(); continue; }
+        // Railway's control API is rate-limited. Object storage remains the completion signal;
+        // query a service's lifecycle at most every five minutes while it is busy.
+        if (onRailway && Date.now() < (nextStatusAt.get(index) ?? 0)) continue;
+        nextStatusAt.set(index, Date.now() + 5 * 60_000);
         // A machine that exited without uploading failed; give its chunk one more machine.
-        const machine = await fly('GET', `/machines/${machineFor.get(index)}`);
+        const machine = onRailway ? (await railwayChunkRunning(machineFor.get(index)) ? { state: 'started' } : null) : await fly('GET', `/machines/${machineFor.get(index)}`);
         if (machine && !['stopped', 'destroyed', 'failed'].includes(machine.state)) continue;
         if (await exists(`${prefix}/chunk-${index}.mp4`, signal)) { done.add(index); progress(); continue; }
         if ((attempts.get(index) ?? 0) >= 2) throw new Error(`Export chunk ${index + 1} of ${count} failed twice.`);
@@ -127,7 +149,9 @@ try {
   process.exitCode = 1;
 } finally {
   // Chunk machines auto-destroy on exit; stop any still running after a failure.
-  await Promise.all([...launched].map(id => fly('DELETE', `/machines/${id}?force=true`).catch(() => {})));
-  await Promise.all(keys.map(key => remove(key)));
+  if (onRailway) for (const id of launched) await removeRailwayChunk(id).catch(() => log('chunk-cleanup-pending', { serviceId: id }));
+  else await Promise.all([...launched].map(id => fly('DELETE', `/machines/${id}?force=true`).catch(() => {})));
+  await Promise.all(keys.map(async key => { if (!await remove(key)) log('artifact-cleanup-pending', { key }); }));
+  await Promise.all(scratch.map(path => rm(path, { recursive: true, force: true }).catch(() => log('scratch-cleanup-pending', { path }))));
   if (process.connected) process.disconnect();
 }
