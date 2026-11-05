@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- New edit: Increase space above the Start new edit section beneath the composer. Why: user requested more separation.
+
 - New edit: Add a small “Start new edit” heading above Upload footage beneath the composer. Why: user requested a clearer label for starting from footage.
 
 - Storage uploads: Replace the blocking dialog with a compact, minimizable progress panel, readable filenames, total progress, and retries. Why: user reported the upload experience was confusing.
