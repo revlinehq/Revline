@@ -1,30 +1,18 @@
-import { v, convexToJson, type ObjectType } from 'convex/values';
+import { v, convexToJson } from 'convex/values';
 import { internal } from './_generated/api';
-import { internalAction, internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
+import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import { assistantRunArgs } from './lib/assistant_run';
 import { runArgs, runIsActive } from './lib/active_run';
 import { resumeInterruptedTurn,turnForRun } from './assistantTurnRecovery';
 import { RUNNER_REQUEST_WINDOW_MS, runToken, runnerSignature } from './lib/runner_auth';
+import { turnRow, WATCH_INTERVAL_MS } from './lib/runner_turns';
 
-// The editor's agent loop runs on Cloudflare (cloudflare/agent-runner, an Agents SDK agent per run), where one
-// model step can think for as long as it needs. It reaches this deployment's functions through /agent-runner/* in http.ts.
-// AGENT_RUNNER_SECRET signs calls both ways and is shared with the Worker; AGENT_RUNNER_RUN_KEY stays in Convex.
-export const agentRunnerConfigured = () => !!process.env.AGENT_RUNNER_URL && !!process.env.AGENT_RUNNER_SECRET && !!process.env.AGENT_RUNNER_RUN_KEY;
 /** The runner resumes a turn Cloudflare evicted; each resumption continues the same request from the saved timeline. */
 const MAX_ATTEMPTS = 3;
 const HEARTBEAT_STALE_MS = 3 * 60_000;
-const WATCH_INTERVAL_MS = 60_000;
 const INTERRUPTED = 'The editing request was interrupted. Your saved edits are still here. Retry unfinished steps to continue.';
 /** A run's files the runner may read back: message attachments and what it stored itself. */
 const MAX_STORAGE_GRANTS = 500;
-
-export async function startRunnerTurn(ctx: MutationCtx, args: ObjectType<typeof assistantRunArgs>) {
-  const previous=await turnRow(ctx,args.runId);
-  if(previous)await ctx.db.delete(previous._id);
-  await ctx.db.insert('agentRunnerTurns', { runId: args.runId, projectId: args.projectId, ownerId: args.ownerId, attempts: 0, seenAt: Date.now() });
-  await ctx.scheduler.runAfter(0, internal.agentRunner.start, args);
-  await ctx.scheduler.runAfter(WATCH_INTERVAL_MS, internal.agentRunner.watch, { runId: args.runId });
-}
 
 /** A signed call to the runner Worker. */
 async function callRunner(path: '/runs' | '/runs/stop', body: string) {
@@ -52,12 +40,6 @@ export const stop = internalAction({ args: { runId: v.string() }, returns: v.nul
   return null;
 }});
 
-/** The stop mutation's half: only runs started on the runner have one to stop. */
-export async function stopRunnerTurn(ctx: MutationCtx, runId: string) {
-  if (agentRunnerConfigured() && await turnRow(ctx, runId)) await ctx.scheduler.runAfter(0, internal.agentRunner.stop, { runId });
-}
-
-const turnRow = (ctx: QueryCtx, runId: string) => ctx.db.query('agentRunnerTurns').withIndex('by_runId', q => q.eq('runId', runId)).unique();
 
 /** The runner's first call of each attempt. Null when the run is over; otherwise which attempt this is. Later
  * calls must carry this claim, so an attempt Cloudflare replaced can no longer act for the run. */

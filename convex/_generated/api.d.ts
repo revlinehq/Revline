@@ -99,6 +99,7 @@ import type * as lib_retry_aborted_transaction from "../lib/retry_aborted_transa
 import type * as lib_revision_log from "../lib/revision_log.js";
 import type * as lib_run_ids from "../lib/run_ids.js";
 import type * as lib_runner_auth from "../lib/runner_auth.js";
+import type * as lib_runner_turns from "../lib/runner_turns.js";
 import type * as lib_save_incidents from "../lib/save_incidents.js";
 import type * as lib_scene_code from "../lib/scene_code.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
@@ -244,6 +245,7 @@ declare const fullApi: ApiFromModules<{
   "lib/revision_log": typeof lib_revision_log;
   "lib/run_ids": typeof lib_run_ids;
   "lib/runner_auth": typeof lib_runner_auth;
+  "lib/runner_turns": typeof lib_runner_turns;
   "lib/save_incidents": typeof lib_save_incidents;
   "lib/scene_code": typeof lib_scene_code;
   "lib/share_chat": typeof lib_share_chat;

@@ -14,7 +14,7 @@ import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/a
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
 import {cancelTurn} from './assistantWorkflow';
-import {stopRunnerTurn} from './agentRunner';
+import {stopRunnerTurn} from './lib/runner_turns';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
