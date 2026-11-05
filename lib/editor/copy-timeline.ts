@@ -4,9 +4,17 @@ import {
   timelineNormalizationKey,
 } from "./audio-normalization";
 
+/** Which kind of reference an asset id comes from, so a caller can map them differently. */
+export type TimelineAssetReference =
+  | "audioNormalization"
+  | "clip"
+  | "normalizedAudio"
+  | "sceneMedia"
+  | "filmReference";
+
 export function remapTimelineAssets(
   item: Timeline,
-  copied: (id: string) => string,
+  copied: (id: string, reference: TimelineAssetReference) => string,
 ): Timeline {
   const next = {
     ...item,
@@ -14,18 +22,24 @@ export function remapTimelineAssets(
       ? {
           audioNormalization: {
             ...item.audioNormalization,
-            assetId: copied(item.audioNormalization.assetId),
+            assetId: copied(
+              item.audioNormalization.assetId,
+              "audioNormalization",
+            ),
           },
         }
       : {}),
     clips: item.clips.map((clip) => ({
       ...clip,
-      ...(clip.assetId ? { assetId: copied(clip.assetId) } : {}),
+      ...(clip.assetId ? { assetId: copied(clip.assetId, "clip") } : {}),
       ...(clip.normalizedAudio
         ? {
             normalizedAudio: {
               ...clip.normalizedAudio,
-              assetId: copied(clip.normalizedAudio.assetId),
+              assetId: copied(
+                clip.normalizedAudio.assetId,
+                "normalizedAudio",
+              ),
             },
           }
         : {}),
@@ -37,7 +51,7 @@ export function remapTimelineAssets(
                 ? {
                     media: clip.scene.media.map((entry) => ({
                       ...entry,
-                      assetId: copied(entry.assetId),
+                      assetId: copied(entry.assetId, "sceneMedia"),
                     })),
                   }
                 : {}),
@@ -47,6 +61,7 @@ export function remapTimelineAssets(
                       ...clip.scene.film,
                       referenceAssetId: copied(
                         clip.scene.film.referenceAssetId,
+                        "filmReference",
                       ),
                     },
                   }
