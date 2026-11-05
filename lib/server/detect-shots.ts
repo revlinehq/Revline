@@ -1,9 +1,9 @@
-import { workerToolPath } from '../server/worker-tool-path';
+import { workerToolPath } from './worker-tool-path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
-import { AnalysisError } from './errors';
-import { parseShots, type ShotDetection } from './shots';
+import { AnalysisError } from '../media-analysis/errors';
+import { parseShots, type ShotDetection } from '../media-analysis/shots';
 
 const run = promisify(execFile);
 export async function detectShots(path: string, duration: number, signal: AbortSignal): Promise<ShotDetection> {

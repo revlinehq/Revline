@@ -1,10 +1,10 @@
-import { runMediaCommand as run } from '../server/media-command';
-import { workerToolPath } from '../server/worker-tool-path';
+import { runMediaCommand as run } from './media-command';
+import { workerToolPath } from './worker-tool-path';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { AnalysisError } from './errors';
-import { BEAT_ANALYSIS_ENGINE, type BeatMap } from './beat-map';
+import { AnalysisError } from '../media-analysis/errors';
+import { BEAT_ANALYSIS_ENGINE, type BeatMap } from '../media-analysis/beat-map';
 
 
 /** Run the pinned music tracker in the background worker, never in a browser. */

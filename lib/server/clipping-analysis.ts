@@ -10,7 +10,7 @@ import { AnalysisError } from '../media-analysis/errors';
 import { scanSourceFaces } from './source-face-evidence';
 import { matchSpeakingFaces } from './match-speaking-faces';
 import { optionalGeminiVision } from './optional-gemini-vision';
-import { detectShots } from '../media-analysis/detect-shots';
+import { detectShots } from './detect-shots';
 
 const run = promisify(execFile);
 export async function detectSourceFacecam(source: string, directory: string, duration: number, signal: AbortSignal, progress: (n: number) => void) {
