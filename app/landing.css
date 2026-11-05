@@ -195,6 +195,7 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-footer-brand small{font-size:14px;color:#ffffff73}
 .landing-footer nav{display:flex;flex-wrap:wrap;gap:12px 28px}
 .landing-footer nav a,.landing-footer .landing-footer-link{padding:0;border:0;background:none;font:14px var(--l-body);color:#ffffffa6;transition:color 140ms ease}
+.landing-footer nav .landing-footer-github{display:inline-flex;align-items:center}
 .landing-footer nav a:hover,.landing-footer .landing-footer-link:hover{color:#fff}
 .landing-legal-dialog{background:#fff;color:#292929;color-scheme:light}
 .landing-legal-dialog [data-slot=dialog-description]{color:#737373;line-height:1.65}
