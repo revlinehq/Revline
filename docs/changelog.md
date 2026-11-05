@@ -20,7 +20,6 @@
 
 - Blog: Remove the visible RSS subscription link. Why: the user requested cleaner customer-facing navigation.
 
-- Repository: Remove the separate OpenCut license file and retain its notice inside NOTICE. Why: the user requested a single project license file.
 
 - Blog: Add a clipping guide for turning long videos into a varied batch of Shorts and Reels. Why: the user requested a timely clipping post.
 
@@ -36,7 +35,6 @@
 
 - Imports: Keep resumable downloads in writable worker scratch instead of the application directory. Why: production imports failed with permission-denied errors.
 
-- Repository: Remove the third-party directory and consolidate retained attribution into NOTICE and OpenCut-LICENSE. Why: user requested the folder be removed.
 
 - Incidents: Separate GitHub publishing from fixer setup and accept renamed repository URLs. Why: saved agent reports were not reaching GitHub.
 

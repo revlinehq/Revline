@@ -1,4 +1,4 @@
-// MIT attribution: NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export const PREVIEW_ZOOM_PRESETS = [25, 50, 100, 150, 200] as const;
 export const PREVIEW_ZOOM_STEP = 1.25;
 export const PREVIEW_ZOOM_MIN = .01;

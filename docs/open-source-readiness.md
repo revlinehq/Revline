@@ -4,7 +4,7 @@ This repository is being prepared for public source distribution. Apache 2.0 app
 
 ## Changes in this review
 
-- Add the Apache 2.0 license, NOTICE, contribution guidance and a security-reporting policy.
+- Add the Apache 2.0 license, contribution guidance and a security-reporting policy.
 - Patch Zod and compatible transitive dependencies. Override the Sentry bundler plugin\'s glob dependency with patched 14.x; its named async glob API is retained. The application build checks this integration.
 - Run redacted Git-history secret scanning and root/agent-runner production dependency audits in the Security workflow on GitHub-hosted runners, and document them for local use. GitHub Actions is enabled at the repository level even when individual workflows are disabled; SECURITY.md describes the self-hosted release runner's limits.
 - Ignore local agent notes, logs and signing files. Existing ignore rules already exclude real environment files; `.env.example` contains configuration placeholders.

@@ -9,7 +9,7 @@ export type VisualSnapLine = { axis: 'x' | 'y'; position: number };
 export type VisualSnapResult = { transform: VisualTransform; lines: VisualSnapLine[] };
 type Size = { width: number; height: number };
 
-// Includes MIT-licensed code; see NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export function visualBounds(transform: VisualTransform, rect: VisualRect, width: number, height: number): VisualBounds {
   const localX = (rect.left + rect.width / 2 - width / 2) * transform.scale;
   const localY = (rect.top + rect.height / 2 - height / 2) * transform.scale;

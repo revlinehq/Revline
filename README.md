@@ -21,4 +21,4 @@ In another terminal:
 npm run dev -- --port 3001
 ```
 
-[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Apache 2.0](LICENSE) · [Notices](NOTICE)
+[Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Apache 2.0](LICENSE)

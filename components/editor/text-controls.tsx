@@ -21,7 +21,7 @@ const corners=[['nw','top left'],['ne','top right'],['sw','bottom left'],['se','
 
 // Preview interaction pattern: select on pointer down,
 // update the rendered node while dragging, commit once, and discard on cancel.
-// MIT notice: NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export function TextControls({timeline,assets,time,revision,selected,activeId,onActivate,getDocument,onSelect,onCommit,onEdit}:{
   timeline:Timeline;assets:MediaAsset[];time:number;revision:number;selected?:string;activeId?:string;onActivate:(id:string)=>void;getDocument:()=>Document|null;
   onSelect:(id:string)=>void;onCommit:(id:string,patch:Partial<Clip>)=>void;onEdit?:(id:string)=>void;

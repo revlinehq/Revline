@@ -20,7 +20,7 @@ export function paintPlayhead(element: HTMLDivElement | null, x: number, viewpor
 }
 
 // Imperative playhead driven by HyperFrames' frame clock.
-// MIT attribution: NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export function useTimelinePlayhead({time,playing,readTime,px,duration,origin,viewport,head,cap,scrubbing,followPausedUntil}:{
   time:number;playing:boolean;readTime?:()=>number;px:number;duration:number;origin:number;
   viewport:RefObject<HTMLDivElement|null>;head:RefObject<HTMLDivElement|null>;cap:RefObject<HTMLDivElement|null>;scrubbing:RefObject<boolean>;followPausedUntil?:RefObject<number>;

@@ -1,6 +1,6 @@
 import { deriveTracks, normalizeTimeline, trackOf, type Timeline } from './types';
 import { isTransitionClip } from './clip-transitions';
-// MIT notice: NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export const TIMELINE_RULER_HEIGHT=28;
 // Time zero starts flush against the timeline lane's left edge.
 export const TIMELINE_ORIGIN=0;

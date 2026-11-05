@@ -33,7 +33,7 @@ function usePreviewZoom() {
 }
 
 // Viewport center/fit model for the retained HyperFrames player.
-// MIT attribution: NOTICE.
+// MIT notice: lib/editor/timeline-controls.ts.
 export function PreviewZoomProvider({ canvas, children }: { canvas: PreviewSize; children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(null);
