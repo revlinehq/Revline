@@ -4,6 +4,17 @@ import type { ModelMessage } from 'ai';
 import type { Timeline, MediaAsset } from '../editor/types';
 import { summarizeSpeakerFraming } from '../media-analysis/clipping';
 import { readHighlights } from '../media-analysis/highlights';
+import { z } from 'zod';
+
+const projectedNormalization = z.object({ assetId: z.string(), targetLufs: z.number(), truePeakCeiling: z.number(), active: z.boolean() }).strict();
+
+function modelNormalization(value: NonNullable<Timeline['audioNormalization']>, active: () => boolean) {
+  if (!('key' in value)) {
+    const projected = projectedNormalization.safeParse(value);
+    if (projected.success) return projected.data;
+  }
+  return { assetId: value.assetId, targetLufs: value.targetLufs, truePeakCeiling: value.truePeak, active: active() };
+}
 
 export const EDITOR_CONTEXT_NOTICE = 'Context loads the latest 100 saved messages plus associated steps needed to complete their tool calls. Older messages or superseded timeline snapshots may be omitted. Omission is not evidence that an event or edit is absent. Preserve recent user constraints and use the current timeline. Visual observations and images in this context remain intact. Before a creative decision needing absent visual evidence, inspect the relevant source window again (saved analysis may be reused). Read inspectClip for omitted motion/focus samples; never reconstruct source trims from a summary.';
 export const EDITOR_CONTEXT_BOUNDARY = '\nCURRENT EDIT CONTEXT:\n';
@@ -27,10 +38,10 @@ function withoutDiagnostics<T extends { providerOptions?: LanguageModelV4Prompt[
 /** A read-only model projection; the edit session retains every source sample. */
 export function modelTimeline(timeline: Timeline, selectedClipIds: readonly string[] = []) {
   const selected = new Set(selectedClipIds);
-  return { ...timeline,...(timeline.audioNormalization?{audioNormalization:{assetId:timeline.audioNormalization.assetId,targetLufs:timeline.audioNormalization.targetLufs,truePeakCeiling:timeline.audioNormalization.truePeak,active:timeline.audioNormalization.key===timelineNormalizationKey(timeline)}}:{}), clips: timeline.clips.map(clip => {
+  return { ...timeline,...(timeline.audioNormalization?{audioNormalization:modelNormalization(timeline.audioNormalization,()=>timeline.audioNormalization?.key===timelineNormalizationKey(timeline))}:{}), clips: timeline.clips.map(clip => {
     const { motion, focus, scene, normalizedAudio, ...settings } = clip;
     return { ...settings,
-      ...(normalizedAudio?{normalizedAudio:{assetId:normalizedAudio.assetId,targetLufs:normalizedAudio.targetLufs,truePeakCeiling:normalizedAudio.truePeak,active:normalizedAudio.key===audioNormalizationKey(timeline,clip)}}:{}),
+      ...(normalizedAudio?{normalizedAudio:modelNormalization(normalizedAudio,()=>normalizedAudio.key===audioNormalizationKey(timeline,clip))}:{}),
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       // Compacted history can hold timelines whose scene code was already summarized.
