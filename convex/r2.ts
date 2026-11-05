@@ -61,7 +61,7 @@ async function retryOnWriteConflict<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
+export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
   const ownerId = task?.ownerId ?? args.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
@@ -72,11 +72,8 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
     if(!snapshot?.normalization||args.jobId||args.kind!=='audio'||args.contentType!=='audio/wav')throw new ConvexError('Only normalization tasks can upload a normalized WAV.');
   }
   if (task && (task.projectId !== args.projectId || !['extract', 'preview', 'render', 'import', 'cutout', 'derive', 'snapshot'].includes(task.kind) || (task.kind === 'derive' && (args.jobId || !(args.kind === 'video' && args.contentType === 'video/mp4' || args.kind === 'image' && /^image\/(jpeg|png)$/.test(args.contentType)))) || (task.kind === 'import' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/mp4')) || (task.kind === 'cutout' && (args.jobId || args.kind !== 'video' || args.contentType !== 'video/webm')) || (task.kind === 'extract' && (args.jobId || args.kind !== 'audio' || args.contentType !== 'audio/mp4')) || (task.kind === 'render' && (args.jobId !== task.renderJobId || args.kind !== 'video' || args.contentType !== 'video/mp4')))) throw new ConvexError('This task cannot upload that media');
-  if (args.jobId && !task) {
-    if (!process.env.RENDER_WORKER_SECRET || args.workerSecret !== process.env.RENDER_WORKER_SECRET) throw new ConvexError('Render worker authentication required');
-    const job = await ctx.db.get(args.jobId);
-    if (!job || job.ownerId !== ownerId || job.projectId !== args.projectId || job.status !== 'rendering') throw new ConvexError('Render is not accepting an upload');
-  }
+  // Export uploads come from the media worker's render task.
+  if (args.jobId && !task) throw new ConvexError('Render worker authentication required');
   const pending = await ctx.db.query('r2Uploads').withIndex('by_projectId_completed', q => q.eq('projectId', args.projectId).eq('completed', false)).take(101);
   if (pending.filter(upload => !upload.completed && upload.expiresAt > Date.now()).length >= 100) throw new ConvexError('Finish the pending uploads first');
   // Fail fast before opening the multipart upload; createLease is authoritative.
@@ -117,11 +114,11 @@ export const beginAbort = internalMutation({args:{uploadId:v.id('r2Uploads'),...
   return {...lease,aborting:true};
 }});
 
-const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), workerSecret: v.optional(v.string()), ...taskAuth,...previewUpload, ...metadata };
+const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, ...metadata };
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
 export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
-  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId, workerSecret: args.workerSecret } : {}) });
+  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}) });
   if(!args.purpose&&(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
