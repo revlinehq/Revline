@@ -36,6 +36,7 @@ export async function finishLane(
     assets: Doc<'assets'>[];
     render: Render;
     staged: boolean;
+    /** The reel lane's pending sampled frames, passed only for its standard (sample) recipe. */
     fastFrameTimes?: number[];
     clipping?: () => Promise<{
       required: boolean;
@@ -146,7 +147,7 @@ export async function finishLane(
       const times = fastTimes ?? (baseline
         ? await changedFrameTimes(tab.timeline, baseline)
         : [0, summary.duration / 2]);
-      // Plain Fast reel reuses its pending queue; other paths retain the rendered finish check.
+      // A plain reel at the standard level reuses its pending queue; other paths retain the rendered finish check.
       if (!times.length && fastTimes === undefined)
         times.push(
           Math.min(

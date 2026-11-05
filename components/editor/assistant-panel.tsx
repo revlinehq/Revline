@@ -9,7 +9,6 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { PRODUCTION_CLAUDE_MODEL_CHOICES } from '@/lib/ai/claude-model-policy';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import type { EditorEditModePreference } from '@/lib/ai/edit-mode';
 import { useAssistantComposerControls } from './assistant-composer-controls';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer, type ComposerAttachment } from '@/components/workspace/edit-composer';
@@ -114,7 +113,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   defaultModelChoice?:ClaudeModelChoice;
   allowedModels?: readonly ClaudeModelChoice[];
   claudeViaMcp?: boolean;
-  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode, editMode?: EditorEditModePreference) => Promise<void>; hasClips: boolean; demo: boolean;
+  onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (promptMessageId:string) => Promise<void>;
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
@@ -126,7 +125,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   budgetUsed?: number;
   onStop?: () => Promise<void>;
   suggestions?: { sourceName:string;clipId:string;items:SourceEditSuggestion[] };
-  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode,editMode?:EditorEditModePreference) => Promise<void>;
+  onSuggestion?: (prompt:string,clipId:string,modelChoice?:ClaudeModelChoice,reasoningEffort?:EditorReasoningEffort,speedMode?:EditorSpeedMode) => Promise<void>;
   canResumeEdit?:boolean;
   editSnapshot?:AssistantEditSnapshot;
 }) {
@@ -201,7 +200,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     const key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSend(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
+    try { await onSend(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -218,7 +217,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSuggestion(request, suggestions.clipId, composerControls.request.modelChoice, composerControls.request.reasoningEffort, undefined, composerControls.request.editMode); }
+    try { await onSuggestion(request, suggestions.clipId, composerControls.request.modelChoice, composerControls.request.reasoningEffort); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }

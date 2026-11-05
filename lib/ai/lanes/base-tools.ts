@@ -11,7 +11,6 @@ export const BASE_TOOLS = [
   'importVideoLink',
   'getMediaTask',
   'exportVideo',
-  'usePreciseMode',
   'duplicateClips',
   'reorderLayer',
   'moveClips',

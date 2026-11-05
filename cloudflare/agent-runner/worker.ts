@@ -1,5 +1,5 @@
 import { Agent, getAgentByName, type FiberContext, type FiberRecoveryContext } from 'agents';
-import { convexToJson, jsonToConvex, type JSONValue } from 'convex/values';
+import { jsonToConvex, type JSONValue } from 'convex/values';
 import { internal } from '../../convex/_generated/api';
 import { runEditorTurn, type EditorTurnArgs } from '../../convex/lib/editorTurn';
 import { runnerRequestHeadersValid, verifyRunnerRequest } from '../../convex/lib/runner_auth';
@@ -82,7 +82,7 @@ export class EditorTurn extends Agent<Env> {
         await runEditorTurn(ctx, { ...args, ...(claim.attempt ? { continuation: { segment: claim.attempt, savedEdits: checkpoint.savedEdits, pendingFastFrames: checkpoint.pendingFastFrames } } : {}) }, {
           signal: fiber.signal,
           // savedEdits already counts the edits saved before this attempt.
-          onStepFinished: progress => fiber.stash({ ...checkpoint, args: convexToJson({ ...args, editMode: progress.editMode }), steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits, pendingFastFrames: progress.pendingFastFrames }),
+          onStepFinished: progress => fiber.stash({ ...checkpoint, steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits, pendingFastFrames: progress.pendingFastFrames }),
         });
       } finally { clearInterval(beat); }
       await ctx.runMutation(internal.agentRunner.release, run).catch(() => {});

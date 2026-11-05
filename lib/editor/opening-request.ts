@@ -1,11 +1,10 @@
 import { z } from 'zod';
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS } from '@/lib/ai/claude-model';
-import { editorEditModePreferenceSchema } from '@/lib/ai/edit-mode';
 
+// Options saved before the editing-mode picker was retired may still hold editMode; z.object drops unknown keys, so they keep parsing.
 const openingRequestOptionsSchema = z.object({
   modelChoice: z.enum(EDITOR_MODELS.map(model => model.id)).optional(),
   reasoningEffort: z.enum(EDITOR_REASONING_EFFORTS).optional(),
-  editMode: editorEditModePreferenceSchema.optional(),
 });
 
 export function rememberOpeningRequest(projectId: string, prompt: string, options: z.infer<typeof openingRequestOptionsSchema>) {

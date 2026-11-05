@@ -39,6 +39,27 @@ export type ReferenceMotionEvidence = {
   checks: MotionCheck[];
   off: MotionOff[];
 };
+/** `final` is the one automatic step-up, set by the server from the request. Model and effort never change the level. */
+export type CheckLevel = 'standard' | 'final';
+/** What a lane checks while editing and at finish. */
+export type CheckRecipe = {
+  /**
+   * changes: getFrames at each change and one frame either side.
+   * sample: saved-data checks, plus one getFrames sample of new styling or framing on plain reel timelines.
+   * data: saved-data delivery checks (finishClipping).
+   * full: the lane's own full checklist (motion, recreate); no pending frame queue.
+   * Every recipe except data and sample also renders each changed range at finish.
+   */
+  frames: 'changes' | 'sample' | 'data' | 'full';
+  /** Pacing, sound-sync, motion-map, effect-review and reference-comparison tools, and the scene guard render. */
+  fullTools: boolean;
+  /** readFrames stays inside short named source windows: no whole-video sweeps. */
+  boundedReads: boolean;
+  /** Clip QA that finish requires on every accepted tab. */
+  clipQa?: readonly ('framing' | 'decode-health')[];
+  /** What the agent is told to check. */
+  instructions: string;
+};
 export type LaneDefinition = {
   id: LaneId;
   label: string;
@@ -46,6 +67,7 @@ export type LaneDefinition = {
   skills: EditorSkill[];
   tools: readonly string[];
   check: (context: LaneCheckContext) => string[];
+  checks: Record<CheckLevel, CheckRecipe>;
   instructions: string;
   referenceMotion?: 'required' | 'bound';
 };

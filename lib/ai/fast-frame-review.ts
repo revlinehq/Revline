@@ -39,7 +39,7 @@ export function fastReelFrameMoments(tool: string, before: Timeline, after: Time
   return undefined;
 }
 
-/** Pending local frame checks, carried between finished runner steps. */
+/** Pending local frame checks (getFrames at each change ±1 frame), carried between finished runner steps. Lane recipes with frames 'changes' or 'sample' use it. */
 export class FastFrameReview {
   private pending: Set<number>;
 
@@ -77,6 +77,6 @@ export class FastFrameReview {
 
   feedback() {
     const times = this.times();
-    return times.length ? `Fast requires rendered checks before completion. Call getFrames for these changed spots and their adjacent frames, in batches of up to four: ${JSON.stringify(times)}. Inspect the returned images, then finish. No full-video sweep or repeated checks.` : undefined;
+    return times.length ? `This lane requires rendered checks before completion. Call getFrames for these changed spots and their adjacent frames, in batches of up to four: ${JSON.stringify(times)}. Inspect the returned images, then finish. No full-video sweep or repeated checks.` : undefined;
   }
 }

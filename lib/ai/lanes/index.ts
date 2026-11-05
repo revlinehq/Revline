@@ -27,8 +27,17 @@ export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []
 export function laneToolAllowed(lane: LaneId, tool: string, capabilities: readonly string[] = []) {
   return laneToolNames(lane, capabilities).includes(tool);
 }
+/** The workflows and skills whose loading enables a tool, workflows first. Shared tools need none. */
+export function toolCapabilities(tool: string): string[] {
+  return [
+    ...LANE_IDS.filter(lane => lane !== 'edit' && LANES[lane].tools.includes(tool)),
+    ...Object.entries(SKILL_TOOLS).filter(([, names]) => names.includes(tool)).map(([name]) => name),
+  ];
+}
 export function laneToolError(lane: LaneId, tool: string) {
-  return `Tool "${tool}" is not loaded for this task. Use discoverCapabilities with the needed action, then loadCapability or readSkill. Keep the primary ${lane === 'edit' ? 'shared editing' : lane} workflow when adding supporting work.`;
+  const [first, ...others] = toolCapabilities(tool);
+  if (!first) return `Tool "${tool}" is not a Revline editing tool.`;
+  return `Tool "${tool}" is not enabled for this ${lane === 'edit' || lane === 'explainer' ? 'shared editing' : lane} task yet. Load the ${first} capability first: loadCapability {"name":"${first}"}${others.length ? ` (also provided by ${others.slice(0, 3).join(', ')})` : ''}, then call ${tool} again. Loading keeps the task, its primary workflow and its checks; use setLane only when the deliverable itself changes.`;
 }
 export function discoverCapabilities(query: string) {
   const words = query.toLowerCase().split(/[^a-z0-9-]+/).filter(word => word.length > 2);

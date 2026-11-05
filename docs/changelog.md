@@ -1,5 +1,9 @@
 ## 2026-11-05
 
+- Editing harness: Replace the Fast/Precise choice with per-lane check recipes, raised to full checks only for export, publish or double-check requests, and serve one stable MCP tool list. Why: the founder made the lane the only thing that changes agent checks, and Codex never re-fetches tools/list.
+
+- Motion lane: Count each pacing sample's interval toward film coverage so 60 fps films can finish. Why: harness verification found fully checked films failing finish.
+
 - Landing: Add a GitHub icon linking to the public repository in the footer. Why: the user asked to point visitors at the open-source repo.
 
 - Security: Restrict the PC release runner to owner main releases, restore GitHub-hosted secret and dependency scans, publish agent-report issues with structured fields only and rate-limit agent reports. Why: a code review found risks after the repository became public.
