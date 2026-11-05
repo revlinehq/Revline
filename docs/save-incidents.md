@@ -47,7 +47,8 @@ functions expose groups. Deployment identity comes from the backend's built-in
 
 ## Run the local PR agent
 
-Use Node 22, local Codex login, authenticated `gh`, Git access to `origin`, and
+Use Node 22, local Codex login with `codex` on `PATH` (or `CODEX_BIN` set to its
+absolute path), authenticated `gh`, Git access to `origin`, and
 existing Convex CLI login or the selected deployment's own deploy credential.
 Install dependencies in the checkout containing this script with `npm ci`.
 

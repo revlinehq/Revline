@@ -20,7 +20,8 @@ if (!['dev', 'prod'].includes(values.env) || !/^[1-5]$/.test(values.limit)) thro
 const target = values.env;
 const deploymentName = target === 'prod' ? 'different-gnu-398' : 'majestic-alpaca-541';
 const limit = Number(values.limit);
-const codex = '/Users/zuramakaradze/.bun/bin/codex';
+// The Codex CLI comes from PATH, or CODEX_BIN when it is installed elsewhere.
+const codex = process.env.CODEX_BIN || 'codex';
 const cancellation = new AbortController();
 const children = new Set();
 for (const signal of ['SIGINT', 'SIGTERM']) process.once(signal, () => {
@@ -72,14 +73,15 @@ const groupSchema = z.object({
     revisionBefore: z.number(), revisionAfter: z.number(), staged: z.boolean(), stagedRevision: z.number().optional(), observedAt: z.number(),
   }),
 });
-const prSchema = z.object({ url: z.string().url(), state: z.enum(['OPEN', 'CLOSED', 'MERGED']), mergedAt: z.string().nullable(), headRefName: z.string(), baseRefName: z.string(), title: z.string(), body: z.string() });
+const prSchema = z.object({ url: z.string().url(), isCrossRepository: z.boolean(), state: z.enum(['OPEN', 'CLOSED', 'MERGED']), mergedAt: z.string().nullable(), headRefName: z.string(), baseRefName: z.string(), title: z.string(), body: z.string() });
 const gh = (...args) => run('gh', args);
 const repo = z.object({ nameWithOwner: z.string().regex(/^[\w.-]+\/[\w.-]+$/) }).parse(JSON.parse(await gh('repo', 'view', '--json', 'nameWithOwner'))).nameWithOwner;
-const prFields = 'url,state,mergedAt,headRefName,baseRefName,title,body';
+const prFields = 'url,isCrossRepository,state,mergedAt,headRefName,baseRefName,title,body';
 const state = join(homedir(), '.local', 'state', 'revline-save-incidents');
 const repoKey = createHash('sha256').update(repo).digest('hex').slice(0, 16);
 const attemptFile = group => join(state, `${repoKey}-${target}-${group.fingerprint}.json`);
-const relevantPR = (pr, group) => pr.state === 'OPEN' || (pr.state === 'MERGED' && pr.mergedAt && group.lastSeenAt <= Date.parse(pr.mergedAt));
+// The repository is public: a fork PR can copy any marker, so only same-repository branches count.
+const relevantPR = (pr, group) => !pr.isCrossRepository && (pr.state === 'OPEN' || (pr.state === 'MERGED' && pr.mergedAt && group.lastSeenAt <= Date.parse(pr.mergedAt)));
 async function knownPR(group) {
   if (group.prUrl) {
     if (!new RegExp(`^https://github\\.com/${repo.replaceAll('.', '\\.').replaceAll('-', '\\-')}/pull/[1-9]\\d*$`).test(group.prUrl)) throw new Error('Stored PR does not belong to this repository.');
@@ -94,7 +96,7 @@ async function knownPR(group) {
     if (pr) return pr;
   }
   const prs = z.array(prSchema).parse(JSON.parse(await gh('pr', 'list', '--repo', repo, '--state', 'open', '--search', `${group.fingerprint} in:body`, '--json', prFields, '--limit', '20')));
-  return prs.find(pr => pr.body.includes(`Save incident: ${target}/${group.fingerprint}`));
+  return prs.find(pr => !pr.isCrossRepository && pr.body.includes(`Save incident: ${target}/${group.fingerprint}`));
 }
 
 // A shared Mac lock prevents two checkouts from spawning duplicate work for one deployment.
@@ -169,7 +171,7 @@ ${JSON.stringify(group, null, 2)}
         } catch { agentFailed = true; }
         // Recover a PR even if Codex exited after creating it. Never trust a link from model output.
         const prs = z.array(prSchema).parse(JSON.parse(await gh('pr', 'list', '--repo', repo, '--head', branch, '--state', 'open', '--json', prFields)));
-        const pr = prs.find(pr => pr.baseRefName === 'main' && pr.headRefName === branch && pr.title.startsWith('Fix save not confirmed:') && pr.body.includes(marker));
+        const pr = prs.find(pr => !pr.isCrossRepository && pr.baseRefName === 'main' && pr.headRefName === branch && pr.title.startsWith('Fix save not confirmed:') && pr.body.includes(marker));
         if (!pr) throw new Error(agentFailed ? 'Codex stopped without a verified open PR.' : 'No correctly titled and tagged open PR was found.');
         await convex('markPR', { groupId: group._id, prUrl: pr.url });
         console.log(`Proposed fix: ${pr.url}`);
