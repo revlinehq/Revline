@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Worker hosting: Refresh cached Railway deployments after dashboard resource changes and fit capture concurrency to CPU allocation. Why: reused deployment snapshots retained the old CPU limit.
+
 - Worker hosting: Size Railway render threads from its allocation instead of applying Fly’s four-thread ceiling. Why: the real 4K staging export rejected eight threads.
 
 ## 2026-11-04
