@@ -2,9 +2,6 @@ import { v } from 'convex/values';
 import { signMediaToken } from '../../lib/storage/media-tokens';
 import { mediaConfig } from './media_storage';
 
-/** A project holds at most this many media files. */
-export const PROJECT_MEDIA_LIMIT = 200;
-
 /** The parts a finished multipart upload reports back. */
 export const partsValidator = v.array(v.object({ partNumber: v.number(), etag: v.string() }));
 

@@ -7,7 +7,7 @@ import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
-import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
+import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";

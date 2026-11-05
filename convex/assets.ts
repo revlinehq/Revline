@@ -11,7 +11,7 @@ import { mediaConfig, mediaUrl, previewUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
 import { paginationOptsValidator } from 'convex/server';
 import { ConvexError, v, type Infer } from "convex/values";
-import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
+import { MAX_MODEL_BYTES, PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import type { Doc } from "./_generated/dataModel";
 import { action, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -61,7 +61,7 @@ export const create = mutation({ args: { projectId: v.id("projects"), storageId:
   const metadata = await ctx.db.system.get(args.storageId);
   if (!metadata) throw new ConvexError("Uploaded file not found");
   if (!metadata.contentType?.startsWith(`${args.kind}/`)) throw new ConvexError("File content type must match the selected media kind");
-  if (args.kind === 'model' && (metadata.contentType !== 'model/gltf-binary' || metadata.size > 32 * 1024 * 1024)) throw new ConvexError('Use a self-contained GLB model under 32 MB.');
+  if (args.kind === 'model' && (metadata.contentType !== 'model/gltf-binary' || metadata.size > MAX_MODEL_BYTES)) throw new ConvexError('Use a self-contained GLB model under 32 MB.');
   if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0 || args.duration > 24 * 60 * 60)) throw new ConvexError("Invalid media duration");
   for (const size of [args.width, args.height]) if (size !== undefined && (!Number.isInteger(size) || size < 1 || size > 16384)) throw new ConvexError("Invalid media dimensions");
   const count = await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", args.projectId)).take(PROJECT_MEDIA_LIMIT);

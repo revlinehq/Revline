@@ -15,6 +15,7 @@ import { requireEditorAccess } from './lib/billing_access';
 import { syncProjectAgent, projectIdentity, projectRun, projectRunContext, writeRunState, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
+import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { aspectRatio } from './schema';
 import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
@@ -127,7 +128,7 @@ export const listProjects = internalQuery({ args: { ownerId: v.string(), limit: 
 export const projectOverview = internalQuery({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const timeline = currentTimeline(project);
-  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).take(200);
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT);
   return {
     projectId: project._id, title: project.title, aspectRatio: project.aspectRatio, revision: project.revision ?? 0,
     duration: Math.round(timelineDuration(timeline) * 1000) / 1000, clipCount: timeline.clips.length, aiRunning: !!project.aiRunning, editorUrl: editorUrl(project._id),

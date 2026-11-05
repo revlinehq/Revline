@@ -1,5 +1,5 @@
 import { ConvexError, v } from 'convex/values';
-import { PROJECT_MEDIA_LIMIT } from './lib/upload_limits';
+import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { internalMutation, type MutationCtx } from './_generated/server';
 import { assetDocument, imageGenerationValidator } from './schema';
 import { projectIdentity, projectRun } from './lib/project_data';

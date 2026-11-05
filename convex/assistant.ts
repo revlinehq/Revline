@@ -35,7 +35,7 @@ import { abortStream, createThread, listStreams, listUIMessages, saveMessage, sy
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
-import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
+import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { requireOwner, requireProject } from "./lib/auth";
@@ -409,7 +409,7 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);
   // Full model context still needs recovery/request text; run-state checks deliberately do not.
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
-  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
+  const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
   const tab=boundRunTab(args.runId);
   if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}

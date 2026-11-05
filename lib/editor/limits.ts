@@ -1,5 +1,10 @@
 import { MAX_UPLOAD_PART_BYTES, MAX_UPLOAD_PARTS } from '../storage/upload-parts';
 
+/** A project holds at most this many media files. */
+export const PROJECT_MEDIA_LIMIT = 200;
+/** The largest GLB model a project accepts. */
+export const MAX_MODEL_BYTES = 32 * 1024 * 1024;
+
 /** Export workload is bounded independently from the editable arrangement. */
 export const MAX_EXPORT_SECONDS = 5 * 60;
 export const MAX_EXPORT_LABEL = `${MAX_EXPORT_SECONDS / 60} minutes`;
