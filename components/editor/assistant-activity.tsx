@@ -6,6 +6,7 @@ import type { ProcessingState } from './processing-status';
 import { Spinner } from '@/components/ui/spinner';
 import { Trace, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { cn } from '@/lib/utils';
+import { minutesSeconds } from './minutes-seconds';
 
 /** Elapsed run time is a development diagnostic; users see only the activity. */
 const SHOW_ELAPSED = process.env.NODE_ENV === 'development';
@@ -18,7 +19,7 @@ function Elapsed({ startedAt }: { startedAt: number }) {
     const timer = setInterval(update, 1000);
     return () => clearInterval(timer);
   }, [startedAt]);
-  return <span aria-hidden="true">{Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, '0')}</span>;
+  return <span aria-hidden="true">{minutesSeconds(seconds)}</span>;
 }
 
 export function AssistantActivity({ label, detail, state = 'working', startedAt, className = '' }: {

@@ -10,6 +10,7 @@ import { AgentLogo } from '@/components/workspace/agent-logo';
 import { WorkingAgents } from '@/components/workspace/working-agents';
 import type { WorkingAgent } from '@/lib/mcp/agent-identity';
 import './timeline-tabs.css';
+import { minutesSeconds } from './minutes-seconds';
 
 export type TimelineTab = { id: string; name: string; aspectRatio: AspectRatio; duration: number; active: boolean; agents?: WorkingAgent[]; /** The tab the AI is editing while another one is only viewed. */ editing?: boolean; /** Its first shot, for the export picker. */ cover?: string | null };
 export type TimelineTabActions = {
@@ -20,7 +21,6 @@ export type TimelineTabActions = {
   onExport?: (id: string) => void;
 };
 
-const length = (seconds: number) => { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; };
 
 /** Spreadsheet-style tabs on top of the timeline: each is its own video in this project. */
 export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
@@ -61,7 +61,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
       <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
         {tab.agents?.length ? <WorkingAgents agents={tab.agents}/> : tab.id === workingId ? <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span> : null}
         <span className="timeline-tab-name">{tab.name}</span>
-        <span className="timeline-tab-length">{length(tab.duration)}</span>
+        <span className="timeline-tab-length">{minutesSeconds(tab.duration)}</span>
       </button>
       {<DropdownMenu><DropdownMenuTrigger className="timeline-tab-menu" aria-label={`Options for ${tab.name}`} tabIndex={isShown ? 0 : -1} aria-hidden={!isShown || undefined} disabled={!isShown}><ChevronDown size={12}/></DropdownMenuTrigger><DropdownMenuContent align="start" className="timeline-tab-options">
         <DropdownMenuItem disabled={locked} onSelect={() => setDialog({ mode: 'rename', id: tab.id, name: tab.name })}><Pencil/>Rename</DropdownMenuItem>
