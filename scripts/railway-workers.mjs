@@ -179,7 +179,10 @@ if (operation === 'status') {
   }
 } else if (operation === 'verify') {
   if (!values.apply) throw new Error('Runtime verification creates temporary preflight services; use --apply after authorization. Use status for read-only inspection.');
-  for (const kind of kinds) await preflight(kind);
+  for (const pool of selectedPools()) for (const serviceId of pool.ids) await preflight(pool.name === 'processor' ? 'processor' : 'exports', serviceId);
+  // Only distributed chunks pull immutable registry images. The permanent
+  // services run the repository builds just verified above.
+  if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
   for (const pool of selectedPools()) for (const serviceId of pool.ids) await verifyRailwaySlot({ ...target(), serviceId, image: pool.image });
 } else if (operation === 'stage') {
   if (kinds.includes('exports') && contract.renderProvider !== 'railway' && config.distributedExports !== (remote.FLY_DISTRIBUTED_EXPORTS === 'true')) throw new Error('Keep the existing distributed-export setting during migration.');
@@ -193,7 +196,8 @@ if (operation === 'status') {
     if (settings.AWS_REGION) artifactVariables.AWS_REGION = settings.AWS_REGION;
     if (settings.BUCKET_NAME !== config.artifactBucket || settings.AWS_ENDPOINT_URL_S3 !== config.artifactEndpoint) throw new Error('Artifact credentials/endpoint do not match the selected environment manifest.');
   }
-  for (const kind of kinds) await preflight(kind);
+  for (const pool of selectedPools()) for (const serviceId of pool.ids) await preflight(pool.name === 'processor' ? 'processor' : 'exports', serviceId);
+  if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
   await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
   await waitStopped();
   for (const pool of selectedPools()) for (const serviceId of pool.ids) {
