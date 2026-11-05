@@ -29,6 +29,7 @@ Newest first. Each merged pull request adds its lines here, grouped by system.
 - Agent context: Preserve verified normalization status when compacting timeline summaries. Why: a second projection falsely reported active audio masters and clips as inactive (#97).
 - Deployment: Retry reset connections when reading Fly preflight status within its existing deadline. Why: a transient TLS reset aborted the latest main release after its image upload.
 - Media preparation: Share prepared audio with transcription, stage audio inputs locally, bound speech-provider waits and report non-retryable disk shortages. Why: rough cuts reread large video sources and hid slow stages.
+- Agent runner: Allow scoped skill capability loads and pixel-track reads. Why: runner authorization rejected tools used by editing workflows.
 - Deployment: Package reference tracking and its shared frame reader in processor images. Why: the main release failed its image runtime check before deployment.
 - Developer isolation: Add explicit faithful snapshots of saved tabs, hydrated analysis and media relationships. Why: metadata-only seeds cannot serve as cached-analysis development baselines.
 - Assistant: Anchor elapsed time to the original user message, including legacy retry recovery. Why: creating a recovery turn must not restart the request clock.
