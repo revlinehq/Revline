@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Storage: Remove the filter menu’s nested scrollbar and wrap media filters on small screens. Why: user reported awkward scrolling on the storage page.
+
 - Editor chat: Give sent user bubbles the composer’s raised background, gradient border, and shadow. Why: user requested matching surface styling.
 
 - Composer: Remove Start clipping and make Upload footage fill the action row. Why: user requested a single full-width upload action.
