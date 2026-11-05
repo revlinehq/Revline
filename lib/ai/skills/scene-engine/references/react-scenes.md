@@ -23,14 +23,13 @@ A React scene is a TSX module whose default export is a component. It is a React
 function Title({ text }: { text: string }) {
   const ref = useTimeline<HTMLHeadingElement>((tl, el) => {
     const { words } = new SplitText(el, { type: 'words' });
-    tl.from(words, { opacity: 0, filter: 'blur(14px)', y: 18, duration: .8, ease: 'expo.out', stagger: .07 }, .2);
+    tl.from(words, { yPercent: 100, opacity: 0, duration: .35, ease: 'power3.out', stagger: .05 }, .2);
   });
   return <h1 ref={ref} style={{ margin: 0, font: '600 84px/1.05 Outfit' }}>{text}</h1>;
 }
 ```
   Selector strings inside `build` (`tl.from('.row', …)`) find only that component's nodes. Let GSAP animate nodes whose style React does not set every render; keep React-computed style and GSAP on different elements.
-- **Never** `gsap.to`, `gsap.from` or `gsap.set` outside a useTimeline build, CSS transitions or keyframe animations, timers, requestAnimationFrame, Date or component state that changes over time. None of them follow the frame clock, so they differ between preview, scrubbing and export.
-- **No flash frames:** a part hidden at its first frame starts hidden through its timeline (`tl.from`/`tl.fromTo` apply their start state where the timeline is built) or through computed style at time 0. Beats unmount what is outside their window, so build hidden parts where they first appear.
+- **Frame-clock rules and first-frame states** (what never follows the clock, where starting states go): gsap page `revline`. In React, build a hidden part where it first appears, since Beats unmount what is outside their window.
 
 ## The revline module
 - `useBeat()`: `{ time, frame, fps, start, duration, progress }` local to the nearest beat; at the top of a film it is film time. `useBeat(t => …)` re-renders only when the selected value changes (`useBeat(t => t.time > 2)`).

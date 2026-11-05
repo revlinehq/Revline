@@ -1,4 +1,4 @@
-import { overallStyling } from './overall-styling';
+import { talkingHeadGraphics } from './talking-head-graphics';
 import { musicAndSound } from './music-and-sound';
 import { effects } from './effects';
 import { textStyling } from './text-styling';
@@ -14,4 +14,4 @@ import { clipping } from './clipping';
 import { vfx } from './vfx';
 import type { EditorSkill } from './types';
 
-export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, overallStyling, motionDesign, referenceFootage, musicAndSound, visualInspection];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, effects, vfxRecipes, textStyling, colorGrading, sceneEngine, gsapSkill, talkingHeadGraphics, motionDesign, referenceFootage, musicAndSound, visualInspection];

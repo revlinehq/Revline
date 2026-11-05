@@ -14,7 +14,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 
 ## Writing scenes
 - Plan the film as a short outline (a few lines per scene: time range, what moves, the words). Never draft scene code while thinking; write it in the addFilm or addScene call. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
-- A film (React scenes): write it with addFilm as one clip (page `react-scenes`), check every section and the moves between them with getFrames, then fix with patchScene edits, never by retyping it. For GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
+- A film: page `react-scenes`. GSAP scenes: one addScene per call, checking each before writing the next. Keep each module well under the code limit.
 - Changing any existing scene or film: inspectClip with section or lines for a short numbered read, then patchScene with scoped snippets or line edits and expectedRevision (page `react-scenes`). Use inspectClip kit: true for the shared film kit. editScene replaces whole code, so use it only to swap a standalone scene for a new one or to attach a brand kit or media.
 - Going back to a version of a scene the user liked: listRevisions (with its clipId) finds the revision, then restoreClip puts that one clip back exactly, leaving every other clip as it is now. Use it, not chains of undoLatestEdit, which also take back later approved work.
 
@@ -27,7 +27,7 @@ Launch and feature films use **React scenes** instead: one film, one clip, built
 - `icon('scissors', { size: 16, color: '#8d8f93', strokeWidth: 2 })` returns a Lucide icon as SVG markup (kebab-case names, as on lucide.dev). Use it for every UI icon instead of drawing one.
 - `blueprint('Editor', container, { width, height })` builds a brand kit blueprint attached with `blueprints` inside `container` and returns its root; animate its `[data-part=...]` pieces (motion-design, blueprints page).
 - `brand` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See motion-design's `brand-kit` page.
-- The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP. CSS transitions and keyframes, requestAnimationFrame, timers, Date, video and audio do not follow the clock.
+- The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP on that timeline (gsap page `revline` lists what never follows the clock).
 - GSAP scenes are plain TypeScript, not JSX (React scenes, page `react-scenes`, are TSX). Imports: `gsap` and its plugins ({{revline:0}}, plus EasePack), each from `gsap/<Name>` or all from `gsap`. They are registered already. Nothing else loads: no network, no other packages.
 - Math.random is seeded, so scatter and noise come out the same in preview and export.
 - Limits: code up to 120,000 characters per scene and 400,000 per timeline (code shared by several clips counts once), clips up to 120 s.

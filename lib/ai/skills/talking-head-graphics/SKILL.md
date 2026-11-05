@@ -1,16 +1,16 @@
 ---
-name: "overall-styling"
-description: "House defaults for films, footage overlays and diagrams: near-black UI, one accent, outlined isometric blocks, hatching, dimension lines and subtitles. Includes a working example. User-selected looks and measured recreations override these defaults."
+name: "talking-head-graphics"
+description: "House look for graphics over footage: isometric line diagrams beside a talking head (near-black panels, outlined blocks, hatching, one accent edge, dimension lines), minimal subtitles and layout around the speaker. Includes a working example. Not for motion films made from scratch (motion-design). User direction and measured recreations override these defaults."
 ---
-# Overall styling
+# Talking-head graphics
 
 House defaults apply to invented graphics. Explicit user direction and measured literal references override them; confirmed brand fonts/colors override remaining defaults. Why: copying a reference and inventing a film require different choices.
 
-## Everywhere
+## Scope
+Graphics and subtitles over footage only. Motion films made from scratch (launch, feature, teaser films) follow motion-design and its pages instead; nothing on this page applies to them.
 
-- Invented UI: surfaces #111–#202020, 1 px dividers, text #F5F5F5/#A6A6A6, one accent hue per shot at 1080-based size. No grids, scan lines or bright purple fills. Panel shadows only for a selected blueprint lift; subtitle shadow is specified below.
-- Reuse one product component or blueprint across sections; vary state/framing. Use getBlueprint or measureScreen/compareScreen against the real app. Separate copies once produced three different Revline editors in one film.
-- Choose a hold or motion that communicates the idea; getFrames/checkPacing verify it. The example demonstrates technique, not a required composition.
+- Invented UI over footage: surfaces #111–#202020, 1 px dividers, text #F5F5F5/#A6A6A6, one accent hue per shot at 1080-based size. No scan lines or bright purple fills.
+- Choose a hold or motion that communicates the idea; getFrames verifies it. The example demonstrates technique, not a required composition.
 
 ## Isometric line diagram (default)
 

@@ -1,4 +1,15 @@
 ## 2026-11-05
+- Motion skills: frame-clock rules now live only in gsap page revline; taste no longer repeats ideation; the React example uses measured timing instead of the 0.8 s blur. Why: repeated and conflicting rules confused the agent.
+- Motion skills: removed rules repeated across motion-design, scene-engine and the checklist (brief, build/edit mechanics, timing and sound checks, reference workflow). Why: duplicates made the agent read the same instruction twice.
+- Motion skills: ideation now covers only the pre-build conversation; look, asset and approval advice removed. Why: the user wanted editing advice out of ideation.
+
+- Motion lane: Films load only motion-design, gsap, scene-engine and reference-footage (no footage, caption or sound-effect skills), no longer need checkPacing to finish, and default to music only cut on bar lines. Why: the user found the shared skills and pacing check produced dark, stop-start films.
+
+- Skills: Add measured timing and easing rules to motion-design (moves about 0.38 s, exits faster than entrances, beats about 2.45 s) and rename overall-styling to talking-head-graphics, scoped to graphics over footage and no longer loaded for motion films. Why: the user found film pacing slow and the dark house look leaking into launch films.
+
+- Skills: Motion films take length and structure from the request (no fixed 30–40 s proof structure), rebuild product UI only when asked, and drop the qualitative motion-feel rules pending measured pacing rules. Why: the user found the old defaults hurt pacing and look.
+
+- Skills: Add motion-design page `backgrounds`, a three-layer background recipe (base, structure, accent) derived from the brand kit, with soft-shadow values, banned looks, a measured check and the user's rated examples. Why: the user rejected dark grain-gradient film backgrounds and asked to train the agent to pick good ones.
 
 - Codebase: Untangle the code (no import cycles, worker/backend contract and media queue in leaf modules, one owner for models, tool labels, limits, run ids and storage keys; dead routes and functions removed); fix the processor release file list, the media Worker upload part limit and the pre-paint dark theme. Why: the user asked to run the untangle-codebase refactor.
 
