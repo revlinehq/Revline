@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Blog: Widen the content area, remove small category labels and use the shared purple palette. Why: the user requested wider cards and consistent branding.
+
 - Blog: Add editing guides with article metadata, RSS and automatic sitemap entries. Why: the user requested a small blog with Google search enhancements.
 
 - Search: Add use-case pages, crawl rules, sitemap links and canonical HTTPS redirects; defer offscreen illustrations and mobile video playback. Why: the user requested fixing the public SEO audit findings.

@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 };
 export default function Blog() {
   return <>
-    <header className="landing-section blog-intro"><p className="blog-eyebrow">THE REVLINE BLOG</p><h1>A better next edit.</h1><p>Practical notes on clipping, captions and motion. Small details that make the finished video work.</p><Link href="/blog/feed.xml" className="blog-feed">Follow the RSS feed ↗</Link></header>
-    <section className="landing-section blog-grid" aria-label="Editing guides">{blogPosts.map(post => <Card key={post.slug} className="blog-card"><Link href={`/blog/${post.slug}`} className="blog-card-link"><img src={post.image} alt={post.imageAlt} width={1920} height={1080} loading="lazy"/><CardHeader><p className="blog-eyebrow">{post.category}</p><CardTitle><h2>{post.title}</h2></CardTitle><p className="blog-meta"><time dateTime={post.published}>{blogDate(post.published)}</time> · {readingMinutes(post)} min read</p></CardHeader><CardContent><p>{post.description}</p><span className="blog-read">Read the guide ↗</span></CardContent></Link></Card>)}</section>
+    <header className="landing-section blog-intro"><h1>A better next edit.</h1><p>Practical notes on clipping, captions and motion. Small details that make the finished video work.</p><Link href="/blog/feed.xml" className="blog-feed">Follow the RSS feed ↗</Link></header>
+    <section className="landing-section blog-grid" aria-label="Editing guides">{blogPosts.map(post => <Card key={post.slug} className="blog-card"><Link href={`/blog/${post.slug}`} className="blog-card-link"><img src={post.image} alt={post.imageAlt} width={1920} height={1080} loading="lazy"/><CardHeader><CardTitle><h2>{post.title}</h2></CardTitle><p className="blog-meta"><time dateTime={post.published}>{blogDate(post.published)}</time> · {readingMinutes(post)} min read</p></CardHeader><CardContent><p>{post.description}</p><span className="blog-read">Read the guide ↗</span></CardContent></Link></Card>)}</section>
   </>;
 }
