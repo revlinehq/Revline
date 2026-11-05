@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "revline": {
+      "type": "http",
+      "url": "https://tryrevline.com/mcp"
+    }
+  }
+}

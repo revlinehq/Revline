@@ -1,0 +1,19 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "revline",
+  "owner": {
+    "name": "Revline",
+    "url": "https://tryrevline.com"
+  },
+  "metadata": {
+    "description": "Revline's Claude Code plugin: edit videos from Claude with Revline's AI video editor."
+  },
+  "plugins": [
+    {
+      "name": "revline",
+      "source": "./plugins/revline",
+      "description": "Edit videos from Claude Code: cut, caption, reframe and animate footage in Revline over MCP.",
+      "category": "productivity"
+    }
+  ]
+}

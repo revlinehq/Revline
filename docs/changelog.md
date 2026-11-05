@@ -2,6 +2,10 @@
 
 - Codebase: Untangle the code (no import cycles, worker/backend contract and media queue in leaf modules, one owner for models, tool labels, limits, run ids and storage keys; dead routes and functions removed); fix the processor release file list, the media Worker upload part limit and the pre-paint dark theme. Why: the user asked to run the untangle-codebase refactor.
 
+- Plugins: Add a Claude Code plugin and marketplace that connect the Revline MCP server and teach Claude the edit flow. Why: the user asked to list Revline in the Claude plugin directory.
+
+- Workspace: Keep the dashboard composer visible during plan checks and show loading inside recent-project cards. Why: the user reported the whole page waiting for data.
+
 - Workspace: Make the home composer one text row taller. Why: the user asked for more room to type.
 
 - Workspace: Show recent projects with an Upload new button on the home screen; keep Start new edit for empty accounts. Why: the user asked to restore recent projects.
