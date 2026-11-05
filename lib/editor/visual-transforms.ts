@@ -10,7 +10,7 @@ export type VisualSnapResult = { transform: VisualTransform; lines: VisualSnapLi
 type Size = { width: number; height: number };
 
 // Adapted from OpenCut preview/element-bounds.ts and components/handle-primitives.tsx,
-// revision cf5e79e919144200294fb9fed22a222592a0aeea. MIT: third-party/OpenCut-LICENSE.
+// revision cf5e79e919144200294fb9fed22a222592a0aeea. MIT: OpenCut-LICENSE.
 export function visualBounds(transform: VisualTransform, rect: VisualRect, width: number, height: number): VisualBounds {
   const localX = (rect.left + rect.width / 2 - width / 2) * transform.scale;
   const localY = (rect.top + rect.height / 2 - height / 2) * transform.scale;

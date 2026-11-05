@@ -33,7 +33,7 @@ function usePreviewZoom() {
 }
 
 // OpenCut's viewport center/fit model, adapted for our retained HyperFrames player.
-// MIT attribution: third-party/OpenCut-LICENSE.
+// MIT attribution: OpenCut-LICENSE.
 export function PreviewZoomProvider({ canvas, children }: { canvas: PreviewSize; children: ReactNode }) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportElement, setViewportElement] = useState<HTMLDivElement | null>(null);

@@ -10,7 +10,7 @@ function formatRulerLabel(time:number){
 }
 
 // OpenCut Classic ruler-utils.ts: choose frame-aligned label spacing.
-// MIT notice: third-party/OpenCut-LICENSE.
+// MIT notice: OpenCut-LICENSE.
 export const TimelineRulerTicks = memo(function TimelineRulerTicks({px,duration,fps,origin=0}:{px:number;duration:number;fps:number;origin?:number}){
   const intervals=[1,2,3,5,10,15].map(frames=>frames/fps).concat([1,2,3,5,10,15,30,60,120,300,600,900,1800,3600,7200,14400]);
   const label=intervals.find(seconds=>seconds*px>=60)??14400;
