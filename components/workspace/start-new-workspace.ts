@@ -1,5 +1,5 @@
 import { clearProjectImportJob, getProjectImportJob } from '@/lib/editor/project-import-job';
-import { clearNewProjectDraft } from '@/lib/editor/opening-request';
+import { clearNewProjectSources } from '@/lib/editor/opening-request';
 import { stashFiles } from './project-draft';
 
 export const NEW_WORKSPACE_EVENT = 'revline:new-workspace';
@@ -9,7 +9,7 @@ export async function startNewWorkspace(ownerId?: string) {
   const job = getProjectImportJob(ownerId);
   if (job) clearProjectImportJob(job);
   try {
-    clearNewProjectDraft();
+    clearNewProjectSources();
   } catch { /* The current workspace can still be cleared in memory. */ }
   window.dispatchEvent(new Event(NEW_WORKSPACE_EVENT));
   await stashFiles([]);
