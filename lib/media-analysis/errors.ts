@@ -17,8 +17,16 @@ export function mediaErrorMessage(error: unknown) {
   return message.replace(/https?:\/\/[^\s<>"']+/g, '[media URL]').replace(/\/(?:home|tmp|app)\/[^\s:'"]+/g, '[worker path]').slice(0, 1000);
 }
 
+/** Match actual disk exhaustion, including FFmpeg stderr, without classifying network errors as permanent. */
+export function isMediaDiskFull(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error ? error.code : undefined;
+  const stderr = error && typeof error === 'object' && 'stderr' in error ? error.stderr : undefined;
+  return code === 'ENOSPC' || /\bENOSPC\b|No space left on device/i.test(`${error instanceof Error ? error.message : ''} ${typeof stderr === 'string' ? stderr : ''}`);
+}
+
 /** Explicit provider policy wins over status defaults, including throttling. */
 export function isRetryableAnalysisError(error: unknown) {
+  if (isMediaDiskFull(error)) return false;
   return !(error instanceof AnalysisError) || (error.retryable ?? error.status >= 500);
 }
 

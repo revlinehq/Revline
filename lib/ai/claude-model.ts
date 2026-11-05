@@ -92,6 +92,11 @@ export function validatePinnedClaudeModel(input: Omit<ClaudeModelSelection, 'rea
   return selection;
 }
 
+/** The free policy is a server default, independent of manual picker feature flags. */
+export function freeEditorModel(env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
+  return enforceClaudeModelPolicy({ provider: 'openai', modelId: 'gpt-6.1-terra', modelChoice: 'gpt-6.1-terra', reasoningEffort: 'low' }, env);
+}
+
 /** Capture manual effort with the model so a queued run cannot change settings. */
 export function withEditorReasoning(selection: ClaudeModelSelection, effort?: string, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (effort !== undefined && effort !== 'auto' && !claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');
