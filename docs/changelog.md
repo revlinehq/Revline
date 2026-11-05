@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Navigation: Keep Blog in the footer and remove it from the navbar. Why: the user requested footer-only blog navigation.
+
 - Blog: Widen the content area, remove small category labels and use the shared purple palette. Why: the user requested wider cards and consistent branding.
 
 - Blog: Add editing guides with article metadata, RSS and automatic sitemap entries. Why: the user requested a small blog with Google search enhancements.
