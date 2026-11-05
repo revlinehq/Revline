@@ -15,8 +15,8 @@ Not for recreating a video the user gave: a clone takes its brand from the video
    - None: ask for the website URL, or for a theme (colors, Google Fonts names, logo SVG) if there is no site.
 2. **Create.** createBrandKit with the URL (and any theme values the user gave; those win). Name it after the brand.
 3. **Show what was found.** Fonts by role, the main colors, whether a logo was found, and every note. Ask the user to correct anything wrong; fix it with updateBrandKit. Never pretend a missing piece was found.
-4. **Confirm the product.** Draft one product text from the scraped copy: what it is, the problem it solves and the 3 to 5 features worth showing (features as short lines). Show it and ask the user to correct it, asking only about what the copy does not answer. Save the confirmed text with updateBrandKit context.product. Never build on an unconfirmed product text.
-5. **Screens.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
+4. **Confirm the product, only when the film states product facts the user has not given.** Draft one product text from the scraped copy: what it is, the problem it solves and the 3 to 5 features worth showing (features as short lines). Show it and ask the user to correct it, asking only about what the copy does not answer. Save the confirmed text with updateBrandKit context.product. Never build on an unconfirmed product text.
+5. **Screens, only when the user wants their product UI shown.** Product screenshots belong to the brand, not one project. Check the kit's screens (getBrandKit). When the user gives screenshots, offer to save them to the kit (updateBrandKit addScreens, named like editor, dashboard, settings, with a short note) so every later video reuses them without re-uploading.
 6. **Use.** Pass `brandKitId` to addFilm or addScene (or editScene to attach or refresh). A scene keeps the kit as it was when saved.
 
 ## In scene code
