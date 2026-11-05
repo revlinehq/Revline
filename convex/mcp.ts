@@ -284,7 +284,7 @@ export const requestGuard = internalMutation({ args: { ownerId: v.string(), proj
   const snapshotId = await ctx.db.insert('frameSnapshots', { projectId: project._id, ownerId: args.ownerId, revision: project.revision ?? 0, times: args.times, status: 'queued', createdAt: Date.now(), guard: { baseline, candidate } });
   const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId, requiredProcessorVersion: GUARD_PROCESSOR_VERSION });
   await ctx.db.patch(snapshotId, { taskId });
-  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false});
+  await ctx.db.insert('frameSnapshotControls',{snapshotId,projectId:project._id,preserve:false,cancelTaskId:taskId});
   await ctx.scheduler.runAfter(15 * 60_000, internal.mcp.expireFrames, { snapshotId });
   return snapshotId;
 }});
