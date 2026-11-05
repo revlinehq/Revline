@@ -14,3 +14,6 @@ export function mcpRunTab(runId: string) {
   if (!runId.startsWith('mcp-') || runId.startsWith(READ_ONLY_RUN_PREFIX)) return undefined;
   return runId.split(':tab:')[1];
 }
+
+/** The tab a read-only or exclusive MCP run is bound to; in-app runs use the open tab and return undefined. */
+export const boundRunTab = (runId: string) => runId.startsWith(READ_ONLY_RUN_PREFIX) ? readRunTab(runId) : mcpRunTab(runId);

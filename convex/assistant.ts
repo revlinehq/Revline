@@ -8,7 +8,7 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, readRunTab, mcpRunTab } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, mcpRunTab, boundRunTab } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
@@ -413,7 +413,7 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
-  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):mcpRunTab(args.runId);
+  const tab=boundRunTab(args.runId);
   if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
   return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
 }});
@@ -425,7 +425,7 @@ export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeli
   return {timeline:await loadSceneCode(ctx,timeline),revision:project.revision??0};
 }});
 /** The tab a run works on: a read of a named tab, or the open one. */
-const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):mcpRunTab(runId))??activeTabOf(project);
+const runTab=(project:Doc<'projects'>,runId:string)=>boundRunTab(runId)??activeTabOf(project);
 /** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
 export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),kit:v.optional(v.boolean()),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
@@ -465,7 +465,7 @@ export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),rev
 export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.optional(v.string()),clipId:v.optional(v.string()),revision:v.optional(v.number()),limit:v.number()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,current=project.revision??0;
-  const namedTab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&readRunTab(args.runId);
+  const namedTab=boundRunTab(args.runId);
   const timelineId=args.timelineId??(args.clipId||namedTab?runTab(project,args.runId):undefined);
   const rows=await listRevisions(ctx,project._id,{timelineId,clipId:args.clipId,revision:args.revision,limit:args.limit});
   const tabs=new Map(tabsOf(project).map(tab=>[tab.id,tab.name]));

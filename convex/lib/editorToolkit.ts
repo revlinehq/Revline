@@ -54,7 +54,7 @@ import { EDITOR_TOOL_DEFINITIONS, assertToolDefinitions, toolBehavior } from '..
 import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
-import { readRunTab } from "./run_ids";
+import { boundRunTab } from "./run_ids";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
 import { placeClip, TIMELINE_ROW } from "./revision_log";
@@ -234,7 +234,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   let finishRequired=options.finishRequired??true;
   let requiredPersisted=finishRequired;
   const noteToolIntent=(name:string)=>{if(name==='finish'||EDITOR_TOOL_DEFINITIONS[name as keyof typeof EDITOR_TOOL_DEFINITIONS]?.effect==='timeline')finishRequired=true;};
-  let timelineId=readRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
+  let timelineId=boundRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
   const timelineIdForLane=()=>timelineId;
   let finishResult:FinishResult|undefined;
   const taskScope={ownerId:run.ownerId,projectId:run.projectId,taskId:taskId??run.runId};
@@ -256,7 +256,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal, isReferenceAsset((input as { assetId?: string }).assetId));
     if ('status' in result) {
-      const timelineId = readRunTab(run.runId);
+      const timelineId = boundRunTab(run.runId);
       return { ...result, nextAction: { ...result.nextAction, arguments: { ...result.nextAction.arguments, ...(timelineId ? { timelineId } : {}) } }, images: [] };
     }
     let acrossCuts: string[] = [];
@@ -285,7 +285,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const clippingRun={...run,runId:options.taskId??run.runId};
   const clippingUnavailableReason=async()=>{const state=await ctx.runQuery(internal.clipping.completionState,clippingRun);return 'geminiUnavailableReason' in state?state.geminiUnavailableReason:undefined;};
   let clippingActive=false;
-  let clippingTimelineId=readRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
+  let clippingTimelineId=boundRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
   let effectPlans:EffectPlan[]=options.initialPlans;
   // Once this environment reports no review service, later reviews answer at once.
   let reviewServiceMissing=false;
@@ -657,7 +657,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Render frames of the saved (or this turn's staged) timeline as base64 JPEGs, as export draws them.
   const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string, resolution?:720|1080) => {
     await editSession.wait();
-    const timelineId = targetTimelineId??readRunTab(run.runId);
+    const timelineId = targetTimelineId??boundRunTab(run.runId);
     const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(resolution?{resolution}:{}), ...(revision !== undefined ? { revision } : {}) });
     const deadline = Date.now() + 280_000;
     let started = false;
@@ -731,7 +731,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // tweens and content changes; with both, where the timeline moves differently from the reference.
   const timelineMotion = async (start: number, end: number, crop?: ComparisonCrop, aspectRatio?: number): Promise<{ map: MotionMap; revision: number }> => {
     await editSession.wait();
-    const timelineId = readRunTab(run.runId);
+    const timelineId = boundRunTab(run.runId);
     const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times: [], motion: { start, end }, ...(crop || aspectRatio ? { comparison: { ...(crop ? { crop } : {}), ...(aspectRatio ? { aspectRatio } : {}) } } : {}) });
     try {
       const deadline = Date.now() + 540_000;
@@ -789,7 +789,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
   const checkPacing = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }) => {
     await editSession.wait();
-    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId);
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = boundRunTab(run.runId);
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : undefined;
     const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], pacing: { start, end:end-start<=9?end:start+8, fps: input.fps ?? 10 } });
     const deadline = Date.now() + 45_000;
@@ -811,7 +811,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Listening decodes the range's mix on the media worker (and for a check also samples its picture), so it may take minutes.
   const listen = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }, check: boolean) => {
     await editSession.wait();
-    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = readRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = boundRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : undefined;
     const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, recreation: recreationRender(), ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], sound: { start, end:end-start<=9?end:start+8, check, ...(input.fps ? { fps: input.fps } : {}) } });
     const deadline = Date.now() + 45_000;
@@ -1159,7 +1159,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const transcript=asset.analysis?.audioActivity?refineTranscriptWithAudioActivity(raw,asset.analysis.audioActivity):raw;
         return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
       }).map(asset=>asset._id);
-      const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = readRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
+      const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = boundRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
       return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, imageGeneration }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId, ...generatedImageSummary({ imageGeneration }) })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
     } }),
     inspectClip: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.inspectClip, description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. With no options, returns the full clip as before. For a short scene read, pass section (marker label or id), lines {start,end}, or both; sceneCode.blocks returns exact code and absolute numberedCode, plus the section block index. Line numbers are 1-based and inclusive for this revision; read ranges past either end are clamped and the returned bounds are reported. Scenes without identifiable sections use whole-scene line ranges. kit: true reads the shared film kit instead. search finds a literal string or per-line JavaScript regex with absolute line and column numbers and bounded previews, without returning the full code. Combine it with section, lines or kit; use search.startLine to continue a page. Scoped reads omit full scene and blueprint code. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string(), section: codeSectionInput.optional(), lines: z.object({ start: z.number().int(), end: z.number().int() }).strict().optional().describe('Inclusive read range; endpoints outside the source are clamped to its first or last line.'), kit: z.boolean().optional(), search: z.object({ query: z.string().min(1).max(500), regex: z.boolean().optional(), caseSensitive: z.boolean().optional().describe('Case-insensitive by default; true matches exact case.'), startLine: z.number().int().min(1).optional(), limit: z.number().int().min(1).max(100).optional() }).optional() }), execute: async (_ctx, input) => {
@@ -1271,7 +1271,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(input.enabled===false)return checkpoint(t=>target?{...t,clips:t.clips.map(c=>c.id===target.id?{...c,normalizedAudio:undefined}:c)}:{...t,audioNormalization:undefined});
       const cached=target?.normalizedAudio??(!target?editSession.timeline.audioNormalization:undefined),cacheKey=target?audioNormalizationKey(editSession.timeline,target):timelineNormalizationKey(editSession.timeline);
       if(cached?.outputLufs!==undefined&&cached.measuredTruePeak!==undefined&&cached.key===cacheKey&&cached.targetLufs===(input.targetLufs??-14)&&cached.truePeak===(input.truePeak??-1))return {applied:false,alreadyNormalized:true,assetId:cached.assetId,targetLufs:cached.targetLufs,truePeakCeiling:cached.truePeak};
-      const timelineId=readRunTab(run.runId),snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,recreation:recreationRender(),...(editSession.staged?{runId:run.runId}:{}),...(timelineId?{timelineId}:{}),times:[],normalization:{...(input.clipId?{clipId:input.clipId}:{}),targetLufs:input.targetLufs??-14,truePeak:input.truePeak??-1}});
+      const timelineId=boundRunTab(run.runId),snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,recreation:recreationRender(),...(editSession.staged?{runId:run.runId}:{}),...(timelineId?{timelineId}:{}),times:[],normalization:{...(input.clipId?{clipId:input.clipId}:{}),targetLufs:input.targetLufs??-14,truePeak:input.truePeak??-1}});
       try{
         const deadline=Date.now()+540_000;
         while(true){
@@ -1532,7 +1532,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const stillReference = assets.find(asset => asset._id === input.assetId)?.kind === 'image';
       const deadline = Math.min(options.comparisonDeadline ?? Infinity, Date.now() + REFERENCE_COMPARISON_BUDGET_MS);
       await editSession.wait();
-      const offset = input.offset ?? 0, requested = comparisonSamples(input), timelineId = readRunTab(run.runId);
+      const offset = input.offset ?? 0, requested = comparisonSamples(input), timelineId = boundRunTab(run.runId);
       if (input.times ? input.times.some(time => time + offset < 0) : input.start! + offset < 0) throw new Error('The offset places a reference sample before the timeline starts.');
       const scores: { time: number; difference: number }[] = [], images: { label: string; data: string; mimeType: string }[] = [];
       const {receipt: suppliedReceipt, cancel, ...work} = input;
