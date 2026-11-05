@@ -1,4 +1,5 @@
 import { v } from 'convex/values';
+import { PROJECT_MEDIA_LIMIT } from './lib/upload_limits';
 import { issueUpload, consumeUpload } from './uploads';
 import { projectIdentity } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
@@ -74,8 +75,8 @@ export const finishModel = internalMutation({ args: { ownerId: v.string(), proje
   await requireEditorAccess(ctx, args.ownerId);
   const file = await ctx.db.system.get(args.storageId);
   if (!file || file.contentType !== 'model/gltf-binary' || file.size > 32 * 1024 * 1024 || !file.size) throw new Error('Use a self-contained GLB model under 32 MB.');
-  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(200);
-  if (count.length >= 200) throw new Error('A project supports up to 200 media files.');
+  const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(PROJECT_MEDIA_LIMIT);
+  if (count.length >= PROJECT_MEDIA_LIMIT) throw new Error(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files.`);
   await consumeUpload(ctx, args.storageId, args.ownerId, args.projectId);
   const id = await ctx.db.insert('assets', { ...args, kind: 'model', contentType: file.contentType, size: file.size, createdAt: Date.now() });
   await recordAssetStorage(ctx, (await ctx.db.get(id))!);

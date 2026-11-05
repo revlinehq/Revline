@@ -5,14 +5,13 @@ import type { Doc, Id } from './_generated/dataModel';
 import type { MutationCtx, QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
-import { mediaConfig, storageControl } from './lib/media_storage';
+import { storageControl } from './lib/media_storage';
 import { forgetStorageObject, recordStorageObject } from './lib/storage_accounting';
-import { signMediaToken } from '../lib/storage/media-tokens';
+import { partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
 import { uploadPartSize } from '../lib/editor/limits';
 
 const metadata = { fileName:v.string(), contentType:v.string(), kind:v.union(v.literal('video'),v.literal('audio'),v.literal('image')), size:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()) };
 const uploadArgs = { uploadId:v.id('cloudMedia') };
-const partsValidator = v.array(v.object({partNumber:v.number(),etag:v.string()}));
 /** An upload that requests no part for this long was abandoned. Part URLs are valid for an hour. */
 const IDLE_MS = 2 * 3600_000;
 const MAX_AGE_MS = 24 * 3600_000;
@@ -70,13 +69,11 @@ export const lease = internalQuery({args:{...uploadArgs,cleanup:v.optional(v.boo
   if(!args.cleanup){await requireEditorAccess(ctx,ownerId);if(row.aborting||(!row.completed&&row.expiresAt<=Date.now()))throw new ConvexError('Cloud upload expired or was cancelled.');}
   return row;
 }});
-export const partUrl = action({args:{...uploadArgs,partNumber:v.number()},returns:v.string(),handler:async(ctx,args)=>{
+export const partUrl = action({args:{...uploadArgs,partNumber:v.number()},returns:v.string(),handler:async(ctx,args):Promise<string>=>{
   const row=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
-  if(row.completed||!Number.isInteger(args.partNumber)||args.partNumber<1||args.partNumber>Math.ceil(row.size/row.partSize))throw new ConvexError('Invalid upload part.');
+  if(row.completed||!validPartNumber(args.partNumber,row.size,row.partSize))throw new ConvexError('Invalid upload part.');
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
-  const {url,secret}=mediaConfig();
-  const token=await signMediaToken(secret,{operation:'part',key:row.r2Key,uploadId:row.uploadId,partNumber:args.partNumber,size:Math.min(row.partSize,row.size-(args.partNumber-1)*row.partSize),expires:Date.now()+3600_000});
-  return `${url}/part?token=${token}`;
+  return signedPartUrl({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.partNumber);
 }});
 export const finish = internalMutation({args:{...uploadArgs,size:v.number(),contentType:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const row=await ctx.db.get(args.uploadId);
@@ -89,7 +86,7 @@ export const finish = internalMutation({args:{...uploadArgs,size:v.number(),cont
 export const complete = action({args:{...uploadArgs,parts:partsValidator},returns:v.null(),handler:async(ctx,args):Promise<null>=>{
   const row=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
   if(row.completed)return null;
-  if(args.parts.length!==Math.ceil(row.size/row.partSize)||args.parts.some((part,i)=>part.partNumber!==i+1||!part.etag||part.etag.length>256))throw new ConvexError('Upload parts are incomplete.');
+  if(!partsComplete(args.parts,row.size,row.partSize))throw new ConvexError('Upload parts are incomplete.');
   const file=await storageControl({action:'complete',key:row.r2Key,uploadId:row.uploadId,parts:args.parts});
   if(file.size===undefined||!file.contentType)throw new ConvexError('Cloud storage did not confirm the file.');
   await ctx.runMutation(internal.cloudMedia.finish,{uploadId:row._id,size:file.size,contentType:file.contentType});

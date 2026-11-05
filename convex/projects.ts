@@ -7,6 +7,7 @@ import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
+import { PROJECT_MEDIA_LIMIT } from "./lib/upload_limits";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
@@ -53,7 +54,7 @@ export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: 
     }
     await ctx.db.patch(copies.get(source._id)!, { audioAssetId: audioId });
   }
-  if (stored.size > 200) throw new ConvexError('Choose fewer sources: a project supports 200 video and audio files');
+  if (stored.size > PROJECT_MEDIA_LIMIT) throw new ConvexError(`Choose fewer sources: a project supports ${PROJECT_MEDIA_LIMIT} video and audio files`);
   // References to recreate stay in the project's media, off the timeline.
   for (const source of args.placeOnTimeline === false ? [] : sources) {
     if (!source) continue;
@@ -81,8 +82,8 @@ export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, pro
   const project = await requireProject(ctx, projectId, ownerId, false);
   await requireEditorAccess(ctx, ownerId);
   if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
-  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(201);
-  if (assets.length > 200) throw new ConvexError('A project supports up to 200 media files');
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT + 1);
+  if (assets.length > PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   const now = Date.now(), timeline = currentTimeline(project);
   const copyId = await createProject(ctx, { title: projectTitle(title ?? `${project.title} copy`), aspectRatio: project.aspectRatio, ownerId, createdAt: now, updatedAt: now, timeline: normalizeTimeline({ clips: [], fps: timeline.fps, aspectRatio: timeline.aspectRatio }), revision: 0, history: [] });
   const ids = new Map<string, Id<'assets'>>();

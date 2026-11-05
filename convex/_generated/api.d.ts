@@ -109,6 +109,7 @@ import type * as lib_storage_accounting from "../lib/storage_accounting.js";
 import type * as lib_timeline from "../lib/timeline.js";
 import type * as lib_toolSaveReceipts from "../lib/toolSaveReceipts.js";
 import type * as lib_tool_write_receipt from "../lib/tool_write_receipt.js";
+import type * as lib_upload_limits from "../lib/upload_limits.js";
 import type * as lib_video_unavailable from "../lib/video_unavailable.js";
 import type * as lib_workflows from "../lib/workflows.js";
 import type * as mcp from "../mcp.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   "lib/timeline": typeof lib_timeline;
   "lib/toolSaveReceipts": typeof lib_toolSaveReceipts;
   "lib/tool_write_receipt": typeof lib_tool_write_receipt;
+  "lib/upload_limits": typeof lib_upload_limits;
   "lib/video_unavailable": typeof lib_video_unavailable;
   "lib/workflows": typeof lib_workflows;
   mcp: typeof mcp;
