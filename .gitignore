@@ -49,4 +49,5 @@ __pycache__/
 *.pfx
 
 # Local design source and previews
+/design/
 /designs/

@@ -1,3 +1,4 @@
+import { isUsageCount as count } from './usage-counts';
 import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4Usage, LanguageModelV4ToolResultPart, SharedV4ProviderMetadata } from '@ai-sdk/provider';
 import type { LanguageModelMiddleware } from 'ai';
 import { compactEditorPrompt } from './editor-context';
@@ -23,7 +24,6 @@ export function editorTokenBudgetEnabled(env:Readonly<Record<string,string|undef
   throw new Error('EDITOR_ENFORCE_TOKEN_BUDGET must be true or false.');
 }
 const record = (value:unknown):Record<string,unknown> => value!==null&&typeof value==='object'&&!Array.isArray(value)?value as Record<string,unknown>:{};
-const count = (value:unknown):value is number => typeof value==='number'&&Number.isSafeInteger(value)&&value>=0;
 
 /** Only these native Standard tariffs have the reviewed cache-cost bound. */
 function nativeCacheModel(params:LanguageModelV4CallOptions,model?:Pick<LanguageModelV4,'provider'|'modelId'>):NativeCacheModel|undefined {

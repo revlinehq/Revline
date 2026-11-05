@@ -1,3 +1,4 @@
+import { roundTo } from '../math';
 /** Pacing of a rendered timeline range: how much of the picture changes over time, how long it then holds,
  * how the camera (zoom and pan) speeds up and slows down, and where cuts or flashes land. Measured from small
  * grayscale frames sampled at a steady rate, so motion problems a still frame cannot show become numbers. */
@@ -24,8 +25,7 @@ const LONG_HOLD = 3;
 // Camera speed is in frame fractions per second (zoom as ln(scale), pan as share of the width).
 const MOVING = .02, TOO_FAST = 1.2, FULL_SPEED = .65;
 
-const round = (value: number, digits = 2) => Math.round(value * 10 ** digits) / 10 ** digits;
-const at = (seconds: number) => `${round(seconds, 1)}s`;
+const at = (seconds: number) => `${roundTo(seconds, 1)}s`;
 
 /** Share of pixels that differ by more than PIXEL_CHANGE. */
 export function changed(a: Uint8Array, b: Uint8Array) {
@@ -99,7 +99,7 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
 
   // A flash: one sample far from both neighbours while they match each other.
   for (let i = 1; i < frames.length - 1; i++) if (change[i - 1] >= .3 && change[i] >= .3 && changed(frames[i - 1], frames[i + 1]) <= .1)
-    flags.push({ start: round(time(i)), end: round(time(i + 1)), kind: 'flash', reason: `A single-frame flash at ${at(time(i))}: one sample differs from both neighbours by ${Math.round(Math.min(change[i - 1], change[i]) * 100)}%. Remove it or hold it long enough to read.` });
+    flags.push({ start: roundTo(time(i), 2), end: roundTo(time(i + 1), 2), kind: 'flash', reason: `A single-frame flash at ${at(time(i))}: one sample differs from both neighbours by ${Math.round(Math.min(change[i - 1], change[i]) * 100)}%. Remove it or hold it long enough to read.` });
 
   // Changes: runs of moving steps, each measured by how much of the frame differs from before it to after it.
   const changes: { from: number; to: number; size: number }[] = [];
@@ -115,11 +115,11 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
     const next = changes.slice(index + 1).find(other => other.size >= ENDS_HOLD);
     if (!next) continue;
     const hold = (next.from - item.to) * dt;
-    if (hold < READABLE_HOLD) flags.push({ start: round(time(item.from)), end: round(time(next.from)), kind: 'short-hold', reason: `${Math.round(item.size * 100)}% of the frame changes by ${at(time(item.to))}, then it holds only ${round(hold, 1)} s before the next change: give each new picture about 1 s to be read.` });
+    if (hold < READABLE_HOLD) flags.push({ start: roundTo(time(item.from), 2), end: roundTo(time(next.from), 2), kind: 'short-hold', reason: `${Math.round(item.size * 100)}% of the frame changes by ${at(time(item.to))}, then it holds only ${roundTo(hold, 1)} s before the next change: give each new picture about 1 s to be read.` });
   }
   for (let first = 0; first < changes.length; first++) {
     const big = changes.slice(first).filter(item => item.size >= BUSY_CHANGE && (item.from - changes[first].from) * dt < 1);
-    if (changes[first].size >= BUSY_CHANGE && big.length >= BUSY_COUNT) flags.push({ start: round(time(changes[first].from)), end: round(time(big[big.length - 1].to)), kind: 'busy', reason: `${big.length} big changes within 1 s from ${at(time(changes[first].from))}: too many for the eye to follow. Spread them out or combine them into one move.` });
+    if (changes[first].size >= BUSY_CHANGE && big.length >= BUSY_COUNT) flags.push({ start: roundTo(time(changes[first].from), 2), end: roundTo(time(big[big.length - 1].to), 2), kind: 'busy', reason: `${big.length} big changes within 1 s from ${at(time(changes[first].from))}: too many for the eye to follow. Spread them out or combine them into one move.` });
   }
 
   // Changes that start in separate places close together: the eye follows one place at a time. A cell next to
@@ -135,7 +135,7 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
       if (fresh.length && (k === first || onsets[onsets.length - 1] !== k)) onsets.push(k);
       active.push(...stepCells[k]);
     }
-    if (onsets.length >= PLACES && onsets[0] === first) flags.push({ start: round(time(first)), end: round(time(onsets[onsets.length - 1] + 1)), kind: 'scattered', reason: `${onsets.length} changes start in different parts of the frame within ${round((onsets[onsets.length - 1] - first) * dt, 1)} s from ${at(time(first))}: the eye follows one place at a time. Stage them one after another, each with time to read.` });
+    if (onsets.length >= PLACES && onsets[0] === first) flags.push({ start: roundTo(time(first), 2), end: roundTo(time(onsets[onsets.length - 1] + 1), 2), kind: 'scattered', reason: `${onsets.length} changes start in different parts of the frame within ${roundTo((onsets[onsets.length - 1] - first) * dt, 1)} s from ${at(time(first))}: the eye follows one place at a time. Stage them one after another, each with time to read.` });
   }
 
   // Camera moves: their speed should rise from rest and settle back, and stay slow enough to follow.
@@ -146,16 +146,16 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
     const run = camera.slice(i, j + 1).map(step => step!.speed), peak = Math.max(...run), length = j - i + 1;
     const total = camera.slice(i, j + 1).reduce((sum, step) => sum + Math.max(Math.abs(step!.zoom), step!.pan), 0);
     const kind = camera.slice(i, j + 1).some(step => Math.abs(step!.zoom) >= step!.pan) ? 'zoom' : 'pan';
-    const span = { start: round(time(i)), end: round(time(j + 1)) };
+    const span = { start: roundTo(time(i), 2), end: roundTo(time(j + 1), 2) };
     moves++;
-    if (peak > TOO_FAST) flags.push({ ...span, kind: 'too-fast', reason: `A ${kind} ${kind === 'zoom' ? `of ${Math.round((Math.exp(total) - 1) * 100)}%` : `across ${Math.round(total * 100)}% of the frame`} in ${round(length * dt, 1)} s, peaking at ${Math.round(peak * 100)}% of the frame per second: too fast to follow. Make it longer.` });
+    if (peak > TOO_FAST) flags.push({ ...span, kind: 'too-fast', reason: `A ${kind} ${kind === 'zoom' ? `of ${Math.round((Math.exp(total) - 1) * 100)}%` : `across ${Math.round(total * 100)}% of the frame`} in ${roundTo(length * dt, 1)} s, peaking at ${Math.round(peak * 100)}% of the frame per second: too fast to follow. Make it longer.` });
     if (length >= 3 && i > 0 && run[0] >= peak * FULL_SPEED) flags.push({ ...span, kind: 'no-ease-in', reason: `The ${kind} at ${at(time(i))} starts at full speed: ease it in (power2.inOut or similar).` });
     const cutAfter = cuts.includes(j + 1);
     if (cutAfter && run[length - 1] >= peak * FULL_SPEED) flags.push({ ...span, kind: 'zoom-cut', reason: `The ${kind} is cut off at full speed by a cut at ${at(time(j + 1))}: let it settle before the cut, or start the next shot on the same motion.` });
     else if (length >= 3 && j + 1 < steps && run[length - 1] >= peak * FULL_SPEED) flags.push({ ...span, kind: 'no-ease-out', reason: `The ${kind} ending at ${at(time(j + 1))} stops dead: ease it out.` });
     for (let k = i; k <= j; k++) {
       const neighbours = [camera[k - 1]?.speed ?? 0, camera[k + 1]?.speed ?? 0];
-      if (Math.abs(camera[k]!.zoom) > .15 && Math.max(...neighbours) < camera[k]!.speed * .3) flags.push({ start: round(time(k)), end: round(time(k + 1)), kind: 'jump', reason: `The camera jumps ${Math.round((Math.exp(Math.abs(camera[k]!.zoom)) - 1) * 100)}% in one sample at ${at(time(k))}: animate it over at least 0.4 s.` });
+      if (Math.abs(camera[k]!.zoom) > .15 && Math.max(...neighbours) < camera[k]!.speed * .3) flags.push({ start: roundTo(time(k), 2), end: roundTo(time(k + 1), 2), kind: 'jump', reason: `The camera jumps ${Math.round((Math.exp(Math.abs(camera[k]!.zoom)) - 1) * 100)}% in one sample at ${at(time(k))}: animate it over at least 0.4 s.` });
     }
     i = j + 1;
   }
@@ -165,12 +165,12 @@ export function measurePacing(frames: Uint8Array[], width: number, height: numbe
     if (change[i] >= STILL) { i++; continue; }
     let j = i; while (j + 1 < steps && change[j + 1] < STILL) j++;
     const length = (j - i + 1) * dt;
-    if (length >= LONG_HOLD && i > 0 && j + 1 < steps) flags.push({ start: round(time(i)), end: round(time(j + 1)), kind: 'long-hold', reason: `Nothing moves for ${round(length, 1)} s: right for a line the viewer must read, otherwise trim it or keep a slow move going.` });
+    if (length >= LONG_HOLD && i > 0 && j + 1 < steps) flags.push({ start: roundTo(time(i), 2), end: roundTo(time(j + 1), 2), kind: 'long-hold', reason: `Nothing moves for ${roundTo(length, 1)} s: right for a line the viewer must read, otherwise trim it or keep a slow move going.` });
     i = j + 1;
   }
 
   const changePerSecond = Array.from({ length: Math.ceil(steps * dt - 1e-6) }, (_, second) => Math.round(change.slice(Math.round(second * fps), Math.round((second + 1) * fps)).reduce((sum, share) => sum + share, 0) * 100));
-  return { start: round(start), end: round(end), fps, samples: frames.length, changePerSecond, cuts: cuts.map(i => round(time(i + 1))), moves, flags: mergeFlags(flags) };
+  return { start: roundTo(start, 2), end: roundTo(end, 2), fps, samples: frames.length, changePerSecond, cuts: cuts.map(i => roundTo(time(i + 1), 2)), moves, flags: mergeFlags(flags) };
 }
 
 /** One flag per kind for overlapping moments, in time order. */

@@ -1,3 +1,4 @@
+import { bytesToBase64 } from '../encoding';
 /** A user's saved brand: what a launch film looks like (colors, fonts, logo) and what it says (context). */
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';
@@ -36,12 +37,6 @@ export function isBrandColor(value: string) { return colorPattern.test(value.tri
 /** Inline SVG copied from a page often lacks xmlns; as an image file it then renders nothing. */
 export function standaloneSvg(svg: string) { return /^<svg\b[^>]*\sxmlns=/i.test(svg) ? svg : svg.replace(/^<svg\b/i, '<svg xmlns="http://www.w3.org/2000/svg"'); }
 
-function base64(text: string) {
-  const bytes = new TextEncoder().encode(text); let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(binary);
-}
-
 /** Built inside the scene frame from the clip's snapshot. */
 export function sceneBrandContext(brand: SceneBrand | undefined): SceneBrandContext | null {
   if (!brand) return null;
@@ -53,6 +48,6 @@ export function sceneBrandContext(brand: SceneBrand | undefined): SceneBrandCont
   return {
     name: brand.name, colors, palette: brand.colors.map(color => color.value),
     fonts: { ...(heading ? { heading } : {}), ...(body ? { body } : {}), families },
-    logo: svg ? `data:image/svg+xml;base64,${base64(standaloneSvg(svg))}` : brand.logo ?? null, logoSvg: svg,
+    logo: svg ? `data:image/svg+xml;base64,${bytesToBase64(new TextEncoder().encode(standaloneSvg(svg)))}` : brand.logo ?? null, logoSvg: svg,
   };
 }

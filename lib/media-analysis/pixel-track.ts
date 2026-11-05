@@ -36,7 +36,6 @@ export const pixelTrackFileIndex = z.object({ summary: pixelTrackSummary, chunks
 export type PixelTrackRequest = z.infer<typeof pixelTrackRequest>;
 export type PixelTrackResult = z.infer<typeof pixelTrackResult>;
 export type PixelTrackSummary = z.infer<typeof pixelTrackSummary>;
-export type PixelTrackSample = z.infer<typeof pixelTrackSample>;
 export type PixelTrackChunk = z.infer<typeof pixelTrackChunk>;
 export type PixelTrackPage = z.infer<typeof pixelTrackPage>;
 export type PixelTrackReference = { trackId: string; token: string };

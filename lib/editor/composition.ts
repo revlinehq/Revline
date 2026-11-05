@@ -1,3 +1,4 @@
+import { clampOrFallback as bounded } from '../math';
 import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
 import { previewSourceAt } from './preview-segments';
 import { pixelTrackingSources } from './pixel-tracking-runtime';
@@ -63,9 +64,6 @@ function mediaUrl(value: string, sameDirectory = false) {
  * ("Invalid duration for option ss"), so snap to microseconds, which never prints one. */
 function attrTime(value: number) {
   return Math.round(value * 1e6) / 1e6 || 0;
-}
-function bounded(value: number | undefined, fallback: number, min: number, max: number) {
-  return Number.isFinite(value) ? Math.min(max, Math.max(min, value!)) : fallback;
 }
 
 export function layerZIndex(clip: Pick<Clip, 'kind' | 'track'>, index = 0) {

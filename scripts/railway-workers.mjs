@@ -1,6 +1,6 @@
 // Explicit operator commands. Nothing in this file runs during install, build or a PR.
 import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
-import { dirname, resolve, join } from 'node:path';
+import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
 import { parseArgs, parseEnv } from 'node:util';

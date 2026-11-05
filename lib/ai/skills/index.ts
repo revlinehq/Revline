@@ -24,21 +24,3 @@ export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, vfx, 
 export function editorSkillIndex() {
   return editorSkills().map(({ name, description }) => ({ name, description }));
 }
-
-export function editorSkill(name: string) {
-  const skill = editorSkills().find(item => item.name === name);
-  if (!skill) throw new Error(`Unknown skill "${name}". Available: ${editorSkills().map(skill=>skill.name).join(', ')}.`);
-  return skill;
-}
-
-/** The main body lists its pages; a page name returns that page alone. */
-export function editorSkillInstructions(name: string, page?: string) {
-  const skill = editorSkill(name);
-  if (page) {
-    const found = skill.pages?.find(item => item.name === page);
-    if (!found) throw new Error(`Skill "${name}" has no page "${page}". Pages: ${skill.pages?.map(item => item.name).join(', ') || 'none'}.`);
-    return found.body;
-  }
-  if (!skill.pages?.length) return skill.body;
-  return `${skill.body}\n\n## Pages\n\nLoad one with readSkill name "${skill.name}" and page:\n${skill.pages.map(item => `- \`${item.name}\`: ${item.description}`).join('\n')}`;
-}

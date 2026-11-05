@@ -7,7 +7,7 @@
 - Kenney usage/attribution: https://kenney.nl/support
 - CC0 legal code: https://creativecommons.org/publicdomain/zero/1.0/legalcode
 
-Downloaded 2026-10-15 from the official pack links. The 24 Kenney source bytes are unmodified. The 8 Revline originals are synthesized locally by `scripts/author-stock-audio.mjs` from deterministic filtered noise and ascending sine harmonics; they contain no samples, AI output or third-party sounds. They are clearly labeled `Revline originals` in the catalog and dedicated to CC0. Their shaped envelopes, stereo width and peak/RMS limits are authored in the script. Do not describe them as Kenney sounds. Names describe the source material; all source filenames and SHA-256 hashes are in `lib/editor/stock-audio-catalog.json`. Byte-identical catalog objects are uploaded once to the existing shared R2 bucket. Project assets hold references; they do not duplicate or charge these stock files to user cloud storage.
+Downloaded 2026-10-15 from the official pack links. The 24 Kenney source bytes are unmodified. The 8 Revline originals are synthesized locally by `scripts/archive/author-stock-audio.mjs` from deterministic filtered noise and ascending sine harmonics; they contain no samples, AI output or third-party sounds. They are clearly labeled `Revline originals` in the catalog and dedicated to CC0. Their shaped envelopes, stereo width and peak/RMS limits are authored in the script. Do not describe them as Kenney sounds. Names describe the source material; all source filenames and SHA-256 hashes are in `lib/editor/stock-audio-catalog.json`. Byte-identical catalog objects are uploaded once to the existing shared R2 bucket. Project assets hold references; they do not duplicate or charge these stock files to user cloud storage.
 
 | Audio FX name | Pack | Original file | Duration |
 | --- | --- | --- | --- |
@@ -38,7 +38,7 @@ Downloaded 2026-10-15 from the official pack links. The 24 Kenney source bytes a
 
 ## Revline originals
 
-Run `node scripts/author-stock-audio.mjs` to regenerate the original sounds and measured waveforms with ffmpeg/libvorbis. Each sound has an immutable content-hash R2 key.
+Run `node scripts/archive/author-stock-audio.mjs` to regenerate the original sounds and measured waveforms with ffmpeg/libvorbis. Each sound has an immutable content-hash R2 key.
 
 | Name | Duration | Design |
 | --- | --- | --- |

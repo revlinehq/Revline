@@ -1,5 +1,6 @@
 ## 2026-11-05
 
+- Code cleanup: Remove unused modules and design studies, share browser/backend helpers, repair audio-tool references and preserve workflow guards across repository renames. Why: the user requested a whole-repository dead-code and reuse audit.
 - Worker hosting: Remove Fly controllers, deployment scripts and rendering branches; keep shared queue demand and capacity limits independent of the host. Why: production now runs on Railway.
 
 - Repository: Remove unused design source and preview images and ignore local design drafts. Why: the user requested excluding design working files from the public source.

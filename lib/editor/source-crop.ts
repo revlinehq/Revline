@@ -1,8 +1,8 @@
+import { clamp } from '../math';
 import type { SourceCrop } from './types';
 import type { VisualRect } from './visual-transforms';
 
 export type CropHandle = 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'sw' | 'se';
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 const maxRemoved = .949;
 
 export function cropSelectionRect(crop: SourceCrop, source: VisualRect): VisualRect {

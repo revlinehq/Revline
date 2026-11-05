@@ -1,9 +1,9 @@
+import { isUsageCount as count } from './usage-counts';
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS,EDITOR_PROGRESS_WINDOW,editStepStopReason,hasRecentEditProgress} from './edit-progress';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
 import { OPENAI_EDIT_MODELS, type EditorReasoningEffort, type EditorSpeedMode } from './claude-model';
 import { hasRepeatedToolFailures } from './tool-failures';
 
-const count = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const rounded = (value: number) => Math.round(value * 1e12) / 1e12;
 type Counts = { inputTokens: number | null; uncachedInputTokens: number | null; cacheReadTokens: number | null; cacheWriteTokens: number | null; outputTokens: number | null; reasoningTokens: number | null };

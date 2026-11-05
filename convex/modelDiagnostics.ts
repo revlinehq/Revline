@@ -1,4 +1,6 @@
 "use node";
+import { usageCountOrNull as numericUsage } from '../lib/ai/usage-counts';
+
 
 import { v } from 'convex/values';
 import { internalAction } from './_generated/server';
@@ -52,7 +54,6 @@ export const openAIAvailableModels = internalAction({
 });
 
 const nullableCount = v.union(v.number(), v.null());
-const numericUsage = (value: unknown) => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null;
 const object = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 
 /** Admin-only paid generation check: one tiny synthetic request, no tools or retries. */

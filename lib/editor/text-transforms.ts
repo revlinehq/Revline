@@ -1,9 +1,9 @@
+import { clamp } from '../math';
 import type { Clip } from './types';
 import type { VisualCorner, VisualSnapLine } from './visual-transforms';
 import { textStyle } from './text-style';
 
 export type TextPlacement = { x: number; y: number; fontSize: number };
-const clamp=(value:number,min:number,max:number)=>Math.max(min,Math.min(max,value));
 export function textPlacement(clip:Clip):TextPlacement {
   const { x, y, fontSize } = textStyle(clip);
   return { x, y, fontSize };

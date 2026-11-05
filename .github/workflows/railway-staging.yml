@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   stage:
-    if: github.repository == 'zuraHQ/revline-editor'
+    if: github.repository_id == '1412697447'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:

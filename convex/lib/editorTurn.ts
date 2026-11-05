@@ -1,5 +1,5 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
-import { LANES, laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
