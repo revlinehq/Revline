@@ -1,5 +1,7 @@
 ## 2026-11-05
 
+- Chat: Reduce sent user message corners from 12px to 6px. Why: user requested less rounded bubbles.
+
 - Player: Preserve play or pause state when using the preview seek bar. Why: user reported seeking unexpectedly paused playback.
 
 - Timeline: Keep playback, edit, and view controls aligned in one toolbar row at narrower widths. Why: user reported playback was separated below the other controls.

@@ -24,3 +24,5 @@
 .composer-sheet-attachments{flex-shrink:0;align-content:flex-start}
 /* The composer box is shadcn InputGroup; only the textarea growth cap and the action spacer live here. */
 .edit-composer [data-slot=input-group-control]{max-height:180px}
+
+.assistant-content [data-slot=bubble][data-align=end] [data-slot=bubble-content]{border-radius:6px}
