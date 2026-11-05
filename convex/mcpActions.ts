@@ -1,4 +1,5 @@
 "use node";
+import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { LANES, laneToolAllowed, laneToolError, laneToolNames, capabilityTools, type LaneId } from '../lib/ai/lanes';
 import { LANE_IDS } from '../lib/ai/lanes/types';
@@ -249,7 +250,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
     case 'getMediaTask': return result(await ctx.runQuery(internal.mcp.mediaTask, { ownerId, taskId: input.taskId }));
     case 'exportVideo': return result(await ctx.runMutation(internal.mcp.startExport, { ownerId, projectId: input.projectId, ...(input.timelineId ? { timelineId: input.timelineId } : {}), resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' }));
     case 'getFrames': {
-      const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.resolution?{resolution:input.resolution}:{}), ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) });
+      const snapshotId = await retryAbortedTransaction(() => ctx.runMutation(internal.mcp.requestFrames, { ownerId, projectId: input.projectId, times: input.times, ...(input.resolution?{resolution:input.resolution}:{}), ...(input.timelineId ? { timelineId: input.timelineId } : {}), ...(input.revision !== undefined ? { revision: input.revision } : {}) }));
       const deadline = Date.now() + 170_000;
       while (Date.now() < deadline) {
         const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId, snapshotId });
