@@ -1,5 +1,8 @@
+import { isMediaDiskFull } from './errors';
+
 /** Retry transport failures, including a response body interrupted after headers. */
 export function isTransientMediaError(error: unknown): boolean {
+  if (isMediaDiskFull(error)) return false;
   const detail = error as { status?: number; code?: string; message?: string; stderr?: string; cause?: unknown } | null;
   if (typeof detail?.status === 'number') return detail.status === 408 || detail.status === 429 || detail.status >= 500;
   if (error instanceof Error && error.name === 'TimeoutError') return true;
