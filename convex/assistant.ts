@@ -1,3 +1,4 @@
+import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
 import { patchTurn, turnSummaryForRun, settleTurn } from './lib/assistant_turn_data';
@@ -7,7 +8,7 @@ import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
 import { chatAgent, createMessageHistory, listMessageViews } from './lib/chat_data';
 import {validatePinnedClaudeModel,type ClaudeModelSelection,type ClaudeModelChoice} from '../lib/ai/claude-model';
-import { READ_ONLY_RUN_PREFIX, readRunTab } from './lib/run_ids';
+import { READ_ONLY_RUN_PREFIX, readRunTab, mcpRunTab } from './lib/run_ids';
 import { approvalRefusal, approvalViolations, isApproved } from '../lib/editor/approvals';
 import type {MutationCtx, QueryCtx} from './_generated/server';
 import type {Doc} from './_generated/dataModel';
@@ -265,6 +266,22 @@ export const messages = query({
   },
 });
 const runArgs = { projectId: v.id("projects"), ownerId: v.string(), runId: v.string() };
+// Both switches belong to one transaction: subscribers only see the original selection.
+const scopedRunMutation = customMutation(internalMutation, {
+  args: runArgs,
+  input: async (ctx, args) => {
+    const target = mcpRunTab(args.runId);
+    const project = await requireProject(ctx, args.projectId, args.ownerId);
+    const selected = activeTabOf(project);
+    if (!target || target === selected) return { ctx: {}, args };
+    await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: target }, args.runId, true);
+    return { ctx: {}, args, onSuccess: async () => {
+      await clearLivePreview(ctx, args.projectId);
+      await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: selected }, args.runId, true);
+    } };
+  },
+});
+
 function settledAnalysisUsage(usage: Doc<'projects'>['aiAnalysisUsage']) {
   if (!usage?.videoUnavailable) return usage;
   const next = { ...usage };
@@ -405,16 +422,19 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(200);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
-  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):undefined;
-  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,timeline:await loadSceneCode(ctx,stored)},assets};}
+  const tab=args.runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(args.runId):mcpRunTab(args.runId);
+  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
   return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
-  const project=(await ctx.db.get(args.projectId))!;return {timeline:await loadSceneCode(ctx,currentTimeline(project)),revision:project.revision??0};
+  const project=(await ctx.db.get(args.projectId))!,tab=mcpRunTab(args.runId);
+  const timeline=tab?await storedTabTimeline(ctx,project,tab):currentTimeline(project);
+  if(!timeline)throw new ConvexError('That timeline no longer exists.');
+  return {timeline:await loadSceneCode(ctx,timeline),revision:project.revision??0};
 }});
 /** The tab a run works on: a read of a named tab, or the open one. */
-const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):undefined)??activeTabOf(project);
+const runTab=(project:Doc<'projects'>,runId:string)=>(runId.startsWith(READ_ONLY_RUN_PREFIX)?readRunTab(runId):mcpRunTab(runId))??activeTabOf(project);
 /** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
 export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),kit:v.optional(v.boolean()),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
@@ -435,7 +455,7 @@ export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRev
   return {clipId:args.clipId,timelineId,target:args.kit?'kit':'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
 }});
 /** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
-export const recordFix=internalMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
+export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,timelineId=runTab(project,args.runId);
@@ -503,7 +523,7 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
   await recordAssetStorage(ctx,asset);
   return transportAsset(ctx,asset);
 }});
-export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
+export const apply = scopedRunMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
   const note=args.tool?{tool:args.tool}:undefined;
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
@@ -532,7 +552,7 @@ export const apply = internalMutation({ args: { ...runArgs, expectedRevision: v.
   await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
-export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
+export const undoLatestEdit=scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId,true);
   if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
   if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
@@ -553,7 +573,13 @@ export const undoLatestEdit=internalMutation({args:{...runArgs,expectedRevision:
 // Destructive turns validate each private draft without exposing intermediate deletions.
 // The final apply repeats these checks atomically before publishing the replacement.
 export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator }, returns: v.null(), handler: async (ctx, args) => {
-  const project = await requireProject(ctx, args.projectId, args.ownerId);
+  let project = await requireProject(ctx, args.projectId, args.ownerId);
+  const tab=mcpRunTab(args.runId);
+  if(tab&&tab!==activeTabOf(project)){
+    const timeline=await storedTabTimeline(ctx,project,tab);
+    if(!timeline)throw new ConvexError('That timeline no longer exists.');
+    project={...project,activeTimelineId:tab,timeline,aspectRatio:timeline.aspectRatio};
+  }
   if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
   if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
   await validateTimeline(ctx, project, args.timeline);
@@ -561,7 +587,7 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
   return null;
 }});
 /** A read-only client projection. This never publishes a draft or adds undo history. */
-export const previewDraft = internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
+export const previewDraft = scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId);
   if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
   if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
