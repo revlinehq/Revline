@@ -9,11 +9,6 @@ on:
         description: 'Dry-run comparison commit (blank = last successful release, or full bootstrap)'
         type: string
         default: ''
-  workflow_call:
-    inputs:
-      base:
-        type: string
-        default: ''
 
 permissions:
   contents: write
@@ -21,13 +16,22 @@ permissions:
 
 # One whole release, including development, at a time. A newer queued push can
 # replace a pending one; the persistent successful-release cursor retains its diff.
+# Runs the release job refuses get their own group, so they never displace a release.
 concurrency:
-  group: revline-main-release
+  group: ${{ github.actor_id == '109432830' && github.triggering_actor == 'zuraHQ' && 'revline-main-release' || format('revline-main-refused-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   release:
-    if: github.repository_id == '1412697447' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main'))
+    # This runner sits beside production credentials and the repository is public.
+    # Only the owner's push or manual dispatch on main of this repository may use it.
+    # A pull request can edit workflows, so this guard cannot stop a fork's own job
+    # from targeting the runner: SECURITY.md names the repository settings that do.
+    if: >-
+      github.repository == 'revlinehq/Revline' && github.repository_id == '1412697447' &&
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' || github.event_name == 'workflow_dispatch') &&
+      github.actor_id == '109432830' && github.triggering_actor == 'zuraHQ'
     runs-on: [self-hosted, Linux, X64, revline-deploy-pc]
     timeout-minutes: 360
     env:
