@@ -14,20 +14,26 @@ export const contract = query({ args: { workerSecret: v.string() }, returns: v.o
   return { processorVersion: MEDIA_PROCESSOR_VERSION, processorBackend: processorBackend(), renderProvider: process.env.RENDER_PROVIDER || '', paused: process.env.RAILWAY_WORKERS_PAUSED === 'true' };
 } });
 export const releaseEvidence = query({
-  args: { workerSecret: v.string(), projectId: v.id('projects'), processorTaskId: v.id('mediaTasks'), exportTaskId: v.id('mediaTasks'), distributedTaskId: v.id('mediaTasks') },
+  args: { workerSecret: v.string(), projectId: v.id('projects'), processorTaskId: v.id('mediaTasks'), exportTaskId: v.id('mediaTasks'), ultraTaskId: v.id('mediaTasks'), distributedTaskId: v.optional(v.id('mediaTasks')) },
   returns: v.object({ checkedAt: v.number(), processorCommit: v.string(), exportsCommit: v.string(), processorImage: v.string(), exportsImage: v.string() }),
   handler: async (ctx, args) => {
     if (requireMediaWorker(args.workerSecret) !== 'processor') throw new Error('Release evidence requires the staging processor credential.');
     if (String(process.env.CONVEX_SITE_URL) !== 'https://striped-starling-234.convex.site' || process.env.REVLINE_ISOLATED !== 'true') throw new Error('Release evidence belongs only to the isolated staging backend.');
     if (processorBackend() !== 'railway' || process.env.RENDER_PROVIDER !== 'railway') throw new Error('Staging must actually route processing and exports to Railway.');
-    const ids = [args.processorTaskId, args.exportTaskId, args.distributedTaskId];
-    if (new Set(ids).size !== 3) throw new Error('Three distinct completed staging jobs are required.');
+    const config = railwayConfig(process.env.RAILWAY_WORKERS_JSON);
+    if (config.environment !== 'staging' || config.distributedExports !== !!args.distributedTaskId) throw new Error('Staging evidence must match the configured distributed-export mode.');
+    const ids = [args.processorTaskId, args.exportTaskId, args.ultraTaskId, ...(args.distributedTaskId ? [args.distributedTaskId] : [])];
+    if (new Set(ids).size !== ids.length) throw new Error('Distinct completed staging jobs are required.');
     const tasks = await Promise.all(ids.map(id => ctx.db.get(id)));
     for (const [index, task] of tasks.entries()) {
       if (!task || task.projectId !== args.projectId || task.status !== 'completed' || (index === 0 ? task.kind === 'render' : task.kind !== 'render')) throw new Error('Staging processing/export evidence is missing or incomplete.');
     }
-    const config = railwayConfig(process.env.RAILWAY_WORKERS_JSON);
-    if (config.environment !== 'staging') throw new Error('Staging manifest required.');
+    for (const [index, task] of tasks.entries()) {
+      if (index === 0) continue;
+      if (!task?.renderJobId) throw new Error('Staging export job is missing.');
+      const job = await ctx.db.get(task.renderJobId);
+      if (!job || job.status !== 'completed' || (index === 1 ? (job.resolution ?? 1080) >= 2160 : index === 2 && (job.resolution ?? 1080) < 2160)) throw new Error('Staging evidence must include completed standard and Ultra exports.');
+    }
     return { checkedAt: Date.now(), processorCommit: config.processorCommit, exportsCommit: config.exportsCommit, processorImage: config.processorImage, exportsImage: config.exportsImage };
   },
 });

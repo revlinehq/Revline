@@ -14,7 +14,7 @@ import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayI
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
-  apply: { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
+  apply: { type: 'boolean' }, 'staged-pr': { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
   processors: { type: 'string' }, standard: { type: 'string' }, ultra: { type: 'string' },
   'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' },
 } });
@@ -47,7 +47,9 @@ if (values.apply) {
   const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && process.env.GITHUB_REPOSITORY === 'zuraHQ/revline-editor' && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
   const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
   const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
-  if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
+  const productionOperator = values['staged-pr'] && config.environment === 'production' && ['stage', 'cutover', 'pause', 'resume', 'rollback', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
+  if (values['staged-pr'] && !productionOperator) throw new Error('--staged-pr requires a bounded production operation with one existing service per lane.');
+  if ((railwayOnly || stagingCi || stagingOperator || productionOperator) && !mainPush && branch !== 'main') {
     const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '82', '--repo', 'zuraHQ/revline-editor', '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
     const head = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
     if (pr.state !== 'OPEN' || pr.headRefName !== 't3/railway-worker-migration' || pr.headRefOid !== head) throw new Error('Pre-merge staging requires the exact published open PR #82 head.');

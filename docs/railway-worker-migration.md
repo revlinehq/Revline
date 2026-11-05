@@ -2,7 +2,7 @@
 
 This change adds a reviewed path to move **only Fly processor/export containers and distributed export chunks** to Railway. Cloudflare frontend, media and agent Workers, Convex functions/database, Clerk, media storage and the existing distributed artifact bucket stay in place. Fly remains selected until an operator explicitly runs cutover. No migration command runs during install or build.
 
-Implementation remains in progress. Authenticated Mac CLI access, repository connections, named service icons, 4-CPU/8-GB API readbacks and separate staging infrastructure are verified. The six initial builds failed on old main (five missing `/models`, one root app install failure); their logs and IDs are retained privately. Repository Docker builds now use a tracked model directory and a declared final-target ARG. All three staging repository runtime preflights passed; bounded media/export/chunk jobs remain pending. Production routing remains unchanged, and promotion is blocked without live staging job evidence.
+Permanent services build Docker images from explicit repository commits. CPU and memory limits come from the Railway dashboard. Staging promotion requires completed processing, standard export and Ultra export jobs on the exact revision, authenticated deployment logs and matching backend routing. Distributed chunks remain disabled on Hobby; enabling them additionally requires immutable private image support and remote chunk/assembly evidence. Production routing changes only through explicit operator cutover, with Fly retained for rollback.
 
 ## Runtime and limits
 
@@ -200,3 +200,8 @@ The staging media Worker is `https://revline-staging-media.makaradze98-s.workers
 The exact published open PR #82 head may operate the dedicated isolated staging queue with one existing service per lane. The manifest fixes the staging Railway/Convex identities; the env file and deployment key must match and `REVLINE_ISOLATED=true` is checked remotely. This exception never permits shared DEV/production queue operations or worktree backend deployment overrides. `REVLINE_EXPORT_MAX_CHUNKS` in the selected private env file bounds distributed concurrency from 2 to 16 (default 8); use 2 for bounded staging validation.
 
 Permanent service staging validates repository runtime builds directly. Distributed exports additionally validate the immutable chunk image. Railway Hobby rejects private registry credentials (confirmed API error); private GHCR chunks require a plan supporting private pulls. Do not expose private repository images publicly to bypass this boundary.
+
+
+## Manual promotion before merge
+
+An authorized operator may use `--staged-pr` for bounded production stage/cutover operations from the exact published open PR #82 head. This requires one existing service per lane, a clean checkout and the same live staging promotion evidence as main. It does not permit changing billing, publishing images or bypassing revision checks. Do not use GitHub Actions for manual releases.
