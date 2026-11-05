@@ -36,7 +36,7 @@ import { mediaTaskActivityLabel } from '@/lib/media-analysis/activity';
 import { createPlaybackOpeningGate } from '@/lib/editor/editor-opening';
 import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
-import { uploadMediaThumbnail } from '@/lib/editor/upload-thumbnail';
+import { useSourceUpload } from './use-source-upload';
 import { composerMedia } from '@/lib/editor/composer-media';
 import type { UploadProgress } from './footage-panel';
 const EMPTY_MESSAGES:ChatMessage[]=[];
@@ -83,14 +83,12 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   const restorePreview=useSceneCode(projectId,[storedPreview?.timeline,storedPreview&&{clips:storedPreview.removedClips}]);
   const livePreview=useMemo(()=>storedPreview&&restorePreview?{...storedPreview,timeline:restorePreview(storedPreview.timeline),removedClips:restorePreview({clips:storedPreview.removedClips}).clips}:storedPreview===null?null:undefined,[storedPreview,restorePreview]);
   const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
-  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const startUpload=useAction(api.r2.start);const partUrl=useAction(api.r2.partUrl);const finishUpload=useAction(api.r2.complete);const abortUpload=useAction(api.r2.abort);const send=useMutation(api.assistant.send);const retryTurn=useMutation(api.assistant.retry);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
+  const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const send=useMutation(api.assistant.send);const retryTurn=useMutation(api.assistant.retry);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
   const importVideo=useMutation(api.mediaTasks.importVideo);
   const removeAsset=useMutation(api.assets.remove);
   const registerStockAudio=useMutation(api.assets.registerStockAudio);
-  const thumbnailUpload=useMutation(api.assets.generateUploadUrl);const attachThumbnail=useMutation(api.assets.attachThumbnail);
-  const saveThumbnail=useCallback((assetId:Id<'assets'>,image:Blob)=>uploadMediaThumbnail(image,{
-    uploadUrl:()=>thumbnailUpload({projectId}),attach:storageId=>attachThumbnail({assetId,storageId}),
-  }),[thumbnailUpload,attachThumbnail,projectId]);
+  const sourceUpload=useSourceUpload();const saveProjectThumbnail=sourceUpload.saveThumbnail;
+  const saveThumbnail=useCallback((assetId:Id<'assets'>,image:Blob)=>saveProjectThumbnail(projectId,assetId,image),[saveProjectThumbnail,projectId]);
   const capturedThumbnails=useRef(new Set<string>());
   const persistThumbnail=useCallback((assetId:string,url:string)=>{
     if(capturedThumbnails.current.has(assetId))return;capturedThumbnails.current.add(assetId);
@@ -285,12 +283,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
       for(const [index,file] of files.entries()){
         if(cancellation.signal.aborted){incomplete=true;break;}
         try{
-          const assetId=await uploadSourceFile(file,{
-            start:meta=>startUpload({projectId,fileName:file.name,contentType:file.type,size:file.size,...meta}),
-            partUrl:(uploadId,partNumber)=>partUrl({uploadId,partNumber}),
-            complete:(uploadId,parts)=>finishUpload({uploadId,parts}),
-            abort:uploadId=>abortUpload({uploadId}),saveThumbnail,
-          },(percent,phase)=>report(index,phase==='reading'?0:transferProgress(percent),phase),cancellation.signal);
+          const assetId=await uploadSourceFile(file,sourceUpload.transport(projectId,file),(percent,phase)=>report(index,phase==='reading'?0:transferProgress(percent),phase),cancellation.signal);
           transferred.push({file,index,assetId});
         }catch(e){incomplete=true;if(!cancellation.signal.aborted)failed(file,e);}
       }
