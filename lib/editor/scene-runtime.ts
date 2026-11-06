@@ -197,32 +197,57 @@ function videoTarget(video: HTMLVideoElement, time: number, fps: number) {
 // which held nested footage to about two frames a second. Videos are re-seeked only when they drift.
 const PLAYBACK_DRIFT = 0.15;
 // A re-seek lands late on slow decoders; checking drift again before it settles would seek on every frame.
-const SETTLE_MS = 600;
-const liveSeeks = new WeakMap<HTMLVideoElement, number>();
+// A video whose decoder cannot keep up drifts again right after each seek, and every seek decodes from a keyframe
+// again, so the wait doubles while it keeps drifting (to 4 s). A jump of the scene clock starts every wait over.
+const SETTLE_MS = 600, SETTLE_MAX_MS = 4000;
+let liveSeeks = new WeakMap<HTMLVideoElement, { at: number; wait: number }>(), liveTime: number | undefined;
+// A video starting this soon buffers ahead, so its shot does not open on an empty decoder.
+const PRELOAD_AHEAD = 2;
+/**
+ * Whether the scene shows this video now. Its own visibility is left out: the paused stand-in hides it with
+ * visibility, so that is read from its parent; display and opacity count on the video and every ancestor.
+ * Footage clipped away or moved out of frame still counts as shown.
+ */
+function onScreen(video: HTMLVideoElement) {
+  if (!video.checkVisibility) return true;
+  return video.checkVisibility({ opacityProperty: true }) && (video.parentElement?.checkVisibility({ visibilityProperty: true, opacityProperty: true }) ?? false);
+}
+
 function playVideo(video: HTMLVideoElement, time: number, fps: number) {
   video.muted = true;
-  if (video.preload !== 'auto') video.preload = 'auto';
+  if (video.readyState < 1) return;
+  const start = Number(video.dataset.start) || 0, rate = Number(video.dataset.rate) || 1, target = videoTarget(video, time, fps), length = video.duration || 0;
+  const loop = video.hasAttribute('data-loop'), held = time < start || !loop && length > 0 && target >= length - 1 / fps;
+  // Only videos on screen play. A film holds many videos in shots that are hidden before and after their turn;
+  // playing them all (a 32 s film had 18 decoding, at most 7 of them visible) loads the browser's decoders and
+  // compositor for footage nobody sees. One that has not started yet still waits on its first frame.
+  const shown = onScreen(video);
+  if (held || !shown) {
+    if (!video.paused) video.pause();
+    if (held && !video.seeking && Math.abs(video.currentTime - target) >= 0.25 / fps) video.currentTime = target;
+    if (held && time >= start - PRELOAD_AHEAD && video.preload !== 'auto') video.preload = 'auto';
+    if (!shown) return;
+  }
   // The live video shows itself once it has a frame; its frozen stand-in returns on the next paused seek.
   if (video.readyState >= 2) {
     const canvas = stillFrames.get(video);
     if (canvas) canvas.style.display = 'none';
     delete video.dataset.revlineStill;
   }
-  if (video.readyState < 1) return;
-  const rate = Number(video.dataset.rate) || 1, target = videoTarget(video, time, fps), length = video.duration || 0;
-  const loop = video.hasAttribute('data-loop'), held = time < (Number(video.dataset.start) || 0) || !loop && length > 0 && target >= length - 1 / fps;
+  if (held) return;
+  if (video.preload !== 'auto') video.preload = 'auto';
   video.loop = loop;
-  if (held) {
-    if (!video.paused) video.pause();
-    if (!video.seeking && Math.abs(video.currentTime - target) >= 0.25 / fps) video.currentTime = target;
-    return;
-  }
   if (video.playbackRate !== rate) video.playbackRate = rate;
   // A looping video wraps on its own, so drift is measured around the loop.
   let drift = Math.abs(video.currentTime - target);
   if (loop && length > 0) drift = Math.min(drift, length - drift);
   const now = performance.now();
-  if (!video.seeking && drift > PLAYBACK_DRIFT && now - (liveSeeks.get(video) ?? -Infinity) > SETTLE_MS) { liveSeeks.set(video, now); video.currentTime = target; }
+  const last = liveSeeks.get(video);
+  if (!video.seeking && drift > PLAYBACK_DRIFT && (!last || now - last.at > last.wait)) {
+    const wait = last && now - last.at < last.wait * 2 ? Math.min(last.wait * 2, SETTLE_MAX_MS) : SETTLE_MS;
+    liveSeeks.set(video, { at: now, wait });
+    video.currentTime = target;
+  }
   if (video.paused) void video.play().catch(() => undefined);
 }
 
@@ -230,7 +255,13 @@ function playVideo(video: HTMLVideoElement, time: number, fps: number) {
 function syncVideos(time: number, fps: number, playing: boolean) {
   // A video the scene removed takes its stand-in with it.
   for (const [video, canvas] of stillFrames) if (!video.isConnected) { canvas.remove(); stillFrames.delete(video); }
-  if (playing) { document.querySelectorAll('video').forEach(video => playVideo(video, time, fps)); return []; }
+  if (playing) {
+    if (liveTime === undefined || Math.abs(time - liveTime) > 0.5) liveSeeks = new WeakMap();
+    liveTime = time;
+    document.querySelectorAll('video').forEach(video => playVideo(video, time, fps));
+    return [];
+  }
+  liveTime = undefined;
   return Array.from(document.querySelectorAll('video')).map(video => {
     video.muted = true; video.pause();
     const ready = video.readyState >= 1 ? Promise.resolve() : mediaEvent(video, ['loadedmetadata', 'error'], 4000);
@@ -305,10 +336,26 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       void build(data).then(() => post({ type: 'compiled' }), error => fail(error));
     } else if (data.type === 'seek') {
-      try { master?.seek(origin + data.time, false); } catch (error) { fail(error); }
-      const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps, data.playing === true)]).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
+      // A frame that falls behind during playback gets seeks faster than it draws them. Of playing seeks still
+      // waiting, only the newest is drawn and the ones it replaces are acknowledged with it, so a busy moment does
+      // not leave the scene drawing old times. Paused, scrub and export seeks are each drawn at their own time.
+      if (waiting && waiting.playing === true && data.playing === true) skipped.push(waiting.seq);
+      else drawSeek();
+      waiting = data;
+      if (!scheduled) { scheduled = true; seekChannel.port2.postMessage(null); }
     }
   });
+  let waiting: Seek | null = null, skipped: number[] = [], scheduled = false;
+  // Usually runs after the seek messages already queued, so a backlog of playing seeks collapses into its last one.
+  const seekChannel = new MessageChannel();
+  seekChannel.port1.onmessage = () => { scheduled = false; drawSeek(); };
+  function drawSeek() {
+    const data = waiting, replaced = skipped;
+    if (!data) return;
+    waiting = null; skipped = [];
+    try { master?.seek(origin + data.time, false); } catch (error) { fail(error); }
+    const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
+    void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps, data.playing === true)]).then(() => { for (const seq of replaced) post({ type: 'painted', seq }); post({ type: 'painted', seq: data.seq }); }, error => fail(error));
+  }
   post({ type: 'ready' });
 }
