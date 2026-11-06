@@ -20,6 +20,7 @@ import { MAX_CLEANUP_CUTS, MAX_CLEANUP_DETAIL } from "../lib/speech-cleanup/type
 import { assetWithUrl, assetKind, focusValidator, analysisValidator } from "./schema";
 import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
+import { MAX_MUSIC_ENERGY_SECONDS, MUSIC_ENERGY_STEP } from '../lib/media-analysis/beat-map';
 import { validateReference } from '../lib/media-analysis/reference';
 import { validateFocus } from "./lib/timeline";
 import { serializedBytes } from "./lib/timeline_history";
@@ -191,6 +192,10 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
   }
   for (const hits of [changes.beats?.accents, changes.beats?.dropCandidates]) {
     if (hits && (hits.length > 1000 || hits.some((hit, i) => !Number.isFinite(hit.time) || hit.time < 0 || hit.time > duration + 0.5 || !Number.isFinite(hit.strength) || hit.strength < 0 || hit.strength > 1 || (i > 0 && hit.time <= hits[i - 1].time)))) throw new ConvexError('Invalid beat analysis');
+  }
+  if (changes.beats?.energy) {
+    const energy = changes.beats.energy, count = energy.loudness.length;
+    if (energy.step !== MUSIC_ENERGY_STEP || count > MAX_MUSIC_ENERGY_SECONDS / MUSIC_ENERGY_STEP + 1 || energy.low.length !== count || energy.onsets.length !== count || (count - 1) * energy.step > duration + .5 || [...energy.loudness, ...energy.low].some(value => !Number.isFinite(value) || value < -120 || value > 20) || energy.onsets.some(value => !Number.isInteger(value) || value < 0 || value > 100)) throw new ConvexError('Invalid music energy');
   }
   if (changes.reference) {
     if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');

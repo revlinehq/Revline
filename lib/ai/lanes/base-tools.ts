@@ -60,6 +60,8 @@ export const BASE_TOOLS = [
   'forget',
   'getFrames',
   'getSound',
+  'analyzeMusic',
+  'startMusicAt',
   'askUser',
   'askBrandKit',
   'previewBackgrounds',
@@ -113,6 +115,8 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'remaking-videos': recreateTools,
   'clipping': clipTools,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
+  // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).
+  'music': ['markMusicBeats', 'alignCutsToBeat', 'setAudioReactive'],
   'reel': ['readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
   // Sound, effect, color and VFX tools for footage edits.
   'footage-editing': [

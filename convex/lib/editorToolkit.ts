@@ -114,6 +114,8 @@ import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, re
 import { REMOTION_TEXT_PRESETS } from '../../lib/editor/remotion-text';
 import { DEFAULT_CAPTION_STYLE, resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
+import { barsForLength, musicStructure, nearestDownbeat } from '../../lib/media-analysis/music-structure';
+import { musicEnergy } from '../../lib/media-analysis/sound';
 import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
 import { runCompare } from './reference_reads';
 import { aspectRatio as aspectRatioValidator } from '../schema';
@@ -124,6 +126,8 @@ import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import type { ActionCtx } from "../_generated/server";
 
 export class AnalysisStepError extends Error {}
+/** A rendered bed's energy, measured as the worker measures a song, so analyzeMusic keeps its exact beat grid. */
+const bedEnergy = (samples: readonly ArrayLike<number>[]) => { const energy = musicEnergy(), interleaved = new Float32Array(samples[0].length * 2); for (let i = 0; i < samples[0].length; i++) { interleaved[2 * i] = samples[0][i]; interleaved[2 * i + 1] = samples[1]?.[i] ?? samples[0][i]; } energy.push(interleaved); return energy.finish(); };
 /** Export settings, shared by the in-app and MCP exportVideo tools; startRenderFor checks the plan allows them. */
 export const EXPORT_SETTINGS_INPUT = { resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() };
 async function reportAnalysisFailure<T>(work: () => Promise<T>) {
@@ -193,7 +197,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user. Say in the reply that approved work was changed.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'previewBackgrounds', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'previewBackgrounds', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -878,6 +882,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     inspected = true;clippingTimelineId=result.timelineId;
     return { ...result, note: 'Editing tools now act on this timeline. Inspect it before editing. Publish this tab before opening another. Finish clipping directly after building accepted tabs; scoped heavy QA is optional. Never call tab changes in parallel with edits.' };
   };
+  /** A song's measured structure, measuring it first when its beat map or energy is missing. */
+  const readSong = async (input: { clipId?: string; assetId?: string; lengths?: number[] }) => {
+    await editSession.wait();
+    let clip = input.clipId ? find(editSession.timeline, input.clipId) : undefined;
+    // A video's sound lives on its linked audio clip.
+    if (clip?.kind === 'video' && clip.linkedClipId) clip = find(editSession.timeline, clip.linkedClipId);
+    if (clip && (clip.kind !== 'audio' || !clip.assetId)) throw new Error('Choose the song\'s audio clip.');
+    let asset = await loadAsset(clip?.assetId ?? input.assetId!);
+    if (!clip && asset.kind === 'video' && asset.audioAssetId) asset = await loadAsset(asset.audioAssetId);
+    if (asset.kind !== 'audio' && asset.kind !== 'video') throw new Error('Choose a song: an audio file or a video with sound.');
+    if (asset.analysis?.beats?.engine !== BEAT_ANALYSIS_ENGINE || !asset.analysis.beats.energy) asset = await analyze(asset._id, 'beats');
+    const map = asset.analysis?.beats;
+    if (!map?.energy) throw new AnalysisStepError('The media worker returned a beat map without music energy; it may be older than this tool. Try again once the worker has updated.');
+    // Sung words come from the song's own transcript, or its video's when the song is a video's sound.
+    const linked = clip?.linkedClipId ? editSession.timeline.clips.find(item => item.id === clip!.linkedClipId)?.assetId : undefined;
+    const words = asset.analysis?.transcript?.words.length ? asset.analysis.transcript.words : linked ? (await loadAsset(linked)).analysis?.transcript?.words ?? [] : [];
+    // Target lengths are timeline seconds; the song's bars are source seconds.
+    const rate = clip && !clip.speedRamp?.length ? playbackRateOf(clip) : 1;
+    return { clip, asset, map, words, structure: musicStructure({ ...map, energy: map.energy }, asset.duration ?? map.energy.loudness.length * map.energy.step, words, input.lengths?.map(length => length * rate)) };
+  };
   const tools = {
     findHighlights:createTool({metadata:EDITOR_TOOL_DEFINITIONS.findHighlights,
       description:'Read saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
@@ -1350,6 +1374,57 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       });
       return { ...result, kind, added: markers.added, skipped: markers.skipped, confidence: markers.confidence, status: markers.status, message: markers.message };
     } }),
+    analyzeMusic: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.analyzeMusic, description: "Read a song's structure from its measured signal, so you never guess where it gets good: tempo, every bar with its downbeat time, loudness (LUFS), low band (kick and bass, dBFS) and onsets per second; sections (low, mid, build, peak, drop, outro) split where the energy changes at a bar line, each with a confidence and the numbers behind it; the strongest moments ranked, each on a downbeat with its loudness jump in dB, low-band jump, onset density before and after, and the first sung line from a saved transcript; and the best windows for each target edit length, in whole bars, with what they open and end on. Times are SOURCE seconds of the song, and with clipId also timeline seconds. Measures the song on first use (beat tracking plus energy, saved with the asset like other analyses), then reads the saved result. Follow with startMusicAt to start the song on a moment.", inputSchema: z.object({ clipId: z.string().min(1).optional().describe('The song\'s audio clip on the timeline (or a video with linked audio); adds timeline times.'), assetId: z.string().min(1).optional().describe('A song in the project media that is not on the timeline yet.'), lengths: z.array(z.number().min(3).max(300)).min(1).max(4).optional().describe('Target edit lengths in timeline seconds for the recommended windows (default 15 and 30).') }).strict().refine(input => (input.clipId === undefined) !== (input.assetId === undefined), { message: 'Choose clipId or assetId.' }), execute: async (_ctx, input) => {
+      const song = await readSong(input);
+      const { structure, clip, asset } = song;
+      const sourceEnd = clip ? sourceEndOf(clip) : 0;
+      const onTimeline = (time: number) => clip ? { timeline: Math.round(timelineTimeAtSource(clip, time) * 1000) / 1000, inClip: time >= clip.sourceStart - 1e-3 && time < sourceEnd } : {};
+      return {
+        assetId: asset._id, ...(clip ? { clipId: clip.id, clipSource: { start: clip.sourceStart, end: Math.round(sourceEnd * 1000) / 1000 } } : {}),
+        bpm: structure.bpm, beatsPerBar: structure.beatsPerBar, barSeconds: structure.barSeconds, phraseSeconds: { fourBars: Math.round(structure.barSeconds * 4 * 100) / 100, eightBars: Math.round(structure.barSeconds * 8 * 100) / 100 }, beatConfidence: structure.beatConfidence,
+        loudness: { loudBarLufs: structure.loudLufs, quietBarLufs: structure.quietLufs, note: 'Section and moment dB are against loudBarLufs, the 90th percentile bar.' },
+        sections: structure.sections.map(section => ({ ...section, ...(clip ? { timelineStart: onTimeline(section.start).timeline, timelineEnd: onTimeline(section.end).timeline } : {}) })),
+        moments: structure.moments.map(moment => ({ ...moment, ...onTimeline(moment.time) })),
+        windows: structure.windows.map(window => ({ ...window, ...(clip ? { timelineStart: onTimeline(window.start).timeline } : {}) })),
+        bars: { columns: ['bar', 'start', 'lufs', 'low', 'onsetsPerSecond'], rows: structure.bars.map(bar => [bar.bar, bar.start, bar.lufs, bar.low, bar.onsetsPerSecond]) },
+        ...(structure.measuredUntil < (asset.duration ?? 0) - 1 ? { measuredUntil: structure.measuredUntil } : {}),
+        ...(song.words.length ? {} : { lyrics: 'No saved transcript for this song, so sung lines are not named. analyzeMedia mode transcribe adds them.' }),
+        next: clip ? 'Start the song on a moment with startMusicAt (moment rank, or a window start as sourceTime, plus length). Then listen with getSound from 2 s before to 4 s after its timeline start: the onsets and the momentary loudness should rise at that second.' : 'Place the song with addMedia, then startMusicAt with its clipId.',
+      };
+    } }),
+    startMusicAt: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.startMusicAt, description: "Start a song's audio clip at a chosen musical moment, exactly on a downbeat, without doing bar maths: moment is a rank from analyzeMusic (default 1, the strongest), or sourceTime is a SOURCE second (snapped to the nearest downbeat, e.g. a window start). length (seconds) is rounded to whole bars, whole 4-bar phrases when close, so the song ends on a bar line; without it the clip keeps its current length. at moves the clip's timeline start (default: it stays where it is). The song's existing fades, volume and ducking are kept.", inputSchema: z.object({ clipId: z.string().min(1), moment: z.number().int().min(1).max(5).optional(), sourceTime: z.number().min(0).optional(), length: z.number().min(1).max(3600).optional(), at: z.number().min(0).optional() }).strict(), execute: async (_ctx, input) => {
+      if (input.moment !== undefined && input.sourceTime !== undefined) throw new Error('Choose moment or sourceTime, not both.');
+      await editSession.wait();
+      const target = find(editSession.timeline, input.clipId);
+      if (target.kind !== 'audio' || !target.assetId) throw new Error('Choose the song\'s audio clip.');
+      if (target.linkedClipId) throw new Error('This song plays with its video. Unlink them first (unlink), then start the audio at a moment.');
+      if (target.speedRamp?.length) throw new Error('This song has a speed ramp; remove it before starting the song at a moment.');
+      const rate = playbackRateOf(target);
+      const { structure, clip, asset, map } = await readSong({ clipId: input.clipId, ...(input.length !== undefined ? { lengths: [input.length] } : {}) });
+      if (!clip) throw new Error('Choose the song\'s audio clip.');
+      const chosen = input.sourceTime === undefined ? structure.moments[(input.moment ?? 1) - 1] : undefined;
+      if (input.sourceTime === undefined && !chosen) throw new Error(`analyzeMusic found ${structure.moments.length} moment${structure.moments.length === 1 ? '' : 's'}; choose one of those ranks or pass sourceTime.`);
+      const start = chosen ? chosen.time : nearestDownbeat(map, input.sourceTime!);
+      const bars = structure.bars, first = bars.findIndex(bar => Math.abs(bar.start - start) < 1e-3);
+      const songEnd = asset.duration ?? start + clip.duration * rate;
+      let end: number, count: number | undefined;
+      if (input.length !== undefined) {
+        count = barsForLength(input.length * rate, structure.barSeconds);
+        end = first >= 0 && bars[first + count - 1] ? bars[first + count - 1].end : start + count * structure.barSeconds;
+        if (end > songEnd + 1e-3) throw new Error(`From ${start} s the song has ${Math.round((songEnd - start) * 10) / 10} s left, less than ${count} bars. Pick an earlier moment or a shorter length.`);
+      } else end = Math.min(songEnd, start + clip.duration * rate);
+      const duration = (end - start) / rate;
+      const result = await checkpoint(t => {
+        // Move first: the new length may only fit at the requested place.
+        const moved = input.at !== undefined ? moveClipTo(t, clip.id, input.at) : t;
+        return trimClip(moved, clip.id, duration, start);
+      });
+      const placed = find(editSession.timeline, clip.id);
+      return { ...result, clipId: clip.id, sourceStart: start, sourceEnd: Math.round(end * 1000) / 1000, timelineStart: placed.start, timelineEnd: Math.round((placed.start + placed.duration) * 1000) / 1000,
+        startsOn: chosen ? `moment ${chosen.rank} (bar ${chosen.bar}): ${chosen.why}` : `the downbeat at ${start} s${Math.abs(start - input.sourceTime!) > 1e-3 ? ` (nearest to ${input.sourceTime} s)` : ''}`,
+        endsOn: count === undefined ? 'the clip keeps its length; it may not end on a bar line' : `${count} bars later${count % 4 === 0 ? `, the end of a ${count}-bar phrase` : ''}`,
+        check: { tool: 'getSound', arguments: { start: Math.max(0, placed.start - 2), end: placed.start + 4 } } };
+    } }),
     setAudioReactive: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setAudioReactive, description: "Make clips react to music: a level curve from one song's detected beats (pulse on each hit, instant attack, `decay` release) or its loudness (energy) drives up to 4 targets per clip. CSS targets work on footage, images, text and solids: scale (amount -0.5..0.5, e.g. 0.06 = 6% bump), shake (0..0.1 of the frame, e.g. 0.01), rotate (-20..20 degrees). Effect controls work on video/image: any keyframeable control such as colorGrade.exposure (0.3), glitch.intensity (0.6), zoomBlur.amount (0.4), lightLeak.amount, softBlur.amount, lensDistortion.amount; the amount is added at full level and is 0 in silence. Modes: beats, downbeats (bar starts), accents (strong hits), energy (follows loudness; sensitivity 0..1). Subtle defaults read best: scale 0.04-0.08 on beats, glitch on accents. Covers each clip's own time span (up to 4 minutes). clear:true removes it. Rendered identically in preview and export.", inputSchema: z.object({ clipIds: clipIdsInput, musicClipId: z.string().min(1).optional().describe('The audio clip whose sound drives the reaction; omit when clear'), mode: z.enum(['beats', 'downbeats', 'accents', 'energy']).optional(), targets: z.array(z.object({ property: z.string().min(1).max(60).describe(`${CSS_REACTIVE_TARGETS.join(', ')} or group.control`), amount: z.number() }).strict()).min(1).max(4).optional(), sensitivity: z.number().min(0).max(1).optional(), decay: z.number().min(.03).max(1.5).optional(), clear: z.boolean().optional() }).strict(), execute: async (_ctx, input) => {
       if (input.clear) return checkpoint(t => { let next = t; for (const id of input.clipIds) next = patchClip(next, find(next, id).id, { audioReactive: undefined }); return next; });
       if (!input.musicClipId || !input.targets) throw new Error('Give musicClipId and targets, or clear:true.');
@@ -1436,7 +1511,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const perBar = reference.waveform ? energyCurve(reference.waveform, Math.max(reference.duration ?? duration, duration), grid.bar, from + phase + firstBar * grid.bar).values : undefined;
         const bed = renderMusicBed({ duration, bpm: grid.bpm, feel, phase, energy: perBar });
         const key = newProjectMediaKey(run.ownerId, run.projectId), size = await putMediaObject(key, encodeWav(bed.samples), 'audio/wav');
-        try { asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `Music bed ${Math.round(bed.bpm)} BPM ${feel}.wav`, size, duration: bed.samples[0].length / SR, waveform: soundWaveform(bed.samples), beats: { beats: bed.beats, bpm: bed.bpm, confidence: 1, engine: BEAT_ANALYSIS_ENGINE, downbeats: bed.downbeats, accents: [], dropCandidates: [] } }); }
+        try { asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `Music bed ${Math.round(bed.bpm)} BPM ${feel}.wav`, size, duration: bed.samples[0].length / SR, waveform: soundWaveform(bed.samples), beats: { beats: bed.beats, bpm: bed.bpm, confidence: 1, engine: BEAT_ANALYSIS_ENGINE, downbeats: bed.downbeats, accents: [], dropCandidates: [], energy: bedEnergy(bed.samples) } }); }
         catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
         assets.push(asset);
         placement = { sourceStart: 0, rate: 1 };
