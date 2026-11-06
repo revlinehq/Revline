@@ -1,5 +1,5 @@
 ---
-name: "scene-engine"
+name: "writing-scenes"
 description: "Defines the plain HTML + GSAP module contract that scene clips and films share: the scene() arguments, what loads, fonts, images, project media and limits. Read before the first addFilm, addScene or editScene, together with launch-films-motions for how a film should look and move."
 ---
 # Scene engine
@@ -13,7 +13,7 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 2. **Read the brief** with readBrief and follow it. Save lasting direction with updateBrief.
 3. **Plan** a short outline: a few lines per section with its time range, what moves and the words.
 4. **Write** the code directly in the addFilm or addScene call (Rules, Writing).
-5. **Check** with page `checklist` before handing it back.
+5. **Check** the rendered frames as launch-films-motions "Before handing back" lists, then call finish: it runs the timing and limit checks on the saved code.
 
 ## Rules
 
@@ -35,7 +35,7 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 - `brand` is the brand kit attached with brandKitId, or null. Its fields: launch-films-motions page `brand-kit`.
 - Scenes are plain TypeScript, never JSX or React.
 - Imports: `gsap` and its plugins ({{revline:0}}, plus EasePack), each from `gsap/<Name>` or all from `gsap`. Nothing else loads: no network, no other packages.
-- Limits: code up to 120,000 characters per scene and 400,000 per timeline (code shared by several clips counts once), scene clips up to 120 s, films up to 180 s.
+- Limits: code up to {{revline:3}} characters per scene and {{revline:4}} per timeline (code shared by several clips counts once), scene clips up to {{revline:5}} s, films up to {{revline:6}} s. finish checks them.
 
 ### Fonts and images
 - `font-family` may be any of: {{revline:1}}, or the brand kit's families when one is attached.
@@ -59,4 +59,3 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 ## Pages
 - `edit-lanes`: start here for any edit to existing footage, captions, scenes or films.
 - `films`: how a film is written as one module with `section(...)` calls, built in parts and edited.
-- `checklist`: full checks before handing back a new build or a full-lane edit.

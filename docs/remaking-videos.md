@@ -105,7 +105,7 @@ The reference file never goes on the timeline. It stays in project media and is 
 ## Decisions (from review)
 
 - No salute emoji. It was not part of this feature.
-- A remake depends on what the reference is. References are already-edited videos (Instagram edits, motivation videos, brand launch films), so the breakdown classifies a genre and the `reference-footage` skill has a page for each: `social-edit` (the user's footage cut to their music on the reference's rhythm), `motivation` (the user's voice and footage, the reference's caption style and pacing), `launch-film` (launch-films-motions scenes for the user's brand), plus `borrow` for single parts.
+- A remake depends on what the reference is. References are already-edited videos (Instagram edits, motivation videos, brand launch films), so the breakdown classifies a genre and the `remaking-videos` skill has a page for each: `social-edit` (the user's footage cut to their music on the reference's rhythm), `motivation` (the user's voice and footage, the reference's caption style and pacing), `launch-film` (launch-films-motions scenes for the user's brand), plus `borrow` for single parts.
 - When a remake needs material the project does not have, the agent lists what each shot needs and asks.
 - Pointing at moments: the chat card's shot strip, part chips and "this moment" chip, plus plain words resolved by `inspectReference`.
 
@@ -115,5 +115,5 @@ The reference file never goes on the timeline. It stays in project media and is 
 - `lib/media-analysis/gemini.ts` `breakDownReference`; `lib/server/media-task-runner.ts` `reference` task (shots, beats, keyframes, one Gemini pass).
 - Stored as `analysis.reference` (validated JSON) next to `shots` and `beats`.
 - Tools: `analyzeMedia` mode `reference`, `inspectReference`.
-- Skill: `lib/ai/skills/reference-footage.ts`.
+- Skill: `lib/ai/skills/remaking-videos.ts`.
 - Card: `components/editor/reference-card.tsx`.

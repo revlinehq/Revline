@@ -1,6 +1,6 @@
 ---
 name: "launch-films-motions"
-description: "Sets the motion, timing, sound and style rules for films made from scratch with no footage on screen: launch and feature films, teasers, standalone motion scenes and shot-for-shot copies of a reference. Read it before building, restyling or editing any of them; scene-engine covers the code."
+description: "Sets the motion, timing and style rules for films made from scratch with no footage on screen: launch and feature films, teasers, standalone motion scenes and shot-for-shot copies of a reference. Read it before building, restyling or editing any of them; writing-scenes covers the code."
 ---
 # Launch films and motion
 
@@ -8,17 +8,16 @@ A good film says one true message in the user's brand, moves fast with short bea
 
 Terms: a **film** is the output; a **section** is one `section(...)` call; a **beat** is one idea on screen inside a section (a title, a UI state, a feature); a **move** is one animation; a **reference** is a video being copied.
 
-Contents: Workflow; Defaults (timing and easing, sound levels); Rules (structure, timing, sound, recreating a reference, a new film for the user's brand, never speculate, taste, direction and feedback); Pages.
+Contents: Workflow; Defaults (timing and easing); Rules (structure, timing, recreating a reference, a new film for the user's brand, never speculate, taste, direction and feedback); Before handing back; Pages.
 
 ## Workflow
-1. **Existing film:** start with scene-engine page `edit-lanes` and follow it instead of the steps below.
+1. **Existing film:** start with writing-scenes page `edit-lanes` and follow it instead of the steps below.
 2. **Recreation:** follow "Recreating a reference" below.
 3. **New film:** read page `ideation`. When the user accepts an angle, start building.
 4. **Look:** find or create the brand kit (page `brand-kit`), then build the background (page `backgrounds`) before the first addFilm.
 5. **Assets:** page `image-plates` for anything code cannot draw; page `blueprints` when the user's product UI is shown.
-6. **Build** the film with addFilm as scene-engine page `films` describes, timing every move from "Timing and easing" below.
-7. **Sound:** add music as "Sound" below says.
-8. **Check** with scene-engine page `checklist` before handing it back.
+6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from "Timing and easing" below.
+7. **Check** the film as "Before handing back" lists, then call finish.
 
 ## Defaults
 
@@ -34,18 +33,11 @@ Defaults for original films. The user's direction and a reference being copied w
 | Camera move (push, pan, pull-back) | 0.8–1.4 s | `power3.inOut` or `power2.inOut` | Push-in to the composer: 1.0 s |
 | Beat (one idea on screen) | 1.75–3.5 s, aim 2.45 s | | A title, a UI state, a feature |
 
-### Sound levels
-| Mix | Level |
-|---|---|
-| Music, film with no speech | about -14 LUFS |
-| Music under speech | ducked 8–10 dB |
-
 ## Rules
 
 ### Structure
 - Length, number of sections and content follow the user's request and brief. There is no default structure and no required proof beat.
 - The pacing rules below apply at any length.
-- Named transitions (letter reveal, write-on, mask wipe, blur-in, morph, typing, fly-off) each have a recipe page; page `transitions` maps motion words to them.
 
 ### Timing
 - **Exits are faster than entrances:** about 0.8× the entrance time, with an ease-in (enter 0.35 s power3.out, exit 0.28 s power2.in).
@@ -57,18 +49,10 @@ Defaults for original films. The user's direction and a reference being copied w
 - **A beat over 4 s** needs a second action inside it (a camera move, a new element, a state change), not a held frame.
 - **Typing and UI demos run fast:** 2–3× real speed, so a 40–50 character prompt takes at most 1 s.
 
-### Sound
-- **Music only by default:** one music track and no generated sound effects.
-- Add effects with generateSound only when the user asks; a few mistimed effects make a film feel stop-start.
-- **The user's track wins:** when they name or upload a song, use it (addMedia) and say once that publishing it needs a license.
-- With no track given, suggest one with matchMusic and let the user hear it before building around it.
-- **Cut on the bar:** markMusicBeats on the track, then put section starts and big moves on bar lines.
-- One bar is 4 × 60 / BPM s (1.88–2.0 s at 120–128 BPM), so a beat of 1–2 bars fits the beat length above.
-
 ### Recreating a reference (clone, remake, "shot for shot")
 - The reference is the brief: no brand kit and no brand questions.
 - New recreations use the recreate lane, which runs full checks.
-- Read reference-footage page `recreation` before building a copy or making a full-lane edit. It owns the recreation workflow.
+- Read remaking-videos page `recreation` before building a copy or making a full-lane edit. It owns the recreation workflow.
 - Its measured behavior wins over the motion defaults on this page.
 
 ### A new film for the user's brand
@@ -98,11 +82,18 @@ Defaults for original films. The user's direction and a reference being copied w
 - **A film the user likes for its style** (not one to copy): readFrames its whole arc.
 - For each choice you borrow, note what it does, why it works and how this film expresses it differently. Never reuse its imagery, layout or timing.
 
+## Before handing back
+Look at these with getFrames:
+- the first frame;
+- each cut, on the cut;
+- one frame per section;
+- nothing still on screen after the element that owns it has closed.
+
+finish runs the timing and limit checks on the saved code automatically.
+
 ## Pages
 - `ideation`: the conversation before a new film: message, tension, angles.
 - `backgrounds`: the three-layer background built from the brand kit.
 - `brand-kit`: find, create and confirm the brand kit; `brand` in scene code.
 - `blueprints`: rebuild a product screenshot as live HTML with named parts.
 - `image-plates`: when and how to generate image assets (photos, textures, cut-outs).
-- `transitions`: motion words mapped to recipe pages.
-- `recipe-letter-reveal`, `recipe-write-on`, `recipe-mask-wipe`, `recipe-blur-in`, `recipe-morph`, `recipe-typing`, `recipe-fly-off`: one named transition each.

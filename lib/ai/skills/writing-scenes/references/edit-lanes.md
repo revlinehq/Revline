@@ -26,7 +26,7 @@ A good edit changes only the requested range, keeps everything around it in sync
 ### Local and full checks
 - **Local checks:** getFrames at each changed moment and one frame either side (`t - 1/fps`, `t`, `t + 1/fps`, within the timeline).
 - Local checks skip full sweeps, reference compares, repeated finishing passes, compareReference, motionMap and checkPacing.
-- **Full checks:** page `checklist` and, for copies, reference-footage page `recreation`. When scene motion changed, follow the full lane.
+- **Full checks:** launch-films-motions "Before handing back" for films and scenes and, for copies, the close-out in remaking-videos page `recreation`; finish adds the automatic timing and limit checks. When scene motion changed, follow the full lane.
 - Rendered checks are required for visual changes in every lane, except the plain reel cleanup above.
 - Reuse loaded skills and project context.
 

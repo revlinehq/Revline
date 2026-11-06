@@ -18,10 +18,13 @@ function allSkills() {
 export function capabilityExists(name: string) {
   return isLane(name) || allSkills().some(skill => skill.name === name);
 }
-// Capabilities saved on existing tasks before these skills were folded into footage-editing.
-const FORMER_FOOTAGE_SKILLS = new Set(['music-and-sound', 'color-grading', 'effects', 'vfx', 'vfx-recipes', 'text-styling']);
+// Capabilities saved on existing tasks under names that were later folded or renamed.
+const FORMER_CAPABILITIES: Record<string, string> = {
+  'music-and-sound': 'footage-editing', 'color-grading': 'footage-editing', effects: 'footage-editing', vfx: 'footage-editing', 'vfx-recipes': 'footage-editing', 'text-styling': 'footage-editing',
+  'reference-footage': 'remaking-videos', 'scene-engine': 'writing-scenes',
+};
 export function capabilityTools(name: string): readonly string[] {
-  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[FORMER_FOOTAGE_SKILLS.has(name) ? 'footage-editing' : name] ?? [];
+  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[FORMER_CAPABILITIES[name] ?? name] ?? [];
 }
 export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
   return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];
@@ -62,7 +65,7 @@ export function laneSkill(name: string, page?: string) {
   if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
   const found = page ? skill.pages?.find(item => item.name === page) : undefined;
   if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);
-  return found?.body ?? `${skill.body}${skill.pages?.length ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
+  return found?.body ?? `${skill.body}${skill.pages?.length && !skill.body.includes('\n## Pages') ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
 }
 export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' || lane === 'explainer' ? 'shared editing (no selected style)' : lane}
 ${LANES[lane].instructions}

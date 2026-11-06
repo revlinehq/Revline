@@ -1,11 +1,11 @@
 import { talkingHeadGraphics } from './talking-head-graphics';
 import { visualInspection } from './visual-inspection';
-import { sceneEngine } from './scene-engine';
+import { writingScenes } from './writing-scenes';
 import { launchFilmsMotions } from './launch-films-motions';
-import { referenceFootage } from './reference-footage';
+import { remakingVideos } from './remaking-videos';
 import { gsapSkill } from './gsap';
 import { footageEditing } from './footage-editing';
 import { clipping } from './clipping';
 import type { EditorSkill } from './types';
 
-export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, sceneEngine, gsapSkill, talkingHeadGraphics, launchFilmsMotions, referenceFootage, visualInspection];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, writingScenes, gsapSkill, talkingHeadGraphics, launchFilmsMotions, remakingVideos, visualInspection];

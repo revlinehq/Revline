@@ -4,7 +4,9 @@ description: "A complete scene module in the isometric line diagram style (stack
 ---
 # Example: a stacked isometric diagram
 
-A complete scene module in the isometric line diagram style: a base block draws on, a second block drops onto it on support posts, labels wipe in, a dimension line and caption finish it, then it holds. This is an example, not a preset: choose shapes, values and timing for the idea.
+A complete scene module in the isometric line diagram style: a base block draws on, a second block drops onto it on support posts, labels wipe in, a dimension line and its note (class `caption`) finish it, then it holds. This is an example, not a preset: choose shapes, values and timing for the idea.
+
+## Example
 
 ```ts
 import { DrawSVGPlugin } from 'gsap/DrawSVGPlugin';
@@ -45,7 +47,9 @@ export default function scene({ root, tl, gsap }) {
 ```
 
 ## Other shapes in the same style
-- **Line chart**: axes `M56 12V212` and `M56 212H500` (#777, 1.5), no grid lines, the value as a 3 px round-capped path drawn with drawSVG while a white dot (r 5) follows it with MotionPathPlugin (`motionPath:{path, align: path, alignOrigin:[.5,.5]}`), the end value in Geist Mono.
-- **Comparison bars**: outlined rects filled with the hatch pattern, revealed with the left-to-right wipe and staggered .12 to .14 s; one accent bracket measures the biggest.
-- **Counter**: a Geist Mono number tweened on an object with onUpdate, power3.out, landing on the spoken value.
-- **Structure / house**: uprights and roof lines as separate paths drawn on in order (front edges #F5F5F5, back edges #888), so the drawing builds like a sketch.
+| Shape | How |
+| --- | --- |
+| Line chart | axes `M56 12V212` and `M56 212H500` (#777, 1.5), no grid lines; the value as a 3 px round-capped path drawn with drawSVG while a white dot (r 5) follows it with MotionPathPlugin (`motionPath:{path, align: path, alignOrigin:[.5,.5]}`); the end value in Geist Mono |
+| Comparison bars | outlined rects filled with the hatch pattern, revealed with the left-to-right wipe and staggered .12 to .14 s; one accent bracket measures the biggest |
+| Counter | a Geist Mono number tweened on an object with onUpdate, power3.out, landing on the spoken value |
+| Structure / house | uprights and roof lines as separate paths drawn on in order (front edges #F5F5F5, back edges #888), so the drawing builds like a sketch |

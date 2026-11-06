@@ -7,6 +7,8 @@ export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
 // Scene code has no length limit; only titles are capped.
 export const SCENE_LIMITS = { title: 80 } as const;
+/** The contract writing-scenes states; the motion and recreate lanes check it at finish. Shared code counts once. */
+export const SCENE_CONTRACT_LIMITS = { sceneCode: 120_000, timelineCode: 400_000, sceneSeconds: 120, filmSeconds: 180 } as const;
 
 export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (clip.kind !== 'scene') { if (clip.scene) throw new Error('Only scene clips can hold scene code.'); return; }

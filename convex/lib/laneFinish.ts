@@ -59,7 +59,8 @@ export async function finishLane(
   if (!task) throw new Error('Start a lane task before finishing.');
   if (task.attempts >= MAX_FINISH_ATTEMPTS && task.result) return task.result;
   const fingerprint = await timelineHistoryKey(timeline),
-    failures: string[] = [];
+    failures: string[] = [],
+    warnings: string[] = [];
   if (task.lane === 'reel') failures.push(...reelCaptionFailures(timeline, assets));
   const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
   let currentRevision: number | undefined;
@@ -179,19 +180,18 @@ export async function finishLane(
         );
       }
     }
-    if (task.lane !== 'clip')
-      failures.push(
-        ...LANES[task.lane]
-          .check({
-            timeline: tab.timeline,
-            evidence: task.evidence as LaneEvidence[],
-            fingerprint: key,
-            timelineId: tab.timelineId,
-            assets,
-            referenceMotion,
-          })
-          .map((error) => prefix + error),
-      );
+    if (task.lane !== 'clip') {
+      const context = {
+        timeline: tab.timeline,
+        evidence: task.evidence as LaneEvidence[],
+        fingerprint: key,
+        timelineId: tab.timelineId,
+        assets,
+        referenceMotion,
+      };
+      failures.push(...LANES[task.lane].check(context).map((error) => prefix + error));
+      warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
+    }
   }
   if (task.lane === 'clip') {
     // The stable task key spans separate MCP calls; the upstream ledger verifies every actual tab.
@@ -217,6 +217,7 @@ export async function finishLane(
     timelineId,
     ...(finalCheckKey ? { checkKey: finalCheckKey } : {}),
     ...(motionReports.length ? { motionCheck: motionReports.join('\n') } : {}),
+    ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
     ...(motionOff.length ? { motionOff } : {}),
   };
   return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result });
