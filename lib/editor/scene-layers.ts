@@ -1,7 +1,8 @@
-import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline } from './types';
+import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline, type TimelineMarker } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
 import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
+import type { SceneBeats } from './scene-motion';
 
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
@@ -24,14 +25,40 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
 }
 
 /** `duration` is the clip's own; `filmDuration`, for a beat clip of a film, is what the scene module receives as its duration. */
-export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; start: number; duration: number; filmDuration?: number; beats?: SceneBeats; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
+
+const BEAT_KINDS = ['beats', 'downbeats', 'accents'] as const;
+/** Code that reads music markers: beat(), downbeat(), accent(), beats() or a shot's `on` check. Others never reload on marker edits. */
+const READS_BEATS = /(?<![\w$.])(?:beats?|downbeat|accent)\s*\(|\bon\s*:\s*['"`](?:beat|downbeat|accent)['"`]/;
+/**
+ * The music markers markMusicBeats left on the timeline (ids `beats:…`, `downbeats:…`, `accents:…`), in scene seconds.
+ * A film maps each marker through the clip of the film that shows it (or the nearest one), so splitting or trimming
+ * its clips keeps the numbering; a plain scene maps through its own clip. Undefined when none falls inside the scene.
+ */
+function sceneBeats(markers: TimelineMarker[], clip: Clip, films: Clip[]): SceneBeats | undefined {
+  const scene = clip.scene;
+  if (!scene || !READS_BEATS.test(scene.code)) return undefined;
+  const rate = (item: Clip) => item.playbackRate ?? 1, shown = scene.film ? films.filter(other => other.scene?.code === scene.code) : [clip];
+  const length = scene.film?.duration ?? clip.sourceStart + clip.duration * rate(clip), beats: SceneBeats = { beats: [], downbeats: [], accents: [] };
+  const gap = (item: Clip, time: number) => Math.max(0, item.start - time, time - (item.start + item.duration));
+  for (const marker of markers) {
+    const kind = BEAT_KINDS.find(name => marker.id.startsWith(`${name}:`));
+    if (!kind) continue;
+    const on = shown.reduce((best, item) => gap(item, marker.time) < gap(best, marker.time) ? item : best, shown[0]);
+    const time = Math.round((on.sourceStart + (marker.time - on.start) * rate(on)) * 1000) / 1000;
+    if (time >= 0 && time < length) beats[kind].push(time);
+  }
+  for (const kind of BEAT_KINDS) beats[kind].sort((a, b) => a - b);
+  return BEAT_KINDS.some(kind => beats[kind].length) ? beats : undefined;
+}
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
+  const markers = timeline.markers ?? [], films = markers.length ? timeline.clips.filter(clip => clip.kind === 'scene' && clip.scene?.film) : [];
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
+    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), ...((beats => beats ? { beats } : {})(markers.length ? sceneBeats(markers, clip, films) : undefined)), offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
 }
@@ -74,7 +101,7 @@ function allCode(source){var parts=[source.code];(source.blueprints||[]).forEach
 function frameDocument(source,scripts){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+scripts.map(function(script){return '<script>'+script+'</'+'script>';}).join('')+'</body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
-  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.width,source.height,source.fps,source.filmDuration||source.duration]),entry=entries.get(source.clipId);
+  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.width,source.height,source.fps,source.filmDuration||source.duration,source.beats||null]),entry=entries.get(source.clipId);
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
@@ -122,7 +149,7 @@ window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
+    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],beats:entry.source.beats||null,media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message),data.stack);entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
