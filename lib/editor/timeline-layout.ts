@@ -10,16 +10,21 @@ const TIMELINE_TRACK_GAP=6;
 // Drag auto-scroll is measured at the ruler boundary, independently of this space.
 export const TIMELINE_TOP_SPACE=24;
 export const TIMELINE_BOTTOM_SPACE=72;
-export function timelineLayout(timeline:Timeline,compact=false){
+/** The "Drafting film…" row shown above A1 while the editor agent writes a film. */
+export const FILM_DRAFT_ROW_HEIGHT=40+TIMELINE_TRACK_GAP;
+export function timelineLayout(timeline:Timeline,compact=false,draftRow=false){
   timeline=normalizeTimeline(timeline);
   let top=TIMELINE_RULER_HEIGHT+TIMELINE_TOP_SPACE;
   const transitionRows=new Set(timeline.clips.filter(isTransitionClip).map(trackOf));
   const effectRows=new Set(timeline.clips.filter(clip=>clip.kind==='effect'&&!isTransitionClip(clip)).map(trackOf));
+  let draft:{top:number;height:number;before?:string}|undefined;
   const tracks=deriveTracks(timeline).filter(track=>track.group!=='effects'||!transitionRows.has(track.number)||effectRows.has(track.number)).map(track=>{
+    if(draftRow&&!draft&&track.group==='audio'){draft={top,height:FILM_DRAFT_ROW_HEIGHT,before:track.id};top+=FILM_DRAFT_ROW_HEIGHT;}
     // Compact rows keep real thumbnails and waveforms, just shorter.
     const clipHeight=compact?20:track.group==='effects'?28:52;
     const height=clipHeight+TIMELINE_TRACK_GAP;
     const row={...track,top,height,clipHeight,gapBefore:0};top+=height;return row;
   });
-  return {tracks,height:top};
+  if(draftRow&&!draft){draft={top,height:FILM_DRAFT_ROW_HEIGHT};top+=FILM_DRAFT_ROW_HEIGHT;}
+  return {tracks,height:top,draft};
 }
