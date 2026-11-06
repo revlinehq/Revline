@@ -45,7 +45,6 @@ Defaults for original films. The user's direction and a reference being copied w
 ### Structure
 - Length, number of sections and content follow the user's request and brief. There is no default structure and no required proof beat.
 - The pacing rules below apply at any length.
-- Named transitions (letter reveal, write-on, mask wipe, blur-in, morph, typing, fly-off) each have a recipe page; page `transitions` maps motion words to them.
 
 ### Timing
 - **Exits are faster than entrances:** about 0.8× the entrance time, with an ease-in (enter 0.35 s power3.out, exit 0.28 s power2.in).
@@ -104,5 +103,3 @@ Defaults for original films. The user's direction and a reference being copied w
 - `brand-kit`: find, create and confirm the brand kit; `brand` in scene code.
 - `blueprints`: rebuild a product screenshot as live HTML with named parts.
 - `image-plates`: when and how to generate image assets (photos, textures, cut-outs).
-- `transitions`: motion words mapped to recipe pages.
-- `recipe-letter-reveal`, `recipe-write-on`, `recipe-mask-wipe`, `recipe-blur-in`, `recipe-morph`, `recipe-typing`, `recipe-fly-off`: one named transition each.
