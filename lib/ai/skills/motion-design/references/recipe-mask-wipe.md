@@ -6,14 +6,9 @@ description: "Mask wipe: clip-path inset or polygon reveals and hides, straight 
 
 **Motion-log words:** wipes in, wipe, reveals left to right, uncovered, slides out from behind, curtain, diagonal wipe, panel opens, card unmasks, iris, split reveal.
 
-```tsx
-function Wipe({ children, at = 0, from = 'left' }: { children: React.ReactNode; at?: number; from?: 'left' | 'right' | 'top' | 'bottom' }) {
-  const closed = { left: 'inset(0% 100% 0% 0%)', right: 'inset(0% 0% 0% 100%)', top: 'inset(0% 0% 100% 0%)', bottom: 'inset(100% 0% 0% 0%)' }[from];
-  const ref = useTimeline<HTMLDivElement>((tl, el) => {
-    tl.fromTo(el, { clipPath: closed }, { clipPath: 'inset(0% 0% 0% 0%)', duration: .6, ease: 'expo.inOut' }, at);
-  });
-  return <div ref={ref}>{children}</div>;
-}
+```ts
+const CLOSED = { left: 'inset(0% 100% 0% 0%)', right: 'inset(0% 0% 0% 100%)', top: 'inset(0% 0% 100% 0%)', bottom: 'inset(100% 0% 0% 0%)' };
+tl.fromTo(el, { clipPath: CLOSED.left }, { clipPath: 'inset(0% 0% 0% 0%)', duration: .6, ease: 'expo.inOut' }, at);
 ```
 - **Diagonal:** tween polygons with the same number of points: `'polygon(0% 0%, 0% 0%, 0% 100%, 0% 100%)'` to `'polygon(0% 0%, 120% 0%, 100% 100%, -20% 100%)'`.
 - **Rounded or circular:** `inset(… round 24px)` keeps a card's corners; an iris is `circle(0% at 50% 50%)` to `circle(75% at 50% 50%)`.

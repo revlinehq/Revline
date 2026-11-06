@@ -4,7 +4,7 @@ description: "Transition recipes for launch films and remakes: which motion-log 
 ---
 # Transition recipes
 
-Name each moment's transition type in the motion log, then build it with its recipe. Every recipe is a useTimeline snippet on the frame clock with its usual durations and eases; take the exact timing and ease from the reference (readFrames fps 10, trackReference) and keep the recipe's structure.
+Name each moment's transition type in the motion log, then build it with its recipe. Every recipe is plain timeline code with its usual durations and eases: `el` is an element already built in `root`, `tl` is the scene's timeline or the timeline a film `section(...)` receives, and `at` is the position in that timeline's seconds (section-local inside a section); take the exact timing and ease from the reference (readFrames fps 10, trackReference) and keep the recipe's structure.
 
 | Motion-log words | Type | Page |
 | --- | --- | --- |

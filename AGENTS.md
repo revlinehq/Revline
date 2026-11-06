@@ -50,7 +50,7 @@ After the user approves a merge, deploy every completed Convex change to its int
 ## Motion films from a coding session
 
 When building or copying a motion film from here (scene code pushed to a Revline project):
-- Read the editor agent's skills first, the same ones Revline's own agent follows: `motion-design`, `gsap` (its `revline` page first), `scene-engine` (pages `react-scenes` and `checklist`) and, when copying a video, `reference-footage`. Load them with `readSkill` on the development deployment, which returns the text with live values filled in (allowed fonts, plugins, limits); the files in `lib/ai/skills/` hold template placeholders for those:
+- Read the editor agent's skills first, the same ones Revline's own agent follows: `motion-design`, `gsap` (its `revline` page first), `scene-engine` (pages `films` and `checklist`) and, when copying a video, `reference-footage`. Load them with `readSkill` on the development deployment, which returns the text with live values filled in (allowed fonts, plugins, limits); the files in `lib/ai/skills/` hold template placeholders for those:
   `npx convex run mcpActions:callTool '{"ownerId":"<your dev owner id>","agentName":"Claude Code","name":"readSkill","arguments":{"projectId":"<a dev project id>","name":"scene-engine","page":"checklist"}}'`
 - Work on the development deployment, and pass the timeline tab explicitly instead of switching the project's open tab; other sessions may be editing another tab of the same project.
 - Measure at full resolution, never from downscaled contact sheets.

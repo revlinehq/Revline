@@ -1,6 +1,6 @@
 ---
 name: "gsap"
-description: "GSAP library reference: GreenSock's official API pages (timeline, core, plugins, React, performance, utils) plus the few engine rules for using GSAP inside Revline's frame-seeked scenes. Read when writing GSAP code. It says how GSAP works, not how films should look (that is motion-design)."
+description: "GSAP library reference: GreenSock's official API pages (timeline, core, plugins, performance, utils) plus the few engine rules for using GSAP inside Revline's frame-seeked scenes. Read when writing GSAP code. It says how GSAP works, not how films should look (that is motion-design)."
 ---
 # GSAP library reference
 
@@ -10,8 +10,7 @@ GSAP choreographs scene motion: staggers, overlaps, word and letter reveals, Spl
 
 ## Engine rules (how GSAP runs in Revline)
 - **Timelines are always paused and seeked to the frame.** The engine seeks each scene's timeline to the frame being drawn, for preview, scrubbing and export alike. Never play(), restart(), reverse(), change timeScale, or rely on a tween playing in real time.
-- **React scenes:** build every timeline with `useTimeline((tl, el) => { … })` (scene-engine page `react-scenes`). It is Revline's useGSAP: it scopes selector strings to the component's element, reverts everything on unmount, and seeks to the beat's local time. Do not import @gsap/react or call useGSAP, gsap.context, useEffect or useLayoutEffect for animation.
-- **GSAP scenes:** put everything on the scene's `tl` with a position parameter.
+- **Every tween goes on a supplied timeline:** the scene's `tl`, or the child timeline a film section's `section(...)` callback receives (its positions are section-local seconds), always with a position parameter.
 - **Never** ScrollTrigger, ScrollSmoother, ScrollTo, Observer, Draggable, Inertia, Flip, GSDevTools, gsap.ticker, requestAnimationFrame, setTimeout or setInterval, and never a tween outside a seeked timeline (a bare gsap.to, gsap.from or gsap.delayedCall). None of them follow the frame clock, so preview, scrubbing and export would disagree.
 - **Starting states go where elements are built**, so the first frame never flashes: `tl.from` and `tl.fromTo` apply their start state when the timeline is built (keep immediateRender for the first entrance; later from/fromTo tweens on the same property set it false), and anything else hidden at its first frame gets `gsap.set` (or inline style) right where it is created. Never `tl.set(el, {…}, 0)` for a starting state: a set at position 0 does not apply on the first frame drawn, so the part shows for one frame (a flash).
 - **Animate transforms and opacity**: x, y, xPercent, yPercent, scale, rotation and opacity or autoAlpha. Use transforms for movement. At 1080p, start blur on ≤8 elements for ≤0.5 s; avoid full-frame blur except measured copies. will-change is unnecessary.
@@ -24,6 +23,5 @@ GSAP choreographs scene motion: staggers, overlaps, word and letter reveals, Spl
 - `gsap-timeline`: the position parameter (absolute, `<`, `>`, `-=0.2`), labels, timeline defaults and nesting. Sequence with these instead of chained delays.
 - `gsap-core`: tween vars, eases, stagger (each, amount, from, grid), function-based and relative values.
 - `gsap-plugins`: SplitText (split once while building, animate lines, words or chars), ScrambleText, DrawSVG, MorphSVG, MotionPath, CustomEase, CustomWiggle and CustomBounce. Skip the scroll, drag, Flip, Inertia, Observer, physics, Pixi and GSDevTools sections.
-- `gsap-react`: the reasons behind scoping and cleanup, which useTimeline already does; skip installation, useGSAP itself, context-safe event handlers and SSR.
 - `gsap-performance`: transforms, batched reads/writes and bounded heavy effects.
 - `gsap-utils`: clamp, mapRange, normalize, interpolate, snap, wrap, distribute, toArray and selector for computing values; random and shuffle only while building.

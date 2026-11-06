@@ -17,7 +17,7 @@ Follow the user's request first. A video to recreate goes through "Recreating a 
 Length, number of sections and what the film shows follow the user's request and brief. There is no default structure or required proof beat. When the user gives no length, ask once in the ideation message with a suggestion sized to the content (for example "about 20 s: title, three features, end card"). Pacing rules apply at any length.
 
 ## How films are built
-A film is one React scene clip built with addFilm and changed with patchScene. How to write, split and edit it lives in scene-engine page `react-scenes`; this skill decides what the film shows. Split a film into clips only when the user asks.
+A film is one plain GSAP scene clip built with addFilm, its sections written as `section(...)` calls, and changed with patchScene. How to write, split and edit it lives in scene-engine page `films`; this skill decides what the film shows. Split a film into clips only when the user asks.
 
 ## Moves and transitions
 Named transitions (letter reveal, write-on, mask wipe, blur-in, morph, typing, fly-off) each have a recipe page; page `transitions` maps motion words to them. Their timing follows the table below unless a reference is being copied.
@@ -62,6 +62,6 @@ Saved feedback from this user (latest explicit feedback wins; recallMemory for a
 
 ## Direction and feedback
 - **Exact direction from the user:** do exactly that. Never override the user.
-- **Approved work is off-limits** (how: scene-engine page `react-scenes`). When the user approves a section, mark it with approveClip (markerId of its section) and their words as the note; never approve on their behalf.
+- **Approved work is off-limits** (how: scene-engine page `films`). When the user approves a section, mark it with approveClip (markerId of its section) and their words as the note; never approve on their behalf.
 - **Feedback on one part:** change only that part, with patchScene. Every other section, title, timing, move, color and sound stays exactly as it was; never "improve" what was not asked about. If the change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
 - **A style reference** (a film or brand they like, not one to recreate): readFrames its whole arc, then note for each choice you borrow: what it does → why it works → how this film expresses it differently. Never reuse its imagery, layout or timing.

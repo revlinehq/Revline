@@ -4,7 +4,7 @@ description: "Official GSAP skill for performance — prefer transforms, avoid l
 ---
 # GSAP Performance
 
-Revline: add tweens to the supplied paused `tl` inside useTimeline/scene; the engine seeks it.
+Revline: add tweens to the supplied paused `tl` (or a section's timeline); the engine seeks it.
 
 
 ## Prefer Transform and Opacity

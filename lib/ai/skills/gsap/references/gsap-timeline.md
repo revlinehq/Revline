@@ -4,13 +4,13 @@ description: "Official GSAP skill for timelines — gsap.timeline(), position pa
 ---
 # GSAP Timeline
 
-Revline: add tweens to the supplied paused `tl` inside useTimeline/scene; the engine seeks it.
+Revline: add tweens to the supplied paused `tl` (or a section's timeline); the engine seeks it.
 
 
 ## Creating a Timeline
 
 ```javascript
-// tl is supplied by useTimeline or the scene contract.
+// tl is supplied by the scene contract (or a section's build callback).
 tl.to(".a", { x: 100, duration: 1 })
   .to(".b", { y: 50, duration: 0.5 })
   .to(".c", { opacity: 0, duration: 0.3 });

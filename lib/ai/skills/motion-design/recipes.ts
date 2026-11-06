@@ -1,7 +1,7 @@
 import { skillText, skillDocument } from '../documents';
 import type { EditorSkillPage } from '../types';
 
-// Revline's transition recipes: the moves launch films are made of, each as a short useTimeline snippet on the frame clock.
+// Revline's transition recipes: the moves launch films are made of, each as a short snippet of plain `tl` code on the frame clock.
 // A motion log names each moment's transition type; the type picks the recipe here.
 
 

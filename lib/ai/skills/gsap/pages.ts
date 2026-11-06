@@ -2,7 +2,7 @@ import { skillText, skillDocument } from '../documents';
 // GSAP API reference adapted for Revline from GreenSock's agent skills, originally copied from https://github.com/greensock/gsap-skills
 // at commit aed9cfd3277740755f6bfc1155c7aa645403b760 (skills/<name>/SKILL.md; frontmatter description as the page
 // description, the rest as the body). To re-sync, fetch the same files at a newer commit and replace the
-// strings. gsap-scrolltrigger and gsap-frameworks are left out. Revline's own rules are in ./index.ts.
+// strings. gsap-scrolltrigger, gsap-frameworks and gsap-react are left out. Revline's own rules are in ./index.ts.
 /*
  * MIT License
  *
@@ -46,12 +46,6 @@ export const gsapPluginsPage: EditorSkillPage = {
   body: skillText("gsap/references/gsap-plugins.md"),
 };
 
-export const gsapReactPage: EditorSkillPage = {
-  name: skillDocument("gsap/references/gsap-react.md").name,
-  description: skillDocument("gsap/references/gsap-react.md").description,
-  body: skillText("gsap/references/gsap-react.md"),
-};
-
 export const gsapPerformancePage: EditorSkillPage = {
   name: skillDocument("gsap/references/gsap-performance.md").name,
   description: skillDocument("gsap/references/gsap-performance.md").description,
@@ -64,4 +58,4 @@ export const gsapUtilsPage: EditorSkillPage = {
   body: skillText("gsap/references/gsap-utils.md"),
 };
 
-export const GREENSOCK_PAGES = [gsapTimelinePage, gsapCorePage, gsapPluginsPage, gsapReactPage, gsapPerformancePage, gsapUtilsPage];
+export const GREENSOCK_PAGES = [gsapTimelinePage, gsapCorePage, gsapPluginsPage, gsapPerformancePage, gsapUtilsPage];

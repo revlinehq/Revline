@@ -54,7 +54,7 @@ Motion design comes with sound. When you add a scene, or change a scene's choreo
 
 ### Find the beats
 
-Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the clip's first frame, so timeline time = `clip.start + enclosing Beat start + tween onset` (omit Beat offset for a top-level timeline). Resolve relative positions (`'<0.2'`, `'-=0.3'`, labels) to absolute times first.
+Read the scene clip's code (inspectClip). A scene's GSAP timeline starts at the clip's first frame, so timeline time = `clip.start + section start + tween onset` (the section start is the second argument of the enclosing `section(...)` call; omit it for a tween on the outer `tl`). Resolve relative positions (`'<0.2'`, `'-=0.3'`, labels) to absolute times first.
 
 - `expo.out` / `power*.out` entrances: a whoosh starting with the tween, as long as it.
 - `*.inOut` moves and draws: a whoosh or swell spanning the tween.
