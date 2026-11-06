@@ -170,7 +170,7 @@ export async function finishLane(
           )
             throw new Error('Changed-range rendering returned missing frames.');
           if (pendingReview) {
-            pendingReview.reviewed(rendered.frames.map(frame => frame.time), tab.timeline.fps);
+            pendingReview.reviewed(rendered.frames.map(frame => frame.time), tab.timeline);
             await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, pendingReview.times()) });
           }
         }

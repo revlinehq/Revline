@@ -498,7 +498,7 @@ export const reviewFrames = internalMutation({
     const pending = readFastFrameTimes(row.evidence, args.timelineId, fingerprint);
     if (!pending?.length) return null;
     const review = new FastFrameReview(pending);
-    review.reviewed(args.times, timeline.fps);
+    review.reviewed(args.times, timeline);
     await saveEvidence(ctx, row, fastFrameEvidence(args.timelineId, fingerprint, review.times()));
     return null;
   },

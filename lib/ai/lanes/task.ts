@@ -1,6 +1,6 @@
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import type { LaneId } from './types';
-import type { Timeline } from '../../editor/types';
+import { renderedFrameTime, type Timeline } from '../../editor/types';
 import { timelineHistoryKey } from '../../editor/timeline-history-key';
 import type { LanguageModelMiddleware } from 'ai';
 export const MAX_FINISH_ATTEMPTS = 3;
@@ -59,16 +59,12 @@ export async function changedFrameTimes(
       0,
       ...timeline.clips.map((clip) => clip.start + clip.duration),
     ),
-    last = Math.max(0, Math.ceil(duration * timeline.fps) - 1);
+    fps = timeline.fps;
   return [
     ...new Set(
       anchors.flatMap((time) =>
-        [-1, 0, 1].map(
-          (offset) =>
-            Math.max(
-              0,
-              Math.min(last, Math.round(time * timeline.fps) + offset),
-            ) / timeline.fps,
+        [-1, 0, 1].map((offset) =>
+          renderedFrameTime((Math.round(time * fps) + offset) / fps, duration, fps),
         ),
       ),
     ),

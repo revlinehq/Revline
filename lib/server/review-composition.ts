@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import sharp from 'sharp';
 import type { MediaWorkItem,MediaTaskResult } from '../../convex/lib/media_task_contract';
 import type { MediaAsset } from '../editor/types';
-import { dimensions, timelineDuration } from '../editor/types';
+import { dimensions, renderedFrameTime, timelineDuration } from '../editor/types';
 import { checkPlanTiming, type EffectPlan } from '../ai/edit-plan';
 import { changedShare,compositionSampleTimes,parseCompositionReview,pixelDifference,reviewObservationsJsonSchema } from '../ai/composition-review';
 import { interaction } from '../media-analysis/gemini';
@@ -97,7 +97,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal,{fps,hits})};
   }
   const frames:NonNullable<MediaTaskResult['snapshot']>['frames']=[];
-  const at=times.map(requested=>Math.round(Math.min(Math.max(0,requested),last)*timeline.fps)/timeline.fps);
+  const at=times.map(requested=>renderedFrameTime(requested,timelineDuration(timeline),timeline.fps));
   const capture = async (indices:number[]):Promise<Buffer[]> => {
     const images = new Map<number,Buffer>();
     if(contactSheet){
