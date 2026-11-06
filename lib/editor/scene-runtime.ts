@@ -17,11 +17,12 @@ import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
 import { assertSceneImport, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules } from './scene-modules';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
+import { createTextMotion, type TextMotion } from './scene-text-motion';
 
 type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper } & TextMotion;
 export type SectionHelper = (name: string, start: number, duration: number, build: (tl: gsap.core.Timeline) => void) => gsap.core.Timeline;
 
 /**
@@ -43,6 +44,20 @@ function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
     film.add(tl, start);
     return tl;
   };
+}
+/**
+ * The text functions (reveal, exit, swap, counter, type, mark) for one scene or blueprint. They add their moves to the
+ * timeline being built: a section's while its build runs, otherwise the scene's tl.
+ */
+function textMotionHelpers(root: HTMLElement, tl: gsap.core.Timeline, fps: number) {
+  const active: gsap.core.Timeline[] = [];
+  const text = createTextMotion({ root, fps, timeline: () => active[active.length - 1] ?? tl });
+  const sections = sectionHelper(tl, fps);
+  const section: SectionHelper = (name, start, duration, build) => sections(name, start, duration, inner => {
+    active.push(inner);
+    try { build(inner); } finally { active.pop(); }
+  });
+  return { section, ...text };
 }
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
 
@@ -221,11 +236,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       host.style.cssText = `position:relative;width:${width}px;height:${height}px;overflow:hidden`;
       container.appendChild(host);
       const tl = gsap.timeline();
-      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
+      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...textMotionHelpers(host, tl, data.fps) });
       return host;
     };
     const tl = gsap.timeline();
-    await scene({ root, tl, gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
+    // Text functions measure the laid-out text while the scene builds; every face must have loaded first.
+    await document.fonts.ready;
+    await scene({ root, tl, gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...textMotionHelpers(root, tl, data.fps) });
     master = gsap.exportRoot({ paused: true });
     // gsap.set calls made while building land after the scene's timeline at the same start time,
     // so a first seek into the middle re-applied the starting states over the animation.
