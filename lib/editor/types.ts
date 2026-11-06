@@ -78,7 +78,8 @@ export type VisualFadeSettings = { fadeIn: number; fadeOut: number };
 // motion-effect-settings
 export type FlashSettings = { strength: number; attack: number; release: number };
 export type PunchSettings = { amount: number; speed: number; centerX: number; centerY: number; attack?: number; release?: number };
-export type ShakeSettings = { strength: number; speed: number; direction: 'both' | 'horizontal' | 'vertical' };
+/** decay: hardest on the first frame, settling to rest exactly at the end (an impact), instead of an even rumble. */
+export type ShakeSettings = { strength: number; speed: number; direction: 'both' | 'horizontal' | 'vertical'; decay?: boolean };
 export type PopSettings = { startScale: number; bounce: number; speed: number };
 
 // smooth-zoom-settings, camera-motion-settings
