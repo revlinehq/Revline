@@ -19,7 +19,7 @@ export function capabilityExists(name: string) {
   return isLane(name) || allSkills().some(skill => skill.name === name);
 }
 export function capabilityTools(name: string): readonly string[] {
-  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[name === 'vfx-recipes' ? 'effects' : name] ?? [];
+  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[name] ?? [];
 }
 export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
   return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];

@@ -112,8 +112,11 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'clipping': clipTools,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
   'reel': ['readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
-  'music-and-sound': ['addSoundEffect', 'generateSound', 'editSound', 'matchMusic', 'useStrongestMoment', 'markMusicBeats', 'alignCutsToBeat'],
-  'effects': ['configureSmoothZoom', 'configureCameraMotion', 'animateEffect', 'setMask', 'setMotionBlur', 'setVisualEffects', 'setSpeedRamp', 'addTransition', 'freezeFrame', 'resetVisualEffect', 'addTimedEffect', 'convertSolidColorToVisual', 'setSolidColor', 'configureTimedEffect', 'applyMotionPreset', 'animateClip', 'setAudioReactive'],
-  'color-grading': ['analyzeColor', 'matchColor', 'setColorCurves', 'setHSL', 'applyLut'],
-  'vfx': ['trackPoints', 'getTrack', 'attachToTrack', 'addImpactFrame', 'configureImpactFrame', 'addOverlay', 'configureOverlay', 'freezeFrameParallax', 'configureParallax', 'smoothSlowMotion', 'upscaleClip', 'removeBackground'],
+  // Sound, effect, color and VFX tools for footage edits.
+  'footage-editing': [
+    'addSoundEffect', 'generateSound', 'editSound', 'matchMusic', 'useStrongestMoment', 'markMusicBeats', 'alignCutsToBeat',
+    'configureSmoothZoom', 'configureCameraMotion', 'animateEffect', 'setMask', 'setMotionBlur', 'setVisualEffects', 'setSpeedRamp', 'addTransition', 'freezeFrame', 'resetVisualEffect', 'addTimedEffect', 'convertSolidColorToVisual', 'setSolidColor', 'configureTimedEffect', 'applyMotionPreset', 'animateClip', 'setAudioReactive',
+    'analyzeColor', 'matchColor', 'setColorCurves', 'setHSL', 'applyLut',
+    'trackPoints', 'getTrack', 'attachToTrack', 'addImpactFrame', 'configureImpactFrame', 'addOverlay', 'configureOverlay', 'freezeFrameParallax', 'configureParallax', 'smoothSlowMotion', 'upscaleClip', 'removeBackground',
+  ],
 };
