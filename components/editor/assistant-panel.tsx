@@ -103,8 +103,10 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
+function AssistantPanelBody({ promptFill, messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
+  /** Text to add to the draft, such as a sketch's playhead time; a new key adds it again. */
+  promptFill?: { key: number; text: string };
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   /** Model and effort choices; effortSwitcher (development only) picks a fixed effort for each request. */
   settings?: ComposerSettings;
@@ -181,6 +183,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     const replied = newUser && messages.slice(messages.indexOf(latestUser) + 1).some(message => message.role !== 'user' && (message.text || message.steps?.length || message.tools?.length || message.status === 'success' || message.status === 'failed' || message.status === 'aborted'));
     if ((newUser && (running || replied)) || (error && error !== pendingReply.previousError)) setPendingReply(null);
   }, [messages, running, error, pendingReply]);
+  const filledKey=useRef(promptFill?.key);
+  useEffect(()=>{if(!promptFill||filledKey.current===promptFill.key)return;filledKey.current=promptFill.key;changePrompt(prompt.trim()?`${prompt.trimEnd()}\n${promptFill.text}: `:`${promptFill.text}: `);},[promptFill]);// eslint-disable-line react-hooks/exhaustive-deps
   function changePrompt(value: string) { setPrompt(value); try { if (draftKey) storeDraftText(draftKey, value); } catch { /* Keep the live draft when storage is unavailable. */ } }
 
   async function stop() {

@@ -53,7 +53,7 @@ function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:
   return Promise.race([local,fallback]).finally(()=>clearTimeout(timer));
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as CompositionWindow|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
-export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
+export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void; /** The rendered composition at project resolution, inside the player's frame. */ compositionElement():HTMLElement|null };
 export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;controls?:boolean;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,controls=true,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
   timeline=useMemo(()=>resolvedAudioTimeline(normalizeTimeline(committedTimeline)),[committedTimeline]);
@@ -211,7 +211,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     seekPosition.current=t;seekRequest.current++;seekOwned.current=true;if(mediaSession.current)mediaSession.current.seek(t);else player.current?.seek(t);setSelectionVisible(selectionAt(t));
     // HyperFrames seek lands paused without emitting a pause event.
     callbacks.current.onPlaying(false);
-  },currentTime:()=>playbackTime(player.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
+  },currentTime:()=>playbackTime(player.current),compositionElement:()=>player.current?.iframeElement?.contentDocument?.getElementById('composition')??null,mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
     if(volume===null)previewVolumes.current.delete(id);else previewVolumes.current.set(id,volume);
     if(player.current)updateLayers(player.current,latestTimeline.current);
   },clipEffects:(id,patch)=>{
