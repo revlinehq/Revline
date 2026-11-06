@@ -1,8 +1,7 @@
-import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline, type TimelineMarker } from './types';
+import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline, type TimelineMarker, type SceneBeats } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
 import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
-import type { SceneBeats } from './scene-motion';
 
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.

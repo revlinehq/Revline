@@ -8,9 +8,7 @@
 // as rest before it starts and after it ends, whichever way the playhead jumped.
 import { gsap } from 'gsap';
 import type { SectionHelper } from './scene-runtime';
-
-/** Film seconds of the music beat markers on the timeline (markMusicBeats), per kind. */
-export type SceneBeats = { beats: number[]; downbeats: number[]; accents: number[] };
+import type { SceneBeats } from './types';
 type Target = string | Element;
 type Point = Target | { x: number; y: number };
 type Direction = 'left' | 'right' | 'up' | 'down';
@@ -23,7 +21,8 @@ export type ShotOptions = {
   /** Checks that the shot starts on a music marker of this kind. */
   on?: 'beat' | 'downbeat' | 'accent';
 };
-export type Shot = { name: string; el: HTMLElement; start: number; duration: number; end: number };
+/** el: the shot's container (entrance, exit and hits move it); camera: the layer inside it that push() moves. */
+export type Shot = { name: string; el: HTMLElement; camera: HTMLElement; start: number; duration: number; end: number };
 export type ShotHelper = (name: string, start: number, duration: number, options: ShotOptions, build: (tl: gsap.core.Timeline, shot: Shot) => void) => gsap.core.Timeline;
 export type PushOptions = { target: Target; amount?: number; frames?: number; ease?: ShotEase; at?: number; center?: number; camera?: Target };
 export type HitOptions = { at?: number; intensity?: number; frames?: number; axis?: 'x' | 'y' | 'both'; flash?: boolean | string; punch?: number; target?: Target };
@@ -49,6 +48,13 @@ function setting(what: string, value: unknown, fallback: number, min: number, ma
   if (value === undefined) return fallback;
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${what} must be a number between ${min} and ${max}.`);
   return Math.min(max, Math.max(min, value));
+}
+/** A time on the timeline a helper was given: before its start is a mistake (often film seconds on a section's timeline). */
+function startTime(what: string, value: unknown) {
+  if (value === undefined) return 0;
+  if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${what} must be a number of seconds on the timeline you passed.`);
+  if (value < 0) throw new Error(`${what} is ${Math.round(value * 1000) / 1000}s, before the start of the timeline you passed. On a section's timeline use section seconds: subtract its start from film seconds such as beat(n).`);
+  return value;
 }
 function choice<T extends string>(what: string, value: unknown, fallback: T, options: readonly T[]): T {
   if (value === undefined) return fallback;
@@ -154,16 +160,26 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
       if (Math.abs(nearest - start) > frame / 2 + 1e-6) throw new Error(`Shot "${name}" starts at ${start}s, which is not on a ${KINDS[kind].label} marker; the nearest is ${KINDS[kind].call}(${list.indexOf(nearest) + 1}) = ${nearest}s. Start it there.`);
     }
     if (current) throw new Error(`Shot "${name}" is inside shot "${current.name}". Shots do not nest.`);
-    const handle: Shot = { name, el, start, duration, end: round(start + duration) };
-    el.dataset.camera = '';
+    // The shot's content moves into a camera layer the helpers own: GSAP transforms the camera (push), and the
+    // container keeps its CSS translate/scale/rotate for the entrance, exit and hits (GSAP clears those on any element
+    // it transforms, so the two never share an element).
+    const camera = document.createElement('div');
+    camera.dataset.camera = '';
+    camera.style.cssText = 'position:absolute;inset:0';
+    while (el.firstChild) camera.appendChild(el.firstChild);
+    el.appendChild(camera);
+    if (getComputedStyle(el).position === 'static') el.style.position = 'relative';
+    // Cuts land on the frame grid: a literal like 2.867 for a marker at 2.86667 (60 fps) still cuts on that frame.
+    const at = Math.round(start * fps) / fps, length = Math.round((start + duration) * fps) / fps - at;
+    const handle: Shot = { name, el, camera, start, duration, end: round(start + duration) };
     // A shot is seen only between its start and end; the next shot's container replaces it at the cut.
     gsap.set(el, { visibility: start <= frame / 2 ? 'visible' : 'hidden' });
     const pending = previous;
-    const result = section(name, start, duration, tl => {
+    const result = section(name, at, duration, tl => {
       current = handle;
       try {
-        if (start > frame / 2) tl.set(el, { visibility: 'visible', x: 0, y: 0, scale: 1, rotation: 0 }, 0);
-        tl.set(el, { visibility: 'hidden' }, duration);
+        if (start > frame / 2) { tl.set(el, { visibility: 'visible' }, 0); tl.set(camera, { x: 0, y: 0, scale: 1, rotation: 0 }, 0); }
+        tl.set(el, { visibility: 'hidden' }, length);
         if (from !== 'none') {
           // The entrance began `overlap` frames before the cut (hidden behind the previous shot), so its first frame
           // is already moving. Its ease is the tail of the chosen ease.out from that point: speed carries across.
@@ -191,15 +207,15 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
   const pushes = new WeakMap<HTMLElement, { tl: gsap.core.Timeline; start: number; end: number; to: Camera }[]>();
   const push = (tl: gsap.core.Timeline, options: PushOptions) => {
     if (!options || options.target === undefined) throw new Error("push(tl, { target }) needs a target: the element the camera moves toward, like push(tl, { target: '.cta', amount: .15 }).");
-    const camera = options.camera !== undefined ? element(options.camera, 'push camera') : current?.el;
-    if (!camera) throw new Error('push() outside a shot needs camera: the element that frames the shot (it carries data-camera).');
+    const camera = options.camera !== undefined ? element(options.camera, 'push camera') : current?.camera;
+    if (!camera) throw new Error('push() outside a shot needs camera: the element that frames the shot (give it data-camera).');
     const target = element(options.target, 'push target', camera);
     if (options.amount !== undefined && typeof options.amount === 'number' && options.amount < .04) throw new Error(`push amount ${options.amount} is under the .04 minimum: a push that small reads as a stutter, not a move. Push .04 or more, or leave the frame still.`);
     const amount = setting('push amount', options.amount, .15, .04, 1.5);
     const frames = Math.round(setting('push frames', options.frames, Math.round(fps * .8), 6, fps * 4));
     const ease = choice('push ease', options.ease, 'expo', ['expo', 'power4'] as const);
     const center = setting('push center', options.center, 1, 0, 1);
-    const at = setting('push at', options.at, 0, 0, 3600), end = at + frames * frame;
+    const at = startTime('push at', options.at), end = at + frames * frame;
     const list = pushes.get(camera) ?? [];
     pushes.set(camera, list);
     const same = list.filter(item => item.tl === tl);
@@ -227,7 +243,7 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
   let hits = 0;
   const hit = (tl: gsap.core.Timeline, options: HitOptions = {}) => {
     const target = options.target !== undefined ? element(options.target, 'hit target') : current?.el ?? root;
-    const at = setting('hit at', options.at, 0, 0, 3600);
+    const at = startTime('hit at', options.at);
     const intensity = setting('hit intensity', options.intensity, .5, 0, 1);
     const frames = Math.round(setting('hit frames', options.frames, 10, 3, 30));
     const axis = choice('hit axis', options.axis, 'both', ['x', 'y', 'both'] as const);
@@ -268,8 +284,9 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
   const travel = (t: number) => t <= 0 ? 0 : t >= 1 ? 1 : cursorEase(t < .12 ? t * t / .24 : (t - .06) / .94);
   const cursor = (tl: gsap.core.Timeline, options: CursorOptions): CursorResult => {
     if (!options || !Array.isArray(options.path) || !options.path.length) throw new Error("cursor(tl, { path }) needs a path: targets or { x, y } points, like cursor(tl, { path: [{ x: 900, y: 700 }, '.signup'], at: .4 }).");
-    const parent = options.parent !== undefined ? element(options.parent, 'cursor parent') : current?.el ?? root;
-    const at = setting('cursor at', options.at, 0, 0, 3600);
+    // Inside the camera by default, so a push carries the pointer with the UI it points at.
+    const parent = options.parent !== undefined ? element(options.parent, 'cursor parent') : current?.camera ?? root;
+    const at = startTime('cursor at', options.at);
     const pause = Math.round(setting('cursor pause', options.pause, 6, 0, 60)) * frame;
     const arc = setting('cursor arc', options.arc, .12, 0, .4);
     const size = setting('cursor size', options.size, 30, 14, 80);
@@ -283,15 +300,16 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
     const el = document.createElement('div');
     el.dataset.rvCursor = '';
     el.style.cssText = `position:absolute;left:0;top:0;width:${size}px;height:${size}px;pointer-events:none;z-index:9000;transform-origin:0 0`;
-    el.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block;overflow:visible;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))"><path d="M0 0 L0 17.5 L4.6 13.4 L7.6 20 L10.6 18.7 L7.7 12.2 L14 12.2 Z" fill="${color}" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg>`;
+    el.innerHTML = `<div data-rv-pointer style="transform-origin:0 0"><svg width="${size}" height="${size}" viewBox="0 0 24 24" style="display:block;overflow:visible;filter:drop-shadow(0 2px 3px rgba(0,0,0,.35))"><path d="M0 0 L0 17.5 L4.6 13.4 L7.6 20 L10.6 18.7 L7.7 12.2 L14 12.2 Z" fill="${color}" stroke="#111" stroke-width="1.4" stroke-linejoin="round"/></svg></div>`;
     parent.appendChild(el);
     gsap.set(el, { x: points[0].x, y: points[0].y, autoAlpha: 0 });
     tl.fromTo(el, { autoAlpha: 0 }, { autoAlpha: 1, duration: 3 * frame, ease: 'none', immediateRender: false }, at);
 
-    const arcX = channel(el, 'x'), arcY = channel(el, 'y'), press = channel(el, 'scale');
+    // The outer element travels the path; the inner pointer carries the arc and the press (separate GSAP properties).
+    const pointer = el.firstElementChild as HTMLElement;
     const arrivals: number[] = [at];
     const click = (time: number, point: { x: number; y: number }) => {
-      tl.fromTo(el, { [press]: 1 }, { [press]: .82, duration: 7 * frame, ease: envelope(t => Math.sin(Math.PI * Math.min(1, t * 1.6) ** .8)), immediateRender: false }, time);
+      tl.fromTo(pointer, { scale: 1 }, { scale: .82, duration: 7 * frame, ease: envelope(t => Math.sin(Math.PI * Math.min(1, t * 1.6) ** .8)), immediateRender: false }, time);
       const ripple = document.createElement('div'), radius = size * 1.1;
       ripple.dataset.rvRipple = '';
       ripple.style.cssText = `position:absolute;left:${point.x - radius}px;top:${point.y - radius}px;width:${radius * 2}px;height:${radius * 2}px;border-radius:50%;border:2px solid ${color};background:${color}22;pointer-events:none;z-index:8999;opacity:0`;
@@ -312,8 +330,7 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
       if (distance > 1 && arc > 0) {
         const side = dx >= 0 ? -1 : 1, bow = distance * arc;
         const shape = envelope(t => Math.sin(Math.PI * travel(t)));
-        tl.fromTo(el, { [arcX]: '0px' }, { [arcX]: `${(-dy / distance) * bow * side}px`, duration: length, ease: shape, immediateRender: false }, time)
-          .fromTo(el, { [arcY]: '0px' }, { [arcY]: `${(dx / distance) * bow * side}px`, duration: length, ease: shape, immediateRender: false }, time);
+        tl.fromTo(pointer, { x: 0, y: 0 }, { x: (-dy / distance) * bow * side, y: (dx / distance) * bow * side, duration: length, ease: shape, immediateRender: false }, time);
       }
       time += length;
       arrivals.push(round(time));

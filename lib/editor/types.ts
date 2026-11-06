@@ -240,6 +240,8 @@ export type Clip = {
 };
 /** `kind: 'section'` marks a film section's start; every other marker is a cue (placed by hand or measured from music). */
 export type TimelineMarker = { id: string; time: number; label?: string; kind?: 'section' };
+/** Scene seconds of the music beat markers on the timeline (markMusicBeats), per kind, as a scene receives them. */
+export type SceneBeats = { beats: number[]; downbeats: number[]; accents: number[] };
 export type Timeline = { audioNormalization?: NonNullable<Clip['normalizedAudio']>; clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {

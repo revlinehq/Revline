@@ -18,7 +18,8 @@ import { TextPlugin } from 'gsap/TextPlugin';
 import { assertSceneImport, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules } from './scene-modules';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 import { createTextMotion, type TextMotion } from './scene-text-motion';
-import { motionHelpers, type MotionHelpers, type SceneBeats } from './scene-motion';
+import { motionHelpers, type MotionHelpers } from './scene-motion';
+import type { SceneBeats } from './types';
 
 type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; beats?: SceneBeats | null; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
