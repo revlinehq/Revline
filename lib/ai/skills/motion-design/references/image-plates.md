@@ -1,10 +1,8 @@
 ---
 name: "image-plates"
-description: "Assets on demand: choose code, icons, traced shapes before generating subjects, textures, backgrounds and cut-outs. New films start with motion-design ideation."
+description: "Assets on demand: choose code, icons, traced shapes before generating subjects, textures, backgrounds and cut-outs."
 ---
 # Image plates
-
-For a new launch film, use motion-design page ideation. The user's accepted angle leads straight to building.
 
 During a build, use generateImage on demand for a photoreal subject, texture, background plate or transparent cut-out. The tool saves PNGs directly into project media and returns assetIds, signed assets[].url links, previews, quality and estimatedUsd (null means the provider did not report enough usage to estimate it). Each variant costs image tokens; start with one and request alternatives only when useful. Assets default to medium quality; low is cheaper for exploration. A failed call includes its actual cause; correct invalid input or unavailable access before trying again.
 
@@ -27,9 +25,5 @@ Opaque example: "Studio product photograph, 1980s industrial-design catalogue. O
 
 Cut-out example: "35mm studio close-up, documentary still-life discipline. One adult hand holding a blank ivory card, wrist entering from below, three-quarter front view, whole silhouette with generous clear margins. Natural umber, ivory and warm grey; real skin creases, matte paper, subtle grain. Broad soft side light, transparent background. No floor, backdrop, text, lettering, logos, jewelry or beauty retouching."
 
-## Bind and animate
-Read scene-engine page `films` and gsap page revline. Attach the chosen asset to addScene/addFilm or editScene as media: [{ name: 'hand', assetId: '<returned assetId>' }]. In scene HTML use an img whose src is media.hand, with explicit width/height and object-fit: contain. Keep text, shapes and backgrounds as separate scene elements.
-
-Give the plate a wrapper and animate that wrapper on the scene's GSAP timeline: translation for an entrance, rotation around the wrist or object's contact point, scale for camera framing, clip-path for a reveal, or a masked crop. Set transform-origin to the physical pivot. Animate an outer camera wrapper for a shared push or pan; animate the plate's own wrapper for independent movement. A single plate has one fixed pose: wrapper motion does not articulate fingers or change an object's viewpoint. Use a separately generated pose only for an intentional cut or replacement.
-
-All motion uses the scene clock and GSAP, so seeking, preview and export agree. Inspect rendered key beats with getFrames; for a recreation compare the composed scene with compareReference and compareMotion. Finish when the subject and its edges composite correctly and its motion matches the intended beat.
+## Bind
+Attach the chosen asset to addScene/addFilm or editScene as media: [{ name: 'hand', assetId: '<returned assetId>' }]. In scene HTML use `<img src="${media.hand}">` with explicit width/height and object-fit: contain. Keep text, shapes and backgrounds as separate scene elements.

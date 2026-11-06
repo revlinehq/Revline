@@ -11,11 +11,11 @@ tl.to(el.querySelectorAll('.item'), {
   x: (i: number) => 700 + i * 120, y: (i: number) => -260 - i * 40,
   rotation: (i: number) => 18 + i * 6,
   filter: 'blur(10px)', opacity: 0,
-  duration: .5, ease: 'power3.in',
+  duration: .28, ease: 'power2.in',
   stagger: { each: .05, from: 'end' },
 }, at);
 ```
 - **The tilt** leans into the direction of travel (moving right and up: positive rotation 10 to 25 degrees); set `transformOrigin` on the trailing edge for a toss.
 - **Blur and fade** start late in the move: split them into a second tween at `at + .2` with `power2.in` if the reference keeps the element sharp at first.
-- **Timing:** .35 to .6 s, `power3.in` or `expo.in` (slow start, fast exit). Stagger .03 to .08 s; `from: 'end'` so the last item leaves first when they pile up.
-- A fly-off that hands over to the next beat overlaps its entrance by .1 to .2 s: start the next element's fly-in before this exit ends.
+- `from: 'end'` so the last item leaves first when they pile up.
+- A fly-off that hands over to the next beat overlaps its entrance: start the next element's entrance before this exit ends.

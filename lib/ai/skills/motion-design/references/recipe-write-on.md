@@ -9,7 +9,7 @@ description: "Write-on and draw-on: strokes, spirals, underlines and signatures 
 **A stroke** (an SVG path with `fill="none"` and a stroke: a spiral, underline, arrow, a traced shape from traceShape):
 ```ts
 // built in root: <svg class="spiral" viewBox="0 0 200 200" width="320"><path d="…" fill="none" stroke="#111" stroke-width="14" stroke-linecap="round" /></svg>
-tl.fromTo(root.querySelector('.spiral path'), { drawSVG: '0%' }, { drawSVG: '100%', duration: .8, ease: 'power2.inOut' }, at);
+tl.fromTo(root.querySelector('.spiral path'), { drawSVG: '0%' }, { drawSVG: '100%', duration: .5, ease: 'power2.inOut' }, at);
 ```
 Without DrawSVG: `const len = path.getTotalLength(); gsap.set(path, { strokeDasharray: len, strokeDashoffset: len })` where the path is built, then `tl.to(path, { strokeDashoffset: 0, … }, at)`. Draw from the other end with `drawSVG: '100% 100%'` to `'0% 100%'`.
 
@@ -19,6 +19,6 @@ const { chars } = new SplitText(el, { type: 'chars' });
 tl.fromTo(chars, { clipPath: 'inset(-20% 100% -20% 0)' },
   { clipPath: 'inset(-20% 0% -20% 0)', duration: .14, ease: 'none', stagger: .09 }, at);
 ```
-- **Timing:** a stroke .5 to 1.2 s; a word written by hand .08 to .12 s per letter, each letter .1 to .18 s with `ease: 'none'` (a pen moves steadily). A spiral or circle `power2.inOut`; an underline `power3.out` .4 to .6 s.
+- Handwriting keeps `ease: 'none'` per letter: a pen moves steadily.
 - The colored newest letters some films show while writing are the typing recipe's highlight (page `recipe-typing`) layered on these chars.
 - A path's direction is its draw direction: if it draws backwards, reverse the drawSVG values instead of editing the path.

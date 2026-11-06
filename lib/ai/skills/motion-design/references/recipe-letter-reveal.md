@@ -11,13 +11,12 @@ description: "Letter-by-letter or word-by-word reveal: SplitText chars rising ou
 const { chars } = new SplitText(root.querySelector('.reveal'), { type: 'chars' });
 tl.from(chars, {
   opacity: 0, yPercent: 60, filter: 'blur(10px)',
-  duration: .5, ease: 'expo.out',
+  duration: .35, ease: 'power3.out',
   stagger: { each: .035, from: 'start' },   // onset spread = each * (chars.length - 1)
 }, at);
 ```
 
-- **Timing:** each letter .35 to .6 s; stagger .02 to .05 s per letter (a 10-letter word spells out in about .3 to .5 s). Words instead of chars: `type: 'words'`, stagger .06 to .12 s.
-- **Eases:** `expo.out` or `power3.out` (fast arrival, soft settle). `back.out(1.6)` for playful pops (use scale .6 to 1 with it).
+- Words instead of chars: `type: 'words'`.
 - **Measure it:** bracket with readFrames fps 10, refine onset with adjacent frames. For N>1, `each=(last onset-first onset)/(N-1)`; settle also includes letter duration.
 - **Variants:** from the center `from: 'center'`; letters sliding up from a line `yPercent: 100` with the element `overflow: hidden` (a mask under the baseline); a wordmark revealing behind its logo: `x: -40, opacity: 0` from the logo side.
 - Only animate transforms, opacity and short blurs: blur on 30+ letters at 1080p is costly, keep it under .5 s.

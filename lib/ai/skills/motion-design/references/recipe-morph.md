@@ -9,7 +9,7 @@ description: "Morph: one shape or UI state turning into another, with MorphSVG o
 **Shapes** (SVG paths): MorphSVG matches the points for you.
 ```ts
 // built in root: <svg ...><path id="from" d="…circle…" /><path id="to" d="…star…" style="visibility:hidden" /></svg>
-tl.to(root.querySelector('#from'), { morphSVG: '#to', duration: .6, ease: 'power3.inOut' }, at);
+tl.to(root.querySelector('#from'), { morphSVG: '#to', duration: .5, ease: 'power2.inOut' }, at);
 ```
 Use `morphSVG: { shape: '#to', type: 'rotational' }` when a twist looks wrong, and `shapeIndex` to pick where the points line up.
 
@@ -17,9 +17,8 @@ Use `morphSVG: { shape: '#to', type: 'rotational' }` when a twist looks wrong, a
 ```ts
 // el is laid out in its final state; start it at the pill's size and place
 tl.fromTo(el, { width: 220, height: 64, x: 180, y: 260, borderRadius: 32 },
-  { width: 860, height: 300, x: 0, y: 0, borderRadius: 24, duration: .7, ease: 'expo.inOut' }, at)
-  .from(el.children, { opacity: 0, y: 12, duration: .3, stagger: .05, ease: 'power2.out' }, at + .45);
+  { width: 860, height: 300, x: 0, y: 0, borderRadius: 24, duration: .5, ease: 'power2.inOut' }, at)
+  .from(el.children, { opacity: 0, y: 12, duration: .35, stagger: .05, ease: 'power3.out' }, at + .3);
 ```
 - For one <1 s panel morph, reveal children in the final 40%; keep the frame clipping them (revline).
 - Across a section boundary inside a film the morph is one tween on the film's outer `tl` running through the boundary; never two sections or clips that each do half.
-- **Timing:** .5 to .9 s; `expo.inOut` or `power3.inOut`. Contents in .2 to .35 s, staggered .04 to .06 s.
