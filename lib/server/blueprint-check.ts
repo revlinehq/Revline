@@ -2,7 +2,7 @@ import { downloadPublicHttps } from './public-https';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import puppeteer from 'puppeteer';
-import { sceneRuntimeNames, SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
+import { SCENE_RUNTIME_BUNDLES } from '../editor/scene-modules';
 import sharp from 'sharp';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/lib/media_task_contract';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -53,10 +53,8 @@ export function measure(screen: Pixels, work: Pick<Work, 'points' | 'lines'>): P
 async function render(work: Work, signal: AbortSignal) {
   if (!work.code) throw new AnalysisError('There is no code to render.', 400);
   const vendor = join(process.cwd(), 'public/vendor');
-  const scripts = await Promise.all(sceneRuntimeNames({ code: work.code }).map(async name => {
-    const code = await readFile(join(vendor, SCENE_RUNTIME_BUNDLES[name].file), 'utf8');
-    return `<script>${code.replace(/<\/script/gi, '<\\/script')}</script>`;
-  }));
+  const runtime = await readFile(join(vendor, SCENE_RUNTIME_BUNDLES.gsap.file), 'utf8');
+  const scripts = [`<script>${runtime.replace(/<\/script/gi, '<\\/script')}</script>`];
   const allIcons = JSON.parse(await readFile(join(vendor, 'lucide-icons.json'), 'utf8')) as Record<string, string>;
   const icons = Object.fromEntries([...work.code.matchAll(/['"`]([a-z0-9]+(?:-[a-z0-9]+)*)['"`]/g)].map(match => match[1]).filter(name => allIcons[name] !== undefined).map(name => [name, allIcons[name]]));
   const brand = work.brand as { fonts?: { family: string; weight: string; url: string }[]; screens?: { name: string; url: string }[] } | null;

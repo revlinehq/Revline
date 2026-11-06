@@ -5,7 +5,7 @@ import { effects } from '../../skills/effects';
 import { textStyling } from '../../skills/text-styling';
 import { colorGrading } from '../../skills/color-grading';
 import { musicAndSound } from '../../skills/music-and-sound';
-import { motionDesign } from '../../skills/motion-design';
+import { launchFilmsMotions } from '../../skills/launch-films-motions';
 import { gsapSkill } from '../../skills/gsap';
 import { sceneEngine } from '../../skills/scene-engine';
 import { referenceFootage } from '../../skills/reference-footage';
@@ -17,7 +17,7 @@ export const skills = [
   textStyling,
   colorGrading,
   musicAndSound,
-  motionDesign,
+  launchFilmsMotions,
   gsapSkill,
   sceneEngine,
   referenceFootage,

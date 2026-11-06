@@ -16,15 +16,15 @@ const checklistPage: EditorSkillPage = {
   body: skillText("scene-engine/references/checklist.md"),
 };
 
-const reactScenesPage: EditorSkillPage = {
-  name: skillDocument("scene-engine/references/react-scenes.md").name,
-  description: skillDocument("scene-engine/references/react-scenes.md").description,
-  body: skillText("scene-engine/references/react-scenes.md"),
+const filmsPage: EditorSkillPage = {
+  name: skillDocument("scene-engine/references/films.md").name,
+  description: skillDocument("scene-engine/references/films.md").description,
+  body: skillText("scene-engine/references/films.md"),
 };
 
 export const sceneEngine: EditorSkill = {
   name: skillDocument("scene-engine/SKILL.md").name,
   description: skillDocument("scene-engine/SKILL.md").description,
   body: skillText("scene-engine/SKILL.md", [SCENE_GSAP_PLUGINS.join(', '), SCENE_FONT_FAMILIES.join(', '), STARTER_SCENE_CODE]),
-  pages: [editLanesPage, reactScenesPage, checklistPage],
+  pages: [editLanesPage, filmsPage, checklistPage],
 };

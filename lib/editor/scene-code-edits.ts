@@ -1,5 +1,4 @@
 import { declarations, filmSections, filmTimeAt, markerSection, reach } from './approvals';
-import { FILM_KIT } from './scene-kit';
 import { diffArrays } from 'diff';
 import { closestCodeLines, sceneSnippetMatches, type SceneEdit } from './scene-film';
 import type { Clip, Timeline } from './types';
@@ -7,15 +6,12 @@ import type { Clip, Timeline } from './types';
 export type CodeLines = { start: number; end: number };
 export type SceneLineEdit = { lines: CodeLines; replace: string; insert?: 'before' | 'after' };
 type Span = { from: number; to: number };
-type CodeSelection = { section?: string; lines?: CodeLines; kit?: boolean };
+type CodeSelection = { section?: string; lines?: CodeLines };
 export type CodeSearch = { query: string; regex?: boolean; caseSensitive?: boolean; startLine?: number; limit?: number };
 
-export function sceneCodeSource(clip: Clip, kit?: boolean) {
+export function sceneCodeSource(clip: Clip) {
   if (clip.kind !== 'scene' || !clip.scene) throw new Error('Choose a scene clip.');
-  if (!kit) return clip.scene.code;
-  const code = clip.scene.blueprints?.find(item => item.name.toLowerCase() === FILM_KIT)?.code;
-  if (code === undefined) throw new Error('This scene has no film kit; leave kit out to read its code.');
-  return code;
+  return clip.scene.code;
 }
 
 const lineAt = (code: string, offset: number) => code.slice(0, offset).split('\n').length;
@@ -45,10 +41,10 @@ function readLines(code: string, lines: CodeLines) {
   return { start: Math.max(1, Math.min(last, lines.start)), end: Math.max(1, Math.min(last, lines.end)) };
 }
 
-/** Timeline markers name sections; their timed Beats reach the code each section uses. */
-function sections(timeline: Timeline, clip: Clip, code: string, kit?: boolean) {
+/** Timeline markers name sections; their timed section() calls reach the code each section uses. */
+function sections(timeline: Timeline, clip: Clip, code: string) {
   const scene = clip.scene;
-  if (!scene || kit) return [];
+  if (!scene) return [];
   const beats = filmSections(scene), bodies = declarations(code);
   return (timeline.markers ?? []).filter(marker => marker.time >= clip.start && marker.time < clip.start + clip.duration).map(marker => {
     const range = markerSection(timeline, clip, marker.id), start = filmTimeAt(clip, range.start), end = filmTimeAt(clip, range.end);
@@ -65,17 +61,16 @@ function sections(timeline: Timeline, clip: Clip, code: string, kit?: boolean) {
 }
 
 function selection(timeline: Timeline, clip: Clip, options: CodeSelection) {
-  const code = sceneCodeSource(clip, options.kit), named = sections(timeline, clip, code, options.kit);
-  if (options.section && options.kit) throw new Error('The film kit is shared across sections. Read or patch kit lines without section.');
+  const code = sceneCodeSource(clip), named = sections(timeline, clip, code);
   const wanted = options.section?.trim().toLowerCase();
   const matches = wanted ? named.filter(item => item.id === options.section || item.label.trim().toLowerCase() === wanted) : [];
   if (wanted && matches.length !== 1) throw new Error(`${matches.length ? 'Ambiguous' : 'Unknown'} section "${options.section}". Sections: ${named.map(item => `"${item.label}" (${item.id})`).join(', ') || 'none; use whole-scene line ranges'}. Nothing was changed.`);
   const section = matches[0];
   const spans = section?.spans.length ? section.spans : [{ from: 0, to: code.length }];
   const warnings: string[] = [];
-  if (section && !section.spans.length) warnings.push('This marker has no Beat with literal timing that identifies its code. Falling back to whole-scene line ranges; edits can affect other sections and their transitions.');
-  else if (section && named.some(other => other !== section && other.spans.some(span => spans.some(owned => intersects(span, owned))))) warnings.push('Some returned code is shared with other sections, including any Beat spanning a boundary. Changes to it can affect their transitions.');
-  if (named.some(item => !item.spans.length && item !== section)) warnings.push('Some section markers have no Beat with literal timing, so their code ownership cannot be isolated. Edits may affect those sections and their transitions; inspect both sides of their boundaries.');
+  if (section && !section.spans.length) warnings.push('This marker has no section() call with literal timing that identifies its code. Falling back to whole-scene line ranges; edits can affect other sections and their transitions.');
+  else if (section && named.some(other => other !== section && other.spans.some(span => spans.some(owned => intersects(span, owned))))) warnings.push('Some returned code is shared with other sections, including any section() spanning a boundary. Changes to it can affect their transitions.');
+  if (named.some(item => !item.spans.length && item !== section)) warnings.push('Some section markers have no section() call with literal timing, so their code ownership cannot be isolated. Edits may affect those sections and their transitions; inspect both sides of their boundaries.');
   return { code, named, section, spans, warnings };
 }
 
@@ -93,7 +88,7 @@ export function inspectSceneCode(timeline: Timeline, clip: Clip, options: CodeSe
   if (!ranges.length) warnings.push('The requested lines do not intersect this section. Omit lines to read its code blocks.');
   const blocks = mergeSpans(ranges.map(range => ({ from: range.start, to: range.end }))).map(span => block(code, { start: span.from, end: span.to }));
   return {
-    target: options.kit ? 'kit' : 'scene', totalLines: code.split('\n').length,
+    totalLines: code.split('\n').length,
     ...(lines ? { requestedLines: options.lines, lines, clamped: lines.start !== options.lines!.start || lines.end !== options.lines!.end } : {}),
     ...(section ? { section: section.label } : {}), blocks,
     sections: named.map(({ spans: owned, ...item }) => ({ ...item, blocks: owned.map(span => ({ startLine: spanLines(code, span).start, endLine: spanLines(code, span).end })) })),
@@ -122,18 +117,18 @@ export function searchSceneCode(timeline: Timeline, clip: Clip, options: CodeSel
     const from = Math.max(0, column - 160);
     matches.push({ line, column: column + 1, text: text.slice(from, column + 440), textStartColumn: from + 1 });
   }
-  return { target: options.kit ? 'kit' : 'scene', totalLines: rows.length, ...(lines ? { requestedLines: options.lines, lines, clamped: lines.start !== options.lines!.start || lines.end !== options.lines!.end } : {}), ...(section ? { section: section.label } : {}), search, matches, ...(nextStartLine ? { nextStartLine } : {}), warnings,
+  return { totalLines: rows.length, ...(lines ? { requestedLines: options.lines, lines, clamped: lines.start !== options.lines!.start || lines.end !== options.lines!.end } : {}), ...(section ? { section: section.label } : {}), search, matches, ...(nextStartLine ? { nextStartLine } : {}), warnings,
     note: 'One result per matching line, with its first matching column. Lines and columns are absolute and 1-based. Text is a bounded preview; use inspectClip lines for exact code before patching. Continue with search.startLine = nextStartLine when present.' };
 }
 
 /** New scoped calls preserve legacy snippet semantics, or replace nonoverlapping snapshot line ranges. */
-export function patchSceneCode(timeline: Timeline, clip: Clip, edits: (SceneEdit | SceneLineEdit)[], options: Pick<CodeSelection, 'section' | 'kit'>) {
+export function patchSceneCode(timeline: Timeline, clip: Clip, edits: (SceneEdit | SceneLineEdit)[], options: Pick<CodeSelection, 'section'>) {
   const initial = selection(timeline, clip, options), warnings = new Set(initial.warnings);
   const warn = (code: string, spans: Span[]) => {
-    const named = sections(timeline, { ...clip, scene: clip.scene ? { ...clip.scene, code } : undefined }, code, options.kit);
+    const named = sections(timeline, { ...clip, scene: clip.scene ? { ...clip.scene, code } : undefined }, code);
     const touched = named.filter(section => section.spans.some(span => spans.some(edit => intersects(span, edit))));
     const covered = mergeSpans(named.flatMap(section => section.spans));
-    if (options.kit || touched.length > 1 || (named.length && spans.some(span => !covered.some(owner => contains(owner, span))))) warnings.add(`This edit touches shared code or section boundaries${touched.length ? ` (${touched.map(section => section.label).join(', ')})` : ''}. It can change a transition spanning sections. Keep its tween on the shared timeline and inspect frames on both sides of each affected boundary.`);
+    if (touched.length > 1 || (named.length && spans.some(span => !covered.some(owner => contains(owner, span))))) warnings.add(`This edit touches shared code or section boundaries${touched.length ? ` (${touched.map(section => section.label).join(', ')})` : ''}. It can change a transition spanning sections. Keep its tween on the shared timeline and inspect frames on both sides of each affected boundary.`);
   };
   const lineEdits = edits.filter((edit): edit is SceneLineEdit => 'lines' in edit);
   if (lineEdits.length) {
@@ -156,7 +151,7 @@ export function patchSceneCode(timeline: Timeline, clip: Clip, edits: (SceneEdit
   let code = initial.code;
   for (const [index, edit] of edits.entries()) {
     if (!('find' in edit)) continue;
-    const currentClip = { ...clip, scene: clip.scene ? options.kit ? { ...clip.scene, blueprints: clip.scene.blueprints?.map(item => item.name.toLowerCase() === FILM_KIT ? { ...item, code } : item) } : { ...clip.scene, code } : undefined };
+    const currentClip = { ...clip, scene: clip.scene ? { ...clip.scene, code } : undefined };
     const current = selection(timeline, currentClip, options), matches = sceneSnippetMatches(code, edit.find, current.spans);
     if (!matches.length) throw new Error(`Edit ${index + 1}: the snippet was not found inside the selected code. Nothing was changed.${closestCodeLines(code, edit.find, 1, current.spans.map(span => spanLines(code, span)))}${index ? '\nLine numbers include preceding edits in this failed call. Inspect the saved code before retrying.' : ''}`);
     if (matches.length > 1 && !edit.all) throw new Error(`Edit ${index + 1}: the snippet appears ${matches.length} times inside the selected code. Add context or set all: true. Nothing was changed.`);

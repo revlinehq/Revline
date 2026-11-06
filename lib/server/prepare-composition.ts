@@ -1,5 +1,4 @@
 import { downloadPublicHttps } from './public-https';
-import { prepareSceneThreeResources } from './scene-three-resources';
 import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-files';
 import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
 import { resolvedAudioTimeline } from '../editor/audio-normalization';
@@ -87,17 +86,12 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     assetUrls[asset._id]=url;
     if(offset!==undefined)audioSourceOffsets[asset._id]=offset;
   }
-  Object.assign(assetUrls, await prepareSceneThreeResources(directory, timeline, signal));
   await preparePixelTrackFiles(directory, { ...timeline, clips: [...timeline.clips, ...referenceTimelines.flatMap(reference => reference.clips)] }, convexUrl, signal);
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
   if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
   const scenes = [timeline, ...referenceTimelines].flatMap(source => sceneLayerSources(source));
-  const runtimes = new Set(scenes.flatMap(scene => scene.runtimes));
-  for (const name of runtimes) {
-    const file = SCENE_RUNTIME_BUNDLES[name].file;
-    await copyFile(join(process.cwd(), 'public/vendor', file), join(directory, file));
-  }
+  if (scenes.length) await copyFile(join(process.cwd(), 'public/vendor', SCENE_RUNTIME_BUNDLES.gsap.file), join(directory, SCENE_RUNTIME_BUNDLES.gsap.file));
   if (scenes.length) await copyFile(join(process.cwd(), 'public/vendor/lucide-icons.json'), join(directory, 'lucide-icons.json'));
   for(const font of TEXT_FONTS)await copyFile(join(process.cwd(),'public/fonts',font.fileName),join(directory,font.fileName));
   // Brand-kit fonts and screens render from local copies, like media: the renderer never depends on the network.

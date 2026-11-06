@@ -105,7 +105,7 @@ export const PROJECT_BASE_TOOLS = [
 
 /** Tools disclosed by reading or loading a supporting skill. */
 export const SKILL_TOOLS: Record<string, readonly string[]> = {
-  'motion-design': motionTools,
+  'launch-films-motions': motionTools,
   'scene-engine': motionTools,
   'gsap': motionTools,
   'reference-footage': recreateTools,

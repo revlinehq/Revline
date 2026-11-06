@@ -4,7 +4,7 @@ description: "Official GSAP skill for GSAP plugins — registration, ScrollToPlu
 ---
 # GSAP Plugins
 
-Revline: add tweens to the supplied paused `tl` inside useTimeline/scene; the engine seeks it.
+Revline: add tweens to the supplied paused `tl` (or a section's timeline); the engine seeks it.
 
 
 Import allowed plugins from `gsap/<Name>`; Revline registers them already. No token, private registry or membership is required.
@@ -13,7 +13,7 @@ Import allowed plugins from `gsap/<Name>`; Revline registers them already. No to
 
 ### SplitText
 
-Splits an element’s text into characters, words, and/or lines (each in its own element) for staggered or per-unit animation. Use when animating text character-by-character, word-by-word, or line-by-line. Returns an instance with **chars**, **words**, **lines** (and **masks** when `mask` is set). Restore markup with **revert()** on teardown; useTimeline supplies context cleanup. API: **SplitText.create(target, vars)** (target = selector, element, or array).
+Splits an element’s text into characters, words, and/or lines (each in its own element) for staggered or per-unit animation. Use when animating text character-by-character, word-by-word, or line-by-line. Returns an instance with **chars**, **words**, **lines** (and **masks** when `mask` is set). Split once while the scene is built; the engine seeks the timeline, so no teardown is needed. API: **SplitText.create(target, vars)** (target = selector, element, or array).
 
 ```javascript
 gsap.registerPlugin(SplitText);

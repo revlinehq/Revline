@@ -1,12 +1,12 @@
 ---
 name: "reference-footage"
-description: "The user shares a video to remake or to take style from (an edit, a motivation video, anything; recreating a launch or motion film is motion-design) and points at parts of it (\"this transition, this title, this pacing\"). Read before analyzing a reference, before a remake, and before borrowing any part of one."
+description: "The user shares a video to remake or to take style from (an edit, a motivation video, anything; recreating a launch or motion film is launch-films-motions) and points at parts of it (\"this transition, this title, this pacing\"). Read before analyzing a reference, before a remake, and before borrowing any part of one."
 ---
 # Reference footage
 
 The user shares a finished video and wants either a **remake** (the same edit made with their own material) or a **style borrow** (one or more parts of it applied to their edit).
 
-For original work inspired by a reference, follow motion-design "A style reference": borrow the reasons behind its choices, never its imagery, layout or timing.
+For original work inspired by a reference, follow launch-films-motions "A style reference": borrow the reasons behind its choices, never its imagery, layout or timing.
 
 ## 1. Break it down
 - Run analyzeMedia with mode reference on the shared video. It measures the cuts and beats, then splits every shot into parts: transition in, camera, look, the screen's parts (background, footage, ui, title, caption, logo, product, person, cursor, shape, emoji, overlay) and title styles. It also writes the five-line style direction and the signatures (the moves that define the style).
@@ -22,7 +22,7 @@ The chat shows the breakdown as a card where the user can click shots and parts 
 Then ask, only if the message did not already say: remake it, or borrow which parts?
 
 ## 3. Remake or borrow
-- **Remake:** load the page for the genre: `social-edit` or `motivation`; for ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit). For a launch or motion film, load this skill's `recreation` page and motion-design. For a footage edit, say what comes from the reference and what comes from the user's material. If it needs material the project does not have, list it per shot and ask before building.
+- **Remake:** load the page for the genre: `social-edit` or `motivation`; for ad, music-video, vlog or tutorial use the closest one (an ad of footage is social-edit). For a launch or motion film, load this skill's `recreation` page and launch-films-motions. For a footage edit, say what comes from the reference and what comes from the user's material. If it needs material the project does not have, list it per shot and ask before building.
 - **Borrow:** load `borrow`. Change only the named parts.
 
 ## Rules

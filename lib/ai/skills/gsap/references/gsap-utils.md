@@ -4,7 +4,7 @@ description: "Official GSAP skill for gsap.utils — clamp, mapRange, normalize,
 ---
 # gsap.utils
 
-Revline: add tweens to the supplied paused `tl` inside useTimeline/scene; the engine seeks it.
+Revline: add tweens to the supplied paused `tl` (or a section's timeline); the engine seeks it.
 
 
 ## Overview
@@ -210,7 +210,7 @@ gsap.utils.splitColor("#6fb936", true);          // [94, 55, 47] (HSL: hue, satu
 
 ### selector(scope)
 
-Returns a scoped selector function that finds elements only within the given element (or ref). Use in components so selectors like `".box"` match only descendants of that component, not the whole document. Accepts a DOM element or a ref (e.g. React ref; handles `.current`).
+Returns a scoped selector function that finds elements only within the given element (or ref). Use it so selectors like `".box"` match only descendants of one part of the scene, not the whole document. Accepts a DOM element.
 
 ```javascript
 const q = gsap.utils.selector(containerRef);

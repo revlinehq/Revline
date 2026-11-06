@@ -24,14 +24,6 @@ await build({ entryPoints: ['lib/editor/visual-effects-runtime.ts'], outfile: 'p
 }
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 
-// Build every advertised scene runtime from the shared import registry.
-for (const [name, bundle] of Object.entries(SCENE_RUNTIME_BUNDLES)) {
-  await build({ entryPoints: [bundle.entry], outfile: join('public/vendor', bundle.file), bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: bundle.global, jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked',
-    plugins: name !== 'three' ? [] : [{ name: 'scene-shared-react', setup(build) {
-      build.onResolve({ filter: /^(react|react\/jsx-runtime)$/ }, args => ({ path: args.path, namespace: 'shared-react' }));
-      build.onLoad({ filter: /.*/, namespace: 'shared-react' }, args => ({ contents: `module.exports = window[${JSON.stringify(SCENE_RUNTIME_BUNDLES.react.global)}].modules[${JSON.stringify(args.path)}];` }));
-      build.onResolve({ filter: /^\.\/scene-react-runtime$/ }, () => ({ path: 'bridge', namespace: 'shared-scene' }));
-      build.onLoad({ filter: /.*/, namespace: 'shared-scene' }, () => ({ contents: `module.exports = window[${JSON.stringify(SCENE_RUNTIME_BUNDLES.react.global)}].rendererBridge;` }));
-    } }],
-  });
-}
+// Build the scene runtime from the shared import registry.
+const sceneRuntime = SCENE_RUNTIME_BUNDLES.gsap;
+await build({ entryPoints: [sceneRuntime.entry], outfile: join('public/vendor', sceneRuntime.file), bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: sceneRuntime.global, define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });

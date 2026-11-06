@@ -2,7 +2,7 @@
 
 Readme update - WIP
 
-Revline is open source general agentic video editor, ask AI to turn your rough cut into fully made video, or create motion-design for a startup with React + GSAP 
+Revline is open source general agentic video editor, ask AI to turn your rough cut into fully made video, or create motion-design for a startup with plain HTML + GSAP 
 
 Using Claude Code, Codex, Cursor, or another coding agent? Connect MCP, it will use our existing harness to make edits.
 

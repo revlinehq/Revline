@@ -1,6 +1,6 @@
 import { skillText, skillDocument } from './documents';
 import type { EditorSkill, EditorSkillPage } from './types';
-import { imagePlatesPage } from './motion-design/image-plates';
+import { imagePlatesPage } from './launch-films-motions/image-plates';
 
 const recreation: EditorSkillPage = {
   name: skillDocument("reference-footage/references/recreation.md").name,
