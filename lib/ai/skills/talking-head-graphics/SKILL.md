@@ -35,7 +35,7 @@ A good result reads like a technical drawing that builds itself next to the spea
 | --- | --- |
 | Isometric block | top, front and side faces as separate paths, stroke 2.5, stroke-linejoin round |
 | Hatching | on one face only: an SVG pattern of 45 degree lines, 9 to 10 px apart, stroke width 1 |
-| Accent edge | one edge, for example the block's base, stroke 3 |
+| Accent edge | one edge or line per graphic, for example the block's base, stroke 3 |
 | Support posts | stroke 2, from the upper block down to the lower one |
 | Dimension line | a thin line with end ticks (M x y H x2 plus short verticals), stroke 1.5, a small note below it |
 | Chart | axes stroke 1.5; values as 3 px round-capped lines; a small white dot (r 4 to 5) riding the line as it draws; an end label in mono |
@@ -63,7 +63,6 @@ A good result reads like a technical drawing that builds itself next to the spea
 
 ## Rules
 - Explicit user direction and measured literal references override the house defaults; confirmed brand fonts and colors override the remaining defaults. Why: copying a reference and inventing a film require different choices.
-- One accent per graphic, on one edge or line.
 - Keep diagram strokes flat, without glows. A requested grain gradient behind the diagram is allowed, and the footage legibility gradient is exempt.
 - No background grids or grid lines: they are clutter.
 - No scan lines or bright purple fills; block faces are never solid color.
@@ -71,9 +70,17 @@ A good result reads like a technical drawing that builds itself next to the spea
 - No headings or kickers, and never repeat the spoken words as titles on the graphic: they are already in the captions. Labels sit inside a block or at a line's end.
 - The speaker stays clear: graphics take the half of a split screen or the lower third, never cover the face.
 - One graphic at a time; the previous one leaves before the next idea starts.
-- Panels change by wiping or sliding, never by fading everything out.
+- Panels never change by fading everything out.
 - Let a completed graphic hold for recognition. Move a dot or count a value when it communicates change; avoid decorative drift.
 - Captions move out of the graphic's way (they ride with the layout when a split screen opens or closes) instead of being covered.
+
+## Example
+The speaker says "GeForce carries CUDA" from 12.0 to 13.4 s, with the graphic in the lower third:
+- 12.0 s, "GeForce": the base block wipes in left to right (0.65 s, power3.inOut) while its accent base edge draws on; its label wipes in inside it.
+- 12.6 s, "carries": the support posts draw on and the CUDA block drops in from 38 px above (0.8 s, power3.out).
+- 13.4 s, "CUDA": its label wipes in, then the dimension line draws on. The graphic holds until the next idea; the captions stay centered below it.
+
+Page `example` has this as a complete scene module.
 
 ## Pages
 - `example`: a complete stacked isometric diagram scene module, plus how to draw charts, bars, counters and structures the same way.

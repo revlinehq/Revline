@@ -8,7 +8,7 @@ A good background is light, quiet and built for this film: one base, at most one
 
 The user's explicit direction and a measured recreation override this page. The limits under Rules still apply unless the user explicitly overrides a limit too.
 
-Contents: Workflow; Defaults (colors, base, structure, accent, shadows); Rules (letting the user pick, color, every layer does a job, shadows, banned, check before handback); Calibration.
+Contents: Workflow; Defaults (colors, base, structure, accent, shadows); Rules (letting the user pick, color, every layer does a job, shadows, banned, check before handback).
 
 ## Workflow
 1. Read the kit with getBrandKit and derive the colors (Defaults, Colors). With no kit, use the example column.
@@ -29,7 +29,6 @@ Contents: Workflow; Defaults (colors, base, structure, accent, shadows); Rules (
 | Bloom | mix(base, accent, 0.18–0.22) | ≈ #DDD3F7 |
 | Tinted canvas | mix(#FFFFFF, accent, 0.10–0.14), then pull 4% toward grey | ≈ #E7E3F4 |
 | Grid lines / dots | base darkened 6–8% (lines), 12–15% (dots) | #ECECEC lines, #D9D9D9 dots |
-| Accent word | Accent darkened 8–12% on a light base | #6D3FD0 |
 
 ### Layer 1: base (exactly one)
 Use warm paper #F7F5F1. Switch only when a row below fits better.
@@ -71,11 +70,12 @@ Use none, or a bloom when the focal point needs lifting. Switch to another row w
 ## Rules
 
 ### Letting the user pick
-Before the first addFilm, when the request, the brief and any reference video set no look:
-1. previewBackgrounds with the film's real headline and 3–5 candidates. Each pair differs in at least one layer (base, structure or accent). One candidate follows a "Very good" line of the Calibration exactly. At most one uses a dark base, and only for an end-card or punch-beat film. Give each a 2–5 word label and a one-line note on what it suits.
-2. askUser in the same turn with one option per candidate, in order: its label, its note as description, and background set to its number (1–5), which shows its HTML preview in the card. End the turn.
-3. Build from the pick. Save its returned line with updateBrief (rule: the line; userWords: what the user said); the tool never writes the brief itself.
-4. On feedback such as "2 but warmer" or "1 with a grid", preview 3 variations of that candidate that change only the named layer (warmer: base #F7F5F1 → #F5F0E8 → #F2EBDF), then ask again. Build only once a pick lands.
+Before the first addFilm, when the request, the brief and any reference video set no look, preview 3–5 candidates with previewBackgrounds and let the user pick (its description gives the askUser step):
+- Each pair differs in at least one layer (base, structure or accent).
+- At most one uses a dark base, and only for an end-card or punch-beat film.
+- Give each a 2–5 word label and a one-line note on what it suits.
+- Save the pick's returned line with updateBrief (rule: the line; userWords: what the user said); the tool never writes the brief itself.
+- On feedback such as "2 but warmer" or "1 with a grid", preview 3 variations of that candidate that change only the named layer (warmer: base #F7F5F1 → #F5F0E8 → #F2EBDF), then ask again. Build only once a pick lands.
 
 Skip the preview when the user named a look, the brief already holds a background line, or the film recreates a reference.
 
@@ -84,8 +84,8 @@ Skip the preview when the user named a look, the brief already holds a backgroun
 - When the user asks for a color ("make it orange", "go dark"), replace only that role and recompute the roles derived from it; keep every limit.
 - The body of a launch film is light: a base between #F7F5F1 and #FFFFFF, near-black ink and one saturated accent.
 - Dark is for the end card or one punch beat, never the body. Dark product UI sits on the light base as an object.
-- The accent color appears in one layer, plus at most one word per line of text.
-- Grid contrast stays under 8% against the base (measureFrame both colors). A grid that reads as a pattern from across the room is too strong.
+- The accent color appears in one layer. Headlines use the ink color.
+- A grid that reads as a pattern from across the room is too strong; the check below measures it.
 
 ### Every layer does a job
 - A grid builds itself, carries the focal box, or gives the camera something to travel over.
@@ -98,24 +98,15 @@ Skip the preview when the user named a look, the brief already holds a backgroun
 
 ### Shadows
 - No shadows on text over a light base.
-- Dark UI objects use the soft card shadow, never a black halo.
 
 ### Banned
 - Full-frame mesh or multi-stop gradients.
-- Film grain on a dark canvas, or a dark body for a launch film.
+- Film grain on a dark canvas.
 - Neon, glowing orbs, blue-tinted darks (#1D202A style), heavy black drop shadows.
 - A solid fill in the bright brand accent on a card, pill or the whole frame.
 
 ### Check before handback
 getFrames on two body beats and the end card, then measureFrame the base in an empty corner of each. Fail and fix when:
 - a body beat's base is darker than #E0E0E0 (unless the user asked for dark),
-- grid or dot contrast against the base is above 8%,
+- grid or dot contrast against the base is above 8% (measureFrame both colors),
 - the accent covers more than about 15% of a frame outside a pixel build in progress.
-
-## Calibration: the user's ratings (2026-11-05)
-Evidence of taste, not templates. Build new combinations from the layers.
-- Very good: warm paper + bloom; cool flat white; white cell grid with the headline on a cell; dark end card #07060B with corner accent glows and a 10 px white dot grid at 8%.
-- Good: grid + accent crosshairs; flat tinted canvas; paper with a pixel dissolve at the edges; rising pixel bars from the bottom edge.
-- Not bad: pixel field behind a pill headline; dot grid; perspective floor; grid + pixel bleed; cool grid + bloom.
-- Rejected: dark film-grain gradients (warm grain, graphite, plum, sage, ash, sand, clay, mesh blends) as film bodies: muddy and unlike every saved launch film. A dark-bodied launch film was rejected with "background is terrible".
-- Measured: every saved launch film (rerun, krea, allophone, firecrawl, shipper, juampitech) uses a base between #F7F5F1 and #FFFFFF with near-black ink and one saturated accent.

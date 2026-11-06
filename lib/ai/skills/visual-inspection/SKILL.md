@@ -58,7 +58,6 @@ This covers "remove the awkward moments", "cut where I look away", "clean up the
 - If the awkward moment happens while the speaker is talking, cut the whole sentence or phrase, or leave it and say so. Do not cut words out of a sentence to hide a glance.
 
 ## Long clips
-- The reel lane keeps the sparse overview and proposed-join sequences above.
 - Other workflows confirm only the momentsOnly candidates; never page the entire clip at 10 fps.
 - Use inspectVideo only when the user asks about something that must be heard (laughing, a cough, a phone ringing) or for a search by meaning across a long clip.
 - inspectFrames is not needed when readFrames can show the frames.
@@ -66,5 +65,12 @@ This covers "remove the awkward moments", "cut where I look away", "clean up the
 ## Rules
 - Only cut what the user asked about. "Clean it up" with no visual words is a speech cleanup (cleanSpeech), not this skill.
 - An explicit transcript-only request skips visual inspection.
-- A quiet pause alone is not an awkward moment, and a map moment alone is not one either: confirm with frames.
+- A quiet pause alone is not an awkward moment.
 - If the frames leave it unclear, keep the footage and say what was uncertain. Never claim a moment was removed that was not seen.
+
+## Example
+"Cut where I look away" on a 2-minute vlog, outside the reel lane:
+1. readFrames momentsOnly:true finds small motion in the face region at 0:12 and 0:31.
+2. readFrames fps 10 from 0:11.5 to 0:13.5: the head drops to read notes from 0:12.2 to 0:13.1, during a pause. At 0:31 it is a nod.
+3. The cut runs 0:12.2 to 0:13.1, widened to the word boundaries around the pause, applied with cleanSpeech keep.
+4. Reply: "Removed 0:12, looked down at notes (0.9 s). Looked at 0:31, a nod, and kept it."

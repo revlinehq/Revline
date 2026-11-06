@@ -29,13 +29,20 @@ Each short lives in its own titled tab of one shared project, keeps the source f
 | QA | finishClipping's inline data checks only |
 
 ## Rules
-- Change framing, aspect or loudness only when the user asks.
-- Never normalize audio automatically, for any kind of source, gaming and action included.
+- Change framing, aspect or loudness only when the user asks, for every kind of source, gaming and action included.
 - Heavy QA is optional for every kind of clipping: use checkClip only for the user's stated concern.
 - Do not run checkPacing, 10 fps windows or getFrames sweeps on finished shorts.
 - Never claim a skipped check passed or that an unsupported action was observed.
 - Finding moments alone is an inspection request: return the ranked candidates without changing timelines.
-- A small follow-up edit to a finished short (caption, trim, style) starts with writing-scenes page edit-lanes and uses its quick lane where it applies; do not repeat whole-source discovery for it.
+- A small follow-up edit to a finished short (caption, trim, style) starts with writing-scenes page edit-lanes and uses its local checks where they apply; do not repeat whole-source discovery for it.
+
+## Example
+"Clip this" on a 45-minute podcast:
+- Speech-led, so the moments come from the saved transcript with no video judging.
+- 14 candidates score 65 or higher. The count is min(10, 14, max(3, round(2700 / 150) = 18)) = 10 shorts.
+- planClips accepts those 10 and drops every other returned candidate with a reason ("same payoff as H3", "needs prior context").
+- Each short gets its own titled tab starting at 0, in the source framing with the original audio.
+- finishClipping, then finish. No export until the user asks.
 
 ## Pages
 - moments: discover, rank and register candidates; choose clean 15–60 s boundaries.

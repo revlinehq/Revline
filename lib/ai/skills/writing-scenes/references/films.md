@@ -24,11 +24,11 @@ A good film module builds its whole DOM once, keeps each section's motion inside
 - `section(name, start, duration, build)` places a child timeline on the film timeline at `start` and passes it to `build`.
 - Positions inside it are section-local seconds (0 = section start). The runtime throws if a section's moves run past its `duration`.
 - `start` and `duration` are number literals: the engine reads them from the source text.
-- Camera elements carry `data-camera` or have "cam" in their selector, variable or id; only they may move for more than 1 s.
+- Camera elements carry `data-camera` or have "cam" in their selector, variable or id: that is how finish tells the camera, the only element allowed moves over 1 s, from the rest.
 - Keep each section's look in its own call and helpers, so shared edits stay rare.
 
 ### Long films
-- Keep every call under about 60,000 characters of code.
+- Write a long film in parts as addFilm describes: a marker comment, builtThrough, then patchScene insert for each later part.
 - A later part that needs new elements creates them inside its own `section(...)` call (appending to the stage), so the shared code stays untouched.
 - Never retype what is already there.
 

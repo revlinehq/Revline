@@ -28,7 +28,6 @@ export type BackgroundRecipe = {
   base: string;
   ink: string;
   accent: string;
-  accentWord: string;
   structure: { kind: typeof BACKGROUND_STRUCTURES[number]; spacing: number; color: string; marks?: string } | null;
   layer: { kind: typeof BACKGROUND_ACCENTS[number]; color: string; strong?: string; at: string } | null;
   line: string;
@@ -80,7 +79,6 @@ export function resolveCandidate(candidate: BackgroundCandidate, roles: KitRoles
   const given = (value: string | undefined, role: string) => { if (value === undefined) return undefined; const hex = toHex(value); if (!hex) throw new Error(`${candidate.label}: ${role} must be a hex color.`); return hex; };
   const ink = given(candidate.ink, 'ink') ?? (darkBase ? (roles.background && light(roles.background) ? roles.background : FALLBACK.lightInk) : (roles.foreground && dark(roles.foreground) ? roles.foreground : FALLBACK.ink));
   const accent = roles.accent ?? FALLBACK.accent;
-  const accentWord = darkBase ? accent : mix(accent, '#000000', 0.1);
   // Lines and dots step away from the base: darker on a light base, lighter on a dark one.
   const step = (t: number) => mix(base, darkBase ? '#FFFFFF' : '#000000', t);
   const structure = candidate.structure ? (() => {
@@ -100,10 +98,9 @@ export function resolveCandidate(candidate: BackgroundCandidate, roles: KitRoles
     `Base ${NAMED_BASES[base] ? `${NAMED_BASES[base]} ` : ''}${base}`, `ink ${ink}`,
     structure ? `structure ${words[structure.kind]} every ${structure.spacing} px in ${structure.color}${structure.marks ? `, marks ${structure.marks}` : ''}` : 'structure none',
     layer ? `accent ${words[layer.kind]} ${layer.color}${layer.strong ? ` (one cell ${layer.strong})` : ''} at ${layer.at}` : 'accent none',
-    `accent word ${accentWord}`,
   ].join(', ') + '.';
   const warnings = luminance(base) < luminance('#E0E0E0') ? ['Base darker than #E0E0E0: the backgrounds page allows it for the end card or one punch beat, or when the user asked for dark.'] : [];
-  return { label: candidate.label, ...(candidate.note ? { note: candidate.note } : {}), base, ink, accent, accentWord, structure, layer, line, ...(warnings.length ? { warnings } : {}) };
+  return { label: candidate.label, ...(candidate.note ? { note: candidate.note } : {}), base, ink, accent, structure, layer, line, ...(warnings.length ? { warnings } : {}) };
 }
 
 // Tiles are drawn in the frame's 1920 x 1080 space and scale with the tile through container units.
@@ -142,11 +139,10 @@ function tile(board: BackgroundBoard, recipe: BackgroundRecipe, index: number, c
   }
   if (A?.kind === 'pixelField' || A?.kind === 'pixelBleed') layers.push(`<canvas class="l" data-k="${A.kind}" data-c="${A.color}" data-at="${A.at}" data-s="${seed(recipe.label)}" data-w="${Math.round(textWidth)}" data-h="${Math.round(textHeight)}"></canvas>`);
   if (box) layers.push(`<div class="c" style="${at(box.x, box.y, box.w, box.h)};background:${recipe.base};box-shadow:0 0 0 ${hair(1)} ${S!.color}">${S!.marks ? ['0% 0%', '100% 0%', '0% 100%', '100% 100%'].map(corner => `<i class="m" style="left:${corner.split(' ')[0]};top:${corner.split(' ')[1]};--m:${S!.marks}"></i>`).join('') : ''}</div>`);
-  const words = text.split(' '), last = words.pop()!;
-  layers.push(`<div class="h" style="font-size:${q(size)};padding:0 ${q((W - (box?.w ?? textWidth)) / 2 + 64)}"><span>${esc(words.length ? `${words.join(' ')} ` : '')}<span style="color:${recipe.accentWord}">${esc(last)}</span></span></div>`);
+  layers.push(`<div class="h" style="font-size:${q(size)};padding:0 ${q((W - (box?.w ?? textWidth)) / 2 + 64)}"><span>${esc(text)}</span></div>`);
   const stage = `<div class="s" style="background:${recipe.base};color:${recipe.ink}">${layers.join('')}</div>`;
   if (!caption) return stage;
-  const swatches: [string, string][] = [['Base', recipe.base], ['Ink', recipe.ink], ['Accent', recipe.accent], ['Accent word', recipe.accentWord]];
+  const swatches: [string, string][] = [['Base', recipe.base], ['Ink', recipe.ink], ['Accent', recipe.accent]];
   if (S) swatches.push([S.kind === 'dotGrid' ? 'Dots' : 'Lines', S.color]);
   if (A) swatches.push([A.kind === 'bloom' ? 'Bloom' : A.kind === 'litCells' ? 'Lit cells' : 'Pixels', A.color]);
   if (A?.strong) swatches.push(['Lit cell', A.strong]);

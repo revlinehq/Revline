@@ -26,4 +26,4 @@ The reference is footage cut to a song. What makes it is the rhythm: where cuts 
 | Look | the grade the reference describes (applyLut, setColorCurves, grain), on the user's footage |
 
 ## Rules
-- Map the reference's rhythm onto the user's beats, not onto seconds: a cut that fell on a downbeat lands on a downbeat; a two-beat shot stays two beats.
+- Map the rhythm onto the user's beats (Defaults, Length): a cut that fell on a downbeat lands on a downbeat.

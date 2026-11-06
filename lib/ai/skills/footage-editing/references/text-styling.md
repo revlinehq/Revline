@@ -2,14 +2,12 @@
 name: "text-styling"
 description: "Caption and title styling for footage edits: the default caption look, which tool changes what, placement, and the full catalog of fonts, looks, animations and text controls. Read before adding, styling or animating any caption or title."
 ---
-New captions default to minimal, readable, static text with no background; a subtle outline or shadow is allowed for separation.
-
 # Text styling
 
 Good text is readable at a glance, clear of faces and app controls, and styled the same way for each role (title, captions, callout).
 
 ## Workflow
-1. New captions: run addSubtitlesFromTranscript after the final cuts. In the clip lane it creates clipper captions instead (clipping page `finishing`).
+1. New captions: run addSubtitlesFromTranscript after the final cuts. Their default look per lane is in the footage-editing Defaults.
 2. Existing text: run inspectClip first, then change only the requested words or controls. Caption text or timing fixes follow writing-scenes page `edit-lanes`, which also sets the frame checks.
 3. Style in one call per change: batch the same appearance across exact clipIds.
 
@@ -26,8 +24,6 @@ Good text is readable at a glance, clear of faces and app controls, and styled t
 | Words | editText |
 
 ## Rules
-- An explicit request wins: no captions, a background, a font, an animation.
-- Defaults apply to new captions only; never restyle existing captions unasked.
 - Change animation with setTextAnimation only when the user asks for an animation change.
 - Vertical captions stay out of the bottom 20% of the frame, where app controls sit, and at least 24 design px from faces. Check the extremes of any movement with getFrames.
 - Use one look per text role: title, captions, callout.

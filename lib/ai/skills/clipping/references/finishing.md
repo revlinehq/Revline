@@ -11,7 +11,7 @@ Follow the user's explicit choices or selected style. Captions, dead-air removal
 1. Finalize timing first (pacing, cuts), so captions and overlays stay in sync.
 2. Add captions with addSubtitlesFromTranscript from saved word timings, then any hook text.
 3. Settle the mix: fades, ducking, volume balance.
-4. Normalize loudness only on an explicit request, after everything above.
+4. Normalize loudness last, and only on an explicit request.
 5. Check the final length is still 15–60 s.
 
 ## Defaults
@@ -28,7 +28,7 @@ Clip-lane captions (the clipper style addSubtitlesFromTranscript creates in this
 
 An explicit user caption style wins: pass style minimal, or restyle with styleCaptions, setTextStyle or configureTextTemplate.
 
-Loudness, only on an explicit normalization or audio-improvement request: -14 LUFS integrated, at most -1 dBTP, on the whole timeline mix of each finished tab.
+Loudness target, when the user asks for normalization or better audio: -14 LUFS integrated, at most -1 dBTP, on the whole timeline mix of each finished tab.
 
 ## Rules
 Captions and hook text:
@@ -38,12 +38,10 @@ Captions and hook text:
 
 Pacing:
 - For speech cleanup, read skill footage-editing; use configureSmoothZoom for zooms.
-- Remove dead air or speed up only when requested or part of the selected style.
 - Preserve comedic pauses, reactions and intelligible speech.
 
 Sound:
 - Keep speech and important game or room sound intelligible.
-- Add hit effects or light music only when requested or selected.
 - Inspect the mix with getSound or checkSound, balance with setVolume, and use configureAudio for fades and music ducking.
 - Normalize the whole tab mix, music and effects included; target one linked sound clip only when that is the intent.
 - Respect an explicit request to keep the original loudness, removing any existing normalization.

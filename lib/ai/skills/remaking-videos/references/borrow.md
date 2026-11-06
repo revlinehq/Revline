@@ -4,7 +4,7 @@ description: "Borrows one part of a reference (a transition, a title style, the 
 ---
 # Borrow a style
 
-A good borrow changes only what the user named. Every other clip, title, timing, color and sound stays exactly as it was.
+A good borrow changes only what the user named; everything else stays as it was (writing-scenes page `edit-lanes`, Direction and feedback).
 
 ## Workflow
 1. Resolve what the user pointed at with inspectReference before building, whether named by id (S4, S4.title, T2) or in words ("the second transition", "the title at 0:07", "that zoom").
@@ -39,5 +39,4 @@ A good borrow changes only what the user named. Every other clip, title, timing,
 | flash | no preset: a short white flash on the cut |
 
 ## Rules
-- Inside a scene, a borrowed title changes nothing else in the scene.
 - Pacing keeps the order of the user's shots and moves their cuts toward the reference's shot lengths, and onto beats when onBeatRatio is high. Say how many cuts moved.
