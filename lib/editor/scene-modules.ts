@@ -2,28 +2,22 @@
 export const SCENE_GSAP_PLUGINS = ['CustomEase', 'CustomWiggle', 'CustomBounce', 'SplitText', 'DrawSVGPlugin', 'MorphSVGPlugin', 'MotionPathPlugin', 'ScrambleTextPlugin', 'TextPlugin'] as const;
 export type SceneGsapPlugin = typeof SCENE_GSAP_PLUGINS[number];
 
-/** Import policy, bundle names and load order shared by saving, preview, capture and export.
- * Optional renderers precede the core runtime, which posts the frame's ready message. */
+/** The scene frame's bundle: one plain HTML + GSAP runtime shared by saving, preview, capture and export. */
 export const SCENE_RUNTIME_BUNDLES = {
-  react: { file: 'scene-react.js', entry: 'lib/editor/scene-react-runtime.tsx', global: '__revlineSceneReact', label: 'React scene renderer', modules: ['revline', 'react', 'react/jsx-runtime'] },
-  // Playback compatibility for saved scenes; authoring is rejected before compilation.
-  three: { file: 'scene-three.js', entry: 'lib/editor/scene-three-runtime.tsx', global: '__revlineSceneThree', label: '3D scene renderer', modules: ['revline/three', 'three'] },
   gsap: { file: 'scene-runtime.js', entry: 'lib/editor/scene-runtime.ts', global: '__revlineSceneRuntime', label: 'scene renderer', modules: ['gsap', 'gsap/all', 'gsap/EasePack', ...SCENE_GSAP_PLUGINS.map(name => `gsap/${name}` as const)] },
 } as const;
 export type SceneRuntimeName = keyof typeof SCENE_RUNTIME_BUNDLES;
-/** Each runtime must implement every import it advertises. */
+/** The runtime must implement every import it advertises. */
 export type SceneRuntimeModules<Name extends SceneRuntimeName> = Record<typeof SCENE_RUNTIME_BUNDLES[Name]['modules'][number], unknown>;
-
-function sceneModuleRuntime(name: string): SceneRuntimeName | undefined {
-  return (Object.keys(SCENE_RUNTIME_BUNDLES) as SceneRuntimeName[]).find(runtime => SCENE_RUNTIME_BUNDLES[runtime].modules.some(module => module === name));
-}
+const SCENE_MODULES: readonly string[] = SCENE_RUNTIME_BUNDLES.gsap.modules;
 
 /** The same policy guards compiled require calls at save time and inside the sandbox. */
-export function assertSceneImport(name: string, react: boolean) {
-  const runtime = sceneModuleRuntime(name);
-  if (runtime === 'gsap' || (react && (runtime || name.startsWith('blueprint:')))) return runtime;
-  const allowed = Object.values(SCENE_RUNTIME_BUNDLES).filter(bundle => bundle !== SCENE_RUNTIME_BUNDLES.three && (react || bundle === SCENE_RUNTIME_BUNDLES.gsap)).flatMap(bundle => [...bundle.modules]);
-  throw new Error(`${react ? 'React scenes' : 'Scenes'} can import only ${allowed.join(', ')}${react ? ' and blueprint:<name>' : ''}, not "${name}".`);
+export function assertSceneImport(name: string) {
+  if (SCENE_MODULES.includes(name)) return;
+  if (name === 'revline' || name.startsWith('revline/') || name === 'react' || name.startsWith('react/') || name.startsWith('blueprint:') || name === 'three' || name.startsWith('three/') || name.startsWith('@react-three/')) {
+    throw new Error(`Scenes and films are plain HTML + GSAP modules; "${name}" (React, JSX, 3D or blueprint:film kits) is not supported. Build the HTML into root and put every tween on tl (or a section's tl).`);
+  }
+  throw new Error(`Scenes can import only ${SCENE_MODULES.join(', ')}, not "${name}".`);
 }
 
 /** Recognise all literal import forms accepted by compilation, including side effects and require. */
@@ -32,40 +26,11 @@ function sceneImports(code: string) {
   const pattern = new RegExp(String.raw`\b(?:from${gap}|import${gap}(?:\(${gap})?|require${gap}\(${gap})['"]([^'"]+)['"]`, 'g');
   return [...code.matchAll(pattern)].map(match => match[1]);
 }
-/** Authoring policy is separate from the import policy used to play saved scenes. */
+/** Checked before compiling, so a React or 3D import gets the plain-module message rather than a JSX syntax error. */
 export function assertSceneAuthoringImports(code: string) {
-  for (const name of sceneImports(code)) {
-    if (name === 'three' || name.startsWith('three/') || name === '@react-three' || name.startsWith('@react-three/') || name === 'revline/three' || name.startsWith('revline/three/')) {
-      throw new Error('3D scenes are turned off; build it in 2D with GSAP');
-    }
-  }
+  for (const name of sceneImports(code)) assertSceneImport(name);
 }
-/** React-only modules and component kits opt into TSX, including a scene importing only three. */
-export const isReactScene = (code: string) => sceneImports(code).some(name => {
-  const runtime = sceneModuleRuntime(name);
-  return name.startsWith('blueprint:') || (runtime !== undefined && runtime !== 'gsap');
-});
 
-export type SceneModuleSource = { code: string; blueprints?: SceneModuleSource[]; neighbours?: SceneModuleSource[] };
-/** Include kits and transition neighbours, using the same module registry as validation. */
-export function sceneRuntimeNames(source: SceneModuleSource): SceneRuntimeName[] {
-  const needed = new Set<SceneRuntimeName>(['gsap']);
-  const visit = (scene: SceneModuleSource) => {
-    if (isReactScene(scene.code)) needed.add('react');
-    for (const name of sceneImports(scene.code)) {
-      const runtime = sceneModuleRuntime(name);
-      if (runtime) needed.add(runtime);
-    }
-    scene.blueprints?.forEach(visit);
-    scene.neighbours?.forEach(visit);
-  };
-  visit(source);
-  return (Object.keys(SCENE_RUNTIME_BUNDLES) as SceneRuntimeName[]).filter(name => needed.has(name));
-}
-export const usesSceneThree = (source: SceneModuleSource) => sceneRuntimeNames(source).includes('three');
-/** A React scene that joins the beat clips on either side of it (it draws <Transition> or <Neighbour>). */
-export const isSceneTransition = (code: string) => isReactScene(code) && /<(?:Transition|Neighbour)\b/.test(code);
-/** Sucrase options for a scene: React scenes compile as TSX with the automatic JSX runtime. */
 /** Sucrase compiles `export const a = 1, b = 2;` to `const a = 1; exports.a = a, b = 2;`, leaving b undeclared ("b is
  * not defined" at render). Every scene and kit is written one export per name before it is compiled or read for names. */
 export function splitExportDeclarations(code: string) {
@@ -103,58 +68,5 @@ export function splitExportDeclarations(code: string) {
   return out + code.slice(index);
 }
 
-export const sceneTransformOptions = (code: string) => isReactScene(code)
-  ? { transforms: ['typescript', 'jsx', 'imports'] as ('typescript' | 'jsx' | 'imports')[], jsxRuntime: 'automatic' as const, production: true }
-  : { transforms: ['typescript', 'imports'] as ('typescript' | 'jsx' | 'imports')[], production: true };
-
-const REVLINE_COMPONENTS = new Set(['Beat', 'Layer', 'Still', 'Icon', 'Blueprint', 'Fragment']);
-/** Each capitalised top-level component in a module, with the source of its declaration. */
-function declarations(code: string) {
-  const found = [...code.matchAll(/^(?:export\s+)?(?:default\s+)?(?:const|function)\s+([A-Z]\w*)/gm)];
-  return new Map(found.map((match, index) => [match[1], code.slice(match.index, found[index + 1]?.index ?? code.length)]));
-}
-const jsxTags = (code: string) => [...new Set([...code.matchAll(/<([A-Z]\w*)/g)].map(match => match[1]))];
-
-/**
- * The components a React scene clip draws, for the inspector: those it declares, plus every exported
- * component of its React blueprints that it reaches (a kit's internal helpers are walked, not listed).
- * Static: read from the code, so it works without rendering. Empty for GSAP scenes.
- */
-export function sceneComponents(scene: { code: string; blueprints?: { name: string; code: string }[] }): string[] {
-  if (!isReactScene(scene.code)) return [];
-  const local = declarations(scene.code), defaultName = /export\s+default\s+function\s+([A-Z]\w*)/.exec(scene.code)?.[1];
-  const kits = new Map((scene.blueprints ?? []).filter(item => isReactScene(item.code)).map(item => [item.name.toLowerCase(), item.code]));
-  // Imported kit name -> where it is declared and whether the kit exports it.
-  const imported = new Map<string, { body?: string; listed: boolean; kit: Map<string, string>; exported: Set<string> }>();
-  const kitInfo = (code: string) => ({ kit: declarations(code), exported: new Set([...code.matchAll(/^export\s+(?:const|function)\s+([A-Z]\w*)/gm)].map(match => match[1])) });
-  for (const match of scene.code.matchAll(/import\s*\{([^}]*)\}\s*from\s*['"]blueprint:([^'"]+)['"]/g)) {
-    const code = kits.get(match[2].trim().toLowerCase());
-    if (!code) continue;
-    const info = kitInfo(code);
-    for (const part of match[1].split(',')) {
-      const [name, alias = name] = part.trim().split(/\s+as\s+/);
-      if (/^[A-Z]/.test(name)) imported.set(alias.trim(), { body: info.kit.get(name.trim()), listed: true, ...info });
-    }
-  }
-  const listed: string[] = [], seen = new Set<string>();
-  const visit = (name: string, scope: { kit: Map<string, string>; exported: Set<string> } | null) => {
-    const key = `${scope ? 'kit' : 'clip'}:${name}`;
-    if (seen.has(key) || REVLINE_COMPONENTS.has(name)) return;
-    seen.add(key);
-    if (scope) {
-      const body = scope.kit.get(name);
-      if (body === undefined) return;
-      if (scope.exported.has(name) && !listed.includes(name)) listed.push(name);
-      for (const tag of jsxTags(body)) visit(tag, scope);
-    } else if (imported.has(name)) {
-      const item = imported.get(name)!;
-      if (!listed.includes(name)) listed.push(name);
-      for (const tag of jsxTags(item.body ?? '')) visit(tag, item);
-    } else if (local.has(name)) {
-      if (name !== defaultName && !listed.includes(name)) listed.push(name);
-      for (const tag of jsxTags(local.get(name)!)) visit(tag, null);
-    } else if (name === 'Transition' || name === 'Neighbour') listed.push(name);
-  };
-  for (const tag of jsxTags(scene.code)) visit(tag, null);
-  return listed;
-}
+/** Sucrase options for a scene: TypeScript compiled to CommonJS. */
+export const sceneTransformOptions = { transforms: ['typescript', 'imports'] as ('typescript' | 'imports')[], production: true };

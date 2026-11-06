@@ -15,18 +15,35 @@ import { MorphSVGPlugin } from 'gsap/MorphSVGPlugin';
 import { MotionPathPlugin } from 'gsap/MotionPathPlugin';
 import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
-import { assertSceneImport, isReactScene, SCENE_GSAP_PLUGINS, SCENE_RUNTIME_BUNDLES, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules, type SceneRuntimeName } from './scene-modules';
-import type { FrameAdapter } from '@hyperframes/core';
-import type * as SceneReact from './scene-react-runtime';
-import type * as SceneThree from './scene-three-runtime';
+import { assertSceneImport, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules } from './scene-modules';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
 
-type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; neighbours?: Neighbour[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
+type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 type Seek = { type: 'seek'; time: number; seq: number };
-/** For a React transition clip: a beat clip it joins, with its own blueprints. `start` is in the transition's seconds. */
-type Neighbour = { role: 'from' | 'to'; code: string; blueprints?: { name: string; code: string }[]; start: number; duration: number };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper };
+export type SectionHelper = (name: string, start: number, duration: number, build: (tl: gsap.core.Timeline) => void) => gsap.core.Timeline;
+
+/**
+ * The section() a scene receives. Each call nests a timeline on the film's at its start, so the section's tweens run at
+ * film time; the engine reads the call's literal start and duration to know which code the section owns, so a section
+ * may not animate past its own end, start inside another, or nest.
+ */
+function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
+  let building: string | undefined;
+  return (name, start, duration, build) => {
+    if (typeof name !== 'string' || !name.trim()) throw new Error('section(name, start, duration, build) needs a name.');
+    if (!Number.isFinite(start) || start < 0 || !Number.isFinite(duration) || duration <= 0) throw new Error(`Section "${name}" needs a start of 0 or more and a positive duration, in film seconds.`);
+    if (typeof build !== 'function') throw new Error(`Section "${name}" needs a build function: section('${name}', ${start}, ${duration}, (tl) => { ... }).`);
+    if (building !== undefined) throw new Error(`Section "${name}" is inside section "${building}". Sections do not nest: call section() from the scene's own function.`);
+    const tl = gsap.timeline();
+    building = name;
+    try { build(tl); } finally { building = undefined; }
+    if (tl.duration() > duration + 1 / fps + 1e-3) throw new Error(`Section "${name}" animates for ${Math.round(tl.duration() * 1000) / 1000}s but lasts ${duration}s. Keep its tweens inside its duration, or put a move that spans sections on the scene's own tl.`);
+    film.add(tl, start);
+    return tl;
+  };
+}
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
 
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
@@ -50,40 +67,18 @@ function iconFactory(icons: Record<string, string>) {
 
 function post(message: Record<string, unknown>) { window.parent.postMessage({ source: 'revline-scene', ...message }, '*'); }
 
-/** The React scene runtime, present only in frames whose scene imports 'revline' (see scene-react-runtime). */
-const sceneThree = () => (window as unknown as Record<string, typeof SceneThree | undefined>)[SCENE_RUNTIME_BUNDLES.three.global];
-const sceneReact = () => (window as unknown as Record<string, typeof SceneReact | undefined>)[SCENE_RUNTIME_BUNDLES.react.global];
-
-/** Run a module and return its exports. React modules may import a React blueprint attached to the
- * scene as 'blueprint:<name>': a component kit that several beat clips share. */
-function runModule(code: string, blueprints: { name: string; code: string }[], kits = new Map<string, Record<string, unknown>>()): Record<string, unknown> {
-  const react = isReactScene(code), runtime = react ? sceneReact() : undefined;
-  if (react && !runtime) throw new Error('The React scene runtime did not load.');
-  const compiled = transform(splitExportDeclarations(code), sceneTransformOptions(code)).code;
+/** Compile a scene module and return its default export. Scenes import only gsap and its plugins. */
+export function compileScene(code: string): (context: SceneContext) => unknown {
+  const compiled = transform(splitExportDeclarations(code), sceneTransformOptions).code;
   const module = { exports: {} as Record<string, unknown> };
-  const runtimes = { gsap: MODULES, react: runtime?.modules, three: sceneThree()?.modules } satisfies Record<SceneRuntimeName, Record<string, unknown> | undefined>;
   const require = (name: string) => {
-    const runtimeName = assertSceneImport(name, react);
-    if (react && name.startsWith('blueprint:')) {
-      const wanted = name.slice(10).trim().toLowerCase(), found = blueprints.find(item => item.name.toLowerCase() === wanted);
-      if (!found) throw new Error(`No blueprint "${name.slice(10)}" is attached to this scene. Attach it with blueprints on addScene or editScene.`);
-      if (!isReactScene(found.code)) throw new Error(`Blueprint "${found.name}" is not a React module; mount it with <Blueprint name="${found.name}">.`);
-      if (!kits.has(wanted)) { kits.set(wanted, {}); kits.set(wanted, runModule(found.code, blueprints, kits)); }
-      return kits.get(wanted);
-    }
-    const modules: Record<string, unknown> | undefined = runtimeName ? runtimes[runtimeName] : undefined;
-    if (!modules || !Object.hasOwn(modules, name)) throw new Error(`The ${SCENE_RUNTIME_BUNDLES[runtimeName!].label} did not load module "${name}". Rebuild the scene bundles and restart the media worker or renderer.`);
-    return modules[name];
+    assertSceneImport(name);
+    if (!Object.hasOwn(MODULES, name)) throw new Error(`The scene renderer did not load module "${name}". Rebuild the scene bundles and restart the media worker or renderer.`);
+    return MODULES[name as keyof typeof MODULES];
   };
   new Function('require', 'module', 'exports', compiled)(require, module, module.exports);
-  return module.exports;
-}
-
-/** Compile a scene module. GSAP scenes import only gsap and its plugins; React scenes also revline, react and React blueprints. */
-export function compileScene(code: string, blueprints: { name: string; code: string }[] = []): (context: SceneContext) => unknown {
-  const react = isReactScene(code);
-  const scene = runModule(code, blueprints).default;
-  if (typeof scene !== 'function') throw new Error(react ? 'A React scene must export default its component.' : 'A scene must export default a function that builds it.');
+  const scene = module.exports.default;
+  if (typeof scene !== 'function') throw new Error('A scene must export default a function that builds it.');
   return scene as (context: SceneContext) => unknown;
 }
 
@@ -196,8 +191,8 @@ function syncVideos(time: number, fps: number) {
 
 if (typeof window !== 'undefined' && window.parent !== window) {
   const root = document.getElementById('scene-root')!;
-  // A GSAP scene seeks one master timeline; a React scene seeks its frame adapter.
-  let master: gsap.core.Timeline | null = null, adapter: (FrameAdapter & { settle(): Promise<void> }) | null = null, origin = 0, failed = false, fps = 30;
+  // The scene seeks one master timeline.
+  let master: gsap.core.Timeline | null = null, origin = 0, failed = false, fps = 30;
   const fail = (error: unknown) => { if (failed) return; failed = true; post({ type: 'error', message: error instanceof Error ? error.message : String(error), stack: error instanceof Error ? error.stack : undefined }); };
   // Math.random would differ between preview and export; seed it before the scene builds.
   let state = 1;
@@ -210,7 +205,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     for (const font of data.fonts) { const face = new FontFace(font.family, font.data, { weight: font.weight }); await face.load(); document.fonts.add(face); }
     fps = data.fps;
     const media = Object.fromEntries((data.media ?? []).map(item => [item.name, URL.createObjectURL(new Blob([item.data], { type: item.type || 'image/png' }))]));
-    const scene = compileScene(data.code, data.blueprints);
+    const scene = compileScene(data.code);
     // Exactly on a zero-duration tween GSAP picks its before or after state from the direction of travel, so a
     // first seek to a clip's first frame reverted the scene's build-time gsap.set calls and showed every hidden
     // part (an export's first frame of a clip mid-timeline). Seeks land a tenth of a millisecond after it.
@@ -225,16 +220,12 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       host.dataset.blueprint = found.name;
       host.style.cssText = `position:relative;width:${width}px;height:${height}px;overflow:hidden`;
       container.appendChild(host);
-      void compileScene(found.code)({ root: host, tl: gsap.timeline(), gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
+      const tl = gsap.timeline();
+      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
       return host;
     };
-    if (isReactScene(data.code)) {
-      const neighbours = (data.neighbours ?? []).map(item => ({ role: item.role, start: item.start, duration: item.duration, Scene: compileScene(item.code, item.blueprints) as never }));
-      adapter = sceneReact()!.createReactSceneAdapter({ root, Scene: scene as never, neighbours, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icons: data.icons ?? {}, blueprint, gsap, parseEase: name => gsap.parseEase(name) as (progress: number) => number });
-      await adapter.init?.({ compositionId: 'revline-scene', fps: data.fps, width: data.width, height: data.height, rootElement: root });
-      return;
-    }
-    await scene({ root, tl: gsap.timeline(), gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint });
+    const tl = gsap.timeline();
+    await scene({ root, tl, gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
     master = gsap.exportRoot({ paused: true });
     // gsap.set calls made while building land after the scene's timeline at the same start time,
     // so a first seek into the middle re-applied the starting states over the animation.
@@ -248,10 +239,9 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       void build(data).then(() => post({ type: 'compiled' }), error => fail(error));
     } else if (data.type === 'seek') {
-      try { if (adapter) void adapter.seekFrame(Math.round(data.time * fps)); else master?.seek(origin + data.time, false); } catch (error) { fail(error); }
+      try { master?.seek(origin + data.time, false); } catch (error) { fail(error); }
       const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      // Three VideoTextures must upload the decoded video frame before their final draw.
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => adapter?.settle()).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
+      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
     }
   });
   post({ type: 'ready' });

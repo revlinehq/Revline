@@ -84,75 +84,113 @@ export function declarations(code: string) {
 }
 export const identifiers = (code: string) => new Set(code.match(/[A-Za-z_$][\w$]*/g) ?? []);
 
-/** End of a JSX open tag starting at `from` (the `<`), skipping `>` inside braces and strings. */
-function openTagEnd(code: string, from: number) {
-  let depth = 0, quote = '';
-  for (let at = from + 1; at < code.length; at++) {
+/** Index just past the string, template literal or comment starting at `at`, or `at` itself when none starts there. */
+function skipText(code: string, at: number): number {
+  const char = code[at];
+  if (char === '/' && code[at + 1] === '/') { const end = code.indexOf('\n', at); return end < 0 ? code.length : end; }
+  if (char === '/' && code[at + 1] === '*') { const end = code.indexOf('*/', at + 2); return end < 0 ? code.length : end + 2; }
+  if (char !== '"' && char !== "'" && char !== '`') return at;
+  for (let next = at + 1; next < code.length; next++) {
+    if (code[next] === '\\') { next++; continue; }
+    if (code[next] === char) return next + 1;
+    if (char === '`' && code[next] === '$' && code[next + 1] === '{') { const close = closeOf(code, next + 2); if (close < 0) return code.length; next = close - 1; }
+  }
+  return code.length;
+}
+
+/** Index just past the bracket that closes the one opened right before `from`; -1 if it never closes. */
+function closeOf(code: string, from: number) {
+  let depth = 1;
+  for (let at = from; at < code.length; at++) {
+    const skipped = skipText(code, at);
+    if (skipped !== at) { at = skipped - 1; continue; }
     const char = code[at];
-    if (quote) { if (char === quote && code[at - 1] !== '\\') quote = ''; continue; }
-    if (char === '"' || char === "'" || char === '`') quote = char;
-    else if (char === '{') depth++;
-    else if (char === '}') depth--;
-    else if (char === '>' && depth === 0) return at;
+    if (char === '(' || char === '[' || char === '{') depth++;
+    else if ((char === ')' || char === ']' || char === '}') && --depth === 0) return at + 1;
   }
   return -1;
 }
 
-/** Every <Beat> in a film's code with its literal start and duration, and the full text of the element (from..to). */
-export function filmBeats(code: string) {
-  const found: { start?: number; duration?: number; text: string; from: number; to: number }[] = [];
-  for (const match of code.matchAll(/<Beat\b/g)) {
-    const from = match.index, close = openTagEnd(code, from);
-    if (close < 0) continue;
-    const tag = code.slice(from, close + 1), number = (name: string) => { const value = new RegExp(`\\b${name}\\s*=\\s*\\{\\s*(-?[\\d.]+)\\s*\\}`).exec(tag)?.[1]; return value === undefined ? undefined : Number(value); };
-    let end = close + 1;
-    if (!tag.endsWith('/>')) {
-      // Match the closing tag, counting Beats nested inside this one.
-      const pattern = /<Beat\b|<\/Beat\s*>/g;
-      pattern.lastIndex = end;
-      for (let depth = 1, next = pattern.exec(code); next; next = pattern.exec(code)) {
-        if (next[0].startsWith('</')) { if (--depth === 0) { end = next.index + next[0].length; break; } }
-        else { const inner = openTagEnd(code, next.index); if (inner > 0 && code[inner - 1] !== '/') depth++; }
-      }
-    }
-    found.push({ start: number('start'), duration: number('duration'), text: code.slice(from, end), from, to: end });
+/** The trimmed top-level arguments of a call whose "(" ends at `from` and whose ")" is at `to - 1`. */
+function callArguments(code: string, from: number, to: number) {
+  const args: string[] = [];
+  let start = from;
+  for (let at = from; at < to - 1; at++) {
+    const skipped = skipText(code, at);
+    if (skipped !== at) { at = skipped - 1; continue; }
+    const char = code[at];
+    if (char === '(' || char === '[' || char === '{') { const close = closeOf(code, at + 1); if (close < 0) break; at = close - 1; }
+    else if (char === ',') { args.push(code.slice(start, at)); start = at + 1; }
   }
-  return found;
+  args.push(code.slice(start, to - 1));
+  return args.map(arg => arg.trim());
 }
 
+const literalNumber = (text: string | undefined) => text !== undefined && /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : undefined;
+const literalString = (text: string | undefined) => text !== undefined && /^(['"`])(?:(?!\1)[^\\$]|\\.)*\1$/.test(text) ? text.slice(1, -1) : undefined;
+
 /**
- * The code a film section owns: the <Beat>s it overlaps, plus every top-level declaration (component,
- * style object, helper) they reach, walked through the film's own code and its film kit. Comparing
- * this before and after a patch says whether the patch touched the section. Undefined when the code
- * has no <Beat> with literal timing over the section, so the whole film counts.
+ * Every `section(name, start, duration, build)` call in a film's code: its literal name, start and duration (film
+ * seconds; undefined when not a plain literal) and the full text of the call (from..to). The call is the code the
+ * section owns.
  */
+export function sectionCalls(code: string) {
+  const found: { name?: string; start?: number; duration?: number; text: string; from: number; to: number }[] = [];
+  // Strings and comments are blanked first, so a "section(" in text or a comment is not a call.
+  let masked = '';
+  for (let at = 0; at < code.length;) { const skipped = skipText(code, at); if (skipped === at) { masked += code[at]; at++; } else { masked += code.slice(at, skipped).replace(/[^\n]/g, ' '); at = skipped; } }
+  for (const match of masked.matchAll(/(?<![\w$.])section\s*\(/g)) {
+    if (/\bfunction\s*$/.test(masked.slice(Math.max(0, match.index - 12), match.index))) continue;
+    const open = match.index + match[0].length, end = closeOf(code, open);
+    if (end < 0) continue;
+    const [name, start, duration] = callArguments(code, open, end);
+    found.push({ name: literalString(name), start: literalNumber(start), duration: literalNumber(duration), text: code.slice(match.index, end), from: match.index, to: end });
+  }
+  // Sections do not nest: a call inside another one is part of it.
+  return found.filter(call => !found.some(other => other !== call && other.from <= call.from && other.to >= call.to));
+}
+
+/** The code a film section owns: the section() calls it overlaps, plus every top-level declaration they reach. Comparing
+ * this before and after a patch says whether the patch touched the section. Undefined when no call with literal timing
+ * covers the section, so the whole film counts. */
 function sectionCode(scene: NonNullable<Clip['scene']>, section: { start: number; end: number }) {
-  const owned = filmSections(scene).filter(beat => beat.start !== undefined && beat.duration !== undefined && beat.start < section.end - EPSILON && beat.start + beat.duration > section.start + EPSILON);
+  const owned = filmSections(scene).filter(call => call.start < section.end - EPSILON && call.start + call.duration > section.start + EPSILON);
   if (!owned.length) return undefined;
-  return reach(scene, owned.map(beat => beat.text)).parts.join('\n\u0000\n');
+  return reach(scene, owned.map(call => call.text)).parts.join('\n\u0000\n');
 }
 
-/**
- * The <Beat>s that time the film itself, with literal start and duration. A Beat inside a component that a timed
- * Beat renders (a section's own inner clock) counts in that component's local time, so it is part of its section.
- */
-export function filmSections(scene: NonNullable<Clip['scene']>) {
-  const timed = filmBeats(scene.code).filter((beat): beat is ReturnType<typeof filmBeats>[number] & { start: number; duration: number } => beat.start !== undefined && beat.duration !== undefined);
-  const spans = [...declarations(scene.code)].map(([name, body]) => { const from = scene.code.indexOf(body); return { name, from, to: from + body.length }; });
-  const container = new Map(timed.map(beat => [beat, spans.find(span => span.from <= beat.from && span.to >= beat.to)?.name]));
-  let kept = timed;
-  for (let round = 0; round < 6; round++) {
-    const inner = reach(scene, kept.map(beat => beat.text)).names, next = timed.filter(beat => { const name = container.get(beat); return !name || !inner.has(name); });
-    if (next.length === kept.length) break;
-    kept = next;
+export type FilmSection = ReturnType<typeof sectionCalls>[number] & { start: number; duration: number };
+/** The section() calls with literal start and duration: they time the film. */
+export const filmSections = (scene: { code: string }) => sectionCalls(scene.code).filter((call): call is FilmSection => call.start !== undefined && call.duration !== undefined);
+
+/** A film's section() calls checked against the film: literal timing, inside the film, in order without overlap. */
+export function checkSectionCalls(code: string, filmDuration: number) {
+  const calls = sectionCalls(code), problems: string[] = [];
+  for (const call of calls) {
+    const head = call.text.slice(0, 80).replace(/\s+/g, ' ');
+    if (call.name === undefined || call.start === undefined || call.duration === undefined) problems.push(`${head}... needs a string literal name and number literals for start and duration, like section('Hook', 0, 3.5, (tl) => { ... }).`);
+    else if (call.duration <= 0 || call.start + call.duration > filmDuration + EPSILON) problems.push(`Section "${call.name}" (${call.start} + ${call.duration}s) must run inside the film (0 to ${filmDuration}s).`);
   }
-  return kept;
+  const timed = calls.filter((call): call is FilmSection => call.start !== undefined && call.duration !== undefined).sort((a, b) => a.start - b.start);
+  for (let index = 1; index < timed.length; index++) if (timed[index].start < timed[index - 1].start + timed[index - 1].duration - EPSILON) problems.push(`Sections "${timed[index - 1].name}" and "${timed[index].name}" overlap; each section must end at or before the next one starts. Put a move that spans both on the outer tl.`);
+  if (problems.length) throw new Error(`Nothing was saved. ${problems.join(' ')}`);
+  return timed;
 }
 
-/** Code and the top-level names it reaches, walked through the film's own declarations and its film kit. The root component is never walked into. */
-export function reach(scene: NonNullable<Clip['scene']>, texts: string[]) {
-  const scopes = [declarations(scene.code), ...(scene.blueprints ?? []).map(item => declarations(item.code))];
-  // The film's root component holds the Beats themselves; only the Beats count, not its other children.
+/** addFilm: every section() call names one of the film's sections by title and start, and every section the call
+ * implements (starting before builtThrough) has its call, so markers, inspectClip and approvals agree with the code. */
+export function checkFilmSections(code: string, filmDuration: number, sections: { title: string; at: number }[], builtThrough = filmDuration) {
+  const calls = checkSectionCalls(code, filmDuration), key = (title: string) => title.trim().toLowerCase(), problems: string[] = [];
+  for (const call of calls) if (!sections.some(item => key(item.title) === key(call.name!) && Math.abs(item.at - call.start) < 1e-3)) problems.push(`section('${call.name}', ${call.start}, ...) is not in sections; add { title: '${call.name}', at: ${call.start} } or match an existing one's title and start.`);
+  for (const item of sections) if (item.at < builtThrough - EPSILON && !calls.some(call => key(call.name!) === key(item.title) && Math.abs(item.at - call.start) < 1e-3)) problems.push(`Section "${item.title}" at ${item.at}s has no section('${item.title}', ${item.at}, <duration>, (tl) => { ... }) call${builtThrough < filmDuration ? `; it starts before builtThrough (${builtThrough}s)` : ''}.`);
+  if (problems.length) throw new Error(`Nothing was saved. ${problems.join(' ')}`);
+  return calls;
+}
+
+/** Code and the top-level names it reaches, walked through the film's own declarations. The default export is never walked into. */
+export function reach(scene: { code: string }, texts: string[]) {
+  const scopes = [declarations(scene.code)];
+  // The default export holds the section() calls themselves; only the calls count, not the rest of its body.
   const root = rootName(scene.code);
   const parts = [...texts], seen = new Set<string>(root ? [root] : []), names = new Set<string>();
   for (let index = 0; index < parts.length; index++) for (const name of identifiers(parts[index])) {
@@ -213,8 +251,8 @@ export function approvalViolations(before: Timeline, after: Timeline): ApprovalV
       const scene = clip.scene, later = now.find(item => item.scene)?.scene;
       if (!scene || !later || (scene.code === later.code && scene.codeRef === later.codeRef && JSON.stringify(scene.blueprints ?? []) === JSON.stringify(later.blueprints ?? []))) continue;
       const owned = sectionCode(scene, section);
-      if (owned === undefined) violations.push({ clipId: clip.id, name, what: `change its code, and its approved ${label} has no <Beat> with literal start and duration to tell it apart, so any code change counts`, note: section.note, sectionId: section.id });
-      else if (owned !== sectionCode(later, section)) violations.push({ clipId: clip.id, name, what: `change the code of its approved ${label} (its <Beat> or a component, style or helper it uses)`, note: section.note, sectionId: section.id });
+      if (owned === undefined) violations.push({ clipId: clip.id, name, what: `change its code, and its approved ${label} has no section() call with literal start and duration to tell it apart, so any code change counts`, note: section.note, sectionId: section.id });
+      else if (owned !== sectionCode(later, section)) violations.push({ clipId: clip.id, name, what: `change the code of its approved ${label} (its section() call or a helper or style it uses)`, note: section.note, sectionId: section.id });
     }
   }
   return violations;

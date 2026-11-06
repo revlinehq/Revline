@@ -1,7 +1,7 @@
 import { dimensions, trackOf, type Clip, type SceneBlueprint, type SceneMedia, type Timeline } from './types';
 import { TEXT_FONTS } from './text-fonts';
 import { validateSceneBrand, type SceneBrand } from './brand-kit';
-import { isReactScene, isSceneTransition, sceneRuntimeNames, SCENE_RUNTIME_BUNDLES, type SceneRuntimeName } from './scene-modules';
+import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
 
 export const SCENE_BLUEPRINT_LIMIT = 4;
 // Stored timelines keep code in sceneCode rows (lib/editor/scene-code), so it no longer weighs on every edit.
@@ -21,31 +21,17 @@ export function validateScene(clip: Pick<Clip, 'kind' | 'scene' | 'assetId'>) {
   if (scene.media && (scene.media.some(item => !/^[a-zA-Z][\w-]{0,30}$/.test(item.name) || !item.assetId) || new Set(scene.media.map(item => item.name)).size !== scene.media.length)) throw new Error('Scene media needs files with unique names (letters, digits, - or _).');
 }
 
-/** A beat clip next to a transition clip; `start` is in the transition's own seconds. */
-export type SceneNeighbourSource = { role: 'from' | 'to'; code: string; blueprints?: SceneBlueprint[]; start: number; duration: number };
 /** `duration` is the clip's own; `filmDuration`, for a beat clip of a film, is what the scene module receives as its duration. */
-export type SceneLayerSource = { runtimes: SceneRuntimeName[]; clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; neighbours?: SceneNeighbourSource[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
+export type SceneLayerSource = { clipId: string; title: string; code: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; start: number; duration: number; filmDuration?: number; offset: number; zIndex: number; fps: number; width: number; height: number; scale: number };
 export type SceneFont = { family: string; weight: string; url: string };
 
 /** Scenes are authored on the 1080-based canvas and scaled to the output resolution. */
 export function sceneLayerSources(timeline: Timeline, resolution = 1080): SceneLayerSource[] {
   const { width, height } = dimensions(timeline.aspectRatio, 1080);
   return timeline.clips.flatMap((clip, index) => clip.kind === 'scene' && clip.scene ? [{
-    runtimes: sceneRuntimeNames({ ...clip.scene, ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}) }), clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), ...(isSceneTransition(clip.scene.code) ? { neighbours: sceneNeighbours(timeline, clip) } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
+    clipId: clip.id, title: clip.scene.title, code: clip.scene.code, ...(clip.scene.brand ? { brand: clip.scene.brand } : {}), ...(clip.scene.media?.length ? { media: clip.scene.media } : {}), ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), start: clip.start, duration: clip.duration, ...(clip.scene.film ? { filmDuration: clip.scene.film.duration } : {}), offset: clip.sourceStart,
     zIndex: trackOf(clip) * 256 + index, fps: timeline.fps, width, height, scale: resolution / 1080,
   }] : []);
-}
-
-/**
- * The beat clips a transition clip joins: the React scene that is playing (or last played) when it
- * starts, and the one that is playing (or next plays) when it ends. Any track; transitions excluded.
- */
-export function sceneNeighbours(timeline: Timeline, transition: Clip): SceneNeighbourSource[] {
-  const beats = timeline.clips.filter(clip => clip.id !== transition.id && clip.kind === 'scene' && clip.scene && isReactScene(clip.scene.code) && !isSceneTransition(clip.scene.code));
-  const end = transition.start + transition.duration, near = 1e-3;
-  const from = beats.filter(clip => clip.start <= transition.start + near).sort((a, b) => b.start - a.start)[0];
-  const to = beats.filter(clip => clip !== from && clip.start + clip.duration >= end - near && clip.start >= transition.start - near).sort((a, b) => a.start - b.start)[0];
-  return ([['from', from], ['to', to]] as const).flatMap(([role, clip]) => clip?.scene ? [{ role, code: clip.scene.code, ...(clip.scene.blueprints?.length ? { blueprints: clip.scene.blueprints } : {}), start: clip.start - clip.sourceStart - transition.start, duration: clip.duration + clip.sourceStart }] : []);
 }
 
 export function sceneFonts(urls: Partial<Record<string, string>>): SceneFont[] {
@@ -70,8 +56,7 @@ var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revlin
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
 var runtimeSources=new Map(),iconSource=null,overscan=16;
 function vendorScript(url,what){return fetch(url).then(function(response){if(!response.ok)throw new Error('The '+what+' could not load.');return response.text();}).then(function(text){return text.replace(/<\\/script/gi,'<\\\\/script');});}
-function runtimeScript(name){if(!runtimeSources.has(name))runtimeSources.set(name,vendorScript(name==='gsap'?new URL(runtimeUrl,document.baseURI).href:new URL(bundles[name].file,new URL(runtimeUrl,document.baseURI)).href,bundles[name].label));return runtimeSources.get(name);}
-function isThree(source){return source.runtimes.indexOf('three')>=0;}
+function runtimeScript(){if(!runtimeSources.has('gsap'))runtimeSources.set('gsap',vendorScript(new URL(runtimeUrl,document.baseURI).href,bundles.gsap.label));return runtimeSources.get('gsap');}
 var anchor=document.createElement('span');anchor.dataset.sceneFrameSource='';anchor.style.cssText='position:absolute;width:0;height:0;pointer-events:none';composition.appendChild(anchor);
 function report(entry,message,stack){var error=new Error('Scene "'+entry.source.title+'": '+message);if(stack)error.stack=stack;entry.error=error;window.dispatchEvent(new ErrorEvent('error',{error:error,message:error.message}));}
 function inner(){var layers=composition.querySelectorAll('.adjustment-layer');for(var i=0;i<layers.length;i++)if(!layers[i].querySelector('.adjustment-layer'))return layers[i];return composition;}
@@ -83,11 +68,11 @@ function wantedMedia(source){var screens=(source.brand&&source.brand.screens||[]
 function wantedIcons(source){/* Every quoted kebab-case name that is a Lucide icon, so wrappers like ic('x') or icon(name) work too; blueprints count. */var names=[],pattern=/['"\`]([a-z0-9]+(?:-[a-z0-9]+)*)['"\`]/g,match,code=allCode(source);while((match=pattern.exec(code)))if(names.indexOf(match[1])<0)names.push(match[1]);if(!names.length)return Promise.resolve({});if(!iconSource)iconSource=fetch(new URL('lucide-icons.json',new URL(runtimeUrl,document.baseURI)).href).then(function(response){if(!response.ok)throw new Error('icons');return response.json();}).catch(function(){iconSource=null;return {};});return iconSource.then(function(all){var picked={};names.forEach(function(name){if(all[name]!==undefined)picked[name]=all[name];});return picked;});}
 function wantedFonts(source){var code=allCode(source),list=fonts.filter(function(item){return item.family==='Space Grotesk'||code.indexOf(item.family)>=0;}).concat(source.brand?source.brand.fonts:[]);return Promise.all(list.map(font)).then(function(list){return list.filter(Boolean);});}
 // A scene's code with its blueprints and, for a transition, the beat clips it draws.
-function allCode(source){var parts=[source.code];(source.blueprints||[]).concat((source.neighbours||[]).reduce(function(list,item){return list.concat([item]).concat(item.blueprints||[]);},[])).forEach(function(item){parts.push(item.code);});return parts.join('\\n');}
+function allCode(source){var parts=[source.code];(source.blueprints||[]).forEach(function(item){parts.push(item.code);});return parts.join('\\n');}
 function frameDocument(source,scripts){return '<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \\'none\\'; script-src \\'unsafe-inline\\' \\'unsafe-eval\\'; style-src \\'unsafe-inline\\'; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:"><style>html,body{margin:0;width:'+(source.width+overscan*2)+'px;height:'+(source.height+overscan*2)+'px;overflow:hidden;background:transparent}body{font-family:\\'Space Grotesk\\',Arial,sans-serif;color:#F4F4F0;-webkit-font-smoothing:antialiased}#scene-root{position:absolute;left:'+overscan+'px;top:'+overscan+'px;width:'+source.width+'px;height:'+source.height+'px;overflow:hidden}</style></head><body><div id="scene-root"></div>'+scripts.map(function(script){return '<script>'+script+'</'+'script>';}).join('')+'</body></html>';}
 function send(entry,message){if(entry.frame.contentWindow)entry.frame.contentWindow.postMessage(Object.assign({source:'revline-scene-host'},message),'*');}
 function mount(source){
-  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.neighbours||null,source.width,source.height,source.fps,source.filmDuration||source.duration]),entry=entries.get(source.clipId);
+  var key=JSON.stringify([source.code,source.brand||null,source.media||null,source.blueprints||null,source.width,source.height,source.fps,source.filmDuration||source.duration]),entry=entries.get(source.clipId);
   var node=entry?entry.node:find(source.clipId);
   if(!node){node=document.createElement('div');node.className='scene-layer';node.dataset.sceneClip=source.clipId;inner().appendChild(node);}
   node.style.zIndex=String(source.zIndex);
@@ -98,7 +83,7 @@ function mount(source){
     var frame=document.createElement('iframe');frame.className='scene-frame';frame.setAttribute('sandbox','allow-scripts');frame.setAttribute('tabindex','-1');frame.setAttribute('aria-hidden','true');
     entry={node:node,frame:frame,key:key,source:source,seq:0,waiters:new Map(),compiled:false,error:null};
     var current=entry;current.ready=new Promise(function(resolve){current.resolve=resolve;});
-    node.appendChild(frame);Promise.all(source.runtimes.map(runtimeScript)).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts);},function(error){report(current,error.message);current.resolve();});
+    node.appendChild(frame);Promise.all([runtimeScript()]).then(function(scripts){if(entries.get(source.clipId)===current)frame.srcdoc=frameDocument(source,scripts);},function(error){report(current,error.message);current.resolve();});
   }
   entry.source=source;entry.frame.style.width=(source.width+overscan*2)+'px';entry.frame.style.height=(source.height+overscan*2)+'px';entry.frame.style.left=entry.frame.style.top=(-overscan*source.scale)+'px';entry.frame.style.transform='scale('+source.scale+')';
   entries.set(source.clipId,entry);
@@ -125,7 +110,7 @@ function whenReady(time){
       if(entry.error)throw entry.error;
       // HyperFrames calls this on every runtime tick; a frame the scene already drew needs no new seek.
       var at=localTime(entry,time);if(entry.drawn===at&&!entry.inflight)return;
-      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},isThree(entry.source)?45000:15000);});
+      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
     }));
   });
   return Promise.all(pending).then(function(){entries.forEach(function(entry){if(visibleAt(entry,time)&&entry.error)throw entry.error;});});
@@ -135,12 +120,7 @@ window.addEventListener('message',function(event){
   var data=event.data;if(!data||data.source!=='revline-scene')return;
   entries.forEach(function(entry){
     if(event.source!==entry.frame.contentWindow)return;
-    if(data.type==='resource'){
-      if(!isThree(entry.source))return;
-      var url;try{url=new URL(data.url);if(url.protocol!=='https:')throw new Error('3D resources need an HTTPS URL or project media.');}catch(error){send(entry,{type:'resource',id:data.id,error:String(error)});return;}
-      fetch(new URL(fileUrls[url.href]||url.href,document.baseURI).href,{credentials:'omit',signal:AbortSignal.timeout(30000)}).then(function(response){if(!response.ok)throw new Error('3D resource HTTP '+response.status);return response.arrayBuffer();}).then(function(bytes){send(entry,{type:'resource',id:data.id,data:bytes});},function(error){send(entry,{type:'resource',id:data.id,error:error.message});});
-    }
-    else if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],neighbours:entry.source.neighbours||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
+    if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
     else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message),data.stack);entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}

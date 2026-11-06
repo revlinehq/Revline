@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { highlight } from 'sugar-high';
 import { Check, Copy } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { isReactScene } from '@/lib/editor/scene-modules';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
@@ -19,7 +18,7 @@ async function formatSceneCode(code: string) {
   return code;
 }
 
-export function SceneCodeDialog({ scene, components = [], onClose }: { scene?: { title?: string; code: string }; components?: string[]; onClose: () => void }) {
+export function SceneCodeDialog({ scene, onClose }: { scene?: { title?: string; code: string }; onClose: () => void }) {
   const code = scene?.code ?? '';
   const [formatted, setFormatted] = useState<{ source: string; text: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -38,8 +37,7 @@ export function SceneCodeDialog({ scene, components = [], onClose }: { scene?: {
     <DialogContent className="flex h-[min(85vh,56rem)] flex-col sm:max-w-5xl">
       <div className="flex flex-col gap-1 pr-8">
         <DialogTitle>{scene?.title || 'Scene'}</DialogTitle>
-        <DialogDescription>{isReactScene(code) ? 'React' : 'GSAP'} scene code, {code.length.toLocaleString()} characters{text !== null ? `, ${lines.toLocaleString()} lines` : ''}. Ask the assistant to change it.</DialogDescription>
-        {components.length > 0 && <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs text-muted-foreground"><span>Components</span>{components.map(name => <span key={name} className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-foreground/80">{name}</span>)}</div>}
+        <DialogDescription>GSAP scene code, {code.length.toLocaleString()} characters{text !== null ? `, ${lines.toLocaleString()} lines` : ''}. Ask the assistant to change it.</DialogDescription>
       </div>
       <ScrollArea className="scene-code min-h-0 flex-1 rounded-lg border bg-black/40">
         {text === null

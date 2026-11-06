@@ -425,7 +425,7 @@ export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeli
 /** The tab a run works on: a read of a named tab, or the open one. */
 const runTab=(project:Doc<'projects'>,runId:string)=>boundRunTab(runId)??activeTabOf(project);
 /** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
-export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),kit:v.optional(v.boolean()),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
+export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
   if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,current=project.revision??0,timelineId=runTab(project,args.runId);
@@ -438,10 +438,10 @@ export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRev
     const clip=change?change.before:timeline.clips.find(item=>item.id===args.clipId);
     if(!clip)throw new ConvexError(`Clip ${args.clipId} did not exist on this tab at revision ${revision}.`);
     const loaded=(await loadSceneCode(ctx,{clips:[clip]})).clips[0];
-    return sceneCodeSource(loaded,args.kit);
+    return sceneCodeSource(loaded);
   };
   const [before,after]=await Promise.all([at(args.fromRevision),at(args.toRevision)]);
-  return {clipId:args.clipId,timelineId,target:args.kit?'kit':'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
+  return {clipId:args.clipId,timelineId,target:'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
 }});
 /** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
 export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
