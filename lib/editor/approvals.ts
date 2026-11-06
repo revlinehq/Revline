@@ -127,8 +127,10 @@ function callArguments(code: string, from: number, to: number) {
   return args.map(arg => arg.trim());
 }
 
-const literalNumber = (text: string | undefined) => text !== undefined && /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : undefined;
-const literalString = (text: string | undefined) => text !== undefined && /^(['"`])(?:(?!\1)[^\\$]|\\.)*\1$/.test(text) ? text.slice(1, -1) : undefined;
+// A block comment beside a literal (beat timing resolved on save keeps one: `2.866 /* downbeat(2) */`) is ignored.
+const uncommented = (text: string | undefined) => text?.replace(/\/\*[^]*?\*\//g, '').trim();
+const literalNumber = (raw: string | undefined) => { const text = uncommented(raw); return text !== undefined && /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : undefined; };
+const literalString = (raw: string | undefined) => { const text = uncommented(raw); return text !== undefined && /^(['"`])(?:(?!\1)[^\\$]|\\.)*\1$/.test(text) ? text.slice(1, -1) : undefined; };
 
 /**
  * Every `section(name, start, duration, build)` call in a film's code (and `shot(name, start, duration, options, build)`, a section that is its own shot): its literal name, start and duration (film

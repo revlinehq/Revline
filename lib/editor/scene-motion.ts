@@ -43,6 +43,8 @@ export type MotionHelpers = {
 };
 
 const round = (value: number) => Math.round(value * 1000) / 1000;
+/** Seconds as saved section literals write them (lib/editor/beat-timing floorMs): floored to the millisecond. */
+const floorMs = (seconds: number) => Math.floor(seconds * 1000 + 1e-6) / 1000;
 /** A setting's value: its default when omitted, clamped into its range otherwise. */
 function setting(what: string, value: unknown, fallback: number, min: number, max: number) {
   if (value === undefined) return fallback;
@@ -53,6 +55,8 @@ function setting(what: string, value: unknown, fallback: number, min: number, ma
 function startTime(what: string, value: unknown) {
   if (value === undefined) return 0;
   if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${what} must be a number of seconds on the timeline you passed.`);
+  // A hair under 0 is rounding (a marker time minus a literal written to the millisecond): that is the start.
+  if (value < 0 && value > -.005) return 0;
   if (value < 0) throw new Error(`${what} is ${Math.round(value * 1000) / 1000}s, before the start of the timeline you passed. On a section's timeline use section seconds: subtract its start from film seconds such as beat(n).`);
   return value;
 }
@@ -119,7 +123,7 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
   };
   const nth = (kind: keyof SceneBeats) => (n: number) => {
     const list = listOf(kind);
-    if (!Number.isInteger(n) || n < 1 || n > list.length) throw new Error(`${KINDS[kind].call}(${n}): this scene has ${list.length} ${KINDS[kind].label} markers, numbered 1 to ${list.length} (${KINDS[kind].call}(1) = ${list[0]}s, ${KINDS[kind].call}(${list.length}) = ${list.at(-1)}s).`);
+    if (!Number.isInteger(n) || n < 1 || n > list.length) throw new Error(`${KINDS[kind].call}(${n}): this scene has ${list.length} ${KINDS[kind].label} markers, numbered 1 to ${list.length} (${KINDS[kind].call}(1) = ${floorMs(list[0])}s, ${KINDS[kind].call}(${list.length}) = ${floorMs(list.at(-1)!)}s).`);
     return list[n - 1];
   };
 
@@ -157,7 +161,7 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
     if (opts.on !== undefined) {
       const kind = ({ beat: 'beats', downbeat: 'downbeats', accent: 'accents' } as const)[choice(`Shot "${name}" on`, opts.on, 'beat', ['beat', 'downbeat', 'accent'] as const)];
       const list = listOf(kind), nearest = list.reduce((best, time) => Math.abs(time - start) < Math.abs(best - start) ? time : best, list[0]);
-      if (Math.abs(nearest - start) > frame / 2 + 1e-6) throw new Error(`Shot "${name}" starts at ${start}s, which is not on a ${KINDS[kind].label} marker; the nearest is ${KINDS[kind].call}(${list.indexOf(nearest) + 1}) = ${nearest}s. Start it there.`);
+      if (Math.abs(nearest - start) > frame / 2 + 1e-6) throw new Error(`Shot "${name}" starts at ${start}s, which is not on a ${KINDS[kind].label} marker; the nearest is ${KINDS[kind].call}(${list.indexOf(nearest) + 1}) = ${floorMs(nearest)}s. Start it there.`);
     }
     if (current) throw new Error(`Shot "${name}" is inside shot "${current.name}". Shots do not nest.`);
     // The shot's content moves into a camera layer the helpers own: GSAP transforms the camera (push), and the
