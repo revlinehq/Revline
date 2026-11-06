@@ -47,12 +47,14 @@ export function usePreviewSketch({ canvas, onStart, capture, readTime, onSend }:
   const latest = useRef({ onStart, capture, readTime, onSend, canvas });
   latest.current = { onStart, capture, readTime, onSend, canvas };
 
-  const toggle = useCallback((next?: boolean) => setActive(previous => {
-    const value = next ?? !previous;
-    if (value && !previous) latest.current.onStart();
+  const activeRef = useRef(active);
+  activeRef.current = active;
+  const toggle = useCallback((next?: boolean) => {
+    const value = next ?? !activeRef.current;
+    if (value && !activeRef.current) latest.current.onStart();
     if (!value) setError('');
-    return value;
-  }), []);
+    setActive(value);
+  }, []);
   useEffect(() => {
     if (!active) return;
     const escape = (event: KeyboardEvent) => { if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); toggle(false); } };

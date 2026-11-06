@@ -353,7 +353,7 @@ export function EditorShell(p: EditorShellProps) {
   const readPlaybackTime=useCallback(()=>preview.current?.currentTime()??store.getState().playhead,[store]);
   const [promptFill,setPromptFill]=useState<{key:number;text:string}>();
   const sketch=usePreviewSketch({canvas:dimensions(timeline.aspectRatio),readTime:readPlaybackTime,capture:()=>preview.current?.compositionElement()??null,
-    onStart:()=>{preview.current?.pause();setPlaying(false);},
+    onStart:()=>{if(!store.getState().playing)return;preview.current?.pause();setPlaying(false);},
     onSend:async(file,text)=>{if(!p.onAttachSketch)throw new Error('Sketches are unavailable here.');await p.onAttachSketch(file);setPromptFill(previous=>({key:(previous?.key??0)+1,text}));if(compact)setMobileChat(true);}});
   const duration = timelineDuration(timeline);
   const clip = timeline.clips.find(c => c.id === selected);
