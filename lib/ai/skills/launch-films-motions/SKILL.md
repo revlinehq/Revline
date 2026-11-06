@@ -18,6 +18,7 @@ Contents: Workflow; Defaults (timing and easing); Rules (structure, timing, a ne
 5. **Assets:** page `image-plates` for anything code cannot draw; page `blueprints` when the user's product UI is shown.
 6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from Defaults.
    A song under the film: skill `music` sets where it starts and puts section() starts on its downbeats.
+   - Shots, camera pushes, beat times, cursors and impacts have helpers (`shot`, `push`, `beat`, `cursor`, `hit`): API reference in writing-scenes page `films`, Motion helpers.
 7. **Check** the film as "Before handing back" lists, then call finish.
 
 ## Defaults
