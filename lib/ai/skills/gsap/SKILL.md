@@ -1,10 +1,10 @@
 ---
 name: "gsap"
-description: "GSAP library reference: GreenSock's official API pages (timeline, core, plugins, performance, utils) plus the few engine rules for using GSAP inside Revline's frame-seeked scenes. Read when writing GSAP code. It says how GSAP works, not how films should look (that is motion-design)."
+description: "GSAP library reference: GreenSock's official API pages (timeline, core, plugins, performance, utils) plus the few engine rules for using GSAP inside Revline's frame-seeked scenes. Read when writing GSAP code. It says how GSAP works, not how films should look (that is launch-films-motions)."
 ---
 # GSAP library reference
 
-How to use GSAP correctly, nothing more. It holds no style: durations, eases, transitions and looks for Revline films are decided in motion-design.
+How to use GSAP correctly, nothing more. It holds no style: durations, eases, transitions and looks for Revline films are decided in launch-films-motions.
 
 GSAP choreographs scene motion: staggers, overlaps, word and letter reveals, SplitText, MorphSVG, DrawSVG, motion paths. The API pages adapt GreenSock’s MIT skills (github.com/greensock/gsap-skills) for Revline. Use the supplied paused timeline: the engine seeks every frame for identical preview/export.
 

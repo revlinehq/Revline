@@ -12,7 +12,7 @@ Drop any video into the editor chat (an edited video, raw footage, someone's lau
 | Overview | `understand` mode, Gemini native video | Summary and rough scenes. Too coarse for a breakdown. |
 | Focused questions | `inspectVideo` (Gemini agentic, up to ~60 s windows), `inspectFrames` (up to 12 decoded frames, 3 s) | Precise looks at one moment, with boxes. |
 | Our own output | `getFrames` | Renders our timeline, so a remake can be compared against the reference. |
-| Style language | `lib/ai/skills/motion-design` | Directions written as five lines (look, type, product UI, motion, pacing), plus techniques with durations and eases. |
+| Style language | `lib/ai/skills/launch-films-motions` | Directions written as five lines (look, type, product UI, motion, pacing), plus techniques with durations and eases. |
 
 So the new work is one new analysis mode, one stored shape, one read tool, one chat card, and skill guidance. No new provider.
 
@@ -63,7 +63,7 @@ reference: {
   duration, fps, aspect,
   shots: [{ id: 'S1', start, end, transitionIn, camera, look, parts: [...], titles: [...], onBeat?: boolean }],
   rhythm: { medianShot, shortestShot, longestShot, cutsPerMinute, onBeatRatio?, bpm? },
-  direction: { look, type, productUi, motion, pacing },   // the five motion-design lines, written from the shots
+  direction: { look, type, productUi, motion, pacing },   // the five launch-films-motions lines, written from the shots
   signatures: [{ id: 'T1', kind: 'transition' | 'title' | 'camera' | 'pacing', shotIds: ['S3','S7'], recipe }]
 }
 ```
@@ -85,19 +85,19 @@ The reference file never goes on the timeline. It stays in project media and is 
 - Each part maps to scene code. `ui` becomes your product UI rebuilt from your brand-kit blueprint (never the reference's UI). `title` keeps the measured size, entrance, ease and hold, with copy written for your product. `background` and `look` come from the brand kit, with the reference palette used only as a guide for mood.
 - Transitions map to `addTransition` presets with the measured duration. Camera moves map to `configureCameraMotion` or GSAP inside the scene. Cuts are snapped to the beats of your music with `alignCutsToBeat` when the reference cut on beat.
 - After it is built, `getFrames` at each shot's middle, compared with the reference keyframes, checks the build.
-- The motion-design rule stays: never copy the reference's copy, logo, product, characters or exact layout. A remake copies the *edit* (structure, timing, motion, type behaviour), not the content.
+- The launch-films-motions rule stays: never copy the reference's copy, logo, product, characters or exact layout. A remake copies the *edit* (structure, timing, motion, type behaviour), not the content.
 
 **Style transfer:** only the parts you pointed at, applied to the current edit.
 - `S4 transition` → the same preset and duration on the cuts you name, or on all of them if you say so.
 - `S4.title` → its type behaviour applied to your titles: `applyTextLook` or `setTextAnimation` for text clips, and an `editScene` change of the title's CSS and GSAP inside scenes.
 - `pacing` → the shot-length profile and on-beat ratio applied to your cuts (trim, `alignCutsToBeat`).
-- `direction` → used as the film's style direction in the motion-design flow (step 5), in place of an example direction.
+- `direction` → used as the film's style direction in the launch-films-motions flow (step 5), in place of an example direction.
 - The "feedback on one part" rule applies: only the named parts change.
 
 ## Build order
 
 1. `reference` analysis mode: worker pipeline, schema, `analysis.reference`, `analyzeMedia` mode `reference`.
-2. `inspectReference` tool and the skill page (`motion-design` → `reference` page: remake vs style rules).
+2. `inspectReference` tool and the skill page (`launch-films-motions` → `reference` page: remake vs style rules).
 3. Turn wiring: an attached video plus a reference-style request triggers the breakdown; the reference stays off the timeline.
 4. Chat breakdown card with shot strip, part chips and composer tokens.
 5. Verify in the dev editor: drop a launch film, read the breakdown, run a remake and a single-part style borrow, check with `getFrames`.
@@ -105,7 +105,7 @@ The reference file never goes on the timeline. It stays in project media and is 
 ## Decisions (from review)
 
 - No salute emoji. It was not part of this feature.
-- A remake depends on what the reference is. References are already-edited videos (Instagram edits, motivation videos, brand launch films), so the breakdown classifies a genre and the `reference-footage` skill has a page for each: `social-edit` (the user's footage cut to their music on the reference's rhythm), `motivation` (the user's voice and footage, the reference's caption style and pacing), `launch-film` (motion-design scenes for the user's brand), plus `borrow` for single parts.
+- A remake depends on what the reference is. References are already-edited videos (Instagram edits, motivation videos, brand launch films), so the breakdown classifies a genre and the `reference-footage` skill has a page for each: `social-edit` (the user's footage cut to their music on the reference's rhythm), `motivation` (the user's voice and footage, the reference's caption style and pacing), `launch-film` (launch-films-motions scenes for the user's brand), plus `borrow` for single parts.
 - When a remake needs material the project does not have, the agent lists what each shot needs and asks.
 - Pointing at moments: the chat card's shot strip, part chips and "this moment" chip, plus plain words resolved by `inspectReference`.
 

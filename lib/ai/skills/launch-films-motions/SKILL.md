@@ -1,5 +1,5 @@
 ---
-name: "motion-design"
+name: "launch-films-motions"
 description: "Motion design made from scratch, with no footage on screen: launch and feature films, product and feature reels, teasers, any standalone motion scene, and faithful motion-film copies when requested (shot for shot from their frames, with no brand questions). How films are built (one clip, one timeline, patchScene edits), the recreation method, and the user's rules for facts and feedback; pages for backgrounds (base, structure and accent from the brand kit), the brand kit and blueprints (product UI that moves). Read before any launch, announcement, teaser, feature video or standalone motion scene. Scenes themselves: scene-engine."
 ---
 # Motion design: launch and feature films

@@ -6,7 +6,7 @@ description: "Rebuild a product screenshot as a pixel-perfect blueprint (live HT
 
 A blueprint is a kit screen rebuilt as a responsive scene module: every piece (header, sidebar, composer, tab, clip, button) is HTML with a `data-part` name, measured from the screen's pixels and scored against it. Once saved in the brand kit, every film for that brand can mount it.
 
-If the kit already has a blueprint for that screen (listBlueprints), use it; build one only when it is missing. Whether a film shows product UI at all, and how it moves, is decided in motion-design.
+If the kit already has a blueprint for that screen (listBlueprints), use it; build one only when it is missing. Whether a film shows product UI at all, and how it moves, is decided in launch-films-motions.
 
 ## Building one
 Fonts and the logo come from the kit; colors and positions come from the screen. Never type a size, color or radius by eye.

@@ -4,7 +4,7 @@ description: "For a new film: one message, one audience tension and 3–5 pictur
 ---
 # Ideation: talk, then build
 
-This page covers only the conversation before a film: what to ask, the message, the tension and the angles. How to build it (look, assets, timing, sound) lives in the rest of motion-design.
+This page covers only the conversation before a film: what to ask, the message, the tension and the angles. How to build it (look, assets, timing, sound) lives in the rest of launch-films-motions.
 
 1. For a new film, readBrief, inspectTimeline and matching getBrandKit first. Read a supplied site with createBrandKit { url }. Reuse the known audience, product, platform/aspect ratio, length, audio and ending. Ask at most 2–3 missing questions in ONE message with defaults. Without a stated length, suggest one sized to the content; explicit length and "no logo" win. Ask for product screens only when the user wants their real product UI shown. Skip this conversation for small edits or "just build it".
 2. Propose MESSAGE in one plain sentence: what the viewer should believe. Bad "Make the video you imagined without juggling tools." Good, if the user confirmed that claim, "Editing software hasn't changed in 7 years. Revline is the first thing that feels different." Check numbers and product claims against readBrief or ask once.

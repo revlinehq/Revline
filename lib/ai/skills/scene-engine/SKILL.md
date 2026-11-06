@@ -1,6 +1,6 @@
 ---
 name: "scene-engine"
-description: "How scene clips and films work: the one plain GSAP module contract they share, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (motion-design for launch films and any standalone motion scene)."
+description: "How scene clips and films work: the one plain GSAP module contract they share, what loads, how frames are rendered, GSAP technique, fonts, images and the brand parameter. Read before the first addScene or editScene, together with the skill for the job (launch-films-motions for launch films and any standalone motion scene)."
 ---
 # Scene engine
 
@@ -26,8 +26,8 @@ Scenes and films share this one contract. A film (launch and feature films, recr
 - `section(name, start, duration, build)` marks a film section: `build` gets a child timeline placed on `tl` at `start`, in section-local seconds (page `films`).
 - `media` holds the project images attached with addScene/editScene `media` (see Project media), by name.
 - `icon('scissors', { size: 16, color: '#8d8f93', strokeWidth: 2 })` returns a Lucide icon as SVG markup (kebab-case names, as on lucide.dev). Use it for every UI icon instead of drawing one.
-- `blueprint('Editor', container, { width, height })` builds a brand kit blueprint attached with `blueprints` inside `container` and returns its root; animate its `[data-part=...]` pieces (motion-design, blueprints page).
-- `brand` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See motion-design's `brand-kit` page.
+- `blueprint('Editor', container, { width, height })` builds a brand kit blueprint attached with `blueprints` inside `container` and returns its root; animate its `[data-part=...]` pieces (launch-films-motions, blueprints page).
+- `brand` is the brand kit attached with brandKitId (fonts already loaded, named colors, logo), or null. See launch-films-motions's `brand-kit` page.
 - The editor seeks the timeline to each frame, so the film is scrubbable and exports frame-exact. Animate only with GSAP on that timeline (gsap page `revline` lists what never follows the clock).
 - Scenes and films are plain TypeScript, never JSX or React. Imports: `gsap` and its plugins ({{revline:0}}, plus EasePack), each from `gsap/<Name>` or all from `gsap`. They are registered already. Nothing else loads: no network, no other packages.
 - Math.random is seeded, so scatter and noise come out the same in preview and export.
@@ -35,7 +35,7 @@ Scenes and films share this one contract. A film (launch and feature films, recr
 
 ## GSAP technique
 
-Build motion on `tl` (or a section's timeline) with explicit positions, e.g. `tl.from(el, {y:20, opacity:0, stagger:.06}, 1)`. Use gsap’s core and plugins (motion-design recipes for named transitions) for easing, text, SVG, blur/masks and perspective. Counters write derived text in onUpdate; loops use repeat:-1/yoyo:true; instant changes use tl.set at explicit times or ease:steps(n). Rebuild interacting UI as HTML parts; measure against the real screen with compareScreen.
+Build motion on `tl` (or a section's timeline) with explicit positions, e.g. `tl.from(el, {y:20, opacity:0, stagger:.06}, 1)`. Use gsap’s core and plugins (launch-films-motions recipes for named transitions) for easing, text, SVG, blur/masks and perspective. Counters write derived text in onUpdate; loops use repeat:-1/yoyo:true; instant changes use tl.set at explicit times or ease:steps(n). Rebuild interacting UI as HTML parts; measure against the real screen with compareScreen.
 
 ## Fonts and images
 
