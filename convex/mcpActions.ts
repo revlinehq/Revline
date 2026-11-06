@@ -21,6 +21,7 @@ import { newMcpTaskId, readRunId } from './lib/run_ids';
 import { CALL_LIMIT_MS } from './lib/mcp_limits';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 import { startLocalUpload, mediaKind } from './mcpUploads';
+import { boardDocument, mcpAppData, type BackgroundRecipe } from '../lib/editor/background-preview';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
@@ -78,7 +79,7 @@ const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
   assets: [], recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: new AbortController().signal,
 });
 
-export const listTools = internalAction({ args: {}, returns: v.array(v.object({ name: v.string(), description: v.string(), inputSchema: v.any() })), handler: async (ctx): Promise<{ name: string; description: string; inputSchema: unknown }[]> => {
+export const listTools = internalAction({ args: {}, returns: v.array(v.object({ name: v.string(), description: v.string(), inputSchema: v.any(), _meta: v.optional(v.any()) })), handler: async (ctx): Promise<{ name: string; description: string; inputSchema: unknown; _meta?: unknown }[]> => {
   const options = catalogOptions();
   const { tools } = editorTools(ctx, options);
   // The catalog is the same for every session. A tag names what enables the tool; calls enforce it.
@@ -91,12 +92,12 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
       if(name!=='startTask'&&inputSchema.properties?.projectId) inputSchema.properties.taskId=toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask; resolves this project’s lane context and pins an omitted timelineId.'));
       return { name, description: description(name,tool.description), inputSchema };
     }),
-    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => ({ name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
+    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => { const ui = toolBehavior(name)?.ui; return { name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)), ...(ui ? { _meta: { ui: { resourceUri: ui } } } : {}) }; }),
   ];
 }});
 
-const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))) });
-type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[] };
+const callResult = v.object({ text: v.string(), isError: v.boolean(), ended: v.optional(v.boolean()), images: v.optional(v.array(v.object({ data: v.string(), mimeType: v.string() }))), structuredContent: v.optional(v.any()) });
+type CallResult = { text: string; isError: boolean; ended?: boolean; images?: { data: string; mimeType: string }[]; structuredContent?: Record<string, unknown> };
 const result = (value: unknown, isError = false): CallResult => ({ text: typeof value === 'string' ? value : JSON.stringify(value), isError });
 const failed = (value: unknown) => !!value && typeof value === 'object' && (value as { success?: unknown }).success === false;
 const message = (error: unknown) => {
@@ -306,6 +307,19 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
+/**
+ * previewBackgrounds over MCP: the text keeps every resolved recipe for clients without MCP Apps; structuredContent
+ * feeds the inline view and carries the whole board as one standalone HTML document. Per-candidate html is for the
+ * editor chat's choice card, which MCP clients do not have.
+ */
+function backgroundPreviewResult(output: unknown, isError: boolean): CallResult {
+  if (isError || !output || typeof output !== 'object' || !Array.isArray((output as { candidates?: unknown }).candidates)) return result(output, isError);
+  const { candidates, next: _next, ...rest } = output as { headline: string; font: { family: string; weight: string }; candidates: (BackgroundRecipe & { html?: string })[]; next?: string };
+  const recipes = candidates.map(({ html: _html, ...recipe }) => recipe);
+  const board = { headline: rest.headline, font: rest.font, recipes };
+  return { ...result({ ...rest, candidates: recipes, next: 'Clients that render MCP Apps show these candidates inline with a "Use this" button that posts the pick as the user\'s message. Otherwise list each label with its line and ask which one. Then save the picked line with updateBrief and build from it.' }), structuredContent: { ...mcpAppData(board), html: boardDocument(board) } };
+}
+
 async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mcpLaneSessions'>) {
   if (!session) return {};
   const task = await ctx.runQuery(internal.lanes.task, { ownerId, projectId: session.projectId, taskId: session.taskId }) as LaneTask | null;
@@ -322,6 +336,7 @@ async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: str
     const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, comparisonDeadline, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
+    if (name === 'previewBackgrounds') return backgroundPreviewResult(output, failed(output));
     return withImages(output, failed(output));
   } catch (error) { return result(message(error), true); }
 }
