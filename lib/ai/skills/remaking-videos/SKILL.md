@@ -14,7 +14,7 @@ For original work inspired by a reference, follow launch-films-motions "A style 
 3. Reply with the breakdown (see Breakdown reply).
 4. Ask, only if the message did not already say: remake it, or borrow which parts?
 5. Load the page for the job (see Defaults) and build.
-6. After building, go through writing-scenes page `checklist` for scenes and look at the result with getFrames at the shots that matter, sampled as writing-scenes page `edit-lanes` sets for the lane.
+6. After building, look at the result with getFrames at the shots that matter, sampled as writing-scenes page `edit-lanes` sets for the lane; a scene remake also closes out with page `recreation`.
 
 ## Breakdown reply
 - One line: what it is (genre), its length and shot count, the rhythm (median shot, cuts on the beat, bpm).

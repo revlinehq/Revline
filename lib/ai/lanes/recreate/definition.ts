@@ -2,7 +2,7 @@ import type { CheckRecipe, LaneDefinition } from '../types';
 import { skills } from './skills';
 import { tools } from './tools';
 import { check } from './check';
-const full: CheckRecipe = { frames: 'full', fullTools: true, boundedReads: false, instructions: 'Full checks plus reference comparison: follow remaking-videos page recreation and the writing-scenes checklist. Run compareReference and compareMotion across every rebuilt section, or mark an unmeasurable window OFF with its time and reason, before finish.' };
+const full: CheckRecipe = { frames: 'full', fullTools: true, boundedReads: false, instructions: 'Full checks plus reference comparison: follow the close-out in remaking-videos page recreation; finish also checks the code limits. Run compareReference and compareMotion across every rebuilt section, or mark an unmeasurable window OFF with its time and reason, before finish.' };
 export const definition: LaneDefinition = {
   id: 'recreate',
   description: 'Rebuild the motion and timing of a reference video.',

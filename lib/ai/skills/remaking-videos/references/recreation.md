@@ -108,7 +108,7 @@ Write a numbered effect inventory in your reply, with one item per visible chang
 - Mark every numbered inventory item matched by rendered evidence or off with its time and reason, including every off item in the motionMap reports; off never means matched.
 - Compare the final rendered output on the saved revision against the source, including dimensions, duration, cut and caption timing, and changed motion windows.
 - Report what remains approximate, substituted fonts/assets, unverified intervals and the actual comparison results; claim only the agreement the evidence supports.
-- Recheck all section boundaries and motionMap windows after the final edits, then run the writing-scenes checklist; a still-frame score never certifies motion.
+- Recheck all section boundaries and motionMap windows after the final edits, then call finish, which also checks the code limits; a still-frame score never certifies motion.
 
 ### Sound
 - Match music with matchMusic using the reference's tempo and main inventory moments.

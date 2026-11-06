@@ -34,5 +34,6 @@ export const laneResultValidator = v.object({
   timelineId: v.string(),
   checkKey: v.optional(v.string()),
   motionCheck: v.optional(v.string()),
+  warnings: v.optional(v.array(v.string())),
   motionOff: v.optional(v.array(v.object({ assetId: v.string(), timelineId: v.string(), start: v.number(), end: v.number(), time: v.number(), reason: v.string() }))),
 });

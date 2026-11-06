@@ -66,6 +66,8 @@ export type LaneDefinition = {
   skills: EditorSkill[];
   tools: readonly string[];
   check: (context: LaneCheckContext) => string[];
+  /** Advisory findings reported with finish; they never block it. */
+  warn?: (context: LaneCheckContext) => string[];
   checks: Record<CheckLevel, CheckRecipe>;
   instructions: string;
   referenceMotion?: 'required' | 'bound';

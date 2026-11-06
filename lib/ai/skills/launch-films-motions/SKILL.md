@@ -8,7 +8,7 @@ A good film says one true message in the user's brand, moves fast with short bea
 
 Terms: a **film** is the output; a **section** is one `section(...)` call; a **beat** is one idea on screen inside a section (a title, a UI state, a feature); a **move** is one animation; a **reference** is a video being copied.
 
-Contents: Workflow; Defaults (timing and easing, sound levels); Rules (structure, timing, sound, recreating a reference, a new film for the user's brand, never speculate, taste, direction and feedback); Pages.
+Contents: Workflow; Defaults (timing and easing, sound levels); Rules (structure, timing, sound, recreating a reference, a new film for the user's brand, never speculate, taste, direction and feedback); Before handing back; Pages.
 
 ## Workflow
 1. **Existing film:** start with writing-scenes page `edit-lanes` and follow it instead of the steps below.
@@ -18,7 +18,7 @@ Contents: Workflow; Defaults (timing and easing, sound levels); Rules (structure
 5. **Assets:** page `image-plates` for anything code cannot draw; page `blueprints` when the user's product UI is shown.
 6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from "Timing and easing" below.
 7. **Sound:** add music as "Sound" below says.
-8. **Check** with writing-scenes page `checklist` before handing it back.
+8. **Check** the film as "Before handing back" lists, then call finish.
 
 ## Defaults
 
@@ -96,6 +96,15 @@ Defaults for original films. The user's direction and a reference being copied w
 - Never "improve" what was not asked about. If a change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
 - **A film the user likes for its style** (not one to copy): readFrames its whole arc.
 - For each choice you borrow, note what it does, why it works and how this film expresses it differently. Never reuse its imagery, layout or timing.
+
+## Before handing back
+Look at these with getFrames:
+- the first frame;
+- each cut, on the cut;
+- one frame per section;
+- nothing still on screen after the element that owns it has closed.
+
+finish runs the timing and limit checks on the saved code automatically.
 
 ## Pages
 - `ideation`: the conversation before a new film: message, tension, angles.
