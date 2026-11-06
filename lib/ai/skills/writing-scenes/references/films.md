@@ -69,7 +69,7 @@ push(s, { target: '.cta', amount: .2, frames: 24, at: 1.1 });
 ### beat, downbeat, accent, beats
 `beat(n)`, `downbeat(n)` and `accent(n)` return the film second of the n-th (1-based) music marker of that kind; `beats(kind)` returns all of them (`'beats'` default, `'downbeats'`, `'accents'`). They read the markers markMusicBeats put on the timeline, mapped to this film's own clock. Run markMusicBeats on the song's clip with the kind needed first; with no markers of that kind, or an n past the last one, they throw and list what is there.
 - Film seconds: on a section's timeline subtract its start, `at: beat(9) - shot.start`.
-- `start` and `duration` stay number literals: write the marker's value there and add `on` to have it checked.
+- A `section` or `shot` may also be timed by markers: `start` as `downbeat(2)`, `duration` as `downbeat(4) - downbeat(2)` (or a marker minus a number). Saving writes the number literals the engine reads, start floored to the millisecond so the cut stays on the marker's frame, plus a comment naming what was written: `shot('Editor', 2.866, 3.566 /* downbeat(2), downbeat(4) - downbeat(2) */, …)`. addFilm and patchScene return them as `beatTiming`; later edits find the literals. A `sections` entry with the same title takes that start.
 ```ts
 hit(s, { at: accent(2) - shot.start, intensity: .6 });
 ```
