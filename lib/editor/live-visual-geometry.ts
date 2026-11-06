@@ -3,12 +3,12 @@ import { NEUTRAL_MOTION } from './motion-path';
 import { boundedCameraMotion } from './camera-framing';
 import { compositionIndex } from './composition-node';
 import { trimmedFocus } from './composition';
-import { calculateVisualRect } from './visual-source-geometry';
+import { calculateVisualRect, flipStyle } from './visual-source-geometry';
 import { playbackRateOf, timelineTimeAtSource } from './playback-rate';
 import { DEFAULT_TRANSFORM, dimensions, type Clip, type MediaAsset, type Timeline } from './types';
 import type { CompositionWindow } from './composition-window';
 
-const geometry = ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, cameraMotion, smoothZoom }: Clip) => ({ crop, fit, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, camera: !!(cameraMotion || smoothZoom) });
+const geometry = ({ crop, fit, flip, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, cameraMotion, smoothZoom }: Clip) => ({ crop, fit, flip, transform, blendMode, start, duration, sourceStart, focus, motion, motionOffset, camera: !!(cameraMotion || smoothZoom) });
 
 /** Change the retained source geometry without replacing its decoded media or clock. */
 export function updateLiveVisualGeometry(document:Document, previous:Timeline, next:Timeline, assets:MediaAsset[]):boolean {
@@ -45,6 +45,7 @@ export function updateLiveVisualGeometry(document:Document, previous:Timeline, n
     frame.style.left = `${(transform.x-.5)*width}px`; frame.style.top = `${(transform.y-.5)*height}px`;
     frame.style.transform = `rotate(${transform.rotation}deg) scale(${transform.scale})`;
     frame.style.opacity = String(transform.opacity); frame.style.mixBlendMode = clip.blendMode ?? 'normal';
+    window.style.transform = flipStyle(clip.flip);
     if (asset.width && asset.height) {
       const focus = trimmedFocus(clip);
       const rect = calculateVisualRect(asset.width,asset.height,width,height,clip.crop,focus[0],clip.fit);

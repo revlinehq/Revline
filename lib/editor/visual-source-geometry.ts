@@ -1,5 +1,5 @@
 import { clampOrFallback as bounded } from '../math';
-import { DEFAULT_CROP, type SourceCrop } from './types';
+import { DEFAULT_CROP, type ClipFlip, type SourceCrop } from './types';
 
 
 /** Crop masks the source without changing its existing scale or placement. */
@@ -13,4 +13,9 @@ export function calculateVisualRect(sourceWidth: number, sourceHeight: number, f
   const windowLeft = Math.max(0,left+crop.left*width), windowTop = Math.max(0,top+crop.top*height);
   const windowRight = Math.min(frameWidth,left+(1-crop.right)*width), windowBottom = Math.min(frameHeight,top+(1-crop.bottom)*height);
   return { left,top,width,height,window:{left:windowLeft,top:windowTop,width:Math.max(0,windowRight-windowLeft),height:Math.max(0,windowBottom-windowTop)} };
+}
+
+/** CSS for a clip flip on its source window, so the mirrored picture keeps the same crop window in preview and export. */
+export function flipStyle(flip?: ClipFlip) {
+  return flip?.horizontal || flip?.vertical ? `scale(${flip.horizontal ? -1 : 1},${flip.vertical ? -1 : 1})` : '';
 }
