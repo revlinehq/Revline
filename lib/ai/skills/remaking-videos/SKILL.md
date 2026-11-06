@@ -1,6 +1,6 @@
 ---
-name: "reference-footage"
-description: "Breaks down a video the user shares to remake or to take style from (an edit, a motivation video, anything) and acts on the parts the user points at (\"this transition, this title, this pacing\"). Read before analyzing a reference, before a remake, and before borrowing any part of one; recreating a launch or motion film also needs launch-films-motions."
+name: "remaking-videos"
+description: "Remakes a video the user shares, or borrows parts of it (a transition, a title style, the pacing, the look) for the user's own edit. Read before analyzing a reference, before a remake, and before borrowing any part of one; recreating a launch or motion film also needs launch-films-motions."
 ---
 # Reference footage
 
@@ -14,7 +14,7 @@ For original work inspired by a reference, follow launch-films-motions "A style 
 3. Reply with the breakdown (see Breakdown reply).
 4. Ask, only if the message did not already say: remake it, or borrow which parts?
 5. Load the page for the job (see Defaults) and build.
-6. After building, go through scene-engine page `checklist` for scenes and look at the result with getFrames at the shots that matter, sampled as scene-engine page `edit-lanes` sets for the lane.
+6. After building, go through writing-scenes page `checklist` for scenes and look at the result with getFrames at the shots that matter, sampled as writing-scenes page `edit-lanes` sets for the lane.
 
 ## Breakdown reply
 - One line: what it is (genre), its length and shot count, the rhythm (median shot, cuts on the beat, bpm).

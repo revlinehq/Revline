@@ -35,7 +35,7 @@ Each short lives in its own titled tab of one shared project, keeps the source f
 - Do not run checkPacing, 10 fps windows or getFrames sweeps on finished shorts.
 - Never claim a skipped check passed or that an unsupported action was observed.
 - Finding moments alone is an inspection request: return the ranked candidates without changing timelines.
-- A small follow-up edit to a finished short (caption, trim, style) starts with scene-engine page edit-lanes and uses its quick lane where it applies; do not repeat whole-source discovery for it.
+- A small follow-up edit to a finished short (caption, trim, style) starts with writing-scenes page edit-lanes and uses its quick lane where it applies; do not repeat whole-source discovery for it.
 
 ## Pages
 - moments: discover, rank and register candidates; choose clean 15–60 s boundaries.

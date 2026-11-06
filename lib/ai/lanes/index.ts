@@ -18,10 +18,13 @@ function allSkills() {
 export function capabilityExists(name: string) {
   return isLane(name) || allSkills().some(skill => skill.name === name);
 }
-// Capabilities saved on existing tasks before these skills were folded into footage-editing.
-const FORMER_FOOTAGE_SKILLS = new Set(['music-and-sound', 'color-grading', 'effects', 'vfx', 'vfx-recipes', 'text-styling']);
+// Capabilities saved on existing tasks under names that were later folded or renamed.
+const FORMER_CAPABILITIES: Record<string, string> = {
+  'music-and-sound': 'footage-editing', 'color-grading': 'footage-editing', effects: 'footage-editing', vfx: 'footage-editing', 'vfx-recipes': 'footage-editing', 'text-styling': 'footage-editing',
+  'reference-footage': 'remaking-videos', 'scene-engine': 'writing-scenes',
+};
 export function capabilityTools(name: string): readonly string[] {
-  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[FORMER_FOOTAGE_SKILLS.has(name) ? 'footage-editing' : name] ?? [];
+  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[FORMER_CAPABILITIES[name] ?? name] ?? [];
 }
 export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
   return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];

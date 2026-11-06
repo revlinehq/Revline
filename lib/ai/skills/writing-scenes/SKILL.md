@@ -1,5 +1,5 @@
 ---
-name: "scene-engine"
+name: "writing-scenes"
 description: "Defines the plain HTML + GSAP module contract that scene clips and films share: the scene() arguments, what loads, fonts, images, project media and limits. Read before the first addFilm, addScene or editScene, together with launch-films-motions for how a film should look and move."
 ---
 # Scene engine

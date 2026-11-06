@@ -1,11 +1,11 @@
 import { launchFilmsMotions } from '../../skills/launch-films-motions';
 import { gsapSkill } from '../../skills/gsap';
-import { sceneEngine } from '../../skills/scene-engine';
-import { referenceFootage } from '../../skills/reference-footage';
+import { writingScenes } from '../../skills/writing-scenes';
+import { remakingVideos } from '../../skills/remaking-videos';
 // Films made from scratch read only the film skills; footage, caption and sound-effect skills belong to the footage lanes.
 export const skills = [
   launchFilmsMotions,
   gsapSkill,
-  sceneEngine,
-  { ...referenceFootage, body: 'For a film already bound to a reference, read page recreation. A new reference remake belongs in the recreate lane.', pages: referenceFootage.pages?.filter(page => page.name === 'recreation') },
+  writingScenes,
+  { ...remakingVideos, body: 'For a film already bound to a reference, read page recreation. A new reference remake belongs in the recreate lane.', pages: remakingVideos.pages?.filter(page => page.name === 'recreation') },
 ];

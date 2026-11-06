@@ -12,7 +12,7 @@ A good plate is one useful asset that code could not draw, in the film's palette
 3. **Generate** one variant first. Ask for alternatives only when they are useful.
 4. **Inspect** the preview: subject, anatomy, edges, framing, palette and unwanted text.
 5. **Correct** a failed asset once with a sharper brief, passing its asset ID in referenceAssetIds; never generate a series of guesses.
-6. **Attach** it as scene media (scene-engine, Project media) and place it (Example).
+6. **Attach** it as scene media (writing-scenes, Project media) and place it (Example).
 
 ## Rules
 

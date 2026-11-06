@@ -1,12 +1,12 @@
 import { footageEditing } from '../../skills/footage-editing';
 import { launchFilmsMotions } from '../../skills/launch-films-motions';
 import { gsapSkill } from '../../skills/gsap';
-import { sceneEngine } from '../../skills/scene-engine';
-import { referenceFootage } from '../../skills/reference-footage';
+import { writingScenes } from '../../skills/writing-scenes';
+import { remakingVideos } from '../../skills/remaking-videos';
 export const skills = [
   footageEditing,
   launchFilmsMotions,
   gsapSkill,
-  sceneEngine,
-  referenceFootage,
+  writingScenes,
+  remakingVideos,
 ];

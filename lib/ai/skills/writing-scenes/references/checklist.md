@@ -27,6 +27,6 @@ A film is done when every item below was checked on rendered frames, never from 
    Name each one checked; a frame that only looks fine at a glance is not checked.
 6. **Measurements.** Product UI compared with its screenshot at full size (compareScreen). Every reference measured on full-resolution frames, never a downscaled contact sheet (it makes everything look about half its size).
 7. **Only what was asked.** On feedback, diffScene shows no change outside the named part.
-8. **Limits.** Within the scene-engine Contract limits.
+8. **Limits.** Within the writing-scenes Contract limits.
 9. **Preview speed.** Parts that are done or hidden are `display: none` (or `autoAlpha: 0`), not only opacity 0. No heavy UI left visible where it cannot be seen.
-10. **Recreations match.** Close out reference-footage page `recreation`: every inventory item matched or explicitly marked off.
+10. **Recreations match.** Close out remaking-videos page `recreation`: every inventory item matched or explicitly marked off.

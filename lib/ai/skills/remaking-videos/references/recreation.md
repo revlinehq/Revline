@@ -1,6 +1,6 @@
 ---
 name: "recreation"
-description: "The full recreation workflow: section inventories, exact content, layered camera behavior, rendered transition comparisons and close-out. Existing edits start with scene-engine page edit-lanes."
+description: "The full recreation workflow: section inventories, exact content, layered camera behavior, rendered transition comparisons and close-out. Existing edits start with writing-scenes page edit-lanes."
 ---
 # Recreating a motion film
 
@@ -12,8 +12,8 @@ description: "The full recreation workflow: section inventories, exact content, 
 - 4. Close out against the inventory
 
 ## Before starting
-- For edits to an existing recreation, start with scene-engine page `edit-lanes`. The inventory, dense reads, comparisons and close-out below are the recreate lane's full checks, which that lane always runs. A small change made in the edit lane uses its local frame checks instead.
-- The supplied video is the brief. Read launch-films-motions and scene-engine for implementation. This page owns the recreation workflow.
+- For edits to an existing recreation, start with writing-scenes page `edit-lanes`. The inventory, dense reads, comparisons and close-out below are the recreate lane's full checks, which that lane always runs. A small change made in the edit lane uses its local frame checks instead.
+- The supplied video is the brief. Read launch-films-motions and writing-scenes for implementation. This page owns the recreation workflow.
 - Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length.
 - Rebuild graphics, UI and captions as editable layers; retain separately addressable footage where the requested workflow uses it. Do not flatten the remake into playback of the reference.
 - For a new motion film, read launch-films-motions page `ideation`: agree the message, tension and an angle, then build when the user accepts it. During the build, read `image-plates` for real asset needs.
@@ -63,7 +63,7 @@ Write a numbered effect inventory in your reply, with one item per visible chang
 ## 3. Build and verify this section before the next
 
 ### Build with section markers
-- Use addFilm for one continuous film with section markers. Build the first section as a `section(...)` call, leaving an insertion marker comment for later sections (scene-engine page `films`).
+- Use addFilm for one continuous film with section markers. Build the first section as a `section(...)` call, leaving an insertion marker comment for later sections (writing-scenes page `films`).
 - Set builtThrough to that section's film-second end so addFilm checks reads for the implemented part while keeping the full clip duration; extend builtThrough with patchScene for each later section.
 - For corrections, inspectClip with section (marker label or id) or lines {start,end} returns short exact blocks with absolute line numbers.
 - Use patchScene with that section and small find/replace edits, or edits [{lines:{start,end},replace}] without quoting old code; pass expectedRevision from the read.
@@ -108,7 +108,7 @@ Write a numbered effect inventory in your reply, with one item per visible chang
 - Mark every numbered inventory item matched by rendered evidence or off with its time and reason, including every off item in the motionMap reports; off never means matched.
 - Compare the final rendered output on the saved revision against the source, including dimensions, duration, cut and caption timing, and changed motion windows.
 - Report what remains approximate, substituted fonts/assets, unverified intervals and the actual comparison results; claim only the agreement the evidence supports.
-- Recheck all section boundaries and motionMap windows after the final edits, then run the scene-engine checklist; a still-frame score never certifies motion.
+- Recheck all section boundaries and motionMap windows after the final edits, then run the writing-scenes checklist; a still-frame score never certifies motion.
 
 ### Sound
 - Match music with matchMusic using the reference's tempo and main inventory moments.

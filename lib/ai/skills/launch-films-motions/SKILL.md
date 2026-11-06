@@ -1,6 +1,6 @@
 ---
 name: "launch-films-motions"
-description: "Sets the motion, timing, sound and style rules for films made from scratch with no footage on screen: launch and feature films, teasers, standalone motion scenes and shot-for-shot copies of a reference. Read it before building, restyling or editing any of them; scene-engine covers the code."
+description: "Sets the motion, timing, sound and style rules for films made from scratch with no footage on screen: launch and feature films, teasers, standalone motion scenes and shot-for-shot copies of a reference. Read it before building, restyling or editing any of them; writing-scenes covers the code."
 ---
 # Launch films and motion
 
@@ -11,14 +11,14 @@ Terms: a **film** is the output; a **section** is one `section(...)` call; a **b
 Contents: Workflow; Defaults (timing and easing, sound levels); Rules (structure, timing, sound, recreating a reference, a new film for the user's brand, never speculate, taste, direction and feedback); Pages.
 
 ## Workflow
-1. **Existing film:** start with scene-engine page `edit-lanes` and follow it instead of the steps below.
+1. **Existing film:** start with writing-scenes page `edit-lanes` and follow it instead of the steps below.
 2. **Recreation:** follow "Recreating a reference" below.
 3. **New film:** read page `ideation`. When the user accepts an angle, start building.
 4. **Look:** find or create the brand kit (page `brand-kit`), then build the background (page `backgrounds`) before the first addFilm.
 5. **Assets:** page `image-plates` for anything code cannot draw; page `blueprints` when the user's product UI is shown.
-6. **Build** the film with addFilm as scene-engine page `films` describes, timing every move from "Timing and easing" below.
+6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from "Timing and easing" below.
 7. **Sound:** add music as "Sound" below says.
-8. **Check** with scene-engine page `checklist` before handing it back.
+8. **Check** with writing-scenes page `checklist` before handing it back.
 
 ## Defaults
 
@@ -68,7 +68,7 @@ Defaults for original films. The user's direction and a reference being copied w
 ### Recreating a reference (clone, remake, "shot for shot")
 - The reference is the brief: no brand kit and no brand questions.
 - New recreations use the recreate lane, which runs full checks.
-- Read reference-footage page `recreation` before building a copy or making a full-lane edit. It owns the recreation workflow.
+- Read remaking-videos page `recreation` before building a copy or making a full-lane edit. It owns the recreation workflow.
 - Its measured behavior wins over the motion defaults on this page.
 
 ### A new film for the user's brand
