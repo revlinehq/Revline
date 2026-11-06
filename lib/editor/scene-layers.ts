@@ -64,8 +64,9 @@ export function sceneMediaAssetIds(timeline: Timeline) {
 }
 
 /** fileUrls maps remote file URLs (brand fonts) to the copies an export wrote beside the composition. */
-export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}, fileUrls: Record<string, string> = {}) {
-  return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls,bundles){
+/** `preview` lets scene videos play natively while the editor plays; exports always seek them frame-exact. */
+export function sceneRuntimeScript(sources: SceneLayerSource[], fonts: SceneFont[], runtimeUrl: string, mediaUrls: Record<string, string> = {}, fileUrls: Record<string, string> = {}, preview = false) {
+  return `(function(initial,fonts,runtimeUrl,mediaUrls,fileUrls,bundles,preview){
 var host=window,clock=host.__timelines.revline.__hfReal||host.__timelines.revline,composition=document.getElementById('composition'),entries=new Map(),fontData=new Map(),unregister;
 var virtual=host.__HF_VIRTUAL_TIME__,later=virtual&&virtual.originalSetTimeout?virtual.originalSetTimeout:setTimeout.bind(window),nextFrame=virtual&&virtual.originalRequestAnimationFrame?virtual.originalRequestAnimationFrame:requestAnimationFrame.bind(window);
 var runtimeSources=new Map(),iconSource=null,overscan=16;
@@ -106,13 +107,19 @@ function mount(source){
 // often than frames change, so unsnapped times flooded the scene with seeks and left it no time to draw.
 function localTime(entry,time){var fps=entry.source.fps||30;return Math.max(0,Math.round((time-entry.source.start+entry.source.offset)*fps)/fps);}
 function visibleAt(entry,time){var local=time-entry.source.start;return local>=0&&local<entry.source.duration;}
-function seek(entry,time){entry.seq++;entry.posted=time;entry.inflight=entry.seq;entry.sentAt=Date.now();entry.queued=undefined;send(entry,{type:'seek',time:time,seq:entry.seq});return entry.seq;}
+// Only the editor preview plays live; paused, scrubbing or exporting gets frame-exact seeks. The preview
+// player drives a paused clock by seeking it, so its runtime bridge says whether it is playing.
+function playing(){if(!preview)return false;var player=host.__player;return player&&typeof player.isPlaying==='function'?!!player.isPlaying():!clock.paused();}
+function seek(entry,time,live){entry.seq++;entry.posted=time;entry.live=!!live;entry.inflight=entry.seq;entry.sentAt=Date.now();entry.queued=undefined;send(entry,{type:'seek',time:time,seq:entry.seq,playing:!!live});return entry.seq;}
 // Playback asks for a frame every animation frame. A scene slower than that would queue stale seeks and
 // keep replaying them after a pause, so while one is drawing only the newest time waits for the next.
-function follow(entry,time){if(entry.inflight&&Date.now()-entry.sentAt<1000)entry.queued=time;else seek(entry,time);}
+function follow(entry,time,live){if(entry.inflight&&Date.now()-entry.sentAt<1000){entry.queued=time;entry.queuedLive=live;}else seek(entry,time,live);}
 function paint(time){
   bindExport();
-  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&!entry.error&&entry.posted!==localTime(entry,time))follow(entry,localTime(entry,time));}catch(error){report(entry,error&&error.message||String(error));}});
+  var live=playing();
+  entries.forEach(function(entry){try{var visible=visibleAt(entry,time),state=visible?'visible':'hidden';if(entry.node.style.visibility!==state)entry.node.style.visibility=state;if(visible&&entry.compiled&&!entry.error&&(entry.posted!==localTime(entry,time)||entry.live!==live))follow(entry,localTime(entry,time),live);
+    // A scene left behind while playing pauses its videos on the frame it last showed.
+    else if(!visible&&entry.live&&entry.compiled&&!entry.error)follow(entry,entry.posted,false);}catch(error){report(entry,error&&error.message||String(error));}});
 }
 // Some clock moves (player swaps, end-of-playback resets) bypass render and onUpdate.
 function watch(){if(entries.size)paint(clock.time());nextFrame(watch);}
@@ -123,8 +130,8 @@ function whenReady(time){
     pending.push(entry.ready.then(function(){
       if(entry.error)throw entry.error;
       // HyperFrames calls this on every runtime tick; a frame the scene already drew needs no new seek.
-      var at=localTime(entry,time);if(entry.drawn===at&&!entry.inflight)return;
-      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at?entry.inflight:seek(entry,at),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
+      var at=localTime(entry,time),live=playing();if(entry.drawn===at&&entry.drawnLive===live&&!entry.inflight)return;
+      return new Promise(function(resolve,reject){var seq=entry.inflight&&entry.posted===at&&entry.live===live?entry.inflight:seek(entry,at,live),before=entry.waiters.get(seq);entry.waiters.set(seq,before?function(){before();resolve();}:resolve);later(function(){if(entry.waiters.delete(seq))reject(new Error('Scene "'+entry.source.title+'" did not finish drawing.'));},15000);});
     }));
   });
   return Promise.all(pending).then(function(){entries.forEach(function(entry){if(visibleAt(entry,time)&&entry.error)throw entry.error;});});
@@ -136,7 +143,7 @@ window.addEventListener('message',function(event){
     if(event.source!==entry.frame.contentWindow)return;
     if(data.type==='ready')Promise.all([wantedFonts(entry.source),wantedMedia(entry.source),wantedIcons(entry.source)]).then(function(found){send(entry,{type:'init',code:entry.source.code,brand:entry.source.brand||null,blueprints:entry.source.blueprints||[],beats:entry.source.beats||null,media:found[1],icons:found[2],width:entry.source.width,height:entry.source.height,fps:entry.source.fps,duration:entry.source.filmDuration||entry.source.duration,fonts:found[0]});});
     else if(data.type==='compiled'){entry.compiled=true;entry.resolve();paint(clock.time());}
-    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq)entry.drawn=entry.posted;if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&entry.queued!==entry.posted)seek(entry,entry.queued);entry.queued=undefined;}}
+    else if(data.type==='painted'){var done=entry.waiters.get(data.seq);if(done){entry.waiters.delete(data.seq);done();}if(data.seq===entry.seq){entry.drawn=entry.posted;entry.drawnLive=entry.live;}if(data.seq===entry.inflight){entry.inflight=0;if(entry.queued!==undefined&&(entry.queued!==entry.posted||entry.queuedLive!==entry.live))seek(entry,entry.queued,entry.queuedLive);entry.queued=undefined;}}
     else if(data.type==='error'){report(entry,String(data.message),data.stack);entry.resolve();entry.waiters.forEach(function(done){done();});entry.waiters.clear();}
   });
 });
@@ -152,7 +159,7 @@ clock.eventCallback('onUpdate',function(){if(previousUpdate)previousUpdate.call(
 window.addEventListener('hf-seek',function(event){var detail=event.detail;if(detail&&typeof detail.waitUntil==='function')detail.waitUntil(whenReady(detail.time));});
 host.__revlineSceneController={setSources:setSources,whenReady:whenReady,hasMedia:function(id){return !!mediaUrls[id];}};
 setSources(initial);nextFrame(watch);
-})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')},${JSON.stringify(fileUrls).replace(/</g, '\\u003c')},${JSON.stringify(SCENE_RUNTIME_BUNDLES)});`;
+})(${JSON.stringify(sources).replace(/</g, '\\u003c')},${JSON.stringify(fonts).replace(/</g, '\\u003c')},${JSON.stringify(runtimeUrl).replace(/</g, '\\u003c')},${JSON.stringify(mediaUrls).replace(/</g, '\\u003c')},${JSON.stringify(fileUrls).replace(/</g, '\\u003c')},${JSON.stringify(SCENE_RUNTIME_BUNDLES)},${preview ? 'true' : 'false'});`;
 }
 
 export const SCENE_FONT_FAMILIES = TEXT_FONTS.map(font => font.family);
