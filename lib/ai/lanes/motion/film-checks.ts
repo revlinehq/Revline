@@ -23,6 +23,12 @@ function maskCode(code: string) {
     const c = code[i], n = code[i + 1];
     if (c === '/' && n === '/') { const end = code.indexOf('\n', i); const stop = end < 0 ? code.length : end; blank(i, stop); i = stop; continue; }
     if (c === '/' && n === '*') { const end = code.indexOf('*/', i + 2); const stop = end < 0 ? code.length : end + 2; blank(i, stop); i = stop; continue; }
+    if (c === '/' && /(^|[(,=:[!&|?{};+\-*%<>~^]|\breturn|\btypeof)\s*$/.test(code.slice(Math.max(0, i - 12), i))) {
+      // A regex literal: skip to its closing slash, honoring escapes and character classes.
+      let k = i + 1, inClass = false;
+      while (k < code.length && code[k] !== '\n' && (inClass || code[k] !== '/')) { if (code[k] === '\\') k++; else if (code[k] === '[') inClass = true; else if (code[k] === ']') inClass = false; k++; }
+      blank(i + 1, Math.min(k, code.length)); i = k + 1; continue;
+    }
     if (c === '"' || c === "'" || c === '`') {
       let k = i + 1;
       while (k < code.length && code[k] !== c) k += code[k] === '\\' ? 2 : 1;
