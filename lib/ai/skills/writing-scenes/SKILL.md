@@ -23,12 +23,13 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 - A standalone scene (title card, overlay): addScene, one at a time, checking each before writing the next. If several are simple and independent, addScenes saves them together.
 
 ### Contract
-- Write `export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media, icon, blueprint, section, shot, push, hit, cursor, beat, downbeat, accent, beats })`. It runs once, before the first frame.
+- Write `export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media, icon, blueprint, section, shot, push, hit, cursor, beat, downbeat, accent, beats, reveal, exit, swap, counter, type, mark })`. It runs once, before the first frame.
 - `root` is the full-frame container on the 1080-based canvas (`width` x `height` px). Build inside it with `root.innerHTML` or `document.createElement`, positioned with absolute px or percentages.
 - Never restyle `root` itself.
 - `tl` is the scene's GSAP timeline. Time 0 is the clip's first frame, in seconds. How moves go on it: gsap page `revline`.
 - `section(name, start, duration, build)` marks a film section (page `films`).
 - `shot`, `push`, `hit`, `cursor` and `beat`/`downbeat`/`accent`/`beats` are motion helpers; API reference in page `films`, Motion helpers.
+- `reveal`, `exit`, `swap`, `counter`, `type` and `mark` are text functions; API reference in the gsap skill, Text functions.
 - `media` holds the project images and videos attached by name (Project media).
 - `icon('scissors', { size: 16, color: '#8d8f93', strokeWidth: 2 })` returns a Lucide icon as SVG markup (kebab-case names, as on lucide.dev). Use it for every UI icon instead of drawing one.
 - `blueprint('Editor', container, { width, height })` builds a brand kit blueprint attached with `blueprints` inside `container` and returns its root; animate its `[data-part=...]` pieces.
