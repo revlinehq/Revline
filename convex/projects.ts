@@ -10,7 +10,7 @@ import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
 import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { commitTimeline, currentTimeline, validateTimeline } from "./lib/timeline";
 import { HISTORY_LIMIT } from "./lib/timeline_history";
@@ -77,6 +77,60 @@ export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: 
     await writeProject(ctx,projectId, { timeline });
   }
   return projectId;
+}
+export const COPY_MEDIA_LIMIT = 20;
+/** Copies media the owner already has in other projects into this one, sharing stored files and analysis.
+ * Same owner only: another account's media reads as not found, exactly like a missing ID. */
+export async function copyMediaFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, assetIds: string[]) {
+  const project = await requireProject(ctx, projectId, ownerId, false, false);
+  await requireEditorAccess(ctx, ownerId);
+  if (!assetIds.length || assetIds.length > COPY_MEDIA_LIMIT) throw new ConvexError(`Copy between 1 and ${COPY_MEDIA_LIMIT} media files at a time`);
+  const existing = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT + 1);
+  const inProject = new Map<string, Id<'assets'>>();
+  for (const asset of existing) { const key = asset.r2Key ?? asset.storageId; if (key && !inProject.has(key)) inProject.set(key, asset._id); }
+  let count = existing.length;
+  const sourceProjects = new Map<string, boolean>();
+  const load = async (raw: string) => {
+    const id = ctx.db.normalizeId('assets', raw), asset = id ? await ctx.db.get(id) : null;
+    const notFound = new ConvexError(`Media ${raw} was not found in your projects`);
+    if (!asset || asset.ownerId !== ownerId || (!asset.r2Key && !asset.storageId)) throw notFound;
+    if (!sourceProjects.has(asset.projectId)) {
+      const source = await ctx.db.get(asset.projectId);
+      sourceProjects.set(asset.projectId, !!source && !source.deleting && source.ownerId === ownerId);
+    }
+    if (!sourceProjects.get(asset.projectId)) throw notFound;
+    return asset;
+  };
+  const now = Date.now();
+  const attach = async (source: Doc<'assets'>) => {
+    if (source.projectId === project._id) return { id: source._id, copied: false };
+    const key = source.r2Key ?? source.storageId!;
+    const found = inProject.get(key);
+    if (found) return { id: found, copied: false };
+    if (count >= PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
+    // Processing and analysis write to the source attachment only; a copy taken now would never receive them.
+    const tasks = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', source._id)).order('desc').take(50);
+    if (tasks.some(task => ['queued', 'running', 'retrying'].includes(task.status))) throw new ConvexError(`${source.fileName} is still processing in its project; copy it once getProject shows it ready`);
+    // Links to other media in the source project do not carry over; a video's extracted audio is copied below.
+    const { _id, _creationTime, audioAssetId: _audio, cutoutOf: _cutout, derivedOf: _derived, imageGeneration, ...metadata } = await shareAnalysis(ctx, source);
+    const id = await ctx.db.insert('assets', { ...metadata, ...(imageGeneration ? { imageGeneration: { ...imageGeneration, referenceAssetIds: [] } } : {}), projectId: project._id, createdAt: now });
+    await recordAssetStorage(ctx, (await ctx.db.get(id))!);
+    inProject.set(key, id); count++;
+    return { id, copied: true };
+  };
+  const results: { sourceAssetId: Id<'assets'>; assetId: Id<'assets'>; fileName: string; kind: Doc<'assets'>['kind']; copied: boolean }[] = [];
+  for (const raw of [...new Set(assetIds)]) {
+    const source = await load(raw);
+    const { id, copied } = await attach(source);
+    if (copied && source.kind === 'video' && source.audioAssetId) {
+      const audio = await ctx.db.get(source.audioAssetId);
+      // Without its extracted audio the copy must not claim extraction happened.
+      if (audio && audio.ownerId === ownerId && audio.kind === 'audio' && (audio.r2Key || audio.storageId)) await ctx.db.patch(id, { audioAssetId: (await attach(audio)).id });
+      else await ctx.db.patch(id, { audioExtracted: undefined });
+    }
+    results.push({ sourceAssetId: source._id, assetId: id, fileName: source.fileName, kind: source.kind, copied });
+  }
+  return results;
 }
 /** A full copy of a project: every timeline tab and its media, sharing the stored files. */
 export async function duplicateProjectFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, title?: string) {
