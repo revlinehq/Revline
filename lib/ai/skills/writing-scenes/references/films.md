@@ -93,7 +93,6 @@ const pointer = cursor(s, { path: [{ x: 1400, y: 820 }, '.prompt'], at: .3, type
 - `flash`: `false` (default), `true` (white) or a CSS color, for exactly one frame.
 - `punch`: extra scale at the hit, default .04, 0 to .25, settling with the shake.
 - `target`: default the current shot's `el`, else `root`. On those, the scale also covers the shake so no edge shows. Another target must not have GSAP transforms of its own (x, y, scale, rotation): GSAP clears the CSS translate the shake uses.
-- For footage, addImpactFrame takes `shake: { strength, frames, direction }`, and the shake FX takes `decay: true`.
 ```ts
 hit(s, { at: 1.6, intensity: .7, flash: true });
 ```
