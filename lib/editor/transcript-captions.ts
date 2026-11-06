@@ -29,11 +29,18 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
   // per-word timings for the karaoke pop and highlight.
   const clipperCaptions = (phrase: TranscriptWord[]): Clip[] => {
     const { start: phraseStart, end: phraseEnd } = span(phrase);
-    const chunks: TranscriptWord[][] = [];
-    for (let i = 0; i < phrase.length; i += CLIPPER_CAPTION_MAX_WORDS) chunks.push(phrase.slice(i, i + CLIPPER_CAPTION_MAX_WORDS));
-    const starts = chunks.map((chunk, i) => i === 0 ? phraseStart : Math.max(phraseStart, Math.min(phraseEnd - frame, timelineTimeAtSource(clip, chunk[0].start))));
+    // Balanced sizes (4 → 2+2, 5 → 3+2) so no word flashes alone; a chunk too close to its predecessor joins it,
+    // so consecutive chunks never overlap.
+    const count = Math.ceil(phrase.length / CLIPPER_CAPTION_MAX_WORDS), chunks: TranscriptWord[][] = [], starts: number[] = [];
+    for (let i = 0, from = 0; i < count; i++) {
+      const to = Math.round((i + 1) * phrase.length / count), chunk = phrase.slice(from, to);
+      from = to;
+      const at = timelineTimeAtSource(clip, chunk[0].start);
+      if (i && (at < starts.at(-1)! + frame || at > phraseEnd - frame)) chunks.at(-1)!.push(...chunk);
+      else { chunks.push(chunk); starts.push(i ? at : phraseStart); }
+    }
     return chunks.map((chunk, i) => {
-      const start = starts[i], end = i + 1 < chunks.length ? Math.max(start + frame, starts[i + 1]) : phraseEnd, duration = Math.max(frame, end - start);
+      const start = starts[i], end = i + 1 < chunks.length ? starts[i + 1] : phraseEnd, duration = Math.max(frame, end - start);
       const tokens = chunk.flatMap(word => word.text.trim().split(/\s+/).map(token => ({ token, word })));
       let previous = 0;
       const wordTimings = tokens.map(({ word }) => {
@@ -44,7 +51,7 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
       });
       return {
         id: createId(), kind: 'caption', start, duration, sourceStart: 0,
-        text: tokens.map(({ token }) => token).join(' ').toUpperCase(), ...CLIPPER_CAPTION_STYLE,
+        text: tokens.map(({ token }) => token).join(' ').toLocaleUpperCase('en-US'), ...CLIPPER_CAPTION_STYLE,
         textTemplate: { preset: 'karaoke', highlightColor: CLIPPER_CAPTION_HIGHLIGHT, karaokeStyle: 'pop', duration, offset: 0, wordTimings },
       };
     });
