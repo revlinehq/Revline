@@ -136,6 +136,8 @@ export type TrackCounts = Record<Exclude<LayerGroup, 'effects'>, number> & { eff
 export type ResolvedTrackCounts = Required<TrackCounts>;
 export const TIMELINE_LAYER_GROUPS = ['effects', 'visual', 'audio'] as const;
 export type VisualTransform = { x: number; y: number; scale: number; rotation: number; opacity: number };
+/** Mirror the visible picture inside its own window: vertical turns it upside down, horizontal left-right. */
+export type ClipFlip = { horizontal?: boolean; vertical?: boolean };
 export type SourceCrop = { left: number; top: number; right: number; bottom: number };
 export const DEFAULT_TRANSFORM: VisualTransform = { x: 0.5, y: 0.5, scale: 1, rotation: 0, opacity: 1 };
 export const DEFAULT_CROP: SourceCrop = { left: 0, top: 0, right: 0, bottom: 0 };
@@ -230,6 +232,7 @@ export type Clip = {
   framingCuts?: number[];
   transform?: VisualTransform;
   crop?: SourceCrop;
+  flip?: ClipFlip;
   fit?: 'cover' | 'contain';
   approval?: ClipApproval;
   approvedSections?: ApprovedSection[];

@@ -25,6 +25,22 @@ export type VisualEffectInput = RenderEffects & { cameraGlideBlur?:CameraGlideBl
 export type VisualEffectSource = VisualEffectInput & { id: string };
 export type VisualEffectsController = { set(id: string, effects: VisualEffectInput): void; setTimedEffects(clips:Clip[]):void; redraw(): void; dispose(): void };
 
+/**
+ * One 5x5 Gaussian pass leaves gaps between its taps once they spread past a few pixels, which
+ * prints a dot grid on large blurs. Larger amounts run as successive passes whose spacing never
+ * outgrows the blur already applied, with the same total variance as the single pass they replace.
+ */
+const SOFT_BLUR_FIRST_STEP = 4;
+function softBlurSteps(amount: number) {
+  const steps: number[] = [];
+  let variance = 0;
+  while (amount * amount - variance > 1e-6) {
+    const step = Math.min(Math.sqrt(amount * amount - variance), steps.length ? 2 * Math.sqrt(variance) : SOFT_BLUR_FIRST_STEP);
+    steps.push(step); variance += step * step;
+  }
+  return steps;
+}
+
 /** One browser bundle runs the same kernel in preview and exported compositions. */
 export function installVisualEffects(sources: VisualEffectSource[], fps: number, resolution: number) {
   type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback?(name:string,callback?:(()=>void)|null):unknown;paused?(value?:boolean):boolean|Clock };
@@ -45,7 +61,7 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
     const passes:RenderEffects[]=[];
     if(parallax)passes.push({parallax});
     // Blur has its own pass so combining it with radial blur never multiplies sample counts.
-    if(softBlur?.enabled&&softBlur.amount>0)passes.push({softBlur});
+    if(softBlur?.enabled&&softBlur.amount>0)for(const amount of softBlurSteps(softBlur.amount))passes.push({softBlur:{...softBlur,amount}});
     if(directionalBlur?.enabled&&directionalBlur.amount>0)passes.push({directionalBlur});
     const composition=base.cameraGlideBlur?document.getElementById('composition'):null;
     const cameraBlur=!base.cameraGlideBlur||preview&&clock.paused?.()===true?undefined:cameraGlideBlurAt(base.cameraGlideBlur,time,Number(composition?.dataset.width)*1080/resolution,Number(composition?.dataset.height)*1080/resolution);

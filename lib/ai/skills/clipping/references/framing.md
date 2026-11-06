@@ -1,6 +1,6 @@
 ---
 name: "framing"
-description: "Gaming facecam above gameplay, or speaker-led podcast and IRL reframing in 9:16, using measured existing tools."
+description: "Gaming facecam above gameplay, mirror blur fill for a wide clip, or speaker-led podcast and IRL reframing in 9:16, using measured existing tools."
 ---
 # Vertical framing
 
@@ -14,6 +14,7 @@ Apply this page only to gaming or action sources and to explicit visual reframin
 |---|---|
 | Requested vertical reframing | 9:16 canvas, fitClip fit "cover" on every single-view video |
 | User wants the complete wide frame | fitClip fit "contain" (leaves large empty bars on a vertical short) |
+| Complete wide frame without empty bars | Mirror blur fill: the clip sharp at full width, mirrored blurred copies above and below |
 | Confident facecam overlay | Two rows: creator on top, gameplay below |
 | Creator-only or gameplay-only | One source filling the frame with the supported crop |
 | Uncertain or unbordered layout | followSubject mode "face", or a stable wider view if no face is clear |
@@ -36,6 +37,17 @@ Rules:
 - For creator-only or gameplay-only sources, do not build a duplicate empty row.
 - For an uncertain layout, inspect the affected source range before choosing followSubject or a wider view.
 - Never report a low-confidence panel as certain.
+
+## Mirror blur fill
+Use it when the whole wide picture must stay visible on a taller canvas (9:16, 4:5, 1:1) and empty bars would look unfinished.
+Workflow:
+1. Set the target aspect ratio.
+2. Call applyLayout mirror-blur with the exact clip IDs that stay sharp. It adds the background copies itself; do not duplicate clips first.
+3. Read one frame per clip with getFrames to confirm no bars remain.
+
+Rules:
+- Only for a source wider than the canvas; a source that already fills the height needs fitClip instead.
+- Finish trims, splits and moves first. To change a clip later, delete its copies and apply the layout again.
 
 ## Speaker reframing and visual IRL cuts
 Workflow:

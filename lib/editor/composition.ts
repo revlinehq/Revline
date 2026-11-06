@@ -6,7 +6,7 @@ import { pixelTrackEndpoint } from '../media-analysis/pixel-track-reader';
 import { resolvedAudioTimeline } from './audio-normalization';
 import { validateVisualTransform } from './visual-inputs';
 import { boundedCameraMotion } from './camera-framing';
-import { calculateVisualRect } from './visual-source-geometry';
+import { calculateVisualRect, flipStyle } from './visual-source-geometry';
 import { focusAt } from './focus-path';
 import { cinematicBarSettings, validateClipEffects, visibleMotion } from './clip-effects';
 import { NEUTRAL_MOTION, type MotionKeyframe } from './motion-path';
@@ -200,7 +200,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const attrs = `${timing} data-media-start="${attrTime(clip.sourceStart-(playback?.offset??0))}" data-preview-offset="${playback?.offset??0}"${playback?.pending?' data-preview-pending="true"':''} data-volume="${volume}"${clip.kind === 'video' || clip.kind === 'audio' ? ` data-playback-rate="${playbackRateOf(clip)}"` : ''}${audioAttrs}`;
     const outline = outlineFilter(clip.outline, scale);
     const frame = (media: string) => {
-      const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}">${media}</div></div>`;
+      const flip = flipStyle(clip.flip);
+      const content = `<div id="${id}-motion" class="motion-frame"><div class="source-window" style="${windowStyle}${flip ? `;transform:${flip}` : ''}">${media}</div></div>`;
       // Camera motion reframes pixels through a stationary aperture. Ordinary
       // object motion can still move the whole clip and its clipping window.
       const view = clip.cameraMotion || clip.smoothZoom
