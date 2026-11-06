@@ -1,4 +1,4 @@
-import { Easing, interpolate, spring } from 'remotion';
+import { Easing, interpolate, spring } from '@/lib/editor/frame-motion';
 
 export const CLIP_MOTION_PRESETS = [
   { id: 'none', label: 'None' }, { id: 'fade', label: 'Fade' },

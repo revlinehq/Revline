@@ -1,9 +1,9 @@
-import { labProgress, type LabConfig } from './remotion-lab-model';
-import './remotion-lab-more-blocks.css';
+import { labProgress, type LabConfig } from './motion-lab-model';
+import './motion-lab-more-blocks.css';
 
 const bounded=(value:number)=>Math.max(0,Math.min(1,value));
 
-export function MoreRemotionBlocks({config,frame}:{config:LabConfig;frame:number}){
+export function MoreLabBlocks({config,frame}:{config:LabConfig;frame:number}){
   const item=config.items[0],progress=bounded(labProgress(config,frame,item.start)),value=Math.max(0,Math.min(100,item.value))*progress;
   const w=config.blockWidth,h=config.blockHeight,radius=Math.max(18,Math.min(w,h)/2-16);
   const number=`${config.counterPrefix}${Math.round(item.value*progress).toLocaleString('en-US')}${config.counterSuffix}`;

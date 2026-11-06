@@ -5,15 +5,15 @@ import { useEffect, useId, useRef, useState, type CSSProperties, type ReactNode 
 import { ArrowLeft, ArrowUpRight, AudioLines, Check, Download, ExternalLink, FileJson, FlaskConical, Layers3, Pause, Play, RotateCcw, Save, Settings2, Sparkles, Upload, X } from 'lucide-react';
 import { ColorControl } from '@/components/editor/color-control';
 import { PrimaryButton } from '@/components/workspace/primary-button';
-import { EXPRESSIVE_TEXT_PRESETS, REMOTION_TEXT_DESCRIPTIONS, REMOTION_TEXT_PRESETS } from '@/lib/editor/remotion-text';
+import { EXPRESSIVE_TEXT_PRESETS, TEXT_TEMPLATE_DESCRIPTIONS, TEXT_TEMPLATE_PRESETS } from '@/lib/editor/text-templates';
 import { SubjectToolsLab } from './subject-tools-lab';
 import { ClipMotionLab } from './clip-motion-lab';
-import { RemotionLabScene } from './remotion-lab-scenes';
-import { isLabExtraTextPreset, LAB_EXTRA_TEXT_PRESETS, LAB_TEXT_DESCRIPTIONS, LAB_TEXT_LABELS, type LabTextPreset } from './remotion-lab-text-presets';
-import { alignLabItems, DEFAULT_LAB_CONFIG, LAB_CATEGORIES, LAB_SCENES, LAB_TEMPLATES, labTemplateFile, parseLabConfig, parseLabFile, retimeWords, type LabCategory, type LabConfig, type LabItem, type LabTemplate, type LabWord } from './remotion-lab-model';
-import './remotion-dev-tests.css';
+import { MotionLabScene } from './motion-lab-scenes';
+import { isLabExtraTextPreset, LAB_EXTRA_TEXT_PRESETS, LAB_TEXT_DESCRIPTIONS, LAB_TEXT_LABELS, type LabTextPreset } from './motion-lab-text-presets';
+import { alignLabItems, DEFAULT_LAB_CONFIG, LAB_CATEGORIES, LAB_SCENES, LAB_TEMPLATES, labTemplateFile, parseLabConfig, parseLabFile, retimeWords, type LabCategory, type LabConfig, type LabItem, type LabTemplate, type LabWord } from './motion-lab-model';
+import './motion-lab.css';
 
-const STORAGE_KEY = 'revline:remotion-lab:templates:v1';
+const STORAGE_KEY = 'revline:motion-lab:templates:v1';
 const cloneConfig = (config: LabConfig) => ({ ...config, items: config.items.map(item => ({ ...item })), words: config.words.map(word => ({ ...word })) });
 type LocalAudio = { name: string; url: string };
 
@@ -43,7 +43,7 @@ function Preview({ config, frame }: { config: LabConfig; frame: number }) {
     return () => observer.disconnect();
   }, []);
   return <div className="rmlab-preview" ref={host} style={{ aspectRatio: `${dimensions[0]}/${dimensions[1]}` }} aria-label={`${config.scene} animation preview`}>
-    <div className="rmlab-artboard" style={{ width: dimensions[0], height: dimensions[1], transform: `scale(${width / dimensions[0]})`, visibility: width ? 'visible' : 'hidden' }}><RemotionLabScene config={config} frame={frame}/></div>
+    <div className="rmlab-artboard" style={{ width: dimensions[0], height: dimensions[1], transform: `scale(${width / dimensions[0]})`, visibility: width ? 'visible' : 'hidden' }}><MotionLabScene config={config} frame={frame}/></div>
   </div>;
 }
 
@@ -139,7 +139,7 @@ function AppearanceControls({ config, onChange }: { config: LabConfig; onChange:
 function MotionControls({ config, onChange }: { config: LabConfig; onChange: (patch: Partial<LabConfig>) => void }) {
   return <div className="rmlab-control-stack">
     {config.scene!=='typography'?<Field label="Block entrance"><select value={config.blockEntrance} onChange={event=>onChange({blockEntrance:event.target.value as LabConfig['blockEntrance']})}><option value="fade">Fade</option><option value="rise">Rise</option><option value="scale">Scale</option><option value="draw">Draw / reveal</option></select></Field>:null}
-    <Field label="Timing curve"><select value={config.motion} onChange={event => onChange({ motion: event.target.value as LabConfig['motion'] })}><option value="spring">Remotion spring</option><option value="ease">Cubic ease out</option><option value="linear">Linear</option></select></Field>
+    <Field label="Timing curve"><select value={config.motion} onChange={event => onChange({ motion: event.target.value as LabConfig['motion'] })}><option value="spring">Spring</option><option value="ease">Cubic ease out</option><option value="linear">Linear</option></select></Field>
     <RangeField label="Entrance duration" value={config.entrance} min={.15} max={3} step={.05} unit="s" onChange={entrance => onChange({ entrance })}/>
     <RangeField label="Travel distance" value={config.distance} min={0} max={200} unit="px" onChange={distance => onChange({ distance })}/>
     <RangeField label="Spring damping" value={config.damping} min={3} max={40} onChange={damping => onChange({ damping })}/>
@@ -165,7 +165,7 @@ function Templates({ saved, onApply, onDelete, onSave, onImport, onExport }: { s
   </div>;
 }
 
-export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: boolean; query?: string }) {
+export function MotionLab({ embedded = false, query = '' }: { embedded?: boolean; query?: string }) {
   const id = useId();
   const [category, setCategory] = useState<LabCategory>('graphics');
   const [clipMotionVisited, setClipMotionVisited] = useState(false);
@@ -261,10 +261,10 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
   useEffect(() => { if (window.location.hash === '#clip-motion') setCategory('clip-motion'); }, []);
   const tabs = [{ id: 'content', label: 'Content' }, { id: 'speech', label: 'Speech cues' }, { id: 'style', label: 'Style' }, { id: 'motion', label: 'Motion' }] as const;
 
-  return <section className={`rmlab ${embedded ? 'rmlab-embedded' : 'rmlab-workspace'}`} aria-label="Remotion development lab">
+  return <section className={`rmlab ${embedded ? 'rmlab-embedded' : 'rmlab-workspace'}`} aria-label="Motion development lab">
     {!embedded ? <header className="rmlab-app-header"><a href={NEW_PROJECT_PATH} className="rmlab-back"><ArrowLeft size={15}/>Back to editor</a><a href={NEW_PROJECT_PATH} className="rmlab-wordmark">revline<span>®</span></a><span className="rmlab-dev-badge"><FlaskConical size={12}/>DEVELOPMENT</span></header> : null}
     <div className="rmlab-shell">
-      <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>REMOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Six ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try six motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/remotion-dev-tests" target="_blank" rel="noopener noreferrer" title="Open full Remotion playground"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
+      <header className="rmlab-heading"><div><span className="rmlab-kicker"><span className="rmlab-live-dot"/>MOTION / DEV TESTS</span><h1>Ideas, in motion<span>.</span></h1>{!embedded ? <p>Six ways to make the story easier to see. Play, edit, and find your style.</p> : <p>Try six motion tools. Every preview is editable.</p>}</div>{embedded ? <a className="rmlab-expand" href="/motion-lab" target="_blank" rel="noopener noreferrer" title="Open full motion lab"><ExternalLink size={15}/><span>Full lab</span></a> : <span className="rmlab-heading-note">AN EXPLORATION SPACE<br/>FOR YOUR NEXT GREAT EDIT</span>}</header>
       <nav className="rmlab-categories" aria-label="Motion experiments">{categories.map((item, index) => <button type="button" key={item.id} aria-pressed={visibleCategory === item.id} onClick={() => selectCategory(item.id)}><span>{String(LAB_CATEGORIES.findIndex(value => value.id === item.id) + 1).padStart(2, '0')}</span>{item.label}{!embedded && index === 0 ? <i>START HERE</i> : null}</button>)}</nav>
       {!visibleCategory ? <p className="rmlab-no-results">No motion experiments match “{query}”. Try cards, tracking, typography or templates.</p> : <>
         <div className="rmlab-section-heading"><div><h2>{activeCategory.label}{visibleCategory === 'graphics' ? <span>RECOMMENDED</span> : null}</h2><p>{activeCategory.description}</p></div>{!embedded ? <span className="rmlab-section-count">EXPERIMENT {String(LAB_CATEGORIES.findIndex(value => value.id === visibleCategory) + 1).padStart(2, '0')} / 06</span> : null}</div>
@@ -292,10 +292,10 @@ export function RemotionDevTests({ embedded = false, query = '' }: { embedded?: 
               {controlTab === 'content' ? <div className="rmlab-control-stack">
                 {visibleCategory !== 'typography' ? <BlockControls config={config} onChange={change} onSeek={seek}/> : null}
                 {visibleCategory === 'typography' ? <>
-                  <Field label="Type treatment"><select value={config.textPreset} onChange={event => chooseTextPreset(event.target.value as LabTextPreset)}><optgroup label="Production animations">{REMOTION_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]}</option>)}</optgroup><optgroup label="10 new experiments">{LAB_EXTRA_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]} · new</option>)}</optgroup></select></Field>
+                  <Field label="Type treatment"><select value={config.textPreset} onChange={event => chooseTextPreset(event.target.value as LabTextPreset)}><optgroup label="Production animations">{TEXT_TEMPLATE_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]}</option>)}</optgroup><optgroup label="10 new experiments">{LAB_EXTRA_TEXT_PRESETS.map(preset => <option key={preset} value={preset}>{LAB_TEXT_LABELS[preset]} · new</option>)}</optgroup></select></Field>
                   <div className="rmlab-control-divider"><span>10 NEW TEXT EXPERIMENTS</span></div>
                   <div className="rmlab-new-type-grid" aria-label="New typography experiments">{LAB_EXTRA_TEXT_PRESETS.map((preset, index) => <button key={preset} type="button" aria-pressed={config.textPreset === preset} onClick={() => chooseTextPreset(preset)}><span>{String(index + 1).padStart(2, '0')}</span>{LAB_TEXT_LABELS[preset]}</button>)}</div>
-                  {isLabExtraTextPreset(config.textPreset) ? <div className="rmlab-text-description"><strong>{LAB_TEXT_LABELS[config.textPreset]}</strong><p>{LAB_TEXT_DESCRIPTIONS[config.textPreset]}</p></div> : EXPRESSIVE_TEXT_PRESETS.some(preset=>preset===config.textPreset) ? <div className="rmlab-text-description"><strong>PRODUCTION ANIMATION</strong><p>{REMOTION_TEXT_DESCRIPTIONS[config.textPreset as typeof EXPRESSIVE_TEXT_PRESETS[number]]}</p></div> : null}
+                  {isLabExtraTextPreset(config.textPreset) ? <div className="rmlab-text-description"><strong>{LAB_TEXT_LABELS[config.textPreset]}</strong><p>{LAB_TEXT_DESCRIPTIONS[config.textPreset]}</p></div> : EXPRESSIVE_TEXT_PRESETS.some(preset=>preset===config.textPreset) ? <div className="rmlab-text-description"><strong>PRODUCTION ANIMATION</strong><p>{TEXT_TEMPLATE_DESCRIPTIONS[config.textPreset as typeof EXPRESSIVE_TEXT_PRESETS[number]]}</p></div> : null}
                   <RangeField label="Type size" value={config.textSize} min={24} max={110} unit="px" onChange={textSize => change({ textSize })}/>
                   {isLabExtraTextPreset(config.textPreset) || EXPRESSIVE_TEXT_PRESETS.some(preset=>preset===config.textPreset) ? <><RangeField label="Effect strength" value={config.textStrength} min={.2} max={2} step={.1} unit="×" onChange={textStrength => change({ textStrength })}/><RangeField label="Reveal duration" value={config.entrance} min={.15} max={3} step={.05} unit="s" onChange={entrance => change({ entrance })}/><RangeField label="Text stagger" value={config.textStagger} min={0} max={.18} step={.01} unit="s" onChange={textStagger => change({ textStagger })}/><p className="rmlab-type-controls-note">Selecting a treatment replays it. Pause, scrub, or try 0.1× speed to compare the motion. Colors live in Style.</p></> : null}
                   <div className="rmlab-control-divider"><span>3D APPEARANCE · LAB ONLY</span></div>

@@ -7,8 +7,8 @@ export function updateLiveTextEffects(document: Document, _previous: Timeline, n
   let controller=host?.__revlineTextLayerController;
   if(!controller){
     if(!next.clips.some(clip=>clip.kind==='caption'||clip.kind==='graphic'))return true;
-    if(!host?.__revlineRemotionText)return false;
-    controller=host.__revlineTextLayerController=host.__revlineRemotionText.installTextLayers([]);
+    if(!host?.__revlineTextRuntime)return false;
+    controller=host.__revlineTextLayerController=host.__revlineTextRuntime.installTextLayers([]);
   }
   const composition=document.getElementById('composition'),width=Number(composition?.dataset.width),height=Number(composition?.dataset.height);
   const resolution=Number.isFinite(width)&&width>0&&Number.isFinite(height)&&height>0?Math.min(width,height):1080;

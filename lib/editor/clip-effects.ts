@@ -3,7 +3,7 @@ import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
 import { BLEND_MODES, EFFECT_PRESETS, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
-import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
+import { textTemplateTimingPatch, validateTextTemplate } from './text-templates';
 import { validatePlaybackRate } from './playback-rate';
 import { isTransitionPreset, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
@@ -106,7 +106,7 @@ export function validateClipEffects(clip: Clip) {
   validateColorFinish(clip);
   if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
-  validateRemotionTextTemplate(clip);
+  validateTextTemplate(clip);
   validateTextStyle(clip);
   validateTextGradient(clip);
   validateAudioSettings(clip);

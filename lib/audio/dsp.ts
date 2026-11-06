@@ -1,5 +1,5 @@
 // Deterministic synthesis primitives for the music bed. Stereo signals are
-// [left, right] Float64Arrays at SR. Ported from cstack's skills/animated-video/templates/remotion-film/audio/dsp.py
+// [left, right] Float64Arrays at SR. Ported from cstack's animated-video film template (audio/dsp.py)
 // and parts/audio/designed.py (https://github.com/goodnight000/cstack), MIT License, Copyright (c) 2026 Charles Zheng.
 // The full MIT notice is reproduced in assets/audio-fx/LICENSE-Revline-designed.txt.
 // Only erasable TypeScript syntax: Node scripts import this file directly.

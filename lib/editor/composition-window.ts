@@ -2,7 +2,7 @@ import type { gsap } from 'gsap';
 import type { AdjustmentController } from './adjustment-layers';
 import type { AudioReactiveController } from './audio-reactive';
 import type { MaskController } from './masks';
-import type { TextLayerController } from './remotion-text-runtime';
+import type { TextLayerController } from './text-template-runtime';
 import type { TransitionController, TransitionSource } from './transitions-runtime';
 import type { SceneLayerSource } from './scene-layers';
 import type { SolidColorController } from './solid-color-layers';
@@ -32,7 +32,7 @@ export type CompositionWindow = Window & {
   __revlineTextLayerController?: TextLayerController;
   __revlineSceneController?: { setSources(sources: SceneLayerSource[]): void; hasMedia?(assetId: string): boolean };
   /** Optional renderers the preview loads on demand (lib/editor/preview-runtimes.ts). */
-  __revlineRemotionText?: { installTextLayers(sources: TextLayerSource[]): TextLayerController };
+  __revlineTextRuntime?: { installTextLayers(sources: TextLayerSource[]): TextLayerController };
   __revlineTransitions?: { installTransitions(initial: TransitionSource[], fps: number): TransitionController };
   __renderReady?: boolean;
   /** The HyperFrames player bridge; the preview reserves it before GSAP loads. */

@@ -5,23 +5,23 @@ import type { TextFontId } from './text-fonts';
 export const VFX_TEXT_PRESETS = ['neon-echo', 'lyric-slam', 'kinetic-stack'] as const;
 export const EXPRESSIVE_TEXT_PRESETS = ['rgb-split', 'type-trails', 'blur-focus', 'character-scramble', 'spotlight-sweep', 'ink-write', 'tunnel-zoom'] as const;
 export type ExpressiveTextPreset = typeof EXPRESSIVE_TEXT_PRESETS[number];
-export const REMOTION_TEXT_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke', ...VFX_TEXT_PRESETS, ...EXPRESSIVE_TEXT_PRESETS] as const;
-export type RemotionTextPreset = typeof REMOTION_TEXT_PRESETS[number];
+export const TEXT_TEMPLATE_PRESETS = ['word-reveal', 'word-pop', 'slide-title', 'karaoke', ...VFX_TEXT_PRESETS, ...EXPRESSIVE_TEXT_PRESETS] as const;
+export type TextTemplatePreset = typeof TEXT_TEMPLATE_PRESETS[number];
 export type WordTiming = { start: number; end: number };
 export const EXPRESSIVE_TEXT_DEFAULTS = { strength: 1, revealDuration: .65, stagger: .07 } as const;
 const EXPRESSIVE_TEXT_LIMITS = { strength: [.2, 2], revealDuration: [.15, 3], stagger: [0, .18] } as const;
 /** Karaoke with speech timings: `box` fills the active word with a highlight pill (default); `pop` keeps the outline,
  * colors the active word and pops each word in as it is spoken (clipper captions). */
 export type KaraokeStyle = 'box' | 'pop';
-export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number; wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle; strength?: number; revealDuration?: number; stagger?: number };
-export const REMOTION_TEXT_LABELS: Record<RemotionTextPreset, string> = {
+export type TextTemplate = { preset: TextTemplatePreset; highlightColor?: string; duration?: number; offset?: number; wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle; strength?: number; revealDuration?: number; stagger?: number };
+export const TEXT_TEMPLATE_LABELS: Record<TextTemplatePreset, string> = {
   'word-reveal': 'Word reveal', 'word-pop': 'Pop-in words', 'slide-title': 'Sliding title', karaoke: 'Karaoke',
   'neon-echo': 'Neon echo', 'lyric-slam': 'Lyric slam', 'kinetic-stack': 'Kinetic stack',
   'rgb-split': 'Chromatic split', 'type-trails': 'Outline trails', 'blur-focus': 'Cinematic focus', 'character-scramble': 'Character scramble',
   'spotlight-sweep': 'Spotlight sweep', 'ink-write': 'Ink write-on',
   'tunnel-zoom': 'Echo tunnel',
 };
-export const REMOTION_TEXT_DESCRIPTIONS: Record<RemotionTextPreset,string> = {
+export const TEXT_TEMPLATE_DESCRIPTIONS: Record<TextTemplatePreset,string> = {
   "word-reveal": "Reveal words sequentially with a short fade and upward settle; appearance remains independently editable.",
   "word-pop": "Bring words in one by one with a spring scale and fade, preserving their positions and chosen appearance.",
   "slide-title": "Slide the entire title horizontally into place with a smooth fade; keeps the text layout intact.",
@@ -37,31 +37,31 @@ export const REMOTION_TEXT_DESCRIPTIONS: Record<RemotionTextPreset,string> = {
   'ink-write': 'Write accent-colored outlines across each word, followed by the filled lettering. Strength, reveal duration and word stagger remain editable.',
   'tunnel-zoom': 'Move concentric accent outlines through a perspective tunnel and resolve into one crisp title. Strength controls the depth; the original words and layout stay intact.',
 };
-export const VFX_TEXT_APPEARANCE: Partial<Record<RemotionTextPreset, { color: string; highlightColor: string }>> = {
+export const VFX_TEXT_APPEARANCE: Partial<Record<TextTemplatePreset, { color: string; highlightColor: string }>> = {
   'neon-echo': { color: '#B72CFF', highlightColor: '#FF962E' },
   'lyric-slam': { color: '#FFF3E1', highlightColor: '#FF6E36' },
   'kinetic-stack': { color: '#F8F2FF', highlightColor: '#BA83FF' },
 };
 export const DEFAULT_TEXT_HIGHLIGHT = '#F5CF45';
-export type RemotionTextProps = {
-  preset: RemotionTextPreset; text: string; frame: number; fps: number; durationInFrames: number;
+export type TemplateTextProps = {
+  preset: TextTemplatePreset; text: string; frame: number; fps: number; durationInFrames: number;
   color: string; fontSize: number; highlightColor: string;
   textGradient?: TextGradient; gradientTime?: number;
   textStyle?: TextAppearance; fontFamily?: string; fontWeight?: number; resolution?: number;
   wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle;
   strength?: number; revealDuration?: number; stagger?: number;
 };
-export type RemotionTextSource = { id: string; start: number; offset: number; props: Omit<RemotionTextProps, 'frame'> };
+export type TemplateTextSource = { id: string; start: number; offset: number; props: Omit<TemplateTextProps, 'frame'> };
 type TextTemplateClip = {
-  kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: RemotionTextTemplate;
+  kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: TextTemplate;
   textStyle?: TextAppearance; fontFamily?: TextFontId; textGradient?: TextGradient;
 };
 
-export function validateRemotionTextTemplate(clip: Pick<TextTemplateClip, 'kind' | 'textTemplate'> & {text?: string; duration?: number}) {
+export function validateTextTemplate(clip: Pick<TextTemplateClip, 'kind' | 'textTemplate'> & {text?: string; duration?: number}) {
   const template = clip.textTemplate;
   if (template === undefined) return;
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Text templates apply to captions and text graphics only.');
-  if (!template || !REMOTION_TEXT_PRESETS.includes(template.preset)) throw new Error('Choose a supported text template.');
+  if (!template || !TEXT_TEMPLATE_PRESETS.includes(template.preset)) throw new Error('Choose a supported text template.');
   if (template.highlightColor !== undefined && !/^#(?:[\da-f]{3,4}|[\da-f]{6}|[\da-f]{8})$/i.test(template.highlightColor)) throw new Error('Text highlight color must be a hex color.');
   if (template.duration !== undefined && (!Number.isFinite(template.duration) || template.duration <= 0)) throw new Error('Text template duration must be finite and positive.');
   if (template.offset !== undefined && !Number.isFinite(template.offset)) throw new Error('Text template offset must be finite.');
@@ -77,14 +77,14 @@ export function validateRemotionTextTemplate(clip: Pick<TextTemplateClip, 'kind'
 }
 
 /** Negative offsets preserve the original entrance when extending a text clip to the left. */
-export function textTemplateTimingPatch(clip: Pick<TextTemplateClip, 'duration' | 'textTemplate'>, delta = 0): { textTemplate?: RemotionTextTemplate } {
+export function textTemplateTimingPatch(clip: Pick<TextTemplateClip, 'duration' | 'textTemplate'>, delta = 0): { textTemplate?: TextTemplate } {
   return clip.textTemplate ? { textTemplate: { ...clip.textTemplate, duration: clip.textTemplate.duration ?? clip.duration, offset: (clip.textTemplate.offset ?? 0) + delta } } : {};
 }
 
 /** Frozen template duration and offset retain word timing when a text clip is split or trimmed. */
-export function remotionTextProps(clip: TextTemplateClip, time: number, fps: number, resolution = 1080): RemotionTextProps | null {
+export function templateTextProps(clip: TextTemplateClip, time: number, fps: number, resolution = 1080): TemplateTextProps | null {
   if (!clip.textTemplate) return null;
-  validateRemotionTextTemplate(clip);
+  validateTextTemplate(clip);
   if (![time, fps, resolution, clip.start, clip.duration].every(Number.isFinite) || fps <= 0 || resolution <= 0 || clip.duration <= 0) throw new Error('Text template rendering needs valid timing and dimensions.');
   const template = clip.textTemplate;
   const style = textStyle(clip, resolution);
