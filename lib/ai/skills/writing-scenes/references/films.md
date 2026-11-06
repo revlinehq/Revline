@@ -37,7 +37,7 @@ API reference for the helpers a scene receives next to `section`. Each one owns 
 
 ### shot
 `shot(name, start, duration, options, build)` is a `section` that is its own shot: its own container, its own camera, shown only from `start` to `start + duration`. A film made of shots is separate shots joined by cuts or whips, not one continuous camera world. `start` and `duration` are number literals, as for `section`. `build(tl, shot)` gets the section timeline and `{ name, el, start, duration, end }`.
-- `el`: the shot's container (selector or element). Default: the element with `data-shot="<name>"`. Its children move into a camera layer, `shot.camera` (`data-camera`), which `push` moves. Never transform the container or the camera yourself; animate what is inside.
+- `el`: the shot's container (selector or element). Default: the element with `data-shot="<name>"`. Its children move into a camera layer, `shot.camera` (`data-camera`), which `push` moves. Never transform the container or the camera yourself; animate what is inside. The container's own layout (flex, grid centering) does not reach its children once they are in the camera layer: position each child itself (`position:absolute;inset:0;display:grid;place-items:center` to center one).
 - The cut lands on the frame nearest `start`, so a literal rounded to milliseconds still cuts on the marker's frame.
 - `enter.from`: `'left'`, `'right'`, `'up'`, `'down'`, `'zoom'` or `'none'` (default). The entrance is already moving on the shot's first frame: it began `overlap` frames before the cut, so nothing lands on a frozen frame. A hold after it settles is fine.
 - `enter.overlap`: frames, default 4, 0 to 12 (and under `frames`).
