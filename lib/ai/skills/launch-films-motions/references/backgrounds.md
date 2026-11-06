@@ -8,11 +8,11 @@ A good background is light, quiet and built for this film: one base, at most one
 
 The user's explicit direction and a measured recreation override this page. The limits under Rules still apply unless the user explicitly overrides a limit too.
 
-Contents: Workflow; Defaults (colors, base, structure, accent, shadows); Rules (color, every layer does a job, shadows, banned, check before handback); Calibration.
+Contents: Workflow; Defaults (colors, base, structure, accent, shadows); Rules (letting the user pick, color, every layer does a job, shadows, banned, check before handback); Calibration.
 
 ## Workflow
 1. Read the kit with getBrandKit and derive the colors (Defaults, Colors). With no kit, use the example column.
-2. Choose one base, then zero or one structure, then zero or one accent.
+2. Choose one base, then zero or one structure, then zero or one accent. When the user has not set a look, let them pick from previews instead (Rules, Letting the user pick).
 3. Write the choice in one line and save it with updateBrief before the first addFilm, for example: "Base warm paper #F7F5F1, structure none, accent bloom #DDD3F7 behind each headline, end card dark #07060B with corner glows."
 4. Build it, then run the check under Rules before handing back.
 
@@ -69,6 +69,15 @@ Use none, or a bloom when the focal point needs lifting. Switch to another row w
 | Lifted or selected element (the darkest allowed) | `0 24px 56px rgba(20,10,40,.14)` |
 
 ## Rules
+
+### Letting the user pick
+Before the first addFilm, when the request, the brief and any reference video set no look:
+1. previewBackgrounds with the film's real headline and 3–5 candidates. Each pair differs in at least one layer (base, structure or accent). One candidate follows a "Very good" line of the Calibration exactly. At most one uses a dark base, and only for an end-card or punch-beat film. Give each a 2–5 word label and a one-line note on what it suits.
+2. askUser in the same turn with one option per candidate, in order: its label, its note as description, and background set to its number (1–5), which shows its HTML preview in the card. End the turn.
+3. Build from the pick. Save its returned line with updateBrief (rule: the line; userWords: what the user said); the tool never writes the brief itself.
+4. On feedback such as "2 but warmer" or "1 with a grid", preview 3 variations of that candidate that change only the named layer (warmer: base #F7F5F1 → #F5F0E8 → #F2EBDF), then ask again. Build only once a pick lands.
+
+Skip the preview when the user named a look, the brief already holds a background line, or the film recreates a reference.
 
 ### Color
 - A dark kit background is the product's UI color, not the film canvas.

@@ -8,3 +8,4 @@
 .choice-card [data-slot=field-label]:has(.choice-card-image){gap:0;overflow:hidden}
 .choice-card-image{background:#2a2a2a}
 .choice-card-image img{width:100%;height:100%;object-fit:contain;display:block}
+.choice-card-image iframe{width:100%;height:100%;border:0;display:block;pointer-events:none}

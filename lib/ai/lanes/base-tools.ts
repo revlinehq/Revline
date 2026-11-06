@@ -62,6 +62,7 @@ export const BASE_TOOLS = [
   'getSound',
   'askUser',
   'askBrandKit',
+  'previewBackgrounds',
   'readSkill',
   'addMedia',
   'addMarker',

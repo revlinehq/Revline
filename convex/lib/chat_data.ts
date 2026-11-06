@@ -35,6 +35,8 @@ function toolDisplay(value: unknown, key = '', result = false): unknown {
   }
   if (Array.isArray(value)) {
     if(result&&key==='changedClips')return value.map(item=>{const clip=item as {id?:unknown;kind?:unknown};return {id:clip?.id,kind:clip?.kind};});
+    // A choice card option's HTML preview (askUser from previewBackgrounds) is what the card shows, so it stays whole.
+    if(result&&key==='options')return value.map(item=>{const {html,...option}=(item&&typeof item==='object'?item:{}) as {html?:unknown};const shown=toolDisplay(item&&typeof item==='object'?option:item,'',result);return typeof html==='string'&&html.length<=24_000&&shown&&typeof shown==='object'?{...shown,html}:shown;});
     return value.map(item => toolDisplay(item, '', result));
   }
   if (value && typeof value === 'object') {

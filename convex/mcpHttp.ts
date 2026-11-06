@@ -1,13 +1,14 @@
 import type { HttpRouter } from 'convex/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { CallToolRequestSchema, InitializeRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, InitializeRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { EDITOR_STYLE_RULES } from '../lib/ai/editor-style';
 import { requestMcpOrigin } from './lib/mcp_origin';
 import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
+import { BACKGROUND_PREVIEW_URI, MCP_APP_MIME, mcpAppDocument } from '../lib/editor/background-preview';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
 // the OAuth 2.1 authorization server MCP clients discover from it.
@@ -46,7 +47,13 @@ const withCors = (response: Response) => { const headers = new Headers(response.
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
 function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId?:string,agentClientId?:Id<'mcpConnections'>) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {}, resources: {} }, instructions: MCP_INSTRUCTIONS });
+  // MCP Apps (io.modelcontextprotocol/ui, 2026-01-26): previewBackgrounds names this view in its tool _meta.ui.resourceUri.
+  server.setRequestHandler(ListResourcesRequestSchema, async () => ({ resources: [{ uri: BACKGROUND_PREVIEW_URI, name: 'background_previews', title: 'Background candidates', description: 'Inline picker for previewBackgrounds results.', mimeType: MCP_APP_MIME }] }));
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    if (request.params.uri !== BACKGROUND_PREVIEW_URI) throw new Error(`Unknown resource ${request.params.uri}.`);
+    return { contents: [{ uri: BACKGROUND_PREVIEW_URI, mimeType: MCP_APP_MIME, text: mcpAppDocument(), _meta: { ui: { csp: { resourceDomains: ['https://fonts.googleapis.com', 'https://fonts.gstatic.com'] }, prefersBorder: false } } }] };
+  });
   // One stable catalog for the whole session: clients that never re-fetch tools/list (Codex ignores list_changed) still
   // hold every tool. Lane, capability, owner and task access are enforced on each call instead.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -55,7 +62,7 @@ function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, compa
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
-    return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], isError: outcome.isError };
+    return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], ...(outcome.structuredContent ? { structuredContent: outcome.structuredContent } : {}), isError: outcome.isError };
   });
   return server;
 }

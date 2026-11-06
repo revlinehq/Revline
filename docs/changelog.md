@@ -1,4 +1,5 @@
 ## 2026-11-05
+- Editor agent: Add previewBackgrounds, which renders 3–5 brand-derived background candidates as HTML (an inline MCP App in MCP clients, sandboxed previews in the chat's choice card). Why: the user wanted to pick a film's background from previews instead of the agent guessing.
 - Films: films and scenes are plain HTML + GSAP modules; sections are section(name, start, duration, build) calls whose code inspectClip, patchScene and approvals own; React, 3D and film-kit scene runtimes are removed. Why: the user chose plain HTML + GSAP over React for films.
 - Motion skills: motion-design is renamed launch-films-motions; recipes give structure only and take timing from its Timing and easing table. Why: the user wants all motion guidance in one skill.
 - Footage skills: music-and-sound, color-grading, effects, vfx and vfx-recipes removed; text-styling is now page text-styling of footage-editing. Their tools load with footage-editing. Why: the user found them untested, unused or misplaced.
