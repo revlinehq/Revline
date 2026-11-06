@@ -16,7 +16,7 @@ import { currentTimeline } from './lib/timeline';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { aspectRatio, frameResolution } from './schema';
-import { beginProjectDeletion, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
+import { beginProjectDeletion, copyMediaFor, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { cancelMediaTask } from './lib/media_queue';
 import { exportFileName, startRenderFor } from './renders';
@@ -170,6 +170,10 @@ export const renameProject = internalMutation({ args: { ownerId: v.string(), pro
 export const duplicateProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), title: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
   const projectId = await duplicateProjectFor(ctx, args.ownerId, projectIdOf(ctx, args.projectId), args.title);
   return { projectId, editorUrl: editorUrl(projectId), note: 'A full copy with every timeline tab and its media. Edits to it never change the original.' };
+}});
+export const copyMedia = internalMutation({ args: { ownerId: v.string(), projectId: v.string(), assetIds: v.array(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const media = await copyMediaFor(ctx, args.ownerId, projectIdOf(ctx, args.projectId), args.assetIds);
+  return { projectId: args.projectId, media, note: 'Each assetId now belongs to this project and shares the original file and saved analysis. Place it with addMedia.' };
 }});
 export const deleteProject = internalMutation({ args: { ownerId: v.string(), projectId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
   const project = await ctx.db.get(projectIdOf(ctx, args.projectId));

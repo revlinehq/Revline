@@ -93,6 +93,7 @@ export const PROJECT_BASE_TOOLS = [
   'createProject',
   'uploadMedia',
   'finishUpload',
+  'copyMedia',
   'renameProject',
   'duplicateProject',
   'deleteProject',
