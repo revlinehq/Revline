@@ -85,7 +85,7 @@ export function declarations(code: string) {
 export const identifiers = (code: string) => new Set(code.match(/[A-Za-z_$][\w$]*/g) ?? []);
 
 /** Index just past the string, template literal or comment starting at `at`, or `at` itself when none starts there. */
-function skipText(code: string, at: number): number {
+export function skipText(code: string, at: number): number {
   const char = code[at];
   if (char === '/' && code[at + 1] === '/') { const end = code.indexOf('\n', at); return end < 0 ? code.length : end; }
   if (char === '/' && code[at + 1] === '*') { const end = code.indexOf('*/', at + 2); return end < 0 ? code.length : end + 2; }

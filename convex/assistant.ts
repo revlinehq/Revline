@@ -18,6 +18,7 @@ import {stopRunnerTurn} from './lib/runner_turns';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
+import { clearFilmDrafts } from './filmDrafts';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { transportAsset, storeAnalysis } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
@@ -140,6 +141,7 @@ export const livePreview = query({args:{projectId:v.id('projects'),sceneCode:v.o
   return {...result,timeline:await loadSceneCode(ctx,result.timeline),removedClips:(await loadSceneCode(ctx,{clips:result.removedClips})).clips};
 }});
 async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,projectId:import('./_generated/dataModel').Id<'projects'>){
+  await clearFilmDrafts(ctx,projectId);
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }

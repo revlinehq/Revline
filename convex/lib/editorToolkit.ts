@@ -69,6 +69,8 @@ import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { SCENE_BLUEPRINT_LIMIT, SCENE_LIMITS } from '../../lib/editor/scene-layers';
 import { checkSceneCode } from '../../lib/editor/scene-compile';
 import { placeFilm, withPatchedScene, type SceneEdit } from '../../lib/editor/scene-film';
+import { cutDraftSnippet, cutFilmDraft, draftSections, type DraftSection } from '../../lib/editor/film-draft';
+import { filmDraftPublisher, DRAFT_TOOLS, type BuildFilmDraft } from './filmDraftStream';
 import { inspectSceneCode, patchSceneCode, rebaseSceneCode, sceneCodeSource, searchSceneCode, type SceneLineEdit } from '../../lib/editor/scene-code-edits';
 import { sectionCount, sectionRanges, guardedSections, guardTimes, resolveScope, restoreSectionCode, type ScopeInput } from '../../lib/editor/section-scope';
 import { TEXT_EFFECT_PRESETS, TEXT_ANIMATION_PRESETS,TEXT_ANIMATION_LABELS,textAnimationPatch, textEffectPatch, textTemplatePatch } from '../../lib/editor/text-effects';
@@ -438,9 +440,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const sceneEditsInput = z.array(z.object({
     find: z.string().min(1).optional().describe('Current code from inspectClip, without line-number prefixes. Line indentation differences are tolerated when the match is unique.'),
     lines: codeLinesInput.optional(),
-    replace: z.string().describe('Replacement code, or empty to delete. Required even for insertions.'),
     all: z.boolean().optional().describe('Replace every matching snippet; only valid with find.'),
     insert: z.enum(['before', 'after']).optional().describe('Keep the snippet or lines and insert replace before or after them.'),
+    replace: z.string().describe('Replacement code, or empty to delete. Required even for insertions.'),
   }).strict().superRefine((edit, context) => {
     if ((edit.find === undefined) === (edit.lines === undefined)) context.addIssue({ code: 'custom', path: ['find'], message: 'Give exactly one of find or lines.' });
     if (edit.lines !== undefined && edit.all !== undefined) context.addIssue({ code: 'custom', path: ['all'], message: 'all is only valid for find edits.' });
@@ -1755,7 +1757,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (failed.length === results.length) throw new Error(failed.map(item => `${item.title}: ${(item as { error: string }).error}`).join('\n'));
       return { ...saved, scenes: results, ...(failed.length ? { note: `${failed.length} of ${results.length} scenes were not saved; fix each with addScene. The others are saved.` } : {}) };
     } }),
-    addFilm: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addFilm, description: "Build a motion film (a launch film, a recreation, any motion piece longer than one idea) as one scene clip for its whole length: one plain HTML + GSAP module (no React or JSX) whose animation runs on one continuous timeline, so moves flow from section to section with no cuts or transition clips. Write each section as section('Title', start, duration, (tl) => { ... }) with number literals for start and duration in film seconds; its tl counts from the section's start. sections name the same parts (title and film second each starts); every section() call must match one of them by title and start, and they become timeline markers the user and you can point at. A section owns its call and the top-level helpers only it uses, so inspectClip and patchScene can address it and an approved section stays locked; everything else in the module (building the HTML, moves spanning sections on the outer tl) is shared. Change the film afterwards with patchScene (small exact edits); never rewrite it. Keep each call under about 20k tokens (60,000 characters) of code: for a longer film, write the first part now with a comment marker such as // --- more sections where the rest goes, set builtThrough to the end of what you wrote (later sections need no call yet), then add each next section with patchScene insert 'before' that marker. Read launch-films-motions and writing-scenes page films first.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title).describe("The film's name."), code: z.string().min(1), start: z.number().min(0).describe('Timeline second where the film starts.'), duration: z.number().positive().max(180).describe("The film's length in seconds."), builtThrough: z.number().positive().max(180).optional().describe('When starting a film section by section: the end, in film seconds, of the part implemented in this call. The clip keeps its full duration; unread later sections are added with patchScene.'), sections: z.array(z.object({ title: z.string().trim().min(1).max(120), at: z.number().min(0).describe('Film second where this section starts.') })).max(24).optional().describe('Named sections, placed as timeline markers.'), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the film receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() }), execute: async (_ctx, { title, code, start, duration, builtThrough, sections, track, brandKitId, media, blueprints: names }) => {
+    addFilm: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addFilm, description: "Build a motion film (a launch film, a recreation, any motion piece longer than one idea) as one scene clip for its whole length: one plain HTML + GSAP module (no React or JSX) whose animation runs on one continuous timeline, so moves flow from section to section with no cuts or transition clips. Write each section as section('Title', start, duration, (tl) => { ... }) with number literals for start and duration in film seconds; its tl counts from the section's start. sections name the same parts (title and film second each starts); every section() call must match one of them by title and start, and they become timeline markers the user and you can point at. A section owns its call and the top-level helpers only it uses, so inspectClip and patchScene can address it and an approved section stays locked; everything else in the module (building the HTML, moves spanning sections on the outer tl) is shared. Change the film afterwards with patchScene (small exact edits); never rewrite it. Keep each call under about 20k tokens (60,000 characters) of code: for a longer film, write the first part now with a comment marker such as // --- more sections where the rest goes, set builtThrough to the end of what you wrote (later sections need no call yet), then add each next section with patchScene insert 'before' that marker. Read launch-films-motions and writing-scenes page films first.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title).describe("The film's name."), start: z.number().min(0).describe('Timeline second where the film starts.'), duration: z.number().positive().max(180).describe("The film's length in seconds."), builtThrough: z.number().positive().max(180).optional().describe('When starting a film section by section: the end, in film seconds, of the part implemented in this call. The clip keeps its full duration; unread later sections are added with patchScene.'), sections: z.array(z.object({ title: z.string().trim().min(1).max(120), at: z.number().min(0).describe('Film second where this section starts.') })).max(24).optional().describe('Named sections, placed as timeline markers.'), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the film receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional(), code: z.string().min(1).describe('The film module, written last: the editor shows each section as it is written.') }), execute: async (_ctx, { title, code, start, duration, builtThrough, sections, track, brandKitId, media, blueprints: names }) => {
       if (builtThrough !== undefined && builtThrough > duration) throw new Error('builtThrough must be inside the film duration.');
       await editSession.wait();
       const reference = LANES[lane].referenceMotion === 'required' ? referenceAssetId() : undefined;
@@ -2327,10 +2329,64 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
+  // A film still streaming in as addFilm or patchScene input, cut to its finished sections (lib/editor/film-draft.ts).
+  // Nothing here is saved to the timeline: the editor shows it from its own draft row until the call lands.
+  const buildFilmDraft:BuildFilmDraft=async(tool,input,memo)=>{
+    const timeline=editSession.timeline,num=(value:unknown)=>typeof value==='number'&&Number.isFinite(value)?value:undefined;
+    if(tool==='addFilm'){
+      const title=typeof input.title==='string'&&input.title.trim()?input.title.trim().slice(0,SCENE_LIMITS.title):'Film',code=typeof input.code==='string'?input.code:'';
+      const beats=(Array.isArray(input.sections)?input.sections:[]).flatMap(item=>{const beat=item as {title?:unknown;at?:unknown};return typeof beat?.title==='string'&&num(beat.at)!==undefined?[{title:beat.title,at:num(beat.at)!}]:[];}).sort((a,b)=>a.at-b.at);
+      const cut=code?cutFilmDraft(code):{sections:[] as DraftSection[]};
+      if(cut.code)memo.code=cut.code;
+      const good=typeof memo.code==='string'?memo.code:undefined,shown=good?draftSections(good):[];
+      const ends=[...shown,...cut.writing?[cut.writing]:[]].map(item=>item.start+item.duration);
+      const duration=Math.min(180,num(input.duration)??Math.max(1,...ends,...beats.map(beat=>beat.at+1)));
+      const planned=beats.map((beat,index)=>({title:beat.title,start:beat.at,duration:Math.max(.1,(beats[index+1]?.at??duration)-beat.at)})).filter(item=>![...shown,...cut.writing?[cut.writing]:[]].some(done=>Math.abs(done.start-item.start)<1e-3));
+      let clip:Clip|undefined;
+      if(good){
+        if(memo.extras===undefined){
+          const brandKitId=typeof input.brandKitId==='string'?input.brandKitId:undefined,names=Array.isArray(input.blueprints)?input.blueprints.filter((name):name is string=>typeof name==='string'):[];
+          const brand=brandKitId?await sceneBrandSnapshot(ctx,run.ownerId,brandKitId).catch(()=>undefined):undefined;
+          let media:{name:string;assetId:string}[]|undefined;try{media=Array.isArray(input.media)?sceneMedia(input.media as {name:string;assetId:string}[]):undefined;}catch{media=undefined;}
+          const blueprints=names.length?await sceneBlueprints(brandKitId,names).catch(()=>undefined):undefined;
+          memo.extras={...(brand?{brand}:{}),...(media?.length?{media}:{}),...(blueprints?.length?{blueprints}:{})};
+        }
+        try{clip=placeFilm(timeline,{id:'film-draft',title,start:num(input.start)??0,duration,track:num(input.track),scene:{code:good,...memo.extras as object}}).timeline.clips.find(item=>item.id==='film-draft');}catch{clip=undefined;}
+      }
+      return {timelineId,tool,title,start:num(input.start)??0,duration,...(clip?{clip}:{}),sections:shown,...(cut.writing?{writing:cut.writing}:{}),planned};
+    }
+    const target=typeof input.clipId==='string'?timeline.clips.find(item=>item.id===input.clipId):undefined;
+    if(!target?.scene)return undefined;
+    const edits=Array.isArray(input.edits)?input.edits as Record<string,unknown>[]:[],ready:(SceneEdit|SceneLineEdit)[]=[];
+    let writing:DraftSection|undefined;
+    for(const [index,edit] of edits.entries()){
+      if(!edit||typeof edit!=='object'||typeof edit.replace!=='string')continue;
+      let replace=edit.replace;
+      // The edit still streaming keeps only the sections it has finished.
+      if(index===edits.length-1){const cut=cutDraftSnippet(replace);writing=cut.writing;if(cut.text===undefined)continue;replace=cut.text;}
+      const insert:{insert?:'before'|'after'}=edit.insert==='before'||edit.insert==='after'?{insert:edit.insert}:{};
+      const lines=edit.lines as {start?:unknown;end?:unknown}|undefined;
+      if(typeof edit.find==='string'&&edit.find)ready.push({find:edit.find,replace,...(edit.all===true?{all:true}:{}),...insert});
+      else if(num(lines?.start)!==undefined&&num(lines?.end)!==undefined)ready.push({lines:{start:num(lines!.start)!,end:num(lines!.end)!},replace,...insert});
+    }
+    if(ready.length&&memo.edits!==JSON.stringify(ready)){
+      memo.edits=JSON.stringify(ready);
+      try{const code=patchSceneCode(timeline,target,ready,{section:typeof input.section==='string'?input.section:undefined}).code;checkSceneCode(code);memo.code=code;}catch{/* Keep the last good cut. */}
+    }
+    const good=typeof memo.code==='string'?memo.code:undefined;
+    const {codeRef:_codeRef,...scene}=target.scene;
+    return {timelineId,tool,title:scene.title,start:target.start-target.sourceStart/(target.playbackRate??1),duration:target.scene.film?.duration??target.duration,...(good?{clip:{...target,scene:{...scene,code:good}}}:{}),sections:good?draftSections(good):[],...(writing?{writing}:{}),planned:[]};
+  };
+  const filmDrafts=filmDraftPublisher({build:buildFilmDraft,write:draft=>ctx.runMutation(internal.filmDrafts.publish,{...run,draft}),clear:()=>ctx.runMutation(internal.filmDrafts.clear,run)});
   const availableToolNames=():string[]=>Object.keys(tools).filter(name=>laneToolAllowed(lane,name,[...capabilities]));
   for(const [name,tool] of Object.entries(tools) as [string,{execute?:(...args:never[])=>Promise<unknown>}][]){
     const execute=tool.execute;if(!execute)continue;
     tool.execute=async function(this:unknown,...args:never[]){
+      // The saved film takes over from the live draft once addFilm or patchScene lands or fails.
+      if(DRAFT_TOOLS.includes(name)){try{return await invoke.call(this,...args);}finally{await filmDrafts.landed();}}
+      return invoke.call(this,...args);
+    };
+    const invoke=async function(this:unknown,...args:never[]){
       if(!laneToolAllowed(lane,name,[...capabilities]))throw new Error(laneToolError(lane,name));
       const input=(args[0]??{}) as Record<string,unknown>;
       if(name==='analyzeMedia'){
@@ -2366,5 +2422,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => !clippingActive&&tracksChanges() ? fastReview.feedback() : undefined };
+  return { tools, filmDrafts, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => !clippingActive&&tracksChanges() ? fastReview.feedback() : undefined };
 }

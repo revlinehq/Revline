@@ -10,6 +10,7 @@ import { editorCommandInstructions } from '../../lib/ai/slash-commands';
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
 import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
+import { filmDraftMiddleware } from './filmDraftStream';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
@@ -114,7 +115,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
       if(provider==='openai'&&activeOpenAIKey())countInput=openAITokenCounter(modelId,activeOpenAIKey(),measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
     }
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
+    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
     const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name==='clip' ? editorCommandInstructions(args.command) : ''}
@@ -184,7 +185,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
           onStepStart: event => { currentStep = offset + event.stepNumber; },
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
+          onStepEnd: async event => { costLog.toolsFinished(event); await toolkit.filmDrafts.landed(); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
