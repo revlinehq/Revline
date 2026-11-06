@@ -20,6 +20,7 @@ This page holds no style: durations, eases and looks are decided in launch-films
 - Never play(), restart(), reverse(), change timeScale, or rely on a move playing in real time.
 - **Every move goes on a supplied timeline:** the scene's `tl`, or the child timeline a `section(...)` callback receives (section-local seconds), always with a position parameter.
 - The motion helpers (`shot`, `push`, `hit`, `cursor`, `beat`) put their moves on the timeline you pass them; API reference: writing-scenes page `films`, Motion helpers.
+- **Whips use the `whip(tl, {...})` helper** the scene receives (launch-films-motions page `shot-changes`), not hand-written tweens.
 - Never use ScrollTrigger, ScrollSmoother, ScrollTo, Observer, Draggable, Inertia, Flip, GSDevTools, gsap.ticker, requestAnimationFrame, setTimeout or setInterval. None of them follow the frame clock.
 - Never create a move outside a seeked timeline (a bare gsap.to, gsap.from or gsap.delayedCall).
 - No responsive or reduced-motion branches: gsap.matchMedia does not apply, since the canvas has a fixed size and every frame is rendered.
@@ -32,7 +33,7 @@ This page holds no style: durations, eases and looks are decided in launch-films
 
 ### Properties and cost
 - Animate transforms and opacity: x, y, xPercent, yPercent, scale, rotation and opacity or autoAlpha. Use transforms for movement. will-change is unnecessary.
-- **Blur budget at 1080p:** blur at most 8 elements for at most 0.5 s at a time. Avoid full-frame blur except in measured copies.
+- **Blur budget at 1080p:** blur at most 8 elements for at most 0.5 s at a time. Avoid full-frame blur except in measured copies and whips (launch-films-motions page `shot-changes`).
 
 ### Callbacks, randomness, steps and loops
 - **Callbacks only write derived values:** onUpdate may write a counter's text. Nothing may depend on how often or in which order callbacks fire, since seeking jumps.

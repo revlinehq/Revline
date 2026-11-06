@@ -42,6 +42,7 @@ export type CompositionOptions = {
   gsapUrl?: string;
   visualEffectsUrl?: string;
   remotionRuntimeUrl?: string;
+  transitionsRuntimeUrl?: string;
   sceneRuntimeUrl?: string;
   fontUrl?: string;
   fontUrls?: Partial<Record<TextFontId, string>>;
@@ -233,9 +234,10 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const visualEffectsUrl = mediaUrl(options.visualEffectsUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL('/vendor/visual-effects.js', options.gsapUrl).href : '/vendor/visual-effects.js'));
   const textSources = JSON.stringify(textLayerSources(timeline.clips, fps, resolution)).replace(/</g, '\\u003c');
   const hasText=timeline.clips.some(clip=>clip.kind==='caption'||clip.kind==='graphic');
-  // One bundle carries the text and transition renderers; the preview loads it on demand from the meta tag.
-  const sharedRuntimeUrl=mediaUrl(options.remotionRuntimeUrl??(/^https?:/i.test(options.gsapUrl??'')?new URL('/vendor/remotion-runtime.js',options.gsapUrl).href:'/vendor/remotion-runtime.js'));
-  const sceneScripts=hasText||transitions.length?`<script src="${sharedRuntimeUrl}"></script>`:'';
+  // The text and transition renderers are separate bundles; the preview loads each on demand from its meta tag.
+  const vendorUrl=(file:string)=>/^https?:/i.test(options.gsapUrl??'')?new URL(`/vendor/${file}`,options.gsapUrl).href:`/vendor/${file}`;
+  const textRuntimeUrl=mediaUrl(options.remotionRuntimeUrl??vendorUrl('remotion-runtime.js')),transitionsRuntimeUrl=mediaUrl(options.transitionsRuntimeUrl??vendorUrl('transitions-runtime.js'));
+  const sceneScripts=`${hasText?`<script src="${textRuntimeUrl}"></script>`:''}${transitions.length?`<script src="${transitionsRuntimeUrl}"></script>`:''}`;
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
@@ -266,7 +268,7 @@ html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;backgroun
 .scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
-</style><meta name="revline-remotion-runtime" content="${sharedRuntimeUrl}">${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
+</style><meta name="revline-remotion-runtime" content="${textRuntimeUrl}"><meta name="revline-transitions-runtime" content="${transitionsRuntimeUrl}">${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});
 ${animation.join('\n')}
 window.__revlineDurationTween=gsap.to({},{duration:${safeDuration},paused:true});timeline.add(window.__revlineDurationTween,0);window.__revlineDurationTween.paused(false);
@@ -278,7 +280,7 @@ window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(time
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineRemotionText)window.__revlineTextLayerController=window.__revlineRemotionText.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
 ${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl, sceneMediaUrls, Object.fromEntries(Object.entries(options.assetUrls ?? {}).filter(([key]) => /^https?:/i.test(key))), options.preview === true)}
-${transitions.length ? `if(window.__revlineRemotionTransitions)window.__revlineRemotionTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
+${transitions.length ? `if(window.__revlineTransitions)window.__revlineTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 ${trackedSources.length ? `window.__revlineVisualEffects.installPixelTracking(${JSON.stringify(trackedSources).replace(/</g, '\\u003c')},${JSON.stringify(trackEndpoint)},${JSON.stringify(options.pixelTrackFiles ?? {})},${fps},${resolution});` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});
 </script></body></html>`;

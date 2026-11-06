@@ -16,7 +16,7 @@ Contents: Workflow; Defaults (timing and easing); Rules (structure, timing, a ne
 3. **New film:** read page `ideation`. When the user accepts an angle, start building.
 4. **Look:** find or create the brand kit (page `brand-kit`), then build the background (page `backgrounds`) before the first addFilm.
 5. **Assets:** page `image-plates` for anything code cannot draw; page `blueprints` when the user's product UI is shown.
-6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from Defaults.
+6. **Build** the film with addFilm as writing-scenes page `films` describes, timing every move from Defaults and every cut, whip and arrival between sections from page `shot-changes`.
    A song under the film: skill `music` sets where it starts and puts section() starts on its downbeats.
    - Use the scene helpers instead of hand-written tweens: `shot` for each shot and its cut or whip, `push` for every camera move, `cursor` for pointers and clicks, `hit` for impacts, `beat`/`downbeat` for music timing (writing-scenes page `films`, Motion helpers); `reveal`, `exit`, `swap`, `counter`, `type` and `mark` for text (gsap skill, Text functions). Pass the Defaults below as their frames and ease. Hand-write a tween only for what no helper covers.
 7. **Check** the film as "Before handing back" lists, then call finish.
@@ -29,11 +29,12 @@ Defaults for original films. The user's direction and a reference being copied w
 | Move | Duration | Ease | Example |
 |---|---|---|---|
 | Typical move (anything) | 0.25–0.6 s, aim 0.38 s | | A card sliding 120 px: 0.4 s |
-| Entrance | 0.25–0.55 s, aim 0.35 s | `power3.out` (default), `power2.out` | Headline in: 0.35 s power3.out |
+| Entrance | 0.25–0.55 s, aim 0.35 s | `power3.out` (default), `expo.out` or `power4.out` (fast start, slow end), `power2.out` | Headline in: 0.35 s power3.out |
 | Exit | about 0.8× its entrance: 0.2–0.4 s, aim 0.3 s | `power2.in` | Headline out: 0.28 s power2.in |
-| Between two resting spots | 0.35–0.6 s, aim 0.5 s | `power2.inOut` | Panel docking to the sidebar: 0.5 s |
-| Camera push | 0.8–1.4 s, with `push()` | `expo.out` (push default) or `power4.out`, never inOut | Push-in to the composer: `push(s, { target: '.composer', amount: .08, frames: 30 })` at 30 fps |
-| Typing and UI demos | 2–3× real speed, with `type()` | | A 40–50 character prompt: at most 1 s, `cps: 45` |
+| Between two resting spots | 0.35–0.6 s, aim 0.5 s | `expo.out` or `power4.out` | Panel docking to the sidebar: 0.5 s expo.out |
+| Camera move inside a shot (push, pan, pull-back) | 0.8–1.4 s, a push with `push()` | `expo.out` (push default) or `power4.out`, never inOut | Push-in to the composer: `push(s, { target: '.composer', amount: .08, frames: 30 })` at 30 fps |
+| Shot cut | hard cut (0 frames) or whip (4–5 frames, 0.13–0.17 s) | page `shot-changes` | Hard cut between features; `whip()` left on the topic change |
+| Typing and UI demos | 2–3× real speed, with `type()` | `none` | A 40–50 character prompt: at most 1 s, `cps: 45` |
 | Beat (one idea on screen) | 1.75–3.5 s, aim 2.45 s | | A title, a UI state, a feature |
 
 ## Rules
@@ -45,8 +46,10 @@ Defaults for original films. The user's direction and a reference being copied w
 ### Timing
 - Never exit with the entrance's ease or duration, and never with a slow fade.
 - **Only the camera runs past 1 s.** A non-camera move over 0.6 s needs a reason (a progress bar, a long draw-on); over 1 s it gets split or sped up. Failing examples: a 1.8 s zoom on a UI element, 1.75 s of typing.
-- **Curve mix:** `power3.out` for most moves, then `power2.out` and `power2.in`.
-- `back.out` and `expo.out` are rare in hand-written moves: at most one or two per film, for one deliberate snap or playful landing, never as the default. The `expo.out` that `push` and `shot` entrances use by default does not count.
+- **Curve mix:** `power3.out` for most moves; `expo.out` or `power4.out` for arrivals (anything landing: an entrance, a dock, a camera push); `power2.in` for exits.
+- **No inOut ease on an arrival:** a slow start reads as a predictable zoom in, zoom out. Failing example: a 1.0 s camera push on `power3.inOut`; fix: the same push on `expo.out`.
+- `back.out` is rare: at most one or two per film, for one deliberate snap or playful landing.
+- **Arrivals carry in and overlap the exit before them:** page `shot-changes` (Carry and overlap).
 - **A beat over 4 s** needs a second action inside it (a camera move, a new element, a state change), not a held frame.
 
 ### A new film for the user's brand
@@ -125,3 +128,4 @@ export default function scene({ root, fps, shot, push, reveal, exit, type }) {
 - `brand-kit`: find, create and confirm the brand kit; `brand` in scene code.
 - `blueprints`: rebuild a product screenshot as live HTML with named parts, and when a shot uses it instead of the screenshot.
 - `image-plates`: when and how to generate image assets (photos, textures, cut-outs).
+- `shot-changes`: hard cuts, `whip()` and carry-and-overlap arrivals between shots.

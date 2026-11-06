@@ -33,7 +33,7 @@ import type { CompositionWindow } from '@/lib/editor/composition-window';
 import { previewVisualEffects } from '@/lib/editor/live-visual-effects';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { previewAdjustmentEffect } from '@/lib/editor/live-adjustment-effects';
-import { loadPreviewRemotion } from '@/lib/editor/preview-remotion-runtime';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
+import { loadPreviewRuntimes } from '@/lib/editor/preview-runtimes';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
 /** Assets the preview must load: every clip's media plus images and videos shown inside scenes. */
 const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>([...timeline.clips.map(clip=>clip.assetId),...sceneMediaAssetIds(timeline)]);
 
@@ -189,7 +189,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     });
     // Small local copies swap in as soon as they finish; a long take's larger copy follows on its own.
     const prepared=[cache.prepare(usedAssets,controller.signal,MAX_PREVIEW_BYTES),cache.prepare(usedAssets,controller.signal)];
-    const optional=loadPreviewRemotion(doc,current);
+    const optional=loadPreviewRuntimes(doc,current);
     if(optional)void optional.then(()=>apply(immediate),()=>{});else apply(immediate);
     for(const prepare of prepared)void Promise.all([prepare,optional]).then(([playbackAssets])=>{if(!cancelled&&player.current===active)callbacks.current.onPlaybackAssets?.(mediaSession.current?.resolveAssets(playbackAssets)??playbackAssets);apply(playbackAssets);},error=>{if(!cancelled)callbacks.current.onError(userError(error,'Could not load the preview renderer.'));});
     return()=>{cancelled=true;controller.abort();};
@@ -266,7 +266,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       if(cancelled||!container.current)return;
       playbackAssets=prepared;callbacks.current.onPlaybackAssets?.(prepared);p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js?v=managed-media-5`);p.setAttribute('disable-click-to-play','');p.setAttribute('controls','');
-      p.setAttribute('srcdoc',generateComposition(timeline,playbackAssets,{preview:true,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=pixel-track-streams-14`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=custom-typography-3`}));
+      p.setAttribute('srcdoc',generateComposition(timeline,playbackAssets,{preview:true,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=pixel-track-streams-14`,remotionRuntimeUrl:`${window.location.origin}/vendor/remotion-runtime.js?v=custom-typography-4`,transitionsRuntimeUrl:`${window.location.origin}/vendor/transitions-runtime.js?v=short-whip-1`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia||!session)return;
         waitingForMedia=true;
@@ -275,7 +275,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
           const prepared=await openingAssets(cache,latestAssets.current.filter(asset=>used.has(asset._id)),preparation.signal);
           if(cancelled||!p||!session)return;
           const doc=p.iframeElement?.contentDocument;if(!doc)return;
-          await loadPreviewRemotion(doc,current);
+          await loadPreviewRuntimes(doc,current);
           if(cancelled)return;
           updateLivePreview(doc,stagedTimeline,current,prepared,{continueAfterFailure:true});stagedTimeline=current;
           // Seeks while this replacement loads only reach the displayed player.

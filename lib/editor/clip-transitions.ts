@@ -1,11 +1,13 @@
-import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WIPE_DIRECTIONS, trackOf, type Clip, type ClipTransition, type Timeline, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './types';
+import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WHIP_BLUR_MAX, WHIP_DIRECTIONS, WHIP_TRAVEL, WIPE_DIRECTIONS, trackOf, type Clip, type ClipTransition, type Timeline, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './types';
 import { playbackRateOf } from './playback-rate';
 
 /** Offered in the timeline's transition menu; the rest are applied by the AI editor. */
 export const MANUAL_TRANSITION_PRESETS: readonly TransitionPreset[] = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'];
-const DEFAULT_TRANSITION_WIPE: TransitionWipeSettings = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle' };
+const DEFAULT_TRANSITION_WIPE: Omit<TransitionWipeSettings, 'whipDirection' | 'whipLegacy'> = { wipeDirection: 'right', softness: .12, centerX: .5, centerY: .5, shape: 'circle', travel: WHIP_TRAVEL.default };
 export function transitionWipeSettings(settings: Partial<ClipTransition>): TransitionWipeSettings {
-  return { wipeDirection: settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, softness: settings.softness ?? DEFAULT_TRANSITION_WIPE.softness, centerX: settings.centerX ?? DEFAULT_TRANSITION_WIPE.centerX, centerY: settings.centerY ?? DEFAULT_TRANSITION_WIPE.centerY, shape: settings.shape ?? DEFAULT_TRANSITION_WIPE.shape };
+  return { wipeDirection: settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, softness: settings.softness ?? DEFAULT_TRANSITION_WIPE.softness, centerX: settings.centerX ?? DEFAULT_TRANSITION_WIPE.centerX, centerY: settings.centerY ?? DEFAULT_TRANSITION_WIPE.centerY, shape: settings.shape ?? DEFAULT_TRANSITION_WIPE.shape,
+    // New whip-pans always carry whipDirection (addTransitionClip); one without it was saved before and keeps the old slide.
+    whipDirection: settings.whipDirection ?? settings.wipeDirection ?? DEFAULT_TRANSITION_WIPE.wipeDirection, travel: settings.travel ?? DEFAULT_TRANSITION_WIPE.travel, ...(settings.blur !== undefined ? { blur: settings.blur } : {}), whipLegacy: settings.whipDirection === undefined };
 }
 const DEFAULT_TRANSITION_DURATION = .6;
 export const DEFAULT_TRANSITION_DIRECTION: TransitionDirection = 'clockwise';
@@ -25,6 +27,9 @@ export function validateTransitionSettings(clip: Clip) {
   for (const key of ['softness', 'centerX', 'centerY'] as const) if (settings[key] !== undefined && (!Number.isFinite(settings[key]) || settings[key]! < 0 || settings[key]! > 1)) throw new Error('Transition softness and center must be finite values between 0 and 1.');
   if (settings.wipeDirection !== undefined && !WIPE_DIRECTIONS.includes(settings.wipeDirection)) throw new Error('Choose a supported wipe direction.');
   if (settings.shape !== undefined && !IRIS_SHAPES.includes(settings.shape)) throw new Error('Choose a circle or ellipse iris.');
+  if (settings.whipDirection !== undefined && !WHIP_DIRECTIONS.includes(settings.whipDirection)) throw new Error(`Choose a whip direction: ${WHIP_DIRECTIONS.join(', ')}.`);
+  if (settings.blur !== undefined && (!Number.isFinite(settings.blur) || settings.blur < 0 || settings.blur > WHIP_BLUR_MAX)) throw new Error(`Whip blur is 0 to ${WHIP_BLUR_MAX} px at 1080p.`);
+  if (settings.travel !== undefined && (!Number.isFinite(settings.travel) || settings.travel < WHIP_TRAVEL.min || settings.travel > WHIP_TRAVEL.max)) throw new Error(`Whip travel is a share of the frame from ${WHIP_TRAVEL.min} to ${WHIP_TRAVEL.max}.`);
   if (clip.motion?.length || (clip.motionOffset !== undefined && clip.motionOffset !== 0)) throw new Error('Transitions use their own presentation, not motion keyframes.');
 }
 
