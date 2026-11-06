@@ -88,7 +88,8 @@ export function withPatchedScene(timeline: Timeline, before: string, after: stri
 const EPSILON = 1e-4;
 const MEASURED_CUE = /^(?:beats|downbeats|accents|dropCandidates):/;
 const nameKey = (name?: string) => name?.trim().toLowerCase() ?? '';
-export type SectionMarkerChanges = { moved: number; added: number; removed: number; renamed: number };
+/** `kinded`: older section markers that gained `kind: 'section'`, after which other markers inside the film no longer split it. */
+export type SectionMarkerChanges = { moved: number; added: number; removed: number; renamed: number; kinded: number };
 
 /**
  * A film's section markers follow its section() calls after the code changes (patchScene, editScene, restoreSection):
@@ -112,8 +113,9 @@ export function syncFilmSectionMarkers(timeline: Timeline, before: string, after
   const titles = new Set([...was, ...now].map(call => nameKey(call.name)));
   const owned = (timeline.markers ?? []).filter(marker => inFilm(marker) && !MEASURED_CUE.test(marker.id) && titles.has(nameKey(marker.label)));
   const claimed = new Set<string>();
-  // A section's own markers: section-kind first, then older unkinded ones, in timeline order.
-  const markersOf = (title: string) => owned.filter(marker => !claimed.has(marker.id) && nameKey(marker.label) === nameKey(title)).sort((a, b) => Number(isSectionMarker(b)) - Number(isSectionMarker(a)) || a.time - b.time);
+  // A film placed since markers carried a kind owns only its section-kind markers; an older film's are unkinded.
+  const legacy = !owned.some(isSectionMarker);
+  const markersOf = (title: string) => owned.filter(marker => !claimed.has(marker.id) && nameKey(marker.label) === nameKey(title) && (legacy || isSectionMarker(marker))).sort((a, b) => a.time - b.time);
 
   // Pair each new section with its old one by title; a section renamed without moving pairs by start.
   const left = [...was], pairs = now.map(call => {
@@ -122,30 +124,29 @@ export function syncFilmSectionMarkers(timeline: Timeline, before: string, after
     return { call, old: index < 0 ? undefined : left.splice(index, 1)[0] };
   });
 
-  const changes: SectionMarkerChanges = { moved: 0, added: 0, removed: 0, renamed: 0 }, remove: string[] = [];
+  const changes: SectionMarkerChanges = { moved: 0, added: 0, removed: 0, renamed: 0, kinded: 0 }, remove: string[] = [], add: { time: number; title: string }[] = [];
   let next = timeline;
   const relabel = (id: string, patch: Partial<TimelineMarker>) => { next = { ...next, markers: next.markers?.map(marker => marker.id === id ? { ...marker, ...patch } : marker) }; };
   for (const { call, old } of pairs) {
     const title = call.name ?? '', times = shownAt(call.start);
-    const mine = [...markersOf(title), ...(old && nameKey(old.name) !== nameKey(title) ? markersOf(old.name ?? '') : [])];
+    // A section renamed in place keeps its own marker first, ahead of any marker already carrying the new title.
+    const mine = [...(old && nameKey(old.name) !== nameKey(title) ? markersOf(old.name ?? '') : []), ...markersOf(title)];
     mine.forEach(marker => claimed.add(marker.id));
     times.forEach((time, index) => {
       const marker = mine[index];
-      if (!marker) {
-        const added = addTimelineMarker(next, time, crypto.randomUUID(), title, 'section');
-        if (added !== next) { next = added; changes.added++; }
-        return;
-      }
+      if (!marker) { add.push({ time, title }); return; }
       const moved = moveTimelineMarker(next, marker.id, time);
       if (moved !== next) { next = moved; changes.moved++; }
       if (marker.label !== title) { relabel(marker.id, { label: title }); changes.renamed++; }
-      if (!isSectionMarker(marker)) relabel(marker.id, { kind: 'section' });
+      if (!isSectionMarker(marker)) { relabel(marker.id, { kind: 'section' }); changes.kinded++; }
     });
-    // Extra section markers of this section (a duplicate, or a start now trimmed out of every clip) go; unkinded ones may be the user's cues.
-    remove.push(...mine.slice(times.length).filter(isSectionMarker).map(marker => marker.id));
+    // Extra markers of this section: a duplicate, or a start now trimmed out of every clip.
+    remove.push(...mine.slice(times.length).map(marker => marker.id));
   }
   // Sections the new code deleted lose their markers.
   for (const old of left) remove.push(...markersOf(old.name ?? '').map(marker => marker.id));
   if (remove.length) { const removed = removeTimelineMarkers(next, remove); changes.removed = (next.markers?.length ?? 0) - (removed.markers?.length ?? 0); next = removed; }
-  return { timeline: next, ...(changes.moved || changes.added || changes.removed || changes.renamed ? { changes } : {}) };
+  // New markers go in last, so a frame another section's marker just left is free.
+  for (const { time, title } of add) { const added = addTimelineMarker(next, time, crypto.randomUUID(), title, 'section'); if (added !== next) { next = added; changes.added++; } }
+  return { timeline: next, ...(Object.values(changes).some(Boolean) ? { changes } : {}) };
 }

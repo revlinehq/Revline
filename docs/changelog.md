@@ -2,6 +2,7 @@
 - Editor agent: while addFilm or patchScene input streams, the film plays in the preview section by section and a "Drafting film…" track above A1 shows finished, in-progress and planned sections; drafts live in their own `filmDrafts` row, are never saved, revisions or exports, and clear when the call lands or the run ends. Why: the user waited minutes for one big film call to land.
 - MCP: new copyMedia tool copies media between the caller's own projects (same owner only; shares files and saved analysis). Why: a film agent had no way to reuse another project's media and impersonated the founder to get it.
 - Agent rules: AGENTS.md and MCP instructions forbid running Convex functions as a user; .claude/settings.json denies `convex run` with `--identity`, `ownerId` or `mcpActions:callTool`. Why: the same incident used `npx convex run … --identity`.
+- Film markers: patchScene, editScene and restoreSection move, add, rename and remove a film's section markers to match its section() calls; section markers carry kind "section", so a beat or cue can share their frame and no longer splits a film. Why: an agent spent 53 marker calls realigning sections by hand, and a section could not start on a beat marker.
 
 ## 2026-11-05
 - Frame checks: finish, the changed-frame queue and getFrames now share one last-frame rule (duration − 1/fps), and a rendered frame clears any pending time it was clamped to. Why: an agent report showed a 16.6 s film stuck on pending [16.6] that getFrames always drew at 16.5833.
