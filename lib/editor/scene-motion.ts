@@ -9,6 +9,7 @@
 import { gsap } from 'gsap';
 import type { SectionHelper } from './scene-runtime';
 import type { SceneBeats } from './types';
+import { FLASH_DEFAULTS, IMPACT_DEFAULTS, IMPACT_RANGES, flashAt, impactAt, impactSettings } from './impact';
 type Target = string | Element;
 type Point = Target | { x: number; y: number };
 type Direction = 'left' | 'right' | 'up' | 'down';
@@ -68,13 +69,6 @@ function choice<T extends string>(what: string, value: unknown, fallback: T, opt
 const easeOut = (name: ShotEase) => gsap.parseEase(`${name}.out`);
 /** 0 at both ends, so before and after the move it adds nothing. */
 const envelope = (shape: (t: number) => number) => (t: number) => t <= 0 || t >= 1 ? 0 : shape(t);
-/** A deterministic 0..1 value for a seed, so shakes differ from each other but never between renders. */
-function seeded(seed: number) {
-  let state = (Math.imul(seed | 0, 2654435761) ^ 0x9e3779b9) >>> 0;
-  state = Math.imul(state ^ (state >>> 16), 2246822507) >>> 0;
-  state = Math.imul(state ^ (state >>> 13), 3266489909) >>> 0;
-  return ((state ^ (state >>> 16)) >>> 0) / 4294967296;
-}
 
 /** Layout position of an element's center inside an ancestor, ignoring transforms (they move while building). */
 function centerIn(el: HTMLElement, ancestor: HTMLElement) {
@@ -244,40 +238,42 @@ export function motionHelpers({ root, fps, width, height, section, beats: marker
   };
 
   // ---- hit -----------------------------------------------------------------------------------------------------
+  // The math is lib/editor/impact (pure, shared with footage); hit() only puts its per-frame values on the timeline.
   let hits = 0;
   const hit = (tl: gsap.core.Timeline, options: HitOptions = {}) => {
     const target = options.target !== undefined ? element(options.target, 'hit target') : current?.el ?? root;
     const at = startTime('hit at', options.at);
-    const intensity = setting('hit intensity', options.intensity, .5, 0, 1);
-    const frames = Math.round(setting('hit frames', options.frames, 10, 3, 30));
-    const axis = choice('hit axis', options.axis, 'both', ['x', 'y', 'both'] as const);
-    const punch = setting('hit punch', options.punch, .04, 0, .25);
-    const seed = ++hits, amplitude = intensity * .035 * Math.min(width, height);
-    // Starts half a frame early so the frame at `at` is already the hardest one; lands on rest exactly at at + frames.
-    const lead = Math.min(at, frame / 2), length = frames * frame + lead, rise = lead / length;
-    const decay = (power: number) => envelope(t => t < rise ? t / rise : Math.pow(1 - (t - rise) / (1 - rise), power));
-    const cycles = frames / 2.4, phase = seeded(seed) * Math.PI * 2, wobble = seeded(seed + 101) * Math.PI * 2;
-    const wave = (t: number, offset: number, shift: number) => Math.cos(2 * Math.PI * cycles * (t - rise) / (1 - rise) + shift) * .75 + Math.cos(2 * Math.PI * cycles * 1.7 * (t - rise) / (1 - rise) + offset) * .25;
-    const shake = decay(2);
-    if (amplitude > 0) {
-      if (axis !== 'y') { const name = channel(target, 'x'); tl.fromTo(target, { [name]: '0px' }, { [name]: `${amplitude}px`, duration: length, ease: t => shake(t) * wave(t, phase, 0), immediateRender: false }, at - lead); }
-      if (axis !== 'x') { const name = channel(target, 'y'); tl.fromTo(target, { [name]: '0px' }, { [name]: `${amplitude * (axis === 'both' ? .7 : 1)}px`, duration: length, ease: t => shake(t) * wave(t, wobble, Math.PI / 2.6), immediateRender: false }, at - lead); }
-      if (axis === 'both') { const name = channel(target, 'rotate'); tl.fromTo(target, { [name]: '0deg' }, { [name]: `${intensity * 1.2}deg`, duration: length, ease: t => shake(t) * wave(t, phase + 1, 1.1), immediateRender: false }, at - lead); }
-    }
-    // Punch-in, plus just enough extra scale that the shake never shows the frame's edge.
-    const cover = target === root || target === current?.el ? (2 * amplitude) / Math.min(width, height) : 0, scaleAmount = punch + cover;
-    if (scaleAmount > 0) {
-      const punchShape = decay(3), coverShape = shake, name = channel(target, 'scale');
-      tl.fromTo(target, { [name]: 1 }, { [name]: 1 + scaleAmount, duration: length, ease: t => (punch * punchShape(t) + cover * coverShape(t)) / scaleAmount, immediateRender: false }, at - lead);
-    }
+    const [intensityMin, intensityMax] = IMPACT_RANGES.intensity, [framesMin, framesMax] = IMPACT_RANGES.frames, [punchMin, punchMax] = IMPACT_RANGES.punch;
+    const settings = impactSettings({
+      intensity: setting('hit intensity', options.intensity, IMPACT_DEFAULTS.intensity, intensityMin, intensityMax),
+      frames: setting('hit frames', options.frames, IMPACT_DEFAULTS.frames, framesMin, framesMax),
+      axis: choice('hit axis', options.axis, IMPACT_DEFAULTS.axis, ['x', 'y', 'both'] as const),
+      punch: setting('hit punch', options.punch, IMPACT_DEFAULTS.punch, punchMin, punchMax),
+      seed: ++hits,
+      // A whole frame or shot also scales just enough that the shake never shows its edge.
+      cover: target === root || target === current?.el,
+    });
+    // The tween starts half a frame early, so the frame at `at` (frame 0, the hardest) is inside it; it ends at rest.
+    const side = Math.min(width, height), lead = Math.min(at, frame / 2), length = settings.frames * frame + lead;
+    const frameAt = (t: number) => (t * length - lead) / frame;
+    let cached = NaN, values = impactAt(settings, -1);
+    const sample = (t: number) => { const index = frameAt(t); if (index !== cached) { cached = index; values = impactAt(settings, index); } return values; };
+    const apply = (kind: 'x' | 'y' | 'rotate' | 'scale', from: string | number, to: string | number, read: (value: ReturnType<typeof impactAt>) => number) => {
+      const name = channel(target, kind);
+      tl.fromTo(target, { [name]: from }, { [name]: to, duration: length, ease: t => read(sample(t)), immediateRender: false }, at - lead);
+    };
+    if (settings.intensity > 0 && settings.axis !== 'y') apply('x', '0px', `${side}px`, value => value.x);
+    if (settings.intensity > 0 && settings.axis !== 'x') apply('y', '0px', `${side}px`, value => value.y);
+    if (settings.intensity > 0 && settings.axis === 'both') apply('rotate', '0deg', '1deg', value => value.rotate);
+    if (settings.punch > 0 || (settings.cover && settings.intensity > 0)) apply('scale', 1, 2, value => value.scale - 1);
     if (options.flash) {
       const flash = document.createElement('div');
       flash.dataset.rvFlash = '';
-      flash.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:9999;opacity:0;background:${typeof options.flash === 'string' ? options.flash : '#fff'}`;
+      flash.style.cssText = `position:absolute;inset:0;pointer-events:none;z-index:9999;opacity:0;background:${typeof options.flash === 'string' ? options.flash : FLASH_DEFAULTS.color}`;
       root.appendChild(flash);
-      // Exactly one frame, at `at`: the tween spans half a frame either side of it.
-      const early = Math.min(at, frame / 2);
-      tl.fromTo(flash, { opacity: 0 }, { opacity: .9, duration: early + frame / 2, ease: envelope(() => 1), immediateRender: false }, at - early);
+      // Exactly the frame at `at`: the tween spans half a frame either side of it.
+      const early = Math.min(at, frame / 2), span = early + frame / 2;
+      tl.fromTo(flash, { opacity: 0 }, { opacity: 1, duration: span, ease: t => flashAt((t * span - early) / frame), immediateRender: false }, at - early);
     }
     return tl;
   };
