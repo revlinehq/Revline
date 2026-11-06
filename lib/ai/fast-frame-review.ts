@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { LaneEvidence } from './lanes/types';
 import { equalTimelineValue } from '../editor/timeline-equality';
-import { timelineDuration, type Timeline } from '../editor/types';
+import { renderedFrameTime, timelineDuration, type Timeline } from '../editor/types';
 
 const frameReview = z.object({ pendingFrameTimes: z.array(z.number().nonnegative()) });
 export function readFastFrameTimes(evidence: LaneEvidence[], timelineId: string, fingerprint: string) {
@@ -49,8 +49,7 @@ export class FastFrameReview {
     if (equalTimelineValue(before, after)) return;
     const duration = timelineDuration(after), fps = after.fps;
     if (duration <= 0) { this.pending = new Set([0]); return; }
-    const lastFrame = Math.max(0, Math.ceil(duration * fps) - 1);
-    const clamp = (time: number) => Math.max(0, Math.min(lastFrame, Math.round(time * fps))) / fps;
+    const clamp = (time: number) => renderedFrameTime(time, duration, fps);
     this.pending = new Set([...this.pending].map(clamp));
     const previous = new Map(before.clips.map(clip => [clip.id, clip]));
     const current = new Map(after.clips.map(clip => [clip.id, clip]));
@@ -67,8 +66,13 @@ export class FastFrameReview {
     for (const time of anchors) for (const offset of [-1, 0, 1]) this.pending.add(clamp(clamp(time) + offset / fps));
   }
 
-  reviewed(times: number[], fps: number) {
-    for (const pending of this.pending) if (times.some(time => Math.abs(time - pending) < .1 / fps)) this.pending.delete(pending);
+  /** A rendered frame satisfies a pending time it was clamped to, so a queue saved before the timeline end moved still clears. */
+  reviewed(times: number[], timeline: Timeline) {
+    const fps = timeline.fps, duration = timelineDuration(timeline);
+    for (const pending of this.pending) {
+      const drawn = renderedFrameTime(pending, duration, fps);
+      if (times.some(time => Math.abs(time - drawn) < .1 / fps)) this.pending.delete(pending);
+    }
   }
 
   restore(times: number[]) { this.pending = new Set(times); }

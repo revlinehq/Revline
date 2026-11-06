@@ -998,7 +998,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(recipe().frames==='changes'&&!clippingActive){const missing=fastReview.feedback();if(missing)return {passed:false,success:false,attemptRecorded:false,pendingFrameTimes:fastReview.times(),next:missing};}
       const frameTask=recipe().frames==='sample'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
-      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline.fps);return result;},staged:editSession.staged});
+      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);return result;},staged:editSession.staged});
       finishResult=await check();
       if(finishResult.passed){
         try{
@@ -1630,7 +1630,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await editSession.wait();
       const snapshot = editSession.timeline;
       const result = await renderFrames(times, revision, undefined, resolution);
-      if (revision === undefined && snapshot === editSession.timeline && result.revision === editSession.revision) fastReview.reviewed(result.frames.map(frame => frame.time), snapshot.fps);
+      if (revision === undefined && snapshot === editSession.timeline && result.revision === editSession.revision) fastReview.reviewed(result.frames.map(frame => frame.time), snapshot);
       return result;
     }, toModelOutput: async (ctx, options) => { const output = options.output as { revision: number; atRevision?: number; resolution?:number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
       { type: 'text' as const, text: `${output.resolution===1080?'1080p':'Preview'} frames of the ${output.atRevision !== undefined ? `timeline as it was at revision ${output.atRevision}` : `saved timeline (revision ${output.revision})`} at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },

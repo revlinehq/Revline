@@ -328,6 +328,10 @@ export function deriveTracks(timeline: Timeline) {
 export function timelineDuration(timeline: Timeline) {
   return Math.max(0, ...timeline.clips.map(c => c.start + c.duration));
 }
+/** The frame the renderer draws for a timeline second: on the frame grid, no later than one frame before the end. Frame requests and the checks that wait for them both use it, so they agree on the last frame. */
+export function renderedFrameTime(time: number, duration: number, fps: number) {
+  return Math.round(Math.min(Math.max(0, time), Math.max(0, duration - 1 / fps)) * fps) / fps;
+}
 export function dimensions(ratio: AspectRatio, resolution = 1080) {
   const even = (value: number) => Math.round(value / 2) * 2;
   // The short side is `resolution`; the long side rounds to an even pixel count.
