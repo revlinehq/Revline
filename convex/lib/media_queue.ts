@@ -16,7 +16,7 @@ import { MEDIA_PROCESSOR_VERSION } from '../../lib/media-analysis/processor-vers
 
 /** The oldest media processor that can run each kind; older processors leave these tasks queued. */
 // Rendered work shares the current clipping, montage VFX and streamed tracking contract.
-const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { highlights:MEDIA_PROCESSOR_VERSION,import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: MEDIA_PROCESSOR_VERSION, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: MEDIA_PROCESSOR_VERSION };
+const MIN_PROCESSOR_VERSION: Partial<Record<Doc<'mediaTasks'>['kind'], number>> = { highlights:MEDIA_PROCESSOR_VERSION,beats:MEDIA_PROCESSOR_VERSION,import:MEDIA_PROCESSOR_VERSION, facecam:MEDIA_PROCESSOR_VERSION, speakers:MEDIA_PROCESSOR_VERSION, transcribe: MEDIA_PROCESSOR_VERSION, frames: 4, preview:MEDIA_PROCESSOR_VERSION, cutout: MEDIA_PROCESSOR_VERSION, derive: 9, render: MEDIA_PROCESSOR_VERSION, review: MEDIA_PROCESSOR_VERSION, snapshot: MEDIA_PROCESSOR_VERSION, blueprint: 11, reference: 12, read: MEDIA_PROCESSOR_VERSION };
 
 export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaTasks'>, 'ownerId' | 'projectId' | 'kind'> & Partial<Pick<Doc<'mediaTasks'>, 'assetId' | 'renderJobId' | 'analysisRequestId' | 'sourceUrl' | 'importRange' | 'sourcesOnly' | 'frameRequest' | 'videoRequest' | 'highlightSourceType' | 'highlightSkipGemini' | 'speakerRequest' | 'reviewId' | 'snapshotId' | 'readId' | 'blueprintCheckId' | 'cutoutId' | 'derivationId' | 'requiredProcessorVersion'|'previewVersion'|'lane'>>, beforeEnqueue?:()=>Promise<void>, waitForCapacity = false): Promise<Id<'mediaTasks'>> {
   const minimum = usesGemini(input.kind) ? MEDIA_PROCESSOR_VERSION : MIN_PROCESSOR_VERSION[input.kind];
@@ -27,7 +27,7 @@ export async function enqueueMediaTask(ctx: MutationCtx, input: Pick<Doc<'mediaT
   if (input.assetId && input.kind === 'beats') {
     const asset = await ctx.db.get(input.assetId);
     const beats=asset?(await hydrateAsset(ctx,asset)).analysis?.beats:undefined;
-    if (asset?.ownerId === input.ownerId && asset.projectId === input.projectId && beats?.engine === BEAT_ANALYSIS_ENGINE && beats.downbeats !== undefined && beats.accents !== undefined && beats.dropCandidates !== undefined) {
+    if (asset?.ownerId === input.ownerId && asset.projectId === input.projectId && beats?.engine === BEAT_ANALYSIS_ENGINE && beats.downbeats !== undefined && beats.accents !== undefined && beats.dropCandidates !== undefined && beats.energy !== undefined) {
       const now = Date.now();
       const taskId = await insertMediaTask(ctx, { ...input, status: 'completed', attempt: 0, progress: 100, createdAt: now, updatedAt: now });
       if (input.analysisRequestId) await ctx.db.patch(input.analysisRequestId, { status: 'completed', error: undefined });

@@ -28,6 +28,7 @@ A good footage edit keeps every retained word intact and in sync, removes only w
 
 ## Rules
 - Ordinary trims, moves and splits never authorize decoration such as effects, music or punch-ins.
+- Any song in the edit (where it starts, cutting to it, length, ending, ducking) follows skill `music`.
 - An explicit user request (style, timestamps, keeping pauses, no captions) overrides every default here.
 - Defaults apply to new work only; never restyle existing captions or clips unasked.
 - Identify user-named footage from inspected project references; never claim a source or object is absent without inspection evidence.

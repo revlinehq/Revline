@@ -8,7 +8,7 @@ The reference is footage cut to a song. What makes it is the rhythm: where cuts 
 
 ## Workflow
 1. Find, in the user's footage, the moments that do the same job as each reference shot: the reveal, the action, the slow beat before a drop. Use analyzeMedia understand, then inspectVideo asking for the actual moments needed.
-2. Measure the user's track with markMusicBeats or analyzeMedia beats.
+2. Measure the user's track with analyzeMusic and start it as skill `music` says.
 3. Place the shots with the lengths and moves in Defaults.
 4. Run alignCutsToBeat after placing the shots.
 5. Rebuild the titles and captions and match the look.
