@@ -76,7 +76,7 @@ export const clipValidator = v.object({
   parallax: v.optional(v.object({duration:v.number(),amount:v.number(),panX:v.number(),panY:v.number(),orbit:v.number(),zoom:v.number()})),
   flash:v.optional(v.object({strength:v.number(),attack:v.number(),release:v.number()})),
   punch:v.optional(v.object({amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number(),attack:v.optional(v.number()),release:v.optional(v.number())})),
-  shake:v.optional(v.object({strength:v.number(),speed:v.number(),direction:v.union(v.literal('both'),v.literal('horizontal'),v.literal('vertical')),decay:v.optional(v.boolean())})),
+  shake:v.optional(v.object({strength:v.number(),speed:v.number(),direction:v.union(v.literal('both'),v.literal('horizontal'),v.literal('vertical'))})),
   pop:v.optional(v.object({startScale:v.number(),bounce:v.number(),speed:v.number()})),
   zoom:v.optional(v.object({direction:v.union(v.literal('in'),v.literal('out')),amount:v.number(),speed:v.number(),centerX:v.number(),centerY:v.number()})),
   transform: v.optional(v.object({ x: v.number(), y: v.number(), scale: v.number(), rotation: v.number(), opacity: v.number() })),

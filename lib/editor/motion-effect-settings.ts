@@ -61,10 +61,9 @@ export function shakeKeyframes(duration: number, settings: ShakeSettings = DEFAU
   const steps = Math.min(119, Math.max(4, Math.ceil(duration * 12 * settings.speed * 4))), frequency = Math.min(12 * settings.speed, steps / duration / 4), edge = Math.min(.08, duration / 4);
   return Array.from({ length: steps + 1 }, (_, index) => {
     const time = duration * index / steps;
-    if ((index === 0 && !settings.decay) || index === steps) return key(time);
-    // A decaying shake starts at full strength (cosine: displaced on the contact frame) and eases to rest at the end.
-    const envelope = settings.decay ? (1 - time / duration) ** 2 : Math.min(1, time / edge, (duration - time) / edge), amount = 2 * settings.strength * envelope, phase = time * frequency * 2 * Math.PI;
-    return key(time, { x: settings.direction === 'vertical' ? 0 : .018 * amount * (settings.decay ? Math.cos(phase) : Math.sin(phase)), y: settings.direction === 'horizontal' ? 0 : .01 * amount * Math.sin(phase * 1.7), rotation: settings.direction === 'both' ? 1.2 * amount * Math.sin(phase * 1.3) : 0, scale: 1 + .08 * amount });
+    if (index === 0 || index === steps) return key(time);
+    const envelope = Math.min(1, time / edge, (duration - time) / edge), amount = 2 * settings.strength * envelope, phase = time * frequency * 2 * Math.PI;
+    return key(time, { x: settings.direction === 'vertical' ? 0 : .018 * amount * Math.sin(phase), y: settings.direction === 'horizontal' ? 0 : .01 * amount * Math.sin(phase * 1.7), rotation: settings.direction === 'both' ? 1.2 * amount * Math.sin(phase * 1.3) : 0, scale: 1 + .08 * amount });
   });
 }
 
@@ -99,6 +98,5 @@ export function validateMotionEffectSettings(clip: Clip) {
     }
     if (preset === 'flash' && clip.flash!.attack + clip.flash!.release > 1 + 1e-6) throw new Error('Flash attack and release must fit within its duration.');
     if (preset === 'shake' && !SHAKE_DIRECTIONS.includes(clip.shake!.direction)) throw new Error('Choose both, horizontal or vertical shake.');
-    if (preset === 'shake' && clip.shake!.decay !== undefined && typeof clip.shake!.decay !== 'boolean') throw new Error('Shake decay is true or false.');
   }
 }
