@@ -17,6 +17,14 @@ export const DEFAULT_CAPTION_STYLE = {
   fontSize: 52, color: '#F4F4F0', background: 'transparent', x: .5, y: .78, animation: 'none',
   textStyle: { ...DEFAULT_TEXT_APPEARANCE, strokeWidth: 1.5, shadowBlur: 3, shadowY: 1, shadowColor: '#000000B3' },
 } as const;
+/** Clip-lane captions: uppercase Montserrat Black, white with a black outline (stroke paints behind the fill, so 11 px
+ * shows about 0.08 em at 68 px), no background, words popping in as spoken with the active word in green. */
+export const CLIPPER_CAPTION_STYLE = {
+  fontSize: 68, fontFamily: 'montserrat', color: '#FFFFFF', background: 'transparent', x: .5, y: .75, animation: 'none',
+  textStyle: { ...DEFAULT_TEXT_APPEARANCE, fontWeight: 900, strokeWidth: 11, shadowBlur: 6, shadowY: 3, shadowColor: '#00000099' },
+} as const;
+export const CLIPPER_CAPTION_HIGHLIGHT = '#22C55E';
+export const CLIPPER_CAPTION_MAX_WORDS = 3;
 
 export const TEXT_APPEARANCE_LIMITS = { strokeWidth: [0,20], shadowBlur: [0,80], shadowX: [-100,100], shadowY: [-100,100], glowBlur: [0,100] } as const;
 export const TEXT_TYPOGRAPHY_LIMITS = { fontWeight: [100,900], letterSpacing: [-10,100], lineHeight: [.5,3], paddingX: [0,200], paddingY: [0,200], borderRadius: [0,200] } as const;
