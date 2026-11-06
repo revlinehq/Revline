@@ -10,7 +10,10 @@ export type RemotionTextPreset = typeof REMOTION_TEXT_PRESETS[number];
 export type WordTiming = { start: number; end: number };
 export const EXPRESSIVE_TEXT_DEFAULTS = { strength: 1, revealDuration: .65, stagger: .07 } as const;
 const EXPRESSIVE_TEXT_LIMITS = { strength: [.2, 2], revealDuration: [.15, 3], stagger: [0, .18] } as const;
-export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number; wordTimings?: WordTiming[]; strength?: number; revealDuration?: number; stagger?: number };
+/** Karaoke with speech timings: `box` fills the active word with a highlight pill (default); `pop` keeps the outline,
+ * colors the active word and pops each word in as it is spoken (clipper captions). */
+export type KaraokeStyle = 'box' | 'pop';
+export type RemotionTextTemplate = { preset: RemotionTextPreset; highlightColor?: string; duration?: number; offset?: number; wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle; strength?: number; revealDuration?: number; stagger?: number };
 export const REMOTION_TEXT_LABELS: Record<RemotionTextPreset, string> = {
   'word-reveal': 'Word reveal', 'word-pop': 'Pop-in words', 'slide-title': 'Sliding title', karaoke: 'Karaoke',
   'neon-echo': 'Neon echo', 'lyric-slam': 'Lyric slam', 'kinetic-stack': 'Kinetic stack',
@@ -45,7 +48,7 @@ export type RemotionTextProps = {
   color: string; fontSize: number; highlightColor: string;
   textGradient?: TextGradient; gradientTime?: number;
   textStyle?: TextAppearance; fontFamily?: string; fontWeight?: number; resolution?: number;
-  wordTimings?: WordTiming[];
+  wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle;
   strength?: number; revealDuration?: number; stagger?: number;
 };
 export type RemotionTextSource = { id: string; start: number; offset: number; props: Omit<RemotionTextProps, 'frame'> };
@@ -66,6 +69,7 @@ export function validateRemotionTextTemplate(clip: Pick<TextTemplateClip, 'kind'
     const value = template[key as keyof typeof EXPRESSIVE_TEXT_LIMITS];
     if (value !== undefined && (!Number.isFinite(value) || value < min || value > max)) throw new Error(`Text animation ${key} must be between ${min} and ${max}.`);
   }
+  if(template.karaokeStyle!==undefined&&(template.preset!=='karaoke'||!['box','pop'].includes(template.karaokeStyle)))throw new Error('Karaoke style applies to the karaoke template and must be box or pop.');
   if(template.wordTimings!==undefined){
     const words=(clip.text??'').trim().split(/\s+/).filter(Boolean),duration=template.duration??clip.duration??Infinity;
     if(template.preset!=='karaoke'||!words.length||words.length>500||!Array.isArray(template.wordTimings)||template.wordTimings.length!==words.length||template.wordTimings.some((word,i)=>!Number.isFinite(word.start)||!Number.isFinite(word.end)||word.start<0||word.end<word.start||word.end>duration+1e-6||(i>0&&word.start<template.wordTimings![i-1].end-1e-6)))throw new Error('Speech timings must match the karaoke words, stay ordered, and fit the original text duration.');
@@ -96,5 +100,6 @@ export function remotionTextProps(clip: TextTemplateClip, time: number, fps: num
     ...(template.revealDuration !== undefined ? { revealDuration: template.revealDuration } : {}),
     ...(template.stagger !== undefined ? { stagger: template.stagger } : {}),
     ...(template.wordTimings?{wordTimings:template.wordTimings}:{}),
+    ...(template.karaokeStyle?{karaokeStyle:template.karaokeStyle}:{}),
   };
 }

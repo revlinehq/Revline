@@ -1,10 +1,12 @@
 ---
 name: "text-styling"
-description: "Text and captions: fonts, looks, animations, templates, gradients, stroke/shadow/glow, placement and caption styling, with every control and its limits. Read before adding, styling or animating any text, title or caption."
+description: "Text and captions for reels, shorts and footage edits: default subtitle style, fonts, looks, animations, templates, gradients, stroke/shadow/glow, placement and caption styling, with every control and its limits. Read before adding, styling or animating any text, title or caption."
 ---
+New subtitles default to minimal, readable, static text with NO background; a subtle outline or shadow is allowed for separation.
+
 # Text styling
 
-New subtitles default to minimal readable static text with NO background, using a subtle outline/shadow as needed. Respect explicit no-captions or requested backgrounds/animations. Defaults never authorize restyling existing captions.
+Respect explicit no-captions or requested backgrounds/animations. Defaults never authorize restyling existing captions. The clip lane is the one exception to the minimal default: addSubtitlesFromTranscript there creates clipper captions (see clipping page finishing).
 
 For existing text, inspectClip first; change only requested words or controls and check getFrames locally (scene-engine/edit-lanes).
 

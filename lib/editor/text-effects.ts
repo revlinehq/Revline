@@ -26,7 +26,7 @@ export function textTemplatePatch(clip: Clip, preset: RemotionTextPreset): Parti
   const speech=preset==='karaoke'&&clip.textTemplate?.wordTimings?clip.textTemplate:undefined;
   const clock=clip.textTemplate?.preset===preset?clip.textTemplate:speech;
   const controls = clip.textTemplate ? Object.fromEntries((['strength','revealDuration','stagger'] as const).filter(key=>clip.textTemplate![key]!==undefined).map(key=>[key,clip.textTemplate![key]])) : {};
-  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clock?.duration??clip.duration, offset: clock?.offset??0, ...controls, ...(speech?{wordTimings:speech.wordTimings}:{}), ...(highlightColor ? { highlightColor } : {}) } };
+  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clock?.duration??clip.duration, offset: clock?.offset??0, ...controls, ...(speech?{wordTimings:speech.wordTimings,...(speech.karaokeStyle?{karaokeStyle:speech.karaokeStyle}:{})}:{}), ...(highlightColor ? { highlightColor } : {}) } };
 }
 
 /** One animation selection replaces motion, while words and appearance stay untouched. */

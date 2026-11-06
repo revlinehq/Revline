@@ -18,8 +18,10 @@ function allSkills() {
 export function capabilityExists(name: string) {
   return isLane(name) || allSkills().some(skill => skill.name === name);
 }
+// Capabilities saved on existing tasks before these skills were folded into footage-editing.
+const FORMER_FOOTAGE_SKILLS = new Set(['music-and-sound', 'color-grading', 'effects', 'vfx', 'vfx-recipes', 'text-styling']);
 export function capabilityTools(name: string): readonly string[] {
-  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[name === 'vfx-recipes' ? 'effects' : name] ?? [];
+  return isLane(name) ? LANES[name].tools : SKILL_TOOLS[FORMER_FOOTAGE_SKILLS.has(name) ? 'footage-editing' : name] ?? [];
 }
 export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
   return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];

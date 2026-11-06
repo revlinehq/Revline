@@ -1,6 +1,8 @@
 ## 2026-11-05
 - Films: films and scenes are plain HTML + GSAP modules; sections are section(name, start, duration, build) calls whose code inspectClip, patchScene and approvals own; React, 3D and film-kit scene runtimes are removed. Why: the user chose plain HTML + GSAP over React for films.
 - Motion skills: motion-design is renamed launch-films-motions; recipes give structure only and take timing from its Timing and easing table. Why: the user wants all motion guidance in one skill.
+- Footage skills: music-and-sound, color-grading, effects, vfx and vfx-recipes removed; text-styling is now page text-styling of footage-editing. Their tools load with footage-editing. Why: the user found them untested, unused or misplaced.
+- Clip captions: the clip lane now defaults to clipper captions (no box, stroked Montserrat Black, words pop in, spoken word green); reels keep minimal captions. Why: the user asked for the streamer clipper look.
 - Motion skills: taste page removed (user likes/dislikes moved into motion-design); blueprints now cover only screenshot-to-HTML rebuilds. Why: the user wanted no motion guidance outside motion-design.
 - Motion skills: motion guidance now lives only in motion-design (gsap is now a pure library reference; transition recipes moved out of it; taste keeps only user preferences and reference learning). Why: the user wants one place that controls how films move.
 - Motion skills: frame-clock rules now live only in gsap page revline; taste no longer repeats ideation; the React example uses measured timing instead of the 0.8 s blur. Why: repeated and conflicting rules confused the agent.

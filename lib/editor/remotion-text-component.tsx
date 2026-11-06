@@ -10,7 +10,7 @@ import { textAppearance, textTypographyStyle } from './text-style';
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
 export function RemotionText(props: RemotionTextProps) {
-  const { preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution, wordTimings } = props;
+  const { preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution, wordTimings, karaokeStyle } = props;
   if(EXPRESSIVE_TEXT_PRESETS.some(value=>value===preset))return <RemotionExpressiveText {...props} preset={preset as ExpressiveTextPreset}/>;
   if(VFX_TEXT_PRESETS.some(value=>value===preset))return <RemotionLyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor,textStyle,fontFamily,fontWeight,resolution,textGradient:props.textGradient,gradientTime:props.gradientTime}}/>;
   const tokens = text.split(/(\s+)/);
@@ -46,7 +46,11 @@ export function RemotionText(props: RemotionTextProps) {
       const to = timing ? timing.end*fps : (position + 1) * durationInFrames / Math.max(1, words.length);
       const highlighted = frame >= from && frame < to;
       useGradient = !highlighted;
-      if(timing){
+      if(timing&&karaokeStyle==='pop'){
+        // Hidden until spoken, then 0.8 → 1.08 → 1 in about 0.15 s; the active word takes the highlight color and keeps its outline.
+        const elapsed=frame-from,pop=elapsed<0?.8:interpolate(elapsed,[0,fps*.09,fps*.15],[.8,1.08,1],{...clamp,easing:Easing.out(Easing.quad)});
+        wordStyle={...wordStyle,color:highlighted?highlightColor:color,opacity:elapsed<0?0:1,transform:`scale(${pop})`,transformOrigin:'center 70%'};
+      }else if(timing){
         const elapsed=Math.max(0,frame-from),pop=highlighted?interpolate(elapsed,[0,Math.max(1,fps*.065),Math.max(2,fps*.17)],[.97,1.045,1],{...clamp,easing:Easing.out(Easing.cubic)}):1;
         wordStyle={...wordStyle,padding:'.035em .12em',borderRadius:'.12em',backgroundColor:highlighted?highlightColor:'transparent',color:highlighted?'#17131F':color,opacity:frame<from ? .75 : 1,transform:`scale(${pop})`,transformOrigin:'center',...(highlighted?{WebkitTextStroke:'0 transparent',textShadow:'none'}:{})};
       }else wordStyle = { ...wordStyle, color: highlighted ? highlightColor : color };
