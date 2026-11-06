@@ -59,6 +59,7 @@ import type * as lib_assistant_recovery from "../lib/assistant_recovery.js";
 import type * as lib_assistant_run from "../lib/assistant_run.js";
 import type * as lib_assistant_turn_data from "../lib/assistant_turn_data.js";
 import type * as lib_assistant_workflow from "../lib/assistant_workflow.js";
+import type * as lib_attached_images from "../lib/attached_images.js";
 import type * as lib_auth from "../lib/auth.js";
 import type * as lib_billing_access from "../lib/billing_access.js";
 import type * as lib_brandKitBuild from "../lib/brandKitBuild.js";
@@ -210,6 +211,7 @@ declare const fullApi: ApiFromModules<{
   "lib/assistant_run": typeof lib_assistant_run;
   "lib/assistant_turn_data": typeof lib_assistant_turn_data;
   "lib/assistant_workflow": typeof lib_assistant_workflow;
+  "lib/attached_images": typeof lib_attached_images;
   "lib/auth": typeof lib_auth;
   "lib/billing_access": typeof lib_billing_access;
   "lib/brandKitBuild": typeof lib_brandKitBuild;
