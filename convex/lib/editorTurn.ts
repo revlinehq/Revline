@@ -8,6 +8,7 @@ import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
 import { editorCommandInstructions } from '../../lib/ai/slash-commands';
 import { chatAgent } from './chat_data';
+import { attachedImagesMessage } from './attached_images';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
 import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
@@ -81,6 +82,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     assertEditorModelConfigured(selection);
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
     if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');
+    const attachedImages = await attachedImagesMessage(ctx, assets, args.attachedAssetIds);
     const memories = await ctx.runQuery(internal.memories.forRun, run), brief = await ctx.runQuery(internal.briefs.forRun, run);
     const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
     const storedLane=await ctx.runQuery(internal.lanes.forRun,{projectId:args.projectId,ownerId:args.ownerId});
@@ -186,7 +188,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
-        }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
+        }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...(attachedImages?[attachedImages]:[]),...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
         steps.push(...completed);
