@@ -1,8 +1,8 @@
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import { Easing, interpolate, spring } from 'remotion';
-import type { LabConfig } from './remotion-lab-model';
-import type { LabExtraTextPreset } from './remotion-lab-text-presets';
-import './remotion-lab-typography.css';
+import { Easing, interpolate, spring } from '@/lib/editor/frame-motion';
+import type { LabConfig } from './motion-lab-model';
+import type { LabExtraTextPreset } from './motion-lab-text-presets';
+import './motion-lab-typography.css';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 const bounded = (value: number) => Math.max(0, Math.min(1, value));
@@ -104,7 +104,7 @@ function SoftBloom({config,frame}:TypeProps){
 }
 
 /** Lab-only treatments use the supplied composition frame; there is no second clock. */
-export function RemotionLabTypography(props: TypeProps) {
+export function MotionLabTypography(props: TypeProps) {
   const { config, frame, preset } = props;
   const longest = Math.max(1, ...config.title.split(/\s+/).map(word => Array.from(word).length));
   const fontSize = Math.min(config.textSize, (config.aspect === 'portrait' ? 420 : 780) / (longest * .64));

@@ -1,14 +1,14 @@
 import type { CSSProperties, ReactNode } from 'react';
-import { RemotionText } from '@/lib/editor/remotion-text-component';
-import { type LabConfig } from './remotion-lab-model';
-import { isLabExtraTextPreset } from './remotion-lab-text-presets';
-import { RemotionLabTypography } from './remotion-lab-typography';
-import { RemotionLabBlock } from './remotion-lab-blocks';
+import { TemplateText } from '@/lib/editor/template-text';
+import { type LabConfig } from './motion-lab-model';
+import { isLabExtraTextPreset } from './motion-lab-text-presets';
+import { MotionLabTypography } from './motion-lab-typography';
+import { MotionLabBlock } from './motion-lab-blocks';
 
 
 function Typography({ config, frame }: { config: LabConfig; frame: number }) {
   const text = config.textPreset === 'karaoke' ? config.words.map(word => word.word).join(' ') : config.title;
-  const content=isLabExtraTextPreset(config.textPreset) ? <RemotionLabTypography config={config} frame={frame} preset={config.textPreset}/> : <RemotionText
+  const content=isLabExtraTextPreset(config.textPreset) ? <MotionLabTypography config={config} frame={frame} preset={config.textPreset}/> : <TemplateText
     preset={config.textPreset} text={text} frame={frame} fps={config.fps} durationInFrames={Math.round(config.duration * config.fps)}
     color={config.foreground} highlightColor={config.accent} fontSize={config.textSize} fontFamily="var(--font-space-grotesk), sans-serif" fontWeight={700}
     strength={config.textStrength} revealDuration={config.entrance} stagger={config.textStagger}
@@ -27,8 +27,8 @@ function DepthAppearance({config,children}:{config:LabConfig;children:ReactNode}
 }
 
 /** A seekable composition: every visible value is a pure function of config and frame. */
-export function RemotionLabScene({ config, frame }: { config: LabConfig; frame: number }) {
-  if(config.scene!=='typography')return <RemotionLabBlock config={config} frame={frame}/>;
+export function MotionLabScene({ config, frame }: { config: LabConfig; frame: number }) {
+  if(config.scene!=='typography')return <MotionLabBlock config={config} frame={frame}/>;
   const style = { '--lab-accent': config.accent, '--lab-foreground': config.foreground, color: config.foreground, background: config.background } as CSSProperties;
   return <div className="rmlab-scene" data-scene={config.scene} data-portrait={config.aspect === 'portrait'} data-frame={frame} style={style}>
     <div className="rmlab-scene-texture" aria-hidden="true"/>

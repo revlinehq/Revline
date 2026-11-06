@@ -24,7 +24,7 @@ function load(document: Document, meta: string, ready: () => boolean, label: str
 export function loadPreviewRuntimes(document: Document, timeline: Timeline): Promise<void> | null {
   const host = document.defaultView as CompositionWindow | null;
   const loads = [
-    timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic') ? load(document, 'revline-remotion-runtime', () => !!host?.__revlineRemotionText, 'text') : null,
+    timeline.clips.some(clip => clip.kind === 'caption' || clip.kind === 'graphic') ? load(document, 'revline-text-runtime', () => !!host?.__revlineTextRuntime, 'text') : null,
     timeline.clips.some(isTransitionClip) ? load(document, 'revline-transitions-runtime', () => !!host?.__revlineTransitions, 'transition') : null,
   ].filter((pending): pending is Promise<void> => pending !== null);
   return loads.length ? Promise.all(loads).then(() => undefined) : null;

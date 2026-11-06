@@ -1,14 +1,14 @@
 import { type CSSProperties } from 'react';
-import { Easing, interpolate } from 'remotion';
-import { labProgress, type LabConfig } from './remotion-lab-model';
-import { MoreRemotionBlocks } from './remotion-lab-more-blocks';
-import './remotion-lab-blocks.css';
+import { Easing, interpolate } from '@/lib/editor/frame-motion';
+import { labProgress, type LabConfig } from './motion-lab-model';
+import { MoreLabBlocks } from './motion-lab-more-blocks';
+import './motion-lab-blocks.css';
 
 const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'} as const;
 const bounded=(value:number)=>Math.max(0,Math.min(1,value));
 
 /** A single reusable graphic, rendered on white and driven by the composition frame. */
-export function RemotionLabBlock({config,frame}:{config:LabConfig;frame:number}){
+export function MotionLabBlock({config,frame}:{config:LabConfig;frame:number}){
   const item=config.items[0],p=labProgress(config,frame,item.start),progress=bounded(p);
   const entranceAt=(sample:number):CSSProperties=>{const phase=labProgress(config,sample,item.start);return {opacity:bounded(phase),transform:config.blockEntrance==='rise'?`translateY(${(1-phase)*config.distance}px)`:config.blockEntrance==='scale'?`scale(${.7+phase*.3})`:undefined};};
   const style={'--block-accent':config.blockAccent,'--block-fill':config.blockFill,'--block-text':config.blockTextColor} as CSSProperties;
@@ -34,7 +34,7 @@ export function RemotionLabBlock({config,frame}:{config:LabConfig;frame:number})
         config.scene==='block-arrow'?<svg className="rmlab-block-arrow" viewBox={`0 0 ${w} ${h}`} role="img" aria-label={item.label||'Connector arrow'}><g transform={`rotate(${rotation} ${w/2} ${h/2})`}><path data-connector-path="" d={path} fill="none" stroke="var(--block-accent)" strokeWidth={config.blockStroke} strokeLinecap="round" strokeLinejoin="round" pathLength="1" strokeDasharray="1" strokeDashoffset={config.blockEntrance==='draw'?1-progress:0}/><path data-arrow-head="" d={`M${-head} ${-head*.48}L0 0L${-head} ${head*.48}`} transform={`translate(${headPoint.x} ${headPoint.y}) rotate(${headAngle})`} fill="none" stroke="var(--block-accent)" strokeWidth={config.blockStroke} strokeLinecap="round" strokeLinejoin="round" opacity={progress>.03?1:0}/></g>{item.label?<text x={w*.5} y={h-8} textAnchor="middle" fill="var(--block-text)" fontSize="14" fontWeight="500">{item.label}</text>:null}</svg>:
         config.scene==='block-label'?<div className="rmlab-block-callout"><svg viewBox={`0 0 ${w} ${h}`} aria-hidden="true"><path data-callout-leader="" d={`M${leaderStart.x} ${leaderStart.y}Q${leaderStart.x} ${anchor.y} ${anchor.x} ${anchor.y}`} fill="none" stroke="var(--block-accent)" strokeWidth={config.blockStroke} strokeLinecap="round" pathLength="1" strokeDasharray="1" strokeDashoffset={config.blockEntrance==='draw'?1-progress:0}/><circle cx={anchor.x} cy={anchor.y} r="7" fill="none" stroke="var(--block-accent)" strokeOpacity=".2" strokeWidth="1.5"/><circle data-callout-target="" cx={anchor.x} cy={anchor.y} r="3.5" fill="var(--block-accent)"/></svg><div className="rmlab-block-label" style={{position:'absolute',left:labelCenter.x-labelWidth/2,top:labelCenter.y-labelHeight/2,width:labelWidth,minHeight:labelHeight}}><div><strong>{item.label}</strong>{item.detail?<span>{item.detail}</span>:null}</div></div></div>:
         config.scene==='block-counter'?<div className="rmlab-block-counter"><span style={{fontSize:Math.min(config.textSize,(config.blockWidth-20)/Math.max(1,number.length*.61))}}>{number}</span><strong>{item.label}</strong>{item.detail?<p>{item.detail}</p>:null}</div>:
-        config.scene==='block-chart'?<div className="rmlab-block-chart">{config.items.map((bar,index)=><div key={index}><span className="rmlab-block-bar-space"><i style={{height:`${bar.value/maximum*bounded(labProgress(config,frame,item.start+index*.12))*100}%`}}><span>{bar.value.toLocaleString('en-US')}</span></i></span><strong>{bar.label}</strong></div>)}</div>:<MoreRemotionBlocks config={config} frame={frame}/>;
+        config.scene==='block-chart'?<div className="rmlab-block-chart">{config.items.map((bar,index)=><div key={index}><span className="rmlab-block-bar-space"><i style={{height:`${bar.value/maximum*bounded(labProgress(config,frame,item.start+index*.12))*100}%`}}><span>{bar.value.toLocaleString('en-US')}</span></i></span><strong>{bar.label}</strong></div>)}</div>:<MoreLabBlocks config={config} frame={frame}/>;
   return <div className="rmlab-scene rmlab-block-canvas" data-scene={config.scene} data-frame={frame} data-portrait={config.aspect==='portrait'} data-block-canvas="white" style={style}>
     {config.showGuides?<div className="rmlab-block-guides" aria-hidden="true"><i/><i/></div>:null}
     <div className="rmlab-block-position" style={{left:`${config.blockX*100}%`,top:`${config.blockY*100}%`,width:config.blockWidth,height:config.blockHeight,transform:`translate(-50%,-50%) rotate(${config.blockRotation}deg) scale(${config.blockScale})`}}>

@@ -7,7 +7,7 @@ import type { ImpactSettings, OverlaySettings, ParallaxSettings } from './montag
 import type { TextGradient } from './text-gradient';
 import type { MotionKeyframe, NamedMotionEasing } from './motion-path';
 import type { NeonEdges } from './neon-edges';
-import type { RemotionTextTemplate } from './remotion-text';
+import type { TextTemplate } from './text-templates';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 import type { RampPoint } from './speed-ramp';
@@ -231,7 +231,7 @@ export type Clip = {
   frameDistortion?: FrameDistortion;
   frameCorners?: FrameCorners;
   outline?: ClipOutline;
-  textTemplate?: RemotionTextTemplate;
+  textTemplate?: TextTemplate;
   textStyle?: TextAppearance;
   textGradient?: TextGradient;
   fontFamily?: TextFontId;
