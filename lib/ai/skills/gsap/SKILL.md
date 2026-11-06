@@ -19,6 +19,7 @@ This page holds no style: durations, eases and looks are decided in launch-films
 - **Timelines are always paused and seeked to the frame**, for preview, scrubbing and export alike.
 - Never play(), restart(), reverse(), change timeScale, or rely on a move playing in real time.
 - **Every move goes on a supplied timeline:** the scene's `tl`, or the child timeline a `section(...)` callback receives (section-local seconds), always with a position parameter.
+- The motion helpers (`shot`, `push`, `hit`, `cursor`, `beat`) put their moves on the timeline you pass them; API reference: writing-scenes page `films`, Motion helpers.
 - Never use ScrollTrigger, ScrollSmoother, ScrollTo, Observer, Draggable, Inertia, Flip, GSDevTools, gsap.ticker, requestAnimationFrame, setTimeout or setInterval. None of them follow the frame clock.
 - Never create a move outside a seeked timeline (a bare gsap.to, gsap.from or gsap.delayedCall).
 - No responsive or reduced-motion branches: gsap.matchMedia does not apply, since the canvas has a fixed size and every frame is rendered.

@@ -58,8 +58,11 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
   frames.sort((a, b) => a - b);
 
   const existing = timeline.markers ?? [];
-  // Beats skip frames near other cues only; a beat may land on a film section's start.
-  const occupied = new Set(existing.filter(marker => marker.kind !== 'section').map(marker => Math.round(marker.time * timeline.fps)));
+  // Another kind of music marker on the same frame does not block this one: a bar start is also a beat, and scene code
+  // reads each kind on its own (downbeat(n) next to beat(n)). A beat may also land on a film section's start.
+  // Cues and markers of this kind still do.
+  const otherKinds = (['beats', 'downbeats', 'accents', 'dropCandidates'] as const).filter(other => other !== kind).map(other => `${other}:`);
+  const occupied = new Set(existing.filter(marker => marker.kind !== 'section' && !otherKinds.some(prefix => marker.id.startsWith(prefix))).map(marker => Math.round(marker.time * timeline.fps)));
   const ids = new Set(existing.map(marker => marker.id));
   const labels = new Set(existing.map(marker => marker.label));
   const added: TimelineMarker[] = [];

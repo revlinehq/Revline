@@ -127,11 +127,13 @@ function callArguments(code: string, from: number, to: number) {
   return args.map(arg => arg.trim());
 }
 
-const literalNumber = (text: string | undefined) => text !== undefined && /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : undefined;
-const literalString = (text: string | undefined) => text !== undefined && /^(['"`])(?:(?!\1)[^\\$]|\\.)*\1$/.test(text) ? text.slice(1, -1) : undefined;
+// A block comment beside a literal (beat timing resolved on save keeps one: `2.866 /* downbeat(2) */`) is ignored.
+const uncommented = (text: string | undefined) => text?.replace(/\/\*[^]*?\*\//g, '').trim();
+const literalNumber = (raw: string | undefined) => { const text = uncommented(raw); return text !== undefined && /^\d+(?:\.\d+)?$/.test(text) ? Number(text) : undefined; };
+const literalString = (raw: string | undefined) => { const text = uncommented(raw); return text !== undefined && /^(['"`])(?:(?!\1)[^\\$]|\\.)*\1$/.test(text) ? text.slice(1, -1) : undefined; };
 
 /**
- * Every `section(name, start, duration, build)` call in a film's code: its literal name, start and duration (film
+ * Every `section(name, start, duration, build)` call in a film's code (and `shot(name, start, duration, options, build)`, a section that is its own shot): its literal name, start and duration (film
  * seconds; undefined when not a plain literal) and the full text of the call (from..to). The call is the code the
  * section owns.
  */
@@ -140,11 +142,13 @@ export function sectionCalls(code: string) {
   // Strings and comments are blanked first, so a "section(" in text or a comment is not a call.
   let masked = '';
   for (let at = 0; at < code.length;) { const skipped = skipText(code, at); if (skipped === at) { masked += code[at]; at++; } else { masked += code.slice(at, skipped).replace(/[^\n]/g, ' '); at = skipped; } }
-  for (const match of masked.matchAll(/(?<![\w$.])section\s*\(/g)) {
+  for (const match of masked.matchAll(/(?<![\w$.])(?:section|shot)\s*\(/g)) {
     if (/\bfunction\s*$/.test(masked.slice(Math.max(0, match.index - 12), match.index))) continue;
     const open = match.index + match[0].length, end = closeOf(code, open);
     if (end < 0) continue;
-    const [name, start, duration] = callArguments(code, open, end);
+    const args = callArguments(code, open, end), [name, start, duration] = args;
+    // shot(name, start, duration, options, build) is the scene helper; a film's own shot() of another shape is not a section.
+    if (match[0].startsWith('shot') && args.length < 5) continue;
     found.push({ name: literalString(name), start: literalNumber(start), duration: literalNumber(duration), text: code.slice(match.index, end), from: match.index, to: end });
   }
   // Sections do not nest: a call inside another one is part of it.
