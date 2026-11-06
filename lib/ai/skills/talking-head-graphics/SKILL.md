@@ -1,6 +1,6 @@
 ---
 name: "talking-head-graphics"
-description: "House look for graphics over footage: isometric line diagrams beside a talking head (near-black panels, outlined blocks, hatching, one accent edge, dimension lines), minimal captions and layout around the speaker, with a working example. Read before adding graphics or captions over footage; not for motion films made from scratch (launch-films-motions), and user direction and measured recreations override these defaults."
+description: "Sets the house look for graphics over footage: isometric line diagrams beside a talking head (near-black panels, outlined blocks, hatching, one accent edge, dimension lines), minimal captions and layout around the speaker, with a working example. Read before adding graphics or captions over footage; not for motion films made from scratch (launch-films-motions), and user direction and measured recreations override these defaults."
 ---
 # Talking-head graphics
 

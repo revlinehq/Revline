@@ -1,6 +1,6 @@
 ---
 name: "moments"
-description: "Scan the whole source, rank evidenced hooks and payoffs, and choose 15 to 60 second boundaries."
+description: "Scans the whole source, ranks evidenced hooks and payoffs, and chooses 15 to 60 second boundaries."
 ---
 # Finding moments for clipping
 

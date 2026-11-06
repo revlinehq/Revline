@@ -1,6 +1,6 @@
 ---
 name: "reference-footage"
-description: "Breaking down a video the user shares to remake or to take style from (an edit, a motivation video, anything) and acting on the parts the user points at (\"this transition, this title, this pacing\"). Read before analyzing a reference, before a remake, and before borrowing any part of one; recreating a launch or motion film also needs launch-films-motions."
+description: "Breaks down a video the user shares to remake or to take style from (an edit, a motivation video, anything) and acts on the parts the user points at (\"this transition, this title, this pacing\"). Read before analyzing a reference, before a remake, and before borrowing any part of one; recreating a launch or motion film also needs launch-films-motions."
 ---
 # Reference footage
 

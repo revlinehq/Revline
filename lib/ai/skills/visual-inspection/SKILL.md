@@ -1,6 +1,6 @@
 ---
 name: "visual-inspection"
-description: "Removing awkward moments the picture shows from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Read before any visually motivated cut; for recreating a reference or measuring motion, read reference-footage instead."
+description: "Finds and removes awkward moments the picture shows from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Read before any visually motivated cut; for recreating a reference or measuring motion, read reference-footage instead."
 ---
 # Awkward moments in footage
 

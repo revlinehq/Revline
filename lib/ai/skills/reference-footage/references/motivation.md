@@ -1,6 +1,6 @@
 ---
 name: "motivation"
-description: "Remaking a motivation or quote video: footage under a voiceover or quote, with bold captions."
+description: "Remakes a motivation or quote video: footage under a voiceover or quote, with bold captions."
 ---
 # Remake: motivation video
 

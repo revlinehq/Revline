@@ -1,6 +1,6 @@
 ---
 name: "social-edit"
-description: "Remaking an edit of footage cut to music (Instagram and TikTok edits, fan edits, velocity edits, sports and car edits)."
+description: "Remakes an edit of footage cut to music (Instagram and TikTok edits, fan edits, velocity edits, sports and car edits)."
 ---
 # Remake: social edit
 

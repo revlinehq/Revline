@@ -62,7 +62,7 @@ export function laneSkill(name: string, page?: string) {
   if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
   const found = page ? skill.pages?.find(item => item.name === page) : undefined;
   if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);
-  return found?.body ?? `${skill.body}${skill.pages?.length ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
+  return found?.body ?? `${skill.body}${skill.pages?.length && !skill.body.includes('\n## Pages') ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
 }
 export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' || lane === 'explainer' ? 'shared editing (no selected style)' : lane}
 ${LANES[lane].instructions}

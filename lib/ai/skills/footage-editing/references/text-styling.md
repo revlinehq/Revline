@@ -1,21 +1,38 @@
 ---
 name: "text-styling"
-description: "Text and captions for reels, shorts and footage edits: default subtitle style, fonts, looks, animations, templates, gradients, stroke/shadow/glow, placement and caption styling, with every control and its limits. Read before adding, styling or animating any text, title or caption."
+description: "Caption and title styling for footage edits: the default caption look, which tool changes what, placement, and the full catalog of fonts, looks, animations and text controls. Read before adding, styling or animating any caption or title."
 ---
-New subtitles default to minimal, readable, static text with NO background; a subtle outline or shadow is allowed for separation.
+New captions default to minimal, readable, static text with no background; a subtle outline or shadow is allowed for separation.
 
 # Text styling
 
-Respect explicit no-captions or requested backgrounds/animations. Defaults never authorize restyling existing captions. The clip lane is the one exception to the minimal default: addSubtitlesFromTranscript there creates clipper captions (see clipping page finishing).
+Good text is readable at a glance, clear of faces and app controls, and styled the same way for each role (title, captions, callout).
 
-For existing text, inspectClip first; change only requested words or controls and check getFrames locally (scene-engine/edit-lanes).
+## Workflow
+1. New captions: run addSubtitlesFromTranscript after the final cuts. In the clip lane it creates clipper captions instead (clipping page `finishing`).
+2. Existing text: run inspectClip first, then change only the requested words or controls. Caption text or timing fixes follow scene-engine page `edit-lanes`, which also sets the frame checks.
+3. Style in one call per change: batch the same appearance across exact clipIds.
 
-Use applyTextLook for an explicitly requested editable look, setTextAnimation for a separate animation selection, styleTextClip/styleCaptions for font/size/solid colors/position/rotation/blend, and setTextStyle for stroke/shadow/glow. Word Reveal/Pop-in use setTextAnimation, never applyTextLook. applyTextLook preserves animation, custom motion, effect color/strength/timing, stagger and word times. Default text resets appearance only; the Neon Echo look provides editable appearance without adding or replacing motion. Change animation independently with setTextAnimation only when requested.
+## Defaults
+| Change | Tool |
+| --- | --- |
+| Font, size, solid colors, position, rotation, blend, text case | styleCaptions (many clips) or styleTextClip (one) |
+| Stroke, shadow, glow | setTextStyle |
+| A named editable look | applyTextLook |
+| Animation, including Word reveal and Pop-in words | setTextAnimation |
+| Highlight or accent color of a template | configureTextTemplate |
+| Copy one caption's look to others | applyCaptionStyle |
+| Caption start/end | setCaptionTiming |
+| Words | editText |
 
-Vertical captions avoid the bottom 20% and stay ≥24 design px from faces; inspect movement extremes with getFrames. App controls cover that bottom area. Use one look per text role: title, captions, callout.
+## Rules
+- An explicit request wins: no captions, a background, a font, an animation.
+- Defaults apply to new captions only; never restyle existing captions unasked.
+- Change animation with setTextAnimation only when the user asks for an animation change.
+- Vertical captions stay out of the bottom 20% of the frame, where app controls sit, and at least 24 design px from faces. Check the extremes of any movement with getFrames.
+- Use one look per text role: title, captions, callout.
 
 ## Catalog
-
 Every font, look, animation, template and text control, with guidance:
 
 ```json

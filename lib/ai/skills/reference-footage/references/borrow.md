@@ -1,6 +1,6 @@
 ---
 name: "borrow"
-description: "Borrowing one part of a reference (a transition, a title style, the pacing, the look) for the current edit, and how each part maps onto controls."
+description: "Borrows one part of a reference (a transition, a title style, the pacing, the look) for the current edit and maps each part onto controls."
 ---
 # Borrow a style
 
