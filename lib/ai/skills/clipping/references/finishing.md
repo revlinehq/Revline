@@ -1,14 +1,55 @@
 ---
 name: "finishing"
-description: "Default social loudness plus optional captions, pacing, sound, hook text and niche styles, with restrained defaults and relevant checks."
+description: "Optional captions in the clipper style, pacing, sound, loudness, hook text and niche styles for finished shorts, with restrained defaults."
 ---
 # Optional finish
 
-Follow the clipper's explicit choices or selected style. Default for ALL clipping: hook-to-payoff cuts, original audio at 1×, source framing/aspect and original loudness. Normalize or visually reframe only when the user requests it. Captions, dead-air removal, speed-ups, zoom punches, hit effects, light music, hook text are optional. Do not force them into every clip or make their selection block delivery.
+A finished short is a hook-to-payoff cut that keeps the clipping defaults, plus only the embellishments the user asked for or the selected style calls for.
+Follow the user's explicit choices or selected style. Captions, dead-air removal, speed-ups, zoom punches, hit effects, light music and hook text are optional: never force them into every short or let choosing them block delivery.
 
-- **Captions and hook text:** read footage-editing and its page text-styling. Use saved word timings and addSubtitlesFromTranscript after final cuts. Clip captions default to the clipper style it creates in this lane: no background box, uppercase Montserrat Black in white with a bold black outline, 1–3 words per caption, each word popping in as spoken and the spoken word highlighted green (karaoke template, karaokeStyle pop, #22C55E). An explicit user caption style wins: pass style minimal, or restyle with styleCaptions/setTextStyle/configureTextTemplate. Hook text comes from the actual moment, without invented claims. Keep text clear of faces, essential gameplay and platform controls.
-- **Pacing:** read footage-editing for speech cleanup; use configureSmoothZoom for zooms. Remove dead air or speed up only when requested or part of the selected style. Preserve comedic pauses, reactions and intelligible speech. Finalize timing before captions and overlays so they stay in sync. Check the final length remains 15 to 60 s.
-- **Sound:** Keep speech and important game/room sound intelligible; add hit effects or light music only when requested or selected. Use getSound/checkSound to inspect the mix, setVolume to balance clips and configureAudio for fades or music ducking. Only for an explicit audio-normalization/improvement request, after final timing, fades, ducking and mix choices, call normalizeAudio on each finished clip tab with no clipId: this normalizes the complete timeline mix to -14 LUFS integrated and at most -1 dBTP, including any music and effects. Pass clipId only when normalizing one linked sound clip is intended. The worker measures and verifies a two-pass normalization; preview and export use the same processed audio. Timeline normalization plays a verified master while preserving original editable sound. Later timing or mix changes automatically bypass the old master. Normalize again after those edits. Silence or failed measurement is not a successful normalized result. Respect an explicit request to preserve original loudness; use normalizeAudio enabled:false to remove an existing normalization when needed.
-- **Niche styles when selected:** gaming favors the facecam/gameplay stack and the real reaction; podcast favors clear speaker turns and intact thoughts; IRL favors stable subject framing and situational context; sports favors the action and its outcome, with essential ball/player/score context visible. Apply only the chosen style's useful embellishments.
+## Workflow
+1. Finalize timing first (pacing, cuts), so captions and overlays stay in sync.
+2. Add captions with addSubtitlesFromTranscript from saved word timings, then any hook text.
+3. Settle the mix: fades, ducking, volume balance.
+4. Normalize loudness only on an explicit request, after everything above.
+5. Check the final length is still 15–60 s.
 
-Finish uses cheap data checks inline. Use checkClip only for explicitly requested scoped QA; it never implies audio normalization. Report actual findings in the affected tab. Do not call checkPacing, 10 fps windows or getFrames sweeps on finished shorts. Small follow-up edits to a finished clip start with scene-engine page `edit-lanes` and use its quick lane where applicable. Do not repeat whole-source discovery for a local caption, trim or style fix.
+## Defaults
+Clip-lane captions (the clipper style addSubtitlesFromTranscript creates in this lane):
+
+| Property | Default |
+|---|---|
+| Background | None |
+| Font | Montserrat Black, uppercase |
+| Color | White with a bold black outline |
+| Words per caption | 1–3 |
+| Motion | Each word pops in as spoken (karaoke template, karaokeStyle pop) |
+| Spoken word | Highlighted green, #22C55E |
+
+An explicit user caption style wins: pass style minimal, or restyle with styleCaptions, setTextStyle or configureTextTemplate.
+
+Loudness, only on an explicit normalization or audio-improvement request: -14 LUFS integrated, at most -1 dBTP, on the whole timeline mix of each finished tab.
+
+## Rules
+Captions and hook text:
+- For caption and hook-text styling, read skill footage-editing page text-styling.
+- Hook text comes from the actual moment, without invented claims.
+- Keep text clear of faces, essential gameplay and platform controls.
+
+Pacing:
+- For speech cleanup, read skill footage-editing; use configureSmoothZoom for zooms.
+- Remove dead air or speed up only when requested or part of the selected style.
+- Preserve comedic pauses, reactions and intelligible speech.
+
+Sound:
+- Keep speech and important game or room sound intelligible.
+- Add hit effects or light music only when requested or selected.
+- Inspect the mix with getSound or checkSound, balance with setVolume, and use configureAudio for fades and music ducking.
+- Normalize the whole tab mix, music and effects included; target one linked sound clip only when that is the intent.
+- Respect an explicit request to keep the original loudness, removing any existing normalization.
+
+Niche styles, applied only when selected and only for their useful embellishments:
+- Gaming: the facecam over gameplay stack and the real reaction.
+- Podcast: clear speaker turns and intact thoughts.
+- IRL: stable subject framing and situational context.
+- Sports: the action and its outcome, with essential ball, player and score context visible.

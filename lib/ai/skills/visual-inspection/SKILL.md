@@ -1,40 +1,70 @@
 ---
 name: "visual-inspection"
-description: "Removing awkward moments from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Find them with the transcript and readFrames moments, confirm each at 10 fps with your own eyes, cut with the speech tools. Read before any visually motivated cut. To recreate a reference or measure motion, see reference-footage instead."
+description: "Removing awkward moments the picture shows from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Read before any visually motivated cut; for recreating a reference or measuring motion, read reference-footage instead."
 ---
 # Awkward moments in footage
 
-For "remove the awkward moments", "cut where I look away", "clean up the dead air", script glances, camera fiddling, or any cut the picture motivates. You see the footage yourself with readFrames: no guessing from the transcript, no Gemini needed.
+A good result removes only the moments the user named, each one confirmed in frames, with every cut on word boundaries so the speech stays whole. The reply says what was removed, by time, and what was looked at and kept.
 
-## 1. Find candidates (cheap)
-In the reel lane, use one cached readFrames overview grid (count:12, stillsOnly:true) for orientation, then confirm proposed joins with short SOURCE sequences around each retained outgoing end and incoming start (about 0.3–0.5s at 10 fps). Batch up to 30 explicit times with stillsOnly:true; revisit only suspicious joins. Do not run a whole-source motion map or infer a lookup from isolated stills. Explicit transcript-only requests skip visual inspection. Other workflows use the candidate search below.
+This covers "remove the awkward moments", "cut where I look away", "clean up the dead air", script glances, camera fiddling, or any cut the picture motivates. The agent looks at the footage itself with readFrames: no guessing from the transcript, no Gemini needed.
 
-Merge the evidence into one list of SOURCE windows:
+## Workflow
+1. Find candidates and merge them into one list of SOURCE windows (see Find candidates).
+2. Confirm each candidate frame by frame (see Confirm).
+3. Apply all cuts at once on the clip: cleanSpeech with keep (the SOURCE ranges between the cuts), or retainSourceRanges with tightenSilence:true. The transcript-only candidates (pauses, fillers) are handled in the same call. Close gaps if several clips are left.
+4. Verify with the checks scene-engine page `edit-lanes` sets for the lane. In the reel lane, the source join sequences already read in step 1 count as the join evidence; do not render them again.
+5. Reject any join that lands on a frozen face or a half glance, and fix it.
+6. Tell the user what was removed, by time and what it was ("0:12 looked down at notes, 0:31 reached for the camera, 4.2 s of dead air at the start"), and what was looked at and kept.
+
+## Find candidates
+
+### Reel lane
+- Read one cached readFrames overview grid (count 12, stillsOnly:true) for orientation.
+- Confirm each proposed join with a short SOURCE sequence around the retained outgoing end and incoming start (about 0.3–0.5 s at 10 fps). Batch explicit times with stillsOnly:true.
+- Revisit only suspicious joins.
+- Do not run a whole-source motion map, and do not infer a look-up from isolated stills.
+
+### Other workflows
 - Transcript: inspectAssetAnalysis (analyzeMedia transcribe first if there is none). Note pauses over about 0.7 s, false starts and restarts, "um/uh/so/like" before a restart, and the words around each gap.
-- Picture (outside the reel lane, with full checks): readFrames momentsOnly:true across the source. At the 80-result cap, rescan successive windows until all source time is covered. The map has no image:
-  - holds: a second or more where the picture all but stops. During silence, inspect for dead air/frozen faces; preserve speaking holds.
-  - small motion moments in the face or hand region (compare region to where the face is): looking away, at notes, down at the phone, fidgeting, hair or face touching, reaching for the camera.
-  - big motion moments that cover most of the frame: standing up, walking out of frame, picking up or moving the camera.
-  - cut moments: jumps from an earlier rough cut, flashes, frame drops.
-  A moment while the speaker is mid-sentence and calm is ordinary talking: skip it. Strongest candidates: moments that sit in or next to a transcript pause, at the very start (before the first word) and the very end (after the last word).
-For a clip under about 20 s you may instead read count 16 over the whole clip; it returns the moments too, plus a picture.
+- Picture: readFrames momentsOnly:true across the whole source (outside the reel lane, or in it when its full checks run). Read each moment with the table below.
+- Short clip: for a clip under about 20 s, readFrames count 16 over the whole clip may replace the moments map; it returns the moments plus a picture.
+- Skip a moment while the speaker is mid-sentence and calm: that is ordinary talking.
+- Strongest candidates: moments in or next to a transcript pause, at the very start (before the first word) and at the very end (after the last word).
 
-## 2. Confirm each candidate frame by frame
-Reel-lane sequences above count as confirmation when clear; do not re-read them. For candidates still unconfirmed, readFrames fps 10 over it, starting about 0.5 s before and ending about 0.5 s after (up to 3 s per read; split a longer one). Look at the grid yourself and decide:
-- Awkward: eyes leave the lens for ≥0.5 s during silence and return, the face freezes or goes blank, a hand comes up to the camera or face, the head drops to read, the camera shakes or is being set up, a flash or jump. Bracket onset/recovery at 10 fps, then inspect adjacent native-rate frames in each bracket for final boundaries.
-- Keep blinks, nods, talking gestures and glances <0.5 s unless specifically targeted.
-Several candidates close together can share one read. Never cut on the map alone; it says where the picture moves, not why.
+| Moment in the map | What it may be |
+| --- | --- |
+| Hold (a second or more where the picture all but stops) | During silence: dead air or a frozen face. A hold while speaking is kept. |
+| Small motion in the face or hand region (compare the region to where the face is) | Looking away, at notes or down at the phone, fidgeting, touching hair or face, reaching for the camera |
+| Big motion covering most of the frame | Standing up, walking out of frame, picking up or moving the camera |
+| Cut | A jump from an earlier rough cut, a flash, a frame drop |
 
-## 3. Cut, keeping the speech whole
-- Each cut runs from the frame the awkward thing starts to the frame the speaker is back, widened to the nearest word boundaries (word timings from inspectAssetAnalysis with start/end). Never cut inside a word. If the awkward moment happens while the speaker is talking, cut the whole sentence or phrase, or leave it and say so: do not cut words out of a sentence to hide a glance.
-- Apply all cuts at once on the clip: cleanSpeech with keep (the SOURCE ranges between your cuts), or retainSourceRanges with tightenSilence:true. Both also remove pauses and fillers inside the kept ranges, so the transcript-only candidates are handled in the same call. Close gaps if several clips are left.
-- In the reel lane, unless final checks were requested, reuse the inspected source join sequences, check inspectTimeline duration/coverage, and render only new caption/framing samples or unresolved picture changes. Other workflows check every changed join with getFrames at t−1/fps, t, t+1/fps; batch ≤6 frames/call. Reject frozen faces/half glances.
-- Tell the user what you removed, by time and what it was ("0:12 looked down at notes, 0:31 reached for the camera, 4.2 s of dead air at the start"), and what you looked at and kept.
+## Confirm
+- Reel-lane join sequences count as confirmation when clear; do not re-read them.
+- For any other candidate, readFrames fps 10 from about 0.5 s before it to about 0.5 s after; split a longer window into several reads. Several candidates close together can share one read.
+- Look at the grid and decide. Awkward:
+  - eyes leave the lens for 0.5 s or more during silence and return
+  - the face freezes or goes blank
+  - a hand comes up to the camera or face
+  - the head drops to read
+  - the camera shakes or is being set up
+  - a flash or a jump
+- Keep blinks, nods, talking gestures and glances under 0.5 s unless the user targeted them.
+- Bracket onset and recovery at 10 fps, then inspect the adjacent native-rate frames in each bracket for the final boundaries.
+- Never cut on the map alone: it says where the picture moves, not why.
+
+## Cut
+- Each cut runs from the frame the awkward thing starts to the frame the speaker is back, widened to the nearest word boundaries (word timings from inspectAssetAnalysis with start/end).
+- Never cut inside a word.
+- If the awkward moment happens while the speaker is talking, cut the whole sentence or phrase, or leave it and say so. Do not cut words out of a sentence to hide a glance.
 
 ## Long clips
-The reel lane keeps the sparse overview and proposed-join sequences above. Other workflows confirm only momentsOnly candidates; do not page the entire clip at 10 fps. Use inspectVideo only when the user asks for something you must hear (laughing, a cough, a phone ringing) or search by meaning across a long clip; inspectFrames is for older flows and is not needed when readFrames can show the frames.
+- The reel lane keeps the sparse overview and proposed-join sequences above.
+- Other workflows confirm only the momentsOnly candidates; never page the entire clip at 10 fps.
+- Use inspectVideo only when the user asks about something that must be heard (laughing, a cough, a phone ringing) or for a search by meaning across a long clip.
+- inspectFrames is not needed when readFrames can show the frames.
 
 ## Rules
 - Only cut what the user asked about. "Clean it up" with no visual words is a speech cleanup (cleanSpeech), not this skill.
-- A quiet pause alone is not an awkward moment, and a moment alone is not one either: confirm with frames.
-- If frames leave it unclear, keep the footage and say what you were unsure of. Never claim a moment was removed that you did not see.
+- An explicit transcript-only request skips visual inspection.
+- A quiet pause alone is not an awkward moment, and a map moment alone is not one either: confirm with frames.
+- If the frames leave it unclear, keep the footage and say what was uncertain. Never claim a moment was removed that was not seen.

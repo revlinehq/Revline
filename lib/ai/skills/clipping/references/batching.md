@@ -1,19 +1,45 @@
 ---
 name: "batching"
-description: "One project and shared source analysis, one titled timeline tab per clip, separate exports only when requested."
+description: "One project and shared source analysis, one titled timeline tab per short, separate exports only when requested."
 ---
-# A batch of separate clips
+# A batch of separate shorts
 
-One source, one project, shared assets and saved analysis. Never create a project or upload/transcribe the same source for each short. Reuse the current project when it contains the source. On MCP, use getProject and listTimelines first; createProject only if a project is needed. Bring a missing source in once with uploadMedia/finishUpload or importVideoLink and wait with getMediaTask. For a whole-source highlight search, import the full source rather than only the first candidate. Read source times from the imported asset: a ranged import starts at 0 at its original range start.
+One source, one project, shared assets and saved analysis; one titled tab per accepted short, each starting at timeline 0.
 
-YouTube, Twitch VODs, Kick recordings and public MP4 links use importVideoLink once. If a provider blocks a recording, request an upload/direct MP4. Never claim an unsupported/live stream was imported.
+## Workflow
+1. Find the project. Reuse the current project when it contains the source; on MCP call getProject and listTimelines first, and createProject only if a project is needed.
+2. Bring a missing source in once: uploadMedia/finishUpload, or importVideoLink for YouTube, Twitch VOD, Kick recording or public MP4 links.
+3. Persist the accepted list with planClips: candidate ID, title, source range and, once known, the resulting timelineId.
+4. For each accepted candidate, createTimeline from blank with the short's title as its name, using the aspect ratio findHighlights returned.
+5. Add the chosen range with addMedia from the shared asset at start 0, then inspect the new clip IDs before any reframing or polish.
+6. Build every accepted tab, then call finishClipping and finish, and report its finalMessage.
+7. Export only when asked: exportVideo once per finished tab with its timelineId, poll getExport for each job, and label each download by title.
 
-1. Persist the accepted list with planClips: each candidate ID, title, SOURCE range and resulting timelineId. Inspect existing tabs on retries and resume completed work rather than duplicating it.
-2. Use createTimeline from "blank", aspectRatio from findHighlights (source aspect by default; change only for requested reframing), name set to the clip title (up to 60 characters). One tab holds one short, starting at timeline 0. Use openTimeline to revisit an existing clip when the editing surface needs it. Preserve unrelated tabs and edits.
-3. Add the chosen range with addMedia using the shared assetId, sourceStart, duration and start:0. Inspect the new clip IDs before reframing or optional polish. Each tab gets its own title and requested finish; transcript mode preserves source framing, while source analysis stays shared.
-4. On MCP, pass projectId and the intended timelineId explicitly to editing and inspection tools, including getFrames, so another session switching tabs cannot redirect work. Opening a tab changes what the user sees; prefer explicit timelineId for subsequent work.
-5. Preserve original audio. Never normalize automatically, including gaming/action. Call normalizeAudio only for an explicit audio-normalization/improvement request. Preserve source framing unless the user requests visual reframing. Heavy QA is optional for ALL clipping: use checkClip only for the user’s actual concern, with checks ["framing"], ["decode-health"] or ["loudness"] as appropriate. A framing-only request neither decodes source health nor requires normalized audio. Inspect its sampled scope honestly. Unchanged successful and failed receipts are reused; do not rerun the same full batch without relevant edits or an explicit scoped need.
-6. Call finishClipping directly, then finish. Completion performs cheap source bounds, nonempty timeline/coverage, accepted ranges, transcript boundaries where available, and accepted-versus-populated tab accounting INLINE. No checkClip ceremony, snapshots, Gemini or normalization job is required. A failed optional check remains an actual finding: fix the affected tab or report it; do not hide it or rerender unrelated passing tabs. Use the returned exact finalMessage. Unrequested checks are skipped, never marked passed.
-7. Export only when the user asks. Call exportVideo once per finished tab with its timelineId, then poll getExport for each job and label its download by title. Exports queue; listExports can show the batch. Never export the open tab repeatedly while assuming it selects different clips.
+## Rules
+Sources:
+- Never create a project, upload or transcribe the same source once per short.
+- If a provider blocks a recording, ask for an upload or a direct MP4 link.
+- Never claim an unsupported or live stream was imported.
 
-Timeline-tab management, imports and exports are available in both MCP and the in-app editing turn. In the app, editing tools act on the tab opened by createTimeline or openTimeline. Tab changes publish pending drafts. Build all accepted tabs, then finishClipping and finish. Optional scoped checkClip requests use explicit timelineIds and reuse unchanged receipts. Never switch tabs in parallel with editing. Never call tab changes in parallel with edits. Do not substitute a montage in one tab or one project per clip. An optional overview can list title, source range, duration, score and tab/export link. Do not require approval of an overview before building requested clips.
+Tabs:
+- One tab holds one short. Do not substitute a montage in one tab, or one project per short.
+- On retries, inspect existing tabs and resume completed work instead of duplicating it.
+- Use openTimeline to revisit an existing short when the editing surface needs it.
+- Preserve unrelated tabs and edits.
+- On MCP, pass projectId and the intended timelineId explicitly to every editing and inspection tool, including getFrames, so another session switching tabs cannot redirect work.
+- Timeline tabs, imports and exports work the same in MCP and the in-app turn.
+
+Close-out:
+- A failed optional check is a real finding: fix the affected tab or report it. Do not hide it or rerender unrelated passing tabs.
+- Report checkClip's sampled scope honestly.
+- Never export the open tab repeatedly assuming it selects different shorts.
+- An optional overview may list title, source range, duration, score and tab or export link. Do not wait for approval of it before building requested shorts.
+
+## Example
+For accepted candidate H2 (source 812.4–851.0 s, title "The upload stalled"):
+
+```
+createTimeline { from: "blank", name: "The upload stalled", aspectRatio: "landscape" }
+addMedia { assetId: "<shared source>", sourceStart: 812.4, duration: 38.6, start: 0 }
+inspectTimeline
+```

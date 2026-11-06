@@ -1,9 +1,44 @@
 ---
 name: "clipping"
-description: "Turn a long stream, VOD or podcast into separate shorts: \"clip this\", \"make clips\", \"turn this into shorts\", \"find the best moments\", or a Twitch, Kick or YouTube source link with a short-form ask. Source-wide transcript search, bounded targeted video discovery, ranked hooks, 15 to 60 second clips and one timeline tab per clip; facecam splits and speaker reframing only when requested. Small existing-clip edits use scene-engine page edit-lanes."
+description: "Turns a long stream, VOD or podcast into separate 15 to 60 second shorts, one timeline tab per short. Read it for \"clip this\", \"make clips\", \"turn this into shorts\", \"find the best moments\", or a Twitch, Kick or YouTube link with a short-form ask."
 ---
 # Clipping long sources into shorts
 
-Read moments before findHighlights and batching before planClips. Choose by content: podcast/interview/talk or requested stream dialogue uses transcript/voice (speechLed:true); gaming/sports commentary does not remove the need to understand visual action. findHighlights returns saved words/helpers without a whole-source Gemini job. For visual candidates use short, explicit inspectVideo windows, extend only uncertainty, and reuse observations. Silent content uses bounded adaptive native-video discovery and honest inspected coverage. Stills/cuts alone cannot prove an action.
+A good batch is a few distinct, self-contained shorts, each opening on its hook and ending after its payoff, with every claim backed by saved transcript or observed video.
+Each short lives in its own titled tab of one shared project, keeps the source framing and audio, and is closed out with cheap data checks rather than heavy QA.
 
-Build 15–60s shorts in one project/shared upload, one named populated tab per accepted candidate. Preserve source framing and audio unless the user asks otherwise. NO automatic normalization or heavy QA for any clipping type. finishClipping performs cheap data checks directly; then finish closes the lane. checkClip is optional, scoped to an explicit concern, cached for unchanged tabs and never implicitly requires normalization. Pass timelineId on MCP; export only when asked. Never claim skipped checks passed or unsupported action was observed.
+## Workflow
+1. Read page moments, then call findHighlights on the shared source.
+2. Pick the evidence path by the requested content, not by voice presence:
+   - Podcast, interview, talk or requested stream dialogue: speech-led (speechLed:true), judged from the saved transcript.
+   - Gaming, sports and other action: visual events judged from short inspectVideo windows; commentary over the action does not make the visuals irrelevant.
+   - Silent content: bounded video discovery across the source, with honest inspected coverage.
+3. Rank candidates and register them with planClips (page moments).
+4. Read page batching, then build one populated tab per accepted candidate.
+5. Reframe (page framing) only when the user requests vertical reframing or a speaker crop; add finishing (page finishing) only when requested or part of the selected style.
+6. Call finishClipping, then finish. Export only when the user asks.
+
+## Defaults
+| Setting | Default |
+|---|---|
+| Short length | 15–60 s |
+| Shorts per source | min(10, qualifying distinct moments, max(3, round(sourceSeconds / 150))), within free tab slots |
+| Qualifying score | 65/100 or higher (rubric in page moments) |
+| Framing and aspect | Source framing and aspect |
+| Audio | Original audio at 1×, original loudness |
+| QA | finishClipping's inline data checks only |
+
+## Rules
+- Change framing, aspect or loudness only when the user asks.
+- Never normalize audio automatically, for any kind of source, gaming and action included.
+- Heavy QA is optional for every kind of clipping: use checkClip only for the user's stated concern.
+- Do not run checkPacing, 10 fps windows or getFrames sweeps on finished shorts.
+- Never claim a skipped check passed or that an unsupported action was observed.
+- Finding moments alone is an inspection request: return the ranked candidates without changing timelines.
+- A small follow-up edit to a finished short (caption, trim, style) starts with scene-engine page edit-lanes and uses its quick lane where it applies; do not repeat whole-source discovery for it.
+
+## Pages
+- moments: discover, rank and register candidates; choose clean 15–60 s boundaries.
+- batching: one project and shared source, one titled tab per short, exports on request.
+- framing: facecam-over-gameplay stacks and speaker reframing in 9:16, only when requested or needed.
+- finishing: optional captions, pacing, sound and niche styles, with the clipper caption defaults.

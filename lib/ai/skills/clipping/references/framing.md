@@ -4,26 +4,65 @@ description: "Gaming facecam above gameplay, or speaker-led podcast and IRL refr
 ---
 # Vertical framing
 
-Ordinary podcast/talk cuts preserve the source view. Use the aspectRatio returned by findHighlights for blank tabs and fitClip fit "contain" if needed to retain the full picture; do not auto-track, crop or analyze faces. Existing user framing stays intact. Only read the visual instructions below for gaming/action or explicit visual requests.
+Good framing keeps faces, the facecam and the key action in view without stretching, guessing coordinates or claiming confidence the analysis does not have.
+Ordinary podcast and talk shorts keep the source view: use fitClip fit "contain" if needed to keep the full picture, and do not auto-track, crop or analyze faces. Existing user framing stays intact.
 
-Only when vertical visual reframing was requested, use a 9:16 canvas. Default every single-view video to fitClip fit "cover". Keep fit "contain" only when the user explicitly requests the complete wide frame; it leaves large empty bars on a vertical short. After planClips, a needed source layout/crop check may use readFrames fps at source rate over at most 1 s and 30 frames. Requested finished-tab framing QA uses only the checkClip sheet. Reuse saved analysis across every clip. Source coordinates are normalized x/y/w/h rectangles, never preview-screen pixels.
+## Defaults
+Apply this page only to gaming or action sources and to explicit visual reframing requests.
+
+| Situation | Default |
+|---|---|
+| Requested vertical reframing | 9:16 canvas, fitClip fit "cover" on every single-view video |
+| User wants the complete wide frame | fitClip fit "contain" (leaves large empty bars on a vertical short) |
+| Confident facecam overlay | Two rows: creator on top, gameplay below |
+| Creator-only or gameplay-only | One source filling the frame with the supported crop |
+| Uncertain or unbordered layout | followSubject mode "face", or a stable wider view if no face is clear |
+| Fixed single speaker | One measured stable crop |
+| Co-visible speakers exchanging turns | fitClip "cover", then followSubject mode "active-speaker" |
 
 ## Gaming: creator above gameplay
-Run detectFacecam once per source assetId: local MediaPipe faces plus OpenCV panel edges across native frames, without Gemini. It returns sampled source times, facecam PANEL and gameplay rectangles, confidence and kind overlay/creator-only/gameplay-only/uncertain. A face rectangle alone is not the webcam panel. Inspect readFrames at retained-range boundaries and layout changes; detection samples cannot prove intervening layout.
+Workflow:
+1. Run detectFacecam once per source asset.
+2. Inspect the saved facecam samples inside the retained range. If the layout kind or boxes change, split the video at those confirmed source times.
+3. Make two synchronized video instances from the same asset and source range on separate V layers (duplicateClips), keeping one audible source track.
+4. Call applyLayout two-rows with detectedRegions:true, creator clips on top and gameplay clips below.
+5. Use cropClip only for a measured refinement.
 
-For a confident overlay, make two synchronized video instances from the same asset and SOURCE range on separate V layers. Keep one audible source track: duplicateClips returns a video/audio pair; identify the returned audio ID and setVolume volume:0 on it. Deleting a linked audio also removes its video. If removal is needed, unlink the duplicate pair first, then delete only its audio and keep the returned video ID for crop/layout. Inspect saved facecam samples inside the retained range FIRST: if the layout kinds/boxes change, split the video at those confirmed SOURCE times before requesting the rows. Call applyLayout layout "two-rows", detectedRegions:true, creator IDs in topClipIds and gameplay IDs in bottomClipIds. It uses detected source boxes and sets crop/transform together, without guessing coordinates or stretching. Never call it across a known layout change: it refuses that range. Resolve a refused layout on the split sections before finish; do not delete one row and silently abandon the failed layout. cropClip remains available for a measured refinement; it masks source edges without recentering or enlarging them.
+Rules:
+- A face rectangle alone is not the webcam panel; never invent a panel from a face box.
+- Read frames at retained-range boundaries and layout changes: detection samples cannot prove the layout between them.
+- Never apply the layout across a known layout change; split first.
+- Resolve a refused layout on the split sections before finishing. Do not delete one row and silently abandon the failed layout.
+- For creator-only or gameplay-only sources, do not build a duplicate empty row.
+- For an uncertain layout, inspect the affected source range before choosing followSubject or a wider view.
+- Never report a low-confidence panel as certain.
 
-For creator-only or gameplay-only, keep one source filling the vertical frame with the supported crop. Do not build a duplicate empty row. For uncertain detection or odd/unbordered layouts with no clear panel, use followSubject mode "face" on the retained video, inspect the affected source range, and keep a stable wider view if no face is clear. Never invent a panel from the face box. Never report a low-confidence panel as certain.
+## Speaker reframing and visual IRL cuts
+Workflow:
+1. For a batch with co-visible speakers, call analyzeMedia mode "speakers" for each accepted source window before changing tabs, at most two calls at a time. Skip this for fixed single-speaker shots.
+2. In each tab, apply the default for the shot type from the Defaults table.
+3. Read the per-short framing receipt and the saved framing intervals around each switch.
 
-## Explicit speaker-reframing requests and visual IRL cuts
-For a fixed single-speaker shot, use a measured stable crop first; do not run mouth matching on a person who never changes. For co-visible speakers that actually exchange turns, use fitClip fit "cover", then followSubject mode "active-speaker" on that retained video clip. Reuse saved framing if its coverage includes the clip; never analyze the whole source per tab. It analyzes the retained SOURCE window, up to 120 source seconds, reusing current saved coverage and diarized Deepgram words when available. Only missing range audio is diarized. The media processor runs the visual analysis entirely on CPU, without Gemini or a GPU.
+Rules:
+- Do not run mouth matching on a single speaker who never changes.
+- Reuse saved framing when its coverage includes the short; never analyze the whole source per tab.
+- If the crop follows the wrong person, turn following off and keep a wider view.
+- Report fallback seconds explicitly.
+- Speaker IDs and faceIds from separate analysis windows are not the same people; never equate numeric voice IDs with real-world names.
 
-For a batch with co-visible speakers, first call analyzeMedia mode "speakers" for each accepted SOURCE start/end window, at most two calls concurrently. Do this before changing tabs. followSubject reuses those exact window results within the run, so framing analysis is not repeated per tab. Skip this precompute for fixed single-speaker shots.
+## Measuring and QA
+- Use source readFrames only while measuring framing: panel edges, layout changes and active-speaker crops, after planClips accepts candidates.
+- Reuse saved analysis across every short.
+- Requested framing QA on a finished tab uses only the checkClip framing sheet. Glance once for face or facecam crop, mouths, key action and text visibility.
+- Fix an affected crop and rerun checkClip. Report sampled coverage and fallback seconds; never check finished shorts frame by frame.
 
-Camera shots come first: PySceneDetect finds cuts, and a clearly dominant visible face gets one fixed crop for that entire shot, including side-on views and microphones covering the mouth. This is a framing decision, not proof that the face owns the audio voice. Multi-face shots use mouth activity aggregated over whole diarization turns. Confident voice-to-face associations are remembered within the analyzed window; conservative appearance and position/size continuity let recurring faces reuse that association across later turns and shots. Short backchannels do not establish identities or trigger a switch. Competing, obscured and offscreen matches remain unresolved.
+## Example
+Confident overlay, retained range already split at layout changes:
 
-The crop holds a fixed face anchor within a shot, cuts immediately at camera cuts and eases only for confirmed speaker changes inside a shot. Uncertain intervals hold the current crop within the shot; an uncertain new shot starts from the stable center. If all intervals are uncertain, followSubject refuses to apply a crop. Turn following off and retain a wider view if the crop follows the wrong person.
-
-Read the per-clip framing receipt: seconds and duration-weighted heuristic confidence for shot-dominant, turn-mouth, identity-reuse and fallback. Report fallback seconds explicitly. These scores are not calibrated probabilities and shot dominance does not verify a voice identity. inspectAssetAnalysis includes framing intervals with SOURCE start/end, shot, method, confidence, face and local faceId, alongside speakers.turns with speaker ID, face rectangle or null and matching confidence. Read around switches. Source speaker IDs come from the diarized source transcript; window speaker IDs and faceIds are local to that analysis window and must not be equated across separate windows. Never equate numeric voice IDs with real-world names.
-
-Use source readFrames only while measuring framing: panel edges, layout changes and active-speaker crops. Only for requested framing QA on the FINISHED tab, checkClip supplies one shot/switch framing sheet. Glance once for face/facecam/crop, mouths, key action and text visibility; fix an affected crop and rerun checkClip. Report sampled coverage and fallback seconds; never frame-by-frame finished-clip checking.
+```
+detectFacecam { assetId: "<source>" }
+duplicateClips { clipIds: ["<video>"] }            → new video V2 + audio A2
+setVolume { clipId: "<A2>", volume: 0 }
+applyLayout { layout: "two-rows", detectedRegions: true,
+              topClipIds: ["<V2>"], bottomClipIds: ["<video>"] }
+```
