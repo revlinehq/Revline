@@ -1,6 +1,6 @@
 ---
 name: "layers-and-effects"
-description: "Layer, b-roll, undo, transition, speed and effect judgment for footage edits, plus the effect planning rules. Read before arranging layers, adding b-roll or transitions, changing speed, or adding any effect."
+description: "Layer, b-roll, undo, speed and effect judgment for footage edits, plus the effect planning rules. Read before arranging layers, adding b-roll, changing speed, or adding any effect; transitions live in the transitions skill."
 ---
 # Layers and effects
 
@@ -10,11 +10,11 @@ A good result changes only the requested clips, keeps linked video and audio tog
 - Batch identical changes across clips with the tool's clipIds selector in one call; run independent calls with known inputs in the same step.
 - Use moveClips and resizeClips for a selected group, reorderLayer for a whole layer, and move or trim for one clip.
 - Never delete an occupied track's clips just to remove its row.
-- To return to an earlier version, use listRevisions with restoreClip or restoreTimeline, not chains of undoLatestEdit.
+- To return to an earlier version: writing-scenes page `edit-lanes` (Direction and feedback).
 - Unlink a video/audio pair only when the user wants to keep one side while editing the other.
 - Footage and sound fades are clip settings (configureVisualFade, configureAudio), never separate FX clips.
 - After setPlaybackRate or setSpeedRamp, read the new clip duration before any further timing edit.
-- Add a transition only when the user asked for it or it is a deliberate creative choice for that cut.
+- Transitions (hard cut, whips, fades, addTransition settings): read the `transitions` skill.
 - When a request needs an unsupported capability (animating an object inside a video, a global camera, automatic parenting between layers, or generated footage), say so instead of approximating it.
 
 {{revline:0}}

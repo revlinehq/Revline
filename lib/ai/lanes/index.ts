@@ -67,9 +67,12 @@ export function laneSkill(name: string, page?: string) {
   if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);
   return found?.body ?? `${skill.body}${skill.pages?.length && !skill.body.includes('\n## Pages') ? `\n\nPages (readSkill with page): ${skill.pages.map(page => `${page.name}: ${page.description}`).join('\n')}` : ''}`;
 }
+// Film lanes change shots with whip() in launch-films-motions; the footage transitions skill is for every other lane.
+const FILM_LANES: readonly LaneId[] = ['motion', 'recreate'];
 export const laneInstructions = (lane: LaneId) => `# Primary workflow: ${lane === 'edit' || lane === 'explainer' ? 'shared editing (no selected style)' : lane}
 ${LANES[lane].instructions}
 Basic trims, captions, audio and timeline operations are shared. No style confirmation is needed for them or for questions.
+${FILM_LANES.includes(lane) ? 'Shot changes in films and recreations (hard cuts, whip(), arrivals): launch-films-motions page shot-changes.' : 'Shot changes in footage (hard cuts, whips, fades with addTransition): readSkill transitions.'}
 Use discoverCapabilities for additional skills/tools and loadCapability for supporting workflows, or readSkill for a known skill. Load only what this request needs. Loading support never changes the primary deliverable, user decisions, task identity or finish obligations. Switch the primary workflow only when the requested deliverable changes; /clip and explicit user style stay authoritative.
 For a one-take talking-head short-form/reel rough cut, choose reel unless the user chose another style. For separate highlights from a long source choose clip. Read the workflow skill before that work.
 Call finish before reporting an editing task complete. Its server checks must pass on the current timeline. After three failed checks stop and report their actual output; never claim completion. Ask a user question with askUser when you need an answer.`;

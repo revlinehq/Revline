@@ -22,6 +22,8 @@ await build({ entryPoints: ['lib/editor/visual-effects-runtime.ts'], outfile: 'p
   writeFileSync('public/vendor/lucide-icons.json',JSON.stringify(icons));
   copyFileSync('node_modules/lucide-react/LICENSE','public/vendor/lucide-LICENSE');
 }
+// Footage transitions: plain DOM, no React or Remotion.
+await build({ entryPoints: ['lib/editor/transitions-bundle.ts'], outfile: 'public/vendor/transitions-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 await build({ entryPoints: ['lib/editor/remotion-runtime.ts'], outfile: 'public/vendor/remotion-runtime.js', bundle: true, minify: true, platform: 'browser', target: 'es2020', format: 'iife', globalName: '__revlineRemotion', jsx: 'automatic', define: { 'process.env.NODE_ENV': '"production"' }, legalComments: 'linked' });
 
 // Build the scene runtime from the shared import registry.

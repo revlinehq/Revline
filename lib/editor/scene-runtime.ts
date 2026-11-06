@@ -20,12 +20,13 @@ import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './br
 import { createTextMotion, type TextMotion } from './scene-text-motion';
 import { motionHelpers, type MotionHelpers } from './scene-motion';
 import type { SceneBeats } from './types';
+import { whipHelper, type WhipHelper } from './scene-whip';
 
 type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; beats?: SceneBeats | null; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
 /** `playing` is set while the editor preview plays: videos then run on their own decoders instead of being seeked every frame. */
 type Seek = { type: 'seek'; time: number; seq: number; playing?: boolean };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper } & TextMotion & MotionHelpers;
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper } & TextMotion & MotionHelpers & { /** A 3–6 frame whip between two shots (launch-films-motions page shot-changes): whip(tl, { out, in, at, direction }). On a section's tl, at is in section seconds; it may straddle the section's end. */ whip: WhipHelper };
 export type SectionHelper = (name: string, start: number, duration: number, build: (tl: gsap.core.Timeline) => void) => gsap.core.Timeline;
 
 /**
@@ -33,7 +34,7 @@ export type SectionHelper = (name: string, start: number, duration: number, buil
  * film time; the engine reads the call's literal start and duration to know which code the section owns, so a section
  * may not animate past its own end, start inside another, or nest.
  */
-function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
+function sectionHelper(film: gsap.core.Timeline, fps: number, starts: WeakMap<gsap.core.Timeline, number>): SectionHelper {
   let building: string | undefined;
   return (name, start, duration, build) => {
     if (typeof name !== 'string' || !name.trim()) throw new Error('section(name, start, duration, build) needs a name.');
@@ -41,6 +42,7 @@ function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
     if (typeof build !== 'function') throw new Error(`Section "${name}" needs a build function: section('${name}', ${start}, ${duration}, (tl) => { ... }).`);
     if (building !== undefined) throw new Error(`Section "${name}" is inside section "${building}". Sections do not nest: call section() from the scene's own function.`);
     const tl = gsap.timeline();
+    starts.set(tl, start);
     building = name;
     try { build(tl); } finally { building = undefined; }
     if (tl.duration() > duration + 1 / fps + 1e-3) throw new Error(`Section "${name}" animates for ${Math.round(tl.duration() * 1000) / 1000}s but lasts ${duration}s. Keep its tweens inside its duration, or put a move that spans sections on the scene's own tl.`);
@@ -53,15 +55,17 @@ function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
  * for one scene or blueprint. Text functions add their moves to the timeline being built: a section's while its build
  * runs, otherwise the scene's tl.
  */
-function sceneHelpers(film: gsap.core.Timeline, root: HTMLElement, data: { fps: number; width: number; height: number; beats?: SceneBeats | null }) {
+function sceneHelpers(film: gsap.core.Timeline, root: HTMLElement, data: { fps: number; width: number; height: number; duration: number; beats?: SceneBeats | null }) {
   const active: gsap.core.Timeline[] = [];
   const text = createTextMotion({ root, fps: data.fps, timeline: () => active[active.length - 1] ?? film });
-  const sections = sectionHelper(film, data.fps);
+  // whip() reads a section's film start from its timeline, so a whip called inside a section may straddle its end.
+  const starts = new WeakMap<gsap.core.Timeline, number>();
+  const sections = sectionHelper(film, data.fps, starts);
   const section: SectionHelper = (name, start, duration, build) => sections(name, start, duration, inner => {
     active.push(inner);
     try { build(inner); } finally { active.pop(); }
   });
-  return { section, ...text, ...motionHelpers({ root, fps: data.fps, width: data.width, height: data.height, section, beats: data.beats }) };
+  return { section, ...text, ...motionHelpers({ root, fps: data.fps, width: data.width, height: data.height, section, beats: data.beats }), whip: whipHelper(gsap, film, starts, root, data.width, data.height, data.fps, data.duration) };
 }
 
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
@@ -281,7 +285,7 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       host.style.cssText = `position:relative;width:${width}px;height:${height}px;overflow:hidden`;
       container.appendChild(host);
       const tl = gsap.timeline();
-      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...sceneHelpers(tl, host, { fps: data.fps, width, height, beats: data.beats }) });
+      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...sceneHelpers(tl, host, { fps: data.fps, width, height, duration: data.duration, beats: data.beats }) });
       return host;
     };
     const tl = gsap.timeline();

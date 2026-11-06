@@ -3,7 +3,7 @@ import type { AdjustmentController } from './adjustment-layers';
 import type { AudioReactiveController } from './audio-reactive';
 import type { MaskController } from './masks';
 import type { TextLayerController } from './remotion-text-runtime';
-import type { TransitionController, TransitionSource } from './remotion-transitions-runtime';
+import type { TransitionController, TransitionSource } from './transitions-runtime';
 import type { SceneLayerSource } from './scene-layers';
 import type { SolidColorController } from './solid-color-layers';
 import type { TextLayerSource } from './text-layers';
@@ -31,9 +31,9 @@ export type CompositionWindow = Window & {
   __revlineVisualFadeController?: VisualFadeController;
   __revlineTextLayerController?: TextLayerController;
   __revlineSceneController?: { setSources(sources: SceneLayerSource[]): void; hasMedia?(assetId: string): boolean };
-  /** Optional renderers the preview loads on demand (lib/editor/preview-remotion-runtime.ts). */
+  /** Optional renderers the preview loads on demand (lib/editor/preview-runtimes.ts). */
   __revlineRemotionText?: { installTextLayers(sources: TextLayerSource[]): TextLayerController };
-  __revlineRemotionTransitions?: { installTransitions(initial: TransitionSource[], fps: number): TransitionController };
+  __revlineTransitions?: { installTransitions(initial: TransitionSource[], fps: number): TransitionController };
   __renderReady?: boolean;
   /** The HyperFrames player bridge; the preview reserves it before GSAP loads. */
   __player?: { isPlaying?(): boolean; getTime?(): number; getDuration?(): number };

@@ -43,8 +43,18 @@ export const TRANSITION_DIRECTIONS = ['clockwise', 'counter-clockwise'] as const
 export type TransitionDirection = typeof TRANSITION_DIRECTIONS[number];
 export const WIPE_DIRECTIONS = ['left', 'right', 'up', 'down'] as const;
 export const IRIS_SHAPES = ['circle', 'ellipse'] as const;
-export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number] };
-export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<TransitionWipeSettings>;
+/** Where a whip-pan sends the picture: a short offset along an axis, or a scale push in or out. */
+export const WHIP_DIRECTIONS = ['left', 'right', 'up', 'down', 'zoom', 'zoom-out'] as const;
+export type WhipDirection = typeof WHIP_DIRECTIONS[number];
+/** whip-pan travel as a share of the frame (0.15 = 15%). */
+export const WHIP_TRAVEL = { min: .1, max: .25, default: .15 } as const;
+/** whip-pan length in 30 fps frames, and its peak blur in px at 1080p (0 turns the blur off). */
+export const WHIP_FRAMES = { min: 3, max: 6, default: 4 } as const;
+export const WHIP_BLUR_MAX = 48;
+/** The whip recipe shared by film whip() and footage whip-pan: zoom scales per unit of travel (outgoing peak, incoming start) and peak blur in px at 1080p. */
+export const WHIP_SHAPE = { zoomIn: { out: 5 / 3, in: .8 }, zoomOut: { out: -4 / 3, in: -.8 }, blur: { slide: 24, zoom: 10 } } as const;
+export type TransitionWipeSettings = { wipeDirection: typeof WIPE_DIRECTIONS[number]; softness: number; centerX: number; centerY: number; shape: typeof IRIS_SHAPES[number]; whipDirection: WhipDirection; travel: number; /** Peak whip blur in px at 1080p; unset uses WHIP_SHAPE.blur. */ blur?: number; /** A whip-pan saved before whipDirection: rendered as the old full-frame slide. */ whipLegacy: boolean };
+export type ClipTransition = { fromClipId: string; toClipId: string; direction: TransitionDirection } & Partial<Omit<TransitionWipeSettings, 'whipLegacy'>>;
 
 // visual-effects
 export type ColorGrade = { enabled: boolean; exposure: number; contrast: number; saturation: number; temperature: number; tint: number; vibrance: number };

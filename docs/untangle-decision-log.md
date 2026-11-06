@@ -107,6 +107,7 @@ Scope: untangling only. No comment pruning and no test changes (the repo has no 
   - SHA-256-to-hex is written about 14 times across the repo.
 - **Delete dead runtime bundles and pass-through re-exports.** *done*
   - The split `remotion-text.js` and `remotion-transitions.js` bundles are never loaded: every caller uses the shared runtime.
+  - Superseded November 6, 2026: footage transitions dropped Remotion and React and load their own small `transitions-runtime.js`; `remotion-runtime.js` now carries only the text renderer.
   - Re-exports at `clip-effects.ts:21`, `composition.ts:78`, `smooth-zoom.ts:7` and `tracking-attach.ts:115`.
 
 ### Web app (`components`, `app`)

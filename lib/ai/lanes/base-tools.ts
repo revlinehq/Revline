@@ -113,6 +113,8 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'writing-scenes': motionTools,
   'gsap': motionTools,
   'remaking-videos': recreateTools,
+  // Footage transitions; the footage lanes have addTransition already, film lanes get it only by loading footage support.
+  'transitions': ['addTransition'],
   'clipping': clipTools,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
   // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).

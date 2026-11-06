@@ -89,7 +89,10 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   await preparePixelTrackFiles(directory, { ...timeline, clips: [...timeline.clips, ...referenceTimelines.flatMap(reference => reference.clips)] }, convexUrl, signal);
   await copyFile(join(process.cwd(),'public/vendor/gsap.min.js'),join(directory,'gsap.min.js'));
   await copyFile(join(process.cwd(),'public/vendor/visual-effects.js'),join(directory,'visual-effects.js'));
-  if(timeline.clips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'||isTransitionClip(clip)))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
+  // Reference timelines render from the same directory, so their runtimes are copied too.
+  const allClips=[timeline,...referenceTimelines].flatMap(source=>source.clips);
+  if(allClips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'))await copyFile(join(process.cwd(),'public/vendor/remotion-runtime.js'),join(directory,'remotion-runtime.js'));
+  if(allClips.some(isTransitionClip))await copyFile(join(process.cwd(),'public/vendor/transitions-runtime.js'),join(directory,'transitions-runtime.js'));
   const scenes = [timeline, ...referenceTimelines].flatMap(source => sceneLayerSources(source));
   if (scenes.length) await copyFile(join(process.cwd(), 'public/vendor', SCENE_RUNTIME_BUNDLES.gsap.file), join(directory, SCENE_RUNTIME_BUNDLES.gsap.file));
   if (scenes.length) await copyFile(join(process.cwd(), 'public/vendor/lucide-icons.json'), join(directory, 'lucide-icons.json'));
@@ -107,7 +110,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){
-  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js',...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle=>bundle.file),'lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
+  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','remotion-runtime.js','transitions-runtime.js',...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle=>bundle.file),'lucide-icons.json',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
     try{await access(join(root,name));}catch{continue;}
     await link(join(root,name),join(directory,name));
   }
@@ -146,7 +149,7 @@ export async function writeComposition(directory:string,timeline:Timeline,assets
   // so it mixed an extra unity-gain, 1x copy of each source's first audible clip.
   // Author media in that same form so every clip's sound is mixed exactly once.
   const mediaSrc=(url:string)=>(prefix+url.slice(2)).replace(/^\.\//,'');
-  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{duration,pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',sceneRuntimeUrl:prefix+SCENE_RUNTIME_BUNDLES.gsap.file,fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
+  await writeFile(join(directory,'index.html'),generateComposition(rendered,assets,{duration,pixelTrackFiles:await localPixelTrackFiles(directory),resolution,fps,gsapUrl:prefix+'gsap.min.js',visualEffectsUrl:prefix+'visual-effects.js',remotionRuntimeUrl:prefix+'remotion-runtime.js',transitionsRuntimeUrl:prefix+'transitions-runtime.js',sceneRuntimeUrl:prefix+SCENE_RUNTIME_BUNDLES.gsap.file,fontUrl:prefix+'space-grotesk-latin.woff2',fontUrls:Object.fromEntries(TEXT_FONTS.map(font=>[font.id,prefix+font.fileName])),assetUrls:Object.fromEntries(Object.entries(assetUrls).map(([id,url])=>[id,mediaSrc(url)]))}));
 }
 /** Keep original times/animation phases and source holds for transitions in the window. */
 export function reviewWindowTimeline(timeline:Timeline,start:number,end:number):Timeline {

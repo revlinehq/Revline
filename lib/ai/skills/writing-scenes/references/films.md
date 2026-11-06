@@ -24,6 +24,7 @@ A good film module builds its whole DOM once, keeps each section's motion inside
 - `section(name, start, duration, build)` places a child timeline on the film timeline at `start` and passes it to `build`.
 - Positions inside it are section-local seconds (0 = section start). The runtime throws if a section's moves run past its `duration`.
 - `start` and `duration` are number literals: the engine reads them from the source text.
+- A whip between two sections: the `whip(tl, { out, in, at, direction })` helper (launch-films-motions page `shot-changes`); it may straddle a section's end.
 - Camera elements carry `data-camera` or have "cam" in their selector, variable or id: that is how finish tells the camera, the only element allowed moves over 1 s, from the rest.
 - Keep each section's look in its own call and helpers, so shared edits stay rare.
 
