@@ -12,12 +12,11 @@ description: "The full recreation workflow: section inventories, exact content, 
 - 4. Close out against the inventory
 
 ## Before starting
-- For edits to an existing recreation, start with writing-scenes page `edit-lanes`. The inventory, dense reads, comparisons and close-out below are the recreate lane's full checks, which that lane always runs. A small change made in the edit lane uses its local frame checks instead.
+- For edits to an existing recreation, start with writing-scenes page `edit-lanes`. The inventory, dense reads, comparisons and close-out below are the recreate lane's full checks.
 - The supplied video is the brief. Read launch-films-motions and writing-scenes for implementation. This page owns the recreation workflow.
 - Take the words, UI, brand, timing and motion from the reference; ask only for something the video cannot answer, such as a different format or length.
 - Rebuild graphics, UI and captions as editable layers; retain separately addressable footage where the requested workflow uses it. Do not flatten the remake into playback of the reference.
-- For a new motion film, read launch-films-motions page `ideation`: agree the message, tension and an angle, then build when the user accepts it. During the build, read `image-plates` for real asset needs.
-- For an actual remake, the measured recreation inventory governs the editable reconstruction; image generation is for assets, not replacement reference frames.
+- The measured recreation inventory governs the editable reconstruction. During the build, read `image-plates` for real asset needs; it sets what may be generated from a reference.
 
 ## 1. Map the film, then inventory one section
 
@@ -62,53 +61,43 @@ Write a numbered effect inventory in your reply, with one item per visible chang
 
 ## 3. Build and verify this section before the next
 
-### Build with section markers
-- Use addFilm for one continuous film with section markers. Build the first section as a `section(...)` call, leaving an insertion marker comment for later sections (writing-scenes page `films`).
-- Set builtThrough to that section's film-second end so addFilm checks reads for the implemented part while keeping the full clip duration; extend builtThrough with patchScene for each later section.
-- For corrections, inspectClip with section (marker label or id) or lines {start,end} returns short exact blocks with absolute line numbers.
-- Use patchScene with that section and small find/replace edits, or edits [{lines:{start,end},replace}] without quoting old code; pass expectedRevision from the read.
-- Line edits share one inspected snapshot, must not overlap, and need a new read after saving. A failed find returns nearby numbered lines to copy. Without markers, use whole-scene line ranges.
-- A transition spanning sections belongs on the outer `tl` (shared code); heed shared-code warnings, include affected sections in scope, and verify both sides of the boundary.
+### Build in sections
+- Use addFilm for one continuous film, written one section at a time in parts (writing-scenes page `films`). builtThrough tells addFilm and patchScene how far the motion reads must cover.
+- Correct a section, review its diff and record the fix with its evidence as writing-scenes page `edit-lanes` describes (Scenes and films).
+- A transition spanning sections belongs on the outer `tl` (shared code): include the affected sections in scope and verify both sides of the boundary.
 
 ### Big moves first
 - Match the big moves first: every inventory transition, layer, count, order, onset, duration and camera behavior must match before polishing colors or offsets.
 - Do not close a button on the scene-change frame unless the reference does.
-- Keep connected motion continuous through boundaries.
 
 ### Verify rendered pixels
 - Verify rendered pixels, never code, tween parameters or cue times. An effect scheduled at the right time may remain invisible behind a threshold or mask.
 - Find its first visible rendered frame and compare it with the reference, then its pace, peak and disappearance.
 
 ### compareReference on every transition
-- Run compareReference with start, end and fps 15 across every transition window, including padding before onset and after settle.
+- Run compareReference with start, end and fps 15 across every transition window.
 - Split long windows into adjoining calls and inspect every returned pair. Sparse times are only for steady stretches.
 - Crop a small effect or detail and score that region on its own; a quiet background can hide a missing click or wrong pixel thickness in a whole-frame score.
-- Scores rank differences, they do not certify a match, even at a low percentage.
 
 ### motionMap on the build
 - Run motionMap with assetId plus timelineStart on every window of up to 12 s: done means zero motion differences on the current revision.
-- Fix each listed difference with patchScene and recheck, or mark its window off with motionMap off:{time,reason} (for example, motion inside ThreeLayer that tracking cannot measure); off never means matched.
+- Fix each listed difference with patchScene and recheck, or mark its window off (Refused or failing checks).
 - Inspect uncertain layers with trackReference and cropped comparisons; still-frame scores alone never certify motion.
 
 ### Refused or failing checks
 - If a render or compare is refused (job limit, timeout), wait about 30 s and retry its exact nextAction.
 - A refused check is not a pass: never mark a section done or end the recreation because checks could not run.
-- After 2 motionMap failures, or for an unmeasurable effect, use motionMap with the same assetId/start/end and off:{time,reason}; carry that timed reason into close-out.
-
-### Code review and fix records
-- Find code with inspectClip search: {query: "text"} (regex: true for a per-line pattern), then read its numbered lines before patching with expectedRevision.
-- Use diffScene with fromRevision and toRevision from listRevisions to review saved code changes.
-- After checking the rendered saved revision, attach what changed and the actual verification evidence with recordFix (clipId, revision, summary, verification); later turns read it in listRevisions.
+- After 2 motionMap failures, or for an unmeasurable effect, mark that window off with motionMap off:{time,reason} and carry the timed reason into close-out. Off never means matched.
 
 ## 4. Close out against the inventory
 
 ### Whole-film comparison
 - Run compareReference with start/end/fps 10 in adjoining windows across the whole film (up to 60 samples per call, about 6 s at 10 fps); it renders the clone beside the reference frame for frame.
 - Write down in plain words what still differs in rhythm, smoothness, entrances and exits, and fix it with patchScene.
-- Mark every numbered inventory item matched by rendered evidence or off with its time and reason, including every off item in the motionMap reports; off never means matched.
+- Mark every numbered inventory item matched by rendered evidence or off with its time and reason, including every off item in the motionMap reports.
 - Compare the final rendered output on the saved revision against the source, including dimensions, duration, cut and caption timing, and changed motion windows.
 - Report what remains approximate, substituted fonts/assets, unverified intervals and the actual comparison results; claim only the agreement the evidence supports.
-- Recheck all section boundaries and motionMap windows after the final edits, then call finish, which also checks the code limits; a still-frame score never certifies motion.
+- Recheck all section boundaries and motionMap windows after the final edits, then call finish.
 
 ### Sound
 - Match music with matchMusic using the reference's tempo and main inventory moments.

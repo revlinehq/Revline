@@ -10,9 +10,15 @@ A good edit changes only the requested range, keeps everything around it in sync
 1. Pick the checks for this edit from Rules, Which checks.
 2. Read only the affected range: the transcript window for footage and captions, the affected section for a film.
 3. Make the edit in as few calls as possible (Rules, Footage and captions or Scenes and films).
-4. Verify at each changed moment, then report what was sampled.
+4. Verify at each changed moment, then report what was sampled and anything that had to move.
 
 ## Rules
+
+### Direction and feedback
+- **Exact direction from the user:** do exactly that. Never override the user.
+- **Approved work is off-limits:** change it only when the user names it. When the user approves a section, mark it with approveClip.
+- **Feedback on one part:** change only that part. Every other section, clip, title, timing, move, color and sound stays exactly as it was.
+- Never "improve" what was not asked about. If a change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
 
 ### Which checks
 - A final export or publish request, or an explicit request to double-check everything, runs the lane's full checks. The server decides that from the request.
@@ -31,10 +37,8 @@ A good edit changes only the requested range, keeps everything around it in sync
 - Reuse loaded skills and project context.
 
 ### Footage and captions
-- Read only the transcript around the affected source range, with inspectAssetAnalysis start/end or batched windows.
-- Batch retained ranges per affected clip with retainSourceRanges, isolating local speech before cleanup.
+- Transcript reads and speech cuts follow footage-editing page `speech`.
 - Ripple the actually removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material, then batch moveClips by the shared time delta.
-- Preserve unrelated speech and styling.
 - Verify with inspectTimeline: the new duration meets the target, with no gaps or orphaned captions.
 
 ### Scenes and films

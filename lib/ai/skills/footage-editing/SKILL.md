@@ -35,6 +35,18 @@ A good footage edit keeps every retained word intact and in sync, removes only w
 - When a cut boundary is uncertain, keep the footage rather than spending the run rechecking every boundary.
 - For rough-cut cleanup plus captions, make the core cuts and add the captions before any optional repeated visual checks.
 
+## Example
+"Cut the pauses and add captions" on a 3-minute talking head, outside the clip lane:
+
+```
+inspectTimeline                         → clip v1, no approved work
+cleanSpeech { clipId: "v1" }            → speechCleanup summary from the saved transcript
+addSubtitlesFromTranscript { assetId }  → minimal captions, no background
+inspectTimeline                         → duration, no gaps, captions in sync
+```
+
+Reply: "Removed 74 pauses and 3 filler words, 12.4 s, and added captions."
+
 ## Pages
 - speech: transcript reading, speech cuts and cleanup, J/L cuts, and when to look at the picture.
 - text-styling: caption and title defaults, styling tools, placement, and the full text catalog.

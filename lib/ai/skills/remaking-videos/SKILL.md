@@ -2,7 +2,7 @@
 name: "remaking-videos"
 description: "Remakes a video the user shares, or borrows parts of it (a transition, a title style, the pacing, the look) for the user's own edit. Read before analyzing a reference, before a remake, and before borrowing any part of one; recreating a launch or motion film also needs launch-films-motions."
 ---
-# Reference footage
+# Remaking videos
 
 The user shares a finished video and wants either a **remake** (the same edit made with their own material) or a **style borrow** (one or more parts of it applied to their edit). A good result starts with a short, concrete breakdown by shot id, uses measured numbers exactly, and checks every model reading in frames before it decides the build.
 
@@ -39,6 +39,20 @@ For original work inspired by a reference, follow launch-films-motions "A style 
 - When the remake needs material the project does not have, list it per shot and ask before building (for example "S1 to S3: a slow establishing shot. S4: fast action on the drop").
 - Measured numbers (shot lengths, cut times, beats, onBeatRatio) are exact.
 - Transition kinds, camera moves and title styles are the model's reading. When one decides the result, or is unclear in the breakdown, check it with readFrames fps 10 on the reference around that shot's time before building.
+
+## Example
+A user shares a 14 s car edit and says "make this with my clips". The reply:
+
+> Car edit, 14.2 s, 9 shots, median shot 1.4 s, cuts on the beat at 128 bpm.
+> - S1 (0 to 2.8 s): hard cut in. Slow establishing pan over the car, no title.
+> - S2 to S6 (2.8 to 8.1 s): detail shots, two beats each, white flash on every cut.
+> - S7 (8.1 to 10.4 s): whip right in. Speed ramp into the drop, shake on the hit.
+> - S8 and S9 (10.4 to 14.2 s): slow push in, bold uppercase title "NIGHT RUN" pops in.
+> - Signatures: T1 white flash on the downbeat; T2 speed ramp into the hit.
+>
+> You can click shots and parts in the card to add them to your next message. S7 needs fast action for the drop; your clips have none, can you add one?
+
+The request already says remake, so nothing else is asked; page `social-edit` is loaded for the build.
 
 ## Pages
 - `recreation`: the full motion-film recreation workflow: inventories, exact content, per-layer camera, rendered comparisons, close-out.

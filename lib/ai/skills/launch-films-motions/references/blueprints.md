@@ -1,13 +1,13 @@
 ---
 name: "blueprints"
-description: "Rebuilds a product screenshot as a pixel-perfect blueprint (live HTML with named parts), scores it against the screenshot, saves it to the brand kit and mounts it in a film. Read when a film shows the user's product UI and the kit has no blueprint for that screen."
+description: "Rebuilds a product screenshot as a pixel-perfect blueprint (live HTML with named parts), scores it against the screenshot, saves it to the brand kit and mounts it in a film. Read when a film shows the user's product UI: it decides per shot between the screenshot and a blueprint, and builds a blueprint when the kit has none for that screen."
 ---
 # Blueprints: screenshot to pixel-perfect HTML
 
 A good blueprint is a kit screen rebuilt as a responsive scene module: every piece (header, sidebar, composer, tab, button) is HTML with a `data-part` name, measured from the screen's pixels and scoring 95%+ against it. Once saved in the kit, every film for that brand can mount it.
 
 ## Workflow
-1. **Check first.** listBlueprints. If the kit has one for that screen, use it and skip to step 8.
+1. **Choose per shot** between the screenshot and a blueprint (Rules). For a blueprint, check listBlueprints first. If the kit has one for that screen, use it and skip to step 8.
 2. **Source.** Use an untouched capture from the kit (getBrandKit screens). If the only capture is edited, ask for a new one: painting over a badge or cursor also erases what was under it.
 3. **Measure** with measureScreen: a row across the header, a column down the sidebar, both axes through each button. Read every box's width, height and corner radius, and build at the screen's size from those pixels.
 4. **Icons.** Match a few icons by shape to Lucide names and use `icon(...)`. Brand logos and app icons come from findIcon; other icons Lucide lacks from findIcon style ui. Draw an SVG only for what neither has.
@@ -17,6 +17,7 @@ A good blueprint is a kit screen rebuilt as a responsive scene module: every pie
 8. **Mount** it in the film (Example below).
 
 ## Rules
+- **Screenshot or blueprint, per shot:** when the whole UI moves or holds, use the screenshot (`media.<screen>`). When something inside the UI moves, zooms past 2× or changes text, use the kit's blueprint.
 - Fonts and the logo come from the kit; colors and positions come from the screen. Never type a size, color or radius by eye.
 - Snap a measured color to the kit's palette only when they are nearly identical.
 - Lay the UI out responsively: fixed parts keep their measured size (a sidebar 400 px wide, a header 56 px tall), stretching regions take the rest, right-hand items anchor right, centered things stay centered.

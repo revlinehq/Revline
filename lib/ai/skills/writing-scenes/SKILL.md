@@ -2,7 +2,7 @@
 name: "writing-scenes"
 description: "Defines the plain HTML + GSAP module contract that scene clips and films share: the scene() arguments, what loads, fonts, images, project media and limits. Read before the first addFilm, addScene or editScene, together with launch-films-motions for how a film should look and move."
 ---
-# Scene engine
+# Writing scenes
 
 A scene is a plain TypeScript module that builds HTML once and choreographs it on a GSAP timeline. It renders full-frame on its own V layer, inside a sandbox, frame by frame for preview and export; transparent areas show the layers below.
 
@@ -13,7 +13,7 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 2. **Read the brief** with readBrief and follow it. Save lasting direction with updateBrief.
 3. **Plan** a short outline: a few lines per section with its time range, what moves and the words.
 4. **Write** the code directly in the addFilm or addScene call (Rules, Writing).
-5. **Check** the rendered frames as launch-films-motions "Before handing back" lists, then call finish: it runs the timing and limit checks on the saved code.
+5. **Check** the rendered frames as launch-films-motions "Before handing back" lists, then call finish.
 
 ## Rules
 
@@ -21,7 +21,6 @@ A good scene follows the contract below exactly, so preview, scrubbing and expor
 - Never draft scene code while thinking. A turn has one output budget for thinking and the call together, and a long draft in thinking leaves nothing for the scene.
 - A film: addFilm, as page `films` describes.
 - A standalone scene (title card, overlay): addScene, one at a time, checking each before writing the next. If several are simple and independent, addScenes saves them together.
-- Keep each module well under the code limit.
 
 ### Contract
 - Write `export default function scene({ root, tl, gsap, width, height, duration, fps, brand, media, icon, blueprint, section })`. It runs once, before the first frame.

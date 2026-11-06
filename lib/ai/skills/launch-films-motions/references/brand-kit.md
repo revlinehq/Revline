@@ -6,8 +6,6 @@ description: "Finds, creates and confirms the user's brand kit (fonts, colors, l
 
 A good kit is confirmed by the user: the right fonts by role, the main colors, the logo, and (only when needed) a confirmed product text and saved product screens. Films attach it with `brandKitId` and receive it as `brand`.
 
-A recreation takes its brand from the reference's own frames, with no kit and no questions.
-
 ## Workflow
 1. **Check first.** listBrandKits.
    - One kit clearly fits: ask "Use the <name> brand kit for this film?" and wait.

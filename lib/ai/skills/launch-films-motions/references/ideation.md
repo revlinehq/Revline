@@ -26,7 +26,7 @@ A good ideation round is one message from the agent: what is already known, at m
 ### Message and claims
 - Bad message: "Make the video you imagined without juggling tools."
 - Good message, if the user confirmed that claim: "Editing software hasn't changed in 7 years. Revline is the first thing that feels different."
-- Check numbers and product claims against readBrief, or ask once. Promise only product behaviour the user stated or confirmed.
+- Numbers and product claims follow launch-films-motions, Never speculate: check them against readBrief, or ask once.
 
 ### Metaphors
 - Develop the meaning under a metaphor, not the metaphor itself.
