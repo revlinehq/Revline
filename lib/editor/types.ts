@@ -237,7 +237,8 @@ export type Clip = {
   approval?: ClipApproval;
   approvedSections?: ApprovedSection[];
 };
-export type TimelineMarker = { id: string; time: number; label?: string };
+/** `kind: 'section'` marks a film section's start; every other marker is a cue (placed by hand or measured from music). */
+export type TimelineMarker = { id: string; time: number; label?: string; kind?: 'section' };
 export type Timeline = { audioNormalization?: NonNullable<Clip['normalizedAudio']>; clips: Clip[]; fps: number; aspectRatio: AspectRatio; tracks?: TrackCounts; markers?: TimelineMarker[]; luts?: TimelineLut[] };
 export type AudioWaveform = { peaks: string; samplesPerSecond: number };
 export type MediaAsset = {
