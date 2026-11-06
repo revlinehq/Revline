@@ -1,3 +1,6 @@
+## 2026-11-06
+- Editor (development builds): a pencil on the preview toolbar sketches over the rendered frame; Send to chat attaches frame plus strokes as one PNG with "Sketch at m:ss.s" in the prompt, and the editor agent now receives attached images as image parts. Why: the user wanted to show the agent what to change by drawing on the video.
+
 ## 2026-11-05
 - Frame checks: finish, the changed-frame queue and getFrames now share one last-frame rule (duration − 1/fps), and a rendered frame clears any pending time it was clamped to. Why: an agent report showed a 16.6 s film stuck on pending [16.6] that getFrames always drew at 16.5833.
 - Clipping layouts: applyLayout gains "mirror-blur": a wide clip stays sharp at full width and blurred, darkened, muted mirrored copies fill above and below; clips gain a vertical/horizontal flip, and large soft blurs render in several passes without the dot grid. Why: the user asked for a mirror blur fill sibling of the split-screen preset.
