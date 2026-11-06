@@ -1,8 +1,12 @@
 /** Shared by tool registration, execution, MCP and chat presentation. */
+import { BACKGROUND_PREVIEW_URI } from '../editor/background-preview';
+
 export type ToolBehavior = {
   mcp: 'read' | 'exclusive' | 'hidden';
   /** Chat progress text while the tool runs and once it finished; unlabeled tools use a generic line. */
   label?: readonly [running: string, done: string];
+  /** MCP App view (a ui:// resource) that MCP clients render inline for this tool's result. */
+  ui?: string;
 } & (
   | { effect: 'read' | 'analysis' | 'timeline'; writes?: never }
   | { effect: 'resource' | 'job'; writes: readonly [string, ...string[]] }
@@ -95,6 +99,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   checkSound: { effect: 'read', mcp: 'read' },
   askUser: { effect: 'read', mcp: 'hidden', label: ['Asking you', 'Asked you'] },
   askBrandKit: { effect: 'read', mcp: 'hidden', label: ['Asking which brand', 'Asked which brand'] },
+  previewBackgrounds: { effect: 'read', mcp: 'read', label: ['Previewing backgrounds', 'Previewed backgrounds'], ui: BACKGROUND_PREVIEW_URI },
   measureScreen: { effect: 'read', mcp: 'read', label: ['Measuring screen', 'Measured screen'] },
   compareScreen: { effect: 'read', mcp: 'read', label: ['Comparing with screen', 'Compared with screen'] },
   readFrames: { effect: 'read', mcp: 'read', label: ['Reading frames', 'Read frames'] },
