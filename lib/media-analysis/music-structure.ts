@@ -144,7 +144,7 @@ function findWindows(bars: MusicBar[], sections: MusicSection[], moments: MusicM
       return {
         target, start: first.start, end: last.end, seconds: roundTo(last.end - first.start, 3), bars: `${first.bar}-${last.bar}`, score: roundTo(score, 2),
         opensOn: opening ? `moment ${opening.rank} (bar ${opening.bar})` : section ? `start of a ${section.kind} section` : `bar ${first.bar}`,
-        endsOn: endsOnSection ? `the end of a section at ${clock(last.end)}` : phraseEnd ? `the end of a ${count}-bar phrase` : `bar ${last.bar} (${count} bars, not a whole phrase)`,
+        endsOn: endsOnSection ? `the end of a section at ${clock(last.end)}` : phraseEnd ? `the end of its ${count}-bar phrase` : `bar ${last.bar} (${count} bars, not a whole phrase)`,
       };
     }).sort((a, b) => b.score - a.score);
     const kept: MusicWindow[] = [];
