@@ -1,5 +1,6 @@
 ## 2026-11-06
 - MCP: new copyMedia tool copies media between the caller's own projects (same owner only; shares files and saved analysis). Why: a film agent had no way to reuse another project's media and impersonated the founder to get it.
+- Agent rules: AGENTS.md and MCP instructions forbid running Convex functions as a user; .claude/settings.json denies `convex run` with `--identity`, `ownerId` or `mcpActions:callTool`. Why: the same incident used `npx convex run … --identity`.
 
 ## 2026-11-05
 - Frame checks: finish, the changed-frame queue and getFrames now share one last-frame rule (duration − 1/fps), and a rendered frame clears any pending time it was clamped to. Why: an agent report showed a 16.6 s film stuck on pending [16.6] that getFrames always drew at 16.5833.

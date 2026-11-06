@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Bash(*convex* run *--identity*)",
+      "Bash(*convex* run *mcpActions:callTool*)",
+      "Bash(*convex* run *ownerId*)"
+    ]
+  }
+}

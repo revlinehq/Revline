@@ -12,6 +12,10 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 Never create test files, mocks, fixtures, smoke scripts or any other test-only code. The project intentionally has no test suite. Verify changes with `npm run typecheck`, `npm run build`, and direct runtime or UI inspection.
 
+## Acting as a user
+
+Agents never run Convex functions as a user to get around the MCP tools: no `npx convex run … --identity`, and no calling user-scoped or internal functions (such as `mcpActions:callTool`) with someone's `ownerId` or `subject`. Work only through the MCP tools, which check owner and task; when a tool you need is missing, report it with `reportIssue` and stop.
+
 ## UI components
 
 Build every new UI component from shadcn (`components/ui/`): tabs, segments, dialogs, buttons, inputs, selects. Add a missing primitive with the shadcn CLI rather than hand-rolling one. Any prompt or chat input uses the main `EditComposer` (`components/workspace/edit-composer.tsx`), never a new composer. Dark surfaces use neutral greys such as `#2a2a2a`, never blue-tinted ones like `#1D202A`. No focus outlines or rings; hover states mark what is interactive.
@@ -50,8 +54,7 @@ After the user approves a merge, deploy every completed Convex change to its int
 ## Motion films from a coding session
 
 When building or copying a motion film from here (scene code pushed to a Revline project):
-- Read the editor agent's skills first, the same ones Revline's own agent follows: `launch-films-motions`, `gsap` (its `revline` page first), `writing-scenes` (pages `films` and `edit-lanes`) and, when copying a video, `remaking-videos`. Load them with `readSkill` on the development deployment, which returns the text with live values filled in (allowed fonts, plugins, limits); the files in `lib/ai/skills/` hold template placeholders for those:
-  `npx convex run mcpActions:callTool '{"ownerId":"<your dev owner id>","agentName":"Claude Code","name":"readSkill","arguments":{"projectId":"<a dev project id>","name":"writing-scenes","page":"films"}}'`
+- Read the editor agent's skills first, the same ones Revline's own agent follows: `launch-films-motions`, `gsap` (its `revline` page first), `writing-scenes` (pages `films` and `edit-lanes`) and, when copying a video, `remaking-videos`. Load them with the `readSkill` tool of the worktree's `revline-local` MCP server (after `startTask` on your dev project), which returns the text with live values filled in (allowed fonts, plugins, limits); the files in `lib/ai/skills/` hold template placeholders for those.
 - Work on the development deployment, and pass the timeline tab explicitly instead of switching the project's open tab; other sessions may be editing another tab of the same project.
 - Measure at full resolution, never from downscaled contact sheets.
 - For device mockups, logos and other reusable assets, check the asset-library skill first and record each asset's license before searching the web.

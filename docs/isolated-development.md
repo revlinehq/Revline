@@ -28,7 +28,7 @@ command: node
 args: [<absolute-worktree-path>/scripts/isolated-mcp.mjs]
 ```
 
-That transport reads its personal MCP token from its own backend in memory and forwards the real MCP protocol, including images and long-running media calls. It never changes the global connector. Existing agent sessions connected to shared `revline-local` must use this transport in a new session or run `mcpActions:callTool` through the worktree's scoped Convex CLI. Always pass the printed project and timeline IDs explicitly.
+That transport reads its personal MCP token from its own backend in memory and forwards the real MCP protocol, including images and long-running media calls. It never changes the global connector. Existing agent sessions connected to shared `revline-local` must use this transport in a new session. Never drive tools with `npx convex run mcpActions:callTool` or `--identity`: that acts as a user without the MCP's owner and task checks. Always pass the printed project and timeline IDs explicitly.
 
 `npx convex dev --once` now targets the scoped backend. The npm postinstall hook installs a local CLI guard: branch worktrees need valid isolation state and a matching dev key before pushing; deployment override flags are refused. `npm run dev` also refuses an unconfigured worktree. This is an accidental-deploy guard around the installed CLI, not an access-control boundary against someone deliberately bypassing it with another binary or editing credentials.
 
