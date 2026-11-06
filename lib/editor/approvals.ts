@@ -1,4 +1,5 @@
 import { equalTimelineValue } from './timeline-equality';
+import { sectionMarkersIn } from './timeline-markers';
 import type { ApprovedSection, Clip, ClipApproval, Timeline } from './types';
 
 /**
@@ -30,11 +31,11 @@ export function approveClip(timeline: Timeline, clipId: string, note: string | u
 
 /** The film seconds a marker's section covers: from the marker to the next marker inside the film, or the film's end. */
 export function markerSection(timeline: Timeline, clip: Clip, markerId: string) {
-  const markers = [...(timeline.markers ?? [])].sort((a, b) => a.time - b.time), marker = markers.find(item => item.id === markerId);
+  const marker = timeline.markers?.find(item => item.id === markerId);
   if (!marker) throw new Error('Marker not found. Read the markers with inspectTimeline.');
   const end = clip.start + clip.duration;
   if (marker.time < clip.start - EPSILON || marker.time >= end - EPSILON) throw new Error(`Marker "${marker.label || marker.id}" is not inside this clip (${round(clip.start)} to ${round(end)}s).`);
-  const next = markers.find(item => item.time > marker.time + EPSILON && item.time < end - EPSILON);
+  const next = sectionMarkersIn(timeline, clip).find(item => item.time > marker.time + EPSILON && item.time < end - EPSILON);
   return { start: marker.time, end: next?.time ?? end, label: marker.label };
 }
 

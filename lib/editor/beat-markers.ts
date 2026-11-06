@@ -58,7 +58,8 @@ export function addBeatMarkers(timeline: Timeline, clipId: string, analysis: Bea
   frames.sort((a, b) => a - b);
 
   const existing = timeline.markers ?? [];
-  const occupied = new Set(existing.map(marker => Math.round(marker.time * timeline.fps)));
+  // Beats skip frames near other cues only; a beat may land on a film section's start.
+  const occupied = new Set(existing.filter(marker => marker.kind !== 'section').map(marker => Math.round(marker.time * timeline.fps)));
   const ids = new Set(existing.map(marker => marker.id));
   const labels = new Set(existing.map(marker => marker.label));
   const added: TimelineMarker[] = [];

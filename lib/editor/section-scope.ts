@@ -1,5 +1,6 @@
 import type { Clip, Timeline } from './types';
 import { declarations, filmSections, filmTimeAt, markerSection, reach, rootName, type FilmSection } from './approvals';
+import { sectionMarkersIn } from './timeline-markers';
 
 /**
  * Scoped edits: a change to a film names the part the user asked about (a section marker or a film range), and
@@ -31,7 +32,8 @@ export function resolveScope(timeline: Timeline, clip: Clip, scope: ScopeInput |
       return { start: item.start, end: item.end };
     }
     const wanted = item.trim().toLowerCase(), markers = timeline.markers ?? [];
-    const marker = markers.find(entry => entry.id === item) ?? markers.find(entry => entry.label?.trim().toLowerCase() === wanted);
+    const named = (list: typeof markers) => list.find(entry => entry.label?.trim().toLowerCase() === wanted);
+    const marker = markers.find(entry => entry.id === item) ?? named(sectionMarkersIn(timeline, clip)) ?? named(markers);
     if (!marker) throw new Error(`No section marker "${item}". Markers on this timeline: ${markers.map(entry => `"${entry.label || entry.id}" at ${round(entry.time)}s`).join(', ') || 'none'}. Pass one of them, or a {start, end} film range.`);
     const section = markerSection(timeline, clip, marker.id);
     return { start: round(filmTimeAt(clip, section.start)), end: round(filmTimeAt(clip, section.end)), ...(section.label ? { label: section.label } : {}) };

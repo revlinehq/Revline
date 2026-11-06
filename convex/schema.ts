@@ -125,7 +125,7 @@ export const clipValidator = v.object({
   approval:v.optional(clipApprovalValidator),
   approvedSections:v.optional(v.array(v.object({...clipApprovalValidator.fields,id:v.string(),start:v.number(),end:v.number(),label:v.optional(v.string())}))),
 });
-export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()) });
+export const timelineMarkerValidator = v.object({ id: v.string(), time: v.number(), label: v.optional(v.string()), kind: v.optional(v.literal('section')) });
 // Legacy: timelines saved while sections existed may still hold them; saving drops them.
 const timelineSectionValidator = v.object({ id: v.string(), name: v.string(), start: v.number(), end: v.number() });
 export const timelineValidator = v.object({ audioNormalization:v.optional(v.object({assetId:v.string(),key:v.string(),targetLufs:v.number(),truePeak:v.number(),offset:v.optional(v.number()),outputLufs:v.optional(v.number()),measuredTruePeak:v.optional(v.number())})), clips: v.array(clipValidator), fps: v.number(), aspectRatio, tracks: v.optional(v.object({ visual: v.number(), overlay: v.number(), audio: v.number(), effects: v.optional(v.number()) })), markers: v.optional(v.array(timelineMarkerValidator)), sections: v.optional(v.array(timelineSectionValidator)), luts: v.optional(v.array(v.object({ id: v.string(), name: v.string(), size: v.number(), data: v.string() }))) });
