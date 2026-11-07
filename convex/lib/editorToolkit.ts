@@ -2302,7 +2302,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const clip = baseClip(editSession.timeline, layers[0], input.clipId);
       if (clip.assetId !== layers[0].sourceAssetId) throw new Error(`Clip ${clip.id} already shows a clean plate. Undo that removeObject and remove every subject in one call (layerIds).`);
       // Refuse before rendering: the render may be paid.
-      if ((await genesisStack(clip.id)).clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips stacked on it, and they copy the original footage, so the subject would show through. undoLatestEdit those, run removeObject first, then apply them again.`);
+      if ((await genesisStack(clip.id)).functions.some(fn => fn !== 'replaceSurface')) throw new Error(`Clip ${clip.id} already has Genesis clips stacked on it, and they copy the original footage, so the subject would show through. undoLatestEdit those, run removeObject first, then apply them again.`);
       const range = plateRange(layers, clip);
       const render = await genesisRender({ op: 'cleanPlate', sourceAssetId: layers[0].sourceAssetId, layerIds: layers.map(layer => layer.layerId), start: range.start, end: range.end, fps: range.fps, params: { dilate: input.dilate ?? .012, fallback: input.fallback ?? 'bria' } });
       if (render.status !== 'completed' || !render.outputAssetId) return renderPending('removeObject', render);
@@ -2319,7 +2319,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       for (const other of layers.slice(1)) baseClip(editSession.timeline, other, clip.id);
       if (clip.assetId !== layer.sourceAssetId) throw new Error(`Clip ${clip.id} shows a clean plate already (removeObject). In v1 retimeLayer needs the original footage: undo removeObject first.`);
       const range = plateRange(layers, clip);
-      const timing = retimedSubject(clip, { ...layer, ...range }, input), before = await genesisStack(clip.id);
+      // The subject plays from its own masks; only the real-time plate is limited to what the clip plays.
+      const timing = retimedSubject(clip, { ...layer, start: Math.max(...layers.map(item => item.start)), end: Math.min(...layers.map(item => item.end)) }, input), before = await genesisStack(clip.id);
       if (before.clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips (${before.functions.join(', ')}). In v1 retimeLayer stands alone on its footage, because those clips copy the original subject in real time. undoLatestEdit them first.`);
       // The same clean plate removeObject would build for these layers: one render serves both.
       const render = await genesisRender({ op: 'cleanPlate', sourceAssetId: layer.sourceAssetId, layerIds: layers.map(item => item.layerId), start: range.start, end: range.end, fps: range.fps, params: { dilate: input.dilate ?? .012, fallback: input.fallback ?? 'bria' } });

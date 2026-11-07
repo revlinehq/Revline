@@ -20,4 +20,5 @@
 // 52: SAM 3.1 cut-outs report the subject's box per frame (Genesis layers).
 // 53: those boxes are measured from the mask's opaque pixels, so they always match the cut-out.
 // 54: Genesis renders: clean plates, Bria erase fallback and tracked surface inserts.
-export const MEDIA_PROCESSOR_VERSION = 54;
+// 55: Genesis surface inserts cut occluders out themselves; reports are staged before upload.
+export const MEDIA_PROCESSOR_VERSION = 55;

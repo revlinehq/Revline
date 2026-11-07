@@ -41,7 +41,7 @@ A Revline screenshot on the Mixkit green-screen phone: it follows the phone thro
 ## Measured (November 2026)
 | Shot | Frames | Result | Compositor | Cost |
 |---|---|---|---|---|
-| Mixkit green-screen phone (100070), 1080p24, 5.7 s: camera pans ~200 px, a hand taps, grips and drags the phone out of frame | 137 | 91 tracked (`chroma-key`); 42 lost after the phone left, 4 during the fast drag | 23–32 s | **$0** |
+| Mixkit green-screen phone (100070), 1080p24, 5.7 s: camera pans ~200 px, a hand taps, grips and drags the phone out of frame | 137 | 92 tracked (`chroma-key`); 42 lost after the phone left, 3 during the fast drag | 20–32 s | **$0** |
 | Its hand layer (SAM 3.1) | 137 | visible 1.3–3.8 s | 89 s | $0.03 |
 | Same clip, no hand (local check) | 48 | jitter 1.3 px | 4 s | $0 |
 

@@ -5,17 +5,21 @@ import { deriveTrackCounts, normalizeTimeline, trackOf, type Clip, type Timeline
 /** A ready Genesis layer: a transparent cut-out of the SAM 3.1 subject on the source's own clock. */
 export type ReadyLayer = { layerId: string; clipId: string; sourceAssetId: string; outputAssetId: string; start: number; end: number; fps: number;
   /** Clean plates of the source (removeObject): footage showing one still has this layer's clock and framing. */
-  sourceAliases?: string[] };
+  sourceAliases?: { assetId: string; start: number; end: number }[] };
 export type Applied = { timeline: Timeline; baseClipId: string; clipIds: string[]; subjectClipIds: string[] };
 
 /** The footage clip a layer function edits: same source as the layer, inside the masked range. */
 export function baseClip(timeline: Timeline, layer: ReadyLayer, clipId = layer.clipId): Clip {
   const clip = timeline.clips.find(item => item.id === clipId);
   if (!clip) throw new Error(`Clip ${clipId} is not on this timeline. Pass clipId of the footage clip that shows the layer's subject.`);
-  if (clip.kind !== 'video' || !clip.assetId || clip.assetId !== layer.sourceAssetId && !layer.sourceAliases?.includes(clip.assetId)) throw new Error(`Layer ${layer.layerId} was segmented from other footage. Choose a video clip of the same source, or segment this clip.`);
+  const alias = layer.sourceAliases?.find(item => item.assetId === clip.assetId);
+  if (clip.kind !== 'video' || !clip.assetId || clip.assetId !== layer.sourceAssetId && !alias) throw new Error(`Layer ${layer.layerId} was segmented from other footage. Choose a video clip of the same source, or segment this clip.`);
   const frame = 1 / layer.fps;
   if (clip.sourceStart < layer.start - frame || sourceEndOf(clip) > layer.end + frame)
     throw new Error(`Layer ${layer.layerId} masks source ${layer.start.toFixed(2)}–${layer.end.toFixed(2)}s but clip ${clip.id} plays ${clip.sourceStart.toFixed(2)}–${sourceEndOf(clip).toFixed(2)}s. Split the clip at the layer's range, or segment the whole clip.`);
+  // A clean plate holds frames only for the range it was rendered over.
+  if (alias && (clip.sourceStart < alias.start - frame || sourceEndOf(clip) > alias.end + frame))
+    throw new Error(`Clip ${clip.id} shows a clean plate rendered for source ${alias.start.toFixed(2)}–${alias.end.toFixed(2)}s only, but plays ${clip.sourceStart.toFixed(2)}–${sourceEndOf(clip).toFixed(2)}s. undoLatestEdit the removeObject, trim the clip, then remove again.`);
   return clip;
 }
 

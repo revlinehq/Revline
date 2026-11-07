@@ -10,7 +10,7 @@ export type SurfaceParams = { time: number; corners?: [number, number][]; rotate
 
 /** Compositor algorithm version per op. Bump one when its output changes, so finished renders of the old algorithm
  * are not reused. Clean plates can be paid (Bria): bumping that one makes repeated requests pay again. */
-export const COMPOSITOR_VERSION = { cleanPlate: 1, surface: 6 } as const;
+export const COMPOSITOR_VERSION = { cleanPlate: 1, surface: 7 } as const;
 
 /** One identity per distinct request: the same op, footage, layers, insert, range and parameters reuse one render. */
 export function renderKey(input: { op: 'cleanPlate' | 'surface'; sourceAssetId: string; layerIds: string[]; seedLayerId?: string; insertAssetId?: string; start: number; end: number; fps: number; params: unknown }) {

@@ -18,7 +18,8 @@ export function applyRemoveObject(timeline: Timeline, layers: ReadyLayer[], exis
   const clip = baseClip(timeline, layers[0], clipId ?? layers[0].clipId);
   for (const layer of layers.slice(1)) baseClip(timeline, layer, clip.id);
   if (clip.assetId !== layers[0].sourceAssetId) throw new Error(`Clip ${clip.id} already shows a clean plate. Undo that removeObject and remove every subject in one call (layerIds).`);
-  if (existing.clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips stacked on it, and they copy the original footage, so the subject would show through. undoLatestEdit those, run removeObject first, then apply them again.`);
+  // A replaceSurface insert is its own image, not a copy of the footage: it stays valid over the clean plate.
+  if (existing.functions?.some(fn => fn !== 'replaceSurface')) throw new Error(`Clip ${clip.id} already has Genesis clips stacked on it, and they copy the original footage, so the subject would show through. undoLatestEdit those, run removeObject first, then apply them again.`);
   const next = { ...timeline, clips: timeline.clips.map(item => item.id === clip.id ? { ...item, assetId: plateAssetId } : item) };
   return { timeline: next, baseClipId: clip.id, clipIds: [clip.id], subjectClipIds: [] };
 }

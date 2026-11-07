@@ -99,7 +99,7 @@ export const layerForRun = internalQuery({
 /** A ready layer for a layer function, or a clear refusal while it is processing or failed. */
 export const readyForRun = internalQuery({
   args: { ...runArgs, layerId: v.string() },
-  returns: v.object({ layerId: v.string(), clipId: v.string(), sourceAssetId: v.string(), outputAssetId: v.string(), start: v.number(), end: v.number(), fps: v.number(), sourceAliases: v.array(v.string()) }),
+  returns: v.object({ layerId: v.string(), clipId: v.string(), sourceAssetId: v.string(), outputAssetId: v.string(), start: v.number(), end: v.number(), fps: v.number(), sourceAliases: v.array(v.object({ assetId: v.string(), start: v.number(), end: v.number() })) }),
   handler: async (ctx, args) => {
     await requireMcpRun(ctx, args, false);
     const layer = await ownedLayer(ctx, args, args.layerId), cutout = await ctx.db.get(layer.cutoutId), status = layerStatus(cutout);
@@ -109,7 +109,7 @@ export const readyForRun = internalQuery({
     // A plate that removed this layer's own subject is no footage for it: its cut-out would put the subject back.
     const plates = (await ctx.db.query('genesisRenders').withIndex('by_project_source', q => q.eq('projectId', args.projectId).eq('sourceAssetId', layer.sourceAssetId)).order('desc').take(100))
       .filter(row => row.ownerId === args.ownerId && row.op === 'cleanPlate' && row.status === 'completed' && row.outputAssetId && !row.layerIds.includes(layer._id));
-    return { layerId: layer._id, clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, outputAssetId: cutout!.outputAssetId!, start: layer.start, end: layer.end, fps: layer.fps, sourceAliases: plates.map(row => row.outputAssetId!) };
+    return { layerId: layer._id, clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, outputAssetId: cutout!.outputAssetId!, start: layer.start, end: layer.end, fps: layer.fps, sourceAliases: plates.map(row => ({ assetId: row.outputAssetId!, start: row.start, end: row.end })) };
   },
 });
 

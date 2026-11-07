@@ -375,7 +375,8 @@ def track_keyed(hsvs, occluders, quad, seed, count, ks, key, fps):
                 shift = np.float32([[1, 0, a['m10']/a['m00']-b['m10']/b['m00']], [0, 1, a['m01']/a['m00']-b['m01']/b['m00']], [0, 0, 1]])
                 guess = (shift @ previous).astype(np.float32)
             image = cv2.GaussianBlur(found, (0, 0), 3).astype(np.float32)/255
-            mask = cv2.bitwise_and(support, cv2.bitwise_not(cv2.warpPerspective(occ, np.linalg.inv(guess), (sw, sh), flags=cv2.INTER_NEAREST)))
+            # ECC's mask marks valid pixels of the input (current) frame: the surface's footprint moved by the guess, minus occluders.
+            mask = cv2.bitwise_and(cv2.warpPerspective(support, guess, (sw, sh), flags=cv2.INTER_NEAREST), cv2.bitwise_not(occ))
             try:
                 score, warp = cv2.findTransformECC(template, image, guess.copy(), cv2.MOTION_HOMOGRAPHY, criteria, mask, 5)
             except cv2.error:
@@ -553,7 +554,7 @@ def render_surface(request, quad, homographies, stops, grays, occluders, lumas, 
             smoothed.append(None)
             continue
         # Only jitter is smoothed: neighbours more than 3 px away (fast motion) would make the insert lag.
-        window = [(weight, corners[index+offset]) for offset, weight in ((-1, 1), (0, 2), (1, 1)) if 0 <= index+offset < count and corners[index+offset] is not None and np.max(np.linalg.norm(corners[index+offset]-corners[index], axis=1)) < 3/scale]
+        window = [(weight, corners[index+offset]) for offset, weight in ((-1, 1), (0, 2), (1, 1)) if 0 <= index+offset < count and corners[index+offset] is not None and np.max(np.linalg.norm(corners[index+offset]-corners[index], axis=1)) < 3*scale]
         smoothed.append(sum(weight*item for weight, item in window)/sum(weight for weight, _ in window))
     tracked = [index for index in range(count) if smoothed[index] is not None]
     jitter = 0.
@@ -601,13 +602,14 @@ def render_surface(request, quad, homographies, stops, grays, occluders, lumas, 
     # Occluders are cut out of the insert, so the footage's own pixels (a hand) show in front. On a chroma surface,
     # occluder pixels of the key colour are surface: SAM's hand mask can take in the phone it grips.
     cut = bool(request['masks'])
-    footage = Frames(request['source'], start, count, fps, width, height, 'bgr') if cut else None
+    # The footage is only needed to find key-coloured pixels inside occluders, on a chroma surface.
+    footage = Frames(request['source'], start, count, fps, width, height, 'bgr') if cut and key is not None else None
     occluder_masks = [Frames(path, start, count, fps, width, height, 'alpha') for path in request['masks']]
     try:
         for index in range(count):
             image = still if still is not None else insert_frames.read()
             if cut:
-                frame, occluder = footage.read(), combined_mask(occluder_masks, (height, width))
+                frame, occluder = footage.read() if footage is not None else None, combined_mask(occluder_masks, (height, width))
             quad_full = None if smoothed[index] is None else smoothed[index]*full
             if quad_full is None:
                 out.stdin.write(blank.tobytes())
