@@ -244,7 +244,8 @@ export async function segmentVideoSubject(
 
 /** MCP selections: SAM 3.1 on Meta tracks the subject through the whole clip in
  * one request, both directions from the selected frame. Frames where the
- * subject is not visible are empty. Returns a lossless grayscale mask video. */
+ * subject is not visible are empty. Returns a lossless grayscale mask video and,
+ * per frame, the subject's normalized [left, top, right, bottom] box (null where hidden). */
 export async function segmentVideoSubjectSam31(
   clip: string,
   directory: string,
@@ -291,5 +292,13 @@ export async function segmentVideoSubjectSam31(
   if (code.status === "rejected" || code.value !== 0 || written.status === "rejected")
     throw new AnalysisError(`Could not encode the SAM 3.1 mask video${stderr ? `: ${stderr.trim().slice(0, 300)}` : "."}`, 502);
   onProgress(75);
-  return path;
+  const round = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 1e4) / 1e4;
+  const boxes = Array.from({ length: total }, (_, index) => {
+    const records = byFrame.get(index);
+    if (!records?.length) return null;
+    const left = Math.min(...records.map(record => record.bounds.left)), top = Math.min(...records.map(record => record.bounds.top));
+    const right = Math.max(...records.map(record => record.bounds.right)), bottom = Math.max(...records.map(record => record.bounds.bottom));
+    return right > left && bottom > top ? [round(left / size.width), round(top / size.height), round(right / size.width), round(bottom / size.height)] : null;
+  });
+  return { path, boxes };
 }
