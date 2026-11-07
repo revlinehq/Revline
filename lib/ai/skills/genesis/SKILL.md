@@ -1,12 +1,24 @@
 ---
 name: "genesis"
-description: "Genesis masking with Meta SAM 3.1 (MCP only): segment a subject once into a tracked layer, then colour only it, grade, blur, glow or outline it, or put a title behind it. Read before segment, layerEffect or textBehind."
+description: "Genesis (MCP only): Meta SAM 3.1 subject layers and VDA-Small depth passes, reused by every function: colour only a subject, grade, blur, glow, outline, title behind, relight (LightX), portrait blur, focus pull, fog and depth scan. Read before segment, layerEffect, textBehind, depth, depthEffect or relight."
 ---
 # Genesis
 
+Genesis builds on two reusable passes per clip: a SAM 3.1 **layer** per subject (`segment`) and one **depth pass** (`depth`). Every function reads them; neither is ever run twice.
+
+| Want | Pass | Function | Page |
+|---|---|---|---|
+| Colour, grade, blur, glow or outline one subject; title behind it | layer | `layerEffect`, `textBehind` | this page |
+| Change the light (whole frame or one subject) | (layer + depth) | `relight` | **relight** |
+| Portrait blur, focus pull, fog/haze, depth scan | depth (+ layer) | `depthEffect` | **depth** |
+| Fake camera move on a still moment | none | `freezeFrameParallax` (not Genesis) | — |
+
+Read page relight before `relight` and page depth before `depth` or `depthEffect` (`readSkill {name:"genesis", page:"relight"}`).
+
+## Layers
 One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the clip, and the worker saves a per-frame mask (a transparent cut-out on the source clock), a box per frame, `model: sam-3.1` and the cost. Every layer function reuses that layer. The masking is never run again.
 
-## Workflow
+## Layer workflow
 1. `inspectTimeline` → the footage `clipId`. `readFrames` 1–3 stills → pick a frame where the subject is whole and unblocked.
 2. `segment {clipId, prompt, at}` → `layerId`. Prompt, best first:
    - `{box:{left:.38,top:.12,right:.66,bottom:.98}}`: normalized SOURCE coordinates from the still. Most reliable.
@@ -18,7 +30,7 @@ One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the c
 5. `getFrames` at the moment the subject moves fastest, plus one frame either side. Use `resolution:1080` for edges. Check that the edges hug the subject (≤ 3 px halo) and nothing pops. If a batch made only of the clip's last frames fails with `zero_output`, add an earlier time (e.g. `0`) to the same call.
 6. `finish`. It fails until every applied layer is ready, covers its clip, stays in sync and was checked with getFrames after your last edit.
 
-## Functions
+## Layer functions
 | Want | Call |
 |---|---|
 | Colour only the subject, rest black and white | `layerEffect {layerId, effect:"colorOnly"}` (`amount:.7` keeps 30% colour) |
@@ -37,4 +49,5 @@ One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the c
 4. textBehind needs the subject to overlap the letters. For a talking head, use `y:.25–.35` and ≤ 10 characters on one line (fontSize defaults to ~90% of the width).
 5. Masks come from SAM 3.1 alone. If MODEL_API_KEY is missing on the worker, `segment` fails clearly. It never falls back to SAM2. Report it with `reportIssue`.
 6. Fast motion blur and hair give soft edges. If `getFrames` shows a halo above 3 px, use `glow` or `outline` to hide the edge, or choose a different shot.
-7. Not in Genesis yet: selective speed (`retimeLayer`) and tracked image replacement (`replaceSurface`). Do not fake them with masks or generative models. Say they are not available.
+7. Relight and depth effects make a new video asset; `applyJob` points the clip at it, one `undoLatestEdit` restores the original. They stack: apply one, then run the next on the clip that now shows it.
+8. Not in Genesis yet: selective speed (`retimeLayer`) and tracked image replacement (`replaceSurface`). Do not fake them with masks or generative models. Say they are not available.

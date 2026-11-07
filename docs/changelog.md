@@ -1,4 +1,5 @@
 ## 2026-11-07
+- Genesis lane (MCP only): relight (LightX on fal; named moments or an explicit sun, whole frame or one SAM subject with depth falloff, 15 s cap, monthly allowance) and a depth pack (one VDA-Small depth pass reused by portraitBlur, focusPull, fog and depthScan), applied with applyJob as one undoable media swap. Media processor 53. Why: the founder settled relight and depth effects for Genesis in a grilling session.
 - Genesis lane (MCP only): segment makes a reusable SAM 3.1 layer (mask, per-frame boxes, provenance, cost); layerEffect (colorOnly, grade, blur, glow, outline) and textBehind build on it, with finish checks for layer readiness, coverage, sync and frame evidence. Media processor 52. Why: the user wants Meta SAM 3.1 masking as one combined feature, like Clip.
 - Media worker: MCP clients' selected-subject masks (freezeFrameParallax, removeBackground) and trackPoints noun seeds use SAM 3.1 directly on Meta's Model API (worker `MODEL_API_KEY`, no SAM2 fallback); Revline's in-app agent keeps fal SAM2 / Florence-2. Why: the user wants SAM 3.1 from Meta, offered over MCP only for now.
 

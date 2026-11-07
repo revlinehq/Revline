@@ -15,7 +15,7 @@ import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../l
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
-import type { GenesisLayerEvidence, LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
+import type { GenesisJobEvidence, GenesisLayerEvidence, LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
 import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import { motionReport, motionTimelineKey } from '../../lib/ai/motion-coverage';
 export type FinishResult = NonNullable<LaneTask['result']>;
@@ -80,7 +80,7 @@ export async function finishLane(
   const initialKey = await checkKey(task.evidence);
   if (initialKey && task.result?.checkKey === initialKey && !task.result.passed)
     return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
-  let genesisLayers: GenesisLayerEvidence[] | undefined;
+  let genesisLayers: GenesisLayerEvidence[] | undefined, genesisJobs: GenesisJobEvidence[] | undefined;
   const genesisChecked = task.lane === 'genesis' || !!task.capabilities?.includes('genesis');
   for (const tab of task.lane === 'clip' ? [] : checked) {
     const baseline = task.baselines.find(
@@ -190,7 +190,7 @@ export async function finishLane(
         timelineId: tab.timelineId,
         assets,
         referenceMotion,
-        ...(genesisChecked ? { genesis: genesisLayers ??= await ctx.runQuery(internal.genesis.forCheck, { ownerId: run.ownerId, projectId: run.projectId }) } : {}),
+        ...(genesisChecked ? { genesis: genesisLayers ??= await ctx.runQuery(internal.genesis.forCheck, { ownerId: run.ownerId, projectId: run.projectId }), genesisJobs: genesisJobs ??= await ctx.runQuery(internal.genesisJobs.forCheck, { ownerId: run.ownerId, projectId: run.projectId }) } : {}),
       };
       failures.push(...LANES[task.lane].check(context).map((error) => prefix + error));
       // Genesis loaded as a supporting capability keeps its layer checks under any primary lane.
