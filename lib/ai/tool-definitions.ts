@@ -183,6 +183,9 @@ export const EDITOR_TOOL_DEFINITIONS = {
   getLayer: { effect: 'read', mcp: 'read' },
   layerEffect: { effect: 'timeline', mcp: 'exclusive', label: ['Applying a layer effect', 'Applied a layer effect'] },
   textBehind: { effect: 'timeline', mcp: 'exclusive', label: ['Placing text behind the subject', 'Placed text behind the subject'] },
+  removeObject: { effect: 'timeline', mcp: 'exclusive', label: ['Removing an object', 'Removed an object'] },
+  retimeLayer: { effect: 'timeline', mcp: 'exclusive', label: ['Retiming the subject', 'Retimed the subject'] },
+  replaceSurface: { effect: 'timeline', mcp: 'exclusive', label: ['Replacing a surface', 'Replaced a surface'] },
 } as const satisfies Record<string, ToolBehavior>;
 
 export type EditorToolName = keyof typeof EDITOR_TOOL_DEFINITIONS;

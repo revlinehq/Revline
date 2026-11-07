@@ -5,7 +5,10 @@ import { LANES, MCP_ONLY_TOOLS, capabilityExists, capabilitySummary, discoverCap
 import { getLayerDescription, getLayerInput, segmentDescription, segmentInput, subjectSeed } from '../../lib/ai/lanes/genesis/functions/segment';
 import { applyLayerEffect, layerEffectDescription, layerEffectInput } from '../../lib/ai/lanes/genesis/functions/layer-effect';
 import { applyTextBehind, textBehindDescription, textBehindInput } from '../../lib/ai/lanes/genesis/functions/text-behind';
-import type { Applied } from '../../lib/ai/lanes/genesis/functions/layer';
+import { baseClip, type Applied } from '../../lib/ai/lanes/genesis/functions/layer';
+import { applyRemoveObject, plateRange, removeObjectDescription, removeObjectInput } from '../../lib/ai/lanes/genesis/functions/remove-object';
+import { applyRetimeLayer, retimedSubject, retimeLayerDescription, retimeLayerInput } from '../../lib/ai/lanes/genesis/functions/retime-layer';
+import { applyReplaceSurface, replaceSurfaceDescription, replaceSurfaceInput, surfaceRange } from '../../lib/ai/lanes/genesis/functions/replace-surface';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline } from '../../lib/ai/lanes/task';
@@ -529,7 +532,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   /** Build a Genesis function on the timeline from a ready layer, and record where it placed the layer for finish checks. */
   const applyGenesis = async (layerId: string, clipId: string | undefined, fn: string, build: (timeline: Timeline, layer: Awaited<ReturnType<typeof readyLayer>>, stack: { clipIds: string[]; subjectClipIds: string[] }) => Applied) => {
     const layer = await readyLayer(layerId);
-    const stack = await ctx.runQuery(internal.genesis.stackForRun, { ...run, timelineId: timelineIdForLane(), baseClipId: clipId ?? layer.clipId });
+    const stack = await genesisStack(clipId ?? layer.clipId);
+    if (stack.functions.includes('retimeLayer')) throw new Error(`Footage clip ${clipId ?? layer.clipId} is retimed with retimeLayer. In v1 retimeLayer stands alone on its footage: undo it to apply ${fn}.`);
     let applied: Applied | undefined;
     const saved = await checkpoint(t => { applied = build(t, layer, stack); return applied.timeline; });
     const placed = applied!;
@@ -538,6 +542,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...saved, layerId: layer.layerId, footageClipId: placed.baseClipId, clipIds: placed.clipIds, subjectClipIds: placed.subjectClipIds, next: `getFrames at ${mid}s (and where the subject moves fastest), then finish.` };
   };
   const readyLayer = (layerId: string) => ctx.runQuery(internal.genesis.readyForRun, { ...run, layerId });
+  const genesisStack = (baseClipId: string) => ctx.runQuery(internal.genesis.stackForRun, { ...run, timelineId: timelineIdForLane(), baseClipId });
+  // Each layer records the shared clips (plates, inserts) and only its own cut-outs, so its mask checks stay exact.
+  const recordGenesis = (layer: { layerId: string; outputAssetId: string }, fn: string, placed: Applied) => {
+    const others = new Set(placed.subjectClipIds.filter(id => placed.timeline.clips.find(clip => clip.id === id)?.assetId !== layer.outputAssetId));
+    return ctx.runMutation(internal.genesis.recordApplication, { ...run, layerId: layer.layerId, application: { timelineId: timelineIdForLane(), function: fn, baseClipId: placed.baseClipId, clipIds: placed.clipIds.filter(id => !others.has(id)), subjectClipIds: placed.subjectClipIds.filter(id => !others.has(id)) } });
+  };
+  /** Start or reuse a Genesis compositor render; refusals (moving camera, coverage, texture) come back as errors. */
+  const genesisRender = async (args: { op: 'cleanPlate' | 'surface'; sourceAssetId: string; layerIds: string[]; seedLayerId?: string; insertAssetId?: string; start: number; end: number; fps: number; params: unknown }) => {
+    const render = await ctx.runMutation(internal.genesisRenders.startFromRun, { ...run, ...args });
+    if (render.status === 'failed') throw new Error(render.refused ? `Refused: ${render.error}` : `The Genesis render failed: ${render.error ?? 'unknown error'}. Calling again starts a new render${render.method === 'bria' ? ' and pays the eraser again' : ''}.`);
+    return render;
+  };
+  const renderPending = (tool: string, render: { renderId: string; progress?: number; reused: boolean; method?: string; costUsd?: number }) => ({ status: 'processing', renderId: render.renderId, progress: render.progress ?? 0, ...(render.method === 'bria' ? { method: 'bria', costUsd: render.costUsd } : {}), next: `The media worker is rendering. Call ${tool} again with the same input in 15-20 seconds; it applies once the render is ready.` });
+  const renderSummary = (render: { renderId: string; report?: unknown; computeSeconds?: number; method?: string; costUsd?: number; allowance?: unknown }) => ({
+    renderId: render.renderId, method: render.method ?? 'compositor', costUsd: render.costUsd ?? 0, report: render.report, ...(render.computeSeconds !== undefined ? { computeSeconds: render.computeSeconds } : {}), ...(render.allowance ? { briaAllowance: render.allowance } : {}),
+    engine: render.method === 'bria' ? 'Bria Video Eraser, mask mode (fal), joined by the Revline compositor' : 'Revline compositor (OpenCV on the media worker, no generative model)',
+  });
+  const genesisNext = (placed: Applied, extra = '') => { const span = find(placed.timeline, placed.baseClipId), mid = Math.round((span.start + span.duration / 2) * 100) / 100; return `getFrames at ${mid}s${extra} with resolution 1080, then finish.`; };
   const pixelSeedInput = z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict(), z.object({ kind: z.literal('target'), targetId: z.string().min(1) }).strict()]);
   const resolveSubjectSeed = (seed:z.infer<typeof pixelSeedInput>,assetId:string|undefined,time:number):PixelTrackRequest['seed'] => {
     if(seed.kind!=='target')return seed;
@@ -2274,6 +2296,62 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     getLayer: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getLayer, description: getLayerDescription, inputSchema: getLayerInput, execute: async (_ctx, {layerId}) => ctx.runQuery(internal.genesis.layerForRun, { ...run, layerId }) }),
     layerEffect: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.layerEffect, description: layerEffectDescription, inputSchema: layerEffectInput, execute: async (_ctx, input) => applyGenesis(input.layerId, input.clipId, `layerEffect:${input.effect}`, (t, layer, stack) => applyLayerEffect(t, layer, stack, input, () => crypto.randomUUID())) }),
     textBehind: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.textBehind, description: textBehindDescription, inputSchema: textBehindInput, execute: async (_ctx, input) => applyGenesis(input.layerId, input.clipId, 'textBehind', (t, layer, stack) => applyTextBehind(t, layer, stack, input, () => crypto.randomUUID())) }),
+    removeObject: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.removeObject, description: removeObjectDescription, inputSchema: removeObjectInput, execute: async (_ctx, input) => {
+      await editSession.wait();
+      const layers = await Promise.all([...new Set(input.layerIds)].map(readyLayer));
+      const clip = baseClip(editSession.timeline, layers[0], input.clipId);
+      if (clip.assetId !== layers[0].sourceAssetId) throw new Error(`Clip ${clip.id} already shows a clean plate. Undo that removeObject and remove every subject in one call (layerIds).`);
+      const range = plateRange(layers);
+      const render = await genesisRender({ op: 'cleanPlate', sourceAssetId: layers[0].sourceAssetId, layerIds: layers.map(layer => layer.layerId), start: range.start, end: range.end, fps: range.fps, params: { dilate: input.dilate ?? .012, fallback: input.fallback ?? 'bria' } });
+      if (render.status !== 'completed' || !render.outputAssetId) return renderPending('removeObject', render);
+      await adoptAsset(render.outputAssetId);
+      const stack = await genesisStack(clip.id);
+      let applied: Applied | undefined;
+      const saved = await checkpoint(t => { applied = applyRemoveObject(t, layers, stack, render.outputAssetId!, clip.id); return applied.timeline; });
+      for (const layer of layers) await recordGenesis(layer, 'removeObject', applied!);
+      return { ...saved, status: 'applied', footageClipId: clip.id, cleanPlateAssetId: render.outputAssetId, ...renderSummary(render), undo: 'undoLatestEdit restores the original footage.', next: genesisNext(applied!, ' (and where the subject was most visible)') };
+    } }),
+    retimeLayer: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.retimeLayer, description: retimeLayerDescription, inputSchema: retimeLayerInput, execute: async (_ctx, input) => {
+      await editSession.wait();
+      const layers = await Promise.all([...new Set([input.layerId, ...(input.alsoLayerIds ?? [])])].map(readyLayer)), [layer] = layers, clip = baseClip(editSession.timeline, layer, input.clipId);
+      for (const other of layers.slice(1)) baseClip(editSession.timeline, other, clip.id);
+      if (clip.assetId !== layer.sourceAssetId) throw new Error(`Clip ${clip.id} shows a clean plate already (removeObject). In v1 retimeLayer needs the original footage: undo removeObject first.`);
+      const range = plateRange(layers);
+      const timing = retimedSubject(clip, { ...layer, ...range }, input), before = await genesisStack(clip.id);
+      if (before.clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips (${before.functions.join(', ')}). In v1 retimeLayer stands alone on its footage, because those clips copy the original subject in real time. undoLatestEdit them first.`);
+      // The same clean plate removeObject would build for these layers: one render serves both.
+      const render = await genesisRender({ op: 'cleanPlate', sourceAssetId: layer.sourceAssetId, layerIds: layers.map(item => item.layerId), start: range.start, end: range.end, fps: range.fps, params: { dilate: input.dilate ?? .012, fallback: input.fallback ?? 'bria' } });
+      if (render.status !== 'completed' || !render.outputAssetId) return renderPending('retimeLayer', render);
+      await adoptAsset(render.outputAssetId);
+      const stack = await genesisStack(clip.id);
+      let applied: Applied | undefined;
+      const saved = await checkpoint(t => { applied = applyRetimeLayer(t, layers, stack, render.outputAssetId!, input, () => crypto.randomUUID()); return applied.timeline; });
+      for (const item of layers) await recordGenesis(item, 'retimeLayer', applied!);
+      const align = input.alignAt ?? clip.start, end = clip.start + clip.duration;
+      return { ...saved, status: 'applied', footageClipId: clip.id, cleanPlateClipId: applied!.clipIds[0], subjectClipIds: applied!.subjectClipIds, subject: { sourceStart: Math.round(timing.sourceStart * 1000) / 1000, ...(timing.playbackRate !== undefined ? { speed: timing.playbackRate } : { speedRamp: true }) }, ...renderSummary(render), next: `getFrames at ${[clip.start, align, end - 1 / editSession.timeline.fps].map(time => Math.round(time * 100) / 100).join(', ')}s with resolution 1080: no ghost of the subject in real time, edges clean. Then finish.` };
+    } }),
+    replaceSurface: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.replaceSurface, description: replaceSurfaceDescription, inputSchema: replaceSurfaceInput, execute: async (_ctx, input) => {
+      await editSession.wait();
+      const clip = find(editSession.timeline, input.clipId);
+      if (clip.kind !== 'video' || !clip.assetId) throw new Error('Choose a video footage clip.');
+      const end = clip.start + clip.duration;
+      if (input.at < clip.start - 1e-6 || input.at >= end) throw new Error(`at must be inside clip ${clip.id} (${clip.start.toFixed(2)}–${end.toFixed(2)}s).`);
+      const occluders = await Promise.all([...new Set(input.occluderLayerIds ?? [])].map(readyLayer)), seed = input.surfaceLayerId ? await readyLayer(input.surfaceLayerId) : undefined;
+      for (const layer of [...occluders, ...(seed ? [seed] : [])]) baseClip(editSession.timeline, layer, clip.id);
+      const before = await genesisStack(clip.id);
+      if (before.functions.includes('retimeLayer')) throw new Error(`Clip ${clip.id} is retimed with retimeLayer. In v1 retimeLayer stands alone on its footage: undo it first.`);
+      const source = assets.find(asset => asset._id === clip.assetId) ?? await adoptAsset(clip.assetId);
+      const range = surfaceRange(clip, [...occluders, ...(seed ? [seed] : [])], source.duration ?? sourceEndOf(clip));
+      const params = { time: sourceTimeAt(clip, input.at), ...(input.corners ? { corners: input.corners } : {}), ...(input.rotate ? { rotate: input.rotate } : {}), fit: input.fit ?? 'cover', lightMatch: input.lightMatch ?? true };
+      const render = await genesisRender({ op: 'surface', sourceAssetId: clip.assetId, layerIds: occluders.map(layer => layer.layerId), ...(seed ? { seedLayerId: seed.layerId } : {}), insertAssetId: input.assetId, start: range.start, end: range.end, fps: occluders[0]?.fps ?? seed?.fps ?? editSession.timeline.fps, params });
+      if (render.status !== 'completed' || !render.outputAssetId) return renderPending('replaceSurface', render);
+      await adoptAsset(render.outputAssetId);
+      const stack = await genesisStack(clip.id);
+      let applied: Applied | undefined;
+      const saved = await checkpoint(t => { applied = applyReplaceSurface(t, find(t, clip.id), occluders, stack, render.outputAssetId!, () => crypto.randomUUID()); return applied.timeline; });
+      for (const layer of [...occluders, ...(seed ? [seed] : [])]) await recordGenesis(layer, 'replaceSurface', applied!);
+      return { ...saved, status: 'applied', footageClipId: clip.id, insertClipId: applied!.clipIds[0], occluderClipIds: applied!.subjectClipIds, ...renderSummary(render), next: genesisNext(applied!, ', at the first and last frames, and where an occluder crosses the surface') };
+    } }),
   };
   // Scenes report what they cover but were never read: a recreation reads every moment before building over it.
   // Building is refused while the range still owes reads, unless the call says why it goes ahead (readReason).

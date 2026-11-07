@@ -1,5 +1,5 @@
 /** Genesis's own functions: one SAM 3.1 layer, reused by every layer function. MCP callers only. */
-export const ownTools = ['segment', 'getLayer', 'layerEffect', 'textBehind'] as const;
+export const ownTools = ['segment', 'getLayer', 'layerEffect', 'textBehind', 'removeObject', 'retimeLayer', 'replaceSurface'] as const;
 // Supporting tools Genesis reuses instead of re-inventing: frame reads, point tracking, masks and looks.
 export const tools = [
   ...ownTools,

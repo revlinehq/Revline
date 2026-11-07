@@ -16,17 +16,17 @@ import type { GenesisLayerEvidence } from '../lib/ai/lanes/types';
 const HANDLE_SECONDS = .25, MAX_SECONDS = 120;
 const box = v.array(v.number());
 const application = v.object({ timelineId: v.string(), function: v.string(), baseClipId: v.string(), clipIds: v.array(v.string()), subjectClipIds: v.array(v.string()) });
-const layerStatus = (cutout: Doc<'cutouts'> | null) => !cutout || cutout.status === 'failed' ? 'failed' as const : cutout.status === 'completed' && cutout.outputAssetId ? 'ready' as const : 'processing' as const;
+export const layerStatus = (cutout: Doc<'cutouts'> | null) => !cutout || cutout.status === 'failed' ? 'failed' as const : cutout.status === 'completed' && cutout.outputAssetId ? 'ready' as const : 'processing' as const;
 // Upper bound before the worker reads the source rate: it never sends more frames than the timeline plays.
 const usd = (seconds: number, fps: number, noun: boolean) => sam31Usd(Math.ceil(seconds * fps), noun);
 
-async function requireMcpRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }, exclusive: boolean) {
+export async function requireMcpRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }, exclusive: boolean) {
   if (!isMcpRun(args.runId)) throw new ConvexError('Genesis is available to MCP clients only.');
   const project = await readProject(ctx, args.projectId);
   if (!project || project.ownerId !== args.ownerId || exclusive && !holdsRun(project, args.runId)) throw new ConvexError('AI run is no longer active');
   return project;
 }
-async function ownedLayer(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string }, layerId: string) {
+export async function ownedLayer(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string }, layerId: string) {
   const id = ctx.db.normalizeId('genesisLayers', layerId), layer = id ? await ctx.db.get(id) : null;
   if (!layer || layer.ownerId !== args.ownerId || layer.projectId !== args.projectId) throw new ConvexError('Layer not found in this project. Use the layerId segment returned.');
   return layer;
@@ -91,25 +91,28 @@ export const layerForRun = internalQuery({
 /** A ready layer for a layer function, or a clear refusal while it is processing or failed. */
 export const readyForRun = internalQuery({
   args: { ...runArgs, layerId: v.string() },
-  returns: v.object({ layerId: v.string(), clipId: v.string(), sourceAssetId: v.string(), outputAssetId: v.string(), start: v.number(), end: v.number(), fps: v.number() }),
+  returns: v.object({ layerId: v.string(), clipId: v.string(), sourceAssetId: v.string(), outputAssetId: v.string(), start: v.number(), end: v.number(), fps: v.number(), sourceAliases: v.array(v.string()) }),
   handler: async (ctx, args) => {
     await requireMcpRun(ctx, args, false);
     const layer = await ownedLayer(ctx, args, args.layerId), cutout = await ctx.db.get(layer.cutoutId), status = layerStatus(cutout);
     if (status === 'processing') throw new ConvexError(`Layer ${layer._id} is still processing. Poll getLayer until ready.`);
     if (status === 'failed') throw new ConvexError(`Layer ${layer._id} failed: ${cutout?.error ?? 'its job is gone'}. Segment again.`);
-    return { layerId: layer._id, clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, outputAssetId: cutout!.outputAssetId!, start: layer.start, end: layer.end, fps: layer.fps };
+    // Footage switched to a clean plate of the same source (removeObject) keeps this layer's clock and framing.
+    const plates = (await ctx.db.query('genesisRenders').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100))
+      .filter(row => row.ownerId === args.ownerId && row.op === 'cleanPlate' && row.status === 'completed' && row.outputAssetId && row.sourceAssetId === layer.sourceAssetId);
+    return { layerId: layer._id, clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, outputAssetId: cutout!.outputAssetId!, start: layer.start, end: layer.end, fps: layer.fps, sourceAliases: plates.map(row => row.outputAssetId!) };
   },
 });
 
 /** Genesis clips earlier functions stacked on one footage clip of one timeline, across every layer. */
 export const stackForRun = internalQuery({
   args: { ...runArgs, timelineId: v.string(), baseClipId: v.string() },
-  returns: v.object({ clipIds: v.array(v.string()), subjectClipIds: v.array(v.string()) }),
+  returns: v.object({ clipIds: v.array(v.string()), subjectClipIds: v.array(v.string()), functions: v.array(v.string()) }),
   handler: async (ctx, args) => {
     await requireMcpRun(ctx, args, false);
     const uses = (await ctx.db.query('genesisLayers').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100))
       .filter(layer => layer.ownerId === args.ownerId).flatMap(layer => layer.applications).filter(use => use.timelineId === args.timelineId && use.baseClipId === args.baseClipId);
-    return { clipIds: [...new Set(uses.flatMap(use => use.clipIds))], subjectClipIds: [...new Set(uses.flatMap(use => use.subjectClipIds))] };
+    return { clipIds: [...new Set(uses.flatMap(use => use.clipIds))], subjectClipIds: [...new Set(uses.flatMap(use => use.subjectClipIds))], functions: [...new Set(uses.map(use => use.function))] };
   },
 });
 

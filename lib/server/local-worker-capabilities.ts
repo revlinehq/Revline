@@ -25,10 +25,10 @@ export async function localWorkerCapabilities() {
   }
   const scene = sceneDetectPython();
   if (!await available('scene detection / OpenCV', scene, ['-c', 'import cv2, scenedetect'])) {
-    for (const kind of ['facecam', 'speakers', 'shots', 'reference', 'derive'] as const) excludedKinds.add(kind);
+    for (const kind of ['facecam', 'speakers', 'shots', 'reference', 'derive', 'genesis'] as const) excludedKinds.add(kind);
   }
   const pixel = pixelTrackPython();
-  if (pixel !== scene && !await available('pixel tracking / OpenCV', pixel, ['-c', 'import cv2'])) excludedKinds.add('derive');
+  if (pixel !== scene && !await available('pixel tracking / OpenCV', pixel, ['-c', 'import cv2'])) { excludedKinds.add('derive'); excludedKinds.add('genesis'); }
   const beat = beatTrackPython();
   const model = beatTrackModelPath();
   if (!await available('Beat This', beat, ['-c', 'import beat_this, torch, torchaudio']) || !existsSync(model)) {

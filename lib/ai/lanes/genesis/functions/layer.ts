@@ -3,14 +3,16 @@ import { sourceEndOf } from '../../../../editor/playback-rate';
 import { deriveTrackCounts, normalizeTimeline, trackOf, type Clip, type Timeline } from '../../../../editor/types';
 
 /** A ready Genesis layer: a transparent cut-out of the SAM 3.1 subject on the source's own clock. */
-export type ReadyLayer = { layerId: string; clipId: string; sourceAssetId: string; outputAssetId: string; start: number; end: number; fps: number };
+export type ReadyLayer = { layerId: string; clipId: string; sourceAssetId: string; outputAssetId: string; start: number; end: number; fps: number;
+  /** Clean plates of the source (removeObject): footage showing one still has this layer's clock and framing. */
+  sourceAliases?: string[] };
 export type Applied = { timeline: Timeline; baseClipId: string; clipIds: string[]; subjectClipIds: string[] };
 
 /** The footage clip a layer function edits: same source as the layer, inside the masked range. */
 export function baseClip(timeline: Timeline, layer: ReadyLayer, clipId = layer.clipId): Clip {
   const clip = timeline.clips.find(item => item.id === clipId);
   if (!clip) throw new Error(`Clip ${clipId} is not on this timeline. Pass clipId of the footage clip that shows the layer's subject.`);
-  if (clip.kind !== 'video' || clip.assetId !== layer.sourceAssetId) throw new Error(`Layer ${layer.layerId} was segmented from other footage. Choose a video clip of the same source, or segment this clip.`);
+  if (clip.kind !== 'video' || !clip.assetId || clip.assetId !== layer.sourceAssetId && !layer.sourceAliases?.includes(clip.assetId)) throw new Error(`Layer ${layer.layerId} was segmented from other footage. Choose a video clip of the same source, or segment this clip.`);
   const frame = 1 / layer.fps;
   if (clip.sourceStart < layer.start - frame || sourceEndOf(clip) > layer.end + frame)
     throw new Error(`Layer ${layer.layerId} masks source ${layer.start.toFixed(2)}–${layer.end.toFixed(2)}s but clip ${clip.id} plays ${clip.sourceStart.toFixed(2)}–${sourceEndOf(clip).toFixed(2)}s. Split the clip at the layer's range, or segment the whole clip.`);
@@ -24,7 +26,7 @@ export function syncedCopy(clip: Clip, id: string, track: number, extra: Partial
 }
 
 /** Genesis clips already stacked on a footage clip by earlier functions (from the layer records). */
-export type ExistingStack = { clipIds: readonly string[]; subjectClipIds: readonly string[] };
+export type ExistingStack = { clipIds: readonly string[]; subjectClipIds: readonly string[]; functions?: readonly string[] };
 export type StackParts = { plate?: Clip; text?: Clip; subject?: Clip };
 
 /** Inserts new Genesis clips into the footage clip's stack by role, whatever was applied first:
@@ -36,7 +38,8 @@ export function placeStack(input: Timeline, clip: Clip, existing: ExistingStack,
   let timeline = normalizeTimeline(input);
   const ids = new Set(existing.clipIds), subjects = new Set(existing.subjectClipIds), roles = new Map<string, number>();
   const same = (a: unknown, b: unknown) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
-  const plain = (item: Clip) => !item.outline && same(item.colorGrade, clip.colorGrade) && same(item.softBlur, clip.softBlur);
+  // A retimed subject (retimeLayer) is never a plain copy: its own speed differs from the footage's.
+  const plain = (item: Clip) => !item.outline && same(item.colorGrade, clip.colorGrade) && same(item.softBlur, clip.softBlur) && same(item.playbackRate, clip.playbackRate) && same(item.speedRamp, clip.speedRamp) && item.sourceStart === clip.sourceStart;
   for (const item of timeline.clips) if (ids.has(item.id) && trackOf(item) > trackOf(clip)) roles.set(item.id, subjects.has(item.id) ? 2 : item.kind === 'video' ? 0 : 1);
   const reused = parts.subject && plain(parts.subject) ? timeline.clips.find(item => roles.get(item.id) === 2 && item.assetId === parts.subject!.assetId && plain(item)) : undefined;
   const added: [Clip, number][] = [[parts.plate, 0], [parts.text, 1], [reused ? undefined : parts.subject, 2]].filter((entry): entry is [Clip, number] => !!entry[0]);

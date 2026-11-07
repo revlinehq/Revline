@@ -41,6 +41,7 @@ import { runDistributedRender, runRenderWorker } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
 import { deriveMedia, measureColor } from './derive-media';
+import { renderGenesis } from '../ai/lanes/genesis/worker/render';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { renderPlainExport } from './plain-export-render';
 import { plainExportPlan } from '@/lib/editor/plain-export';
@@ -255,6 +256,16 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       await runPhase('Saving processed media', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${base}${suffix}.${output.contentType.split('/')[1].replace('jpeg', 'jpg')}`, kind: output.kind, contentType: output.contentType, width: output.width, height: output.height, ...(output.duration ? { duration: output.duration } : {}) }, uploadContext, signal));
       onProgress(98);
       return {};
+    }
+    if (task.kind === 'genesis') {
+      // A retried attempt whose render was already stored only needs completing.
+      if (task.outputAssetId) return { genesis: { recovered: true } };
+      if (!task.genesis || asset.kind !== 'video') throw new AnalysisError('The Genesis render request is unavailable.', 400);
+      const work = task.genesis, output = await runPhase(work.op === 'cleanPlate' ? 'Building a clean plate' : 'Tracking and warping the surface', () => renderGenesis(source, directory, work, new URL(convexUrl).origin, (seconds, reason) => (exclusive ?? (job => job()))(() => convex.mutation(pixelTrackApi.genesisRenders.reserveBria, { ...credentials, seconds, reason })), signal, onProgress));
+      const base = asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200);
+      await runPhase('Saving Genesis render', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${base} (${work.op === 'cleanPlate' ? 'clean plate' : 'surface insert'}).${output.contentType === 'video/mp4' ? 'mp4' : 'webm'}`, kind: 'video', contentType: output.contentType, width: output.width, height: output.height, duration: work.end }, uploadContext, signal));
+      onProgress(98);
+      return { genesis: output.report };
     }
     if (task.kind === 'read') {
       if (!['video', 'image'].includes(asset.kind) || !task.read) throw new AnalysisError('Reading frames needs a video or image and a window.', 400);
