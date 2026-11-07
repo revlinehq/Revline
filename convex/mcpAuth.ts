@@ -149,7 +149,7 @@ export const authenticate = internalMutation({ args: { token: v.string(), calls:
   return { ownerId: token.ownerId, clientName: token.label, grantId:token.grantId };
 }});
 
-// Connections approved through the Cloudflare MCP server (cloudflare/mcp). Its OAuth provider issues and rotates the
+// Connections approved through the Cloudflare MCP server (cf-workers/mcp). Its OAuth provider issues and rotates the
 // client's tokens; Convex keeps one "grant" row per connection whose key only that Worker holds. Every MCP request
 // authenticates that key here, so plan access, rate limits, the connector settings list and revocation stay in Convex.
 const GRANT_PENDING_MS = 15 * 60_000;

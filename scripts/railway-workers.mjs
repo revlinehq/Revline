@@ -65,7 +65,7 @@ const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
 if (operation === 'build') {
   // Build the existing credential-free allow-list context. Explicit target keeps
   // the Cloudflare default Docker stage unchanged.
-  await command(process.execPath, ['infra/media-worker/prepare-context.mjs'], { env });
+  await command(process.execPath, ['media-processor/prepare-context.mjs'], { env });
   const context = resolve('.wrangler/media-processor-build');
   const metadata = resolve('.data/railway-build', config.environment);
   await mkdir(metadata, { recursive: true });
@@ -74,7 +74,7 @@ if (operation === 'build') {
       const name = kind === 'processor' ? 'processor' : 'exports';
       const tag = `${IMAGE_REGISTRY}/revline-railway-${name}${config.environment === 'dev' ? '-dev' : ''}:${git('rev-parse', 'HEAD')}`;
       const file = join(metadata, `${name}.json`);
-      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'infra/media-worker/Dockerfile', '--tag', tag, '--build-arg', `REVLINE_BUILD_COMMIT=${git('rev-parse', 'HEAD')}`, '--label', `org.opencontainers.image.source=https://github.com/${REPOSITORY}`, '--metadata-file', file, '--push', '.'], { cwd: context, env });
+      await command('docker', ['buildx', 'build', '--platform', 'linux/amd64', '--target', `railway-${name}`, '--file', 'media-processor/Dockerfile', '--tag', tag, '--build-arg', `REVLINE_BUILD_COMMIT=${git('rev-parse', 'HEAD')}`, '--label', `org.opencontainers.image.source=https://github.com/${REPOSITORY}`, '--metadata-file', file, '--push', '.'], { cwd: context, env });
       const digest = z.object({ 'containerimage.digest': z.string().regex(/^sha256:[a-f0-9]{64}$/) }).parse(JSON.parse(await readFile(file, 'utf8')))['containerimage.digest'];
       config = railwayConfig({ ...config, [`${name}Image`]: `${tag.slice(0, tag.lastIndexOf(':'))}@${digest}`, [`${name}Commit`]: git('rev-parse', 'HEAD') });
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n');

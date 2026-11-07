@@ -7,4 +7,5 @@
 *.tsbuildinfo
 design/
 public/uploads/
-infra/
+media-processor/
+cf-workers/media-edge/

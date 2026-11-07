@@ -14,7 +14,7 @@ const target = process.argv[2];
 const dryRun = process.argv.includes('--dry-run');
 if (target !== 'dev' && target !== 'production') throw new Error('Usage: node scripts/sync-agent-runner-env.mjs dev|production');
 const prod = ['--deployment', target === 'production' ? 'different-gnu-398' : 'majestic-alpaca-541'];
-const config = join(root, 'cloudflare/agent-runner', target === 'production' ? 'wrangler.production.jsonc' : 'wrangler.jsonc');
+const config = join(root, 'cf-workers/agent-runner', target === 'production' ? 'wrangler.production.jsonc' : 'wrangler.jsonc');
 /** Read by the turn (lib/ai, convex/lib/editorToolkit.ts, convex/lib/media_storage.ts). Add a name when the turn starts reading it. */
 const TURN_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'GOOGLE_GENERATIVE_AI_API_KEY', 'ELEVENLABS_API_KEY', 'GEMINI_VIDEO_MODEL', 'GEMINI_FRAME_MODEL',
   'EDITOR_DEFAULT_MODEL', 'EDITOR_DEFAULT_EFFORT', 'EDITOR_ENFORCE_TOKEN_BUDGET', 'EDITOR_INTERNAL_DETAILS_ENABLED', 'EDITOR_ALLOW_OPUS', 'EDITOR_EFFORT_SWITCHER', 'EDITOR_MODEL_CHOICE_OPEN',

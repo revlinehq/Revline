@@ -3,7 +3,7 @@ import { internal } from '../_generated/api';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { assistantRunArgs } from './assistant_run';
 
-// The editor's agent loop runs on Cloudflare (cloudflare/agent-runner, an Agents SDK agent per run), where one
+// The editor's agent loop runs on Cloudflare (cf-workers/agent-runner, an Agents SDK agent per run), where one
 // model step can think for as long as it needs. It reaches this deployment's functions through /agent-runner/* in http.ts.
 // AGENT_RUNNER_SECRET signs calls both ways and is shared with the Worker; AGENT_RUNNER_RUN_KEY stays in Convex.
 export const agentRunnerConfigured = () => !!process.env.AGENT_RUNNER_URL && !!process.env.AGENT_RUNNER_SECRET && !!process.env.AGENT_RUNNER_RUN_KEY;

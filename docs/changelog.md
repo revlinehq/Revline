@@ -1,4 +1,5 @@
 ## 2026-11-07
+- Repo: Cloudflare Workers move to `cf-workers/` (`agent-runner`, `media`, `mcp`, and the old edge processor as `media-edge`), and the Railway media processor moves from `infra/media-worker` to `media-processor/`; paths only, no behavior change. Why: the founder wanted folders grouped by what runs where, not by vendor.
 - MCP: the public server at tryrevline.com/mcp moves to its own Cloudflare Worker (`cloudflare/mcp`: Agents SDK McpAgent per session, Workers OAuth Provider); tools, access checks, rate limits and agent identity stay in Convex behind a signed bridge, older connections keep their Convex tokens, and upload scripts use tryrevline.com instead of `*.convex.site`. Why: the user wanted real streaming and sessions, a standard OAuth provider and one deploy style.
 
 ## 2026-11-06

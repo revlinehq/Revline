@@ -1,6 +1,6 @@
 import { readFile, statfs } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
-import { railwayConfig } from '../../lib/railway-workers.mjs';
+import { railwayConfig } from '../lib/railway-workers.mjs';
 
 const config = railwayConfig(process.env.RAILWAY_WORKERS_JSON);
 if (process.platform !== 'linux' || process.env.RAILWAY_PROJECT_ID !== config.projectId || process.env.RAILWAY_ENVIRONMENT_ID !== config.environmentId || !process.env.RAILWAY_SERVICE_ID) throw new Error('Railway runtime/environment identity is invalid.');
@@ -26,5 +26,5 @@ const memory = Number((await readFile('/sys/fs/cgroup/memory.max', 'utf8')).trim
 if (!Number.isFinite(quota) || quota <= 0 || !Number.isFinite(period) || period <= 0 || !Number.isFinite(memory) || memory <= 0) throw new Error('Railway CPU and memory allocation must be finite, positive and verifiable.');
 const disk = await statfs(process.env.TMPDIR || '/tmp');
 if (disk.bavail * disk.bsize < 20 * 1024 ** 3) throw new Error('Railway scratch needs at least 20 GiB free; use a paid plan with sufficient ephemeral storage.');
-execFileSync(process.execPath, ['infra/media-worker/runtime-check.mjs'], { stdio: 'inherit' });
+execFileSync(process.execPath, ['media-processor/runtime-check.mjs'], { stdio: 'inherit' });
 console.log(JSON.stringify({ event: 'railway-runtime-verified', commit, role, image: process.env.REVLINE_RAILWAY_IMAGE, cpus: quota / period, memoryBytes: memory, environment: config.environment }));

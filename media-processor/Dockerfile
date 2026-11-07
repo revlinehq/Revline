@@ -39,15 +39,15 @@ COPY convex ./convex
 COPY lib ./lib
 COPY scripts ./scripts
 COPY public ./public
-COPY infra/media-worker ./infra/media-worker
+COPY media-processor ./media-processor
 RUN node scripts/copy-vendor.mjs \
-    && REVLINE_RUNTIME_CHECK=exports node infra/media-worker/runtime-check.mjs \
+    && REVLINE_RUNTIME_CHECK=exports node media-processor/runtime-check.mjs \
     && mkdir -p /tmp/revline && chown node:node /tmp/revline
 USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "--import", "tsx", "infra/media-worker/consumer.ts"]
+CMD ["node", "--import", "tsx", "media-processor/consumer.ts"]
 
 # Full media analysis runtime, shared by Cloudflare and Railway.
 FROM runtime AS processor
@@ -64,10 +64,10 @@ COPY convex ./convex
 COPY lib ./lib
 COPY scripts ./scripts
 COPY public ./public
-COPY infra/media-worker ./infra/media-worker
+COPY media-processor ./media-processor
 RUN node scripts/install-beat-model.mjs \
     && node scripts/copy-vendor.mjs \
-    && node infra/media-worker/runtime-check.mjs
+    && node media-processor/runtime-check.mjs
 
 # Installed Chromium is read-only at runtime. Re-owning it here would copy
 # another ~698 MB into every image after an application-code change.
@@ -76,7 +76,7 @@ USER node
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["node", "--import", "tsx", "infra/media-worker/consumer.ts"]
+CMD ["node", "--import", "tsx", "media-processor/consumer.ts"]
 
 # Railway uses the same packaged runtimes with ephemeral, unprivileged scratch.
 FROM processor AS railway-processor
@@ -84,7 +84,7 @@ ENV REVLINE_BUILD_ROLE=processor
 ARG RAILWAY_GIT_COMMIT_SHA
 ARG REVLINE_BUILD_COMMIT
 ENV REVLINE_BUILD_COMMIT=${REVLINE_BUILD_COMMIT:-${RAILWAY_GIT_COMMIT_SHA}}
-CMD ["sh", "infra/media-worker/railway-entry.sh"]
+CMD ["sh", "media-processor/railway-entry.sh"]
 
 FROM exports AS railway-exports
 ENV REVLINE_BUILD_ROLE=exports
@@ -93,7 +93,7 @@ ARG REVLINE_BUILD_COMMIT
 ENV REVLINE_BUILD_COMMIT=${REVLINE_BUILD_COMMIT:-${RAILWAY_GIT_COMMIT_SHA}}
 USER node
 ENV REVLINE_RUNTIME_CHECK=exports
-CMD ["sh", "infra/media-worker/railway-entry.sh"]
+CMD ["sh", "media-processor/railway-entry.sh"]
 
 # Preserve the Cloudflare default target; Railway explicitly selects its role.
 FROM ${REVLINE_FINAL_TARGET}
