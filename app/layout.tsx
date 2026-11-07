@@ -22,8 +22,8 @@ export const metadata: Metadata = {
   title: "Revline AI video editor",
   description: "Edit your videos in conversation. Make every cut your own.",
   // Version the image URL when changing the artwork so preview caches fetch the new card.
-  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v2.png", width: 1200, height: 630, alt: "Revline AI video editor" }] },
-  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v2.png"] },
+  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v3.png", width: 1200, height: 630, alt: "Revline AI video editor" }] },
+  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v3.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

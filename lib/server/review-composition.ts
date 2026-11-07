@@ -3,7 +3,7 @@ import { mkdir,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
 import type { MediaWorkItem,MediaTaskResult } from '../../convex/lib/media_task_contract';
-import type { MediaAsset } from '../editor/types';
+import type { Clip, MediaAsset } from '../editor/types';
 import { dimensions, renderedFrameTime, timelineDuration } from '../editor/types';
 import { checkPlanTiming, type EffectPlan } from '../ai/edit-plan';
 import { changedShare,compositionSampleTimes,parseCompositionReview,pixelDifference,reviewObservationsJsonSchema } from '../ai/composition-review';
@@ -12,12 +12,25 @@ import { geminiFrameModel } from '../media-analysis/gemini-model';
 import { interactionText } from '../media-analysis/transcript';
 import { AnalysisError } from '../media-analysis/errors';
 import { sceneMediaAssetIds } from '../editor/scene-layers';
+import { isTransitionClip } from '../editor/clip-transitions';
+
 import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositionResources } from './prepare-composition';
 import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
 import { visualHits } from '../media-analysis/sound';
 import { mapMotion, motionWindow } from '../inspo-motion/motion-map';
 import { measureTimelineSound } from './sound-check';
+
+/** A frame inside a transition needs both clips around its cut: the outgoing one ends exactly at the cut, so a
+ * window at or after it would leave that clip's media undownloaded and undecoded. Widen by one frame each side of
+ * the cut (both sources are sampled at most there), so the window stays a few frames long. */
+function withTransitions(timeline:{clips:Clip[];fps:number},start:number,end:number){
+  const frame=1/timeline.fps;
+  for(const clip of timeline.clips)if(isTransitionClip(clip)&&clip.start<end-1e-6&&start<clip.start+clip.duration-1e-6){
+    const cut=clip.start+clip.duration/2;start=Math.max(0,Math.min(start,cut-frame));end=Math.max(end,cut+frame);
+  }
+  return {start,end};
+}
 import { cropBounds } from '../ai/reference-comparison';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
@@ -54,7 +67,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const range=snapshot.pacing??snapshot.sound??snapshot.motion;
-  const windows=contactSheet?[{start:0,end:last+frame}]:range?[{start:Math.max(0,range.start-.5),end:Math.min(last+frame,range.end+.5)}]:times.map(time=>({start:Math.max(0,Math.min(time,last)),end:Math.min(time,last)+frame}));
+  const windows=contactSheet?[{start:0,end:last+frame}]:range?[withTransitions(timeline,Math.max(0,range.start-.5),Math.min(last+frame,range.end+.5))]:times.map(time=>withTransitions(timeline,Math.max(0,Math.min(time,last)),Math.min(time,last)+frame));
   const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[],windows);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
@@ -117,7 +130,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
       }
     }else for(const [done,index] of indices.entries()){
       const time=at[index];
-      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],start:time,end:time+frame,variants:['edited']},signal);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],...withTransitions(timeline,time,time+frame),variants:['edited']},signal);
       images.set(index,await readFile(join(path,'sample-0.png')));
       onProgress(20+Math.round(75*(done+1)/indices.length));
     }

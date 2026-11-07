@@ -42,7 +42,7 @@ Pacing:
 
 Sound:
 - Keep speech and important game or room sound intelligible.
-- Inspect the mix with getSound or checkSound, balance with setVolume, and use configureAudio for fades and music ducking.
+- Inspect the mix with getSound or checkSound and balance it with setVolume. Added music (start, length, ending, ducking under speech) follows skill `music`.
 - Normalize the whole tab mix, music and effects included; target one linked sound clip only when that is the intent.
 - Respect an explicit request to keep the original loudness, removing any existing normalization.
 

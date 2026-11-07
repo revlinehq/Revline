@@ -1,5 +1,5 @@
 import { transitionSampleTime, transitionWipeSettings, type transitionSources } from './clip-transitions';
-import { createPresentation, type PresentationBridge } from './remotion-transition-presentation';
+import { createPresentation, type PresentationBridge } from './transition-presentation';
 import type { Clip, TransitionPreset } from './types';
 
 export type TransitionSource = ReturnType<typeof transitionSources>[number];
@@ -25,7 +25,7 @@ function moveRetained(parent: HTMLElement, child: HTMLElement, before: Node | nu
   else parent.insertBefore(child, before);
 }
 
-/** Remotion owns the presentation only. HyperFrames still owns the clock, native playback and audio. */
+/** Our presentation styles the two shots; HyperFrames owns the clock, native playback and audio. */
 export function installTransitions(initial: TransitionSource[], projectFps: number): TransitionController {
   const host = window as unknown as RuntimeWindow, composition = document.getElementById('composition')!;
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
@@ -127,7 +127,7 @@ export function installTransitions(initial: TransitionSource[], projectFps: numb
       if (!entry.frames && !mount(entry)) continue;
       entry.node.style.display = '';
       entry.node.style.zIndex = String(Math.max(...entry.frames!.map(frame => Number(frame.style.zIndex))));
-      entry.presentation.render({ ...transitionWipeSettings(clip.transition!), preset: clip.effectPreset as TransitionPreset, direction: clip.transition!.direction, progress: (time - clip.start) / clip.duration, durationInFrames: Math.max(1, Math.round(clip.duration * projectFps)), outputHeight: Number(composition.dataset.height) });
+      entry.presentation.render({ ...transitionWipeSettings(clip.transition!), preset: clip.effectPreset as TransitionPreset, direction: clip.transition!.direction, progress: (time - clip.start) / clip.duration, durationInFrames: Math.max(1, Math.round(clip.duration * projectFps)), duration: clip.duration, outputHeight: Number(composition.dataset.height) });
       for (const [index, frame] of entry.frames!.entries()) {
         const sourceClip = index === 0 ? entry.source.from : entry.source.to, media = mediaOf(frame);
         if (!media) continue;

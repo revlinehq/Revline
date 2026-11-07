@@ -1,5 +1,5 @@
-import { Easing, interpolate, spring } from 'remotion';
-import { LAB_TEXT_PRESETS, type LabTextPreset } from './remotion-lab-text-presets';
+import { Easing, interpolate, spring } from '@/lib/editor/frame-motion';
+import { LAB_TEXT_PRESETS, type LabTextPreset } from './motion-lab-text-presets';
 
 export type LabCategory = 'graphics' | 'typography' | 'clip-motion' | 'tracking' | 'templates';
 export type LabScene = 'block-card' | 'block-arrow' | 'block-label' | 'block-chart' | 'block-counter' | 'block-progress-ring' | 'block-progress-bar' | 'block-stat-badge' | 'block-checklist' | 'block-steps' | 'block-quote' | 'block-comparison' | 'block-marker' | 'block-highlight' | 'block-lower-third' | 'typography';
@@ -106,7 +106,7 @@ function hex(value: unknown): value is string { return typeof value === 'string'
 
 /** Validate all imported and persisted values before a configuration reaches the render clock. */
 export function parseLabConfig(input: unknown): LabConfig {
-  if (!record(input)) throw new Error('Choose a Revline Remotion template JSON file.');
+  if (!record(input)) throw new Error('Choose a Revline motion template JSON file.');
   const legacyScenes:Record<string,LabScene>={cards:'block-card',diagram:'block-arrow',arrows:'block-arrow',chart:'block-chart',counter:'block-counter',polish:'block-card'};
   const blockDefaults=Object.fromEntries(Object.entries(DEFAULT_LAB_CONFIG).filter(([key])=>key.startsWith('block')));
   const c: Record<string, unknown> = { ...blockDefaults,...input, scene: legacyScenes[String(input.scene)]??input.scene, textStrength: input.textStrength ?? 1, textStagger: input.textStagger ?? .07,
@@ -137,8 +137,8 @@ export function parseLabConfig(input: unknown): LabConfig {
 }
 
 export function parseLabFile(input: unknown): LabConfig {
-  if (!record(input) || input.version !== 1 || input.type !== 'revline-remotion-template') throw new Error('Choose a version 1 Revline Remotion template.');
+  if (!record(input) || input.version !== 1 || input.type !== 'revline-motion-template') throw new Error('Choose a version 1 Revline motion template.');
   return parseLabConfig(input.config);
 }
 
-export function labTemplateFile(config: LabConfig) { return { type: 'revline-remotion-template', version: 1, config }; }
+export function labTemplateFile(config: LabConfig) { return { type: 'revline-motion-template', version: 1, config }; }

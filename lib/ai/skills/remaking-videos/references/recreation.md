@@ -102,5 +102,5 @@ Write a numbered effect inventory in your reply, with one item per visible chang
 ### Sound
 - Match music with matchMusic using the reference's tempo and main inventory moments.
 - Regenerate its effects with generateSound, place them at the matching visible hits and verify with checkSound.
-- End music and effects with the film. Never copy the reference audio.
+- End music and effects with the film. Never copy the reference audio. Where a matched track starts and ends follows skill `music`.
 - Confirm any voiceover with a transcript; if it cannot be reproduced, finish the visuals and state the missing recording explicitly.

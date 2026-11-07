@@ -15,4 +15,6 @@
 // 46: sparse capture windows retain video before an audio tail for final-frame holds.
 // 47: route public X status pages through the supported downloader before import.
 // 49: report genuine Gemini billing failures and honor durable admission cooldowns.
-export const MEDIA_PROCESSOR_VERSION = 49;
+// 50: beat maps carry the measured music energy (loudness, low band, onsets) analyzeMusic reads.
+// 51: MCP subject selections and noun grounding can request SAM 3.1 on Meta's Model API.
+export const MEDIA_PROCESSOR_VERSION = 51;

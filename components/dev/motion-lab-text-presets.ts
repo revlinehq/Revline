@@ -1,14 +1,14 @@
-import { REMOTION_TEXT_LABELS, REMOTION_TEXT_PRESETS, type RemotionTextPreset } from '@/lib/editor/remotion-text';
+import { TEXT_TEMPLATE_LABELS, TEXT_TEMPLATE_PRESETS, type TextTemplatePreset } from '@/lib/editor/text-templates';
 
 export const LAB_EXTRA_TEXT_PRESETS = [
   'flip-words', 'line-wipe', 'elastic-wave', 'shutter-slice', 'iris-reveal',
   'liquid-stretch', 'orbit-assembly', 'stamp-impact', 'diagonal-stagger', 'soft-bloom',
 ] as const;
 export type LabExtraTextPreset = typeof LAB_EXTRA_TEXT_PRESETS[number];
-export type LabTextPreset = RemotionTextPreset | LabExtraTextPreset;
-export const LAB_TEXT_PRESETS: readonly LabTextPreset[] = [...REMOTION_TEXT_PRESETS, ...LAB_EXTRA_TEXT_PRESETS];
+export type LabTextPreset = TextTemplatePreset | LabExtraTextPreset;
+export const LAB_TEXT_PRESETS: readonly LabTextPreset[] = [...TEXT_TEMPLATE_PRESETS, ...LAB_EXTRA_TEXT_PRESETS];
 export const LAB_TEXT_LABELS: Record<LabTextPreset, string> = {
-  ...REMOTION_TEXT_LABELS,
+  ...TEXT_TEMPLATE_LABELS,
   'flip-words': '3D word flip', 'line-wipe': 'Masked line wipe', 'elastic-wave': 'Elastic letter wave',
   'shutter-slice': 'Shutter slices', 'iris-reveal': 'Iris reveal', 'liquid-stretch': 'Liquid stretch',
   'orbit-assembly': 'Orbit assembly', 'stamp-impact': 'Stamp impact', 'diagonal-stagger': 'Diagonal cascade',

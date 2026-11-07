@@ -1,18 +1,18 @@
 import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties } from 'react';
-import { Easing, interpolate, spring } from 'remotion';
-import type { RemotionTextProps } from './remotion-text';
-import { EXPRESSIVE_TEXT_PRESETS, VFX_TEXT_PRESETS, type ExpressiveTextPreset } from './remotion-text';
-import { RemotionLyricText } from './remotion-lyric-text';
-import { RemotionExpressiveText } from './remotion-expressive-text';
+import { Easing, interpolate, spring } from './frame-motion';
+import type { TemplateTextProps } from './text-templates';
+import { EXPRESSIVE_TEXT_PRESETS, VFX_TEXT_PRESETS, type ExpressiveTextPreset } from './text-templates';
+import { LyricText } from './lyric-text';
+import { ExpressiveText } from './expressive-text';
 import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
-export function RemotionText(props: RemotionTextProps) {
+export function TemplateText(props: TemplateTextProps) {
   const { preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution, wordTimings, karaokeStyle } = props;
-  if(EXPRESSIVE_TEXT_PRESETS.some(value=>value===preset))return <RemotionExpressiveText {...props} preset={preset as ExpressiveTextPreset}/>;
-  if(VFX_TEXT_PRESETS.some(value=>value===preset))return <RemotionLyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor,textStyle,fontFamily,fontWeight,resolution,textGradient:props.textGradient,gradientTime:props.gradientTime}}/>;
+  if(EXPRESSIVE_TEXT_PRESETS.some(value=>value===preset))return <ExpressiveText {...props} preset={preset as ExpressiveTextPreset}/>;
+  if(VFX_TEXT_PRESETS.some(value=>value===preset))return <LyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor,textStyle,fontFamily,fontWeight,resolution,textGradient:props.textGradient,gradientTime:props.gradientTime}}/>;
   const tokens = text.split(/(\s+)/);
   const words = tokens.filter(token => token && !/^\s+$/.test(token));
   const lastFrame = Math.max(0, durationInFrames - 1);
@@ -27,7 +27,7 @@ export function RemotionText(props: RemotionTextProps) {
     opacity: frame < 0 ? 0 : 1,
     ...(preset === 'slide-title' ? { opacity: frame < 0 ? 0 : slide, transform: `translateX(${(1 - slide) * -.65}em)` } : {}),
   };
-  return <span data-remotion-text={preset} data-frame={frame} style={style}>{tokens.map((token, index) => {
+  return <span data-text-template={preset} data-frame={frame} style={style}>{tokens.map((token, index) => {
     if (!token || /^\s+$/.test(token)) return <Fragment key={index}>{token}</Fragment>;
     const position = wordIndex++;
     const start = words.length <= 1 ? 0 : Math.round(position * revealEnd / (words.length - 1));

@@ -1,9 +1,10 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
-import { subjectSelection, subjectSelectionKey, pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
+import { forSurface, subjectSelection, subjectSelectionKey, pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
 import { runArgs } from './lib/active_run';
+import { isMcpRun } from './lib/run_ids';
 import { internalMutation, internalQuery, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
@@ -27,7 +28,7 @@ const HANDLE_SECONDS = .25, PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 36
 // fal.ai (Oct 2026): video upscaler $0.0008 per output megapixel; RIFE $0.0013 per compute second (about 1.5 s per output second).
 const UPSCALE_USD_PER_MEGAPIXEL = .0008, RIFE_USD_PER_OUTPUT_SECOND = .002;
 
-type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; selection?: Pick<PixelTrackRequest, 'time' | 'seed'>; tracking?: PixelTrackRequest; start: number; end: number; backgroundPrompt?: string; time?: number; times?: number[]; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
+type StartInput = { ownerId: string; projectId: Id<'projects'>; clipId: string; assetId: string; op: DerivationOp; selection?: Pick<PixelTrackRequest, 'time' | 'seed' | 'segmenter'>; tracking?: PixelTrackRequest; start: number; end: number; backgroundPrompt?: string; time?: number; times?: number[]; factor?: number; scale?: number; target?: number; fps?: number; placeLater: boolean };
 
 /** Queue (or reuse) a processed copy. Window times are source seconds. */
 export async function startDerivation(ctx: MutationCtx, input: StartInput) {
@@ -101,7 +102,12 @@ async function requireRun(ctx: MutationCtx | import('./_generated/server').Query
 export const startFromRun = internalMutation({
   args: { ...runArgs, clipId: v.string(), assetId: v.string(), op, tracking: v.optional(pixelTrackRequestValidator), start: v.number(), end: v.number(), selection: v.optional(subjectSelectionValidator), backgroundPrompt: v.optional(v.string()), time: v.optional(v.number()), times: v.optional(v.array(v.number())), factor: v.optional(v.number()), scale: v.optional(v.number()), target: v.optional(v.number()), fps: v.optional(v.number()), placeLater: v.boolean() },
   returns: v.object({ derivationId: v.id('derivations'), status: v.union(v.literal('queued'), v.literal('completed')), outputAssetId: v.optional(v.id('assets')), estimatedUsd: v.number() }),
-  handler: async (ctx, { runId, ...args }) => { await requireRun(ctx, { ...args, runId }); return startDerivation(ctx, args); },
+  handler: async (ctx, { runId, ...args }) => {
+    await requireRun(ctx, { ...args, runId });
+    // SAM 3.1 (Meta) is for MCP clients only; Revline's in-app agent keeps fal SAM2 / Florence-2.
+    const mcp = isMcpRun(runId);
+    return startDerivation(ctx, { ...args, ...(args.selection ? { selection: forSurface(args.selection, mcp) } : {}), ...(args.tracking ? { tracking: forSurface(args.tracking, mcp && args.tracking.seed.kind === 'object') } : {}) });
+  },
 });
 
 export const runStatus = internalQuery({

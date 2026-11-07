@@ -1,13 +1,13 @@
 import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties, type ReactNode } from 'react';
-import { Easing, interpolate } from 'remotion';
-import { EXPRESSIVE_TEXT_DEFAULTS, type ExpressiveTextPreset, type RemotionTextProps } from './remotion-text';
+import { Easing, interpolate } from './frame-motion';
+import { EXPRESSIVE_TEXT_DEFAULTS, type ExpressiveTextPreset, type TemplateTextProps } from './text-templates';
 import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 const bounded = (value: number) => Math.max(0, Math.min(1, value));
 
-function timing(props: RemotionTextProps, frame: number, index = 0, count = 1, word = false) {
+function timing(props: TemplateTextProps, frame: number, index = 0, count = 1, word = false) {
   const seconds = props.durationInFrames / props.fps;
   const entrance = Math.min(props.revealDuration ?? EXPRESSIVE_TEXT_DEFAULTS.revealDuration, seconds * .4);
   const stagger = Math.min((props.stagger ?? EXPRESSIVE_TEXT_DEFAULTS.stagger) * (word ? 3 : 1), Math.max(0, seconds * .6 - entrance) / Math.max(1, count - 1));
@@ -22,7 +22,7 @@ function Words({ text, render }: { text: string; render: (word: string, index: n
   return <>{tokens.map((token, key) => <Fragment key={key}>{!token || /^\s+$/.test(token) ? token : render(token, index++, count)}</Fragment>)}</>;
 }
 
-function ChromaticSplit(props: RemotionTextProps) {
+function ChromaticSplit(props: TemplateTextProps) {
   const strength = props.strength ?? EXPRESSIVE_TEXT_DEFAULTS.strength;
   const shadow = props.textStyle ? textAppearance({ textStyle: props.textStyle }, props.resolution).textShadow : 'none';
   return <Words text={props.text} render={(word, index, count) => {
@@ -34,7 +34,7 @@ function ChromaticSplit(props: RemotionTextProps) {
   }}/>;
 }
 
-function OutlineTrails(props: RemotionTextProps) {
+function OutlineTrails(props: TemplateTextProps) {
   const strength = props.strength ?? EXPRESSIVE_TEXT_DEFAULTS.strength, scale = props.fontSize / 70;
   const t = timing(props, props.frame);
   const styleAt = (frame: number): CSSProperties => {
@@ -44,7 +44,7 @@ function OutlineTrails(props: RemotionTextProps) {
   return <span style={{ position: 'relative', display: 'grid', alignItems: 'center', justifyItems: 'center', maxWidth: '100%' }}>{[5, 4, 3, 2, 1].map(index => <span aria-hidden="true" key={index} style={{ gridArea: '1/1', display: 'block', maxWidth: '100%', whiteSpace: 'pre-wrap', pointerEvents: 'none', ...styleAt(props.frame - index * (2 + (props.stagger ?? EXPRESSIVE_TEXT_DEFAULTS.stagger) * props.fps)), color: 'transparent', WebkitTextStroke: `${Math.max(.5, 1.2 - index * .12) * scale}px ${props.highlightColor}`, textShadow: 'none', opacity: bounded(t.progress * 4) * (1 - t.progress) * (1 - index * .1) }}>{props.text}</span>)}<span style={{ gridArea: '1/1', display: 'block', maxWidth: '100%', whiteSpace: 'pre-wrap', ...styleAt(props.frame),...textGradientFill(props.textGradient,props.gradientTime??props.frame/props.fps) }}>{props.text}</span></span>;
 }
 
-function CinematicFocus(props: RemotionTextProps) {
+function CinematicFocus(props: TemplateTextProps) {
   const strength = props.strength ?? EXPRESSIVE_TEXT_DEFAULTS.strength;
   return <Words text={props.text} render={(word, index, count) => {
     const t = timing(props, props.frame, index, count, true);
@@ -54,7 +54,7 @@ function CinematicFocus(props: RemotionTextProps) {
   }}/>;
 }
 
-function CharacterScramble(props: RemotionTextProps) {
+function CharacterScramble(props: TemplateTextProps) {
   const strength = props.strength ?? EXPRESSIVE_TEXT_DEFAULTS.strength, alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   const count = Array.from(props.text.replace(/\s/g, '')).length;
   let characterIndex = 0;
@@ -66,13 +66,13 @@ function CharacterScramble(props: RemotionTextProps) {
   })}</span>}/>;
 }
 
-function SpotlightSweep(props:RemotionTextProps){
+function SpotlightSweep(props:TemplateTextProps){
   const t=timing(props,props.frame),strength=props.strength??EXPRESSIVE_TEXT_DEFAULTS.strength;
   const sweep=interpolate(props.frame,[0,Math.max(1,(props.revealDuration??EXPRESSIVE_TEXT_DEFAULTS.revealDuration)*props.fps*2)],[0,1],clamp);
   return <span style={{position:'relative',display:'grid'}}><span style={{gridArea:'1/1',opacity:.12+t.progress*.88,...textGradientFill(props.textGradient,props.gradientTime??props.frame/props.fps)}}>{props.text}</span><span aria-hidden="true" style={{gridArea:'1/1',color:'transparent',backgroundClip:'text',WebkitBackgroundClip:'text',pointerEvents:'none',backgroundImage:`linear-gradient(110deg,transparent 35%,${props.highlightColor} 49%,transparent 63%)`,backgroundSize:'250% 100%',backgroundPosition:`${130-sweep*260}% 0`,opacity:Math.sin(sweep*Math.PI)*Math.min(1,strength),filter:`drop-shadow(0 0 ${strength*5*props.fontSize/70}px ${props.highlightColor})`,WebkitTextStroke:'0 transparent',textShadow:'none'}}>{props.text}</span></span>;
 }
 
-function InkWrite(props:RemotionTextProps){
+function InkWrite(props:TemplateTextProps){
   const strength=props.strength??EXPRESSIVE_TEXT_DEFAULTS.strength;
   return <Words text={props.text} render={(word,index,count)=>{
     const t=timing(props,props.frame,index,count,true),fill=bounded((t.progress-.4)/.6);
@@ -81,13 +81,13 @@ function InkWrite(props:RemotionTextProps){
   }}/>;
 }
 
-function EchoTunnel(props:RemotionTextProps){
+function EchoTunnel(props:TemplateTextProps){
   const t=timing(props,props.frame),strength=props.strength??EXPRESSIVE_TEXT_DEFAULTS.strength;
   return <span style={{position:'relative',display:'grid',alignItems:'center',justifyItems:'center',maxWidth:'100%'}}>{[4,3,2,1].map(index=><span key={index} aria-hidden="true" style={{gridArea:'1/1',display:'block',maxWidth:'100%',whiteSpace:'pre-wrap',pointerEvents:'none',color:'transparent',WebkitTextStroke:`${.008*strength}em ${props.highlightColor}`,textShadow:'none',transform:`perspective(${props.fontSize*10}px) translateZ(${(1-t.progress)*index*80*strength*props.fontSize/70}px) rotate(${(1-t.progress)*index*-.7}deg)`,opacity:Math.sin(t.progress*Math.PI)*(1-index*.12)}}>{props.text}</span>)}<span style={{gridArea:'1/1',display:'block',maxWidth:'100%',whiteSpace:'pre-wrap',...textGradientFill(props.textGradient,props.gradientTime??props.frame/props.fps),opacity:t.progress,transform:`scale(${.78+t.progress*.22})`}}>{props.text}</span></span>;
 }
 
 /** These effects share the production preview/export clock and reserve resting text layout. */
-export function RemotionExpressiveText(props: RemotionTextProps & { preset: ExpressiveTextPreset }) {
+export function ExpressiveText(props: TemplateTextProps & { preset: ExpressiveTextPreset }) {
   const style: CSSProperties = { display: 'inline-block', maxWidth: '100%', fontSize: props.fontSize, color: props.color, fontFamily: props.fontFamily, fontWeight: props.fontWeight, whiteSpace: 'pre-wrap', letterSpacing: '-.045em', ...textTypographyStyle(props.textStyle, props.resolution), ...(props.textStyle ? textAppearance({ textStyle: props.textStyle }, props.resolution) : {}), opacity: props.frame < 0 ? 0 : 1 };
-  return <span data-remotion-text={props.preset} data-frame={props.frame} style={style} role="img" aria-label={props.text}><span aria-hidden="true">{props.preset === 'rgb-split' ? <ChromaticSplit {...props}/> : props.preset === 'type-trails' ? <OutlineTrails {...props}/> : props.preset === 'blur-focus' ? <CinematicFocus {...props}/> : props.preset === 'character-scramble' ? <CharacterScramble {...props}/> : props.preset==='spotlight-sweep'?<SpotlightSweep {...props}/>:props.preset==='ink-write'?<InkWrite {...props}/>:<EchoTunnel {...props}/>}</span></span>;
+  return <span data-text-template={props.preset} data-frame={props.frame} style={style} role="img" aria-label={props.text}><span aria-hidden="true">{props.preset === 'rgb-split' ? <ChromaticSplit {...props}/> : props.preset === 'type-trails' ? <OutlineTrails {...props}/> : props.preset === 'blur-focus' ? <CinematicFocus {...props}/> : props.preset === 'character-scramble' ? <CharacterScramble {...props}/> : props.preset==='spotlight-sweep'?<SpotlightSweep {...props}/>:props.preset==='ink-write'?<InkWrite {...props}/>:<EchoTunnel {...props}/>}</span></span>;
 }

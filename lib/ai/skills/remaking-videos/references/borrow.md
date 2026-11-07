@@ -29,7 +29,7 @@ A good borrow changes only what the user named; everything else stays as it was 
 ### Transition presets
 | Reference kind | addTransition preset |
 | --- | --- |
-| whip | whip-pan |
+| whip | whip-pan, whipDirection as the reference moves (left, right, up, down, zoom, zoom-out) |
 | zoom | zoom-through |
 | dissolve | crossfade |
 | blur | blur-dissolve |
