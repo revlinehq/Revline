@@ -19,10 +19,6 @@ import { saveEvidence } from './lib/lane_evidence';
 import { summarizeTimeline } from './lib/inspectTimeline';
 import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../lib/ai/lanes/task';
 import { capabilityExists, type LaneId } from '../lib/ai/lanes';
-import { isMcpOnlyLane } from '../lib/ai/lanes/types';
-import { isMcpRun } from './lib/run_ids';
-/** MCP-only lanes (Genesis) belong to MCP tasks (mcp-task:<uuid>); Revline's in-app agent never runs them. */
-const requireLaneSurface = (lane: string | undefined, taskId: string) => { if (isMcpOnlyLane(lane) && !isMcpRun(taskId)) throw new ConvexError(`The ${lane} lane is available to MCP clients only.`); };
 import { FastFrameReview, fastFrameEvidence, readFastFrameTimes } from '../lib/ai/fast-frame-review';
 import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
 import type { Id } from './_generated/dataModel';
@@ -44,8 +40,6 @@ async function saveTab(
   reason: string,
   manual = false,
 ) {
-  // The tab's lane is shared with Revline's in-app agent; MCP-only lanes live on their MCP task alone.
-  if (isMcpOnlyLane(lane)) return;
   const project = await requireProject(ctx, projectId, ownerId);
   if (!tabsOf(project).some((tab) => tab.id === timelineId))
     throw new ConvexError('Timeline no longer exists.');
@@ -100,7 +94,7 @@ export const choose = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.lane === 'explainer' || isMcpOnlyLane(args.lane)) throw new ConvexError('Choose an available workflow.');
+    if (args.lane === 'explainer') throw new ConvexError('Choose an available workflow.');
     const ownerId = await requireOwner(ctx),
       project = await requireProject(ctx, args.projectId, ownerId);
     if (project.aiRunning)
@@ -199,8 +193,6 @@ export const begin = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    requireLaneSurface(args.lane, args.taskId);
-    requireLaneSurface(args.lockedLane, args.taskId);
     const project = await requireProject(ctx, args.projectId, args.ownerId),
       timelineId = args.timelineId ?? activeTabOf(project);
     const existing = await ctx.db
@@ -268,7 +260,6 @@ export const switchLane = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    requireLaneSurface(args.lane, args.taskId);
     await requireProject(ctx, args.projectId, args.ownerId);
     const row = await ctx.db
       .query('editingLaneTasks')
@@ -312,7 +303,7 @@ export const loadCapability = internalMutation({
     await requireProject(ctx, args.projectId, args.ownerId);
     const row = await ctx.db.query('editingLaneTasks').withIndex('by_task', q => q.eq('taskId', args.taskId)).unique();
     if (!row || row.ownerId !== args.ownerId || row.projectId !== args.projectId) throw new ConvexError('Task not found.');
-    if (!capabilityExists(args.name, isMcpRun(args.taskId))) throw new ConvexError('Unknown supporting capability. Use discoverCapabilities first.');
+    if (!capabilityExists(args.name)) throw new ConvexError('Unknown supporting capability. Use discoverCapabilities first.');
     if (row.attempts >= MAX_FINISH_ATTEMPTS) throw new ConvexError('This task exhausted its finish checks.');
     await ctx.db.patch(row._id, { capabilities: [...new Set([...(row.capabilities ?? []), args.name])] });
     return null;
@@ -504,13 +495,11 @@ export const reviewFrames = internalMutation({
     const timeline = await storedTabTimeline(ctx, project, args.timelineId);
     if (!timeline) return null;
     const fingerprint = await timelineHistoryKey(timeline);
-    // Genesis finish needs frames read after its last edit: keep them as evidence at this fingerprint.
-    if (row.lane === 'genesis' || row.capabilities?.includes('genesis')) await saveEvidence(ctx, row, { tool: 'getFrames', timelineId: args.timelineId, fingerprint, input: { times: args.times }, output: { revision: args.revision } });
     const pending = readFastFrameTimes(row.evidence, args.timelineId, fingerprint);
     if (!pending?.length) return null;
     const review = new FastFrameReview(pending);
     review.reviewed(args.times, timeline);
-    await saveEvidence(ctx, (await ctx.db.get(row._id)) ?? row, fastFrameEvidence(args.timelineId, fingerprint, review.times()));
+    await saveEvidence(ctx, row, fastFrameEvidence(args.timelineId, fingerprint, review.times()));
     return null;
   },
 });

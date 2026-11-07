@@ -279,7 +279,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       const output = await runPhase('Removing background', () => removeBackground(source, directory, task.cutout!, signal, onProgress));
       await runPhase('Saving cut-out', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200)} (${task.cutout!.mode === 'foreground' ? 'foreground matte' : 'background removed'}).webm`, duration: output.duration, width: output.width, height: output.height, kind: 'video', contentType: 'video/webm' }, uploadContext, signal));
       onProgress(98);
-      return output.subjectMask ? { subjectMask: output.subjectMask } : {};
+      return {};
     }
     if (task.kind === 'frames') {
       if (!media.hasVideo || !task.frameRequest) throw new AnalysisError('Frame inspection needs a video window and a question.', 400);

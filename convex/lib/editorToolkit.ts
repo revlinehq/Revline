@@ -1,11 +1,7 @@
 import { retryAbortedTransaction } from './retry_aborted_transaction';
 import { materializeTranscript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
-import { LANES, MCP_ONLY_TOOLS, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
-import { getLayerDescription, getLayerInput, segmentDescription, segmentInput, subjectSeed } from '../../lib/ai/lanes/genesis/functions/segment';
-import { applyLayerEffect, layerEffectDescription, layerEffectInput } from '../../lib/ai/lanes/genesis/functions/layer-effect';
-import { applyTextBehind, textBehindDescription, textBehindInput } from '../../lib/ai/lanes/genesis/functions/text-behind';
-import type { Applied } from '../../lib/ai/lanes/genesis/functions/layer';
+import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline } from '../../lib/ai/lanes/task';
@@ -248,10 +244,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   let backgroundPreviews: { label: string; html: string }[] = [];
   let backgroundPreviewRun: Promise<unknown> | undefined;
   const loadCapability = async (name: string) => {
-    if (!capabilityExists(name, isMcpRun(run.runId))) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
+    if (!capabilityExists(name)) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
     if (taskId) await laneCtx.runMutation(internal.lanes.loadCapability, { ...taskScope, name });
     capabilities.add(name);
-    return capabilitySummary(name, isMcpRun(run.runId));
+    return capabilitySummary(name);
   };
   let finishRequired=options.finishRequired??true;
   let requiredPersisted=finishRequired;
@@ -526,18 +522,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await new Promise(resolve=>setTimeout(resolve,700));
     }
   };
-  /** Build a Genesis function on the timeline from a ready layer, and record where it placed the layer for finish checks. */
-  const applyGenesis = async (layerId: string, clipId: string | undefined, fn: string, build: (timeline: Timeline, layer: Awaited<ReturnType<typeof readyLayer>>, stack: { clipIds: string[]; subjectClipIds: string[] }) => Applied) => {
-    const layer = await readyLayer(layerId);
-    const stack = await ctx.runQuery(internal.genesis.stackForRun, { ...run, timelineId: timelineIdForLane(), baseClipId: clipId ?? layer.clipId });
-    let applied: Applied | undefined;
-    const saved = await checkpoint(t => { applied = build(t, layer, stack); return applied.timeline; });
-    const placed = applied!;
-    await ctx.runMutation(internal.genesis.recordApplication, { ...run, layerId: layer.layerId, application: { timelineId: timelineIdForLane(), function: fn, baseClipId: placed.baseClipId, clipIds: placed.clipIds, subjectClipIds: placed.subjectClipIds } });
-    const span = find(placed.timeline, placed.baseClipId), mid = Math.round((span.start + span.duration / 2) * 100) / 100;
-    return { ...saved, layerId: layer.layerId, footageClipId: placed.baseClipId, clipIds: placed.clipIds, subjectClipIds: placed.subjectClipIds, next: `getFrames at ${mid}s (and where the subject moves fastest), then finish.` };
-  };
-  const readyLayer = (layerId: string) => ctx.runQuery(internal.genesis.readyForRun, { ...run, layerId });
   const pixelSeedInput = z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict(), z.object({ kind: z.literal('target'), targetId: z.string().min(1) }).strict()]);
   const resolveSubjectSeed = (seed:z.infer<typeof pixelSeedInput>,assetId:string|undefined,time:number):PixelTrackRequest['seed'] => {
     if(seed.kind!=='target')return seed;
@@ -1022,7 +1006,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       },
       toModelOutput: (ctx, options) => blueprintImages(ctx, options.output),
     }),
-    discoverCapabilities: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.discoverCapabilities, description: 'Find relevant optional workflows or supporting skills by the needed action. Returns a short matching index, never full skill text. Shared edits need no discovery.', inputSchema: z.object({ query: z.string().trim().min(3).max(200) }), execute: async (_ctx, {query}) => ({ matches: discoverCapabilities(query, mcpSurface), next: 'Use loadCapability for a supporting workflow or readSkill for a skill. Change the primary style only if the deliverable changes.' }) }),
+    discoverCapabilities: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.discoverCapabilities, description: 'Find relevant optional workflows or supporting skills by the needed action. Returns a short matching index, never full skill text. Shared edits need no discovery.', inputSchema: z.object({ query: z.string().trim().min(3).max(200) }), execute: async (_ctx, {query}) => ({ matches: discoverCapabilities(query), next: 'Use loadCapability for a supporting workflow or readSkill for a skill. Change the primary style only if the deliverable changes.' }) }),
     loadCapability: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.loadCapability, description: 'Load supporting tools and a small skill index by a discovered workflow or skill name, without changing the primary style, task, clip delivery, finish checks or user decisions. Read only the needed skill pages afterward.', inputSchema: z.object({ name: z.string().trim().min(1).max(80) }), execute: async (_ctx, {name}) => ({ ...await loadCapability(name), primaryWorkflow: lane, next: 'Supporting capability loaded. Read needed skills; preserve the primary deliverable and finish it.' }) }),
     switchLane:createTool({metadata:EDITOR_TOOL_DEFINITIONS.switchLane,description:'Optionally change the primary workflow when the deliverable changes. Shared edits need no style selection. For supporting skills/tools use loadCapability instead, preserving the primary deliverable and finish checks.',inputSchema:z.object({lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}),execute:async(_ctx,input)=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
@@ -1834,7 +1818,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { result } = await blueprintCheck(checkId);
       return { ...blueprint, images: [{ label: `Preview at ${result.width}x${result.height}`, data: result.image, mimeType: 'image/jpeg' }] };
     }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
-    readSkill:createTool({metadata:EDITOR_TOOL_DEFINITIONS.readSkill,description:"Load one known supporting skill or page on demand and enable its tools. Reuse current reads. Preserves the primary workflow and its deliverable. Find skills with discoverCapabilities.",inputSchema:z.object({name:z.string().min(1),page:z.string().max(80).optional()}),execute:async(_ctx,{name,page})=>{const instructions=laneSkill(name,page,mcpSurface);await loadCapability(name);return {name,...(page?{page}:{}),lane,instructions};}}),
+    readSkill:createTool({metadata:EDITOR_TOOL_DEFINITIONS.readSkill,description:"Load one known supporting skill or page on demand and enable its tools. Reuse current reads. Preserves the primary workflow and its deliverable. Find skills with discoverCapabilities.",inputSchema:z.object({name:z.string().min(1),page:z.string().max(80).optional()}),execute:async(_ctx,{name,page})=>{const instructions=laneSkill(name,page);await loadCapability(name);return {name,...(page?{page}:{}),lane,instructions};}}),
     addScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addScene, description: "Add one animated scene: a TypeScript module (code) that builds plain HTML and animates it on a GSAP timeline, rendered full-frame on a free V layer for start..start+duration timeline seconds. Read writing-scenes first, plus launch-films-motions for launch and feature films. Then give it matching sound as that skill says. For a film (a launch film, a recreation, anything longer than one idea), use addFilm instead: one clip, one timeline, sections as markers. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo the scene receives as `brand`.'), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() }), execute: async (_ctx, { title, code, brandKitId, media, blueprints, ...timing }) => { checkSceneCode(code); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const mounted = blueprints?.length ? await sceneBlueprints(brandKitId, blueprints) : undefined; return checkpoint(t => placeScene(t, { title, code, ...timing, brand, media: images, blueprints: mounted })); } }),
     editScene: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editScene, description: "Replace an existing scene clip's code and/or title, or attach or refresh its brand kit, preserving its timing and layer. A scene keeps its brand kit as it was when attached; pass brandKitId again to pick up later kit changes. Read writing-scenes (and launch-films-motions for films) and inspectClip for the current code first. If the edit changes the scene's timing or motion, update its existing generated sound with editSound in the same turn (or generate one if it has none). For a change to part of a film or scene, use patchScene instead of retyping the code; new code on a film clip replaces the whole film in every clip of it, and its section markers follow the new section() calls. Title-only edits need no scope. A code change isolated to one section infers scope; shared-code edits need scope for the requested sections. Binding-only refreshes without scope must render every existing section unchanged. Returns compile errors for invalid code; save immediately.", inputSchema: z.object({ clipId: z.string(), scope: scopeInput.optional(), title: z.string().trim().min(1).max(SCENE_LIMITS.title).optional(), code: z.string().min(1).optional(), brandKitId: z.string().nullable().optional().describe('Attach or refresh a brand kit on the scene; null removes it.'), media: sceneMediaInput.nullable().optional().describe('Replace the scene\'s images; null removes them all.'), blueprints: sceneBlueprintInput.nullable().optional().describe('Replace the mounted blueprints (refreshing their code from the kit); null removes them.') }).refine(input => input.title !== undefined || input.code !== undefined || input.brandKitId !== undefined || input.media !== undefined || input.blueprints !== undefined, { message: 'Specify a title, code, brandKitId, media or blueprints.' }), execute: async (_ctx, { clipId, scope, title, code, brandKitId, media, blueprints }) => { let sectionMarkers: SectionMarkerChanges | undefined; if (code !== undefined) checkSceneCode(code); const brand = brandKitId ? await sceneBrandSnapshot(ctx, run.ownerId, brandKitId) : undefined; const images = media ? sceneMedia(media) : undefined; const kitId = brandKitId ?? find(editSession.timeline, clipId).scene?.brand?.kitId; const mounted = blueprints?.length ? await sceneBlueprints(kitId, blueprints) : undefined; const change = (t: Timeline) => { const clip = find(t, clipId); if (clip.kind !== 'scene' || !clip.scene) throw new Error('Choose a scene clip.'); const { brand: current, media: currentMedia, blueprints: currentBlueprints, ...scene } = clip.scene; const next = brandKitId === null ? undefined : brand ?? current; const nextMedia = media === null ? undefined : images ?? currentMedia; const nextCode = code ?? scene.code, nextBlueprints = blueprints === null ? undefined : mounted ?? currentBlueprints; if (code !== undefined && scene.film) checkSectionCalls(nextCode, scene.film.duration); const shown = (other: Clip['scene'] & {}, own: boolean) => ({ ...(({ brand: _b, media: _m, blueprints: _p, ...rest }) => rest)(other), title: own ? title ?? other.title : other.title, code: nextCode, ...(next ? { brand: next } : {}), ...(nextMedia?.length ? { media: nextMedia } : {}), ...(nextBlueprints?.length ? { blueprints: nextBlueprints } : {}) }); /* Every clip of a film shares one code: its code, brand, media and blueprints change in all of them. */ if (scene.film) { const synced = syncFilmSectionMarkers({ ...t, clips: t.clips.map(other => other.kind === 'scene' && other.scene?.code === scene.code ? { ...other, scene: shown(other.scene, other.id === clipId) } : other) }, scene.code, nextCode); sectionMarkers = synced.changes; return synced.timeline; } return patchClip(t, clipId, { scene: shown(clip.scene, true) }); }; const scoped = await scopedChange(clipId, scope, change, 'edit'); if ('refusal' in scoped) return scoped.refusal; const saved = await checkpoint(change); return { ...saved, ...scoped, ...(sectionMarkers ? { sectionMarkers } : {}) }; }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     addScenes: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addScenes, description: "Add several separate scene clips in one call, saved together: standalone moments such as title cards or overlays, each a plain HTML + GSAP module like addScene. For a film whose motion runs from section to section (launch films, recreations), use addFilm instead. Each scene saves or fails on its own: fix a failed one with addScene. Read writing-scenes and launch-films-motions first.", inputSchema: z.object({ brandKitId: z.string().optional().describe('Brand kit whose fonts, colors and logo every scene receives as `brand`.'), scenes: z.array(z.object({ title: z.string().trim().min(1).max(SCENE_LIMITS.title), code: z.string().min(1), start: z.number().min(0), duration: z.number().positive().max(120), track: z.number().int().min(1).max(24).optional(), media: sceneMediaInput.optional(), blueprints: sceneBlueprintInput.optional() })).min(1).max(8) }), execute: async (_ctx, { brandKitId, scenes }) => {
@@ -2260,20 +2244,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const result = await ctx.runMutation(internal.cutouts.startFromRun, { ...run, clipId, ...(mode ? { mode } : {}), ...(seed?{selection:{time:sourceTime,seed:resolveSubjectSeed(seed,clip.assetId,sourceTime)}}:{}) });
       return result.reused ? { applied: true, reusedExistingCutOut: true, estimatedUsd: 0, note: 'An existing cut-out of this footage was applied; the background is already removed. Visuals belong on a lower V layer.' } : { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
-    // Genesis (MCP only): SAM 3.1 layers. Pure timeline builders live in lib/ai/lanes/genesis/functions.
-    segment: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.segment, description: segmentDescription, inputSchema: segmentInput, execute: async (_ctx, input) => {
-      await editSession.wait();const clip=find(editSession.timeline,input.clipId);
-      if(clip.kind!=='video'||!clip.assetId)throw new Error('Choose a video clip.');
-      const clipEnd=clip.start+clip.duration,from=input.start??clip.start,to=input.end??clipEnd,at=input.at??from;
-      if(from<clip.start-1e-6||to>clipEnd+1e-6||to-from<1/editSession.timeline.fps)throw new Error(`Keep start/end inside clip ${clip.id} (${clip.start.toFixed(2)}–${clipEnd.toFixed(2)}s).`);
-      if(at<from||at>=to)throw new Error('at must be inside the masked range.');
-      const a=sourceTimeAt(clip,from),b=sourceTimeAt(clip,to);
-      const started=await ctx.runMutation(internal.genesis.startFromRun,{...run,clipId:clip.id,sourceAssetId:clip.assetId,prompt:JSON.stringify(input.prompt),time:sourceTimeAt(clip,at),seed:subjectSeed(input.prompt),start:Math.min(a,b),end:Math.max(a,b),fps:editSession.timeline.fps});
-      return {...started,model:'sam-3.1',provider:'Meta Model API via media worker',next:started.status==='ready'?'Apply layerEffect or textBehind with this layerId.':'Poll getLayer with this layerId every 10-15 seconds until status is ready.'};
-    } }),
-    getLayer: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getLayer, description: getLayerDescription, inputSchema: getLayerInput, execute: async (_ctx, {layerId, from, to}) => ctx.runQuery(internal.genesis.layerForRun, { ...run, layerId, ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) }) }),
-    layerEffect: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.layerEffect, description: layerEffectDescription, inputSchema: layerEffectInput, execute: async (_ctx, input) => applyGenesis(input.layerId, input.clipId, `layerEffect:${input.effect}`, (t, layer, stack) => applyLayerEffect(t, layer, stack, input, () => crypto.randomUUID())) }),
-    textBehind: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.textBehind, description: textBehindDescription, inputSchema: textBehindInput, execute: async (_ctx, input) => applyGenesis(input.layerId, input.clipId, 'textBehind', (t, layer, stack) => applyTextBehind(t, layer, stack, input, () => crypto.randomUUID())) }),
   };
   // Scenes report what they cover but were never read: a recreation reads every moment before building over it.
   // Building is refused while the range still owes reads, unless the call says why it goes ahead (readReason).
@@ -2498,7 +2468,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return {timelineId,tool,title:scene.title,start:target.start-target.sourceStart/(target.playbackRate??1),duration:target.scene.film?.duration??target.duration,...(good?{clip:{...target,scene:{...scene,code:good}}}:{}),sections:good?draftSections(good):[],...(writing?{writing}:{}),planned:[]};
   };
   const filmDrafts=filmDraftPublisher({build:buildFilmDraft,write:draft=>ctx.runMutation(internal.filmDrafts.publish,{...run,draft}),clear:()=>ctx.runMutation(internal.filmDrafts.clear,run)});
-  const availableToolNames=():string[]=>Object.keys(tools).filter(name=>(mcpSurface||!MCP_ONLY_TOOLS.has(name))&&laneToolAllowed(lane,name,[...capabilities]));
+  const availableToolNames=():string[]=>Object.keys(tools).filter(name=>laneToolAllowed(lane,name,[...capabilities]));
   for(const [name,tool] of Object.entries(tools) as [string,{execute?:(...args:never[])=>Promise<unknown>}][]){
     const execute=tool.execute;if(!execute)continue;
     tool.execute=async function(this:unknown,...args:never[]){
@@ -2507,8 +2477,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return invoke.call(this,...args);
     };
     const invoke=async function(this:unknown,...args:never[]){
-      // Genesis and other MCP-only tools never run for Revline's in-app agent, whatever its lane or capabilities.
-      if(MCP_ONLY_TOOLS.has(name)&&!mcpSurface)throw new Error(`Tool "${name}" is not a Revline editing tool.`);
       if(!laneToolAllowed(lane,name,[...capabilities]))throw new Error(laneToolError(lane,name));
       const input=(args[0]??{}) as Record<string,unknown>;
       if(name==='analyzeMedia'){
@@ -2544,7 +2512,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  // Revline's in-app agent is never handed MCP-only tools (Genesis), not even inactive definitions.
-  if(!mcpSurface)for(const name of MCP_ONLY_TOOLS)delete (tools as Record<string,unknown>)[name];
   return { tools, filmDrafts, editSession, motionStatus, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => ({ ...receipts.publishedResult(output, editSession.revision), ...await motionStatus() }), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),fastReviewFeedback: () => !clippingActive&&tracksChanges() ? fastReview.feedback() : undefined };
 }

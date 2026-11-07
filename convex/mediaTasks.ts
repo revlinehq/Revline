@@ -38,7 +38,6 @@ import { commitTimeline, currentTimeline } from './lib/timeline';
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { placeCutout } from './cutouts';
-import { completeGenesisCutout } from './genesis';
 import { completeDerivation } from './derivations';
 import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
@@ -616,7 +615,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'extract' });
     await enqueueMediaTask(ctx, { ownerId: task.ownerId, projectId: task.projectId, assetId: output._id, kind: 'preview' });
   },
-  cutout: async (ctx, task, result) => {
+  cutout: async (ctx, task) => {
     const cutout = task.cutoutId ? await ctx.db.get(task.cutoutId) : null;
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
     if (!cutout || cutout.status !== 'queued') throw new ConvexError('The background removal request is no longer active.');
@@ -625,8 +624,6 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     // extracted audio, so the clip's linked audio stays valid.
     const source = await ctx.db.get(cutout.sourceAssetId);
     await ctx.db.patch(output._id, { cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start, audioExtracted: true, ...(source?.audioAssetId ? { audioAssetId: source.audioAssetId } : {}) });
-    // A Genesis layer keeps its cut-out as a reusable mask: saved boxes, no timeline placement.
-    if (cutout.purpose === 'genesis') { await completeGenesisCutout(ctx, cutout, result.subjectMask); await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id, placed: false }); return; }
     await ctx.db.patch(cutout._id, { status: 'completed', outputAssetId: output._id });
     await placeCutout(ctx, { ...cutout, status: 'completed', outputAssetId: output._id }, { ...output, cutoutOf: cutout.sourceAssetId, cutoutStart: cutout.start });
   },

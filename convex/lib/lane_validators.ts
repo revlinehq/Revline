@@ -1,7 +1,6 @@
 import { v } from 'convex/values';
-import { MCP_LANE_IDS } from '../../lib/ai/lanes/types';
-// Stored lanes include MCP-only lanes; selection surfaces decide which ones a caller may choose.
-export const activeLaneValidator = v.union(...MCP_LANE_IDS.map(lane => v.literal(lane)));
+import { LANE_IDS } from '../../lib/ai/lanes/types';
+export const activeLaneValidator = v.union(...LANE_IDS.map(lane => v.literal(lane)));
 // Keep persisted records readable without offering the retired workflow.
 export const laneValidator = v.union(activeLaneValidator, v.literal('explainer'));
 export const laneEvidenceValidator = v.object({

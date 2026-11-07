@@ -9,12 +9,8 @@ export const LANE_IDS = [
   'clip',
   'reel',
 ] as const;
-/** Lanes only MCP clients can select or load; Revline's in-app agent never sees them or their tools. */
-export const MCP_ONLY_LANE_IDS = ['genesis'] as const;
-export const MCP_LANE_IDS = [...LANE_IDS, ...MCP_ONLY_LANE_IDS] as const;
-export const isMcpOnlyLane = (value: unknown) => MCP_ONLY_LANE_IDS.some(id => id === value);
 // Legacy stored lane values remain readable without becoming selectable.
-export type LaneId = (typeof MCP_LANE_IDS)[number] | 'explainer';
+export type LaneId = (typeof LANE_IDS)[number] | 'explainer';
 export type LaneEvidence = {
   tool: string;
   timelineId: string;
@@ -29,20 +25,6 @@ export type LaneCheckContext = {
   timelineId: string;
   assets: { _id: string; kind: string; duration?: number }[];
   referenceMotion?: ReferenceMotionEvidence[];
-  /** Genesis layers of this project, read by the server for the genesis lane's checks. */
-  genesis?: GenesisLayerEvidence[];
-};
-/** One SAM 3.1 layer and where Genesis functions placed it. Boxes are per mask frame, normalized [l,t,r,b] or null. */
-export type GenesisLayerEvidence = {
-  layerId: string;
-  status: 'processing' | 'ready' | 'failed';
-  outputAssetId?: string;
-  sourceAssetId: string;
-  start: number;
-  end: number;
-  fps: number;
-  boxes?: (number[] | null)[];
-  applications: { timelineId: string; function: string; baseClipId: string; clipIds: string[]; subjectClipIds: string[] }[];
 };
 export type ReferenceMotionEvidence = {
   projectId: string;
@@ -83,8 +65,6 @@ export type LaneDefinition = {
   description: string;
   skills: EditorSkill[];
   tools: readonly string[];
-  /** Tools this lane defines itself. For an MCP-only lane they are hidden from Revline's in-app agent. */
-  ownTools?: readonly string[];
   check: (context: LaneCheckContext) => string[];
   /** Advisory findings reported with finish; they never block it. */
   warn?: (context: LaneCheckContext) => string[];

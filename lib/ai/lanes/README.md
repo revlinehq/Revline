@@ -15,7 +15,6 @@ Each lane's `definition.ts` owns its check recipe. The lane is the only thing th
 - `clip`: finishClipping data checks; visual confirmation only for action moments.
 - `motion`: always full checks.
 - `recreate`: always full checks plus reference comparison.
-- `genesis` (MCP only): getFrames at each change ±1 frame, plus layer checks: every applied SAM 3.1 layer is ready, its mask covers and is non-empty over the clip, its synced copies match the footage, and getFrames ran inside each Genesis range after the last edit. Revline's in-app agent cannot select, discover, load or call it.
 
 One automatic step-up, the `final` level, runs the lane's full checks (clip: checkClip framing and decode-health on every accepted tab). The server sets it in `lanes.begin` from the request: a final export or publish request, or an explicit request to double-check everything. The agent never chooses it. Stored `editMode` values on older queue rows, turns, runner checkpoints and browser storage still validate and are ignored.
 

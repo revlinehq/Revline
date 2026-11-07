@@ -99,8 +99,6 @@ export async function removeBackground(
   );
   onProgress(30);
   let path = join(directory, "cutout.webm");
-  // SAM 3.1 also reports the subject's box per frame of the window (Genesis layers keep them).
-  let boxes: (number[] | null)[] | undefined;
   const segmented = async () => {
     const { stdout } = await run(
       "ffprobe",
@@ -137,7 +135,7 @@ export async function removeBackground(
       const frame = Math.round((window.selection.time - window.start) * fps);
       mask =
         window.selection.segmenter === "sam-3.1"
-          ? await segmentVideoSubjectSam31(clip, directory, prompt, frame, fps, signal, onProgress).then((result) => { boxes = result.boxes; return result.path; })
+          ? await segmentVideoSubjectSam31(clip, directory, prompt, frame, fps, signal, onProgress)
           : await segmentVideoSubject(
               fal(),
               clip,
@@ -330,7 +328,7 @@ export async function removeBackground(
   )
     throw new AnalysisError("The background-removed video is unreadable.", 502);
   onProgress(90);
-  return { path, duration, width: stream.width, height: stream.height, ...(boxes ? { subjectMask: { fps, boxes } } : {}) };
+  return { path, duration, width: stream.width, height: stream.height };
 }
 
 async function frameCount(path: string, signal: AbortSignal) {
