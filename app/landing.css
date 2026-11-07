@@ -93,8 +93,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-agent-logos img+img{margin-left:-5px}
 .landing-hero-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding-top:8px}
 .landing-product-frame{border-radius:10px;box-shadow:0 12px 32px -8px #1212122e}
-@media(prefers-reduced-motion:no-preference){.landing-product-frame{animation:landing-settle-media 1.1s cubic-bezier(.32,.72,0,1) 1.05s backwards}}
-@keyframes landing-settle-media{from{opacity:.01;translate:0 32px;scale:.97}}
 .landing-product-window{display:block;width:100%;height:auto;aspect-ratio:16/9;object-fit:cover;border-radius:10px;background:#0b0c0e}
 
 /* Revline's Agent is powerful: nested cards, each stage a small mock of its effect. */
