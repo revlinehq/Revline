@@ -27,10 +27,12 @@ import '@/components/editor/scripted-demo-editor.css';
 
 type Pick = { title: string; start: number; end: number; facecam: number[] };
 const highlights: Pick[] = picks.picks;
-const source: MediaAsset = { _id: 'prototype-tenz', fileName: 'TenZ · VALORANT highlights.mp4', kind: 'video', previewOriginalPlayable: true, url: '/prototype/tenz-source.mp4', duration: picks.duration, width: picks.width, height: picks.height, thumbnailUrl: '/prototype/source.jpg' };
+// The prototype's recordings live in the public revline-prototype R2 bucket; they are too large for static assets.
+const MEDIA = 'https://pub-1cffb3ec2b3446ec91e49f18b328883c.r2.dev';
+const source: MediaAsset = { _id: 'prototype-tenz', fileName: 'TenZ · VALORANT highlights.mp4', kind: 'video', previewOriginalPlayable: true, url: `${MEDIA}/tenz-source.mp4`, duration: picks.duration, width: picks.width, height: picks.height, thumbnailUrl: `${MEDIA}/source.jpg` };
 const media = scriptedDemoMedia([source, ...highlights.map((pick, i): MediaAsset => {
   const [x, y, w, h] = pick.facecam;
-  return { _id: `prototype-clip-${i}`, fileName: `${pick.title}.mp4`, kind: 'video', previewOriginalPlayable: true, url: `/prototype/clip-${i + 1}.mp4`, duration: pick.end - pick.start, width: picks.width, height: picks.height, thumbnailUrl: `/prototype/clip-${i + 1}.jpg`, analysis: { facecam: { version: 1, samples: [{ time: 0, kind: 'overlay', facecam: { x: x / picks.width, y: y / picks.height, w: w / picks.width, h: h / picks.height }, gameplay: { x: (x + w) / picks.width, y: 0, w: 1 - (x + w) / picks.width, h: 1 }, confidence: 1, reason: 'Panel measured on native frames for this saved recording segment.' }] } } };
+  return { _id: `prototype-clip-${i}`, fileName: `${pick.title}.mp4`, kind: 'video', previewOriginalPlayable: true, url: `${MEDIA}/clip-${i + 1}.mp4`, duration: pick.end - pick.start, width: picks.width, height: picks.height, thumbnailUrl: `${MEDIA}/clip-${i + 1}.jpg`, analysis: { facecam: { version: 1, samples: [{ time: 0, kind: 'overlay', facecam: { x: x / picks.width, y: y / picks.height, w: w / picks.width, h: h / picks.height }, gameplay: { x: (x + w) / picks.width, y: 0, w: 1 - (x + w) / picks.width, h: 1 }, confidence: 1, reason: 'Panel measured on native frames for this saved recording segment.' }] } } };
 })]);
 const assets = media.assets;
 const noUpload = async () => {};
