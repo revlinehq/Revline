@@ -215,7 +215,7 @@ if (operation === 'status') {
       else if (name.endsWith('_KEY')) throw new Error(`Selected environment lacks ${name}.`);
     }
     // Optional: SAM 3.1 (Meta) for MCP subject selections; those requests fail clearly when it is unset.
-    if (!exportsOnly && (settings.META_API_KEY || remote.META_API_KEY)) variables.META_API_KEY = settings.META_API_KEY || remote.META_API_KEY;
+    if (!exportsOnly && (settings.MODEL_API_KEY || remote.MODEL_API_KEY)) variables.MODEL_API_KEY = settings.MODEL_API_KEY || remote.MODEL_API_KEY;
     await configureRailwaySlot({ ...target(), serviceId, image: pool.image, variables });
   }
   await setEnv('RAILWAY_API_TOKEN', token);

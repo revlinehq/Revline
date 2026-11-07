@@ -3,7 +3,7 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { MEDIA_PROCESSOR_VERSION } from '../../../lib/media-analysis/processor-version';
 
-type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY?: string; MEDIA_VISION_GEMINI_FALLBACK?: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string; META_API_KEY?: string };
+type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY?: string; MEDIA_VISION_GEMINI_FALLBACK?: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string; MODEL_API_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;
 const TIMEOUT_MS = 5 * 60_000;
 const INSTANCE_TYPE = 'standard-3';
@@ -97,7 +97,7 @@ export class MediaProcessor extends DurableObject<Bindings> {
         // Background removal (fal.ai); without it cut-out tasks fail with a clear message.
         ...(this.env.FAL_KEY ? { FAL_KEY: this.env.FAL_KEY } : {}),
         // SAM 3.1 on Meta's Model API for MCP subject selections; without it those requests fail clearly.
-        ...(this.env.META_API_KEY ? { META_API_KEY: this.env.META_API_KEY } : {}),
+        ...(this.env.MODEL_API_KEY ? { MODEL_API_KEY: this.env.MODEL_API_KEY } : {}),
         GEMINI_VIDEO_MODEL: this.env.GEMINI_VIDEO_MODEL,
       } });
     }

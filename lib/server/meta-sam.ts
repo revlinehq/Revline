@@ -11,12 +11,12 @@ const API = 'https://api.meta.ai/v1';
 const MODEL_PATTERN = /^sam-3\.1(?:$|[-@:])/;
 
 /** The worker-only Meta Model API key, or undefined when none is set. */
-export const configuredMetaSam = () => process.env.META_API_KEY || undefined;
+export const configuredMetaSam = () => process.env.MODEL_API_KEY || undefined;
 
 /** The key, or a clear 503. SAM 3.1 requests never fall back to an older SAM. */
 export function requireMetaSam() {
   const key = configuredMetaSam();
-  if (!key) throw new AnalysisError('SAM 3.1 needs META_API_KEY on the media worker. It does not fall back to SAM2.', 503, false);
+  if (!key) throw new AnalysisError('SAM 3.1 needs MODEL_API_KEY on the media worker. It does not fall back to SAM2.', 503, false);
   return key;
 }
 
@@ -35,7 +35,7 @@ async function failure(response: Response): Promise<AnalysisError> {
   try { const parsed = errorBody.safeParse(JSON.parse(text)); if (parsed.success) detail = parsed.data.error.message ?? parsed.data.error.code ?? ''; } catch { detail = text; }
   detail = detail.slice(0, 300);
   const status = response.status;
-  if (status === 401 || status === 403) return new AnalysisError('Meta Model API rejected META_API_KEY for SAM 3.1.', 503, false);
+  if (status === 401 || status === 403) return new AnalysisError('Meta Model API rejected MODEL_API_KEY for SAM 3.1.', 503, false);
   if (status === 404) return new AnalysisError(`Meta Model API did not find ${META_SAM_MODEL}${detail ? `: ${detail}` : ''}. No older SAM is used instead.`, 502, false);
   if (status === 400 || status === 413 || status === 422) return new AnalysisError(`SAM 3.1 refused the request${detail ? `: ${detail}` : ''}.`, 422, false);
   return new AnalysisError(`SAM 3.1 is unavailable (HTTP ${status})${detail ? `: ${detail}` : ''}.`, status === 429 ? 503 : 502, true);
