@@ -1,3 +1,6 @@
+## 2026-11-07
+- MCP: the public server at tryrevline.com/mcp moves to its own Cloudflare Worker (`cloudflare/mcp`: Agents SDK McpAgent per session, Workers OAuth Provider); tools, access checks, rate limits and agent identity stay in Convex behind a signed bridge, older connections keep their Convex tokens, and upload scripts use tryrevline.com instead of `*.convex.site`. Why: the user wanted real streaming and sessions, a standard OAuth provider and one deploy style.
+
 ## 2026-11-06
 - Editor agent: while addFilm or patchScene input streams, the film plays in the preview section by section and a "Drafting film…" track above A1 shows finished, in-progress and planned sections; drafts live in their own `filmDrafts` row, are never saved, revisions or exports, and clear when the call lands or the run ends. Why: the user waited minutes for one big film call to land.
 - MCP: new copyMedia tool copies media between the caller's own projects (same owner only; shares files and saved analysis). Why: a film agent had no way to reuse another project's media and impersonated the founder to get it.
