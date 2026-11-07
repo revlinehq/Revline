@@ -5,14 +5,23 @@ import { promisify } from "node:util";
 import { z } from "zod";
 import { AnalysisError } from "../media-analysis/errors";
 import { download, subscribe, type FalClient } from "./fal";
-import { SUBJECT_MODELS, type subjectPrompt } from "./subject-segmentation";
+import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { paintMasks, requireMetaSam, segmentVideo } from "./meta-sam";
+import {
+  SUBJECT_MODELS,
+  falSubjectPrompt,
+  samSubjectPrompt,
+  type SubjectPrompt,
+} from "./subject-segmentation";
 
 const run = promisify(execFile);
 const resultSchema = z.object({ video: z.object({ url: z.string().url() }) });
 type Seed =
   | {
       kind: "prompt";
-      prompt: Awaited<ReturnType<typeof subjectPrompt>>;
+      prompt: SubjectPrompt;
       frame: number;
     }
   | { kind: "mask"; url: string };
@@ -101,14 +110,7 @@ export async function segmentVideoSubject(
       const prompt =
         initial && seed.kind === "prompt" ? seed.prompt : undefined;
       const input = prompt
-        ? prompt.prompts
-          ? { prompts: prompt.prompts.map((p) => ({ ...p, frame_index: 0 })) }
-          : {
-              box_prompts: prompt.box_prompts.map((p) => ({
-                ...p,
-                frame_index: 0,
-              })),
-            }
+        ? falSubjectPrompt(prompt, 0)
         : { mask_url: maskUrl };
       const result = resultSchema.parse(
         await subscribe(
@@ -237,5 +239,57 @@ export async function segmentVideoSubject(
     { signal, maxBuffer: 1024 * 1024 },
   );
   await Promise.all(pieces.map((piece) => rm(piece, { force: true })));
+  return path;
+}
+
+/** MCP selections: SAM 3.1 on Meta tracks the subject through the whole clip in
+ * one request, both directions from the selected frame. Frames where the
+ * subject is not visible are empty. Returns a lossless grayscale mask video. */
+export async function segmentVideoSubjectSam31(
+  clip: string,
+  directory: string,
+  prompt: SubjectPrompt,
+  frame: number,
+  fps: number,
+  signal: AbortSignal,
+  onProgress: (value: number) => void,
+) {
+  const key = requireMetaSam();
+  const { stdout } = await run(
+    "ffprobe",
+    ["-v", "error", "-select_streams", "v:0", "-count_packets", "-show_entries", "stream=width,height,nb_read_packets", "-of", "json", clip],
+    { signal },
+  );
+  const stream = z
+    .object({ streams: z.array(z.object({ width: z.number().int().positive(), height: z.number().int().positive(), nb_read_packets: z.coerce.number().int().positive() })).min(1) })
+    .parse(JSON.parse(stdout)).streams[0];
+  const size = { width: stream.width, height: stream.height }, total = stream.nb_read_packets;
+  if (total > 15_000) throw new AnalysisError("SAM 3.1 tracks up to 15,000 frames per request. Shorten the clip.", 422, false);
+  const masks = await segmentVideo(key, clip, samSubjectPrompt(prompt, Math.max(0, Math.min(total - 1, frame))), size, signal);
+  if (!masks.length) throw new AnalysisError("SAM 3.1 did not find the selected subject. Choose another source point or a box around the visible subject.", 422, false);
+  onProgress(60);
+  const byFrame = new Map<number, typeof masks[number][]>();
+  for (const mask of masks) {
+    const index = mask.frame?.frameIndex ?? 0;
+    byFrame.set(index, [...(byFrame.get(index) ?? []), mask]);
+  }
+  const path = join(directory, "subject-mask.mp4");
+  const encoder = spawn("ffmpeg", ["-v", "error", "-f", "rawvideo", "-pix_fmt", "gray", "-s", `${size.width}x${size.height}`, "-framerate", String(fps), "-i", "-", "-an", "-c:v", "libx264", "-threads", "2", "-preset", "veryfast", "-crf", "0", "-pix_fmt", "yuv420p", "-y", path], { signal, stdio: ["pipe", "ignore", "pipe"] });
+  let stderr = "";
+  encoder.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-1000); });
+  const closed = new Promise<number | null>((resolve, reject) => { encoder.once("error", reject); encoder.once("close", resolve); });
+  const empty = new Uint8Array(size.width * size.height);
+  function* frames() {
+    for (let index = 0; index < total; index++) {
+      const records = byFrame.get(index);
+      yield records ? paintMasks(records, size) : empty;
+    }
+  }
+  // pipeline handles backpressure, an early ffmpeg exit (EPIPE) and abort without leaking listeners.
+  const [written, code] = await Promise.allSettled([pipeline(Readable.from(frames()), encoder.stdin), closed]);
+  signal.throwIfAborted();
+  if (code.status === "rejected" || code.value !== 0 || written.status === "rejected")
+    throw new AnalysisError(`Could not encode the SAM 3.1 mask video${stderr ? `: ${stderr.trim().slice(0, 300)}` : "."}`, 502);
+  onProgress(75);
   return path;
 }

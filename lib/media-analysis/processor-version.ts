@@ -16,4 +16,5 @@
 // 47: route public X status pages through the supported downloader before import.
 // 49: report genuine Gemini billing failures and honor durable admission cooldowns.
 // 50: beat maps carry the measured music energy (loudness, low band, onsets) analyzeMusic reads.
-export const MEDIA_PROCESSOR_VERSION = 50;
+// 51: MCP subject selections and noun grounding can request SAM 3.1 on Meta's Model API.
+export const MEDIA_PROCESSOR_VERSION = 51;
