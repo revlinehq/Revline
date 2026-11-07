@@ -1,6 +1,6 @@
 ---
 name: "genesis"
-description: "Genesis masking with Meta SAM 3.1 (MCP only): segment a subject once into a tracked layer, then colour only it, grade, blur, glow or outline it, or put a title behind it. Read before segment, layerEffect or textBehind."
+description: "Genesis masking with Meta SAM 3.1 (MCP only): segment a subject once into a tracked layer, then colour only it, grade, blur, glow or outline it, put a title behind it, remove it, change only its speed, or replace a tracked surface. Read before segment, layerEffect, textBehind, removeObject, retimeLayer or replaceSurface."
 ---
 # Genesis
 
@@ -32,6 +32,9 @@ One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the c
 | Neon halo | `layerEffect {layerId, effect:"glow", color:"#36F9F2", glow:28}` |
 | Gameplay player outline | `layerEffect {layerId, effect:"outline", color:"#FF3B30", width:4}` |
 | Title behind the subject | `textBehind {layerId, text:"MONDAY", y:.3}` |
+| Remove the subject from the shot | `removeObject {layerIds:[layerId]}`: free clean plate when the camera is static and the subject uncovers everything, otherwise Bria Video Eraser at $0.14/s. Page `remove`. |
+| Slow down only the subject | `retimeLayer {layerId, speed:.5, alignAt:4}` (or a `preset`/`anchors` ramp). Page `speed`. |
+| Put a screenshot on a phone screen or sign | `replaceSurface {clipId, assetId, at, corners:[[x,y]×4], occluderLayerIds:[handLayerId]}`. Page `replace`. |
 
 ## Rules
 1. One subject per layer. Two players means two `segment` calls and two `layerEffect` calls.
@@ -41,4 +44,10 @@ One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the c
 5. Masks come from SAM 3.1 alone. If MODEL_API_KEY is missing on the worker, `segment` fails clearly. It never falls back to SAM2. Report it with `reportIssue`.
 6. Fast motion blur and hair give soft edges. If `getFrames` shows a halo above 3 px, use `glow` or `outline` to hide the edge, or choose a different shot.
 7. A cut-out used as scene media is checked from the scene's `<video>` timing. Write the same literal `data-start`, `data-offset` and `data-rate` on every `<video>` of that scene (e.g. `data-start="0" data-offset="0"`); computed or looped timing cannot be checked, and finish warns.
-8. Not in Genesis yet: selective speed (`retimeLayer`) and tracked image replacement (`replaceSurface`). Do not fake them with masks or generative models. Say they are not available.
+8. removeObject, retimeLayer and replaceSurface render on the media worker: the first call returns `processing`; call again with the same input every 15–20 s until it applies. Their results report `method` and the real `costUsd`. Only removeObject and retimeLayer can pay (Bria, within a monthly allowance); replaceSurface is always free.
+9. Order on one footage clip: removeObject first, then other functions. retimeLayer stands alone on its clip in v1.
+
+## Pages
+- `remove`: removeObject methods (free clean plate, then Bria), allowance, measured costs and limits.
+- `speed`: retimeLayer timing (speed, ramps, alignAt), the stack and its limits.
+- `replace`: replaceSurface corners, tracking, occluders, light match and limits.

@@ -27,6 +27,16 @@ export function syncedCopy(clip: Clip, id: string, track: number, extra: Partial
 
 /** Genesis clips already stacked on a footage clip by earlier functions (from the layer records). */
 export type ExistingStack = { clipIds: readonly string[]; subjectClipIds: readonly string[]; functions?: readonly string[] };
+/** What earlier functions still have on the timeline above a footage clip. Records outlive undo, so clips that are
+ * gone (undone, deleted) and the footage clip itself drop out, and so do functions with nothing left. */
+export function liveStack(timeline: Timeline, baseClipId: string, stack: { clipIds: string[]; subjectClipIds: string[]; uses: { function: string; clipIds: string[] }[] }): ExistingStack & { functions: string[] } {
+  const present = new Set(timeline.clips.map(clip => clip.id));
+  present.delete(baseClipId);
+  return {
+    clipIds: stack.clipIds.filter(id => present.has(id)), subjectClipIds: stack.subjectClipIds.filter(id => present.has(id)),
+    functions: [...new Set(stack.uses.filter(use => use.clipIds.some(id => present.has(id))).map(use => use.function))],
+  };
+}
 export type StackParts = { plate?: Clip; text?: Clip; subject?: Clip };
 
 /** Inserts new Genesis clips into the footage clip's stack by role, whatever was applied first:

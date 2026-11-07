@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { AnalysisError } from '../../../../media-analysis/errors';
-import { download, requireFal, subscribe } from '../../../../server/fal';
+import { configuredFal, download, subscribe } from '../../../../server/fal';
 import { ownedMediaUrl } from '../../../../server/owned-media';
 import { pixelTrackPython } from '../../../../server/worker-tool-path';
 import { BRIA_ERASE_ENDPOINT, BRIA_MASK_DILATE_PX, BRIA_MAX_SECONDS_PER_CALL, GENESIS_ALLOWANCE, GENESIS_REFUSAL, briaUsd } from '../render-contract';
@@ -59,7 +59,8 @@ export async function renderGenesis(source: string, directory: string, work: Gen
   if (free.type === 'result') return { path: output, report: { ...free.report, method: work.op === 'cleanPlate' ? 'cleanPlate' : 'surface', costUsd: 0 }, contentType, width: Number(free.report.width), height: Number(free.report.height) };
 
   // Paid fallback: reserve the seconds first (refuses past the allowance), then erase chunk by chunk and join.
-  const seconds = Math.round((work.end - work.start) * 1000) / 1000, fal = requireFal('The paid eraser is not configured on the media worker (FAL_KEY).');
+  const seconds = Math.round((work.end - work.start) * 1000) / 1000, fal = configuredFal();
+  if (!fal) throw new AnalysisError(`${free.reason} The paid eraser is not configured on this media worker (FAL_KEY), so nothing was charged.`, 503, false);
   let allowance: Awaited<ReturnType<ReserveBria>>;
   try { allowance = await reserve(seconds, free.reason); }
   catch (error) {

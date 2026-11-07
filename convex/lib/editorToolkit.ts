@@ -5,7 +5,7 @@ import { LANES, MCP_ONLY_TOOLS, capabilityExists, capabilitySummary, discoverCap
 import { getLayerDescription, getLayerInput, segmentDescription, segmentInput, subjectSeed } from '../../lib/ai/lanes/genesis/functions/segment';
 import { applyLayerEffect, layerEffectDescription, layerEffectInput } from '../../lib/ai/lanes/genesis/functions/layer-effect';
 import { applyTextBehind, textBehindDescription, textBehindInput } from '../../lib/ai/lanes/genesis/functions/text-behind';
-import { baseClip, type Applied } from '../../lib/ai/lanes/genesis/functions/layer';
+import { baseClip, liveStack, type Applied, type ExistingStack } from '../../lib/ai/lanes/genesis/functions/layer';
 import { applyRemoveObject, plateRange, removeObjectDescription, removeObjectInput } from '../../lib/ai/lanes/genesis/functions/remove-object';
 import { applyRetimeLayer, retimedSubject, retimeLayerDescription, retimeLayerInput } from '../../lib/ai/lanes/genesis/functions/retime-layer';
 import { applyReplaceSurface, replaceSurfaceDescription, replaceSurfaceInput, surfaceRange } from '../../lib/ai/lanes/genesis/functions/replace-surface';
@@ -530,7 +530,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     }
   };
   /** Build a Genesis function on the timeline from a ready layer, and record where it placed the layer for finish checks. */
-  const applyGenesis = async (layerId: string, clipId: string | undefined, fn: string, build: (timeline: Timeline, layer: Awaited<ReturnType<typeof readyLayer>>, stack: { clipIds: string[]; subjectClipIds: string[] }) => Applied) => {
+  const applyGenesis = async (layerId: string, clipId: string | undefined, fn: string, build: (timeline: Timeline, layer: Awaited<ReturnType<typeof readyLayer>>, stack: ExistingStack) => Applied) => {
     const layer = await readyLayer(layerId);
     const stack = await genesisStack(clipId ?? layer.clipId);
     if (stack.functions.includes('retimeLayer')) throw new Error(`Footage clip ${clipId ?? layer.clipId} is retimed with retimeLayer. In v1 retimeLayer stands alone on its footage: undo it to apply ${fn}.`);
@@ -542,7 +542,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...saved, layerId: layer.layerId, footageClipId: placed.baseClipId, clipIds: placed.clipIds, subjectClipIds: placed.subjectClipIds, next: `getFrames at ${mid}s (and where the subject moves fastest), then finish.` };
   };
   const readyLayer = (layerId: string) => ctx.runQuery(internal.genesis.readyForRun, { ...run, layerId });
-  const genesisStack = (baseClipId: string) => ctx.runQuery(internal.genesis.stackForRun, { ...run, timelineId: timelineIdForLane(), baseClipId });
+  const genesisStack = async (baseClipId: string) => { const stack = await ctx.runQuery(internal.genesis.stackForRun, { ...run, timelineId: timelineIdForLane(), baseClipId }); await editSession.wait(); return liveStack(editSession.timeline, baseClipId, stack); };
   // Each layer records the shared clips (plates, inserts) and only its own cut-outs, so its mask checks stay exact.
   const recordGenesis = (layer: { layerId: string; outputAssetId: string }, fn: string, placed: Applied) => {
     const others = new Set(placed.subjectClipIds.filter(id => placed.timeline.clips.find(clip => clip.id === id)?.assetId !== layer.outputAssetId));
@@ -551,7 +551,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   /** Start or reuse a Genesis compositor render; refusals (moving camera, coverage, texture) come back as errors. */
   const genesisRender = async (args: { op: 'cleanPlate' | 'surface'; sourceAssetId: string; layerIds: string[]; seedLayerId?: string; insertAssetId?: string; start: number; end: number; fps: number; params: unknown }) => {
     const render = await ctx.runMutation(internal.genesisRenders.startFromRun, { ...run, ...args });
-    if (render.status === 'failed') throw new Error(render.refused ? `Refused: ${render.error}` : `The Genesis render failed: ${render.error ?? 'unknown error'}. Calling again starts a new render${render.method === 'bria' ? ' and pays the eraser again' : ''}.`);
+    if (render.status === 'failed') throw new Error(render.refused ? `Refused: ${render.failureMessage}` : `The Genesis render failed: ${render.failureMessage ?? 'unknown error'}. Calling again starts a new render${render.method === 'bria' ? ' and pays the eraser again' : ''}.`);
     return render;
   };
   const renderPending = (tool: string, render: { renderId: string; progress?: number; reused: boolean; method?: string; costUsd?: number }) => ({ status: 'processing', renderId: render.renderId, progress: render.progress ?? 0, ...(render.method === 'bria' ? { method: 'bria', costUsd: render.costUsd } : {}), next: `The media worker is rendering. Call ${tool} again with the same input in 15-20 seconds; it applies once the render is ready.` });

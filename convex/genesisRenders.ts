@@ -15,7 +15,7 @@ import { layerStatus, ownedLayer, requireMcpRun } from './genesis';
 /** Genesis renders (MCP only): clean plates and tracked surface inserts from the media worker's own compositor. */
 const renderStatus = v.union(v.literal('queued'), v.literal('completed'), v.literal('failed'));
 const allowance = v.object({ plan: v.string(), usedSeconds: v.number(), monthlySeconds: v.number() });
-const renderView = v.object({ renderId: v.id('genesisRenders'), status: renderStatus, method: v.optional(v.string()), costUsd: v.optional(v.number()), briaSeconds: v.optional(v.number()), allowance: v.optional(allowance), reused: v.boolean(), progress: v.optional(v.number()), outputAssetId: v.optional(v.string()), error: v.optional(v.string()), refused: v.optional(v.boolean()), report: v.optional(v.any()), start: v.number(), end: v.number(), fps: v.number(), computeSeconds: v.optional(v.number()) });
+const renderView = v.object({ renderId: v.id('genesisRenders'), status: renderStatus, method: v.optional(v.string()), costUsd: v.optional(v.number()), briaSeconds: v.optional(v.number()), allowance: v.optional(allowance), reused: v.boolean(), progress: v.optional(v.number()), outputAssetId: v.optional(v.string()), failureMessage: v.optional(v.string()), refused: v.optional(v.boolean()), report: v.optional(v.any()), start: v.number(), end: v.number(), fps: v.number(), computeSeconds: v.optional(v.number()) });
 
 /** Bria seconds this owner used this calendar month (UTC). A reservation counts once Bria was called, whatever happened after. */
 async function briaUsage(ctx: QueryCtx | MutationCtx, ownerId: string) {
@@ -33,7 +33,7 @@ async function view(ctx: QueryCtx | MutationCtx, row: Doc<'genesisRenders'>, reu
     ...(row.method ? { method: row.method } : {}), ...(row.costUsd !== undefined ? { costUsd: row.costUsd } : {}), ...(row.briaSeconds ? { briaSeconds: row.briaSeconds } : {}),
     ...(row.op === 'cleanPlate' ? { allowance: await briaUsage(ctx, row.ownerId) } : {}),
     ...(task ? { progress: task.progress ?? 0 } : {}), ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}),
-    ...(row.error ? { error: row.error.replace(GENESIS_REFUSAL, '').replace(GENESIS_ALLOWANCE, '') } : {}), ...(row.refused ? { refused: true } : {}), ...(row.report ? { report: row.report } : {}),
+    ...(row.error ? { failureMessage: row.error.replace(GENESIS_REFUSAL, '').replace(GENESIS_ALLOWANCE, '') } : {}), ...(row.refused ? { refused: true } : {}), ...(row.report ? { report: row.report } : {}),
     ...(row.readyAt ? { computeSeconds: Math.round((row.readyAt - row.createdAt) / 100) / 10 } : {}),
   };
 }
@@ -68,10 +68,13 @@ export const startFromRun = internalMutation({
     const fps = Math.max(1, Math.min(60, Math.round(args.fps)));
     const fields = { op: args.op, sourceAssetId: asset._id, layerIds: layers.map(layer => layer._id), ...(seed ? { seedLayerId: seed._id } : {}), ...(insertAssetId ? { insertAssetId } : {}), start: args.start, end: args.end, fps, params: args.params ?? {} };
     const key = renderKey({ ...fields, layerIds: fields.layerIds.map(String), seedLayerId: seed?._id, insertAssetId });
-    // Identical requests reuse the render; a refusal stands (the footage will not change), other failures run again.
+    // Identical requests reuse the render; a refusal stands (the footage will not change). Any other failure is
+    // reported to the next call once, so polling never silently starts (and pays for) a new render; the call after runs again.
     for (const row of await ctx.db.query('genesisRenders').withIndex('by_project_key', q => q.eq('projectId', project._id).eq('key', key)).order('desc').take(5)) {
       if (row.ownerId !== args.ownerId) continue;
       if (row.status !== 'failed' || row.refused) return view(ctx, row, true);
+      if (!row.failureReported) { await ctx.db.patch(row._id, { failureReported: true }); return view(ctx, row, true); }
+      break;
     }
     await requireMediaTaskCapacity(ctx, args.ownerId, 1);
     const renderId = await ctx.db.insert('genesisRenders', { ownerId: args.ownerId, projectId: project._id, key, ...fields, status: 'queued', createdAt: Date.now() });

@@ -4,7 +4,7 @@ import { ownTools, tools } from './tools';
 import { check, warn } from './check';
 export const definition: LaneDefinition = {
   id: 'genesis',
-  description: 'Masking with Meta SAM 3.1: segment a subject once into a tracked layer, then colour only it, grade, blur, glow or outline it, or put a title behind it.',
+  description: 'Masking with Meta SAM 3.1: segment a subject once into a tracked layer, then colour only it, grade, blur, glow or outline it, put a title behind it, remove it, change only its speed, or replace a tracked surface.',
   skills,
   tools,
   ownTools,
@@ -25,5 +25,5 @@ export const definition: LaneDefinition = {
     },
   },
   instructions:
-    'Read genesis first. segment once per subject and clip, poll getLayer until ready, then apply layerEffect or textBehind with the layerId. One layer serves every function. Inspect the result with getFrames. Never export without explicit user confirmation.',
+    'Read genesis first (and its page remove, speed or replace before those tools). segment once per subject and clip, poll getLayer until ready, then apply layerEffect, textBehind, removeObject, retimeLayer or replaceSurface with the layerId. One layer serves every function. Inspect the result with getFrames. Never export without explicit user confirmation.',
 };

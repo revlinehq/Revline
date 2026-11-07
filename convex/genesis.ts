@@ -115,12 +115,12 @@ export const readyForRun = internalQuery({
 /** Genesis clips earlier functions stacked on one footage clip of one timeline, across every layer. */
 export const stackForRun = internalQuery({
   args: { ...runArgs, timelineId: v.string(), baseClipId: v.string() },
-  returns: v.object({ clipIds: v.array(v.string()), subjectClipIds: v.array(v.string()), functions: v.array(v.string()) }),
+  returns: v.object({ clipIds: v.array(v.string()), subjectClipIds: v.array(v.string()), uses: v.array(v.object({ function: v.string(), clipIds: v.array(v.string()) })) }),
   handler: async (ctx, args) => {
     await requireMcpRun(ctx, args, false);
     const uses = (await ctx.db.query('genesisLayers').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100))
       .filter(layer => layer.ownerId === args.ownerId).flatMap(layer => layer.applications).filter(use => use.timelineId === args.timelineId && use.baseClipId === args.baseClipId);
-    return { clipIds: [...new Set(uses.flatMap(use => use.clipIds))], subjectClipIds: [...new Set(uses.flatMap(use => use.subjectClipIds))], functions: [...new Set(uses.map(use => use.function))] };
+    return { clipIds: [...new Set(uses.flatMap(use => use.clipIds))], subjectClipIds: [...new Set(uses.flatMap(use => use.subjectClipIds))], uses: uses.map(use => ({ function: use.function, clipIds: use.clipIds })) };
   },
 });
 
