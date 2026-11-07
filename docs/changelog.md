@@ -1,5 +1,6 @@
 ## 2026-11-07
-- Genesis lane (MCP only): segment makes a reusable SAM 3.1 layer (mask, per-frame boxes, provenance, cost); layerEffect (colorOnly, grade, blur, glow, outline) and textBehind build on it, with finish checks for layer readiness, coverage, sync and frame evidence. Media processor 52. Why: the user wants Meta SAM 3.1 masking as one combined feature, like Clip.
+- Genesis: getLayer returns every frame's box (paged by source range), boxes come from the mask's own pixels, and finish checks layers used as plain clips or scene media in any lane. Why: building the launch film found 1 s box samples, a box/mask doubt and unchecked scene-media layers.
+- Genesis lane (MCP only): segment makes a reusable SAM 3.1 layer (mask, per-frame boxes, provenance, cost); layerEffect (colorOnly, grade, blur, glow, outline) and textBehind build on it, with finish checks for layer readiness, coverage, sync and frame evidence. Media processor 53. Why: the user wants Meta SAM 3.1 masking as one combined feature, like Clip.
 - Media worker: MCP clients' selected-subject masks (freezeFrameParallax, removeBackground) and trackPoints noun seeds use SAM 3.1 directly on Meta's Model API (worker `MODEL_API_KEY`, no SAM2 fallback); Revline's in-app agent keeps fal SAM2 / Florence-2. Why: the user wants SAM 3.1 from Meta, offered over MCP only for now.
 
 ## 2026-11-06

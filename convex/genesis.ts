@@ -11,6 +11,7 @@ import { pixelTrackRequestValidator } from './lib/pixel_track_validator';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { sam31Usd, subjectSelection, subjectSelectionKey } from '../lib/media-analysis/pixel-track';
 import type { GenesisLayerEvidence } from '../lib/ai/lanes/types';
+import { MAX_LAYER_BOXES } from '../lib/ai/lanes/genesis/functions/segment';
 
 /** Genesis (MCP only): one SAM 3.1 subject layer, made by a foreground cut-out that is never placed itself. */
 const HANDLE_SECONDS = .25, MAX_SECONDS = 120;
@@ -56,7 +57,7 @@ export const startFromRun = internalMutation({
     await requireMediaTaskCapacity(ctx, args.ownerId, 1);
     const fps = Math.max(1, Math.min(60, Math.round(args.fps)));
     const cutoutId = await ctx.db.insert('cutouts', { ownerId: args.ownerId, projectId: project._id, clipId: args.clipId, sourceAssetId: asset._id, start, end, fps, mode: 'foreground', selection, status: 'queued', createdAt: Date.now(), purpose: 'genesis' });
-    // Per-frame boxes come from the v52 processor; older workers cannot claim the task.
+    // Per-frame boxes measured from the mask come from the v53 processor; older workers cannot claim the task.
     const taskId = await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId, requiredProcessorVersion: MEDIA_PROCESSOR_VERSION });
     await ctx.db.patch(cutoutId, { taskId });
     const estimatedUsd = usd(end - start, fps, args.seed.kind === 'object');
@@ -65,25 +66,32 @@ export const startFromRun = internalMutation({
   },
 });
 
-/** Status, coverage and a one-per-second box sample; the full boxes stay server-side for checks. */
+/** Status, coverage and the per-frame boxes of a source range (one page of at most MAX_LAYER_BOXES frames). */
 export const layerForRun = internalQuery({
-  args: { ...runArgs, layerId: v.string() },
+  args: { ...runArgs, layerId: v.string(), from: v.optional(v.number()), to: v.optional(v.number()) },
   returns: v.any(),
   handler: async (ctx, args) => {
     await requireMcpRun(ctx, args, false);
     const layer = await ownedLayer(ctx, args, args.layerId), cutout = await ctx.db.get(layer.cutoutId);
     const status = layerStatus(cutout), task = status === 'processing' && cutout?.taskId ? await ctx.db.get(cutout.taskId) : null;
     const boxes = layer.boxes ?? [], visible = boxes.flatMap((item, index) => item ? [index] : []);
-    const at = (index: number) => Math.round((layer.start + index / layer.fps) * 1000) / 1000;
-    const step = Math.max(1, Math.round(layer.fps));
+    // Frame k of the mask shows source second start + k / fps (the cut-out is on the source clock).
+    const at = (index: number) => Math.round((layer.start + index / layer.fps) * 1e6) / 1e6;
+    const first = Math.max(0, args.from === undefined ? 0 : Math.ceil((args.from - layer.start) * layer.fps - 1e-6));
+    const last = Math.min(boxes.length - 1, args.to === undefined ? boxes.length - 1 : Math.floor((args.to - layer.start) * layer.fps + 1e-6), first + MAX_LAYER_BOXES - 1);
+    const page = status === 'ready' && boxes.length ? {
+      boxes: first <= last
+        ? { from: at(first), fps: layer.fps, frames: last - first + 1, boxes: boxes.slice(first, last + 1), ...(last < boxes.length - 1 && (args.to === undefined || at(last + 1) <= args.to + 1e-6) ? { next: at(last + 1) } : {}) }
+        : { from: at(first), fps: layer.fps, frames: 0, boxes: [], note: `No mask frame in that range. The layer covers source ${at(0)}–${at(boxes.length - 1)}s.` },
+    } : {};
     return {
       layerId: layer._id, status, ...(status === 'failed' ? { error: cutout?.error ?? 'The layer job is gone. Segment again.' } : {}), ...(task ? { progress: task.progress ?? 0 } : {}),
       clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, prompt: layer.prompt, source: { start: layer.start, end: layer.end }, fps: layer.fps,
       model: layer.model, provider: 'Meta Model API', ...(layer.readyAt ? { costUsd: layer.estimatedUsd } : { estimatedUsd: layer.estimatedUsd }),
       ...(layer.readyAt ? { latencySeconds: Math.round((layer.readyAt - layer.createdAt) / 100) / 10 } : {}),
-      ...(status === 'ready' ? { maskAssetId: cutout!.outputAssetId, coverage: { frames: boxes.length, visibleFrames: visible.length, ...(visible.length ? { firstVisible: at(visible[0]), lastVisible: at(visible[visible.length - 1]) } : {}) }, boxesPerSecond: boxes.flatMap((item, index) => index % step === 0 ? [{ time: at(index), box: item }] : []) } : {}),
+      ...(status === 'ready' ? { maskAssetId: cutout!.outputAssetId, coverage: { frames: boxes.length, visibleFrames: visible.length, ...(visible.length ? { firstVisible: at(visible[0]), lastVisible: at(visible[visible.length - 1]) } : {}) }, ...page } : {}),
       applications: layer.applications,
-      next: status === 'ready' ? 'Apply layerEffect or textBehind with this layerId, then getFrames.' : status === 'processing' ? 'Call getLayer again in 10-15 seconds.' : 'Segment again, ideally with a box on a frame where the subject is clear.',
+      next: status === 'ready' ? 'Apply layerEffect or textBehind with this layerId, then getFrames. To follow the subject on the timeline, a box at SOURCE second s shows at timeline second clip.start + (s - clip.sourceStart) / playbackRate of the footage clip (footage without a speed ramp).' : status === 'processing' ? 'Call getLayer again in 10-15 seconds.' : 'Segment again, ideally with a box on a frame where the subject is clear.',
     };
   },
 });
@@ -125,16 +133,20 @@ export const recordApplication = internalMutation({
   },
 });
 
-/** Layers with placements, for the genesis lane's finish checks. */
+/** Layers that were placed or whose cut-out the checked timelines use, for the Genesis finish checks.
+ * Boxes (up to thousands per layer) are returned only for layers in use. */
 export const forCheck = internalQuery({
-  args: { ownerId: v.string(), projectId: v.id('projects') },
+  args: { ownerId: v.string(), projectId: v.id('projects'), usedAssetIds: v.array(v.string()) },
   returns: v.array(v.object({ layerId: v.string(), status: v.union(v.literal('processing'), v.literal('ready'), v.literal('failed')), outputAssetId: v.optional(v.string()), sourceAssetId: v.string(), start: v.number(), end: v.number(), fps: v.number(), boxes: v.optional(v.array(v.union(v.null(), box))), applications: v.array(application) })),
   handler: async (ctx, args): Promise<GenesisLayerEvidence[]> => {
-    const layers = await ctx.db.query('genesisLayers').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100);
-    return Promise.all(layers.filter(layer => layer.ownerId === args.ownerId && layer.applications.length).map(async layer => {
-      const cutout = await ctx.db.get(layer.cutoutId);
-      return { layerId: layer._id, status: layerStatus(cutout), ...(cutout?.outputAssetId ? { outputAssetId: cutout.outputAssetId } : {}), sourceAssetId: layer.sourceAssetId, start: layer.start, end: layer.end, fps: layer.fps, ...(layer.boxes ? { boxes: layer.boxes } : {}), applications: layer.applications.map(({ at: _at, ...use }) => use) };
-    }));
+    const used = new Set(args.usedAssetIds);
+    const layers = (await ctx.db.query('genesisLayers').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100)).filter(layer => layer.ownerId === args.ownerId);
+    const rows = await Promise.all(layers.map(async layer => ({ layer, cutout: await ctx.db.get(layer.cutoutId) })));
+    // Functions place a layer, but its cut-out can also be added as a clip or scene media.
+    return rows.filter(({ layer, cutout }) => layer.applications.length || cutout?.outputAssetId && used.has(cutout.outputAssetId)).map(({ layer, cutout }) => {
+      const inUse = !!cutout?.outputAssetId && used.has(cutout.outputAssetId);
+      return { layerId: layer._id, status: layerStatus(cutout), ...(cutout?.outputAssetId ? { outputAssetId: cutout.outputAssetId } : {}), sourceAssetId: layer.sourceAssetId, start: layer.start, end: layer.end, fps: layer.fps, ...(layer.boxes && inUse ? { boxes: layer.boxes } : {}), applications: layer.applications.map(({ at: _at, ...use }) => use) };
+    });
   },
 });
 
