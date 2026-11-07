@@ -106,8 +106,9 @@ export const readyForRun = internalQuery({
     if (status === 'processing') throw new ConvexError(`Layer ${layer._id} is still processing. Poll getLayer until ready.`);
     if (status === 'failed') throw new ConvexError(`Layer ${layer._id} failed: ${cutout?.error ?? 'its job is gone'}. Segment again.`);
     // Footage switched to a clean plate of the same source (removeObject) keeps this layer's clock and framing.
-    const plates = (await ctx.db.query('genesisRenders').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(100))
-      .filter(row => row.ownerId === args.ownerId && row.op === 'cleanPlate' && row.status === 'completed' && row.outputAssetId && row.sourceAssetId === layer.sourceAssetId);
+    // A plate that removed this layer's own subject is no footage for it: its cut-out would put the subject back.
+    const plates = (await ctx.db.query('genesisRenders').withIndex('by_project_source', q => q.eq('projectId', args.projectId).eq('sourceAssetId', layer.sourceAssetId)).order('desc').take(100))
+      .filter(row => row.ownerId === args.ownerId && row.op === 'cleanPlate' && row.status === 'completed' && row.outputAssetId && !row.layerIds.includes(layer._id));
     return { layerId: layer._id, clipId: layer.clipId, sourceAssetId: layer.sourceAssetId, outputAssetId: cutout!.outputAssetId!, start: layer.start, end: layer.end, fps: layer.fps, sourceAliases: plates.map(row => row.outputAssetId!) };
   },
 });

@@ -34,7 +34,7 @@ One `segment` call makes one **layer**: SAM 3.1 tracks the subject through the c
 | Title behind the subject | `textBehind {layerId, text:"MONDAY", y:.3}` |
 | Remove the subject from the shot | `removeObject {layerIds:[layerId]}`: free clean plate when the camera is static and the subject uncovers everything, otherwise Bria Video Eraser at $0.14/s. Page `remove`. |
 | Slow down only the subject | `retimeLayer {layerId, speed:.5, alignAt:4}` (or a `preset`/`anchors` ramp). Page `speed`. |
-| Put a screenshot on a phone screen or sign | `replaceSurface {clipId, assetId, at, corners:[[x,y]×4], occluderLayerIds:[handLayerId]}`. Page `replace`. |
+| Put a screenshot on a phone screen or sign | `replaceSurface {clipId, assetId, at, corners:[[x,y]×4], occluderLayerIds:[handLayerId]}`; the hand stays in front. Page `replace`. |
 
 ## Rules
 1. One subject per layer. Two players means two `segment` calls and two `layerEffect` calls.

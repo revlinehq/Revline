@@ -14,7 +14,9 @@ description: "removeObject: take segmented subjects out of footage. A free clean
 
 - Never-uncovered specks under 0.02% of the frame (~400 px at 1080p) are filled from the matching texture beside them and never trigger the paid path.
 - `fallback:"none"` refuses instead of paying. Small never-uncovered areas (up to 1% of the frame) are then filled from the matching texture beside them, with a warning; larger ones and a moving camera are refused with the coverage percentage.
-- Monthly Bria allowance per account (UTC calendar month): **60 s** on the MCP plan, **120 s** on Pro (`BRIA_MONTHLY_SECONDS` in `lib/ai/lanes/genesis/render-contract.ts`). Seconds count from the moment Bria is called. Past the allowance the call is refused with what is left; no money is spent.
+- Only what the clip plays, plus 0.25 s on each side, is rendered and billed: trim or split the footage first to pay for less.
+- Monthly Bria allowance per account (UTC calendar month): **60 s** on the MCP plan, **120 s** on Pro (`BRIA_MONTHLY_SECONDS` in `lib/ai/lanes/genesis/render-contract.ts`). Seconds count from the moment Bria is called, in a per-owner ledger that deleting a project does not reset. Past the allowance the call is refused with what is left; no money is spent.
+- A render is paid once. The same request (or retimeLayer on the same layers and clip) reuses it free; the result's `costNote` says so.
 - The expected Bria cost is logged on the worker before each call. The tool result reports `method` (`cleanPlate` or `bria`), `costUsd`, `report.coverage`, `report.reason` and `briaAllowance`.
 
 ## Workflow

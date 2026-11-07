@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import type { Timeline } from '../../../../editor/types';
+import { sourceEndOf } from '../../../../editor/playback-rate';
+import type { Clip, Timeline } from '../../../../editor/types';
 import { baseClip, type Applied, type ExistingStack, type ReadyLayer } from './layer';
 
 export const removeObjectInput = z.object({
@@ -22,9 +23,11 @@ export function applyRemoveObject(timeline: Timeline, layers: ReadyLayer[], exis
   return { timeline: next, baseClipId: clip.id, clipIds: [clip.id], subjectClipIds: [] };
 }
 
-/** The source range a clean plate covers: where every layer has a mask (each includes its 0.25 s handles). */
-export function plateRange(layers: ReadyLayer[]) {
-  const start = Math.max(...layers.map(layer => layer.start)), end = Math.min(...layers.map(layer => layer.end));
+/** The source range a clean plate covers: what the footage clip plays plus 0.25 s handles, inside every layer's mask.
+ * Only that range is rendered (and, on the paid path, billed), not the whole masked range. */
+export function plateRange(layers: ReadyLayer[], clip: Clip) {
+  const round = (value: number) => Math.round(value * 1000) / 1000;
+  const start = round(Math.max(clip.sourceStart - .25, ...layers.map(layer => layer.start))), end = round(Math.min(sourceEndOf(clip) + .25, ...layers.map(layer => layer.end)));
   if (!(end > start)) throw new Error('These layers cover different parts of the footage. Segment each subject over the same range.');
   return { start, end, fps: layers[0].fps };
 }

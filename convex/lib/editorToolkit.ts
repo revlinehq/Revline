@@ -556,7 +556,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const renderPending = (tool: string, render: { renderId: string; progress?: number; reused: boolean; method?: string; costUsd?: number }) => ({ status: 'processing', renderId: render.renderId, progress: render.progress ?? 0, ...(render.method === 'bria' ? { method: 'bria', costUsd: render.costUsd } : {}), next: `The media worker is rendering. Call ${tool} again with the same input in 15-20 seconds; it applies once the render is ready.` });
   const renderSummary = (render: { renderId: string; report?: unknown; computeSeconds?: number; method?: string; costUsd?: number; allowance?: unknown }) => ({
-    renderId: render.renderId, method: render.method ?? 'compositor', costUsd: render.costUsd ?? 0, report: render.report, ...(render.computeSeconds !== undefined ? { computeSeconds: render.computeSeconds } : {}), ...(render.allowance ? { briaAllowance: render.allowance } : {}),
+    renderId: render.renderId, method: render.method ?? 'compositor', costUsd: render.costUsd ?? 0, ...(render.costUsd ? { costNote: 'Paid once, when this render was made. Reusing it (the same request, or retimeLayer on the same layers and clip) costs nothing more.' } : {}), report: render.report, ...(render.computeSeconds !== undefined ? { computeSeconds: render.computeSeconds } : {}), ...(render.allowance ? { briaAllowance: render.allowance } : {}),
     engine: render.method === 'bria' ? 'Bria Video Eraser, mask mode (fal), joined by the Revline compositor' : 'Revline compositor (OpenCV on the media worker, no generative model)',
   });
   const genesisNext = (placed: Applied, extra = '') => { const span = find(placed.timeline, placed.baseClipId), mid = Math.round((span.start + span.duration / 2) * 100) / 100; return `getFrames at ${mid}s${extra} with resolution 1080, then finish.`; };
@@ -2301,7 +2301,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const layers = await Promise.all([...new Set(input.layerIds)].map(readyLayer));
       const clip = baseClip(editSession.timeline, layers[0], input.clipId);
       if (clip.assetId !== layers[0].sourceAssetId) throw new Error(`Clip ${clip.id} already shows a clean plate. Undo that removeObject and remove every subject in one call (layerIds).`);
-      const range = plateRange(layers);
+      // Refuse before rendering: the render may be paid.
+      if ((await genesisStack(clip.id)).clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips stacked on it, and they copy the original footage, so the subject would show through. undoLatestEdit those, run removeObject first, then apply them again.`);
+      const range = plateRange(layers, clip);
       const render = await genesisRender({ op: 'cleanPlate', sourceAssetId: layers[0].sourceAssetId, layerIds: layers.map(layer => layer.layerId), start: range.start, end: range.end, fps: range.fps, params: { dilate: input.dilate ?? .012, fallback: input.fallback ?? 'bria' } });
       if (render.status !== 'completed' || !render.outputAssetId) return renderPending('removeObject', render);
       await adoptAsset(render.outputAssetId);
@@ -2316,7 +2318,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const layers = await Promise.all([...new Set([input.layerId, ...(input.alsoLayerIds ?? [])])].map(readyLayer)), [layer] = layers, clip = baseClip(editSession.timeline, layer, input.clipId);
       for (const other of layers.slice(1)) baseClip(editSession.timeline, other, clip.id);
       if (clip.assetId !== layer.sourceAssetId) throw new Error(`Clip ${clip.id} shows a clean plate already (removeObject). In v1 retimeLayer needs the original footage: undo removeObject first.`);
-      const range = plateRange(layers);
+      const range = plateRange(layers, clip);
       const timing = retimedSubject(clip, { ...layer, ...range }, input), before = await genesisStack(clip.id);
       if (before.clipIds.length) throw new Error(`Clip ${clip.id} already has Genesis clips (${before.functions.join(', ')}). In v1 retimeLayer stands alone on its footage, because those clips copy the original subject in real time. undoLatestEdit them first.`);
       // The same clean plate removeObject would build for these layers: one render serves both.
@@ -2348,9 +2350,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await adoptAsset(render.outputAssetId);
       const stack = await genesisStack(clip.id);
       let applied: Applied | undefined;
-      const saved = await checkpoint(t => { applied = applyReplaceSurface(t, find(t, clip.id), occluders, stack, render.outputAssetId!, () => crypto.randomUUID()); return applied.timeline; });
+      const saved = await checkpoint(t => { applied = applyReplaceSurface(t, find(t, clip.id), stack, render.outputAssetId!, () => crypto.randomUUID()); return applied.timeline; });
       for (const layer of [...occluders, ...(seed ? [seed] : [])]) await recordGenesis(layer, 'replaceSurface', applied!);
-      return { ...saved, status: 'applied', footageClipId: clip.id, insertClipId: applied!.clipIds[0], occluderClipIds: applied!.subjectClipIds, ...renderSummary(render), next: genesisNext(applied!, ', at the first and last frames, and where an occluder crosses the surface') };
+      return { ...saved, status: 'applied', footageClipId: clip.id, insertClipId: applied!.clipIds[0], ...renderSummary(render), next: genesisNext(applied!, ', at the first and last frames, and where an occluder crosses the surface') };
     } }),
   };
   // Scenes report what they cover but were never read: a recreation reads every moment before building over it.

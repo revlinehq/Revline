@@ -263,6 +263,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (!task.genesis || asset.kind !== 'video') throw new AnalysisError('The Genesis render request is unavailable.', 400);
       const work = task.genesis, output = await runPhase(work.op === 'cleanPlate' ? 'Building a clean plate' : 'Tracking and warping the surface', () => renderGenesis(source, directory, work, new URL(convexUrl).origin, (seconds, reason) => (exclusive ?? (job => job()))(() => convex.mutation(pixelTrackApi.genesisRenders.reserveBria, { ...credentials, seconds, reason })), signal, onProgress));
       const base = asset.fileName.replace(/\.[^.]+$/, '').slice(0, 200);
+      // Kept before the upload, so a lease handoff after it still completes with the real report.
+      await (exclusive ?? (job => job()))(() => convex.mutation(pixelTrackApi.genesisRenders.stageReport, { ...credentials, report: output.report }));
       await runPhase('Saving Genesis render', () => uploadMediaFile(output.path, { ...credentials, projectId: task.projectId, fileName: `${base} (${work.op === 'cleanPlate' ? 'clean plate' : 'surface insert'}).${output.contentType === 'video/mp4' ? 'mp4' : 'webm'}`, kind: 'video', contentType: output.contentType, width: output.width, height: output.height, duration: work.end }, uploadContext, signal));
       onProgress(98);
       return { genesis: output.report };

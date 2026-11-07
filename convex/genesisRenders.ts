@@ -18,12 +18,11 @@ const allowance = v.object({ plan: v.string(), usedSeconds: v.number(), monthlyS
 const renderView = v.object({ renderId: v.id('genesisRenders'), status: renderStatus, method: v.optional(v.string()), costUsd: v.optional(v.number()), briaSeconds: v.optional(v.number()), allowance: v.optional(allowance), reused: v.boolean(), progress: v.optional(v.number()), outputAssetId: v.optional(v.string()), failureMessage: v.optional(v.string()), refused: v.optional(v.boolean()), report: v.optional(v.any()), start: v.number(), end: v.number(), fps: v.number(), computeSeconds: v.optional(v.number()) });
 
 /** Bria seconds this owner used this calendar month (UTC). A reservation counts once Bria was called, whatever happened after. */
+const month = () => new Date().toISOString().slice(0, 7);
 async function briaUsage(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  const now = new Date(), since = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1);
-  const rows = await ctx.db.query('genesisRenders').withIndex('by_owner_created', q => q.eq('ownerId', ownerId).gte('createdAt', since)).take(1000);
-  const used = Math.round(rows.reduce((sum, row) => sum + (row.briaSeconds ?? 0), 0) * 100) / 100;
+  const ledger = await ctx.db.query('genesisEraseUsage').withIndex('by_owner_month', q => q.eq('ownerId', ownerId).eq('month', month())).unique();
   const plan = await hasPaidModelAccess(ctx, ownerId) ? 'pro' as const : 'mcp' as const;
-  return { plan, usedSeconds: used, monthlySeconds: BRIA_MONTHLY_SECONDS[plan] };
+  return { plan, usedSeconds: Math.round((ledger?.seconds ?? 0) * 100) / 100, monthlySeconds: BRIA_MONTHLY_SECONDS[plan], ledger };
 }
 
 async function view(ctx: QueryCtx | MutationCtx, row: Doc<'genesisRenders'>, reused: boolean) {
@@ -31,7 +30,8 @@ async function view(ctx: QueryCtx | MutationCtx, row: Doc<'genesisRenders'>, reu
   return {
     renderId: row._id, status: row.status, reused, start: row.start, end: row.end, fps: row.fps,
     ...(row.method ? { method: row.method } : {}), ...(row.costUsd !== undefined ? { costUsd: row.costUsd } : {}), ...(row.briaSeconds ? { briaSeconds: row.briaSeconds } : {}),
-    ...(row.op === 'cleanPlate' ? { allowance: await briaUsage(ctx, row.ownerId) } : {}),
+    // The allowance only matters once a render settled or paid: polling a running render skips the lookup.
+    ...(row.op === 'cleanPlate' && (row.status !== 'queued' || row.method === 'bria') ? { allowance: await briaUsage(ctx, row.ownerId).then(({ ledger: _ledger, ...usage }) => usage) } : {}),
     ...(task ? { progress: task.progress ?? 0 } : {}), ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}),
     ...(row.error ? { failureMessage: row.error.replace(GENESIS_REFUSAL, '').replace(GENESIS_ALLOWANCE, '') } : {}), ...(row.refused ? { refused: true } : {}), ...(row.report ? { report: row.report } : {}),
     ...(row.readyAt ? { computeSeconds: Math.round((row.readyAt - row.createdAt) / 100) / 10 } : {}),
@@ -47,12 +47,15 @@ export const startFromRun = internalMutation({
     await requireEditorAccess(ctx, args.ownerId);
     const assetId = ctx.db.normalizeId('assets', args.sourceAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
     if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== project._id || asset.kind !== 'video' || !asset.duration) throw new ConvexError('This clip’s video is unavailable.');
-    if (asset.cutoutOf || asset.derivedOf) throw new ConvexError('This clip already shows processed footage (a cut-out or an earlier Genesis render). Use the original footage.');
+    // A surface can go onto footage removeObject already cleaned: its layers belong to the plate's source.
+    const plate = asset.derivedOf ? await ctx.db.query('genesisRenders').withIndex('by_output', q => q.eq('outputAssetId', asset._id)).first() : null;
+    const layerSource = args.op === 'surface' && plate?.op === 'cleanPlate' && plate.ownerId === args.ownerId ? plate.sourceAssetId : asset._id;
+    if (asset.cutoutOf || asset.derivedOf && layerSource === asset._id) throw new ConvexError('This clip already shows processed footage (a cut-out or an earlier Genesis render). Use the original footage.');
     if (!(args.end > args.start) || args.end - args.start > GENESIS_LIMITS.maxSeconds) throw new ConvexError(`Genesis renders cover up to ${GENESIS_LIMITS.maxSeconds} seconds at a time. Split the clip.`);
     const ready = async (layerId: string) => {
       const layer = await ownedLayer(ctx, args, layerId), cutout = await ctx.db.get(layer.cutoutId), status = layerStatus(cutout);
       if (status !== 'ready') throw new ConvexError(`Layer ${layer._id} is ${status}. ${status === 'processing' ? 'Poll getLayer until ready.' : 'Segment again.'}`);
-      if (layer.sourceAssetId !== asset._id) throw new ConvexError(`Layer ${layer._id} was segmented from other footage.`);
+      if (layer.sourceAssetId !== layerSource) throw new ConvexError(`Layer ${layer._id} was segmented from other footage.`);
       if (layer.start > args.start + 1 / layer.fps || layer.end < args.end - 1 / layer.fps) throw new ConvexError(`Layer ${layer._id} masks source ${layer.start.toFixed(2)}–${layer.end.toFixed(2)}s, but this render needs ${args.start.toFixed(2)}–${args.end.toFixed(2)}s. Segment the whole clip.`);
       return layer;
     };
@@ -123,8 +126,10 @@ export async function genesisRenderActive(ctx: QueryCtx | MutationCtx, task: Doc
 }
 
 /** The worker stored the render: record provenance on the asset (same source clock, shared sound) and the report. */
-export async function completeGenesisRender(ctx: MutationCtx, task: Doc<'mediaTasks'>, report: unknown) {
+export async function completeGenesisRender(ctx: MutationCtx, task: Doc<'mediaTasks'>, reported: unknown) {
   const row = task.genesisRenderId ? await ctx.db.get(task.genesisRenderId) : null;
+  // A retry after the upload only says it recovered: the report staged before the upload stands.
+  const report = (reported as { recovered?: boolean } | undefined)?.recovered ? row?.report : reported;
   const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
   if (!row || row.status !== 'queued') throw new ConvexError('The Genesis render is no longer active.');
   if (!output || output.ownerId !== task.ownerId || output.projectId !== task.projectId || output.kind !== 'video') throw new ConvexError('The Genesis render has not been stored yet.');
@@ -135,6 +140,19 @@ export async function completeGenesisRender(ctx: MutationCtx, task: Doc<'mediaTa
   await ctx.db.patch(row._id, { status: 'completed', outputAssetId: output._id, report, readyAt: Date.now(), ...(row.op === 'cleanPlate' && !row.method ? { method: 'cleanPlate' as const, costUsd: 0 } : {}) });
 }
 
+/** The worker's report, saved before it uploads the render, so a lease handoff after the upload keeps it. */
+export const stageReport = mutation({
+  args: { ...mediaTaskCredentials, report: v.any() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const task = await requireMediaTask(ctx, args.taskId, args.leaseToken), row = task.genesisRenderId ? await ctx.db.get(task.genesisRenderId) : null;
+    if (!row || row.status !== 'queued') throw new ConvexError('The Genesis render request is not active.');
+    if (JSON.stringify(args.report ?? null).length > 60_000) throw new ConvexError('The Genesis report is too large.');
+    await ctx.db.patch(row._id, { report: args.report });
+    return null;
+  },
+});
+
 /** The worker is about to call Bria for a clean plate the free compositor could not make: count its seconds against
  * the monthly allowance first, or refuse. Idempotent per render, so a lease handoff never counts twice. */
 export const reserveBria = mutation({
@@ -144,11 +162,13 @@ export const reserveBria = mutation({
     const task = await requireMediaTask(ctx, args.taskId, args.leaseToken), row = task.genesisRenderId ? await ctx.db.get(task.genesisRenderId) : null;
     if (!row || row.op !== 'cleanPlate' || row.status !== 'queued') throw new ConvexError('The Genesis render request is not active.');
     if (!(args.seconds > 0) || args.seconds > GENESIS_LIMITS.maxSeconds + 1) throw new ConvexError('Invalid Bria duration.');
-    const usage = await briaUsage(ctx, row.ownerId), expectedUsd = briaUsd(args.seconds);
+    const { ledger, ...usage } = await briaUsage(ctx, row.ownerId), expectedUsd = briaUsd(args.seconds);
     if (row.briaSeconds) return { expectedUsd, ...usage };
     if ((row.params as { fallback?: string } | undefined)?.fallback === 'none') throw new ConvexError(`${GENESIS_REFUSAL}${args.reason} The paid eraser is off for this call (fallback "none").`);
     if (usage.usedSeconds + args.seconds > usage.monthlySeconds + 1e-6) throw new ConvexError(`${GENESIS_ALLOWANCE}${args.reason} The free clean plate cannot do this shot, and the paid eraser needs ${args.seconds.toFixed(1)} s but only ${Math.max(0, usage.monthlySeconds - usage.usedSeconds).toFixed(1)} of this month's ${usage.monthlySeconds} Bria seconds (${usage.plan === 'pro' ? 'Pro' : 'MCP'} plan) are left. Use a shorter range, or a static shot where the subject moves away.`);
     await ctx.db.patch(row._id, { method: 'bria', briaSeconds: args.seconds, costUsd: expectedUsd });
+    if (ledger) await ctx.db.patch(ledger._id, { seconds: ledger.seconds + args.seconds });
+    else await ctx.db.insert('genesisEraseUsage', { ownerId: row.ownerId, month: month(), seconds: args.seconds });
     return { expectedUsd, ...usage, usedSeconds: Math.round((usage.usedSeconds + args.seconds) * 100) / 100 };
   },
 });

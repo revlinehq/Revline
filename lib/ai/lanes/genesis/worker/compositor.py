@@ -15,6 +15,7 @@ import importlib.util
 import json
 import math
 import os
+import shutil
 import signal
 import subprocess
 import sys
@@ -301,6 +302,97 @@ def clean_plate(request):
     return report
 
 
+KEY_WIDTH = 640
+
+
+def key_mask(hsv, key):
+    """Pixels of the surface's key colour (circular hue distance, enough saturation and value)."""
+    hue = hsv[..., 0].astype(np.int16)
+    distance = np.minimum(np.abs(hue-key), 180-np.abs(hue-key))
+    return ((distance <= 14) & (hsv[..., 1] > 60) & (hsv[..., 2] > 40)).astype(np.uint8)*255
+
+
+def chroma_key(hsv, quad):
+    """The key hue when the seed surface is one saturated colour (a green or blue screen), else None."""
+    region = np.zeros(hsv.shape[:2], np.uint8)
+    cv2.fillConvexPoly(region, np.round(shrink(quad, .85)).astype(np.int32), 255)
+    pixels = hsv[region > 0]
+    if len(pixels) < 50 or pixels[:, 1].mean() < 90:
+        return None
+    angles = pixels[:, 0].astype(np.float32)*np.pi/90
+    key = int(round(math.atan2(np.sin(angles).mean(), np.cos(angles).mean())*90/np.pi)) % 180
+    share = (key_mask(pixels[None], key) > 0).mean()
+    return key if share > .85 else None
+
+
+def track_keyed(hsvs, occluders, quad, seed, count, ks, key, fps):
+    """Chroma surface: align the seed frame's key shape to each frame's key mask (ECC homography, occluders masked
+    out), starting from the previous frame shifted by the key region's centroid. Frames without the key are lost."""
+    sh, sw = hsvs.shape[1:3]
+    scale = np.diag([ks, ks, 1.]).astype(np.float32)
+    inverse = np.linalg.inv(scale)
+    quad_s = (quad*ks).astype(np.float32)
+    surface = np.zeros((sh, sw), np.uint8)
+    cv2.fillConvexPoly(surface, np.round(shrink(quad_s, 1.04)).astype(np.int32), 255)
+    seed_key = cv2.bitwise_and(key_mask(hsvs[seed], key), surface)
+    template = cv2.GaussianBlur(seed_key, (0, 0), 3).astype(np.float32)/255
+    expected = max(1., float((seed_key > 0).sum()))
+    support = cv2.dilate(surface, np.ones((9, 9), np.uint8))
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 60, 1e-5)
+    homographies = [None]*count
+    homographies[seed] = np.eye(3)
+    stops = {}
+    reasons = dict(covered=0, gone=0, align=0, mismatch=0)
+    stops['lostReasons'] = reasons
+    for direction in (1, -1):
+        name = 'forward' if direction == 1 else 'backward'
+        stops[name] = dict(frame=count-1 if direction == 1 else 0, reason='boundary')
+        previous = np.eye(3, dtype=np.float32)
+        for index in range(seed+direction, count if direction == 1 else -1, direction):
+            occ = cv2.resize(occluders[index], (sw, sh), interpolation=cv2.INTER_NEAREST)
+            current = key_mask(hsvs[index], key)
+            # Key-coloured pixels inside an occluder mask, and the rim right around them, are the surface it grips:
+            # SAM's hand mask can take in the gripped phone, bezel included, and the bezel edge is what aligns it.
+            occ[cv2.dilate(current, np.ones((7, 7), np.uint8)) > 0] = 0
+            predicted = cv2.perspectiveTransform(quad_s.reshape(-1, 1, 2), previous).reshape(-1, 2)
+            near = np.zeros((sh, sw), np.uint8)
+            cv2.fillConvexPoly(near, np.round(shrink(predicted, 2.)).astype(np.int32), 255)
+            found = cv2.bitwise_and(current, near)
+            # The part of the surface the occluders leave visible, in seed coordinates.
+            hidden = cv2.warpPerspective(occ, np.linalg.inv(previous), (sw, sh), flags=cv2.INTER_NEAREST)
+            visible = cv2.bitwise_and(seed_key, cv2.bitwise_not(hidden))
+            if (visible > 0).sum() < .08*expected:
+                reasons['covered'] += 1
+                continue  # covered: this frame stays uncovered
+            if (found > 0).sum() < .15*max(1., float((visible > 0).sum())):
+                reasons['gone'] += 1
+                continue  # the surface left the frame
+            # Initial guess: the previous homography moved by the key region's centroid shift.
+            expected_here = cv2.warpPerspective(visible, previous, (sw, sh), flags=cv2.INTER_NEAREST)
+            a, b = cv2.moments(found, True), cv2.moments(expected_here, True)
+            guess = previous.copy()
+            if a['m00'] > 0 and b['m00'] > 0:
+                shift = np.float32([[1, 0, a['m10']/a['m00']-b['m10']/b['m00']], [0, 1, a['m01']/a['m00']-b['m01']/b['m00']], [0, 0, 1]])
+                guess = (shift @ previous).astype(np.float32)
+            image = cv2.GaussianBlur(found, (0, 0), 3).astype(np.float32)/255
+            mask = cv2.bitwise_and(support, cv2.bitwise_not(cv2.warpPerspective(occ, np.linalg.inv(guess), (sw, sh), flags=cv2.INTER_NEAREST)))
+            try:
+                score, warp = cv2.findTransformECC(template, image, guess.copy(), cv2.MOTION_HOMOGRAPHY, criteria, mask, 5)
+            except cv2.error:
+                reasons['align'] += 1
+                continue
+            aligned = cv2.warpPerspective(visible, warp, (sw, sh), flags=cv2.INTER_NEAREST) > 0
+            # Precision: the key found is where the surface lands. Recall may be low: an unmasked hand hides key pixels.
+            both = (aligned & (found > 0)).sum()
+            if score < .3 or both < .7*(found > 0).sum() or both < .2*aligned.sum():
+                reasons['mismatch'] += 1
+                continue
+            previous = warp.astype(np.float32)
+            homographies[index] = (inverse @ previous @ scale).astype(np.float64)
+        progress(30+(35 if direction == 1 else 40))
+    return homographies, stops
+
+
 def order_corners(points):
     points = np.float32(points).reshape(4, 2)
     center = points.mean(axis=0)
@@ -337,9 +429,20 @@ def surface(request):
     scale = min(1., 1280/max(width, height))
     tw, th = round(width*scale), round(height*scale)
     work = tempfile.mkdtemp(prefix='genesis-surface-')
+    try:
+        return surface_in(request, work, start, end, fps, width, height, count, seed, scale, tw, th)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def surface_in(request, work, start, end, fps, width, height, count, seed, scale, tw, th):
     # Gray tracking frames and occluder masks, disk-backed so long clips do not hold memory.
     grays = np.lib.format.open_memmap(os.path.join(work, 'gray.npy'), 'w+', np.uint8, (count, th, tw))
     occluders = np.lib.format.open_memmap(os.path.join(work, 'occ.npy'), 'w+', np.uint8, (count, th, tw))
+    # Small HSV frames for a chroma (green/blue screen) surface: its key shape is tracked directly.
+    ks = min(1., KEY_WIDTH/tw)
+    sw, sh = round(tw*ks), round(th*ks)
+    hsvs = np.lib.format.open_memmap(os.path.join(work, 'hsv.npy'), 'w+', np.uint8, (count, sh, sw, 3))
     lumas = np.zeros(count, np.float32)
     source = Frames(request['source'], start, count, fps, tw, th, 'bgr')
     masks = [Frames(path, start, count, fps, tw, th, 'alpha') for path in request['masks']]
@@ -349,6 +452,7 @@ def surface(request):
         for index in range(count):
             frame = source.read()
             grays[index] = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            hsvs[index] = cv2.cvtColor(cv2.resize(frame, (sw, sh), interpolation=cv2.INTER_AREA), cv2.COLOR_BGR2HSV)
             occ = combined_mask(masks, (th, tw))
             occluders[index] = cv2.dilate((occ > 24).astype(np.uint8)*255, np.ones((7, 7), np.uint8))
             lumas[index] = -1
@@ -371,6 +475,11 @@ def surface(request):
     area = cv2.contourArea(quad)
     if area < 400:
         raise Refusal('The surface is too small to track (under 20x20 px). Pass corners around a larger surface.')
+
+    key = chroma_key(hsvs[seed], quad*ks)
+    if key is not None:
+        homographies, stops = track_keyed(hsvs, occluders, quad, seed, count, ks, key, fps)
+        return render_surface(request, quad, homographies, stops, grays, occluders, lumas, count, seed, scale, tw, th, width, height, fps, start, 'chroma-key', key)
 
     # Track: features on and around the surface (not on occluders), anchored to the seed frame each step,
     # falling back to the previous frame when the direct match is too weak. One homography per frame.
@@ -432,7 +541,10 @@ def surface(request):
             misses, current_h, previous = 0, homography, index
             homographies[index] = homography
         progress(30+(35 if direction == 1 else 40))
+    return render_surface(request, quad, homographies, stops, grays, occluders, lumas, count, seed, scale, tw, th, width, height, fps, start, 'features')
 
+
+def render_surface(request, quad, homographies, stops, grays, occluders, lumas, count, seed, scale, tw, th, width, height, fps, start, tracker, key=None):
     # Corners per frame, lightly smoothed over neighbours that tracked; frames that did not track stay hidden.
     corners = [None if h is None else cv2.perspectiveTransform(quad.reshape(-1, 1, 2), h).reshape(4, 2) for h in homographies]
     smoothed = []
@@ -440,7 +552,8 @@ def surface(request):
         if corners[index] is None:
             smoothed.append(None)
             continue
-        window = [(weight, corners[index+offset]) for offset, weight in ((-1, 1), (0, 2), (1, 1)) if 0 <= index+offset < count and corners[index+offset] is not None]
+        # Only jitter is smoothed: neighbours more than 3 px away (fast motion) would make the insert lag.
+        window = [(weight, corners[index+offset]) for offset, weight in ((-1, 1), (0, 2), (1, 1)) if 0 <= index+offset < count and corners[index+offset] is not None and np.max(np.linalg.norm(corners[index+offset]-corners[index], axis=1)) < 3/scale]
         smoothed.append(sum(weight*item for weight, item in window)/sum(weight for weight, _ in window))
     tracked = [index for index in range(count) if smoothed[index] is not None]
     jitter = 0.
@@ -485,9 +598,16 @@ def surface(request):
     white = np.full((ih, iw), 255, np.uint8)
     out = encoder(request['output'], width, height, fps, start, True)
     blank = np.zeros((height, width, 4), np.uint8)
+    # Occluders are cut out of the insert, so the footage's own pixels (a hand) show in front. On a chroma surface,
+    # occluder pixels of the key colour are surface: SAM's hand mask can take in the phone it grips.
+    cut = bool(request['masks'])
+    footage = Frames(request['source'], start, count, fps, width, height, 'bgr') if cut else None
+    occluder_masks = [Frames(path, start, count, fps, width, height, 'alpha') for path in request['masks']]
     try:
         for index in range(count):
             image = still if still is not None else insert_frames.read()
+            if cut:
+                frame, occluder = footage.read(), combined_mask(occluder_masks, (height, width))
             quad_full = None if smoothed[index] is None else smoothed[index]*full
             if quad_full is None:
                 out.stdin.write(blank.tobytes())
@@ -497,18 +617,25 @@ def surface(request):
             alpha = cv2.warpPerspective(white, matrix, (width, height), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
             if gains[index] != 1:
                 color = np.clip(color.astype(np.float32)*gains[index], 0, 255).astype(np.uint8)
+            if cut and occluder.any():
+                occluder = (occluder > 24).astype(np.uint8)*255
+                if key is not None:
+                    occluder[key_mask(cv2.cvtColor(frame, cv2.COLOR_BGR2HSV), key) > 0] = 0
+                hold = cv2.GaussianBlur(occluder, (5, 5), 0).astype(np.float32)/255
+                alpha = (alpha*(1-hold)).astype(np.uint8)
             out.stdin.write(np.dstack([color, alpha]).tobytes())
             progress(75+index/count*24)
     finally:
         if still is None:
             insert_frames.close()
+        if footage is not None:
+            footage.close()
+        for reader in occluder_masks:
+            reader.close()
     finish(out)
     del grays, occluders
-    for name in ('gray.npy', 'occ.npy'):
-        os.remove(os.path.join(work, name))
-    os.rmdir(work)
     seed_quad = (quad*full).tolist()
-    return dict(frames=count, trackedFrames=len(tracked), seedCorners=[[round(x/width, 4), round(y/height, 4)] for x, y in seed_quad],
+    return dict(frames=count, trackedFrames=len(tracked), tracker=tracker, lostFrames=[round(start+index/fps, 3) for index in range(count) if smoothed[index] is None][:60], seedCorners=[[round(x/width, 4), round(y/height, 4)] for x, y in seed_quad],
                 cornerJitterPx=round(jitter/scale, 2), stops=stops, lightGain=dict(min=round(float(gains[tracked].min()), 3) if tracked else 1, max=round(float(gains[tracked].max()), 3) if tracked else 1),
                 width=width, height=height,
                 corners=[None if smoothed[index] is None else [[round(float(x)/tw, 5), round(float(y)/th, 5)] for x, y in smoothed[index]] for index in range(0, count, int(os.environ.get("GENESIS_EVERY") or max(1, round(fps))))])

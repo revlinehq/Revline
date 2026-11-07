@@ -8,10 +8,14 @@ export const GENESIS_ALLOWANCE = 'Genesis allowance: ';
 export type CleanPlateParams = { dilate?: number };
 export type SurfaceParams = { time: number; corners?: [number, number][]; rotate?: 0 | 90 | 180 | 270; fit: 'cover' | 'stretch'; lightMatch: boolean };
 
+/** Compositor algorithm version per op. Bump one when its output changes, so finished renders of the old algorithm
+ * are not reused. Clean plates can be paid (Bria): bumping that one makes repeated requests pay again. */
+export const COMPOSITOR_VERSION = { cleanPlate: 1, surface: 6 } as const;
+
 /** One identity per distinct request: the same op, footage, layers, insert, range and parameters reuse one render. */
-export function renderKey(input: { op: string; sourceAssetId: string; layerIds: string[]; seedLayerId?: string; insertAssetId?: string; start: number; end: number; fps: number; params: unknown }) {
+export function renderKey(input: { op: 'cleanPlate' | 'surface'; sourceAssetId: string; layerIds: string[]; seedLayerId?: string; insertAssetId?: string; start: number; end: number; fps: number; params: unknown }) {
   const round = (value: number) => Math.round(value * 1000) / 1000;
-  return JSON.stringify([input.op, input.sourceAssetId, [...input.layerIds].sort(), input.seedLayerId ?? null, input.insertAssetId ?? null, round(input.start), round(input.end), input.fps, input.params]);
+  return JSON.stringify([input.op, COMPOSITOR_VERSION[input.op], input.sourceAssetId, [...input.layerIds].sort(), input.seedLayerId ?? null, input.insertAssetId ?? null, round(input.start), round(input.end), input.fps, input.params]);
 }
 
 /** v1 limits the worker enforces (lib/ai/lanes/genesis/worker/compositor.py); quoted in the skill. */

@@ -68,26 +68,32 @@ export async function renderGenesis(source: string, directory: string, work: Gen
     const prefix = [GENESIS_REFUSAL, GENESIS_ALLOWANCE].find(item => message.includes(item));
     throw new AnalysisError(prefix ? message.slice(message.indexOf(prefix)) : `Could not reserve the paid eraser: ${message}`, 422, false);
   }
-  const prep = await compositor({ ...base, op: 'erasePrep', outDir: directory, chunkSeconds: BRIA_MAX_SECONDS_PER_CALL, dilatePx: BRIA_MASK_DILATE_PX }, signal, value => onProgress(40 + Math.round(value * .05)));
-  if (prep.type !== 'result') throw new AnalysisError('The eraser chunks could not be prepared.', 502, false);
-  const chunks = z.array(z.object({ source: z.string(), mask: z.string(), frames: z.number(), seconds: z.number() })).parse(prep.report.chunks);
-  console.log(`[genesis] Bria Video Eraser (mask mode): ${chunks.length} call(s), ${seconds.toFixed(2)} s, expected $${allowance.expectedUsd.toFixed(2)} at $0.14/s. ${free.reason} Allowance after: ${allowance.usedSeconds}/${allowance.monthlySeconds} s (${allowance.plan}).`);
-  const started = Date.now(), done: { path: string; frames: number }[] = [];
-  for (const [index, chunk] of chunks.entries()) {
-    console.log(`[genesis] Bria call ${index + 1}/${chunks.length}: ${chunk.seconds.toFixed(2)} s, expected $${briaUsd(chunk.seconds).toFixed(2)}.`);
-    const upload = async (path: string) => fal.storage.upload(new Blob([await readFile(path)], { type: 'video/mp4' }));
-    const [video_url, mask_video_url] = await Promise.all([upload(chunk.source), upload(chunk.mask)]);
-    let result;
-    // Never retried automatically: a retry would pay again. A new call starts a fresh, counted render.
-    try { result = erased.parse(await subscribe(fal, BRIA_ERASE_ENDPOINT, { video_url, mask_video_url, output_container_and_codec: 'mp4_h264' }, signal)); }
-    catch (error) { if (signal.aborted) throw error; throw new AnalysisError(`The paid eraser failed on chunk ${index + 1}: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`, 502, false); }
-    const path = join(directory, `erase-${index}-result.mp4`);
-    await download(result.video.url, path, signal);
-    done.push({ path, frames: chunk.frames });
-    onProgress(45 + Math.round((index + 1) / chunks.length * 40));
+  // From here on Bria may have been paid: nothing is retried automatically, or the eraser would be paid again.
+  try {
+    const prep = await compositor({ ...base, op: 'erasePrep', outDir: directory, chunkSeconds: BRIA_MAX_SECONDS_PER_CALL, dilatePx: BRIA_MASK_DILATE_PX }, signal, value => onProgress(40 + Math.round(value * .05)));
+    if (prep.type !== 'result') throw new AnalysisError('The eraser chunks could not be prepared.', 502, false);
+    const chunks = z.array(z.object({ source: z.string(), mask: z.string(), frames: z.number(), seconds: z.number() })).parse(prep.report.chunks);
+    console.log(`[genesis] Bria Video Eraser (mask mode): ${chunks.length} call(s), ${seconds.toFixed(2)} s, expected $${allowance.expectedUsd.toFixed(2)} at $0.14/s. ${free.reason} Allowance after: ${allowance.usedSeconds}/${allowance.monthlySeconds} s (${allowance.plan}).`);
+    const started = Date.now(), done: { path: string; frames: number }[] = [];
+    for (const [index, chunk] of chunks.entries()) {
+      console.log(`[genesis] Bria call ${index + 1}/${chunks.length}: ${chunk.seconds.toFixed(2)} s, expected $${briaUsd(chunk.seconds).toFixed(2)}.`);
+      const upload = async (path: string) => fal.storage.upload(new Blob([await readFile(path)], { type: 'video/mp4' }));
+      const [video_url, mask_video_url] = await Promise.all([upload(chunk.source), upload(chunk.mask)]);
+      let result;
+      // Never retried automatically: a retry would pay again. A new call starts a fresh, counted render.
+      try { result = erased.parse(await subscribe(fal, BRIA_ERASE_ENDPOINT, { video_url, mask_video_url, output_container_and_codec: 'mp4_h264' }, signal)); }
+      catch (error) { if (signal.aborted) throw error; throw new AnalysisError(`The paid eraser failed on chunk ${index + 1}: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}`, 502, false); }
+      const path = join(directory, `erase-${index}-result.mp4`);
+      await download(result.video.url, path, signal);
+      done.push({ path, frames: chunk.frames });
+      onProgress(45 + Math.round((index + 1) / chunks.length * 40));
+    }
+    const joined = await compositor({ ...base, op: 'eraseJoin', output, chunks: done, dilatePx: BRIA_MASK_DILATE_PX }, signal, value => onProgress(85 + Math.round(value * .1)));
+    if (joined.type !== 'result') throw new AnalysisError('The erased chunks could not be joined.', 502, false);
+    const report = { ...free.report, ...joined.report, method: 'bria', reason: free.reason, provider: `fal ${BRIA_ERASE_ENDPOINT}`, calls: chunks.length, briaSeconds: seconds, costUsd: allowance.expectedUsd, eraseSeconds: Math.round((Date.now() - started) / 100) / 10, maskDilatePx: prep.report.dilatePx, allowance: { plan: allowance.plan, usedSeconds: allowance.usedSeconds, monthlySeconds: allowance.monthlySeconds } };
+    return { path: output, report, contentType, width: Number(joined.report.width), height: Number(joined.report.height) };
+  } catch (error) {
+    if (signal.aborted || error instanceof AnalysisError && error.retryable === false) throw error;
+    throw new AnalysisError(`The paid erase failed after it started: ${error instanceof Error ? error.message.slice(0, 300) : String(error)}. Call again to start a new (paid) render.`, 502, false);
   }
-  const joined = await compositor({ ...base, op: 'eraseJoin', output, chunks: done, dilatePx: BRIA_MASK_DILATE_PX }, signal, value => onProgress(85 + Math.round(value * .1)));
-  if (joined.type !== 'result') throw new AnalysisError('The erased chunks could not be joined.', 502, false);
-  const report = { ...free.report, ...joined.report, method: 'bria', reason: free.reason, provider: `fal ${BRIA_ERASE_ENDPOINT}`, calls: chunks.length, briaSeconds: seconds, costUsd: allowance.expectedUsd, eraseSeconds: Math.round((Date.now() - started) / 100) / 10, maskDilatePx: prep.report.dilatePx, allowance: { plan: allowance.plan, usedSeconds: allowance.usedSeconds, monthlySeconds: allowance.monthlySeconds } };
-  return { path: output, report, contentType, width: Number(joined.report.width), height: Number(joined.report.height) };
 }
