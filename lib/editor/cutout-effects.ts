@@ -24,7 +24,7 @@ export function validateCutoutEffect(effect: CutoutEffect) {
 }
 
 /** Moves every V-group clip above `track` up by `count`, leaving those rows empty. */
-function openLayersAbove(timeline: Timeline, track: number, count: number): Timeline {
+export function openLayersAbove(timeline: Timeline, track: number, count: number): Timeline {
   const tracks = deriveTrackCounts(timeline);
   if (tracks.visual + count > maxTrackCount('visual')) throw new Error(`This effect needs ${count} more V tracks; remove an empty track first.`);
   const clips = timeline.clips.map(clip => layerGroup(clip.kind) === 'visual' && trackOf(clip) > track ? { ...clip, track: trackOf(clip) + count } : clip);

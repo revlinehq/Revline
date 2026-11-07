@@ -3,20 +3,28 @@ import { definition as motion } from './motion/definition';
 import { definition as recreate } from './recreate/definition';
 import { definition as clip } from './clip/definition';
 import { definition as reel } from './reel/definition';
+import { definition as genesis } from './genesis/definition';
 import { BASE_TOOLS, PROJECT_BASE_TOOLS, SKILL_TOOLS } from './base-tools';
 import { editorSkills } from '../skills';
-import { LANE_IDS, type LaneId } from './types';
+import { MCP_LANE_IDS, isMcpOnlyLane, type LaneId } from './types';
 export type { LaneId } from './types';
 // Persisted legacy tasks use shared editing; this alias is never advertised.
-export const LANES = { edit, motion, recreate, clip, reel, explainer: edit };
+export const LANES = { edit, motion, recreate, clip, reel, genesis, explainer: edit };
 export const isLane = (value: unknown): value is LaneId =>
-  LANE_IDS.some(id => id === value);
+  MCP_LANE_IDS.some(id => id === value);
 
-function allSkills() {
-  return [...new Map([...Object.values(LANES).flatMap(lane => lane.skills), ...editorSkills()].map(skill => [skill.name, skill])).values()];
+/** Skills and tools of MCP-only lanes (Genesis). `mcp` is true only for MCP callers (run ids starting mcp-). */
+const SHARED_SKILLS = new Set([...Object.values(LANES).filter(lane => !isMcpOnlyLane(lane.id)).flatMap(lane => lane.skills), ...editorSkills()].map(skill => skill.name));
+// Only skills no in-app lane uses: Genesis also lists the shared transitions skill, which stays visible.
+const MCP_ONLY_SKILLS = new Set(Object.values(LANES).filter(lane => isMcpOnlyLane(lane.id)).flatMap(lane => lane.skills.map(skill => skill.name)).filter(name => !SHARED_SKILLS.has(name)));
+export const MCP_ONLY_TOOLS: ReadonlySet<string> = new Set(Object.values(LANES).filter(lane => isMcpOnlyLane(lane.id)).flatMap(lane => lane.ownTools ?? []));
+const visibleTo = (name: string, mcp: boolean) => mcp || !isMcpOnlyLane(name) && !MCP_ONLY_SKILLS.has(name);
+
+function allSkills(mcp = false) {
+  return [...new Map([...Object.values(LANES).flatMap(lane => lane.skills), ...editorSkills()].filter(skill => visibleTo(skill.name, mcp)).map(skill => [skill.name, skill])).values()];
 }
-export function capabilityExists(name: string) {
-  return isLane(name) || allSkills().some(skill => skill.name === name);
+export function capabilityExists(name: string, mcp = false) {
+  return visibleTo(name, mcp) && (isLane(name) || allSkills(mcp).some(skill => skill.name === name));
 }
 // Capabilities saved on existing tasks under names that were later folded or renamed.
 const FORMER_CAPABILITIES: Record<string, string> = {
@@ -35,8 +43,10 @@ export function laneToolAllowed(lane: LaneId, tool: string, capabilities: readon
 /** The workflows and skills whose loading enables a tool, workflows first. Shared tools need none. */
 export function toolCapabilities(tool: string): string[] {
   return [
-    ...LANE_IDS.filter(lane => lane !== 'edit' && LANES[lane].tools.includes(tool)),
+    ...MCP_LANE_IDS.filter(lane => lane !== 'edit' && !isMcpOnlyLane(lane) && LANES[lane].tools.includes(tool)),
     ...Object.entries(SKILL_TOOLS).filter(([, names]) => names.includes(tool)).map(([name]) => name),
+    // MCP-only lanes come last, so shared tools keep pointing at their usual capability first.
+    ...MCP_LANE_IDS.filter(lane => isMcpOnlyLane(lane) && LANES[lane].tools.includes(tool)),
   ];
 }
 export function laneToolError(lane: LaneId, tool: string) {
@@ -44,24 +54,25 @@ export function laneToolError(lane: LaneId, tool: string) {
   if (!first) return `Tool "${tool}" is not a Revline editing tool.`;
   return `Tool "${tool}" is not enabled for this ${lane === 'edit' || lane === 'explainer' ? 'shared editing' : lane} task yet. Load the ${first} capability first: loadCapability {"name":"${first}"}${others.length ? ` (also provided by ${others.slice(0, 3).join(', ')})` : ''}, then call ${tool} again. Loading keeps the task, its primary workflow and its checks; use setLane only when the deliverable itself changes.`;
 }
-export function discoverCapabilities(query: string) {
+export function discoverCapabilities(query: string, mcp = false) {
   const words = query.toLowerCase().split(/[^a-z0-9-]+/).filter(word => word.length > 2);
   const entries = [
-    ...Object.values(LANES).filter(lane => lane.id !== 'edit').map(lane => ({ name: lane.id, kind: 'workflow', description: lane.description })),
-    ...allSkills().map(skill => ({ name: skill.name, kind: 'skill', description: skill.description })),
+    ...Object.values(LANES).filter(lane => lane.id !== 'edit' && visibleTo(lane.id, mcp)).map(lane => ({ name: lane.id, kind: 'workflow', description: lane.description })),
+    ...allSkills(mcp).map(skill => ({ name: skill.name, kind: 'skill', description: skill.description })),
   ];
   return entries.map(entry => ({ ...entry, score: words.reduce((score, word) => score + (`${entry.name} ${entry.description}`.toLowerCase().includes(word) ? 1 : 0), 0) }))
     .filter(entry => entry.score > 0).sort((a, b) => b.score - a.score).slice(0, 5)
     .map(({ score: _score, ...entry }) => entry);
 }
-export function capabilitySummary(name: string) {
+export function capabilitySummary(name: string, mcp = false) {
+  if (!visibleTo(name, mcp)) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
   if (isLane(name)) return { name, kind: 'workflow', description: LANES[name].description, skills: LANES[name].skills.map(({name, description}) => ({name, description})), tools: capabilityTools(name) };
-  const skill = allSkills().find(skill => skill.name === name);
+  const skill = allSkills(mcp).find(skill => skill.name === name);
   if (!skill) throw new Error(`Unknown capability "${name}". Search with discoverCapabilities first.`);
   return { name, kind: 'skill', description: skill.description, tools: capabilityTools(name) };
 }
-export function laneSkill(name: string, page?: string) {
-  const skill = allSkills().find(skill => skill.name === name);
+export function laneSkill(name: string, page?: string, mcp = false) {
+  const skill = allSkills(mcp).find(skill => skill.name === name);
   if (!skill) throw new Error(`Unknown skill "${name}". Search with discoverCapabilities first.`);
   const found = page ? skill.pages?.find(item => item.name === page) : undefined;
   if (page && !found) throw new Error(`Unknown page "${page}". Pages: ${skill.pages?.map(page => page.name).join(', ') || 'none'}.`);

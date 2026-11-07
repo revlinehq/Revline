@@ -1,5 +1,5 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
-import { SAM_31_USD, forSurface, subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
+import { sam31Usd, forSurface, subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
 import { isMcpRun } from './lib/run_ids';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
@@ -44,7 +44,8 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
     if(selection.time<clip.sourceStart||selection.time>=sourceEndOf(clip))throw new ConvexError('The subject seed must be inside the source clip.');
   }
   if (end - start > MAX_SECONDS) throw new ConvexError(`Remove the background from up to ${MAX_SECONDS / 60} minutes at a time. Split this clip first.`);
-  const recent = await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(50);
+  // Genesis layers (MCP masks, never placed) are not background removals: they never block or satisfy one.
+  const recent = (await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(50)).filter(row => row.purpose !== 'genesis');
   const pending = recent.find(row => row.clipId === clipId && row.status === 'queued');
   if (pending && (subjectSelectionKey(pending.selection) !== subjectSelectionKey(selection) || pending.subject !== undefined || (pending.mode ?? 'person') !== mode || pending.effect?.kind !== effect?.kind)) throw new ConvexError('Another cut-out of this clip is still processing. Try again when it finishes.');
   if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start, pending.fps, pending.selection), alreadyRunning: true, reused: false };
@@ -73,8 +74,8 @@ function placed(timeline: ReturnType<typeof currentTimeline>, clipId: string, ou
 // MCP subject cut-outs run on SAM 3.1 (Meta): per-frame video price, plus one image for a noun seed.
 const estimate = (seconds: number, fps = 30, selection?: Pick<PixelTrackRequest, 'seed' | 'segmenter'>) => {
   const frames = Math.ceil(seconds * fps);
-  const usd = selection?.segmenter === 'sam-3.1' ? Math.max(SAM_31_USD.minimumFrames, frames) * SAM_31_USD.frame + (selection.seed.kind === 'object' ? SAM_31_USD.image : 0) : frames * USD_PER_FRAME;
-  return Math.max(.01, Math.round(usd * 100) / 100);
+  if (selection?.segmenter === 'sam-3.1') return sam31Usd(frames, selection.seed.kind === 'object');
+  return Math.max(.01, Math.round(frames * USD_PER_FRAME * 100) / 100);
 };
 
 export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string(), mode: v.optional(cutoutMode), selection: v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
@@ -89,7 +90,7 @@ export const forProject = query({ args: { projectId: v.id('projects') }, returns
   const ownerId = await requireOwner(ctx);
   await requireProject(ctx, args.projectId, ownerId, false);
   const rows = await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', args.projectId)).order('desc').take(20);
-  return Promise.all(rows.filter(row => row.ownerId === ownerId).map(async row => {
+  return Promise.all(rows.filter(row => row.ownerId === ownerId && row.purpose !== 'genesis').map(async row => {
     const task = row.status === 'queued' && row.taskId ? await ctx.db.get(row.taskId) : null;
     return { _id: row._id, clipId: row.clipId, mode: row.mode ?? 'person', ...(row.effect ? { effect: row.effect.kind } : {}), ...(row.outputAssetId ? { outputAssetId: row.outputAssetId } : {}), status: row.status, ...(row.placed !== undefined ? { placed: row.placed } : {}), ...(row.error ? { error: row.error } : {}), createdAt: row.createdAt, ...(task ? { progress: task.progress } : {}) };
   }));

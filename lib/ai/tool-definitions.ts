@@ -178,6 +178,11 @@ export const EDITOR_TOOL_DEFINITIONS = {
   setAspectRatio: { effect: 'timeline', mcp: 'exclusive', label: ['Resizing canvas', 'Resized canvas'] },
   followSubject: { effect: 'timeline', mcp: 'exclusive', label: ['Following subject', 'Applied subject tracking'] },
   removeBackground: { effect: 'job', mcp: 'exclusive', writes: ['cutouts:startFromRun'], label: ['Starting background removal', 'Started background removal'] },
+  // Genesis (MCP only): SAM 3.1 layers and the functions that use them.
+  segment: { effect: 'job', mcp: 'exclusive', writes: ['genesis:startFromRun'], label: ['Segmenting with SAM 3.1', 'Started SAM 3.1 segmentation'] },
+  getLayer: { effect: 'read', mcp: 'read' },
+  layerEffect: { effect: 'timeline', mcp: 'exclusive', label: ['Applying a layer effect', 'Applied a layer effect'] },
+  textBehind: { effect: 'timeline', mcp: 'exclusive', label: ['Placing text behind the subject', 'Placed text behind the subject'] },
 } as const satisfies Record<string, ToolBehavior>;
 
 export type EditorToolName = keyof typeof EDITOR_TOOL_DEFINITIONS;
