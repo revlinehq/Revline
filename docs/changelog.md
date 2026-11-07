@@ -1,5 +1,6 @@
 ## 2026-11-07
 - MCP: the public server at tryrevline.com/mcp moves to its own Cloudflare Worker (`cloudflare/mcp`: Agents SDK McpAgent per session, Workers OAuth Provider); tools, access checks, rate limits and agent identity stay in Convex behind a signed bridge, older connections keep their Convex tokens, and upload scripts use tryrevline.com instead of `*.convex.site`. Why: the user wanted real streaming and sessions, a standard OAuth provider and one deploy style.
+- Convex schema: stored cutouts and derivations still accept the `segmenter` and `purpose` fields written while SAM 3.1 and Genesis were live; function arguments stay strict. Why: the reverts left those rows on dev, which blocked every deploy.
 - README: rewritten with an editor screenshot, what Revline does, MCP setup for coding agents and verified development steps. Why: the README was a WIP draft.
 - App: removed the scripted editor demo (`/editor/demo/*` and its footage in `public/demo`), the zoom studies (`/demozoom`), the motion dev lab (`/motion-lab`) and the 404 stubs at `/chat/demo` and `/editor/demo`. Why: the founder approved deleting dead demo and dev pages.
 - Landing page: removed the purple outline and shimmer reveal that played around the nav, headings and buttons on load; they now appear static. Why: the founder no longer wanted that animation.
