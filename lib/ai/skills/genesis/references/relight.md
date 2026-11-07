@@ -47,8 +47,8 @@ A whole-frame relight changes the sky, ground and every person together. A subje
 | Item | Value |
 |---|---|
 | Price | $0.10 per LightX output second; one call returns 49 frames at 10 fps = **$0.49 per clip** (any length up to 15 s) |
-| Measured (8 s, 1080p, ic) | MEASURED_IC |
-| Measured (8 s, subject + depth) | MEASURED_SUBJECT |
+| Measured, whole frame (8 s, 1080p) | **$0.49**, 523 s end to end (about 7 min of it fal's queue and LightX) |
+| Measured, subject only (8 s, woman, with depth) | **$0.49** for LightX (plus the reused depth pass), 172 s end to end |
 | Allowance | 60 relight seconds a month (120 on Pro), counted in clip seconds; failed jobs do not count |
 | Max length | 15 s of source per clip |
 | Output | 1080p, the source's frame rate, picture only (the clip keeps its sound) |
@@ -57,7 +57,7 @@ A whole-frame relight changes the sky, ground and every person together. A subje
 Past the allowance `relight` refuses with the seconds used. Say so plainly and offer a shorter range; never work around it.
 
 ## Rules
-1. Explicit angles run in LightX `EXPLICIT_MODE` mode. EXPLICIT_REASON
+1. Explicit angles run in LightX `ic` mode: the nearest side plus the angle and colour in words. LightX's `hdr` mode (an environment map) is not used: on fal it refuses non-.exr images and then cannot decode a real .exr. The reply's `mode` says which ran.
 2. Fast motion between the 49 samples can leave a soft light edge that lags a moving subject by a frame or two. Check the frame where the subject moves fastest.
 3. Relight changes light, not content. If the user wants objects, weather or the sky replaced, say Genesis does not do that.
 4. Do not trim, move or retime the clip after `applyJob` beyond the relit range; finish fails if the clip plays footage the result does not cover. `undoLatestEdit`, retime, then relight again.

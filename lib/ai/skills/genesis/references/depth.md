@@ -41,8 +41,8 @@ Describe what the effect does when you propose it; do not pick a strength or col
 ## Cost, time and limits
 | Item | Value |
 |---|---|
-| Depth pass | $0.04 per second of footage (fal, VDA-Small). Measured: MEASURED_DEPTH |
-| Depth effect | No model cost. Measured: MEASURED_EFFECT |
+| Depth pass | $0.04 per second of footage (fal, VDA-Small). Measured: 8 s of 1080p at 24 fps = **$0.32**, ready in 45 s |
+| Depth effect | No model cost. Measured on 8 s of 1080p: fog 48 s, depth scan 24 s, portrait blur and focus pull 90–105 s (blur is the slow part) |
 | Max range | 60 s per depth pass or effect |
 | Output | 1080p video on the source clock, picture only (the clip keeps its sound) |
 | Reuse | One depth pass serves every effect and subject relight of that footage, free |

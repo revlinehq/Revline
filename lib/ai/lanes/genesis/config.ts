@@ -19,5 +19,6 @@ export const DEPTH_MODEL = 'VDA-Small';
 /** Relit and depth-effect videos are delivered at this short side (1080p). */
 export const OUTPUT_SHORT_SIDE = 1080;
 
-/** LightX mode for explicit sun angles: `hdr` (an environment image rendered from the sun) or `ic` (nearest side plus angle words). */
-export const EXPLICIT_LIGHT_MODE: 'hdr' | 'ic' = 'hdr';
+/** LightX mode for explicit sun angles: `ic` (nearest side plus angle words) or `hdr` (an .exr environment rendered
+ * from the sun). `ic` ships: on fal (Nov 2026) `hdr` refuses non-.exr images, then cannot decode a real .exr (422). */
+export const EXPLICIT_LIGHT_MODE: 'hdr' | 'ic' = 'ic';
