@@ -17,4 +17,6 @@
 // 49: report genuine Gemini billing failures and honor durable admission cooldowns.
 // 50: beat maps carry the measured music energy (loudness, low band, onsets) analyzeMusic reads.
 // 51: MCP subject selections and noun grounding can request SAM 3.1 on Meta's Model API.
-export const MEDIA_PROCESSOR_VERSION = 51;
+// 52: SAM 3.1 cut-outs report the subject's box per frame (Genesis layers).
+// 53: those boxes are measured from the mask's opaque pixels, so they always match the cut-out.
+export const MEDIA_PROCESSOR_VERSION = 53;

@@ -13,6 +13,8 @@ const subjectSeed = z.union([trackSeed, z.object({ kind: z.literal('object'), no
 export const subjectSegmenter = z.literal('sam-3.1');
 /** Meta list prices for sam-3.1: $2.50 per 1,000 images; $0.20 per 1,000 video frames, at least 50 frames per video request. */
 export const SAM_31_USD = { image: 2.5 / 1000, frame: .2 / 1000, minimumFrames: 50 } as const;
+/** One SAM 3.1 video request: per frame (at least 50), plus one image when a noun is grounded first. Rounded to cents, at least $0.01. */
+export const sam31Usd = (frames: number, noun: boolean) => Math.max(.01, Math.round((Math.max(SAM_31_USD.minimumFrames, frames) * SAM_31_USD.frame + (noun ? SAM_31_USD.image : 0)) * 100) / 100);
 export const subjectSelection = z.object({ time:z.number().nonnegative(), seed:subjectSeed, segmenter:subjectSegmenter.optional() }).strict();
 export const pixelTrackRequest = z.object({ start: z.number().nonnegative(), end: z.number().positive(), time: z.number().nonnegative(), seed: subjectSeed, segmenter: subjectSegmenter.optional() }).strict().refine(value => value.end > value.start && value.time >= value.start && value.time < value.end, 'The seed must be inside the source tracking window.');
 /** SAM 3.1 serves MCP clients only. Entry points set or clear segmenter from the caller's surface and ignore any value the caller sent. */

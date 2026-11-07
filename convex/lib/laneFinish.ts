@@ -15,7 +15,7 @@ import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../l
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
-import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
+import type { GenesisLayerEvidence, LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
 import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
 import { motionReport, motionTimelineKey } from '../../lib/ai/motion-coverage';
 export type FinishResult = NonNullable<LaneTask['result']>;
@@ -80,6 +80,9 @@ export async function finishLane(
   const initialKey = await checkKey(task.evidence);
   if (initialKey && task.result?.checkKey === initialKey && !task.result.passed)
     return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
+  // Genesis layers are checked wherever the timeline uses them, whatever the lane: as clips or scene media.
+  const usedAssetIds = [...new Set(checked.flatMap(tab => tab.timeline?.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.scene?.media?.map(item => item.assetId) ?? []]) ?? []))];
+  let genesisLayers: GenesisLayerEvidence[] | undefined;
   for (const tab of task.lane === 'clip' ? [] : checked) {
     const baseline = task.baselines.find(
       (item) => item.timelineId === tab.timelineId,
@@ -188,9 +191,15 @@ export async function finishLane(
         timelineId: tab.timelineId,
         assets,
         referenceMotion,
+        genesis: genesisLayers ??= task.lane === 'genesis' || usedAssetIds.length ? await ctx.runQuery(internal.genesis.forCheck, { ownerId: run.ownerId, projectId: run.projectId, usedAssetIds }) : [],
       };
       failures.push(...LANES[task.lane].check(context).map((error) => prefix + error));
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
+      // Any lane that uses a Genesis layer (a cut-out clip, scene media, a layer function) keeps its layer checks.
+      if (task.lane !== 'genesis' && genesisLayers.length) {
+        failures.push(...LANES.genesis.check(context).map((error) => prefix + error));
+        warnings.push(...(LANES.genesis.warn?.(context) ?? []).map((warning) => prefix + warning));
+      }
     }
   }
   if (task.lane === 'clip') {

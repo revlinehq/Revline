@@ -3,7 +3,7 @@ import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilities } from '../lib/ai/lanes';
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
-import { LANE_IDS } from '../lib/ai/lanes/types';
+import { MCP_LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
 import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
@@ -32,8 +32,8 @@ const projectIdField = z.string().min(1).describe('Revline project ID from listP
 const RESOURCE_TOOLS = new Set(['finishUpload', 'getMediaTask', 'getExport']);
 
 const PROJECT_TOOLS = {
-  startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. A style is optional; shared edits work immediately after startTask. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
-  setLane:{description:'Optionally choose the primary workflow when the deliverable changes. Use loadCapability for supporting work. Pass taskId from startTask, or projectId and timelineId. Switch when the kind of work changes. Preserves failed finish attempts. Refresh tools/list after a style change.',inputSchema:z.object({projectId:projectIdField.optional(),timelineId:z.string().min(1).optional(),taskId:z.string().min(1).optional(),lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}).refine(value=>!!value.taskId||!!value.projectId&&!!value.timelineId,{message:'Pass taskId from startTask, or projectId and timelineId.'})},
+  startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. A style is optional; shared edits work immediately after startTask. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(MCP_LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
+  setLane:{description:'Optionally choose the primary workflow when the deliverable changes. Use loadCapability for supporting work. Pass taskId from startTask, or projectId and timelineId. Switch when the kind of work changes. Preserves failed finish attempts. Refresh tools/list after a style change.',inputSchema:z.object({projectId:projectIdField.optional(),timelineId:z.string().min(1).optional(),taskId:z.string().min(1).optional(),lane:z.enum(MCP_LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}).refine(value=>!!value.taskId||!!value.projectId&&!!value.timelineId,{message:'Pass taskId from startTask, or projectId and timelineId.'})},
   listProjects: { description: 'List your Revline video projects, newest first, with their IDs and editor links. Start here to find the project to edit.', inputSchema: z.object({ limit: z.number().int().min(1).max(50).optional() }) },
   getProject: { description: 'Overview of one project: its timeline tabs (which one is open), aspect ratio, duration, revision, editor link and its media (asset IDs, kinds, durations, which analyses are saved). Then call inspectTimeline with the same projectId to read clips before editing.', inputSchema: z.object({ projectId: projectIdField }) },
   createProject: { description: 'Create an empty project. Add footage with uploadMedia (a local file), importVideoLink, or copyMedia (media from another of your projects).', inputSchema: z.object({ title: z.string().min(1).max(120), aspectRatio: z.enum(['landscape', 'vertical', 'square']) }) },
@@ -75,7 +75,8 @@ function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorTool
 }
 
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
-  run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'catalog' },
+  // An mcp- run id: the catalog is the MCP surface, so it lists MCP-only lanes' tools. It never executes.
+  run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'mcp-catalog' },
   project: { timeline: { clips: [], fps: 60, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
   assets: [], recovering: false, initialPlans: [], selectedClipIds: [], abortSignal: new AbortController().signal,
 });
@@ -93,7 +94,7 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
       if(name!=='startTask'&&inputSchema.properties?.projectId) inputSchema.properties.taskId=toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask; resolves this project’s lane context and pins an omitted timelineId.'));
       return { name, description: description(name,tool.description), inputSchema };
     }),
-    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => { const ui = toolBehavior(name)?.ui; return { name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)), ...(ui ? { _meta: { ui: { resourceUri: ui } } } : {}) }; }),
+    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(MCP_LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => { const ui = toolBehavior(name)?.ui; return { name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)), ...(ui ? { _meta: { ui: { resourceUri: ui } } } : {}) }; }),
   ];
 }});
 
