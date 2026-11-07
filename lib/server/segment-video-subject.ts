@@ -245,7 +245,7 @@ export async function segmentVideoSubject(
 /** MCP selections: SAM 3.1 on Meta tracks the subject through the whole clip in
  * one request, both directions from the selected frame. Frames where the
  * subject is not visible are empty. Returns a lossless grayscale mask video and,
- * per frame, the subject's normalized [left, top, right, bottom] box (null where hidden). */
+ * per frame, the normalized [left, top, right, bottom] box of the mask's opaque pixels (null where hidden). */
 export async function segmentVideoSubjectSam31(
   clip: string,
   directory: string,
@@ -280,10 +280,14 @@ export async function segmentVideoSubjectSam31(
   encoder.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-1000); });
   const closed = new Promise<number | null>((resolve, reject) => { encoder.once("error", reject); encoder.once("close", resolve); });
   const empty = new Uint8Array(size.width * size.height);
+  // Each frame's box is read from the very pixels written to the mask, so box and cut-out always agree.
+  const boxes: (number[] | null)[] = [];
   function* frames() {
     for (let index = 0; index < total; index++) {
       const records = byFrame.get(index);
-      yield records ? paintMasks(records, size) : empty;
+      const alpha = records ? paintMasks(records, size) : empty;
+      boxes.push(records ? alphaBox(alpha, records, size) : null);
+      yield alpha;
     }
   }
   // pipeline handles backpressure, an early ffmpeg exit (EPIPE) and abort without leaking listeners.
@@ -292,13 +296,28 @@ export async function segmentVideoSubjectSam31(
   if (code.status === "rejected" || code.value !== 0 || written.status === "rejected")
     throw new AnalysisError(`Could not encode the SAM 3.1 mask video${stderr ? `: ${stderr.trim().slice(0, 300)}` : "."}`, 502);
   onProgress(75);
-  const round = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 1e4) / 1e4;
-  const boxes = Array.from({ length: total }, (_, index) => {
-    const records = byFrame.get(index);
-    if (!records?.length) return null;
-    const left = Math.min(...records.map(record => record.bounds.left)), top = Math.min(...records.map(record => record.bounds.top));
-    const right = Math.max(...records.map(record => record.bounds.right)), bottom = Math.max(...records.map(record => record.bounds.bottom));
-    return right > left && bottom > top ? [round(left / size.width), round(top / size.height), round(right / size.width), round(bottom / size.height)] : null;
-  });
+  if (boxes.length !== total) throw new AnalysisError("The SAM 3.1 boxes do not cover every mask frame.", 502);
   return { path, boxes };
+}
+
+/** Normalized [left, top, right, bottom] of the opaque pixels of one painted mask frame, or null when none.
+ * paintMasks writes only inside its records' bounds, so only that region is scanned. */
+function alphaBox(alpha: Uint8Array, records: readonly { bounds: { left: number; top: number; right: number; bottom: number } }[], size: { width: number; height: number }) {
+  const x0 = Math.max(0, Math.floor(Math.min(...records.map(record => record.bounds.left)))), y0 = Math.max(0, Math.floor(Math.min(...records.map(record => record.bounds.top))));
+  // paintMasks paints at least one column and row per record, even for empty bounds.
+  const x1 = Math.min(size.width, Math.ceil(Math.max(...records.map(record => record.bounds.left + Math.max(1, record.bounds.right - record.bounds.left))))), y1 = Math.min(size.height, Math.ceil(Math.max(...records.map(record => record.bounds.top + Math.max(1, record.bounds.bottom - record.bounds.top)))));
+  let left = size.width, top = size.height, right = -1, bottom = -1;
+  for (let y = y0; y < y1; y++) {
+    const row = y * size.width;
+    for (let x = x0; x < x1; x++) {
+      if (!alpha[row + x]) continue;
+      if (x < left) left = x;
+      if (x > right) right = x;
+      if (y < top) top = y;
+      bottom = y;
+    }
+  }
+  if (right < 0) return null;
+  const round = (value: number) => Math.round(Math.max(0, Math.min(1, value)) * 1e4) / 1e4;
+  return [round(left / size.width), round(top / size.height), round((right + 1) / size.width), round((bottom + 1) / size.height)];
 }
