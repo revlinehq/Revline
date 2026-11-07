@@ -24,6 +24,6 @@ Distributed exports are disabled on Hobby. When enabled in the verified manifest
 
 ## Development and releases
 
-Local development uses `npm run dev:isolated` in an agent worktree. It starts the frontend and local media worker against a scoped development backend. See [isolated development](../../docs/isolated-development.md).
+Local development uses `npm run dev:isolated` in an agent worktree. It starts the frontend and local media worker against a scoped development backend. See [isolated development](../docs/isolated-development.md).
 
-Hosted releases use explicit manifests and separate environment files, runtime preflight, authenticated queue verification, and real staging jobs before production promotion. See the [Railway hosting runbook](../../docs/railway-worker-migration.md). No release command runs during install or build.
+Hosted releases use explicit manifests and separate environment files, runtime preflight, authenticated queue verification, and real staging jobs before production promotion. See the [Railway hosting runbook](../docs/railway-worker-migration.md). No release command runs during install or build.

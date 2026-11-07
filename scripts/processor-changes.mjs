@@ -8,14 +8,14 @@ import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { PROCESSOR_SCRIPTS } from './processor-runtime.mjs';
 
-export const ENTRIES = ['infra/media-worker/consumer.ts', 'infra/media-worker/edge/cloudflare.ts',
+export const ENTRIES = ['media-processor/consumer.ts', 'cf-workers/media-edge/cloudflare.ts',
   // Browser runtimes copy-vendor.mjs bundles into public/vendor for exports.
   'lib/editor/remotion-text-runtime.tsx', 'lib/editor/remotion-transitions-runtime.ts', 'lib/editor/remotion-runtime.ts', 'lib/editor/visual-effects-runtime.ts', 'lib/editor/scene-runtime.ts'];
 /** Railway and export-capacity files both the processor and the export workers run. */
 export const WORKER_RUNTIME_FILES = ['lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs'];
 // Read, spawned or copied into the image without a static import.
 export const RUNTIME_PREFIXES = [
-  'infra/media-worker/', 'models/', 'public/vendor/', 'public/fonts/',
+  'media-processor/', 'models/', 'public/vendor/', 'public/fonts/',
   ...PROCESSOR_SCRIPTS.map(name => `scripts/${name}`), 'scripts/processor-runtime.mjs', 'lib/render-resources.mjs',
   'package.json', 'package-lock.json', 'tsconfig.json',
   ...WORKER_RUNTIME_FILES,

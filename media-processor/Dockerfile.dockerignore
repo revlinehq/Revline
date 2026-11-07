@@ -12,9 +12,8 @@
 !scripts/**
 !public/
 !public/**
-!infra/
-!infra/media-worker/
-!infra/media-worker/**
+!media-processor/
+!media-processor/**
 public/uploads/**
 **/.env*
 **/.dev.vars*

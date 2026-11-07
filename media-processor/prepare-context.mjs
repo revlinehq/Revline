@@ -1,9 +1,9 @@
 import { cp, mkdir, readdir, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PROCESSOR_SCRIPTS } from '../../scripts/processor-runtime.mjs';
+import { PROCESSOR_SCRIPTS } from '../scripts/processor-runtime.mjs';
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const context = join(root, '.wrangler/media-processor-build');
 await rm(context, { recursive: true, force: true });
 await mkdir(context, { recursive: true });
@@ -12,7 +12,7 @@ const filter = path => {
   const parts = relative(root, path).split('/');
   return !parts.some(prohibited) && !parts.some(part => ['__tests__', '__fixtures__', 'fixtures'].includes(part)) && !/\.(test|spec)\.[cm]?[jt]sx?$/.test(parts.at(-1)) && !(parts[0] === 'public' && parts[1] === 'uploads');
 };
-for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'lib', 'convex', 'public', 'infra/media-worker']) {
+for (const name of ['package.json', 'package-lock.json', 'tsconfig.json', 'lib', 'convex', 'public', 'media-processor']) {
   await mkdir(dirname(join(context, name)), { recursive: true });
   await cp(join(root, name), join(context, name), { recursive: true, dereference: false, filter });
 }

@@ -1,7 +1,7 @@
 import { DurableObject } from 'cloudflare:workers';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
-import { MEDIA_PROCESSOR_VERSION } from '../../../lib/media-analysis/processor-version';
+import { MEDIA_PROCESSOR_VERSION } from '../../lib/media-analysis/processor-version';
 
 type ProcessorSecrets = { RENDER_WORKER_SECRET: string; GOOGLE_GENERATIVE_AI_API_KEY?: string; MEDIA_VISION_GEMINI_FALLBACK?: string; DEEPGRAM_API_KEY?: string; FAL_KEY?: string };
 type Bindings = ProcessorEnv & ProcessorSecrets;

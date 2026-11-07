@@ -1,6 +1,6 @@
 import { EDITOR_STYLE_RULES } from '../ai/editor-style';
 
-// The MCP server's instructions, served by both the Convex server (convex/mcpHttp.ts) and the Cloudflare one (cloudflare/mcp).
+// The MCP server's instructions, served by both the Convex server (convex/mcpHttp.ts) and the Cloudflare one (cf-workers/mcp).
 export const MCP_INSTRUCTIONS = `Keep check-level, cost and method metadata in tool results. User-facing replies have zero "How it was made", check-level or cost footers; explain how or cost only when asked. Never approve finished work on the user’s behalf.
 
 Revline is a video editor. These tools edit the user's real Revline projects; each editing call is saved immediately, appears live in any open editor tab, and is undoable (undoLatestEdit, or Undo in the editor). History is kept: when the user wants back something they had ("bring back what we had", "it was better before"), call listRevisions, look at a revision with getFrames revision, then restoreSection (one section of a film, the rest stays as it is now) or restoreClip (one whole clip, keeping every later edit to the others). Never chain undoLatestEdit to reach an older version.

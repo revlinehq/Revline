@@ -3,7 +3,7 @@ import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server
 
 const clerk = clerkMiddleware();
 
-// Fallback path for the MCP server and its OAuth endpoints: the revline-mcp Worker (cloudflare/mcp) serves them on
+// Fallback path for the MCP server and its OAuth endpoints: the revline-mcp Worker (cf-workers/mcp) serves them on
 // tryrevline.com through routes, which take precedence over this Worker's custom domain. Without those routes
 // (before cutover, or after a rollback) tryrevline.com/mcp passes them through to Convex so clients only ever see
 // Revline's own domain (see convex/lib/mcp_origin.ts).

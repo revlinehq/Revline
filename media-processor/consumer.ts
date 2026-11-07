@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
-import { startMediaWorker, type MediaWorkerOptions } from '../../lib/server/media-worker-loop';
-import { MEDIA_PROCESSOR_VERSION } from '../../lib/media-analysis/processor-version';
-import { api } from '../../convex/_generated/api';
+import { startMediaWorker, type MediaWorkerOptions } from '../lib/server/media-worker-loop';
+import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { api } from '../convex/_generated/api';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 const workerSecret = process.env.RENDER_WORKER_SECRET;
