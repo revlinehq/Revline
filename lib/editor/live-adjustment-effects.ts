@@ -20,7 +20,7 @@ export function updateLiveAdjustmentEffects(document:Document,_previous:Timeline
   const sources=transitionSources(next.clips,next.fps);
   let transitions=transitionsOf(document);
   if(!transitions&&sources.length){
-    const runtime=(document.defaultView as CompositionWindow|null)?.__revlineRemotionTransitions;
+    const runtime=(document.defaultView as CompositionWindow|null)?.__revlineTransitions;
     if(!runtime)return false;transitions=runtime.installTransitions(sources,next.fps);
   }
   controller.setSources(adjustmentSources(next.clips));

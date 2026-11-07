@@ -1,6 +1,6 @@
 import { layerGroup, normalizeTimeline, timelineDuration, trackOf, type LayerGroup, type Timeline } from "../../lib/editor/types";
 import { selectedTextEffect,TEXT_EFFECT_LABELS } from '../../lib/editor/text-effects';
-import { REMOTION_TEXT_LABELS } from '../../lib/editor/remotion-text';
+import { TEXT_TEMPLATE_LABELS } from '../../lib/editor/text-templates';
 
 /** Visual coverage gaps and same-layer collisions; stacked layers are intentional. */
 export function summarizeTimeline(timeline: Timeline, assets: { _id: string; kind: string }[]) {
@@ -32,7 +32,7 @@ export function summarizeTimeline(timeline: Timeline, assets: { _id: string; kin
   const textAnimations=timeline.clips.filter(clip=>clip.kind==='caption'||clip.kind==='graphic').map(clip=>{
     const effect=selectedTextEffect(clip);
     const labels=effect&&effect!=='none'?[TEXT_EFFECT_LABELS[effect]]:clip.motion?.length?['Custom keyframe motion']:[];
-    if(clip.textTemplate)labels.push(REMOTION_TEXT_LABELS[clip.textTemplate.preset]);
+    if(clip.textTemplate)labels.push(TEXT_TEMPLATE_LABELS[clip.textTemplate.preset]);
     return {clipId:clip.id,labels:labels.length?labels:['None']};
   });
   return { duration, clipCount: timeline.clips.length, gaps, gapScope: "visual coverage" as const, overlaps, overlapScope: "same group and track" as const, overlapCount, overlapsTruncated: overlapCount > overlaps.length, missingAssetRefs,textAnimations };

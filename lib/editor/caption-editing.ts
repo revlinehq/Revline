@@ -1,7 +1,7 @@
 import { validateClipEffects,offsetClipMotion } from './clip-effects';
 import { DEFAULT_TRANSFORM,normalizeTimeline,trackOf,type Clip,type Timeline } from './types';
 import { resolvedTextAppearance,textStyle,type TextAppearance } from './text-style';
-import { remotionTextProps } from './remotion-text';
+import { templateTextProps } from './text-templates';
 
 export type CaptionStyleChanges=Partial<Pick<Clip,'fontSize'|'fontFamily'|'color'|'background'|'x'|'y'|'blendMode'>>&{rotation?:number;textStyle?:Partial<TextAppearance>;textCase?:'sentence'|'upper'|'lower'};
 function caption(timeline:Timeline,id:string){const clip=timeline.clips.find(item=>item.id===id);if(!clip||clip.kind!=='caption')throw new Error('Choose an existing caption clip.');return clip}
@@ -21,7 +21,7 @@ function validateAppearance(clip:Clip){
 export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetIds?:string[]):Timeline{
   const source=caption(timeline,sourceClipId),selected=targets(timeline,targetIds);
   validateAppearance(source);
-  const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:remotionTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),textGradient:source.textGradient?{...source.textGradient,offset:0}:undefined,transform:{...DEFAULT_TRANSFORM,...source.transform}};
+  const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:templateTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),textGradient:source.textGradient?{...source.textGradient,offset:0}:undefined,transform:{...DEFAULT_TRANSFORM,...source.transform}};
   return {...timeline,clips:timeline.clips.map(clip=>selected.has(clip.id)?{...clip,...patch}:clip)};
 }
 /** Patch requested appearance fields only; animation changes are a separate explicit action. */

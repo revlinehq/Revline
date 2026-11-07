@@ -40,6 +40,7 @@
   ],
   "vars": {
     "APP_ORIGIN": "https://tryrevline.com",
+    "REVLINE_CLIP_PROTOTYPE": "true",
     "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY": "pk_live_Y2xlcmsudHJ5cmV2bGluZS5jb20k",
     "NEXT_PUBLIC_CONVEX_SITE_URL": "https://different-gnu-398.convex.site",
     "NEXT_PUBLIC_CONVEX_URL": "https://different-gnu-398.convex.cloud",

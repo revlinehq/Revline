@@ -1,5 +1,5 @@
 import catalog from './stock-audio-catalog.json';
-import type { AudioWaveform, MediaAsset } from './types';
+import type { AudioWaveform } from './types';
 
 export type StockAudio = {
   id: string; name: string; category: string; tags: string[]; pack: string; sourceFile: string; sourceUrl: string; license: string;
@@ -11,8 +11,3 @@ const byId = new Map(STOCK_AUDIO_CATALOG.map(sound => [sound.id, sound]));
 const keys = new Set(STOCK_AUDIO_CATALOG.map(sound => sound.r2Key));
 export function stockAudio(id: string) { return byId.get(id); }
 export function isStockAudioKey(key: string | undefined): boolean { return !!key && keys.has(key); }
-export function stockAudioAsset(id: string): MediaAsset {
-  const sound = stockAudio(id);
-  if (!sound) throw new Error('Unknown Audio FX sound.');
-  return { _id: `stock-audio-${id}`, kind: 'audio', fileName: `${sound.name}.ogg`, url: `/api/audio-fx/${id}`, duration: sound.duration, waveform: sound.waveform };
-}
