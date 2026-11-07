@@ -1,7 +1,7 @@
 import { textGradientFill } from './text-gradient';
 import { Fragment, type CSSProperties } from 'react';
-import { Easing, interpolate, spring } from 'remotion';
-import type { RemotionTextProps } from './remotion-text';
+import { Easing, interpolate, spring } from './frame-motion';
+import type { TemplateTextProps } from './text-templates';
 import { textAppearance, textTypographyStyle } from './text-style';
 
 const clamp={extrapolateLeft:'clamp',extrapolateRight:'clamp'} as const;
@@ -16,7 +16,7 @@ function lyricTextTiming(frame:number,fps:number,durationInFrames:number){
   return {last,enter,exit,entering,exiting,visible:frame>=0&&frame<=last,seconds:frame/fps};
 }
 
-function NeonEcho(props:RemotionTextProps){
+function NeonEcho(props:TemplateTextProps){
   const {text,frame,fps,durationInFrames,color,highlightColor}=props;
   const timing=lyricTextTiming(frame,fps,durationInFrames);
   const settle=timing.last<=1?1:spring({frame:Math.max(0,frame),fps,durationInFrames:Math.max(1,timing.enter),config:{damping:13,stiffness:190,mass:.7}});
@@ -32,7 +32,7 @@ function NeonEcho(props:RemotionTextProps){
   </span>;
 }
 
-function LyricSlam(props:RemotionTextProps){
+function LyricSlam(props:TemplateTextProps){
   const {text,frame,fps,durationInFrames,color,highlightColor}=props;
   const timing=lyricTextTiming(frame,fps,durationInFrames);
   const settle=timing.last<=1?1:spring({frame:Math.max(0,frame),fps,durationInFrames:Math.max(1,timing.enter),config:{damping:10,stiffness:240,mass:.8}});
@@ -42,7 +42,7 @@ function LyricSlam(props:RemotionTextProps){
   return <span data-text-layer="main" data-text-phase={timing.exiting>0?'exit':timing.entering<1?'enter':'hold'} style={{display:'inline-block',position:'relative',opacity,color,WebkitTextStroke:`.028em ${highlightColor}`,paintOrder:'stroke fill',textShadow:`.045em .05em 0 ${highlightColor},0 .07em .14em #0009`,...custom,...textGradientFill(props.textGradient,props.gradientTime??frame/fps,custom?.textShadow??`.045em .05em 0 ${highlightColor},0 .07em .14em #0009`),transform:`translateY(${(1-settle)*.45-exit*.6}em) rotate(${(1-settle)*-4+exit*2}deg) scale(${1.45-.45*settle+exit*.12},${.58+.42*settle-exit*.2})`,transformOrigin:'center 60%'}}>{text}{!props.textStyle&&<span aria-hidden="true" data-text-accent="underline" style={{position:'absolute',left:0,right:0,bottom:'-.10em',height:'.07em',borderRadius:'.04em',background:highlightColor,transform:`scaleX(${timing.entering*(1-exit)})`,transformOrigin:'left',opacity:.9}}/>}</span>;
 }
 
-function KineticStack(props:RemotionTextProps){
+function KineticStack(props:TemplateTextProps){
   const {text,frame,fps,durationInFrames,color,highlightColor}=props;
   const timing=lyricTextTiming(frame,fps,durationInFrames);
   const tokens=text.split(/(\s+)/),words=tokens.filter(token=>token&&!/^\s+$/.test(token));
@@ -62,7 +62,7 @@ function KineticStack(props:RemotionTextProps){
 }
 
 /** Shared by the canvas composition and exact-frame export; no independent clock. */
-export function RemotionLyricText(props:RemotionTextProps){
+export function LyricText(props:TemplateTextProps){
   const style:CSSProperties={display:'inline-block',fontSize:props.fontSize,color:props.color,fontWeight:props.fontWeight??900,fontFamily:props.fontFamily,letterSpacing:props.textStyle?'inherit':'-.045em',lineHeight:props.textStyle?'inherit':1.05,whiteSpace:'pre-wrap',textTransform:props.textStyle?'none':'uppercase',...textTypographyStyle(props.textStyle,props.resolution)};
-  return <span data-remotion-text={props.preset} data-frame={props.frame} style={style}>{props.preset==='neon-echo'?<NeonEcho {...props}/>:props.preset==='lyric-slam'?<LyricSlam {...props}/>:<KineticStack {...props}/>}</span>;
+  return <span data-text-template={props.preset} data-frame={props.frame} style={style}>{props.preset==='neon-echo'?<NeonEcho {...props}/>:props.preset==='lyric-slam'?<LyricSlam {...props}/>:<KineticStack {...props}/>}</span>;
 }

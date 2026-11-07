@@ -9,4 +9,5 @@ export const tools = [
   'planClips',
   'checkClip',
   'finishClipping',
+  'addTransition',
 ] as const;

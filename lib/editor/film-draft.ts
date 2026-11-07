@@ -24,9 +24,10 @@ function openBrackets(code: string, to: number) {
 /** Just past the call ending at `to`, including its semicolon. */
 const afterCall = (code: string, to: number) => to + (/^[ \t]*;/.exec(code.slice(to))?.[0].length ?? 0);
 
-/** The header of the first section() call after `from` that has not closed yet: the section being written. */
+/** The header of the first section() or shot() call after `from` that has not closed yet: the section being written. */
 function writingAfter(code: string, from: number): DraftSection | undefined {
-  const match = /(?<![\w$.])section\s*\(\s*(['"`])((?:(?!\1)[^\\]|\\.)*)\1\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*,/.exec(code.slice(from));
+  // section(...) or shot(...): beat timing is already resolved to literals (lib/editor/beat-timing), which may keep a comment.
+  const match = /(?<![\w$.])(?:section|shot)\s*\(\s*(['"`])((?:(?!\1)[^\\]|\\.)*)\1\s*,\s*(\d+(?:\.\d+)?)\s*,\s*(\d+(?:\.\d+)?)\s*(?:\/\*[^]*?\*\/\s*)?,/.exec(code.slice(from));
   return match && Number(match[4]) > 0 ? { title: match[2], start: Number(match[3]), duration: Number(match[4]) } : undefined;
 }
 

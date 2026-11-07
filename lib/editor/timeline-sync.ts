@@ -52,6 +52,10 @@ export function applyTimelineEdit(base: Timeline, next: Timeline, current: Timel
         if (edited.label === undefined) delete updated.label;
         else updated.label = edited.label;
       }
+      if (old.kind !== edited.kind) {
+        if (edited.kind === undefined) delete updated.kind;
+        else updated.kind = edited.kind;
+      }
       return [updated];
     });
     merged.markers.push(...(next.markers ?? []).filter(marker => !beforeMarkers.has(marker.id) && !currentIds.has(marker.id)));

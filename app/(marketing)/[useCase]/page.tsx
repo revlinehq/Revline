@@ -18,8 +18,8 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const page = findPage((await params).useCase);
   const title = `${page.title} | Revline`;
   return { title, description: page.description, alternates: { canonical: `/${page.slug}` },
-    openGraph: { title, description: page.description, url: `/${page.slug}`, type: 'website', images: ['/og-revline-v2.png'] },
-    twitter: { card: 'summary_large_image', title, description: page.description, images: ['/og-revline-v2.png'] } };
+    openGraph: { title, description: page.description, url: `/${page.slug}`, type: 'website', images: ['/og-revline-v3.png'] },
+    twitter: { card: 'summary_large_image', title, description: page.description, images: ['/og-revline-v3.png'] } };
 }
 export default async function UseCasePage({ params }: Props) {
   const page = findPage((await params).useCase);

@@ -4,10 +4,11 @@ import { blueprintsPage, brandPage } from './pages';
 import { imagePlatesPage } from './image-plates';
 import { ideationPage } from './ideation';
 import { backgroundsPage } from './backgrounds';
+import { shotChangesPage } from './shot-changes';
 
 export const launchFilmsMotions: EditorSkill = {
   name: skillDocument("launch-films-motions/SKILL.md").name,
   description: skillDocument("launch-films-motions/SKILL.md").description,
   body: skillText("launch-films-motions/SKILL.md"),
-  pages: [ideationPage, backgroundsPage, brandPage, blueprintsPage, imagePlatesPage],
+  pages: [ideationPage, backgroundsPage, brandPage, blueprintsPage, imagePlatesPage, shotChangesPage],
 };

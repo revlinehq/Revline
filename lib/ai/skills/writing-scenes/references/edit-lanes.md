@@ -19,6 +19,7 @@ A good edit changes only the requested range, keeps everything around it in sync
 - **Approved work is off-limits:** change it only when the user names it. When the user approves a section, mark it with approveClip.
 - **Feedback on one part:** change only that part. Every other section, clip, title, timing, move, color and sound stays exactly as it was.
 - Never "improve" what was not asked about. If a change forces something else to shift (later timings, an audio cue), keep it otherwise identical and say what moved.
+- **Back to what we had** ("go back to what we had", "it was better before"): listRevisions, look with getFrames revision, then restoreSection for one section (restoreClip for one clip, restoreTimeline for the whole tab). Never re-patch by hand to recreate it, and never chain undoLatestEdit.
 
 ### Which checks
 - A final export or publish request, or an explicit request to double-check everything, runs the lane's full checks. The server decides that from the request.
