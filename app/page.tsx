@@ -24,7 +24,7 @@ const structuredData = {
     {
       '@type': ['SoftwareApplication', 'Product'], '@id': 'https://tryrevline.com/#application',
       name: 'Revline', url: 'https://tryrevline.com', applicationCategory: 'MultimediaApplication',
-      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v2.png',
+      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v3.png',
       description: 'An AI video editor for prompt-based cuts, captions, vertical clips, motion design and reference video recreation, with MCP access for AI agents.',
       brand: { '@id': 'https://tryrevline.com/#organization' },
       offers: {
