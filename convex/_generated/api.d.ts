@@ -121,6 +121,7 @@ import type * as lib_workflows from "../lib/workflows.js";
 import type * as mcp from "../mcp.js";
 import type * as mcpActions from "../mcpActions.js";
 import type * as mcpAuth from "../mcpAuth.js";
+import type * as mcpBridgeHttp from "../mcpBridgeHttp.js";
 import type * as mcpConnections from "../mcpConnections.js";
 import type * as mcpHttp from "../mcpHttp.js";
 import type * as mcpUploads from "../mcpUploads.js";
@@ -274,6 +275,7 @@ declare const fullApi: ApiFromModules<{
   mcp: typeof mcp;
   mcpActions: typeof mcpActions;
   mcpAuth: typeof mcpAuth;
+  mcpBridgeHttp: typeof mcpBridgeHttp;
   mcpConnections: typeof mcpConnections;
   mcpHttp: typeof mcpHttp;
   mcpUploads: typeof mcpUploads;

@@ -10,7 +10,7 @@ import { PROCESSOR_SCRIPTS } from './processor-runtime.mjs';
 
 export const ENTRIES = ['media-processor/consumer.ts', 'cf-workers/media-edge/cloudflare.ts',
   // Browser runtimes copy-vendor.mjs bundles into public/vendor for exports.
-  'lib/editor/remotion-text-runtime.tsx', 'lib/editor/remotion-transitions-runtime.ts', 'lib/editor/remotion-runtime.ts', 'lib/editor/visual-effects-runtime.ts', 'lib/editor/scene-runtime.ts'];
+  'lib/editor/text-template-runtime.tsx', 'lib/editor/transitions-bundle.ts', 'lib/editor/text-runtime.ts', 'lib/editor/visual-effects-runtime.ts', 'lib/editor/scene-runtime.ts'];
 /** Railway and export-capacity files both the processor and the export workers run. */
 export const WORKER_RUNTIME_FILES = ['lib/export-chunk-resources.mjs', 'lib/worker-capacity.mjs', 'lib/railway-workers.mjs', 'scripts/railway-workers.mjs', 'scripts/release-railway.mjs'];
 // Read, spawned or copied into the image without a static import.

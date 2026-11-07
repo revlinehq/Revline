@@ -68,6 +68,8 @@ export const EDITOR_TOOL_DEFINITIONS = {
   setVolume: { effect: 'timeline', mcp: 'exclusive', label: ['Adjusting sound', 'Adjusted sound'] },
   addSubtitlesFromTranscript: { effect: 'timeline', mcp: 'exclusive', label: ['Adding subtitles', 'Added subtitles'] },
   markMusicBeats: { effect: 'timeline', mcp: 'exclusive', label: ['Marking beats', 'Marked beats'] },
+  analyzeMusic: { effect: 'analysis', mcp: 'exclusive', label: ['Reading the song', 'Read the song'] },
+  startMusicAt: { effect: 'timeline', mcp: 'exclusive', label: ['Starting the song on the beat', 'Started the song on the beat'] },
   setAudioReactive: { effect: 'timeline', mcp: 'exclusive' },
   addMarker: { effect: 'timeline', mcp: 'exclusive', label: ['Adding marker', 'Added marker'] },
   moveMarker: { effect: 'timeline', mcp: 'exclusive', label: ['Moving marker', 'Moved marker'] },

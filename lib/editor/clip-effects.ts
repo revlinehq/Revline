@@ -3,7 +3,7 @@ import { validateTextGradient, textGradientTimingPatch } from './text-gradient';
 import { flashSettings, punchSettings, shakeSettings, popSettings, flashKeyframes, punchKeyframes, shakeKeyframes, popKeyframes, isPropertyEffectPreset, propertyEffectMotion, motionEffectPatch, validateMotionEffectSettings, type MotionEffectChanges } from './motion-effect-settings';
 import { BLEND_MODES, EFFECT_PRESETS, type CinematicBarSettings, type Clip, type EffectPreset, type FrameShrinkSettings, type SolidColorSettings, type TimedEffectPreset, type ZoomSettings } from './types';
 import { DEFAULT_ZOOM_BLUR, validateVisualEffects } from './visual-effects';
-import { textTemplateTimingPatch, validateRemotionTextTemplate } from './remotion-text';
+import { textTemplateTimingPatch, validateTextTemplate } from './text-templates';
 import { validatePlaybackRate } from './playback-rate';
 import { isTransitionPreset, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
@@ -73,7 +73,7 @@ export const EFFECT_CATALOG: Record<EffectPreset, { label: string; description: 
   'blur-dissolve': { label: 'Blur dissolve', description: "Dissolve as outgoing footage blurs and incoming footage comes into focus. Blur reaches 20 reference pixels and scales with output resolution.", duration: .6, keyframes: () => [] },
   'gradient-wipe': { label: 'Gradient wipe', description: "Reveal the neighboring incoming clip with a moving gradient edge. Direction and softness are adjustable; complementary masks preserve cropped transparency and lower layers.", duration: .6, keyframes: () => [] },
   'iris-wipe': { label: 'Iris wipe', description: "Open a circular or elliptical iris into the neighboring incoming clip, with editable center and edge softness. Complementary masks preserve source transparency and lower layers.", duration: .6, keyframes: () => [] },
-  'whip-pan': { label: 'Whip pan', description: "Both shots slide past like a fast camera whip, eased in and out, with a motion blur that peaks mid-move. Direction follows wipeDirection (left by default).", duration: .4, keyframes: () => [] },
+  'whip-pan': { label: 'Whip pan', description: "A 4-frame whip: the outgoing shot flicks a short way out (power4.in), the incoming one arrives moving the same way and settles (expo.out), both composed in place, with a blur along the whip axis that peaks at the cut. whipDirection left, right, up, down, zoom or zoom-out (left by default); travel .1-.25 of the frame.", duration: 2 / 15, keyframes: () => [] },
   'zoom-through': { label: 'Zoom through', description: "Push into the outgoing shot until it blows past the camera while the incoming shot lands from behind, with blur at the peak.", duration: .5, keyframes: () => [] },
   'film-burn': { label: 'Film burn', description: "The cut burns out to warm, overexposed light like the end of a film reel, then the incoming shot develops back in.", duration: .7, keyframes: () => [] },
   fade: { label: 'Fade in / out', description: "Fade the underlying footage in and out with a held middle section; does not fade audio.", duration: 1, keyframes: d => { const fade = Math.min(.3, d / 3); return [key(0, { opacity: 0 }), key(fade), key(d - fade), key(d, { opacity: 0 })]; } },
@@ -106,7 +106,7 @@ export function validateClipEffects(clip: Clip) {
   validateColorFinish(clip);
   if (clip.motionBlur !== undefined && (!Number.isFinite(clip.motionBlur) || clip.motionBlur < 0 || clip.motionBlur > 1)) throw new Error('Motion blur must be between 0 and 1.');
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
-  validateRemotionTextTemplate(clip);
+  validateTextTemplate(clip);
   validateTextStyle(clip);
   validateTextGradient(clip);
   validateAudioSettings(clip);

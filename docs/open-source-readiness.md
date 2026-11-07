@@ -20,12 +20,7 @@ If a real credential is found, revoke it at its provider, examine usage, and rep
 
 ## Media rights: publication blockers
 
-The existing provenance in `assets/landing-media/README.md` explicitly does not establish redistribution rights for:
-
-- `public/demo/f1-edit/`: film footage and commercial music from the F1 edit, including video, extracted audio and poster derivatives.
-- `public/demo/hormozi-distractions.mp4` and related interview-derived examples: a third-party interview excerpt.
-
-Obtain redistribution permission or replace these assets and their references before public distribution. They also exist in prior commits, so deleting only the current files does not remove them from public Git history. The repository\'s `pr-assets` branch and other image/video assets require the same provenance review. NASA and OFL-font provenance is documented separately; keep the original notices. No rights are inferred merely from an asset being downloadable.
+The F1 edit (`public/demo/f1-edit/`: film footage and commercial music) and the interview excerpt (`public/demo/hormozi-distractions.mp4`) had no redistribution rights. They were deleted from the current tree with the scripted editor demo on 2026-11-07, but they still exist in prior commits, so public distribution still requires removing them from Git history or obtaining permission. The racing montage (`public/demo/racing/`, CC BY-SA 4.0 Wikimedia Commons footage) was deleted at the same time; its attribution is kept only in history in `public/demo/racing/credits.html`, so publishing that history must keep those credits. The repository\'s `pr-assets` branch and other image/video assets require the same provenance review. OFL-font provenance is documented separately; keep the original notices. No rights are inferred merely from an asset being downloadable.
 
 ## Scope and remaining review
 

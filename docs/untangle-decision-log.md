@@ -106,7 +106,8 @@ Scope: untangling only. No comment pruning and no test changes (the repo has no 
   - Focus interpolation is written three times: `composition.ts:93-99`, `tracking-attach.ts:24-29` and `lib/dev/subject-tools.ts:4-12`.
   - SHA-256-to-hex is written about 14 times across the repo.
 - **Delete dead runtime bundles and pass-through re-exports.** *done*
-  - The split `remotion-text.js` and `remotion-transitions.js` bundles are never loaded: every caller uses the shared runtime.
+  - The split text and transitions bundles are never loaded: every caller uses the shared runtime.
+  - Superseded November 6, 2026: footage transitions dropped Remotion and React and load their own small `transitions-runtime.js`; text templates dropped Remotion and load `text-runtime.js`.
   - Re-exports at `clip-effects.ts:21`, `composition.ts:78`, `smooth-zoom.ts:7` and `tracking-attach.ts:115`.
 
 ### Web app (`components`, `app`)

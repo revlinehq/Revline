@@ -99,7 +99,7 @@ Both sources upsert the same `appleEntitlements` row by transaction ID and recor
 ## App Store submission and remaining manual work
 
 - Select a development team, replace the placeholder bundle ID consistently in Xcode, Clerk, Convex and App Store Connect, and configure distribution signing and provisioning.
-- Supply a final App Store icon and launch branding. Product onboarding uses the repository's actual racing edit, clipping workspace, and Revline motion-film frames. Audit rights for demo footage and creator likenesses before distributing those visuals publicly.
+- Supply a final App Store icon and launch branding. Product onboarding uses the clipping workspace and Revline motion-film frames. Audit rights for demo footage and creator likenesses before distributing those visuals publicly.
 - Enable and validate Sign in with Apple in Clerk, including credential revocation behavior when deleting an account.
 - Add production local configuration, Superwall key, products and a published paywall campaign. Use StoreKit sandbox accounts for real purchase and restore verification. Sandbox transactions on a Production-configured backend are accepted only for the Clerk subjects explicitly listed in `APPLE_SANDBOX_REVIEW_USER_IDS`. Configure dedicated review/TestFlight accounts there or grant them complimentary access. Never switch the production backend to development for review.
 - Deploy the renderer route and the prepared Convex billing code through the normal authorized workflow. Verify both webhook deliveries with real sandbox transactions, including renewal, cancellation, refund, expiry and restore. No real purchase or destructive account deletion should be performed by an agent.
