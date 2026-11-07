@@ -1,4 +1,5 @@
 ## 2026-11-07
+- Landing page: removed the purple outline and shimmer reveal that played around the nav, headings and buttons on load; they now appear static. Why: the founder no longer wanted that animation.
 - Media worker: MCP clients' selected-subject masks (freezeFrameParallax, removeBackground) and trackPoints noun seeds use SAM 3.1 directly on Meta's Model API (worker `MODEL_API_KEY`, no SAM2 fallback); Revline's in-app agent keeps fal SAM2 / Florence-2. Why: the user wants SAM 3.1 from Meta, offered over MCP only for now.
 
 ## 2026-11-06
