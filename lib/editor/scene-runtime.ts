@@ -17,11 +17,16 @@ import { ScrambleTextPlugin } from 'gsap/ScrambleTextPlugin';
 import { TextPlugin } from 'gsap/TextPlugin';
 import { assertSceneImport, SCENE_GSAP_PLUGINS, sceneTransformOptions, splitExportDeclarations, type SceneGsapPlugin, type SceneRuntimeModules } from './scene-modules';
 import { sceneBrandContext, type SceneBrand, type SceneBrandContext } from './brand-kit';
+import { createTextMotion, type TextMotion } from './scene-text-motion';
+import { motionHelpers, type MotionHelpers } from './scene-motion';
+import type { SceneBeats } from './types';
+import { whipHelper, type WhipHelper } from './scene-whip';
 
-type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
-type Seek = { type: 'seek'; time: number; seq: number };
+type Init = { type: 'init'; code: string; brand: SceneBrand | null; media?: { name: string; type: string; data: ArrayBuffer }[]; icons?: Record<string, string>; blueprints?: { name: string; code: string }[]; beats?: SceneBeats | null; width: number; height: number; fps: number; duration: number; fonts: { family: string; weight: string; data: ArrayBuffer }[] };
+/** `playing` is set while the editor preview plays: videos then run on their own decoders instead of being seeked every frame. */
+type Seek = { type: 'seek'; time: number; seq: number; playing?: boolean };
 /** What a scene's default export receives. Time 0 on `tl` is the first frame of the clip. */
-export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper };
+export type SceneContext = { root: HTMLElement; tl: gsap.core.Timeline; gsap: typeof gsap; width: number; height: number; duration: number; fps: number; brand: SceneBrandContext | null; /** Project images, videos and GLB models by name, as URLs for <img src>, <video src> or CSS backgrounds. */ media: Record<string, string>; /** A Lucide icon as SVG markup, e.g. icon('scissors', { size: 16, color: '#8d8f93' }). */ icon: (name: string, options?: IconOptions) => string; /** Builds a brand kit blueprint (its whole UI) inside container at width x height and returns its root; its pieces are [data-part=...] elements to animate. */ blueprint: (name: string, container: HTMLElement, size?: { width: number; height: number }) => HTMLElement; /** A named part of a film: build(tl) gets a timeline placed on the film's at `start` film seconds, timed in section seconds (0 = its start). start and duration are number literals in the code. */ section: SectionHelper } & TextMotion & MotionHelpers & { /** A 3–6 frame whip between two shots (launch-films-motions page shot-changes): whip(tl, { out, in, at, direction }). On a section's tl, at is in section seconds; it may straddle the section's end. */ whip: WhipHelper };
 export type SectionHelper = (name: string, start: number, duration: number, build: (tl: gsap.core.Timeline) => void) => gsap.core.Timeline;
 
 /**
@@ -29,7 +34,7 @@ export type SectionHelper = (name: string, start: number, duration: number, buil
  * film time; the engine reads the call's literal start and duration to know which code the section owns, so a section
  * may not animate past its own end, start inside another, or nest.
  */
-function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
+function sectionHelper(film: gsap.core.Timeline, fps: number, starts: WeakMap<gsap.core.Timeline, number>): SectionHelper {
   let building: string | undefined;
   return (name, start, duration, build) => {
     if (typeof name !== 'string' || !name.trim()) throw new Error('section(name, start, duration, build) needs a name.');
@@ -37,6 +42,7 @@ function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
     if (typeof build !== 'function') throw new Error(`Section "${name}" needs a build function: section('${name}', ${start}, ${duration}, (tl) => { ... }).`);
     if (building !== undefined) throw new Error(`Section "${name}" is inside section "${building}". Sections do not nest: call section() from the scene's own function.`);
     const tl = gsap.timeline();
+    starts.set(tl, start);
     building = name;
     try { build(tl); } finally { building = undefined; }
     if (tl.duration() > duration + 1 / fps + 1e-3) throw new Error(`Section "${name}" animates for ${Math.round(tl.duration() * 1000) / 1000}s but lasts ${duration}s. Keep its tweens inside its duration, or put a move that spans sections on the scene's own tl.`);
@@ -44,6 +50,24 @@ function sectionHelper(film: gsap.core.Timeline, fps: number): SectionHelper {
     return tl;
   };
 }
+/**
+ * section(), the text functions (reveal, exit, swap, counter, type, mark) and the motion helpers (lib/editor/scene-motion)
+ * for one scene or blueprint. Text functions add their moves to the timeline being built: a section's while its build
+ * runs, otherwise the scene's tl.
+ */
+function sceneHelpers(film: gsap.core.Timeline, root: HTMLElement, data: { fps: number; width: number; height: number; duration: number; beats?: SceneBeats | null }) {
+  const active: gsap.core.Timeline[] = [];
+  const text = createTextMotion({ root, fps: data.fps, timeline: () => active[active.length - 1] ?? film });
+  // whip() reads a section's film start from its timeline, so a whip called inside a section may straddle its end.
+  const starts = new WeakMap<gsap.core.Timeline, number>();
+  const sections = sectionHelper(film, data.fps, starts);
+  const section: SectionHelper = (name, start, duration, build) => sections(name, start, duration, inner => {
+    active.push(inner);
+    try { build(inner); } finally { active.pop(); }
+  });
+  return { section, ...text, ...motionHelpers({ root, fps: data.fps, width: data.width, height: data.height, section, beats: data.beats }), whip: whipHelper(gsap, film, starts, root, data.width, data.height, data.fps, data.duration) };
+}
+
 export type IconOptions = { size?: number; color?: string; strokeWidth?: number; fill?: string };
 
 const PLUGINS: Record<SceneGsapPlugin, object> = { CustomEase, CustomWiggle, CustomBounce, SplitText, DrawSVGPlugin, MorphSVGPlugin, MotionPathPlugin, ScrambleTextPlugin, TextPlugin };
@@ -161,17 +185,88 @@ function drawStill(video: HTMLVideoElement) {
   video.dataset.revlineStill = '';
 }
 
+/** The source second a video shows at scene time `time`. */
+function videoTarget(video: HTMLVideoElement, time: number, fps: number) {
+  const length = video.duration || 0, rate = Number(video.dataset.rate) || 1;
+  const target = Math.max(0, time - (Number(video.dataset.start) || 0)) * rate + (Number(video.dataset.offset) || 0);
+  if (length <= 0) return target;
+  return video.hasAttribute('data-loop') ? target % length : Math.min(target, Math.max(0, length - 0.5 / fps));
+}
+
+// Preview playback lets each video play on its own decoder: seeking every frame waits for a decode per frame,
+// which held nested footage to about two frames a second. Videos are re-seeked only when they drift.
+const PLAYBACK_DRIFT = 0.15;
+// A re-seek lands late on slow decoders; checking drift again before it settles would seek on every frame.
+// A video whose decoder cannot keep up drifts again right after each seek, and every seek decodes from a keyframe
+// again, so the wait doubles while it keeps drifting (to 4 s). A jump of the scene clock starts every wait over.
+const SETTLE_MS = 600, SETTLE_MAX_MS = 4000;
+let liveSeeks = new WeakMap<HTMLVideoElement, { at: number; wait: number }>(), liveTime: number | undefined;
+// A video starting this soon buffers ahead, so its shot does not open on an empty decoder.
+const PRELOAD_AHEAD = 2;
+/**
+ * Whether the scene shows this video now. Its own visibility is left out: the paused stand-in hides it with
+ * visibility, so that is read from its parent; display and opacity count on the video and every ancestor.
+ * Footage clipped away or moved out of frame still counts as shown.
+ */
+function onScreen(video: HTMLVideoElement) {
+  if (!video.checkVisibility) return true;
+  return video.checkVisibility({ opacityProperty: true }) && (video.parentElement?.checkVisibility({ visibilityProperty: true, opacityProperty: true }) ?? false);
+}
+
+function playVideo(video: HTMLVideoElement, time: number, fps: number) {
+  video.muted = true;
+  if (video.readyState < 1) return;
+  const start = Number(video.dataset.start) || 0, rate = Number(video.dataset.rate) || 1, target = videoTarget(video, time, fps), length = video.duration || 0;
+  const loop = video.hasAttribute('data-loop'), held = time < start || !loop && length > 0 && target >= length - 1 / fps;
+  // Only videos on screen play. A film holds many videos in shots that are hidden before and after their turn;
+  // playing them all (a 32 s film had 18 decoding, at most 7 of them visible) loads the browser's decoders and
+  // compositor for footage nobody sees. One that has not started yet still waits on its first frame.
+  const shown = onScreen(video);
+  if (held || !shown) {
+    if (!video.paused) video.pause();
+    if (held && !video.seeking && Math.abs(video.currentTime - target) >= 0.25 / fps) video.currentTime = target;
+    if (held && time >= start - PRELOAD_AHEAD && video.preload !== 'auto') video.preload = 'auto';
+    if (!shown) return;
+  }
+  // The live video shows itself once it has a frame; its frozen stand-in returns on the next paused seek.
+  if (video.readyState >= 2) {
+    const canvas = stillFrames.get(video);
+    if (canvas) canvas.style.display = 'none';
+    delete video.dataset.revlineStill;
+  }
+  if (held) return;
+  if (video.preload !== 'auto') video.preload = 'auto';
+  video.loop = loop;
+  if (video.playbackRate !== rate) video.playbackRate = rate;
+  // A looping video wraps on its own, so drift is measured around the loop.
+  let drift = Math.abs(video.currentTime - target);
+  if (loop && length > 0) drift = Math.min(drift, length - drift);
+  const now = performance.now();
+  const last = liveSeeks.get(video);
+  if (!video.seeking && drift > PLAYBACK_DRIFT && (!last || now - last.at > last.wait)) {
+    const wait = last && now - last.at < last.wait * 2 ? Math.min(last.wait * 2, SETTLE_MAX_MS) : SETTLE_MS;
+    liveSeeks.set(video, { at: now, wait });
+    video.currentTime = target;
+  }
+  if (video.paused) void video.play().catch(() => undefined);
+}
+
 /** Videos in a scene follow the scene clock: data-start (scene seconds it begins), data-offset (source seconds), data-rate, data-loop. */
-function syncVideos(time: number, fps: number) {
+function syncVideos(time: number, fps: number, playing: boolean) {
   // A video the scene removed takes its stand-in with it.
   for (const [video, canvas] of stillFrames) if (!video.isConnected) { canvas.remove(); stillFrames.delete(video); }
+  if (playing) {
+    if (liveTime === undefined || Math.abs(time - liveTime) > 0.5) liveSeeks = new WeakMap();
+    liveTime = time;
+    document.querySelectorAll('video').forEach(video => playVideo(video, time, fps));
+    return [];
+  }
+  liveTime = undefined;
   return Array.from(document.querySelectorAll('video')).map(video => {
     video.muted = true; video.pause();
     const ready = video.readyState >= 1 ? Promise.resolve() : mediaEvent(video, ['loadedmetadata', 'error'], 4000);
     return ready.then(async () => {
-      const length = video.duration || 0, rate = Number(video.dataset.rate) || 1;
-      let target = Math.max(0, time - (Number(video.dataset.start) || 0)) * rate + (Number(video.dataset.offset) || 0);
-      if (length > 0) target = video.hasAttribute('data-loop') ? target % length : Math.min(target, Math.max(0, length - 0.5 / fps));
+      const target = videoTarget(video, time, fps);
       if (Math.abs(video.currentTime - target) >= 0.25 / fps || video.seeking) {
         const seeked = mediaEvent(video, ['seeked', 'error'], 4000);
         const decoded = decodedVideoFrame(video, target, fps);
@@ -221,11 +316,13 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       host.style.cssText = `position:relative;width:${width}px;height:${height}px;overflow:hidden`;
       container.appendChild(host);
       const tl = gsap.timeline();
-      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
+      void compileScene(found.code)({ root: host, tl, gsap, width, height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...sceneHelpers(tl, host, { fps: data.fps, width, height, duration: data.duration, beats: data.beats }) });
       return host;
     };
     const tl = gsap.timeline();
-    await scene({ root, tl, gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, section: sectionHelper(tl, data.fps) });
+    // Text functions measure the laid-out text while the scene builds; every face must have loaded first.
+    await document.fonts.ready;
+    await scene({ root, tl, gsap, width: data.width, height: data.height, duration: data.duration, fps: data.fps, brand, media, icon, blueprint, ...sceneHelpers(tl, root, data) });
     master = gsap.exportRoot({ paused: true });
     // gsap.set calls made while building land after the scene's timeline at the same start time,
     // so a first seek into the middle re-applied the starting states over the animation.
@@ -239,10 +336,26 @@ if (typeof window !== 'undefined' && window.parent !== window) {
     if (data.type === 'init') {
       void build(data).then(() => post({ type: 'compiled' }), error => fail(error));
     } else if (data.type === 'seek') {
-      try { master?.seek(origin + data.time, false); } catch (error) { fail(error); }
-      const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
-      void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps)]).then(() => post({ type: 'painted', seq: data.seq }), error => fail(error));
+      // A frame that falls behind during playback gets seeks faster than it draws them. Of playing seeks still
+      // waiting, only the newest is drawn and the ones it replaces are acknowledged with it, so a busy moment does
+      // not leave the scene drawing old times. Paused, scrub and export seeks are each drawn at their own time.
+      if (waiting && waiting.playing === true && data.playing === true) skipped.push(waiting.seq);
+      else drawSeek();
+      waiting = data;
+      if (!scheduled) { scheduled = true; seekChannel.port2.postMessage(null); }
     }
   });
+  let waiting: Seek | null = null, skipped: number[] = [], scheduled = false;
+  // Usually runs after the seek messages already queued, so a backlog of playing seeks collapses into its last one.
+  const seekChannel = new MessageChannel();
+  seekChannel.port1.onmessage = () => { scheduled = false; drawSeek(); };
+  function drawSeek() {
+    const data = waiting, replaced = skipped;
+    if (!data) return;
+    waiting = null; skipped = [];
+    try { master?.seek(origin + data.time, false); } catch (error) { fail(error); }
+    const images = Array.from(document.images).filter(image => !image.complete).map(image => image.decode().catch(() => undefined));
+    void Promise.all([document.fonts.ready, ...images, ...syncVideos(data.time, fps, data.playing === true)]).then(() => { for (const seq of replaced) post({ type: 'painted', seq }); post({ type: 'painted', seq: data.seq }); }, error => fail(error));
+  }
   post({ type: 'ready' });
 }

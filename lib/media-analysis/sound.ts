@@ -4,6 +4,7 @@ import { roundTo } from '../math';
  * whether each sound effect lands on something that happens in the picture. */
 
 import { changed } from './pacing';
+import { MUSIC_ENERGY_STEP, type MusicEnergy } from './beat-map';
 
 export const SOUND_RATE = 48000;
 
@@ -146,6 +147,50 @@ function measureLoudness(left: Float32Array, right: Float32Array, rate = SOUND_R
     integrated: kept.length ? roundTo(lufs(kept.reduce((sum, value) => sum + value, 0) / kept.length), 1) : null,
     peak: roundTo(db(Math.max(0, ...peaks)), 1),
     levels: momentary.map(value => Math.max(-70, Math.round(lufs(value)))), peaks: peaks.map(value => Math.max(-70, Math.round(db(value)))), silences,
+  };
+}
+
+/** A song's energy over time, for finding where it builds and hits: each MUSIC_ENERGY_STEP seconds the loudness (LUFS of
+ * the K-weighted power over that step), the low band under about 150 Hz (dBFS RMS, where kick and bass live) and how many
+ * sounds start. Fed interleaved stereo at SOUND_RATE in chunks of any size, so a whole song is never held twice. */
+export function musicEnergy() {
+  const rate = SOUND_RATE, step = Math.round(rate * MUSIC_ENERGY_STEP);
+  const loudness: number[] = [], low: number[] = [];
+  // K-weighting runs sample by sample; same stages as kWeighted.
+  const stages = [[1.53512485958697, -2.69169618940638, 1.19839281085285, -1.69065929318241, .73248077421585], [1, -2, 1, -1.99004745483398, .99007225036621]];
+  const state = [new Float64Array(8), new Float64Array(8)];
+  const weigh = (x: number, s: Float64Array) => {
+    for (let k = 0; k < 2; k++) {
+      const [b0, b1, b2, a1, a2] = stages[k], o = k * 4, y = b0 * x + b1 * s[o] + b2 * s[o + 1] - a1 * s[o + 2] - a2 * s[o + 3];
+      s[o + 1] = s[o]; s[o] = x; s[o + 3] = s[o + 2]; s[o + 2] = y; x = y;
+    }
+    return x;
+  };
+  // One-pole low pass twice over (12 dB per octave) at 150 Hz.
+  const alpha = 1 - Math.exp(-2 * Math.PI * 150 / rate);
+  let a = 0, b = 0, power = 0, bass = 0, filled = 0, pair = 0, half = 0;
+  // Onsets are found on a half-rate mono copy (pairs averaged), a quarter of the stereo input's size.
+  let mono = new Float32Array(rate * 30), length = 0;
+  return {
+    push(interleaved: Float32Array) {
+      for (let i = 0; i + 1 < interleaved.length; i += 2) {
+        const left = interleaved[i], right = interleaved[i + 1], l = weigh(left, state[0]), r = weigh(right, state[1]), sample = (left + right) / 2;
+        power += l * l + r * r;
+        a += alpha * (sample - a); b += alpha * (a - b); bass += b * b;
+        pair += sample;
+        if (++half === 2) { if (length === mono.length) { const grown = new Float32Array(mono.length * 2); grown.set(mono); mono = grown; } mono[length++] = pair / 2; pair = 0; half = 0; }
+        if (++filled === step) {
+          loudness.push(Math.max(-70, roundTo(power > 0 ? -.691 + 10 * Math.log10(power / step) : -120, 1)));
+          low.push(Math.max(-90, roundTo(db(Math.sqrt(bass / step)), 1)));
+          power = 0; bass = 0; filled = 0;
+        }
+      }
+    },
+    finish(): MusicEnergy {
+      const onsets = new Array<number>(loudness.length).fill(0);
+      for (const onset of detectOnsets(mono.subarray(0, length), rate / 2)) { const n = Math.floor(onset.time / MUSIC_ENERGY_STEP); if (n < onsets.length) onsets[n]++; }
+      return { step: MUSIC_ENERGY_STEP, loudness, low, onsets };
+    },
   };
 }
 

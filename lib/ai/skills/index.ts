@@ -6,6 +6,8 @@ import { remakingVideos } from './remaking-videos';
 import { gsapSkill } from './gsap';
 import { footageEditing } from './footage-editing';
 import { clipping } from './clipping';
+import { music } from './music';
+import { transitions } from './transitions';
 import type { EditorSkill } from './types';
 
-export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, writingScenes, gsapSkill, talkingHeadGraphics, launchFilmsMotions, remakingVideos, visualInspection];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, music, writingScenes, gsapSkill, talkingHeadGraphics, launchFilmsMotions, transitions, remakingVideos, visualInspection];

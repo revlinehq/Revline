@@ -60,6 +60,8 @@ export const BASE_TOOLS = [
   'forget',
   'getFrames',
   'getSound',
+  'analyzeMusic',
+  'startMusicAt',
   'askUser',
   'askBrandKit',
   'previewBackgrounds',
@@ -111,8 +113,12 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'writing-scenes': motionTools,
   'gsap': motionTools,
   'remaking-videos': recreateTools,
+  // Footage transitions; the footage lanes have addTransition already, film lanes get it only by loading footage support.
+  'transitions': ['addTransition'],
   'clipping': clipTools,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
+  // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).
+  'music': ['markMusicBeats', 'alignCutsToBeat', 'setAudioReactive'],
   'reel': ['readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
   // Sound, effect, color and VFX tools for footage edits.
   'footage-editing': [

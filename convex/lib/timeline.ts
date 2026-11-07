@@ -38,6 +38,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
     if (!marker.id || marker.id.length > 100 || markerIds.has(marker.id)) throw new ConvexError('Marker IDs must be unique and nonempty');
     if (!Number.isFinite(marker.time) || marker.time < 0) throw new ConvexError('Marker time must be finite and nonnegative');
     if ((marker.label?.length ?? 0) > 120) throw new ConvexError('Marker labels support up to 120 characters');
+    if (marker.kind !== undefined && marker.kind !== 'section') throw new ConvexError('Marker kind must be section or omitted');
     markerIds.add(marker.id);
   }
   // Validate the input before conversion so inferred counts cannot repair an

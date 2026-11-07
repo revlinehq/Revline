@@ -222,9 +222,12 @@ export function convertSolidColorToVisual(timeline:Timeline,id:string):Timeline 
 export function addTransitionClip(timeline: Timeline, id: string, preset: TransitionPreset, fromClipId: string, toClipId: string, options: Partial<Omit<ClipTransition, 'fromClipId' | 'toClipId'>> & { duration?: number; track?: number } = {}): Timeline {
   timeline = normalizeTimeline(timeline);
   const pair = transitionPair(timeline.clips, { fromClipId, toClipId });
-  const settings = Object.fromEntries((['wipeDirection','softness','centerX','centerY','shape'] as const).filter(key => options[key] !== undefined).map(key => [key,options[key]]));
+  const settings = Object.fromEntries((['wipeDirection','softness','centerX','centerY','shape','whipDirection','travel','blur'] as const).filter(key => options[key] !== undefined).map(key => [key,options[key]]));
+  // Every new whip-pan gets the short whip, left unless a direction was given.
+  if (preset === 'whip-pan' && settings.whipDirection === undefined) settings.whipDirection = options.wipeDirection ?? 'left';
   const clip: Clip = { id, kind: 'effect', sourceStart: 0, track: options.track ?? 1, effectPreset: preset,
-    ...boundedTransitionRange(timeline, pair.from, pair.to, options.duration,id),
+    // A whip is 4 frames at 30 fps; other presets keep the shared transition default.
+    ...boundedTransitionRange(timeline, pair.from, pair.to, options.duration ?? (preset === 'whip-pan' ? EFFECT_CATALOG[preset].duration : undefined),id),
     transition: { ...settings, fromClipId, toClipId, direction: options.direction ?? DEFAULT_TRANSITION_DIRECTION },
   };
   const next = placeOnFreeLayer(timeline, clip);

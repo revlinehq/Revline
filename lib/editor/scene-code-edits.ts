@@ -1,6 +1,7 @@
 import { declarations, filmSections, filmTimeAt, markerSection, reach } from './approvals';
 import { diffArrays } from 'diff';
 import { closestCodeLines, sceneSnippetMatches, type SceneEdit } from './scene-film';
+import { sectionMarkersIn } from './timeline-markers';
 import type { Clip, Timeline } from './types';
 
 export type CodeLines = { start: number; end: number };
@@ -46,7 +47,7 @@ function sections(timeline: Timeline, clip: Clip, code: string) {
   const scene = clip.scene;
   if (!scene) return [];
   const beats = filmSections(scene), bodies = declarations(code);
-  return (timeline.markers ?? []).filter(marker => marker.time >= clip.start && marker.time < clip.start + clip.duration).map(marker => {
+  return sectionMarkersIn(timeline, clip).map(marker => {
     const range = markerSection(timeline, clip, marker.id), start = filmTimeAt(clip, range.start), end = filmTimeAt(clip, range.end);
     const owned = beats.filter(beat => beat.start < end - 1e-4 && beat.start + beat.duration > start + 1e-4);
     const names = reach(scene, owned.map(beat => beat.text)).names;
