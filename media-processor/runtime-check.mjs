@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer';
-import { SCENE_RUNTIME_BUNDLES } from '../../lib/editor/scene-modules.ts';
+import { SCENE_RUNTIME_BUNDLES } from '../lib/editor/scene-modules.ts';
 
 execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });

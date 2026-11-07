@@ -1,6 +1,6 @@
 # MCP server on Cloudflare
 
-`tryrevline.com/mcp`, `/oauth/*`, `/.well-known/oauth-*` and `/.well-known/openid-configuration` are served by the `revline-mcp-production` Worker (`cloudflare/mcp/`). Its routes take precedence over `revline-web`'s custom domain for those paths. Without them, `proxy.ts` in `revline-web` forwards the same paths to Convex's own MCP server (`convex/mcpHttp.ts`), which stays in place as the rollback.
+`tryrevline.com/mcp`, `/oauth/*`, `/.well-known/oauth-*` and `/.well-known/openid-configuration` are served by the `revline-mcp-production` Worker (`cf-workers/mcp/`). Its routes take precedence over `revline-web`'s custom domain for those paths. Without them, `proxy.ts` in `revline-web` forwards the same paths to Convex's own MCP server (`convex/mcpHttp.ts`), which stays in place as the rollback.
 
 ```mermaid
 flowchart LR
@@ -24,7 +24,7 @@ Known limits: a client that revokes its own token through the provider (`/oauth/
 
 | Name | Where |
 | --- | --- |
-| `MCP_BRIDGE_SECRET` | Convex dev and prod environment variables (`npx convex env set`), and the matching Worker secret: `wrangler secret put MCP_BRIDGE_SECRET --config cloudflare/mcp/wrangler.jsonc` (dev) or `wrangler.production.jsonc` (prod). Use a different random value for each environment. |
+| `MCP_BRIDGE_SECRET` | Convex dev and prod environment variables (`npx convex env set`), and the matching Worker secret: `wrangler secret put MCP_BRIDGE_SECRET --config cf-workers/mcp/wrangler.jsonc` (dev) or `wrangler.production.jsonc` (prod). Use a different random value for each environment. |
 | `NEXT_PUBLIC_MCP_ORIGIN` | Only for local or dev web builds whose consent page talks to a Worker on another origin, for example `http://localhost:8787`. Production leaves it unset (same origin). |
 | `OAUTH_KV` | KV namespace binding. Wrangler creates it on the first deploy of each config. |
 
@@ -43,6 +43,6 @@ Remove the five `revline-mcp-production` routes (Cloudflare dashboard → Worker
 
 ## Local
 
-`npm run mcp:install`, then `npm run dev:mcp` (wrangler dev, dev Convex, `MCP_ORIGIN=http://localhost:8787`). Put `MCP_BRIDGE_SECRET` in `cloudflare/mcp/.dev.vars`, matching the target backend. `scripts/isolated-mcp.mjs` keeps talking to the worktree backend directly; set `REVLINE_MCP_URL=http://localhost:8787/mcp` to route it through the local Worker instead.
+`npm run mcp:install`, then `npm run dev:mcp` (wrangler dev, dev Convex, `MCP_ORIGIN=http://localhost:8787`). Put `MCP_BRIDGE_SECRET` in `cf-workers/mcp/.dev.vars`, matching the target backend. `scripts/isolated-mcp.mjs` keeps talking to the worktree backend directly; set `REVLINE_MCP_URL=http://localhost:8787/mcp` to route it through the local Worker instead.
 
 In an isolated worktree, point the Worker at its own backend and app port rather than shared dev: start the app with `NEXT_PUBLIC_MCP_ORIGIN=http://localhost:8787 npm run dev:isolated`, set `MCP_BRIDGE_SECRET` on that backend, and run `npm run dev:mcp -- --var CONVEX_SITE_URL:https://<backend>.convex.site --var APP_ORIGIN:http://localhost:<port>`. Upload scripts follow the backend's `MCP_PUBLIC_ORIGIN` (its `*.convex.site` by default); set it to `http://localhost:8787` there to send uploads through the Worker too.

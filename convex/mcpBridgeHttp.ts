@@ -5,7 +5,7 @@ import { verifyRunnerRequest } from './lib/runner_auth';
 import { clientInfoValidator } from './mcpConnections';
 import type { Infer } from 'convex/values';
 
-// The Cloudflare MCP server (cloudflare/mcp) speaks the protocol and runs the OAuth provider; Convex keeps the data,
+// The Cloudflare MCP server (cf-workers/mcp) speaks the protocol and runs the OAuth provider; Convex keeps the data,
 // the tools and every access decision. Each call is signed with MCP_BRIDGE_SECRET under a single-use nonce
 // (lib/runner_auth.ts). Calls that act for a user carry that user's credential, which Convex authenticates itself:
 // the Worker never names an owner. Grant keys (kind "grant") are accepted only here.

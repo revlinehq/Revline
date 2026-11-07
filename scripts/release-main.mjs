@@ -149,13 +149,13 @@ try {
   for (const target of targets) {
     const suffix = target.name === 'production' ? '.production' : '';
     if (changed('media')) {
-      const config = `cloudflare/media/wrangler${suffix}.jsonc`;
+      const config = `cf-workers/media/wrangler${suffix}.jsonc`;
       const output = await node(`${target.name}: media Worker`, ['node_modules/wrangler/bin/wrangler.js', 'deploy', '--config', config, ...(dry ? ['--dry-run'] : [])]);
       if (!dry) await check(`${target.name}: verify media Worker`, () => verifyWorker(config, output, env));
     }
     if (changed('agent')) {
       await node(`${target.name}: sync agent settings`, ['scripts/sync-agent-runner-env.mjs', target.name, ...(dry ? ['--dry-run'] : [])]);
-      const config = `cloudflare/agent-runner/wrangler${suffix}.jsonc`;
+      const config = `cf-workers/agent-runner/wrangler${suffix}.jsonc`;
       const output = dry
         ? await node(`${target.name}: agent runner Worker`, ['node_modules/wrangler/bin/wrangler.js', 'deploy', '--config', config, '--dry-run'])
         : await npm(`${target.name}: agent runner Worker`, ['run', target.name === 'production' ? 'deploy:agent-runner:production' : 'deploy:agent-runner']);

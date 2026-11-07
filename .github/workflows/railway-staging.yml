@@ -39,12 +39,12 @@ jobs:
       - name: Resolve the canonical image registry
         run: node --input-type=module -e "import { IMAGE_REGISTRY, REPOSITORY } from './lib/repository.mjs'; console.log('IMAGE_REGISTRY=' + IMAGE_REGISTRY + '\nIMAGE_SOURCE=https://github.com/' + REPOSITORY);" >> "$GITHUB_ENV"
       - name: Prepare credential-free image context
-        run: node infra/media-worker/prepare-context.mjs
+        run: node media-processor/prepare-context.mjs
       - uses: docker/build-push-action@v6
         id: processor
         with:
           context: .wrangler/media-processor-build
-          file: .wrangler/media-processor-build/infra/media-worker/Dockerfile
+          file: .wrangler/media-processor-build/media-processor/Dockerfile
           target: railway-processor
           cache-from: type=gha,scope=railway-processor
           cache-to: type=gha,mode=max,scope=railway-processor
@@ -57,7 +57,7 @@ jobs:
         id: exports
         with:
           context: .wrangler/media-processor-build
-          file: .wrangler/media-processor-build/infra/media-worker/Dockerfile
+          file: .wrangler/media-processor-build/media-processor/Dockerfile
           target: railway-exports
           cache-from: type=gha,scope=railway-exports
           cache-to: type=gha,mode=max,scope=railway-exports

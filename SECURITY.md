@@ -25,7 +25,7 @@ GitHub Actions is enabled for this repository; individual workflows can still be
 
 ```sh
 npm audit --omit=dev --audit-level=moderate
-npm audit --prefix cloudflare/agent-runner --omit=dev --audit-level=moderate
+npm audit --prefix cf-workers/agent-runner --omit=dev --audit-level=moderate
 gitleaks git --redact=100 --no-banner --log-opts="--remotes=origin --tags"
 npm run typecheck
 npm run build

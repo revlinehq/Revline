@@ -167,9 +167,9 @@ try {
     // Hosted processors wake the shared queue. Isolated media tasks are handled by this worktree's local worker.
     MEDIA_PROCESSOR_WAKE_URL: '', MEDIA_PROCESSOR_BACKEND: 'local', RENDER_PROVIDER: 'local',
   };
-  const mediaConfig = await workerConfig('cloudflare/media/wrangler.jsonc', state.mediaName, { ALLOWED_ORIGINS: origin, READ_ONLY_MEDIA_KEYS: overrides.REVLINE_BORROWED_MEDIA_KEYS });
-  const runnerConfig = await workerConfig('cloudflare/agent-runner/wrangler.jsonc', state.runnerName, { CONVEX_SITE_URL: site });
-  if (!existsSync(join(root, 'cloudflare/agent-runner/node_modules/agents'))) execFileSync('npm', ['ci', '--prefix', 'cloudflare/agent-runner', '--legacy-peer-deps', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit' });
+  const mediaConfig = await workerConfig('cf-workers/media/wrangler.jsonc', state.mediaName, { ALLOWED_ORIGINS: origin, READ_ONLY_MEDIA_KEYS: overrides.REVLINE_BORROWED_MEDIA_KEYS });
+  const runnerConfig = await workerConfig('cf-workers/agent-runner/wrangler.jsonc', state.runnerName, { CONVEX_SITE_URL: site });
+  if (!existsSync(join(root, 'cf-workers/agent-runner/node_modules/agents'))) execFileSync('npm', ['ci', '--prefix', 'cf-workers/agent-runner', '--legacy-peer-deps', '--no-audit', '--no-fund'], { cwd: root, stdio: 'inherit' });
   // Worker secrets go through stdin; no .dev.vars or secret JSON files are created.
   announce('Deploying this worktree’s media Worker and editor runner.');
   const mediaDeploy = await wrangler(['deploy'], mediaConfig);

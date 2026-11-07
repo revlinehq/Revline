@@ -43,14 +43,14 @@ Scope: untangling only. No comment pruning and no test changes (the repo has no 
   - `lib/server/plain-export-render.ts:5` imports `scripts/render-resources.mjs`.
 - **Keep one list of the files that make up the processor runtime.** *done*
   - `scripts/processor-changes.mjs:14-21` is missing `track-reference.py` and `source_frames.py`, so changing only those files does not trigger a processor release.
-  - The same list is also kept in `infra/media-worker/prepare-context.mjs:18`, `scripts/release-plan.mjs:45` and `infra/media-worker/runtime-check.mjs:9`.
+  - The same list is also kept in `media-processor/prepare-context.mjs:18`, `scripts/release-plan.mjs:45` and `media-processor/runtime-check.mjs:9`.
 - **Name each worker tool path once.** *done*
   - `workerToolPath(SCENE_DETECT_PYTHON, …)` appears in `clipping-analysis.ts:24`, `track-reference.ts:14`, `detect-shots.ts:10` and `local-worker-capabilities.ts:26`.
   - The pixel-tracker path appears in `track-source-pixels.ts:20` and `local-worker-capabilities.ts:30`.
 - **Delete the Next API routes nothing calls.** *done*
   - `app/api/{analyze,beats,extract-audio,waveform,render}/route.ts` and `lib/server/queue-media-request.ts`. Their last callers were removed with the test suite in `6caea204`.
 - **Share the media Worker's upload part limit with the client.** *done*
-  - `cloudflare/media/worker.ts:42` rejects parts over 64 MiB, while `lib/editor/limits.ts:8` lets the client send up to 95 MiB.
+  - `cf-workers/media/worker.ts:42` rejects parts over 64 MiB, while `lib/editor/limits.ts:8` lets the client send up to 95 MiB.
 - **Use one Sentry server/edge config.** *done*
   - `sentry.server.config.ts` and `sentry.edge.config.ts` are identical.
 

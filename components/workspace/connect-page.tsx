@@ -12,7 +12,7 @@ import './workspace-pages.css';
 import './connect-page.css';
 import { Button } from '@/components/ui/button';
 
-/** A Convex OAuth request (older connections), or a consent `handle` from the Cloudflare MCP server (cloudflare/mcp). */
+/** A Convex OAuth request (older connections), or a consent `handle` from the Cloudflare MCP server (cf-workers/mcp). */
 export type ConnectRequest = { clientId?: string; redirectUri?: string; codeChallenge?: string; codeChallengeMethod?: string; state?: string; resource?: string; handle?: string; clientName?: string };
 
 /** The MCP server that started a handle's consent; its cookie is bound to that origin. Same origin in production. */

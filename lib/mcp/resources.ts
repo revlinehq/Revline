@@ -1,7 +1,7 @@
 import { BACKGROUND_PREVIEW_URI, MCP_APP_MIME, mcpAppDocument } from '../editor/background-preview';
 
 // MCP Apps (io.modelcontextprotocol/ui, 2026-01-26): previewBackgrounds names this view in its tool _meta.ui.resourceUri.
-// Served the same way by the Convex server (convex/mcpHttp.ts) and the Cloudflare one (cloudflare/mcp).
+// Served the same way by the Convex server (convex/mcpHttp.ts) and the Cloudflare one (cf-workers/mcp).
 export const listMcpResources = () => ({ resources: [{ uri: BACKGROUND_PREVIEW_URI, name: 'background_previews', title: 'Background candidates', description: 'Inline picker for previewBackgrounds results.', mimeType: MCP_APP_MIME }] });
 
 export function readMcpResource(uri: string) {

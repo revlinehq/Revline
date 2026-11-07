@@ -1,7 +1,7 @@
 // Requests between Convex and the Cloudflare agent runner carry an HMAC of their time, nonce, method, path and
 // body under AGENT_RUNNER_SECRET, never the secret itself. A changed body or path fails, a captured request stops
 // working after the window, and the receiver refuses a nonce it has seen. Shared by convex/agentRunnerHttp.ts and
-// cloudflare/agent-runner.
+// cf-workers/agent-runner.
 export const RUNNER_REQUEST_WINDOW_MS = 2 * 60_000;
 const encoder = new TextEncoder();
 const hex = (bytes: ArrayBuffer) => [...new Uint8Array(bytes)].map(byte => byte.toString(16).padStart(2, '0')).join('');

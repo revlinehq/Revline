@@ -1,4 +1,4 @@
-// A signed-in user's approval of one OAuth consent handle on the Cloudflare MCP server (cloudflare/mcp). Convex signs
+// A signed-in user's approval of one OAuth consent handle on the Cloudflare MCP server (cf-workers/mcp). Convex signs
 // it for the consent page under MCP_BRIDGE_SECRET; the page posts it to the Worker, which hands it back to Convex to
 // create the connection. Convex checks it again there, so the Worker can never choose whose account is connected.
 export const CONSENT_APPROVAL_TTL_MS = 5 * 60_000;
