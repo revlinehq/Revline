@@ -1,3 +1,6 @@
+## 2026-11-07
+- Landing: new black "Revline Genesis" section above the MCP band (six tool tabs over a CSS 3D curved carousel of real SAM 3.1 stills, loops drop in per tab later) and a Genesis entry in the Products menu. Why: the founder wants the SAM 3.1 object-layer tools on the landing page for launch.
+
 ## 2026-11-06
 - Editor agent: while addFilm or patchScene input streams, the film plays in the preview section by section and a "Drafting film…" track above A1 shows finished, in-progress and planned sections; drafts live in their own `filmDrafts` row, are never saved, revisions or exports, and clear when the call lands or the run ends. Why: the user waited minutes for one big film call to land.
 - MCP: new copyMedia tool copies media between the caller's own projects (same owner only; shares files and saved analysis). Why: a film agent had no way to reuse another project's media and impersonated the founder to get it.
