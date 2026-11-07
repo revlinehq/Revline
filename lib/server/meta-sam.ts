@@ -6,7 +6,6 @@ import { AnalysisError } from '../media-analysis/errors';
 /** Segment Anything 3.1, called directly on Meta's Model API (https://dev.meta.ai/docs/sam/overview).
  * The model id is pinned: a response from any other model is rejected, never used. */
 export const META_SAM_MODEL = 'sam-3.1';
-export const META_SAM_LABEL = 'SAM 3.1 (Meta)';
 const API = 'https://api.meta.ai/v1';
 const MODEL_PATTERN = /^sam-3\.1(?:$|[-@:])/;
 
@@ -79,7 +78,14 @@ function promptText(prompt: SamPrompt, size: SamSize) {
   return buildObjectPrompt({ size, objects: [{ id: 1, prompts: [{ frame: prompt.frame ?? 0, ...(box ? { box } : {}), ...(point ? { points: [point] } : {}) }] }] });
 }
 
-async function respond<Result extends SegmentationResult>(key: string, media: Record<string, unknown>, text: string, metadata: Record<string, string>, parse: (source: AsyncIterable<{ type: string }>) => AsyncIterable<unknown> & { finalResult: Promise<Result> }, signal: AbortSignal) {
+/** The latest revision of each mask: the parser keeps superseded revisions in its cumulative list. */
+function latestMasks(result: SegmentationResult) {
+  const latest = new Map<string, SegmentationMaskRecord>();
+  for (const record of recordsOfKind(result.records, 'mask')) if ((latest.get(record.identity)?.revision ?? 0) < record.revision) latest.set(record.identity, record);
+  return [...latest.values()];
+}
+
+async function respond<Result extends SegmentationResult>(key: string, media: Record<string, unknown>, text: string, metadata: Record<string, string>, parse: (source: AsyncIterable<{ type: string }>) => { finalResult: Promise<Result> }, signal: AbortSignal) {
   const response = await fetch(`${API}/responses`, {
     method: 'POST', signal,
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', Accept: 'text/event-stream' },
@@ -87,9 +93,8 @@ async function respond<Result extends SegmentationResult>(key: string, media: Re
   });
   if (!response.ok) throw await failure(response);
   try {
-    const parsed = parse(events(response));
-    for await (const _ of parsed) { /* snapshots are not needed; the final result holds every record */ }
-    const result = await parsed.finalResult;
+    // Reading finalResult first drains the stream without building per-delta snapshots.
+    const result = await parse(events(response)).finalResult;
     if (result.outcome.status !== 'completed') throw new AnalysisError(`SAM 3.1 ended early${result.outcome.detail ? `: ${result.outcome.detail}` : ''}.`, 502, true);
     const broken = result.diagnostics.find(item => item.severity === 'error');
     if (broken) throw new AnalysisError(`SAM 3.1 returned an unreadable record (${broken.code}).`, 502, true);
@@ -104,7 +109,8 @@ async function respond<Result extends SegmentationResult>(key: string, media: Re
 /** Segment one image. A noun returns every match; an object prompt returns object 1. */
 export async function segmentImage(key: string, image: { data: Buffer; mime: string }, prompt: SamPrompt, size: SamSize, signal: AbortSignal) {
   const result = await respond(key, { type: 'input_image', image_url: `data:${image.mime};base64,${image.data.toString('base64')}` }, promptText(prompt, size), {}, parseImageStream, signal);
-  return recordsOfKind(result.records, 'mask');
+  const masks = latestMasks(result);
+  return prompt.kind === 'object' ? masks.filter(record => record.objectId === '1') : masks;
 }
 
 /** Track object 1 through a video from an object prompt on one frame, both directions.
@@ -120,7 +126,7 @@ export async function segmentVideo(key: string, path: string, prompt: Extract<Sa
   const { id } = z.object({ id: z.string().min(1) }).parse(await upload.json());
   try {
     const result = await respond(key, { type: 'input_video', file_id: id }, promptText(prompt, size), { propagation_direction: 'both' }, parseVideoStream, signal);
-    return recordsOfKind(result.records, 'mask').filter(record => record.objectId === '1');
+    return latestMasks(result).filter(record => record.objectId === '1');
   } finally {
     await fetch(`${API}/files/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(15_000) }).then(response => response.body?.cancel()).catch(() => {});
   }

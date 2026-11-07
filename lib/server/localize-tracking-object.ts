@@ -34,7 +34,9 @@ export async function localizeTrackingObject(source: string, directory: string, 
       const masks = await segmentImage(requireMetaSam(), { data, mime: 'image/jpeg' }, { kind: 'noun', noun }, { width, height }, signal);
       if (masks.length !== 1) throw new AnalysisError(`SAM 3.1 found ${masks.length ? 'several matches for' : 'no'} "${noun.slice(0, 60)}". Choose an inspected source point or box.`, 422, false);
       const { bounds } = masks[0];
-      return { time: seedTime, provider: 'meta-sam-3.1' as const, box: trackBox.parse({ left: bounds.left / width, top: bounds.top / height, right: Math.min(width, bounds.right) / width, bottom: Math.min(height, bounds.bottom) / height }) };
+      const box = trackBox.safeParse({ left: Math.max(0, bounds.left) / width, top: Math.max(0, bounds.top) / height, right: Math.min(width, bounds.right) / width, bottom: Math.min(height, bounds.bottom) / height });
+      if (!box.success) throw new AnalysisError(`SAM 3.1 returned an empty box for "${noun.slice(0, 60)}". Choose an inspected source point or box.`, 422, false);
+      return { time: seedTime, provider: 'meta-sam-3.1' as const, box: box.data };
     }
     let found: { box: z.infer<typeof trackBox>; provider: 'fal-florence-2' | 'gemini' } | undefined;
     const fal = configuredFal();

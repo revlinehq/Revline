@@ -6,6 +6,8 @@ import { z } from "zod";
 import { AnalysisError } from "../media-analysis/errors";
 import { download, subscribe, type FalClient } from "./fal";
 import { spawn } from "node:child_process";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { paintMasks, requireMetaSam, segmentVideo } from "./meta-sam";
 import {
   SUBJECT_MODELS,
@@ -277,14 +279,17 @@ export async function segmentVideoSubjectSam31(
   encoder.stderr.on("data", (data: Buffer) => { stderr = (stderr + data.toString()).slice(-1000); });
   const closed = new Promise<number | null>((resolve, reject) => { encoder.once("error", reject); encoder.once("close", resolve); });
   const empty = new Uint8Array(size.width * size.height);
-  for (let index = 0; index < total; index++) {
-    const records = byFrame.get(index);
-    const frameMask = records ? paintMasks(records, size) : empty;
-    if (!encoder.stdin.write(frameMask)) await new Promise<void>((resolve) => encoder.stdin.once("drain", resolve));
+  function* frames() {
+    for (let index = 0; index < total; index++) {
+      const records = byFrame.get(index);
+      yield records ? paintMasks(records, size) : empty;
+    }
   }
-  encoder.stdin.end();
-  const code = await closed;
-  if (code !== 0) throw new AnalysisError(`Could not encode the SAM 3.1 mask video${stderr ? `: ${stderr.trim().slice(0, 300)}` : "."}`, 502);
+  // pipeline handles backpressure, an early ffmpeg exit (EPIPE) and abort without leaking listeners.
+  const [written, code] = await Promise.allSettled([pipeline(Readable.from(frames()), encoder.stdin), closed]);
+  signal.throwIfAborted();
+  if (code.status === "rejected" || code.value !== 0 || written.status === "rejected")
+    throw new AnalysisError(`Could not encode the SAM 3.1 mask video${stderr ? `: ${stderr.trim().slice(0, 300)}` : "."}`, 502);
   onProgress(75);
   return path;
 }
