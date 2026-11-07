@@ -94,7 +94,7 @@ export async function freezeParallax(
   const prompt = selection
     ? await subjectPrompt(source, directory, selection, width, height, signal)
     : undefined;
-  const mask = await foregroundMask(fal, frame, directory, signal, prompt, selection?.segmenter),
+  const mask = await foregroundMask(fal, frame, directory, signal, prompt),
     expanded = join(directory, "parallax-hole.png");
   // Extend the hole beyond soft matte edges so moving the foreground exposes no halo.
   await ffmpeg(

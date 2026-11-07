@@ -10,11 +10,10 @@ type Sink = { header: (header: z.infer<typeof pixelTrackHeader>) => Promise<unkn
 
 /** Consume NDJSON with stream backpressure; neither runtime nor output size limits the shot. */
 export async function trackSourcePixels(source: string, directory: string, request: PixelTrackRequest, signal: AbortSignal, sink: Sink): Promise<PixelTrackSummary> {
-  const { segmenter, ...parsed } = pixelTrackRequest.parse(request);
-  let input: PixelTrackRequest = parsed;
+  let input = pixelTrackRequest.parse(request);
   let grounding: PixelTrackSummary['grounding'];
   if (input.seed.kind === 'object') {
-    const localized = await localizeTrackingObject(source, directory, input.time, input.seed.noun, signal, segmenter);
+    const localized = await localizeTrackingObject(source, directory, input.time, input.seed.noun, signal);
     grounding = { ...localized, noun: input.seed.noun };
     input = pixelTrackRequest.parse({ ...input, time: localized.time, seed: { kind: 'box', box: localized.box } });
   }

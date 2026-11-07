@@ -8,29 +8,19 @@ export const trackSeed = z.union([
   z.object({ kind: z.literal('box'), box: trackBox }).strict(),
 ]);
 const subjectSeed = z.union([trackSeed, z.object({ kind: z.literal('object'), noun: z.string().trim().min(1).max(120) }).strict()]);
-/** 'sam-3.1' routes selected-subject masks and noun grounding to SAM 3.1 on Meta's Model API.
- * Only MCP clients set it; Revline's in-app agent omits it and keeps fal SAM2 / Florence-2. */
-export const subjectSegmenter = z.literal('sam-3.1');
-/** Meta list prices for sam-3.1: $2.50 per 1,000 images; $0.20 per 1,000 video frames, at least 50 frames per video request. */
-export const SAM_31_USD = { image: 2.5 / 1000, frame: .2 / 1000, minimumFrames: 50 } as const;
-export const subjectSelection = z.object({ time:z.number().nonnegative(), seed:subjectSeed, segmenter:subjectSegmenter.optional() }).strict();
-export const pixelTrackRequest = z.object({ start: z.number().nonnegative(), end: z.number().positive(), time: z.number().nonnegative(), seed: subjectSeed, segmenter: subjectSegmenter.optional() }).strict().refine(value => value.end > value.start && value.time >= value.start && value.time < value.end, 'The seed must be inside the source tracking window.');
-/** SAM 3.1 serves MCP clients only. Entry points set or clear segmenter from the caller's surface and ignore any value the caller sent. */
-export function forSurface<T extends { segmenter?: 'sam-3.1' }>(value: T, mcp: boolean): T {
-  const { segmenter: _ignored, ...rest } = value;
-  return (mcp ? { ...rest, segmenter: 'sam-3.1' } : rest) as T;
-}
+export const subjectSelection = z.object({ time:z.number().nonnegative(), seed:subjectSeed }).strict();
+export const pixelTrackRequest = z.object({ start: z.number().nonnegative(), end: z.number().positive(), time: z.number().nonnegative(), seed: subjectSeed }).strict().refine(value => value.end > value.start && value.time >= value.start && value.time < value.end, 'The seed must be inside the source tracking window.');
 export function subjectSelectionKey(selection: z.infer<typeof subjectSelection> | undefined) {
   if(!selection)return '';
-  const {time,seed,segmenter}=selection,model=segmenter?[segmenter]:[];
-  if(seed.kind==='object')return JSON.stringify([time,seed.kind,seed.noun,...model]);
-  if(seed.kind==='point')return JSON.stringify([time,seed.kind,seed.x,seed.y,...model]);
-  return JSON.stringify([time,seed.kind,seed.box.left,seed.box.top,seed.box.right,seed.box.bottom,...model]);
+  const {time,seed}=selection;
+  if(seed.kind==='object')return JSON.stringify([time,seed.kind,seed.noun]);
+  if(seed.kind==='point')return JSON.stringify([time,seed.kind,seed.x,seed.y]);
+  return JSON.stringify([time,seed.kind,seed.box.left,seed.box.top,seed.box.right,seed.box.bottom]);
 }
 const stop = z.object({ time: z.number().nonnegative(), reason: z.enum(['boundary', 'cut', 'occluded', 'out-of-frame', 'unreliable']) });
 export const pixelTrackSample = z.object({ frameIndex: z.number().int().nonnegative(), time: z.number().nonnegative(), x: fraction, y: fraction, confidence: fraction, scale: z.number().positive(), rotation: z.number(), box: trackBox.optional() });
 export const pixelTrackHeader = z.object({ seedTime: z.number().nonnegative(), sourceFps: z.number().positive(), width: z.number().positive(), height: z.number().positive() });
-const trackGrounding = z.object({ provider: z.enum(['fal-florence-2', 'meta-sam-3.1', 'gemini']), noun: z.string(), box: trackBox, time: z.number().nonnegative() });
+const trackGrounding = z.object({ provider: z.enum(['fal-florence-2', 'gemini']), noun: z.string(), box: trackBox, time: z.number().nonnegative() });
 const pixelTrackSummary = pixelTrackHeader.extend({ grounding: trackGrounding.optional(), engine: z.literal('opencv-klt-template-v2'), sampleCount: z.number().int().positive(), minConfidence: fraction, firstTime: z.number().nonnegative(), lastTime: z.number().nonnegative(), backward: stop, forward: stop });
 const legacyPixelTrackResult = pixelTrackHeader.extend({ engine: z.literal('opencv-klt-template-v1'), samples: z.array(pixelTrackSample).min(1), backward: stop, forward: stop });
 const pixelTrackResult = z.discriminatedUnion('engine', [legacyPixelTrackResult, pixelTrackSummary]);

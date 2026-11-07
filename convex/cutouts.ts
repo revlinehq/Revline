@@ -1,6 +1,5 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
-import { SAM_31_USD, forSurface, subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
-import { isMcpRun } from './lib/run_ids';
+import { subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -12,7 +11,6 @@ import { readProject } from './lib/project_data';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { enqueueMediaTask } from './lib/media_queue';
-import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { sourceEndOf } from '../lib/editor/playback-rate';
 import { applyCutoutEffect, CUTOUT_EFFECT_INFO, validateCutoutEffect, type CutoutEffect } from '../lib/editor/cutout-effects';
 import { cutoutEffectValidator } from './lib/cutout_effect_validator';
@@ -25,7 +23,7 @@ const PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
 /** Queue background removal for the source range one video clip uses; the clip switches when it finishes.
  * Person matting is the default; foreground mode extracts salient content or a seeded subject.
  * With an effect, the original stays and the effect is built from it and the cut-out instead. */
-export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, clipId: string, mode?: 'person' | 'foreground', effect?: CutoutEffect, selection?: Pick<PixelTrackRequest, 'time' | 'seed' | 'segmenter'>) {
+export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, clipId: string, mode?: 'person' | 'foreground', effect?: CutoutEffect, selection?: Pick<PixelTrackRequest, 'time' | 'seed'>) {
   if (effect) { try { validateCutoutEffect(effect); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid effect.'); } }
   const target = effect ? CUTOUT_EFFECT_INFO[effect.kind] : undefined;
   if (selection) mode = 'foreground';
@@ -47,7 +45,7 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   const recent = await ctx.db.query('cutouts').withIndex('by_project', q => q.eq('projectId', project._id)).order('desc').take(50);
   const pending = recent.find(row => row.clipId === clipId && row.status === 'queued');
   if (pending && (subjectSelectionKey(pending.selection) !== subjectSelectionKey(selection) || pending.subject !== undefined || (pending.mode ?? 'person') !== mode || pending.effect?.kind !== effect?.kind)) throw new ConvexError('Another cut-out of this clip is still processing. Try again when it finishes.');
-  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start, pending.fps, pending.selection), alreadyRunning: true, reused: false };
+  if (pending) return { cutoutId: pending._id, estimatedUsd: estimate(pending.end - pending.start, pending.fps), alreadyRunning: true, reused: false };
   // A finished cut-out of this footage that covers the clip applies again for free.
   for (const row of recent) {
     if (subjectSelectionKey(row.selection) !== subjectSelectionKey(selection) || row.status !== 'completed' || !row.outputAssetId || row.subject !== undefined || (row.mode ?? 'person') !== mode || row.sourceAssetId !== asset._id || row.start > clip.sourceStart + 1e-6 || row.end < sourceEndOf(clip) - 1e-6) continue;
@@ -60,9 +58,9 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
   const fps = currentTimeline(project).fps;
   const cutoutId = await ctx.db.insert('cutouts', { ownerId, projectId: project._id, clipId, sourceAssetId: asset._id, start, end, fps, mode, ...(selection ? { selection } : {}), ...(effect ? { effect } : {}), status: 'queued', createdAt: Date.now() });
   // Foreground mode requires the current processor; old workers only know person matting.
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId, ...(selection?.segmenter ? { requiredProcessorVersion: MEDIA_PROCESSOR_VERSION } : {}) });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId: asset._id, kind: 'cutout', cutoutId });
   await ctx.db.patch(cutoutId, { taskId });
-  return { cutoutId, estimatedUsd: estimate(end - start, fps, selection), alreadyRunning: false, reused: false };
+  return { cutoutId, estimatedUsd: estimate(end - start, fps), alreadyRunning: false, reused: false };
 }
 /** The timeline with the cut-out in place: swapped into the clip, or built into an effect around it. */
 function placed(timeline: ReturnType<typeof currentTimeline>, clipId: string, outputId: Id<'assets'>, effect?: CutoutEffect): ReturnType<typeof currentTimeline> {
@@ -70,20 +68,15 @@ function placed(timeline: ReturnType<typeof currentTimeline>, clipId: string, ou
   try { return applyCutoutEffect(timeline, clipId, outputId, effect, () => crypto.randomUUID()) as ReturnType<typeof currentTimeline>; }
   catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'The effect could not be built.'); }
 }
-// MCP subject cut-outs run on SAM 3.1 (Meta): per-frame video price, plus one image for a noun seed.
-const estimate = (seconds: number, fps = 30, selection?: Pick<PixelTrackRequest, 'seed' | 'segmenter'>) => {
-  const frames = Math.ceil(seconds * fps);
-  const usd = selection?.segmenter === 'sam-3.1' ? Math.max(SAM_31_USD.minimumFrames, frames) * SAM_31_USD.frame + (selection.seed.kind === 'object' ? SAM_31_USD.image : 0) : frames * USD_PER_FRAME;
-  return Math.max(.01, Math.round(usd * 100) / 100);
-};
+const estimate = (seconds: number, fps = 30) => Math.max(.01, Math.round(Math.ceil(seconds * fps) * USD_PER_FRAME * 100) / 100);
 
 export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string(), mode: v.optional(cutoutMode), selection: v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
   const project = await readProject(ctx, args.projectId);
   if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
-  return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId, args.mode, undefined, args.selection && forSurface(args.selection, isMcpRun(args.runId)));
+  return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId, args.mode, undefined, args.selection);
 }});
 
-export const start = mutation({ args: { projectId: v.id('projects'), clipId: v.string(), mode: v.optional(cutoutMode), effect: v.optional(cutoutEffectValidator), selection:v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => startCutoutFor(ctx, await requireOwner(ctx), args.projectId, args.clipId, args.mode, args.effect, args.selection && forSurface(args.selection, false)) });
+export const start = mutation({ args: { projectId: v.id('projects'), clipId: v.string(), mode: v.optional(cutoutMode), effect: v.optional(cutoutEffectValidator), selection:v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => startCutoutFor(ctx, await requireOwner(ctx), args.projectId, args.clipId, args.mode, args.effect, args.selection) });
 
 export const forProject = query({ args: { projectId: v.id('projects') }, returns: v.array(v.object({ _id: v.id('cutouts'), clipId: v.string(), mode: v.optional(cutoutMode), effect: v.optional(v.string()), outputAssetId: v.optional(v.id('assets')), status: v.union(v.literal('queued'), v.literal('completed'), v.literal('failed')), placed: v.optional(v.boolean()), error: v.optional(v.string()), createdAt: v.number(), progress: v.optional(v.number()) })), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);

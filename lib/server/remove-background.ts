@@ -1,5 +1,5 @@
 import { processingThreads } from './processing-resources';
-import { segmentVideoSubject, segmentVideoSubjectSam31 } from "./segment-video-subject";
+import { segmentVideoSubject } from "./segment-video-subject";
 import {
   foregroundMask,
   subjectPrompt,
@@ -33,11 +33,9 @@ export async function removeBackground(
   signal: AbortSignal,
   onProgress: (value: number) => void,
 ) {
-  // MCP subject selections run on SAM 3.1 (Meta) alone and do not need fal.
-  const sam31 = window.selection?.segmenter === "sam-3.1";
-  const fal = () =>
-    requireFal("Background removal is not configured on the media worker.");
-  if (!sam31) fal();
+  const fal = requireFal(
+    "Background removal is not configured on the media worker.",
+  );
   const clip = join(directory, "cutout-source.mp4");
   // fal bills per frame: never send more frames than the project plays.
   const { stdout: rate } = await run(
@@ -97,6 +95,11 @@ export async function removeBackground(
     ],
     { signal, timeout: 600_000, maxBuffer: 1024 * 1024 },
   );
+  onProgress(20);
+  const url = await fal.storage.upload(
+    new Blob([await readFile(clip)], { type: "video/mp4" }),
+  );
+  signal.throwIfAborted();
   onProgress(30);
   let path = join(directory, "cutout.webm");
   const segmented = async () => {
@@ -132,19 +135,19 @@ export async function removeBackground(
         height,
         signal,
       );
-      const frame = Math.round((window.selection.time - window.start) * fps);
-      mask =
-        window.selection.segmenter === "sam-3.1"
-          ? await segmentVideoSubjectSam31(clip, directory, prompt, frame, fps, signal, onProgress)
-          : await segmentVideoSubject(
-              fal(),
-              clip,
-              directory,
-              { kind: "prompt", prompt, frame },
-              fps,
-              signal,
-              onProgress,
-            );
+      mask = await segmentVideoSubject(
+        fal,
+        clip,
+        directory,
+        {
+          kind: "prompt",
+          prompt,
+          frame: Math.round((window.selection.time - window.start) * fps),
+        },
+        fps,
+        signal,
+        onProgress,
+      );
     } else {
       const frame = join(directory, "cutout-seed.png");
       await run(
@@ -152,12 +155,12 @@ export async function removeBackground(
         ["-v", "error", "-i", clip, "-frames:v", "1", "-y", frame],
         { signal },
       );
-      const initial = await foregroundMask(fal(), frame, directory, signal);
-      const url = await fal().storage.upload(
+      const initial = await foregroundMask(fal, frame, directory, signal);
+      const url = await fal.storage.upload(
         new Blob([await readFile(initial)], { type: "image/png" }),
       );
       mask = await segmentVideoSubject(
-        fal(),
+        fal,
         clip,
         directory,
         { kind: "mask", url },
@@ -205,10 +208,6 @@ export async function removeBackground(
   };
   if (window.selection) await segmented();
   else {
-    const url = await fal().storage.upload(
-      new Blob([await readFile(clip)], { type: "video/mp4" }),
-    );
-    signal.throwIfAborted();
     const endpoint =
       window.mode === "foreground" ? FOREGROUND_ENDPOINT : PERSON_ENDPOINT;
     const input =
@@ -232,7 +231,7 @@ export async function removeBackground(
           z.array(z.object({ url: z.string().url() })).min(1),
         ]),
       })
-      .parse(await subscribe(fal(), endpoint, input, signal));
+      .parse(await subscribe(fal, endpoint, input, signal));
     await download(
       Array.isArray(result.video) ? result.video[0].url : result.video.url,
       path,

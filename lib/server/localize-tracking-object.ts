@@ -8,7 +8,6 @@ import { AnalysisError } from '../media-analysis/errors';
 import { locateTrackingObject } from '../media-analysis/gemini';
 import { optionalGeminiVision } from './optional-gemini-vision';
 import { configuredFal, subscribe } from './fal';
-import { requireMetaSam, segmentImage } from './meta-sam';
 
 const run = promisify(execFile);
 const frameInfo = z.object({ streams: z.array(z.object({ width: z.number().positive(), height: z.number().positive() })).min(1) });
@@ -16,9 +15,8 @@ const originInfo = z.object({ format: z.object({ start_time: z.coerce.number().f
 const grounding = z.object({ results: z.object({ bboxes: z.array(z.object({ x: z.number().finite().nonnegative(), y: z.number().finite().nonnegative(), w: z.number().positive(), h: z.number().positive(), label: z.string() })) }) });
 const OBJECT_GROUNDING_ENDPOINT = 'fal-ai/florence-2-large/open-vocabulary-detection';
 
-/** One native frame leaves the processor. Explicit point/box seeds never call a provider.
- * segmenter 'sam-3.1' (MCP callers) grounds the noun with SAM 3.1 on Meta only: no Florence-2 or Gemini fallback. */
-export async function localizeTrackingObject(source: string, directory: string, time: number, noun: string, signal: AbortSignal, segmenter?: 'sam-3.1') {
+/** One native frame leaves the processor. Explicit point/box seeds never call a provider. */
+export async function localizeTrackingObject(source: string, directory: string, time: number, noun: string, signal: AbortSignal) {
   const path = join(directory, 'tracking-object.jpg');
   const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=start_time', '-of', 'json', source], { signal, maxBuffer: 65536 });
   const origin = originInfo.parse(JSON.parse(probe.stdout)).format.start_time ?? 0;
@@ -30,14 +28,6 @@ export async function localizeTrackingObject(source: string, directory: string, 
     const info = await run('ffprobe', ['-v', 'error', '-show_entries', 'stream=width,height', '-of', 'json', path], { signal, maxBuffer: 65536 });
     const { width, height } = frameInfo.parse(JSON.parse(info.stdout)).streams[0];
     const data = await readFile(path);
-    if (segmenter === 'sam-3.1') {
-      const masks = await segmentImage(requireMetaSam(), { data, mime: 'image/jpeg' }, { kind: 'noun', noun }, { width, height }, signal);
-      if (masks.length !== 1) throw new AnalysisError(`SAM 3.1 found ${masks.length ? 'several matches for' : 'no'} "${noun.slice(0, 60)}". Choose an inspected source point or box.`, 422, false);
-      const { bounds } = masks[0];
-      const box = trackBox.safeParse({ left: Math.max(0, bounds.left) / width, top: Math.max(0, bounds.top) / height, right: Math.min(width, bounds.right) / width, bottom: Math.min(height, bounds.bottom) / height });
-      if (!box.success) throw new AnalysisError(`SAM 3.1 returned an empty box for "${noun.slice(0, 60)}". Choose an inspected source point or box.`, 422, false);
-      return { time: seedTime, provider: 'meta-sam-3.1' as const, box: box.data };
-    }
     let found: { box: z.infer<typeof trackBox>; provider: 'fal-florence-2' | 'gemini' } | undefined;
     const fal = configuredFal();
     let failure = 'Configure FAL_KEY on the media processor, or provide an inspected point or box.';
