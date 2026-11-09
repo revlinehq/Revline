@@ -23,7 +23,7 @@ type ProbeStream = { codec_type?: string; codec_name?: string; pix_fmt?: string;
 // at most PLAIN_EXPORT_MAX_STACK_SOURCES decoders (about 25 MiB each at 1080p); two run at once.
 const SEGMENT_CONCURRENCY = 2;
 // Bump when a segment's pixels would change for the same plan (filters, encoder settings).
-const SEGMENT_FORMAT = 1;
+export const SEGMENT_FORMAT = 1;
 
 const known = (value?: string) => value && value !== 'unknown' && value !== 'reserved' ? value : undefined;
 const rate = (value?: string) => { const [n, d] = (value ?? '').split('/').map(Number); return n > 0 && d > 0 ? n / d : 0; };

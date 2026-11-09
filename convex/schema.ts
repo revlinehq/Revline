@@ -227,6 +227,8 @@ export const renderFields = {
   outputStorageId: v.optional(v.id("_storage")), outputR2Key: v.optional(v.string()), outputSize: v.optional(v.number()), error: v.optional(v.string()), createdAt: v.number(), updatedAt: v.number(),
   sourceRevision:v.optional(v.number()), sourceClipId:v.optional(v.string()), sourceSectionId:v.optional(v.string()), sourceTimelineId:v.optional(v.string()), label:v.optional(v.string()), timeline: v.optional(timelineValidator), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()),
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
+  // Which render path and renderer version drew the picture (worker-reported); picture reuse requires an exact match.
+  renderer: v.optional(v.string()),
 };
 export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime: v.number(), ...renderFields, url: v.union(v.string(), v.null()) });
 const {timeline:_snapshot,...renderSummaryFields}=renderFields;
