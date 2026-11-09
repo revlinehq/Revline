@@ -36844,7 +36844,7 @@
               "id": "R6p6Ey",
               "name": "Nav Title",
               "fill": "$text",
-              "content": "Storage",
+              "content": "Cloud storage",
               "fontFamily": "Inter",
               "fontSize": 17,
               "fontWeight": "600"
@@ -36860,198 +36860,247 @@
         },
         {
           "type": "frame",
-          "id": "TkkkZ",
+          "id": "JFayK",
           "name": "Content",
           "clip": true,
           "width": "fill_container",
           "height": "fill_container",
           "layout": "vertical",
-          "gap": 16,
+          "gap": 18,
           "padding": [
             8,
-            20,
+            16,
             0,
-            20
+            16
           ],
           "children": [
             {
               "type": "frame",
-              "id": "Urq5Y",
-              "name": "Usage Card",
+              "id": "r7XbG5",
+              "name": "Usage",
               "width": "fill_container",
               "fill": "$card",
               "cornerRadius": 16,
-              "stroke": "$border",
-              "strokeWidth": 1,
               "layout": "vertical",
-              "gap": 14,
-              "padding": 14,
+              "gap": 12,
+              "padding": 16,
               "children": [
                 {
                   "type": "frame",
-                  "id": "JNUBP",
-                  "name": "Usage Total",
-                  "gap": 6,
+                  "id": "mtcys",
+                  "name": "Usage Top",
+                  "width": "fill_container",
+                  "justifyContent": "space_between",
                   "alignItems": "end",
                   "children": [
                     {
-                      "type": "text",
-                      "id": "IIljC",
-                      "name": "18.4 GB",
-                      "fill": "$text",
-                      "content": "18.4 GB",
-                      "fontFamily": "Inter",
-                      "fontSize": 32,
-                      "fontWeight": "700",
-                      "letterSpacing": -0.8
-                    },
-                    {
                       "type": "frame",
-                      "id": "hlsFO",
-                      "name": "Of",
-                      "padding": [
-                        0,
-                        0,
-                        5,
-                        0
-                      ],
+                      "id": "roY1V",
+                      "name": "Used",
+                      "layout": "vertical",
+                      "gap": 2,
                       "children": [
                         {
                           "type": "text",
-                          "id": "t3XRQQ",
-                          "name": "of 50 GB used",
+                          "id": "p04IOJ",
+                          "name": "Storage used",
                           "fill": "$muted",
-                          "content": "of 50 GB used",
+                          "content": "Storage used",
                           "fontFamily": "Inter",
-                          "fontSize": 14,
-                          "fontWeight": "normal"
+                          "fontSize": 13
+                        },
+                        {
+                          "type": "text",
+                          "id": "u57hOT",
+                          "name": "18.4 GB",
+                          "fill": "$text",
+                          "content": "18.4 GB",
+                          "fontFamily": "Inter",
+                          "fontSize": 22,
+                          "fontWeight": "700"
                         }
                       ]
+                    },
+                    {
+                      "type": "text",
+                      "id": "f20LvL",
+                      "name": "No storage limit",
+                      "fill": "$muted",
+                      "content": "No storage limit",
+                      "fontFamily": "Inter",
+                      "fontSize": 13
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "r67XQ",
-                  "name": "Usage Bar",
+                  "id": "l634z",
+                  "name": "Meter",
                   "clip": true,
                   "width": "fill_container",
-                  "height": 10,
-                  "fill": "$input",
-                  "cornerRadius": 5,
+                  "height": 8,
+                  "cornerRadius": 4,
                   "gap": 2,
                   "children": [
                     {
                       "type": "rectangle",
-                      "id": "xKaEb",
-                      "name": "Bar Footage",
+                      "id": "m0E3f",
+                      "name": "Meter Video",
                       "fill": "$clip-video",
-                      "width": 86,
-                      "height": 10
+                      "width": 208,
+                      "height": 8
                     },
                     {
                       "type": "rectangle",
-                      "id": "A5vNR",
-                      "name": "Bar Exports",
+                      "id": "lEYA4",
+                      "name": "Meter Exports",
                       "fill": "$clip-audio",
-                      "width": 30,
-                      "height": 10
+                      "width": 86,
+                      "height": 8
                     },
                     {
                       "type": "rectangle",
-                      "id": "AC7f9",
-                      "name": "Bar Generated",
+                      "id": "BoEbY",
+                      "name": "Meter Audio",
                       "fill": "$clip-text",
-                      "width": 15,
-                      "height": 10
+                      "width": 16,
+                      "height": 8
+                    },
+                    {
+                      "type": "rectangle",
+                      "id": "nACOH",
+                      "name": "Meter Images",
+                      "fill": "$clip-caption",
+                      "width": 8,
+                      "height": 8
                     }
                   ]
                 },
                 {
                   "type": "frame",
-                  "id": "LfwPF",
-                  "name": "Legend",
+                  "id": "yKarQ",
+                  "name": "Breakdown",
                   "width": "fill_container",
-                  "gap": 10,
+                  "layout": "vertical",
+                  "gap": 6,
                   "children": [
                     {
                       "type": "frame",
-                      "id": "LgOKG",
-                      "name": "Legend Footage",
-                      "gap": 6,
-                      "alignItems": "center",
+                      "id": "EgyTH",
+                      "name": "Breakdown Row 1",
+                      "gap": 16,
                       "children": [
                         {
-                          "type": "ellipse",
-                          "id": "Ze1TH",
-                          "name": "Dot",
-                          "fill": "$clip-video",
-                          "width": 8,
-                          "height": 8
+                          "type": "frame",
+                          "id": "qH6jh",
+                          "name": "Kind Video",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "ym20z",
+                              "name": "Dot",
+                              "fill": "$clip-video",
+                              "width": 8,
+                              "height": 8
+                            },
+                            {
+                              "type": "text",
+                              "id": "H6qtvB",
+                              "name": "Video · 12.1 GB",
+                              "fill": "$muted",
+                              "content": "Video · 12.1 GB",
+                              "fontFamily": "Inter",
+                              "fontSize": 12
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "SRwQa",
-                          "name": "Footage 12.1 GB",
-                          "fill": "$muted",
-                          "content": "Footage 12.1 GB",
-                          "fontFamily": "Inter",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "type": "frame",
+                          "id": "prl8S",
+                          "name": "Kind Exports",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "pC6bF",
+                              "name": "Dot",
+                              "fill": "$clip-audio",
+                              "width": 8,
+                              "height": 8
+                            },
+                            {
+                              "type": "text",
+                              "id": "TzNOI",
+                              "name": "Exports · 5.0 GB",
+                              "fill": "$muted",
+                              "content": "Exports · 5.0 GB",
+                              "fontFamily": "Inter",
+                              "fontSize": 12
+                            }
+                          ]
                         }
                       ]
                     },
                     {
                       "type": "frame",
-                      "id": "lrhoY",
-                      "name": "Legend Exports",
-                      "gap": 6,
-                      "alignItems": "center",
+                      "id": "S1Ud14",
+                      "name": "Breakdown Row 2",
+                      "gap": 16,
                       "children": [
                         {
-                          "type": "ellipse",
-                          "id": "RTDfS",
-                          "name": "Dot",
-                          "fill": "$clip-audio",
-                          "width": 8,
-                          "height": 8
+                          "type": "frame",
+                          "id": "fh9ZJ",
+                          "name": "Kind Audio",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "O0aRAI",
+                              "name": "Dot",
+                              "fill": "$clip-text",
+                              "width": 8,
+                              "height": 8
+                            },
+                            {
+                              "type": "text",
+                              "id": "o9pYI",
+                              "name": "Audio · 0.9 GB",
+                              "fill": "$muted",
+                              "content": "Audio · 0.9 GB",
+                              "fontFamily": "Inter",
+                              "fontSize": 12
+                            }
+                          ]
                         },
                         {
-                          "type": "text",
-                          "id": "hfzxd",
-                          "name": "Exports 4.2 GB",
-                          "fill": "$muted",
-                          "content": "Exports 4.2 GB",
-                          "fontFamily": "Inter",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "frame",
-                      "id": "fUyBw",
-                      "name": "Legend Generated",
-                      "gap": 6,
-                      "alignItems": "center",
-                      "children": [
-                        {
-                          "type": "ellipse",
-                          "id": "Hy7l7",
-                          "name": "Dot",
-                          "fill": "$clip-text",
-                          "width": 8,
-                          "height": 8
-                        },
-                        {
-                          "type": "text",
-                          "id": "GAH3w",
-                          "name": "Generated 2.1 GB",
-                          "fill": "$muted",
-                          "content": "Generated 2.1 GB",
-                          "fontFamily": "Inter",
-                          "fontSize": 11,
-                          "fontWeight": "normal"
+                          "type": "frame",
+                          "id": "qLH1Q",
+                          "name": "Kind Images",
+                          "gap": 6,
+                          "alignItems": "center",
+                          "children": [
+                            {
+                              "type": "ellipse",
+                              "id": "iDIuw",
+                              "name": "Dot",
+                              "fill": "$clip-caption",
+                              "width": 8,
+                              "height": 8
+                            },
+                            {
+                              "type": "text",
+                              "id": "glroe",
+                              "name": "Images · 0.4 GB",
+                              "fill": "$muted",
+                              "content": "Images · 0.4 GB",
+                              "fontFamily": "Inter",
+                              "fontSize": 12
+                            }
+                          ]
                         }
                       ]
                     }
@@ -37060,410 +37109,679 @@
               ]
             },
             {
-              "type": "text",
-              "id": "ZiKC8",
-              "name": "Largest projects",
-              "fill": "$text",
-              "content": "Largest projects",
-              "fontFamily": "Inter",
-              "fontSize": 17,
-              "fontWeight": "600"
-            },
-            {
               "type": "frame",
-              "id": "xCtuY",
-              "name": "Project Sizes",
+              "id": "jF9V3",
+              "name": "Library Heading",
               "width": "fill_container",
-              "layout": "vertical",
+              "justifyContent": "space_between",
+              "alignItems": "end",
               "children": [
                 {
                   "type": "frame",
-                  "id": "vUknN",
-                  "name": "Row Warzone Season 1",
-                  "width": "fill_container",
-                  "gap": 12,
-                  "padding": [
-                    10,
-                    0
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "m06yDH",
-                      "name": "Cover",
-                      "width": 40,
-                      "height": 40,
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "generated-1.png",
-                        "mode": "fill"
-                      },
-                      "cornerRadius": 8
-                    },
-                    {
-                      "type": "frame",
-                      "id": "i9gmR",
-                      "name": "Info",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 3,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "YdlcQ",
-                          "name": "Warzone Season 1",
-                          "fill": "$text",
-                          "content": "Warzone Season 1",
-                          "fontFamily": "Inter",
-                          "fontSize": 15,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "exuNK",
-                          "name": "3 sources · 12 clips",
-                          "fill": "$muted",
-                          "content": "3 sources · 12 clips",
-                          "fontFamily": "Inter",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "OKyt0",
-                      "name": "5.4 GB",
-                      "fill": "$text",
-                      "content": "5.4 GB",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "icon",
-                      "id": "lOyRB",
-                      "name": "chevron-right",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "chevron-right",
-                      "library": "lucide",
-                      "fill": "$faint"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "ngIyS",
-                  "name": "Row Horror night VOD",
-                  "width": "fill_container",
-                  "stroke": "$border",
-                  "strokeWidth": {
-                    "top": 1
-                  },
-                  "gap": 12,
-                  "padding": [
-                    10,
-                    0
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "Cp39N",
-                      "name": "Cover",
-                      "width": 40,
-                      "height": 40,
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "generated-2.png",
-                        "mode": "fill"
-                      },
-                      "cornerRadius": 8
-                    },
-                    {
-                      "type": "frame",
-                      "id": "RYbzR",
-                      "name": "Info",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 3,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "FkVGY",
-                          "name": "Horror night VOD",
-                          "fill": "$text",
-                          "content": "Horror night VOD",
-                          "fontFamily": "Inter",
-                          "fontSize": 15,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "ax93A",
-                          "name": "1 source · 5 clips",
-                          "fill": "$muted",
-                          "content": "1 source · 5 clips",
-                          "fontFamily": "Inter",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "jx25F",
-                      "name": "4.8 GB",
-                      "fill": "$text",
-                      "content": "4.8 GB",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "icon",
-                      "id": "nkZU9",
-                      "name": "chevron-right",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "chevron-right",
-                      "library": "lucide",
-                      "fill": "$faint"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "CyyVw",
-                  "name": "Row Podcast ep. 41",
-                  "width": "fill_container",
-                  "stroke": "$border",
-                  "strokeWidth": {
-                    "top": 1
-                  },
-                  "gap": 12,
-                  "padding": [
-                    10,
-                    0
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "nESDy",
-                      "name": "Cover",
-                      "width": 40,
-                      "height": 40,
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "../public/landing/clippers-lex.webp",
-                        "mode": "fill"
-                      },
-                      "cornerRadius": 8
-                    },
-                    {
-                      "type": "frame",
-                      "id": "vbg6z",
-                      "name": "Info",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 3,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "prSJv",
-                          "name": "Podcast ep. 41",
-                          "fill": "$text",
-                          "content": "Podcast ep. 41",
-                          "fontFamily": "Inter",
-                          "fontSize": 15,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "IBDPM",
-                          "name": "2 sources",
-                          "fill": "$muted",
-                          "content": "2 sources",
-                          "fontFamily": "Inter",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "t6Quv",
-                      "name": "3.9 GB",
-                      "fill": "$text",
-                      "content": "3.9 GB",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "icon",
-                      "id": "EqUsW",
-                      "name": "chevron-right",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "chevron-right",
-                      "library": "lucide",
-                      "fill": "$faint"
-                    }
-                  ]
-                },
-                {
-                  "type": "frame",
-                  "id": "mLcZP",
-                  "name": "Row Overwatch ranked run",
-                  "width": "fill_container",
-                  "stroke": "$border",
-                  "strokeWidth": {
-                    "top": 1
-                  },
-                  "gap": 12,
-                  "padding": [
-                    10,
-                    0
-                  ],
-                  "alignItems": "center",
-                  "children": [
-                    {
-                      "type": "frame",
-                      "id": "D2jR9L",
-                      "name": "Cover",
-                      "width": 40,
-                      "height": 40,
-                      "fill": {
-                        "type": "image",
-                        "enabled": true,
-                        "url": "generated-3.png",
-                        "mode": "fill"
-                      },
-                      "cornerRadius": 8
-                    },
-                    {
-                      "type": "frame",
-                      "id": "b44rfd",
-                      "name": "Info",
-                      "width": "fill_container",
-                      "layout": "vertical",
-                      "gap": 3,
-                      "children": [
-                        {
-                          "type": "text",
-                          "id": "NwblL",
-                          "name": "Overwatch ranked run",
-                          "fill": "$text",
-                          "content": "Overwatch ranked run",
-                          "fontFamily": "Inter",
-                          "fontSize": 15,
-                          "fontWeight": "600"
-                        },
-                        {
-                          "type": "text",
-                          "id": "b2klh",
-                          "name": "1 source",
-                          "fill": "$muted",
-                          "content": "1 source",
-                          "fontFamily": "Inter",
-                          "fontSize": 12,
-                          "fontWeight": "normal"
-                        }
-                      ]
-                    },
-                    {
-                      "type": "text",
-                      "id": "YQ7k9",
-                      "name": "2.2 GB",
-                      "fill": "$text",
-                      "content": "2.2 GB",
-                      "fontFamily": "Inter",
-                      "fontSize": 14,
-                      "fontWeight": "500"
-                    },
-                    {
-                      "type": "icon",
-                      "id": "pMgy8",
-                      "name": "chevron-right",
-                      "width": 16,
-                      "height": 16,
-                      "icon": "chevron-right",
-                      "library": "lucide",
-                      "fill": "$faint"
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "type": "frame",
-              "id": "wzhVD",
-              "name": "Free Up",
-              "width": "fill_container",
-              "fill": "$card",
-              "cornerRadius": 16,
-              "stroke": "$border",
-              "strokeWidth": 1,
-              "gap": 12,
-              "padding": 14,
-              "alignItems": "center",
-              "children": [
-                {
-                  "type": "icon",
-                  "id": "lHBII",
-                  "name": "trash-2",
-                  "width": 18,
-                  "height": 18,
-                  "icon": "trash-2",
-                  "library": "lucide",
-                  "fill": "$muted"
-                },
-                {
-                  "type": "frame",
-                  "id": "tjtcP",
-                  "name": "Free Up Text",
-                  "width": "fill_container",
+                  "id": "MgHhr",
+                  "name": "Heading",
                   "layout": "vertical",
                   "gap": 2,
                   "children": [
                     {
                       "type": "text",
-                      "id": "H3FXJi",
-                      "name": "Remove unused footage",
+                      "id": "sesXz",
+                      "name": "All media",
                       "fill": "$text",
-                      "content": "Remove unused footage",
+                      "content": "All media",
                       "fontFamily": "Inter",
-                      "fontSize": 15,
-                      "fontWeight": "600"
+                      "fontSize": 20,
+                      "fontWeight": "700"
                     },
                     {
                       "type": "text",
-                      "id": "W1fOtP",
-                      "name": "3.1 GB is not on any tim",
+                      "id": "m8iJDX",
+                      "name": "42 files in your cloud l",
                       "fill": "$muted",
-                      "content": "3.1 GB is not on any timeline",
+                      "content": "42 files in your cloud library",
                       "fontFamily": "Inter",
-                      "fontSize": 12,
-                      "fontWeight": "normal"
+                      "fontSize": 13
                     }
                   ]
                 },
                 {
                   "type": "text",
-                  "id": "j9h1a",
-                  "name": "Review",
+                  "id": "YqldD",
+                  "name": "Review unused",
                   "fill": "$accent-text",
-                  "content": "Review",
+                  "content": "Review unused",
                   "fontFamily": "Inter",
-                  "fontSize": 14,
-                  "fontWeight": "600"
+                  "fontSize": 15,
+                  "fontWeight": "500"
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "GtPAg",
+              "name": "Search",
+              "width": "fill_container",
+              "height": 40,
+              "fill": "$glass",
+              "cornerRadius": 20,
+              "stroke": {
+                "type": "gradient",
+                "gradientType": "linear",
+                "enabled": true,
+                "rotation": 180,
+                "size": {
+                  "height": 1
+                },
+                "colors": [
+                  {
+                    "color": "$rim-hi",
+                    "position": 0
+                  },
+                  {
+                    "color": "$rim-lo",
+                    "position": 0.5
+                  },
+                  {
+                    "color": "$rim-hi",
+                    "position": 1
+                  }
+                ]
+              },
+              "strokeWidth": 1,
+              "strokeAlignment": "inner",
+              "effect": {
+                "type": "background_blur",
+                "radius": 16
+              },
+              "gap": 8,
+              "padding": [
+                0,
+                12
+              ],
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "icon",
+                  "id": "vvVMk",
+                  "name": "search",
+                  "width": 17,
+                  "height": 17,
+                  "icon": "search",
+                  "library": "lucide",
+                  "fill": "$muted"
+                },
+                {
+                  "type": "text",
+                  "id": "u3yEBm",
+                  "name": "Search media",
+                  "fill": "$faint",
+                  "content": "Search media",
+                  "fontFamily": "Inter",
+                  "fontSize": 16
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "dewA4",
+              "name": "Filter Row",
+              "width": "fill_container",
+              "gap": 10,
+              "alignItems": "center",
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "NEXTv",
+                  "name": "Media type",
+                  "width": "fill_container",
+                  "height": 36,
+                  "fill": "$glass-clear",
+                  "cornerRadius": 18,
+                  "stroke": {
+                    "type": "gradient",
+                    "gradientType": "linear",
+                    "enabled": true,
+                    "rotation": 180,
+                    "size": {
+                      "height": 1
+                    },
+                    "colors": [
+                      {
+                        "color": "$rim-hi",
+                        "position": 0
+                      },
+                      {
+                        "color": "$rim-lo",
+                        "position": 0.5
+                      },
+                      {
+                        "color": "$rim-hi",
+                        "position": 1
+                      }
+                    ]
+                  },
+                  "strokeWidth": 1,
+                  "strokeAlignment": "inner",
+                  "effect": {
+                    "type": "background_blur",
+                    "radius": 12
+                  },
+                  "padding": 3,
+                  "children": [
+                    {
+                      "type": "frame",
+                      "id": "Q6hpHB",
+                      "name": "Type All",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "fill": "$lens-tint",
+                      "cornerRadius": 15,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "Tjr4d",
+                          "name": "All",
+                          "fill": "$text",
+                          "content": "All",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "600"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "z6bjFb",
+                      "name": "Type Video",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "cornerRadius": 15,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "w9hBF",
+                          "name": "Video",
+                          "fill": "$muted",
+                          "content": "Video",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "zRkgJ",
+                      "name": "Type Audio",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "cornerRadius": 15,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "lQqWT",
+                          "name": "Audio",
+                          "fill": "$muted",
+                          "content": "Audio",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "frame",
+                      "id": "XsECq",
+                      "name": "Type Images",
+                      "width": "fill_container",
+                      "height": "fill_container",
+                      "cornerRadius": 15,
+                      "justifyContent": "center",
+                      "alignItems": "center",
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "FhEmp",
+                          "name": "Images",
+                          "fill": "$muted",
+                          "content": "Images",
+                          "fontFamily": "Inter",
+                          "fontSize": 13,
+                          "fontWeight": "500"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "f5BaGn",
+                  "name": "Sort",
+                  "gap": 4,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "text",
+                      "id": "sRWtH",
+                      "name": "Largest first",
+                      "fill": "$accent-text",
+                      "content": "Largest first",
+                      "fontFamily": "Inter",
+                      "fontSize": 13,
+                      "fontWeight": "500"
+                    },
+                    {
+                      "type": "icon",
+                      "id": "M4xwo1",
+                      "name": "arrow-up-down",
+                      "width": 13,
+                      "height": 13,
+                      "icon": "arrow-up-down",
+                      "library": "lucide",
+                      "fill": "$accent-text"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "frame",
+              "id": "N2zaPj",
+              "name": "File List",
+              "width": "fill_container",
+              "fill": "$card",
+              "cornerRadius": 16,
+              "layout": "vertical",
+              "padding": [
+                0,
+                14
+              ],
+              "children": [
+                {
+                  "type": "frame",
+                  "id": "qDo88",
+                  "name": "File stream_0614.mov",
+                  "width": "fill_container",
+                  "height": 56,
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "d28bTa",
+                      "name": "film",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "film",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "FauYT",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "nC4nh",
+                          "name": "stream_0614.mov",
+                          "fill": "$text",
+                          "content": "stream_0614.mov",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "QiiE7",
+                          "name": "3.2 GB · Jun 14",
+                          "fill": "$muted",
+                          "content": "3.2 GB · Jun 14",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "HSwK7",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "JH4Yg",
+                  "name": "File hajin_drop_pov.mp4",
+                  "width": "fill_container",
+                  "height": 56,
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "gKo5u",
+                      "name": "film",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "film",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Y7Rky",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pdLI9",
+                          "name": "hajin_drop_pov.mp4",
+                          "fill": "$text",
+                          "content": "hajin_drop_pov.mp4",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "O1Xla",
+                          "name": "1.1 GB · Jun 14",
+                          "fill": "$muted",
+                          "content": "1.1 GB · Jun 14",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "p7cKM",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "A5gyIM",
+                  "name": "File zodiac_reveal.mov",
+                  "width": "fill_container",
+                  "height": 56,
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "n7SI8m",
+                      "name": "film",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "film",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "q7jir",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "pMfCW",
+                          "name": "zodiac_reveal.mov",
+                          "fill": "$text",
+                          "content": "zodiac_reveal.mov",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "VtK9C",
+                          "name": "840 MB · Jun 12",
+                          "fill": "$muted",
+                          "content": "840 MB · Jun 12",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "h7EoE1",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "VnFv8",
+                  "name": "File Biggest kill first.mp4",
+                  "width": "fill_container",
+                  "height": 56,
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "lBBgg",
+                      "name": "upload",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "upload",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "WH4N8",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "NoNVj",
+                          "name": "Biggest kill first.mp4",
+                          "fill": "$text",
+                          "content": "Biggest kill first.mp4",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "dtA6E",
+                          "name": "47.6 MB · Export · today",
+                          "fill": "$muted",
+                          "content": "47.6 MB · Export · today",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "dM2OM",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "QhkYY",
+                  "name": "File season1_theme.mp3",
+                  "width": "fill_container",
+                  "height": 56,
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "SUb5M",
+                      "name": "music",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "music",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "mLL2Q",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "zIKRN",
+                          "name": "season1_theme.mp3",
+                          "fill": "$text",
+                          "content": "season1_theme.mp3",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "Lqlzz",
+                          "name": "9 MB · Jun 10",
+                          "fill": "$muted",
+                          "content": "9 MB · Jun 10",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "zMU7A",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
+                },
+                {
+                  "type": "frame",
+                  "id": "Mt9nO",
+                  "name": "File clipcrew_logo.png",
+                  "width": "fill_container",
+                  "height": 56,
+                  "stroke": "$border",
+                  "strokeWidth": {
+                    "top": 1
+                  },
+                  "gap": 12,
+                  "alignItems": "center",
+                  "children": [
+                    {
+                      "type": "icon",
+                      "id": "NEyrl",
+                      "name": "image",
+                      "width": 20,
+                      "height": 20,
+                      "icon": "image",
+                      "library": "lucide",
+                      "fill": "$muted"
+                    },
+                    {
+                      "type": "frame",
+                      "id": "Wd4Co",
+                      "name": "File Info",
+                      "width": "fill_container",
+                      "layout": "vertical",
+                      "gap": 2,
+                      "children": [
+                        {
+                          "type": "text",
+                          "id": "t7YmZ",
+                          "name": "clipcrew_logo.png",
+                          "fill": "$text",
+                          "content": "clipcrew_logo.png",
+                          "fontFamily": "Inter",
+                          "fontSize": 15,
+                          "fontWeight": "500"
+                        },
+                        {
+                          "type": "text",
+                          "id": "pg7GZ",
+                          "name": "412 KB · May 30",
+                          "fill": "$muted",
+                          "content": "412 KB · May 30",
+                          "fontFamily": "Inter",
+                          "fontSize": 12
+                        }
+                      ]
+                    },
+                    {
+                      "type": "icon",
+                      "id": "i6KUE",
+                      "name": "ellipsis",
+                      "width": 18,
+                      "height": 18,
+                      "icon": "ellipsis",
+                      "library": "lucide",
+                      "fill": "$faint"
+                    }
+                  ]
                 }
               ]
             }
@@ -39289,7 +39607,7 @@
                           "id": "KNlmu",
                           "name": "18.4 of 50 GB",
                           "fill": "$muted",
-                          "content": "18.4 of 50 GB",
+                          "content": "18.4 GB",
                           "fontFamily": "Inter",
                           "fontSize": 14,
                           "fontWeight": "normal"
