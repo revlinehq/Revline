@@ -9,6 +9,7 @@ A good result changes only the requested clips, keeps linked video and audio tog
 ## Rules
 - Batch identical changes across clips with the tool's clipIds selector in one call; run independent calls with known inputs in the same step.
 - Use moveClips and resizeClips for a selected group, reorderLayer for a whole layer, and move or trim for one clip.
+- Montage shot notes take one call each and name the shot by its time: delete {at, ripple:true} removes a shot and closes the gap, swapClips {a, b} trades two slots, resizeClips {at, side, delta, ripple:true} lengthens a shot and pushes later clips, setVolume {at, volume:0} mutes it. Linked audio and mirror-blur backgrounds follow.
 - Never delete an occupied track's clips just to remove its row.
 - To return to an earlier version: writing-scenes page `edit-lanes` (Direction and feedback).
 - Unlink a video/audio pair only when the user wants to keep one side while editing the other.

@@ -42,12 +42,13 @@ Rules:
 Use it when the whole wide picture must stay visible on a taller canvas (9:16, 4:5, 1:1) and empty bars would look unfinished.
 Workflow:
 1. Set the target aspect ratio.
-2. Call applyLayout mirror-blur with the exact clip IDs that stay sharp. It adds the background copies itself; do not duplicate clips first.
+2. Call applyLayout mirror-blur with the exact clip IDs that stay sharp, in one call. It sets backgroundFill on each clip; the bands are drawn from that clip's own frames. No clips or layers are added; never duplicate clips for it.
 3. Read one frame per clip with getFrames to confirm no bars remain.
 
 Rules:
 - Only for a source wider than the canvas; a source that already fills the height needs fitClip instead.
-- Finish trims, splits and moves first. To change a clip later, delete its copies and apply the layout again.
+- Mirror blur is a clip property: trims, splits, moves, swaps and deletes keep it. Change the look with applyLayout mirror-blur again (blur, darken); take it off with remove:true.
+- An older timeline may have stacked copies (blurred, muted copies of each shot on V layers beneath it). Fold them first with applyLayout mirror-blur foldStacked:true, one call for the whole tab; shot edits then touch one clip per shot.
 
 ## Speaker reframing and visual IRL cuts
 Workflow:

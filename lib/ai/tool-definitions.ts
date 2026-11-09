@@ -30,6 +30,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   reorderLayer: { effect: 'timeline', mcp: 'exclusive', label: ['Reordering track', 'Reordered track'] },
   moveClips: { effect: 'timeline', mcp: 'exclusive', label: ['Arranging clips', 'Arranged clips'] },
   resizeClips: { effect: 'timeline', mcp: 'exclusive', label: ['Trimming clips', 'Trimmed clips'] },
+  swapClips: { effect: 'timeline', mcp: 'exclusive', label: ['Swapping shots', 'Swapped shots'] },
   setBlendMode: { effect: 'timeline', mcp: 'exclusive', label: ['Adjusting compositing', 'Adjusted compositing'] },
   undoLatestEdit: { effect: 'timeline', mcp: 'exclusive', label: ['Reverting latest edit', 'Reverted latest edit'] },
   listRevisions: { effect: 'read', mcp: 'read' },

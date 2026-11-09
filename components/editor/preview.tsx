@@ -142,6 +142,8 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     const node=compositionNode(doc,clip,index);if(!node)return;index=compositionIndex(doc,clip,index);
     const trackIndex=String(compositionTrackIndex(clip));if(node.dataset.trackIndex!==trackIndex)node.dataset.trackIndex=trackIndex;
     const frame=clip.kind==='video'||clip.kind==='image'?doc.getElementById(`clip-${index}-frame`):null,visual=frame??node,zIndex=String(layerZIndex(clip,index));if(visual.style.zIndex!==zIndex)visual.style.zIndex=zIndex;
+    // backgroundFill bands follow their sharp clip's layer, just beneath it.
+    if(clip.backgroundFill)for(const band of doc.querySelectorAll<HTMLElement>(`[data-mirror-fill-of="${CSS.escape(clip.id)}"]`)){const z=String(Number(zIndex)-1);if(band.style.zIndex!==z)band.style.zIndex=z;}
     if(clip.kind==='video'||clip.kind==='audio'){
       const volume=previewVolumes.current.get(clip.id)??clip.volume??1;
       const media=node as HTMLMediaElement;if(media.dataset.volume!==String(volume))media.dataset.volume=String(volume);
