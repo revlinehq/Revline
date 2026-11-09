@@ -35,7 +35,14 @@ function runRendererProcess(script:string,args:string[],onProgress:(render:{prog
         for (const line of lines) if (/Render:trace|WARN|ERROR/.test(line) && !/Parallel capture worker phase/.test(line)) console.log(line.slice(0, 2000));
       });
     } else worker.stdout?.resume();
-    worker.stderr?.on('data', (chunk: Buffer) => { stderr = (stderr + chunk.toString()).slice(-2000); if (process.env.REVLINE_RENDER_LOG_LEVEL) process.stderr.write(chunk); });
+    let stderrLine = '';
+    worker.stderr?.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-2000);
+      if (process.env.REVLINE_RENDER_LOG_LEVEL) { process.stderr.write(chunk); return; }
+      // GPU mode: say whether frames draw on the GPU or fell back to SwiftShader (scripts/render-gpu.mjs).
+      const lines = (stderrLine + chunk.toString()).split('\n'); stderrLine = lines.pop()!.slice(-2000);
+      for (const line of lines) if (line.startsWith('[revline] GPU')) console.log(`Export renderer: ${line.slice(0, 500)}`);
+    });
     const cancel = () => {
       worker.kill('SIGTERM');
       forceStop = setTimeout(() => worker.kill('SIGKILL'), 10_000);
