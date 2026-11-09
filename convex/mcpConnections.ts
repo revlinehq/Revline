@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
-import type { Id } from './_generated/dataModel';
+import type { Doc, Id } from './_generated/dataModel';
 import { agentCompany, mcpClientName, MCP_AGENT_GRACE_MS, MCP_AGENT_IDLE_MS, type WorkingAgent } from '../lib/mcp/agent-identity';
 import { MCP_RUN_LIMIT } from './lib/mcp_limits';
 
@@ -37,13 +37,25 @@ export const identity = internalQuery({
 export async function projectWorkingAgents(ctx: QueryCtx, ownerId: string, projectId: Id<'projects'>): Promise<WorkingAgent[]> {
   const now = Date.now();
   const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', now)).order('desc').take(100);
-  const agents = new Map<string, WorkingAgent>();
+  return workingAgentsOf(rows, ownerId, now).get(projectId) ?? [];
+}
+/** Every project of the owner with an agent working on it right now, in one small time-dependent query, so the
+ * project list itself never reads lease rows or the clock and stays cached while agents come and go. */
+export async function ownerWorkingAgents(ctx: QueryCtx, ownerId: string): Promise<Map<Id<'projects'>, WorkingAgent[]>> {
+  const now = Date.now();
+  const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_owner_activity', q => q.eq('ownerId', ownerId).gt('activeUntil', now)).order('desc').take(500);
+  return workingAgentsOf(rows, ownerId, now);
+}
+function workingAgentsOf(rows: Doc<'mcpLaneSessions'>[], ownerId: string, now: number) {
+  const agents = new Map<Id<'projects'>, Map<string, WorkingAgent>>();
   for (const row of rows) {
     if (row.ownerId !== ownerId || !row.agentName || !row.activeUntil || !row.busyUntil || row.busyUntil <= now || row.supersededAt !== undefined) continue;
     const id = row.agentClientId ?? row._id, key = `${id}:${row.timelineId}`;
-    if (!agents.has(key)) agents.set(key, { id, name: row.agentName, company: agentCompany(row.agentName), timelineId: row.timelineId, until: Math.min(row.activeUntil, row.busyUntil) });
+    const project = agents.get(row.projectId) ?? new Map<string, WorkingAgent>();
+    if (!project.has(key)) project.set(key, { id, name: row.agentName, company: agentCompany(row.agentName), timelineId: row.timelineId, until: Math.min(row.activeUntil, row.busyUntil) });
+    agents.set(row.projectId, project);
   }
-  return [...agents.values()];
+  return new Map([...agents].map(([projectId, project]) => [projectId, [...project.values()]]));
 }
 
 export async function touchTaskAgent(ctx: MutationCtx, ownerId: string, taskId: string, agentName: string, agentClientId?: Id<'mcpConnections'>, startedAt=Date.now()) {

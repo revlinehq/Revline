@@ -278,6 +278,6 @@ export const prune = internalMutation({ args: {}, returns: v.null(), handler: as
   for (const client of await ctx.db.query('mcpClients').withIndex('by_createdAt', q => q.lt('createdAt', now - 7 * DAY)).take(200)) {
     if (!await ctx.db.query('mcpTokens').withIndex('by_clientId', q => q.eq('clientId', client.clientId)).first()) await ctx.db.delete(client._id);
   }
-  for (const usage of await ctx.db.query('mcpUsage').take(500)) if (usage.windowStart < now - DAY) await ctx.db.delete(usage._id);
+  for (const usage of await ctx.db.query('mcpUsage').withIndex('by_windowStart', q => q.lt('windowStart', now - DAY)).take(500)) await ctx.db.delete(usage._id);
   return null;
 }});

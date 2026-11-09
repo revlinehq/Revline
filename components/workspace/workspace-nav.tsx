@@ -7,7 +7,7 @@ import { memo, useEffect, useMemo, useRef, useState, type ReactNode, type MouseE
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { useConvexAuth, useQuery } from 'convex/react';
+import { useConvexAuth, usePaginatedQuery, useQuery } from 'convex/react';
 import { Check, ChevronDown, CircleAlert, Copy, Download, Film, History, Link2, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
@@ -33,17 +33,32 @@ export type WorkspaceChat = {
   agents: WorkingAgent[];
 };
 
-export function useWorkspaceChats(demo = false, enabled = true, limit = 100) {
+/** Projects per page on the chats list; older ones load on request. */
+export const CHAT_PAGE_SIZE = 24;
+
+/** The owner's projects, newest first, in pages: each page is its own subscription, so an edit to one project
+ * re-runs only its page. Working MCP agents arrive from a separate small query and are joined here. */
+export function useWorkspaceChats(demo = false, enabled = true, limit = CHAT_PAGE_SIZE) {
   const { isLoaded, isSignedIn } = useUser();
   const { isAuthenticated, isLoading } = useConvexAuth();
   const connected = !!isSignedIn && isAuthenticated && !demo;
-  const projects = useQuery(api.projects.list, connected && enabled ? { limit } : 'skip');
-  const chats = useMemo<WorkspaceChat[]>(() => connected ? (projects ?? []).map(project => ({
-    id: project._id, title: project.title, updatedAt: project.updatedAt,
-    clipCount: project.clipCount, coverUrl: project.coverUrl,
-    coverKind: project.coverKind, running: !!project.aiRunning, agent: project.agent, agents: project.agents??[],
-  })) : [], [connected, projects]);
-  return { chats, loading: enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && projects === undefined)))), connected };
+  const active = connected && enabled;
+  const { results: projects, status, loadMore } = usePaginatedQuery(api.projects.list, active ? {} : 'skip', { initialNumItems: limit });
+  const working = useQuery(api.projects.workingAgents, active ? {} : 'skip');
+  const chats = useMemo<WorkspaceChat[]>(() => {
+    if (!connected) return [];
+    const agentsByProject = new Map((working ?? []).map(row => [row.projectId, row.agents]));
+    return projects.map(project => {
+      const agents = agentsByProject.get(project._id) ?? [], agent = agents[0];
+      return {
+        id: project._id, title: project.title, updatedAt: project.updatedAt,
+        clipCount: project.clipCount, coverUrl: project.coverUrl,
+        coverKind: project.coverKind, running: !!project.aiRunning, agent: agent ? { name: agent.name, until: agent.until, running: false } : null, agents,
+      };
+    });
+  }, [connected, projects, working]);
+  const loading = enabled && (!isLoaded || (!demo && !!isSignedIn && (isLoading || (isAuthenticated && status === 'LoadingFirstPage'))));
+  return { chats, loading, connected, loadMore, canLoadMore: status === 'CanLoadMore', loadingMore: status === 'LoadingMore' };
 }
 
 export function chatRecency(timestamp: number) {
