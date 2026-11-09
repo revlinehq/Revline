@@ -22,7 +22,7 @@ import { validateVisualEffects } from './visual-effects';
 import { clipVisualEffectSource } from './visual-effect-sources';
 import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
-import { mirrorBlurSources } from './mirror-blur-layout';
+import { expandBackgroundFills, mirrorBlurSources, mirrorFillOwner } from './mirror-blur-layout';
 import { textLayerSources } from './text-layers';
 import { sceneFonts, sceneLayerSources, sceneMediaAssetIds, sceneRuntimeScript, validateScene } from './scene-layers';
 import { textStyle, textAppearance } from './text-style';
@@ -100,6 +100,8 @@ const MIRROR_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BA
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
   timeline=resolvedAudioTimeline(timeline);
   timeline = normalizeTimeline(timeline);
+  // A backgroundFill renders as bands of the clip's own frames, appended after the saved clips.
+  timeline = expandBackgroundFills(timeline, assets);
   const trackedSources = pixelTrackingSources(timeline.clips);
   const backend = process.env.NEXT_PUBLIC_CONVEX_URL || process.env.CONVEX_URL;
   const trackEndpoint = options.pixelTrackEndpoint ?? (backend ? pixelTrackEndpoint(backend) : '');
@@ -126,6 +128,9 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   }
   // Preview decodes each shot once: mirror-blur copies draw the sharp clip's video frames.
   const mirrors = options.preview ? mirrorBlurSources(timeline.clips) : new Map<string, string>();
+  // backgroundFill bands stack just beneath their sharp clip, above every lower layer.
+  const clipIndex = new Map(timeline.clips.map((clip, index) => [clip.id, index]));
+  const fillOwner = (clip: Clip) => { const owner = mirrorFillOwner(clip.id); return owner !== undefined && clipIndex.has(owner) ? owner : undefined; };
   const nodes = timeline.clips.map((clip, index) => {
     validateClip(clip);
     validateClipEffects(clip);
@@ -149,7 +154,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     // hide all the footage it contains before and after the effect range.
     if (clip.kind === 'effect') return '';
     const trackIndex = compositionTrackIndex(clip);
-    const zIndex = layerZIndex(clip, index);
+    const owner = fillOwner(clip);
+    const zIndex = owner !== undefined ? layerZIndex(timeline.clips[clipIndex.get(owner)!], clipIndex.get(owner)!) - 1 : layerZIndex(clip, index);
     // The scene controller below fills this sandboxed frame and seeks its animations.
     // Untimed composition children are stamped to the whole video, and HyperFrames
     // would then show every scene on each playback frame.
@@ -214,7 +220,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       const view = clip.cameraMotion || clip.smoothZoom
         ? `<div class="camera-window" style="position:absolute;overflow:hidden;${windowStyle}"><div class="camera-stage" style="${cameraStageStyle}">${content}</div></div>`
         : content;
-      return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}${outline ? `;filter:${outline}` : ''}">${view}</div>`;
+      return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}"${owner !== undefined ? ` data-mirror-fill-of="${escapeHtml(owner)}"` : ''} class="visual-frame" style="${frameStyle}${outline ? `;filter:${outline}` : ''}">${view}</div>`;
     };
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
     const mirrorOf = mirrors.get(clip.id);

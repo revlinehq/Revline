@@ -1,5 +1,6 @@
 ## 2026-11-09
 - Editor/MCP: link a video with its extracted audio again from the right-click menu ("Link video and audio", or "Link matching audio" for a multi-selection) or the new `link({pairs})` tool, the inverse of unlink. Why: about 40 montage shots had loose audio that did not move or delete with its video.
+- Editor/MCP: mirror blur is one clip setting (`backgroundFill`) drawn from the clip's own frames, and shot notes are one call each (`delete`/`resizeClips`/`setVolume` take `at` and `ripple`; new `swapClips`); `foldStacked` converts old stacked copies. Why: a 40-shot montage made each "remove/swap/extend the shot at N s" note take dozens to hundreds of calls.
 - Editor preview: mirror-blur copies no longer decode their own video; they draw the sharp clip's frames on WebGL canvases that are kept across cuts and drawn before the cut (5 decoders per shot become 1, 0 GL contexts rebuilt per cut). Why: the founder saw playback lag or glitch at almost every cut with mirror blur on, and smooth playback with it off.
 
 ## 2026-11-08

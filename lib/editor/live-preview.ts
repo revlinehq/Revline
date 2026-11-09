@@ -4,6 +4,7 @@ import { updateLiveTextEffects } from './live-preview-effects';
 import { updateLiveScenes } from './live-scenes';
 import { updateLiveVisualEffects } from './live-visual-effects';
 import { updateLiveVisualGeometry } from './live-visual-geometry';
+import { expandBackgroundFills } from './mirror-blur-layout';
 import type { MediaAsset, Timeline } from './types';
 
 type LiveUpdater = (document: Document, previous: Timeline, next: Timeline, assets: MediaAsset[]) => boolean;
@@ -27,6 +28,9 @@ const LIVE_UPDATERS: readonly LiveUpdater[] = [
  * rebuilt composition. By default it stops at the first such part; `continueAfterFailure` still applies the rest.
  */
 export function updateLivePreview(document: Document, previous: Timeline, next: Timeline, assets: MediaAsset[], { continueAfterFailure = false } = {}): boolean {
+  // The composition renders backgroundFill bands as extra nodes; every updater sees them the same way.
+  previous = expandBackgroundFills(previous, assets);
+  next = expandBackgroundFills(next, assets);
   let retained = true;
   for (const update of LIVE_UPDATERS) {
     if (!retained && !continueAfterFailure) break;

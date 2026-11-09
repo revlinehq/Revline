@@ -65,6 +65,8 @@ export type Dither = { enabled: boolean; amount: number; levels: number; size: n
 export type FrameDistortion = { enabled: boolean; horizontal: number; vertical: number; skew: number; bend?: number };
 export type FrameCorners = { enabled: boolean; amount: number };
 export type SoftBlur = { enabled: boolean; amount: number };
+/** Fills the canvas around a contained wide clip from its own frames. mirror-blur: blurred, darkened, mirrored bands above and below. */
+export type BackgroundFill = { kind: 'mirror-blur'; blur: number; darken: number };
 export type LensDistortion = { enabled: boolean; amount: number; centerX: number; centerY: number; fringing: number };
 export type FilmOverlay = { enabled: boolean; amount: number; grain: number; dust: number; scratches: number; vignette: number; flicker: number; warmth: number };
 export type Vhs = { enabled: boolean; amount: number; scanlines: number; noise: number; bleed: number; tracking: number; speed: number };
@@ -228,6 +230,8 @@ export type Clip = {
   turbulentDisplace?: TurbulentDisplace;
   lightSweep?: LightSweep;
   softBlur?: SoftBlur;
+  /** Render-time background drawn from this clip's own frames; never separate clips (lib/editor/mirror-blur-layout.ts). */
+  backgroundFill?: BackgroundFill;
   frameDistortion?: FrameDistortion;
   frameCorners?: FrameCorners;
   outline?: ClipOutline;

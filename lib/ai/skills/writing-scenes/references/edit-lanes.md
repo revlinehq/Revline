@@ -39,7 +39,8 @@ A good edit changes only the requested range, keeps everything around it in sync
 
 ### Footage and captions
 - Transcript reads and speech cuts follow footage-editing page `speech`.
-- Ripple the actually removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material, then batch moveClips by the shared time delta.
+- Montage shot notes are one call each, by time, with no ID lookups or per-clip moves: remove a shot with delete {at, ripple:true}, swap two with swapClips {a, b}, lengthen with resizeClips {at, side:'right', delta, ripple:true}, mute with setVolume {at, volume:0}. Music and other layers keep their times; check once with inspectTimeline afterwards.
+- For other cuts, ripple the actually removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material, then batch moveClips by the shared time delta.
 - Verify with inspectTimeline: the new duration meets the target, with no gaps or orphaned captions.
 
 ### Scenes and films

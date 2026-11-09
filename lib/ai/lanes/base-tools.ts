@@ -15,6 +15,7 @@ export const BASE_TOOLS = [
   'reorderLayer',
   'moveClips',
   'resizeClips',
+  'swapClips',
   'setBlendMode',
   'undoLatestEdit',
   'listRevisions',

@@ -28,6 +28,7 @@ A good footage edit keeps every retained word intact and in sync, removes only w
 
 ## Rules
 - Ordinary trims, moves and splits never authorize decoration such as effects, music or punch-ins.
+- Shot-level montage notes (remove, swap, lengthen or mute the shot at a time) take one call each (page `layers-and-effects`). Never delete and then move later clips one by one.
 - Any song in the edit (where it starts, cutting to it, length, ending, ducking) follows skill `music`.
 - An explicit user request (style, timestamps, keeping pauses, no captions) overrides every default here.
 - Defaults apply to new work only; never restyle existing captions or clips unasked.
