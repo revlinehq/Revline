@@ -1,4 +1,5 @@
 ## 2026-11-09
+- Editor/MCP: link a video with its extracted audio again from the right-click menu ("Link video and audio", or "Link matching audio" for a multi-selection) or the new `link({pairs})` tool, the inverse of unlink. Why: about 40 montage shots had loose audio that did not move or delete with its video.
 - Editor preview: mirror-blur copies no longer decode their own video; they draw the sharp clip's frames on WebGL canvases that are kept across cuts and drawn before the cut (5 decoders per shot become 1, 0 GL contexts rebuilt per cut). Why: the founder saw playback lag or glitch at almost every cut with mirror blur on, and smooth playback with it off.
 
 ## 2026-11-08

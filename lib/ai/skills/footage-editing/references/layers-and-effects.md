@@ -12,6 +12,7 @@ A good result changes only the requested clips, keeps linked video and audio tog
 - Never delete an occupied track's clips just to remove its row.
 - To return to an earlier version: writing-scenes page `edit-lanes` (Direction and feedback).
 - Unlink a video/audio pair only when the user wants to keep one side while editing the other.
+- When a video and its sound sit as separate clips that should move, trim and delete together (same start, length and source range), link them again with link, all pairs in one call.
 - Footage and sound fades are clip settings (configureVisualFade, configureAudio), never separate FX clips.
 - After setPlaybackRate or setSpeedRamp, read the new clip duration before any further timing edit.
 - Transitions (hard cut, whips, fades, addTransition settings): read the `transitions` skill.
