@@ -156,7 +156,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if(master?.key===timelineNormalizationKey(snapshot.timeline))ceilings.push(master.truePeak);
       if(ceilings.length)await runPhase('Verifying encoded true peak',()=>enforceNormalizedExportPeak(output,directory,Math.min(...ceilings),signal));
       onProgress(97);
-      await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, uploadContext, signal));
+      await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, { ...uploadContext, onPart: (stored, total) => onProgress(Math.round(970 + 20 * stored / total) / 10) }, signal));
       return {};
     }
     if(task.kind==='review'){if(!task.review)throw new AnalysisError('Review snapshot is unavailable.',400);return {review:await reviewComposition(task.review,directory,convexUrl,signal,onProgress)};}

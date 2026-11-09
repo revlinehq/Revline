@@ -40,7 +40,7 @@ import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { placeCutout } from './cutouts';
 import { completeDerivation } from './derivations';
-import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
+import { hostedRendersEnabled, processorHasRenderRoom, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { brandFileUrl, fontUrl } from './brandKits';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
@@ -280,7 +280,8 @@ async function fairest(ctx:MutationCtx|QueryCtx,candidates:Doc<'mediaTasks'>[]) 
   if(new Set(candidates.map(task=>task.ownerId)).size<2)return candidates[0]??null;
   const busy=new Map<string,boolean>();
   for(const task of candidates){
-    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await runningMediaTaskCount(ctx,task.ownerId,FAIR_RUNNING_PER_OWNER))>=FAIR_RUNNING_PER_OWNER);
+    // A dedicated export pool runs exports apart from the processors; an owner's running export does not make its checks yield.
+    if(!busy.has(task.ownerId))busy.set(task.ownerId,(await runningMediaTaskCount(ctx,task.ownerId,FAIR_RUNNING_PER_OWNER,undefined,hostedRendersEnabled()?'render':undefined))>=FAIR_RUNNING_PER_OWNER);
     if(!busy.get(task.ownerId))return task;
   }
   return candidates[0];
@@ -291,11 +292,13 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   if(rendersOnly)return (await seatedRenders(ctx,lane==='ultra'?'ultra':undefined,versioned))[0]??null;
   // With dedicated exports, regular processors leave rendering to the export workers.
   const separateExports=hostedRendersEnabled();
+  // Processors that also run exports keep one free for quick checks; queued exports wait for room.
+  const skipRenders=separateExports||!await processorHasRenderRoom(ctx);
   // The Ultra slot only runs Ultra exports; regular slots leave them to it unless they wait too long.
   if(lane==='ultra')return separateExports?null:fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(q=>q.and(q.eq(q.field('lane'),'ultra'),versioned(q))).take(FAIR_CLAIM_SCAN));
   // Regular slots leave Ultra exports to the Ultra slot until releaseUltraLane
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
-  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return separateExports?q.and(base,q.neq(q.field('kind'),'render')):base;};
+  const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return skipRenders?q.and(base,q.neq(q.field('kind'),'render')):base;};
   // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
   for(const kind of ['preview','read','snapshot','blueprint'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
@@ -304,12 +307,12 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
     const quick=await fairest(ctx,rows);if(quick)return quick;
   }
   // Exports are interactive; claim them before long queued analysis work.
-  const renders=separateExports?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
+  const renders=skipRenders?[]:await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind','render')).filter(laneOk).take(FAIR_CLAIM_SCAN);
   if(renders.length)return fairest(ctx,renders);
   const indexed=await fairest(ctx,await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created',q=>q.eq('status','queued').eq('claimable',true)).filter(laneOk).take(FAIR_CLAIM_SCAN));
   // Legacy prepared tasks remain claimable during rollout, without a ten-row cap.
   if (indexed) return indexed;
-  const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(separateExports?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
+  const legacy = await ctx.db.query('mediaTasks').withIndex('by_status_createdAt',q=>q.eq('status','queued')).filter(q=>q.and(q.eq(q.field('claimable'),undefined),q.gt(q.field('attempt'),0),q.neq(q.field('workflowId'),undefined),versioned(q),...(skipRenders?[q.neq(q.field('kind'),'render')]:[]),q.or(q.eq(q.field('requiredProcessorVersion'),undefined),q.lte(q.field('requiredProcessorVersion'),processorVersion)))).first();
   return legacy ? fairest(ctx, [legacy]) : null;
 }
 export const cancel=mutation({args:{taskId:v.id('mediaTasks')},returns:v.null(),handler:async(ctx,args)=>{
@@ -460,7 +463,7 @@ export const claim = mutation({ args: { projectId:v.optional(v.id('projects')),w
     else { await failTask(ctx, task, billingReason, false); return null; }
   }
   const leaseToken=crypto.randomUUID(),now=Date.now();
-  await patchMediaTask(ctx, task,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,updatedAt:now});
+  await patchMediaTask(ctx, task,{status:'running',claimable:false,leaseToken,leaseExpiresAt:now+LEASE_MS,attemptStartedAt:now,progressAt:now,updatedAt:now});
   if(task.analysisRequestId)await ctx.db.patch(task.analysisRequestId,{status:'running'});
   if(task.renderJobId){const job=await ctx.db.get(task.renderJobId);if(job)await ctx.db.patch(job._id,{status:'rendering',error:undefined,updatedAt:now});}
   await ctx.scheduler.runAfter(LEASE_MS,internal.mediaTasks.expire,{taskId:task._id,leaseToken});
@@ -482,8 +485,9 @@ export const heartbeat = mutation({ args: { ...mediaTaskCredentials, progress: v
   const task = await requireMediaTask(ctx, args.taskId, args.leaseToken);
   if (args.progress !== undefined && (!Number.isFinite(args.progress) || args.progress < 0 || args.progress > (task.kind==='preview'?100:99))) throw new ConvexError('Invalid processing progress.');
   const progress = Math.max(task.progress, args.progress ?? task.progress);
-  const now=Date.now();
-  await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(args.activity&&args.activity!==task.activity?{activity:args.activity,activityStartedAt:now}:{}) });
+  const now=Date.now(), moved=args.activity!==undefined&&args.activity!==task.activity;
+  // progressAt lets failStalled stop an export that keeps heartbeating without advancing.
+  await patchMediaTask(ctx, task, { leaseExpiresAt: now + LEASE_MS, progress, updatedAt: now,...(moved?{activity:args.activity,activityStartedAt:now}:{}),...(progress>task.progress||moved?{progressAt:now}:{}) });
   // The request budget bounds queue/worker silence, not a healthy source
   // transfer. Long VOD downloads and their retries can outlast four minutes.
   if(task.analysisRequestId){
