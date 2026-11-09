@@ -2,7 +2,8 @@ import { v } from 'convex/values';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
-import { agentCompany, mcpClientName, MCP_AGENT_IDLE_MS, type WorkingAgent } from '../lib/mcp/agent-identity';
+import { agentCompany, mcpClientName, MCP_AGENT_GRACE_MS, MCP_AGENT_IDLE_MS, type WorkingAgent } from '../lib/mcp/agent-identity';
+import { MCP_RUN_LIMIT } from './lib/mcp_limits';
 
 const scope = { ownerId: v.string(), connectionId: v.string() };
 export const clientInfoValidator = v.object({ name: v.string(), title: v.optional(v.string()), version: v.string() });
@@ -30,14 +31,17 @@ export const identity = internalQuery({
   },
 });
 
-/** Small indexed lease rows keep project lists independent of timelines and prompts. */
+/** Small indexed lease rows keep project lists independent of timelines and prompts.
+ * The lease (activeUntil) keeps the task open between calls; the badge shows only while a call runs or
+ * for MCP_AGENT_GRACE_MS after the last one ends (busyUntil). */
 export async function projectWorkingAgents(ctx: QueryCtx, ownerId: string, projectId: Id<'projects'>): Promise<WorkingAgent[]> {
-  const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', Date.now())).order('desc').take(100);
+  const now = Date.now();
+  const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', now)).order('desc').take(100);
   const agents = new Map<string, WorkingAgent>();
   for (const row of rows) {
-    if (row.ownerId !== ownerId || !row.agentName || !row.activeUntil || row.supersededAt !== undefined) continue;
+    if (row.ownerId !== ownerId || !row.agentName || !row.activeUntil || !row.busyUntil || row.busyUntil <= now || row.supersededAt !== undefined) continue;
     const id = row.agentClientId ?? row._id, key = `${id}:${row.timelineId}`;
-    if (!agents.has(key)) agents.set(key, { id, name: row.agentName, company: agentCompany(row.agentName), timelineId: row.timelineId, until: row.activeUntil });
+    if (!agents.has(key)) agents.set(key, { id, name: row.agentName, company: agentCompany(row.agentName), timelineId: row.timelineId, until: Math.min(row.activeUntil, row.busyUntil) });
   }
   return [...agents.values()];
 }
@@ -49,16 +53,45 @@ export async function touchTaskAgent(ctx: MutationCtx, ownerId: string, taskId: 
   if(row.agentEndedAt!==undefined&&row.agentEndedAt>=startedAt)return;
   if(agentClientId&&(await ctx.db.get(agentClientId))?.closedAt!==undefined)return;
   const now = Date.now();
-  // Each lease write reruns every open dashboard's project and assistant queries. Keep a lease with
-  // more than half its idle window left, so a busy task writes (and schedules expiry) at most every five minutes.
+  // The badge is up while this call runs: busyUntil covers the longest call, and settleTaskAgent shortens it to the
+  // grace period when the call ends. A killed call needs no timer of its own: its lease (which ends sooner) retires the badge.
   // A call of a task a newer one hid shows it again at once: touches happen when a call starts, so this agent is still working.
-  if (row.supersededAt === undefined && row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return;
+  const busy = { busyUntil: now + MCP_RUN_LIMIT, callStartedAt: startedAt };
+  // Keep a lease with more than half its idle window left, so a busy task schedules expiry at most every five minutes.
+  if (row.supersededAt === undefined && row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) {
+    await ctx.db.patch(row._id, busy);
+    return;
+  }
   const activeUntil = now + MCP_AGENT_IDLE_MS;
-  await ctx.db.patch(row._id, { agentName, agentClientId, activeUntil, supersededAt: undefined });
+  await ctx.db.patch(row._id, { agentName, agentClientId, activeUntil, ...busy, supersededAt: undefined });
   // Convex queries don't rerun as wall time passes. Retire the lease with a
   // scheduled write so every open dashboard and editor updates at expiry.
   await ctx.scheduler.runAt(activeUntil, internal.mcpConnections.expire, { sessionId: row._id, activeUntil });
 }
+
+/** A call ended: the badge drops after the grace period unless another call starts. Only the latest call settles,
+ * so an older call ending never hides a newer one still running. */
+export const settleTaskAgent = internalMutation({
+  args: { ownerId: v.string(), taskId: v.string(), startedAt: v.number() }, returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.query('mcpLaneSessions').withIndex('by_task', q => q.eq('taskId', args.taskId)).unique();
+    if (!row || row.ownerId !== args.ownerId || row.callStartedAt !== args.startedAt || !row.busyUntil) return null;
+    const busyUntil = Date.now() + MCP_AGENT_GRACE_MS;
+    if (row.busyUntil <= busyUntil) return null;
+    await ctx.db.patch(row._id, { busyUntil });
+    await ctx.scheduler.runAt(busyUntil, internal.mcpConnections.idle, { sessionId: row._id, busyUntil });
+    return null;
+  },
+});
+
+export const idle = internalMutation({
+  args: { sessionId: v.id('mcpLaneSessions'), busyUntil: v.number() }, returns: v.null(),
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.sessionId);
+    if (row?.busyUntil === args.busyUntil && row.busyUntil <= Date.now()) await ctx.db.patch(row._id, { busyUntil: undefined });
+    return null;
+  },
+});
 
 export const expire = internalMutation({
   args: { sessionId: v.id('mcpLaneSessions'), activeUntil: v.number() }, returns: v.null(),
@@ -73,7 +106,7 @@ export const endTask = internalMutation({
   args: { ownerId: v.string(), taskId: v.string() }, returns: v.null(),
   handler: async (ctx, args) => {
     const row = await ctx.db.query('mcpLaneSessions').withIndex('by_task', q => q.eq('taskId', args.taskId)).unique();
-    if (row?.ownerId === args.ownerId) await ctx.db.patch(row._id, { activeUntil: undefined, agentEndedAt: Date.now() });
+    if (row?.ownerId === args.ownerId) await ctx.db.patch(row._id, { activeUntil: undefined, busyUntil: undefined, agentEndedAt: Date.now() });
     return null;
   },
 });
