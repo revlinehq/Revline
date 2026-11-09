@@ -1,5 +1,6 @@
 import { IRIS_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WHIP_BLUR_MAX, WHIP_DIRECTIONS, WHIP_TRAVEL, WIPE_DIRECTIONS, trackOf, type Clip, type ClipTransition, type Timeline, type TransitionDirection, type TransitionPreset, type TransitionWipeSettings } from './types';
 import { playbackRateOf } from './playback-rate';
+import { mirrorFillOwner } from './mirror-blur-layout';
 
 /** Offered in the timeline's transition menu; the rest are applied by the AI editor. */
 export const MANUAL_TRANSITION_PRESETS: readonly TransitionPreset[] = ['crossfade', 'spin-zoom', 'blur-dissolve', 'gradient-wipe', 'iris-wipe'];
@@ -117,6 +118,11 @@ export function transitionSampleTime(clip: Clip, time: number, fps: number) {
   return clip.sourceStart + Math.max(0, Math.min(Math.max(0, clip.duration - 1 / fps), time - clip.start)) * playbackRateOf(clip);
 }
 
+function isOwnMirrorBand(clip: Clip, pair: { from: Clip; to: Clip }) {
+  const owner = mirrorFillOwner(clip.id);
+  return owner === pair.from.id || owner === pair.to.id;
+}
+
 /** Shared by persistence and the actual preview/export presentation runtime. */
 export function transitionSources(clips: Clip[], fps: number) {
   const sources = clips.flatMap((clip, index) => {
@@ -124,7 +130,8 @@ export function transitionSources(clips: Clip[], fps: number) {
     if (!isTransitionClip(clip)) return [];
     const pair = transitionPair(clips, clip.transition!), end = clip.start + clip.duration;
     if (![clip.start, clip.duration, end].every(Number.isFinite) || clip.duration < 2 / fps - tolerance || clip.start < pair.from.start - tolerance || end > pair.to.start + pair.to.duration + tolerance || pair.cut - clip.start < 1 / fps - tolerance || end - pair.cut < 1 / fps - tolerance) throw new Error('A transition must span its cut and stay within both retained clips.');
-    if (clips.some(other => other.id !== pair.from.id && other.id !== pair.to.id && other.kind !== 'audio' && other.kind !== 'effect' && trackOf(other) === pair.track && other.start < end - tolerance && clip.start < other.start + other.duration - tolerance)) throw new Error('The transition range overlaps another clip on its V track.');
+    // A mirror-blur band is drawn from its owner's frames at render time; it is not a third clip on the track.
+    if (clips.some(other => other.id !== pair.from.id && other.id !== pair.to.id && !isOwnMirrorBand(other, pair) && other.kind !== 'audio' && other.kind !== 'effect' && trackOf(other) === pair.track && other.start < end - tolerance && clip.start < other.start + other.duration - tolerance)) throw new Error('The transition range overlaps another clip on its V track.');
     return [{ clip, ...pair, index }];
   });
   for (let i = 0; i < sources.length; i++) for (let j = i + 1; j < sources.length; j++) {
