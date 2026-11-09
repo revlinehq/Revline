@@ -43,6 +43,7 @@ Pacing:
 Sound:
 - Keep speech and important game or room sound intelligible.
 - Inspect the mix with getSound or checkSound and balance it with setVolume. Added music (start, length, ending, ducking under speech) follows skill `music`.
+- Muting a moment ("mute the shot at 25 s", "mute from 40 s to the end"): find every clip covering that range in one inspectTimeline, then make one setVolume { clipIds: [...], volume: 0 } call; it saves as one revision. The same clipIds batch works for configureAudio fades or roles.
 - Normalize the whole tab mix, music and effects included; target one linked sound clip only when that is the intent.
 - Respect an explicit request to keep the original loudness, removing any existing normalization.
 
