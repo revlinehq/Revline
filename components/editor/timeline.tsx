@@ -3,7 +3,7 @@ import type { LiveEditChange } from '@/lib/editor/live-edit';
 import { Download } from 'lucide-react';
 import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
-import { Fragment, useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
+import { Fragment, createContext, memo, useContext, useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
 import { FilmDraftLabel, FilmDraftTrack } from './film-draft-track';
 import type { FilmDraftView } from '@/lib/editor/film-draft-view';
 import { Film, ImageIcon, AudioLines, Captions, Clapperboard, Square, SlidersHorizontal, Zap, Blend, LoaderCircle } from 'lucide-react';
@@ -110,6 +110,53 @@ function followPointer(target:HTMLElement,pointer:number,handlers:Parameters<typ
   return()=>{unwatch();if(target.hasPointerCapture(pointer))target.releasePointerCapture(pointer);};
 }
 
+/** Stable entry points into the panel's latest handlers, so memoized clips never re-render for a new closure. */
+type ClipActions={
+  pointerDown(e:React.PointerEvent<HTMLElement>,clip:Clip,mode:'move'|'left'|'right'):void;
+  pointerMove(e:React.PointerEvent<HTMLElement>,clip:Clip):void;
+  doubleClick(e:React.MouseEvent<HTMLDivElement>,clip:Clip):void;
+  keyDown(e:React.KeyboardEvent<HTMLDivElement>,clip:Clip):void;
+  trimKey(e:React.KeyboardEvent<HTMLButtonElement>,clip:Clip,side:'left'|'right'):void;
+  volumePointerDown(e:React.PointerEvent<HTMLDivElement>,clip:Clip):void;
+  volumeKey(e:React.KeyboardEvent<HTMLDivElement>,clip:Clip):void;
+};
+/**
+ * Clips are placed with the track area's --timeline-px, so a zoom step restyles them without
+ * re-rendering each one. Only their filmstrips read the scale (and the gesture pause) from here.
+ */
+const TimelineScale=createContext({px:0,filmstripPaused:false});
+const clipLeft=(origin:number,start:number)=>`calc(${origin}px + ${start} * var(--timeline-px))`;
+const clipWidth=(duration:number)=>`max(6px, ${duration} * var(--timeline-px))`;
+function ClipMediaFilmstrip(props:Omit<React.ComponentProps<typeof MediaFilmstrip>,'width'|'px'|'paused'>){
+  const {px,filmstripPaused}=useContext(TimelineScale);
+  return <MediaFilmstrip {...props} width={Math.max(6,props.duration*px)} px={px} paused={filmstripPaused}/>;
+}
+function ClipSceneFilmstrip(props:Omit<React.ComponentProps<typeof SceneFilmstrip>,'width'>){
+  const {px}=useContext(TimelineScale);
+  return <SceneFilmstrip {...props} width={Math.max(6,props.duration*px)}/>;
+}
+type TimelineClipProps={
+  clip:Clip;asset?:MediaAsset;trackLabel:string;clipHeight:number;origin:number;fps:number;
+  selected:boolean;hidden:boolean;liveChanged:boolean;rendering:boolean;sceneFrames?:{time:number;image:string}[];
+  /** Only film clips read the timeline, for their section markers. */
+  filmTimeline?:Timeline;aspect:number;readOnly:boolean;editingDisabled:boolean;ultra:boolean;
+  viewport:React.RefObject<HTMLDivElement|null>;actions:ClipActions;
+};
+/** One clip on a lane. Memoized: a playhead tick, selection elsewhere or a pointer move leaves it alone. */
+const TimelineClip=memo(function TimelineClip({clip,asset,trackLabel,clipHeight,origin,fps,selected,hidden,liveChanged,rendering,sceneFrames,filmTimeline,aspect,readOnly,editingDisabled,ultra,viewport,actions}:TimelineClipProps){
+  const identity=clipIdentity(clip);const ClipIcon=clipIcons[identity];const position=clip;const trimWidth=`min(9px, ${clipWidth(position.duration)} / 4)`;const isMedia=clip.kind==='video'||clip.kind==='image';const label=clip.kind==='scene'?clip.scene?.title||'Scene':clip.kind==='solid'?'Solid color':clip.kind==='effect'?effectClipLabel(clip):clip.text||asset?.fileName||clip.kind;
+  return <div data-clip-id={clip.id} data-identity={identity} data-rendering={clip.kind==='scene'&&rendering||undefined} role="button" tabIndex={0} aria-label={`${label}, ${trackLabel}, ${formatTime(clip.start)}, ${clip.duration.toFixed(1)} seconds`} aria-pressed={selected} onDragStart={e=>e.preventDefault()} onDoubleClick={e=>actions.doubleClick(e,clip)} onKeyDown={e=>actions.keyDown(e,clip)} onPointerDown={e=>actions.pointerDown(e,clip,'move')} onPointerMove={e=>actions.pointerMove(e,clip)} data-ai-changed={liveChanged||undefined} className={`timeline-clip ${selected?'selected':''} clip-${isMedia?'video':clip.kind}${ultra&&clip.kind==='scene'?' clip-motion':''}`} style={{'--clip-height':`${clipHeight}px`,height:clipHeight,left:clipLeft(origin,position.start),width:clipWidth(position.duration),...(clip.kind!=='effect'&&!(ultra&&clip.kind==='scene')?{background:clipColor(clip.kind)}:{}),...(hidden?{visibility:'hidden'}: {})} as React.CSSProperties}>
+    {asset?.url&&isMedia&&<ClipMediaFilmstrip asset={asset} height={clipHeight} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} timelineStart={clip.start} fps={fps} viewport={viewport}/>} {clip.kind==='scene'&&<ClipSceneFilmstrip frames={sceneFrames} title={label} rendering={rendering} height={clipHeight} duration={clip.duration} aspect={aspect}/>} {clip.kind==='audio'&&<AudioWaveform waveform={asset?.waveform} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} volume={clip.volume} timelineStart={clip.start} viewport={viewport}/>}<span className="clip-title"><ClipIcon size={12} aria-hidden="true"/><span className="clip-name">{clip.kind==='caption'?'Caption':label}</span><small>{clip.kind==='scene'&&rendering&&<LoaderCircle size={12} aria-label="Rendering frames"/>}{clip.duration.toFixed(1)}s</small></span>
+    {clip.kind==='graphic'&&<div className="clip-text-preview" aria-hidden="true"><b>Aa</b><span>{clip.text}</span></div>}
+    {clip.kind==='caption'&&<div className="clip-caption-preview" aria-hidden="true">{clip.text}</div>}
+    {clip.kind==='solid'&&<div className="clip-color-preview" aria-hidden="true" style={{background:solidColorSettings(clip).color}}/>}
+    {clip.kind==='scene'&&clip.scene?.film&&filmTimeline&&<div className="clip-sections" aria-hidden="true">{sectionMarkersIn(filmTimeline,clip).map((marker,index)=><span key={marker.id} style={{left:`${(marker.time-clip.start)/clip.duration*100}%`}}>{String(index+1).padStart(2,'0')} {marker.label}</span>)}</div>}
+    <i className="clip-identity-rail" aria-hidden="true"/>
+    {!readOnly&&clip.kind==='audio'&&<div className="audio-clip-volume" style={{'--clip-volume':clip.volume??1} as React.CSSProperties}><div className="audio-volume-line" role="slider" tabIndex={0} aria-label={`Volume for ${asset?.fileName||'audio clip'}`} aria-orientation="vertical" aria-disabled={editingDisabled||undefined} aria-valuemin={0} aria-valuemax={MAX_CLIP_VOLUME*100} aria-valuenow={Math.round((clip.volume??1)*100)} aria-valuetext={clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`} onPointerDown={e=>actions.volumePointerDown(e,clip)} onKeyDown={e=>actions.volumeKey(e,clip)}><output aria-hidden="true">{clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`}</output></div></div>}
+    {!readOnly&&<><button className="clip-trim left" style={{width:trimWidth}} aria-label="Trim clip start" disabled={editingDisabled} title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>actions.trimKey(e,clip,'left')} onPointerDown={e=>actions.pointerDown(e,clip,'left')}/><button className="clip-trim right" style={{width:trimWidth}} aria-label="Trim clip end" disabled={editingDisabled} title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>actions.trimKey(e,clip,'right')} onPointerDown={e=>actions.pointerDown(e,clip,'right')}/></>}
+  </div>;
+});
+
 function TimelinePlayheadClock(props: Omit<Parameters<typeof useTimelinePlayhead>[0], 'time'>) {
   const time=usePausedPlaybackTime();
   useTimelinePlayhead({...props,time});
@@ -182,7 +229,11 @@ export function TimelinePanel(p:Props){
   useLayoutEffect(()=>{
     if(scroll.current&&labels.current)labels.current.scrollTop=scroll.current.scrollTop;
   },[layout,viewportHeight,scrollbarHeight]);
-  const cleanedTimeline=useMemo(()=>removeEmptyLayers(timeline),[timeline]);
+  const clipById=useMemo(()=>new Map(timeline.clips.map(clip=>[clip.id,clip])),[timeline.clips]);
+  // A gesture's cleanup restores clips to what React last drew, which an edit during the gesture may have moved.
+  const renderedClips=useRef(clipById);
+  useLayoutEffect(()=>{renderedClips.current=clipById;},[clipById]);
+  const trackCounts=useMemo(()=>deriveTrackCounts(timeline),[timeline]);
   const closeGaps=()=>{if(editingLock.current)return;try{const next=closeFootageGaps(timeline,selectedIds);if(next!==timeline)onChange(next);}catch(error){report(error);}};
   const mergeClips=()=>{if(editingLock.current)return;try{const result=mergeSplitClips(timeline,selectedIds.length?selectedIds:selected?[selected]:[]);onChange(result.timeline);onSelect(result.mergedClipIds[0]);store.setState({selectedIds:result.mergedClipIds});}catch(error){report(error);}};
   const clipsByTrack=useMemo(()=>{const rows=new Map<string,Clip[]>();for(const clip of timeline.clips){if(isTransitionClip(clip))continue;const key=`${layerGroup(clip.kind)}-${trackOf(clip)}`;const members=rows.get(key)??[];members.push(clip);rows.set(key,members);}return rows;},[timeline.clips]);
@@ -505,7 +556,7 @@ export function TimelinePanel(p:Props){
     const cleanup=()=>{
       unwatch();gestureUpdate.current=null;document.body.style.cursor=previousCursor;cursorStyle.remove();frame.cancel();
       stopFollowing();
-      if(mode!=='move')for(const member of trimPreviewClips){const node=sourceNodes.get(member.id);if(node){node.style.left=`${origin+member.start*px}px`;node.style.width=`${Math.max(6,member.duration*px)}px`;if(member.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:member.sourceStart,duration:member.duration}}));}}
+      if(mode!=='move')for(const previewed of trimPreviewClips){const member=renderedClips.current.get(previewed.id)??previewed,node=sourceNodes.get(member.id);if(node){node.style.left=clipLeft(origin,member.start);node.style.width=clipWidth(member.duration);if(member.kind==='audio')node.dispatchEvent(new CustomEvent('revline:clip-trim-preview',{detail:{sourceStart:member.sourceStart,duration:member.duration}}));}}
       host.replaceChildren();delete host.dataset.invalid;setDrag(null);gestureCleanup.current=null;gestureClipIds.current=[];
     };
     const finish=(event:PointerEvent)=>{
@@ -653,6 +704,8 @@ export function TimelinePanel(p:Props){
   const linkMatching=()=>runContext(()=>onChange(matchingAudioPairs(timeline,selectedIds,audioAssetOf).reduce((next,pair)=>linkClips(next,pair.videoClipId,pair.audioClipId,audioAssetOf),timeline)));
   const contextClips=context?.group&&context.track?timeline.clips.filter(clip=>layerGroup(clip.kind)===context.group&&trackOf(clip)===context.track):[];
   const contextTime=context?.time??time;
+  // Only the open context menu offers this; skip the full pass on every timeline change.
+  const cleanedTimeline=useMemo(()=>context?removeEmptyLayers(timeline):timeline,[timeline,!!context]);
   const runContext=(action:()=>void)=>{try{action();}catch(error){report(error);}};
   const editClipAtPointer=(event:React.MouseEvent<HTMLDivElement>,clip:Clip)=>{
     event.preventDefault();event.stopPropagation();
@@ -665,6 +718,21 @@ export function TimelinePanel(p:Props){
     }
     if(!editingLock.current)p.onEditClip?.(clip.id);
   };
+  const clipKeyDown=(e:React.KeyboardEvent<HTMLDivElement>,clip:Clip)=>{if(e.target!==e.currentTarget)return;if(timelineLock.current&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();return;}if(e.key==='Enter'||e.code==='Space'){e.preventDefault();e.stopPropagation();if(timelineLock.current)return;onSelect(clip.id);if(p.readOnly)onSeek(clip.start);if(!editingLock.current&&e.key==='Enter')(p.onEditClip??((clip.kind==='caption'||clip.kind==='graphic')?p.onEditText:undefined))?.(clip.id);} };
+  // Clips call the handlers of the latest committed render, exactly as inline props would.
+  const latestActions=useRef<ClipActions|null>(null);
+  useLayoutEffect(()=>{latestActions.current={pointerDown:startDrag,pointerMove:showBladeLine,doubleClick:editClipAtPointer,keyDown:clipKeyDown,trimKey:trimWithKeyboard,volumePointerDown:startVolume,volumeKey:volumeWithKeyboard};});
+  const clipActions=useMemo<ClipActions>(()=>({
+    pointerDown:(e,clip,mode)=>latestActions.current?.pointerDown(e,clip,mode),pointerMove:(e,clip)=>latestActions.current?.pointerMove(e,clip),
+    doubleClick:(e,clip)=>latestActions.current?.doubleClick(e,clip),keyDown:(e,clip)=>latestActions.current?.keyDown(e,clip),
+    trimKey:(e,clip,side)=>latestActions.current?.trimKey(e,clip,side),volumePointerDown:(e,clip)=>latestActions.current?.volumePointerDown(e,clip),volumeKey:(e,clip)=>latestActions.current?.volumeKey(e,clip),
+  }),[]);
+  const latestCutActions=useRef({onSelect,onEdit:p.onEditClip,onChange,onError:report});
+  useLayoutEffect(()=>{latestCutActions.current={onSelect,onEdit:p.onEditClip,onChange,onError:report};});
+  const cutActions=useMemo(()=>({onSelect:(id:string|null)=>latestCutActions.current.onSelect(id),onEdit:(id:string)=>latestCutActions.current.onEdit?.(id),onChange:(next:Timeline)=>latestCutActions.current.onChange(next),onError:(error:unknown)=>latestCutActions.current.onError(error)}),[]);
+  const aspectSize=dimensions(timeline.aspectRatio);const aspect=aspectSize.width/aspectSize.height;
+  const filmstripPaused=!!drag||scrubbing||!!movingLayer;
+  const scale=useMemo(()=>({px,filmstripPaused}),[px,filmstripPaused]);
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-compact-tracks={dense||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
     {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs agentName={p.workingAgent} tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
@@ -693,11 +761,11 @@ export function TimelinePanel(p:Props){
     <div className="timeline-body" data-working-label={p.aiWorking&&!p.readOnly?(p.workingLabel??'AI is working'):undefined}><div className="track-headers" ref={labels} style={{marginBottom:scrollbarHeight}} onScroll={e=>{const viewport=scroll.current;if(viewport&&viewport.scrollTop!==e.currentTarget.scrollTop)viewport.scrollTop=e.currentTarget.scrollTop;}}><div className="track-ruler-label"/><div className="timeline-top-space" aria-hidden="true" style={{height:TIMELINE_TOP_SPACE}}/>{tracks.map(track=>{
       const clips=(clipsByTrack.get(track.id)??[]);
       const audible=clips.filter(c=>c.kind==='audio'||c.kind==='video'&&(!c.audioSeparated||!!c.linkedClipId));
-      const muted=audible.length>0&&audible.every(c=>(c.linkedClipId&&c.kind==='video'?timeline.clips.find(a=>a.id===c.linkedClipId)?.volume:c.volume)===0);
+      const muted=audible.length>0&&audible.every(c=>(c.linkedClipId&&c.kind==='video'?clipById.get(c.linkedClipId)?.volume:c.volume)===0);
       return <Fragment key={track.id}>{p.filmDraft&&layout.draft?.before===track.id&&<FilmDraftLabel draft={p.filmDraft} height={layout.draft.height}/>}<div data-layer={track.number} data-track-id={track.id} onPointerDown={e=>startLayerDrag(e,track.group,track.number)} className={`track-label ${layerDrop===track.id?'layer-drop-target':''} ${movingLayer===track.id?'layer-moving':''}`} data-group={track.group} style={{height:track.height,marginTop:track.gapBefore}} title={p.readOnly?track.label:`Drag to reorder ${track.label}`}>
         <span className="track-label-name">{track.label}</span><span className="track-label-kind">{track.group==='effects'?'Effects':track.group==='audio'?'Audio':'Visual'}</span>
         {!p.readOnly&&<DropdownMenu><DropdownMenuTrigger className="layer-options" aria-label={`Options for ${track.label}`} disabled={editingDisabled}><MoreHorizontal size={12}/></DropdownMenuTrigger><DropdownMenuContent>
-          <DropdownMenuItem disabled={editingDisabled||track.number>=deriveTrackCounts(timeline)[track.group]} onSelect={()=>onChange(reorderLayer(timeline,track.group,track.number,track.number+1))}>Move layer up</DropdownMenuItem>
+          <DropdownMenuItem disabled={editingDisabled||track.number>=trackCounts[track.group]} onSelect={()=>onChange(reorderLayer(timeline,track.group,track.number,track.number+1))}>Move layer up</DropdownMenuItem>
           <DropdownMenuItem disabled={editingDisabled||track.number<=1} onSelect={()=>onChange(reorderLayer(timeline,track.group,track.number,track.number-1))}>Move layer down</DropdownMenuItem>
           <DropdownMenuItem disabled={editingDisabled||clips.length>0} onSelect={()=>onChange(deleteEmptyLayer(timeline,track.group,track.number))}>Delete empty layer</DropdownMenuItem>
           <DropdownMenuItem disabled={editingDisabled||!audible.length} onSelect={()=>toggleTrackSound(audible)}>Toggle sound</DropdownMenuItem>
@@ -709,30 +777,18 @@ export function TimelinePanel(p:Props){
       </div></Fragment>;
     })}{p.filmDraft&&layout.draft&&!layout.draft.before&&<FilmDraftLabel draft={p.filmDraft} height={layout.draft.height}/>}<div aria-hidden="true" style={{height:Math.max(TIMELINE_BOTTOM_SPACE,viewportHeight-layout.height)}}/></div>
       <div className="timeline-scroll" ref={scroll} onScroll={e=>{if(labels.current)labels.current.scrollTop=e.currentTarget.scrollTop;gestureUpdate.current?.();}}>
-        <div ref={area} className="timeline-track-area" style={{width:width+origin*2,height:Math.max(layout.height+TIMELINE_BOTTOM_SPACE,viewportHeight)}} onPointerDown={selectBox}><div className="time-ruler" style={{'--ruler-unit':`${px}px`} as React.CSSProperties} onPointerDown={startScrub}><TimelineRulerTicks px={px} duration={Math.max(duration,width/px)} fps={timeline.fps} origin={origin}/>{timeline.markers?.map(marker=><button key={marker.id} type="button" className="timeline-beat-marker" data-marker-id={marker.id} data-marker-kind={marker.kind} data-beside-section={!isSectionMarker(marker)&&sectionFrames.has(Math.round(marker.time*timeline.fps))||undefined} aria-label={`${marker.label||'Beat marker'}, ${formatTime(marker.time,true,timeline.fps)}`} title={`${marker.label||'Beat marker'} · ${formatTime(marker.time,true,timeline.fps)}${p.readOnly?'':' · Drag to move, right-click to edit'}`} style={{left:origin+marker.time*px}} onPointerDown={e=>startMarkerDrag(e,marker)} onKeyDown={e=>markerKeyboard(e,marker)} onClick={e=>{e.stopPropagation();if(e.detail===0)onSeek(marker.time);}} onDoubleClick={()=>{if(!editingLock.current)setEditingMarker({id:marker.id,label:marker.label??''});}}><svg width="16" height="22" viewBox="0 0 16 22" aria-hidden="true"><path d="M1 1v20M1 2h13l-3 4 3 4H1"/></svg></button>)}</div>
+        <TimelineScale.Provider value={scale}><div ref={area} className="timeline-track-area" style={{width:width+origin*2,height:Math.max(layout.height+TIMELINE_BOTTOM_SPACE,viewportHeight),'--timeline-px':`${px}px`} as React.CSSProperties} onPointerDown={selectBox}><div className="time-ruler" style={{'--ruler-unit':`${px}px`} as React.CSSProperties} onPointerDown={startScrub}><TimelineRulerTicks px={px} duration={Math.max(duration,width/px)} fps={timeline.fps} origin={origin}/>{timeline.markers?.map(marker=><button key={marker.id} type="button" className="timeline-beat-marker" data-marker-id={marker.id} data-marker-kind={marker.kind} data-beside-section={!isSectionMarker(marker)&&sectionFrames.has(Math.round(marker.time*timeline.fps))||undefined} aria-label={`${marker.label||'Beat marker'}, ${formatTime(marker.time,true,timeline.fps)}`} title={`${marker.label||'Beat marker'} · ${formatTime(marker.time,true,timeline.fps)}${p.readOnly?'':' · Drag to move, right-click to edit'}`} style={{left:origin+marker.time*px}} onPointerDown={e=>startMarkerDrag(e,marker)} onKeyDown={e=>markerKeyboard(e,marker)} onClick={e=>{e.stopPropagation();if(e.detail===0)onSeek(marker.time);}} onDoubleClick={()=>{if(!editingLock.current)setEditingMarker({id:marker.id,label:marker.label??''});}}><svg width="16" height="22" viewBox="0 0 16 22" aria-hidden="true"><path d="M1 1v20M1 2h13l-3 4 3 4H1"/></svg></button>)}</div>
           <div className="timeline-top-space" aria-hidden="true" style={{height:TIMELINE_TOP_SPACE}}/>
           {tracks.map(track=><Fragment key={track.id}>{p.filmDraft&&layout.draft?.before===track.id&&<FilmDraftTrack draft={p.filmDraft} height={layout.draft.height} px={px} origin={origin}/>}<div data-group={track.group} data-layer={track.number} className="timeline-track" style={{height:track.height,marginTop:track.gapBefore}} onDragOver={e=>{e.preventDefault();if(editingLock.current){e.dataTransfer.dropEffect='none';return;}if(e.dataTransfer.types.includes(STOCK_AUDIO_DRAG_TYPE)){e.dataTransfer.dropEffect=track.group==='audio'&&p.onAddStockAudio?'copy':'none';if(track.group==='audio'&&p.onAddStockAudio)e.currentTarget.classList.add('library-effect-drop');return;}if(e.dataTransfer.types.includes(EFFECT_DRAG_TYPE)){e.dataTransfer.dropEffect='copy';e.currentTarget.classList.add('library-effect-drop');}}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget as Node|null))e.currentTarget.classList.remove('library-effect-drop');}} onDrop={e=>{e.preventDefault();if(editingLock.current)return;e.currentTarget.classList.remove('library-effect-drop');const stockAudioId=e.dataTransfer.getData(STOCK_AUDIO_DRAG_TYPE);if(stockAudioId){if(track.group!=='audio'){report(new Error('Drop Audio FX on an audio track.'));return;}if(!p.onAddStockAudio)return;const at=Math.max(0,snapTime((e.clientX-e.currentTarget.getBoundingClientRect().left-origin)/px,timeline.fps));void p.onAddStockAudio(stockAudioId,at,track.number).catch(report);return;}const effect=readEffectDrag(e.dataTransfer.getData(EFFECT_DRAG_TYPE));if(effect){try{const at=Math.max(0,snapTime((e.clientX-e.currentTarget.getBoundingClientRect().left-origin)/px,timeline.fps));const target=(e.target as HTMLElement).closest<HTMLElement>('[data-clip-id]')?.dataset.clipId;onChange(dropLibraryEffect(timeline,effect,at,track.group,track.number,target));}catch(error){report(error);}return;}const id=e.dataTransfer.getData('revline/asset');const asset=assetMap.get(id);if(!asset)return;if(layerGroup(asset.kind)!==track.group){report(new Error(track.group==='effects'?'FX tracks accept effect clips only.':'Drop video or images on a visual layer, and audio on an audio layer.'));return;}try{onChange(addMediaClip(timeline,asset,crypto.randomUUID(),Math.max(0,snapTime((e.clientX-e.currentTarget.getBoundingClientRect().left-origin)/px,timeline.fps)),track.number));}catch(error){report(error);}}}>
-            {(clipsByTrack.get(track.id)??[]).map(clip=>{
-              const identity=clipIdentity(clip);const ClipIcon=clipIcons[identity];const position=clip;const trimWidth=Math.min(9,Math.max(6,position.duration*px)/4);const asset=assetMap.get(clip.assetId??'');const isMedia=clip.kind==='video'||clip.kind==='image';const label=clip.kind==='scene'?clip.scene?.title||'Scene':clip.kind==='solid'?'Solid color':clip.kind==='effect'?effectClipLabel(clip):clip.text||asset?.fileName||clip.kind;
-              return <div key={clip.id} data-clip-id={clip.id} data-identity={identity} data-rendering={clip.kind==='scene'&&p.sceneRendering?.includes(clip.id)||undefined} role="button" tabIndex={0} aria-label={`${label}, ${track.label}, ${formatTime(clip.start)}, ${clip.duration.toFixed(1)} seconds`} aria-pressed={linkedSelection.has(clip.id)} onDragStart={e=>e.preventDefault()} onDoubleClick={e=>editClipAtPointer(e,clip)} onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(timelineLock.current&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End'].includes(e.key)){e.preventDefault();e.stopPropagation();return;}if(e.key==='Enter'||e.code==='Space'){e.preventDefault();e.stopPropagation();if(timelineLock.current)return;onSelect(clip.id);if(p.readOnly)onSeek(clip.start);if(!editingLock.current&&e.key==='Enter')(p.onEditClip??((clip.kind==='caption'||clip.kind==='graphic')?p.onEditText:undefined))?.(clip.id);} }} onPointerDown={e=>startDrag(e,clip,'move')} onPointerMove={e=>showBladeLine(e,clip)} data-ai-changed={liveIds.has(clip.id)||undefined} className={`timeline-clip ${(linkedSelection.has(clip.id))?'selected':''} clip-${isMedia?'video':clip.kind}${p.ultra&&clip.kind==='scene'?' clip-motion':''}`} style={{'--clip-height':`${track.clipHeight}px`,height:track.clipHeight,left:origin+position.start*px,width:Math.max(6,position.duration*px),...(clip.kind!=='effect'&&!(p.ultra&&clip.kind==='scene')?{background:clipColor(clip.kind)}:{}),...(drag&&activeMode.current==='move'&&(linkedSelection.has(clip.id)||drag.id===clip.id)?{visibility:'hidden'}: {})} as React.CSSProperties}>
-                {asset?.url&&isMedia&&<MediaFilmstrip asset={asset} width={Math.max(6,position.duration*px)} height={track.clipHeight} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} timelineStart={clip.start} px={px} fps={timeline.fps} viewport={scroll} paused={!!drag||scrubbing||!!movingLayer}/>} {clip.kind==='scene'&&<SceneFilmstrip frames={p.sceneThumbs?.[clip.id]} title={label} rendering={p.sceneRendering?.includes(clip.id)} width={Math.max(6,position.duration*px)} height={track.clipHeight} duration={clip.duration} aspect={dimensions(timeline.aspectRatio).width/dimensions(timeline.aspectRatio).height}/>} {clip.kind==='audio'&&<AudioWaveform waveform={asset?.waveform} sourceStart={clip.sourceStart} duration={clip.duration} playbackRate={clip.playbackRate} volume={clip.volume} timelineStart={clip.start} viewport={scroll}/>}<span className="clip-title"><ClipIcon size={12} aria-hidden="true"/><span className="clip-name">{clip.kind==='caption'?'Caption':label}</span><small>{clip.kind==='scene'&&p.sceneRendering?.includes(clip.id)&&<LoaderCircle size={12} aria-label="Rendering frames"/>}{clip.duration.toFixed(1)}s</small></span>
-                {clip.kind==='graphic'&&<div className="clip-text-preview" aria-hidden="true"><b>Aa</b><span>{clip.text}</span></div>}
-                {clip.kind==='caption'&&<div className="clip-caption-preview" aria-hidden="true">{clip.text}</div>}
-                {clip.kind==='solid'&&<div className="clip-color-preview" aria-hidden="true" style={{background:solidColorSettings(clip).color}}/>}
-                {clip.kind==='scene'&&clip.scene?.film&&<div className="clip-sections" aria-hidden="true">{sectionMarkersIn(timeline,clip).map((marker,index)=><span key={marker.id} style={{left:`${(marker.time-clip.start)/clip.duration*100}%`}}>{String(index+1).padStart(2,'0')} {marker.label}</span>)}</div>}
-                <i className="clip-identity-rail" aria-hidden="true"/>
-                {!p.readOnly&&clip.kind==='audio'&&<div className="audio-clip-volume" style={{'--clip-volume':clip.volume??1} as React.CSSProperties}><div className="audio-volume-line" role="slider" tabIndex={0} aria-label={`Volume for ${asset?.fileName||'audio clip'}`} aria-orientation="vertical" aria-disabled={editingDisabled||undefined} aria-valuemin={0} aria-valuemax={MAX_CLIP_VOLUME*100} aria-valuenow={Math.round((clip.volume??1)*100)} aria-valuetext={clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`} onPointerDown={e=>startVolume(e,clip)} onKeyDown={e=>volumeWithKeyboard(e,clip)}><output aria-hidden="true">{clip.volume===0?'Muted':`${Math.round((clip.volume??1)*100)}%`}</output></div></div>}
-                {!p.readOnly&&<><button className="clip-trim left" style={{width:trimWidth}} aria-label="Trim clip start" disabled={editingDisabled} title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'left')} onPointerDown={e=>startDrag(e,clip,'left')}/><button className="clip-trim right" style={{width:trimWidth}} aria-label="Trim clip end" disabled={editingDisabled} title="Drag or use arrow keys to trim; Shift moves ten frames" onKeyDown={e=>trimWithKeyboard(e,clip,'right')} onPointerDown={e=>startDrag(e,clip,'right')}/></>}
-              </div>;
-            })}
+            {(clipsByTrack.get(track.id)??[]).map(clip=><TimelineClip key={clip.id} clip={clip} asset={assetMap.get(clip.assetId??'')} trackLabel={track.label} clipHeight={track.clipHeight} origin={origin} fps={timeline.fps} selected={linkedSelection.has(clip.id)} hidden={!!drag&&activeMode.current==='move'&&(linkedSelection.has(clip.id)||drag.id===clip.id)} liveChanged={liveIds.has(clip.id)} rendering={clip.kind==='scene'&&!!p.sceneRendering?.includes(clip.id)} sceneFrames={clip.kind==='scene'?p.sceneThumbs?.[clip.id]:undefined} filmTimeline={clip.kind==='scene'&&clip.scene?.film?timeline:undefined} aspect={aspect} readOnly={!!p.readOnly} editingDisabled={editingDisabled} ultra={!!p.ultra} viewport={scroll} actions={clipActions}/>)}
             {p.liveEdit?.removedClips.filter(clip=>layerGroup(clip.kind)===track.group&&trackOf(clip)===track.number).map(clip=><div key={`${p.liveEdit!.runId}:${p.liveEdit!.sequence}:${clip.id}`} className="timeline-live-removed" aria-hidden="true" style={{left:origin+clip.start*px,width:Math.max(6,clip.duration*px),height:track.clipHeight}}/>)}
-            {track.group==='visual'&&!drag&&(cutsByTrack.get(track.number)??[]).map(cut=><TimelineCutTransition key={`${cut.from.id}:${cut.to.id}`} timeline={timeline} from={cut.from} to={cut.to} clip={cut.clip} px={px} origin={origin} selected={!!cut.clip&&linkedSelection.has(cut.clip.id)} readOnly={editingDisabled} onSelect={onSelect} onEdit={p.onEditClip} onChange={onChange} onError={report}/>)}
+            {track.group==='visual'&&!drag&&(cutsByTrack.get(track.number)??[]).map(cut=><TimelineCutTransition key={`${cut.from.id}:${cut.to.id}`} timeline={timeline} from={cut.from} to={cut.to} clip={cut.clip} px={px} origin={origin} selected={!!cut.clip&&linkedSelection.has(cut.clip.id)} readOnly={editingDisabled} onSelect={cutActions.onSelect} onEdit={p.onEditClip&&cutActions.onEdit} onChange={cutActions.onChange} onError={cutActions.onError}/>)}
           </div></Fragment>)}{p.filmDraft&&layout.draft&&!layout.draft.before&&<FilmDraftTrack draft={p.filmDraft} height={layout.draft.height} px={px} origin={origin}/>}
           <div ref={selectionBox} className="timeline-selection-box" style={{display:'none',left:0,top:0}} aria-hidden="true"/>
           <div ref={previews} className="timeline-drag-previews" aria-hidden="true"/>
           {!timeline.clips.length&&!p.filmDraft&&<div className="timeline-empty">Your clips will land here.</div>}
           <div ref={head} className="playhead" style={{left:0,height:"100%",pointerEvents:'none'}} aria-label="Timeline playhead"/>
-        </div>
+        </div></TimelineScale.Provider>
       </div>
       <div ref={cap} className="timeline-playhead-cap" onPointerDown={startScrub} aria-disabled={p.editingLocked||undefined} aria-label="Drag timeline playhead"><svg width="14" height="20" viewBox="0 0 14 20" aria-hidden="true"><path d="M3 0H11Q14 0 14 3V12Q14 13 13 14L8.5 18.5Q7 20 5.5 18.5L1 14Q0 13 0 12V3Q0 0 3 0Z"/></svg></div>
     </div>
