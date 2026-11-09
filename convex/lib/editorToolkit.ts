@@ -47,7 +47,7 @@ import { addBeatMarkers } from "../../lib/editor/beat-markers";
 import { addTimelineMarker,moveTimelineMarker,removeTimelineMarker, removeTimelineMarkers, sectionMarkersIn } from "../../lib/editor/timeline-markers";
 import { AUDIO_ROLES, BLEND_MODES, IRIS_SHAPES, MASK_SHAPES, TRANSITION_DIRECTIONS, TRANSITION_PRESETS, WHIP_BLUR_MAX, WHIP_DIRECTIONS, WHIP_FRAMES, WHIP_TRAVEL, WIPE_DIRECTIONS, dimensions, deriveTrackCounts, deriveTracks, maxTrackCount, timelineDuration, trackOf } from "../../lib/editor/types";
 import {VISUAL_INPUT_UNITS,VISUAL_TRANSFORM_LIMITS,transformInputPatch,cropInputPatch} from '../../lib/editor/visual-inputs';
-import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,setClipBlendMode, addTransitionClip } from "../../lib/editor/operations";
+import { addMediaClip, addEffectClip, convertSolidColorToVisual, setClipPlaybackRate, setClipSpeedRamp, deleteClip, focusForClip, newLayerOverlaps, patchClip, placeOnFreeLayer, splitClip,trimClip,unlinkClips,linkClips,setClipBlendMode, addTransitionClip } from "../../lib/editor/operations";
 import { TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 import { APPROVAL_NOTE_LIMIT, approvalRefusal, approvalViolations, approveClip, approveSection, approvedWork, checkFilmSections, checkSectionCalls, isApproved, markerSection, unapproveClip, type ApprovalViolation } from '../../lib/editor/approvals';
 import { summarizeTimeline } from "./inspectTimeline";
@@ -1205,6 +1205,19 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         clipIds=[clip.id,pair.id];return unlinkClips(t,clipId);
       });
       return {...result,unlinked:clipIds.length>0,clipIds};
+    }}),
+    link:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.link,description:"Link video clips with their audio clips again so move, trim, split and delete act on both, as for imported footage: the inverse of unlink. Pass every pair in ONE call. Each pair must already start together, last the same time and play the same source range at the same speed; line them up first if not. The video is muted and its audio clip carries the sound. Only a video and the audio extracted from it can be linked; unlink a clip from another partner first.",inputSchema:z.object({pairs:z.array(z.object({videoClipId:z.string().min(1).max(100),audioClipId:z.string().min(1).max(100)})).min(1).max(200).describe('Video/audio clip pairs to link.')}).refine(input=>new Set(input.pairs.flatMap(pair=>[pair.videoClipId,pair.audioClipId])).size===input.pairs.length*2,{message:'Use each clip in only one pair.'}),execute:async(_ctx,{pairs})=>{
+      let linked:{videoClipId:string;audioClipId:string}[]=[];
+      const result=await checkpoint(t=>{
+        linked=[];
+        return pairs.reduce((next,pair)=>{
+          const video=find(next,pair.videoClipId),audio=find(next,pair.audioClipId);
+          if(video.linkedClipId===audio.id&&audio.linkedClipId===video.id)return next;
+          linked.push(pair);
+          try{return linkClips(next,video.id,audio.id,videoAssetId=>assets.find(asset=>asset._id===videoAssetId)?.audioAssetId);}catch(error){throw new Error(`${pair.videoClipId} + ${pair.audioClipId}: ${error instanceof Error?error.message:String(error)}`);}
+        },t);
+      });
+      return {...result,linked,alreadyLinked:pairs.length-linked.length};
     }}),
     approveClip: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.approveClip, description: "Mark a clip, or one section of a film or scene, as approved: the user signed off on it, and every editing tool then refuses to change it. Use it when the user says they approve, like, or want to keep a clip or part of a film as it is. A section is a marker's part of a film (markerId: from that marker to the next) or a timeline range (start/end seconds) on a scene clip. note says what was approved, in the user's words (\"user approved the GeForce/CUDA diagrams\"). Approving a video approves its linked audio too. Call it only after the user approves; never approve on their behalf.", inputSchema: z.object({ clipId: z.string().min(1), markerId: z.string().min(1).optional().describe('Approve the film section that starts at this marker (to the next marker or the film end).'), start: z.number().min(0).optional().describe('Timeline seconds: approve only start..end of this scene or film clip.'), end: z.number().positive().optional(), note: z.string().trim().max(APPROVAL_NOTE_LIMIT).optional() }).refine(input => (input.start === undefined) === (input.end === undefined) && !(input.markerId && input.start !== undefined) && (input.start === undefined || input.end! > input.start), { message: 'Give markerId, or both start and end (end after start), or neither to approve the whole clip.' }), execute: async (_ctx, { clipId, markerId, start, end, note }) => {
       let section: { id: string; start: number; end: number; label?: string } | undefined;

@@ -41,6 +41,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   readBrief: { effect: 'read', mcp: 'read' },
   updateBrief: { effect: 'resource', mcp: 'exclusive', writes: ['briefs:update'], label: ['Saving project brief', 'Saved project brief'] },
   unlink: { effect: 'timeline', mcp: 'exclusive', label: ['Unlinking video and audio', 'Unlinked video and audio'] },
+  link: { effect: 'timeline', mcp: 'exclusive', label: ['Linking video and audio', 'Linked video and audio'] },
   approveClip: { effect: 'timeline', mcp: 'exclusive' },
   unapproveClip: { effect: 'timeline', mcp: 'exclusive' },
   inspectTimeline: { effect: 'read', mcp: 'read', label: ['Checking timeline', 'Checked timeline'] },

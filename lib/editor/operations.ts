@@ -20,6 +20,46 @@ export function unlinkClips(timeline: Timeline, id: string): Timeline {
   const ids = new Set(linkedClipIds(timeline, [id]));
   return { ...timeline, clips: timeline.clips.map(clip => ids.has(clip.id) ? { ...clip, linkedClipId: undefined } : clip) };
 }
+/** Looks up the audio asset extracted from a video asset; the server only accepts links to that audio. */
+export type AudioAssetOf = (videoAssetId: string) => string | undefined;
+/** Why a video and an audio clip cannot be linked, or undefined when they can. Linked trims copy the video's absolute timing onto its audio, so both must already cover the same moment of source. */
+export function linkProblem(timeline: Timeline, video: Clip, audio: Clip, audioAssetOf: AudioAssetOf): string | undefined {
+  if (video.kind !== 'video' || audio.kind !== 'audio') return 'Choose one video clip and one audio clip to link.';
+  if (video.linkedClipId === audio.id && audio.linkedClipId === video.id) return 'These clips are already linked.';
+  if (video.linkedClipId || audio.linkedClipId) return 'One of these clips is linked to another clip. Unlink it first.';
+  if (!video.assetId || !audio.assetId || audioAssetOf(video.assetId) !== audio.assetId) return 'Only a video and the audio extracted from it can be linked.';
+  const half = 0.5 / timeline.fps, near = (a: number, b: number) => Math.abs(a - b) < half;
+  if (!near(video.start, audio.start) || !near(video.duration, audio.duration)) return 'Linked video and audio must start together and last the same time. Line them up first.';
+  if (!near(video.sourceStart, audio.sourceStart) || Math.abs(playbackRateOf(video) - playbackRateOf(audio)) > 1e-6 || JSON.stringify(video.speedRamp ?? null) !== JSON.stringify(audio.speedRamp ?? null)) return 'Linked video and audio must play the same part of their source at the same speed.';
+  return undefined;
+}
+/** The inverse of unlinkClips: pair a video with its extracted audio exactly as media import does. */
+export function linkClips(timeline: Timeline, videoId: string, audioId: string, audioAssetOf: AudioAssetOf): Timeline {
+  timeline = normalizeTimeline(timeline);
+  const video = timeline.clips.find(clip => clip.id === videoId), audio = timeline.clips.find(clip => clip.id === audioId);
+  if (!video || !audio) throw new Error('Choose existing video and audio clips to link.');
+  const problem = linkProblem(timeline, video, audio, audioAssetOf);
+  if (problem) throw new Error(problem);
+  // A video still playing its own sound hands that level to its audio clip, as import does.
+  const volume = video.audioSeparated ? audio.volume : video.volume ?? 1;
+  return { ...timeline, clips: timeline.clips.map(clip =>
+    clip.id === videoId ? { ...clip, volume: 0, audioSeparated: true, linkedClipId: audioId }
+    : clip.id === audioId ? { ...clip, start: video.start, duration: video.duration, sourceStart: video.sourceStart, playbackRate: video.playbackRate, volume, linkedClipId: videoId }
+    : clip) };
+}
+/** Unlinked selected video/audio pairs that cover the same moment; videos with no single match are skipped. */
+export function matchingAudioPairs(timeline: Timeline, ids: string[], audioAssetOf: AudioAssetOf): { videoClipId: string; audioClipId: string }[] {
+  const selected = new Set(ids);
+  const videos = timeline.clips.filter(clip => clip.kind === 'video' && selected.has(clip.id)).sort((a, b) => a.start - b.start);
+  const audios = timeline.clips.filter(clip => clip.kind === 'audio' && selected.has(clip.id));
+  const used = new Set<string>(), pairs: { videoClipId: string; audioClipId: string }[] = [];
+  for (const video of videos) {
+    const matches = audios.filter(audio => !used.has(audio.id) && !linkProblem(timeline, video, audio, audioAssetOf));
+    if (matches.length !== 1) continue;
+    used.add(matches[0].id); pairs.push({ videoClipId: video.id, audioClipId: matches[0].id });
+  }
+  return pairs;
+}
 /** Apply a shared blend atomically so both sides of a transition can stay compatible. */
 export function setClipBlendMode(timeline:Timeline,ids:string[],blendMode:BlendMode):Timeline{
   const selected=new Set(ids);

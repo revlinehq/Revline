@@ -26,6 +26,7 @@ export const BASE_TOOLS = [
   'readBrief',
   'updateBrief',
   'unlink',
+  'link',
   'approveClip',
   'unapproveClip',
   'inspectTimeline',

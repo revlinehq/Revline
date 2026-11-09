@@ -9,7 +9,7 @@ import type { FilmDraftView } from '@/lib/editor/film-draft-view';
 import { Film, ImageIcon, AudioLines, Captions, Clapperboard, Square, SlidersHorizontal, Zap, Blend, LoaderCircle } from 'lucide-react';
 import { EffectIcon } from './effect-icon';
 import { SceneFilmstrip } from './scene-filmstrip';
-import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft, Braces } from 'lucide-react';
+import { Scissors, Copy, ClipboardPaste, Trash2, Magnet, Plus, Type, Layers, Volume2, VolumeX, ChevronDown, ChevronUp, MoreHorizontal, Rows3, ListMinus, Link, Unlink, Flag, Pencil, FoldHorizontal, Combine, Undo2, Redo2, ChevronsRightLeft, Braces } from 'lucide-react';
 import { IconButton } from './primitives';
 import { TimelineRulerTicks } from './timeline-ruler';
 import { EditorPlaybackTime } from './playback-time';
@@ -26,7 +26,7 @@ import { EFFECT_DRAG_TYPE, readEffectDrag, dropLibraryEffect } from '@/lib/edito
 import { effectClipLabel, solidColorSettings } from '@/lib/editor/clip-effects';
 import { isTransitionClip, transitionPair } from '@/lib/editor/clip-transitions';
 import { TimelineCutTransition } from './timeline-transitions';
-import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, patchClip } from '@/lib/editor/operations';
+import { snapTime, addMediaClip, addTextClip, splitClip, frameSeekTime, linkedClipIds, unlinkClips, linkClips, matchingAudioPairs, patchClip } from '@/lib/editor/operations';
 import { timelineLayout, TIMELINE_RULER_HEIGHT, TIMELINE_ORIGIN, TIMELINE_TOP_SPACE, TIMELINE_BOTTOM_SPACE } from '@/lib/editor/timeline-layout';
 import { clipVolumeAtPointer, clipVolumeAtFraction, MAX_CLIP_VOLUME } from '@/lib/editor/clip-volume';
 import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resizeSelectedClips,moveSelectedClips,moveSelectionToNewLayers,layerDropTarget,clipLayerDropTarget,intersectsSelection,shouldCommitClipGesture,timelineTimeAtPointer,minimumClipMoveDelta } from '@/lib/editor/timeline-controls';
@@ -644,6 +644,13 @@ export function TimelinePanel(p:Props){
   // A cue on a section start's frame flags the other way, so both stay visible and grabbable on one pole.
   const sectionFrames=new Set((timeline.markers??[]).filter(isSectionMarker).map(marker=>Math.round(marker.time*timeline.fps)));
   const contextAudio=contextClip?.kind==='audio'?contextClip:timeline.clips.find(clip=>clip.id===contextClip?.linkedClipId);
+  // Selected clips the context menu can link: one explicit video/audio pair, or several paired by matching timing.
+  const audioAssetOf=(videoAssetId:string)=>assetMap.get(videoAssetId)?.audioAssetId;
+  const contextSelection=contextClip&&selectedIds.includes(contextClip.id)?timeline.clips.filter(clip=>selectedIds.includes(clip.id)):[];
+  const linkVideo=contextSelection.length===2?contextSelection.find(clip=>clip.kind==='video'):undefined,linkAudio=contextSelection.length===2?contextSelection.find(clip=>clip.kind==='audio'):undefined;
+  const linkablePair=linkVideo&&linkAudio&&!(linkVideo.linkedClipId===linkAudio.id&&linkAudio.linkedClipId===linkVideo.id)?{video:linkVideo,audio:linkAudio}:undefined;
+  const matchingLinks=contextSelection.length>2?matchingAudioPairs(timeline,selectedIds,audioAssetOf):[];
+  const linkMatching=()=>runContext(()=>onChange(matchingAudioPairs(timeline,selectedIds,audioAssetOf).reduce((next,pair)=>linkClips(next,pair.videoClipId,pair.audioClipId,audioAssetOf),timeline)));
   const contextClips=context?.group&&context.track?timeline.clips.filter(clip=>layerGroup(clip.kind)===context.group&&trackOf(clip)===context.track):[];
   const contextTime=context?.time??time;
   const runContext=(action:()=>void)=>{try{action();}catch(error){report(error);}};
@@ -745,6 +752,8 @@ export function TimelinePanel(p:Props){
       <ContextMenuItem disabled={editingDisabled} onSelect={p.onDuplicate}><Copy/>Duplicate</ContextMenuItem>
       <ContextMenuItem disabled={editingDisabled} onSelect={p.onDelete}><Trash2/>Delete</ContextMenuItem>
       {contextClip.linkedClipId&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>onChange(unlinkClips(timeline,contextClip.id))}><Unlink/>Unlink video and audio</ContextMenuItem>}
+      {linkablePair&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>runContext(()=>onChange(linkClips(timeline,linkablePair.video.id,linkablePair.audio.id,audioAssetOf)))}><Link/>Link video and audio</ContextMenuItem>}
+      {matchingLinks.length>0&&<ContextMenuItem disabled={editingDisabled} onSelect={linkMatching}><Link/>Link matching audio{matchingLinks.length>1?` (${matchingLinks.length})`:''}</ContextMenuItem>}
       {(contextClip.kind==='audio'||contextClip.kind==='video'&&!contextClip.audioSeparated)&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>toggleTrackSound([contextClip])}>{(contextAudio??contextClip).volume===0?<VolumeX/>:<Volume2/>}{(contextAudio??contextClip).volume===0?'Unmute clip':'Mute clip'}</ContextMenuItem>}
       <ContextMenuSeparator/>
     </>:<>
