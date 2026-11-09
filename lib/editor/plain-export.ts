@@ -1,5 +1,6 @@
 import { resolvedAudioTimeline } from './audio-normalization';
 import { canonical } from './export-reuse';
+import { expandBackgroundFills, mirrorFillOwner } from './mirror-blur-layout';
 import { layerZIndex, type ExportResolution } from './composition';
 import { calculateVisualRect } from './visual-source-geometry';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
@@ -61,7 +62,7 @@ export const PLAIN_EXPORT_MAX_STACK_SOURCES = 8;
 // HyperFrames snaps clip edges within 1/1000 frame to the frame grid (parityContract FRAME_BOUNDARY_EPSILON).
 const FRAME_BOUNDARY_EPSILON = 1e-3;
 const SHARED_KEYS = new Set<keyof Clip>(['id', 'kind', 'assetId', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'linkedClipId', 'audioSeparated', 'effectPreset', 'motion', 'motionOffset', 'approval', 'approvedSections']);
-const VIDEO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'fit', 'transform', 'crop', 'blendMode', 'focus', 'framingCuts', 'visualFade', 'flip', ...VISUAL_EFFECT_KEYS]);
+const VIDEO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'fit', 'transform', 'crop', 'blendMode', 'focus', 'framingCuts', 'visualFade', 'flip', 'backgroundFill', ...VISUAL_EFFECT_KEYS]);
 const AUDIO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'audio', 'audioFadeTiming']);
 // Everything the browser text layer reads for a clip without a template, gradient or entrance.
 const TEXT_KEYS = new Set<keyof Clip>(['id', 'kind', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'text', 'fontSize', 'color', 'background', 'x', 'y', 'textStyle', 'fontFamily', 'transform', 'blendMode', 'animation', 'textAnimationTiming', 'approval', 'approvedSections']);
@@ -205,6 +206,14 @@ export function plainAudioPlan(timeline: Timeline, assets: MediaAsset[], fps: nu
  */
 export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolution: ExportResolution, fps: number): PlainExportDecision {
   timeline=resolvedAudioTimeline(timeline);
+  // A backgroundFill is drawn as the browser draws it: bands of the clip's own frames (flipped,
+  // soft-blurred, darkened copies) stacked just beneath it, which the stack path below reproduces.
+  timeline = expandBackgroundFills(timeline, assets);
+  const clipIndex = new Map(timeline.clips.map((clip, index) => [clip.id, index]));
+  const zOf = (clip: Clip, index: number) => {
+    const owner = mirrorFillOwner(clip.id), ownerIndex = owner === undefined ? undefined : clipIndex.get(owner);
+    return ownerIndex === undefined ? layerZIndex(clip, index) : layerZIndex(timeline.clips[ownerIndex], ownerIndex) - 1;
+  };
   const no = (reason: string): PlainExportDecision => ({ eligible: false, reason });
   if (fps !== 24 && fps !== 30 && fps !== 60) return no('unsupported export frame rate');
   if (resolution !== 720 && resolution !== 1080 && resolution !== 2160) return no('unsupported export resolution');
@@ -221,7 +230,7 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
       if (reason) return no(reason);
       if (!finite(clip.start, clip.duration) || clip.start < 0 || clip.duration <= 0) return no('a clip has invalid timing');
       const { first, end } = visibleTicks(clip, fps);
-      if (end > first) texts.push({ clip, z: layerZIndex(clip, index), first, end });
+      if (end > first) texts.push({ clip, z: zOf(clip, index), first, end });
       continue;
     }
     if (clip.kind !== 'video' && clip.kind !== 'audio') return no(`the timeline contains a ${clip.kind} clip`);
@@ -242,7 +251,7 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
       const look = visualLook(clip, asset);
       if (typeof look === 'string') return no(look);
       const { first, end } = visibleTicks(clip, fps);
-      if (end > first) visuals.push({ clip, look, z: layerZIndex(clip, index), first, end });
+      if (end > first) visuals.push({ clip, look, z: zOf(clip, index), first, end });
     } else if (!asset || asset.kind !== 'audio') return no('an audio clip references unavailable or mismatched media');
     const sound = soundOf(timeline, clip);
     if (typeof sound === 'string') return no(sound);
