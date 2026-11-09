@@ -6,6 +6,7 @@ import { createCaptureSession, initializeSession, closeCaptureSession, captureFr
 import { parseVideoElements, extractAllVideoFrames, createFrameLookupTable } from '@hyperframes/engine';
 import { shiftRateLane, sourceTimeAt } from '@hyperframes/core';
 import sharp from 'sharp';
+import { microseconds } from '../lib/ffmpeg-time.mjs';
 const [directory,serialized]=process.argv.slice(2),settings=JSON.parse(serialized);
 const root=resolve(directory),controller=new AbortController();
 process.on('SIGTERM',()=>controller.abort());process.on('disconnect',()=>controller.abort());
@@ -24,8 +25,14 @@ try{
   const safe=[];
   for(const variant of variants){
     const dir=join(root,variant),html=await readFile(join(dir,'index.html'),'utf8');
+    // Clip bounds and the window come from different float sums, so a clip that
+    // ends where the window starts can overlap it by a sliver (3e-7s). The engine
+    // hands FFmpeg `-t String(duration)`, which comes out in exponent form and
+    // fails the whole decode (and every mirror copy sharing it). Snap to
+    // microseconds and decode at least one whole frame of any overlapping clip.
+    const frame=1/settings.fps;
     const videos=parseVideoElements(html).filter(video=>video.start<settings.end&&video.end>settings.start).map(video=>{
-      const start=Math.max(settings.start,video.start),end=Math.min(settings.end,video.end);
+      const start=microseconds(Math.max(settings.start,video.start)),end=Math.max(microseconds(Math.min(settings.end,video.end)),microseconds(start+frame));
       // A speed ramp (a rate lane) is cut to the window with the engine's own source-time mapping.
       const rate=video.playbackRate??1,skipped=start-video.start;
       // Composition attributes use microseconds; avoid scientific-notation seeks FFmpeg rejects.
@@ -41,7 +48,8 @@ try{
         for(const [index,time] of settings.times.entries()){
           if(time<video.start-tolerance||time>=video.end-tolerance)continue;
           const rate=video.playbackRate??1,skipped=time-video.start;
-          const local={...video,start:time,end:Math.min(video.end,time+1/settings.fps),mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
+          // One whole frame from the sample; a sliver to the clip's end would reach FFmpeg as an exponent.
+          const local={...video,start:microseconds(time),end:microseconds(time+1/settings.fps),mediaStart:Math.round((video.mediaStart+sourceTimeAt(rate,skipped))*1e6)/1e6,playbackRate:typeof rate==='number'?rate:shiftRateLane(rate,skipped)};
           const part=await extractAllVideoFrames([local],dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames',String(index)),format:'png',toneMapHdrToSdr:true,timelineEnd:local.end},controller.signal);
           if(part.errors?.length)throw new Error(`Clipping-sheet source frame could not be decoded: ${part.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
           if(!part.extracted[0]?.framePaths.size)throw new Error('A requested clipping-sheet source frame could not be decoded.');
@@ -50,7 +58,7 @@ try{
         if(template)sparse.push({...template,videoId:video.id,fps:settings.fps,totalFrames:Math.ceil(sourceTimeAt(video.playbackRate??1,video.end-video.start)*settings.fps),framePaths:paths});
       }
       extracted={extracted:sparse};
-    }else extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:settings.end},controller.signal);
+    }else extracted=await extractAllVideoFrames(videos,dir,{fps:{num:settings.fps,den:1},outputDir:join(dir,'frames'),format:'png',toneMapHdrToSdr:true,timelineEnd:Math.max(settings.end,...videos.map(video=>video.end))},controller.signal);
     if(extracted.errors?.length)throw new Error(`Video frames could not be decoded for review: ${extracted.errors.map(({videoId,kind,error})=>`${videoId} (${kind}): ${error}`).join('; ')}`);
     const injector=createVideoFrameInjector(createFrameLookupTable(videos,extracted.extracted,settings.fps));
     const server=await createFileServer({projectDir:dir,fps:{num:settings.fps,den:1}});

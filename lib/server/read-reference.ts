@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { roundTo } from '../math';
 import type { FrameCache } from './frame-cache';
 import { runMediaCommand as run } from './media-command';
@@ -46,7 +47,7 @@ export async function frameAt(path: string, directory: string, time: number, cro
   // A seek at or near the very end can decode nothing (the container runs a little longer than the video).
   // Step back until a real frame comes out, so a whole-length read never fails on its last frame.
   for (const back of [0, .05, .15, .3, .6, 1, 2]) {
-    await run('ffmpeg', ['-v', 'error', '-ss', Math.max(0, time - back).toFixed(3), '-i', path, '-map', '0:v:0', '-frames:v', '1', ...(crop ? ['-vf', `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []), '-y', output], { signal, timeout: 30_000 });
+    await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(Math.max(0, time - back)), '-i', path, '-map', '0:v:0', '-frames:v', '1', ...(crop ? ['-vf', `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []), '-y', output], { signal, timeout: 30_000 });
     try { return await readFile(output); } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   }
   throw new AnalysisError(`No video frame could be decoded near ${time.toFixed(2)} s.`, 400);
@@ -131,7 +132,7 @@ async function findMoments(path: string, start: number, end: number, source: Sou
   if (to - from < .2) return { moments: [], holds: [], changed: false };
   // A window up to 30 s is read wide enough that an app icon or one key is several pixels, not one; long maps stay small.
   const width = to - from <= 30 ? 256 : 96, height = Math.max(2, Math.round(width * area.h / area.w) & ~1);
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(3), '-t', (to - from).toFixed(3), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, Math.ceil((to - from) * 1000)), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(from), '-t', ffmpegTime(to - from), '-i', path, '-map', '0:v:0', '-vf', `fps=${rate},crop=${area.w}:${area.h}:${area.x}:${area.y},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: Math.max(120_000, Math.ceil((to - from) * 1000)), encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, total = Math.floor(stdout.length / size), factor = area.w / width;
   if (total < 2) return { moments: [], holds: [], changed: false };
   const frame = (index: number) => stdout.subarray(index * size, (index + 1) * size);
@@ -252,7 +253,7 @@ async function readSounds(path: string, directory: string, source: Source, work:
   const from = Math.max(0, Math.min(work.start, source.duration)), to = Math.min(Math.max(work.end, from), source.duration), length = to - from;
   if (length < .3) throw new AnalysisError('Listen to at least 0.3 s.', 400);
   if (length > 60) throw new AnalysisError('Listen to at most 60 s at a time.', 400);
-  const window = ['-ss', from.toFixed(3), '-t', length.toFixed(3), '-i', path];
+  const window = ['-ss', ffmpegTime(from), '-t', ffmpegTime(length), '-i', path];
   const audio = await run('ffmpeg', ['-v', 'error', ...window, '-map', '0:a:0', '-ac', '1', '-ar', String(SOUND_RATE), '-f', 'f32le', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }).catch(() => null);
   if (!audio?.stdout.length) throw new AnalysisError('This video has no sound to listen to.', 400);
   const bytes = audio.stdout as Buffer, mono = new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length - bytes.length % 4));
@@ -304,7 +305,7 @@ async function readMotion(path: string, source: Source, work: Work, signal: Abor
   const x = keys ? coordinate('x') : '', y = keys ? coordinate('y') : '', w = keys ? coordinate('w') : '', h = keys ? coordinate('h') : '';
   const selection = keys ? [`perspective=x0='W*(${x})':y0='H*(${y})':x1='W*((${x})+(${w}))':y1='H*(${y})':x2='W*(${x})':y2='H*((${y})+(${h}))':x3='W*((${x})+(${w}))':y3='H*((${y})+(${h}))':sense=source:eval=frame`] : crop ? [`crop=${crop.width}:${crop.height}:${crop.left}:${crop.top}`] : [];
   const filter = [`fps=${fps}`, ...selection, `scale=${width}:${height}`, 'format=gray'].join(',');
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', from.toFixed(6), '-t', (to - from).toFixed(6), '-i', path, '-map', '0:v:0', '-vf', filter, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
+  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(from), '-t', ffmpegTime(to - from), '-i', path, '-map', '0:v:0', '-vf', filter, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
   const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
   if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
   onProgress(40);

@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { downloadPublicHttps } from './public-https';
 import { preparePixelTrackFiles, localPixelTrackFiles } from './pixel-track-files';
 import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
@@ -60,7 +61,7 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
         const alpha=asset.contentType==='video/webm'||!!asset.cutoutOf,name=`asset-${index}-window.${alpha?'webm':'mp4'}`;
         const codec=alpha?(await run('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=codec_name','-of','csv=p=0',source],{signal:sourceSignal})).stdout.trim():'';
         const decoder=codec==='vp8'?'libvpx':codec==='vp9'?'libvpx-vp9':undefined;
-        await run('ffmpeg',['-v','error','-threads','2',...(decoder?['-c:v',decoder]:[]),'-ss',String(start),'-i',source,'-t',String(end-start),'-map','0:v:0','-map','0:a:0?',...(alpha?['-c:v','libvpx-vp9','-pix_fmt','yuva420p','-auto-alt-ref','0','-b:v','0','-crf','18','-deadline','realtime']:['-c:v','libx264','-preset','veryfast','-crf','14','-pix_fmt','yuv420p','-movflags','+faststart']),'-threads','2','-c:a',alpha?'libopus':'aac','-y',join(directory,name)],{signal:sourceSignal,maxBuffer:1024*1024});
+        await run('ffmpeg',['-v','error','-threads','2',...(decoder?['-c:v',decoder]:[]),'-ss',ffmpegTime(start),'-i',source,'-t',ffmpegTime(end-start),'-map','0:v:0','-map','0:a:0?',...(alpha?['-c:v','libvpx-vp9','-pix_fmt','yuva420p','-auto-alt-ref','0','-b:v','0','-crf','18','-deadline','realtime']:['-c:v','libx264','-preset','veryfast','-crf','14','-pix_fmt','yuv420p','-movflags','+faststart']),'-threads','2','-c:a',alpha?'libopus':'aac','-y',join(directory,name)],{signal:sourceSignal,maxBuffer:1024*1024});
         prepared.set(index,{url:`./${name}`,offset:start});return;
       }
     }
