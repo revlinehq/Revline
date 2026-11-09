@@ -103,6 +103,7 @@ export const PROJECT_BASE_TOOLS = [
   'deleteTimeline',
   'listExports',
   'getExport',
+  'cancelExport',
   'startTask',
   'setLane',
 ];

@@ -19,7 +19,7 @@ import { aspectRatio, frameResolution } from './schema';
 import { beginProjectDeletion, copyMediaFor, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
 import { importVideoFor } from './mediaTasks';
 import { cancelMediaTask } from './lib/media_queue';
-import { exportFileName, startRenderFor } from './renders';
+import { cancelRenderJob, exportFileName, startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, removeTabFor, renameTabFor, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { historyStart, timelineAtRevision } from './lib/revision_log';
@@ -206,6 +206,17 @@ export const listExports = internalQuery({ args: { ownerId: v.string(), projectI
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
   const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', project._id)).order('desc').take(args.limit);
   return jobs.map(job => ({ jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, createdAt: new Date(job.createdAt).toISOString(), current: job.sourceRevision === (project.revision ?? 0), ...(job.label ? { timeline: job.label } : {}), ...(job.sourceClipId ? { clipId: job.sourceClipId } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null }));
+}});
+
+/** cancelExport: the same stop as the editor's Cancel button, checked against the owner and, when the call names one, the task's project. */
+export const cancelExport = internalMutation({ args: { ownerId: v.string(), jobId: v.string(), projectId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
+  const id = ctx.db.normalizeId('renderJobs', args.jobId), job = id ? await ctx.db.get(id) : null;
+  if (!job || job.ownerId !== args.ownerId) throw new ConvexError('Export not found.');
+  if (args.projectId !== undefined && projectIdOf(ctx, args.projectId) !== job.projectId) throw new ConvexError('This export belongs to another project. Use listExports on its project for its jobId.');
+  await requireProject(ctx, job.projectId, args.ownerId, false);
+  const previous = job.status;
+  if (!await cancelRenderJob(ctx, job)) return { jobId: job._id, status: previous, cancelled: false, note: `This export had already ${previous === 'completed' ? 'completed' : `ended (${previous})`}; nothing was stopped.` };
+  return { jobId: job._id, status: 'cancelled', previousStatus: previous, cancelled: true, note: 'The render stopped. Saved edits and finished exports are unchanged; frame checks and a new export no longer wait on it.' };
 }});
 
 export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.string() }, returns: v.any(), handler: async (ctx, args) => {

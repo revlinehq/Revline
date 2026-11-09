@@ -13,7 +13,7 @@ One source, one project, shared assets and saved analysis; one titled tab per ac
 4. For each accepted candidate, createTimeline from blank with the short's title as its name, using the aspect ratio findHighlights returned.
 5. Add the chosen range with addMedia from the shared asset at start 0, then inspect the new clip IDs before any reframing or polish.
 6. Build every accepted tab, then call finishClipping and finish, and report its finalMessage.
-7. Export only when asked: exportVideo once per finished tab with its timelineId, poll getExport for each job, and label each download by title.
+7. Export only when asked: exportVideo once per finished tab with its timelineId, poll getExport for each job, and label each download by title. cancelExport stops a stuck or unwanted job.
 
 ## Rules
 Sources:

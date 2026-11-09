@@ -29,7 +29,7 @@ import { boardDocument, mcpAppData, type BackgroundRecipe } from '../lib/editor/
 const projectIdField = z.string().min(1).describe('Revline project ID from listProjects or getProject.');
 // These shared tools resolve their target from an owner-checked upload/job ID,
 // not a lane task. Their IDs must never be interpreted as lane task IDs.
-const RESOURCE_TOOLS = new Set(['finishUpload', 'getMediaTask', 'getExport']);
+const RESOURCE_TOOLS = new Set(['finishUpload', 'getMediaTask', 'getExport', 'cancelExport']);
 
 const PROJECT_TOOLS = {
   startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. A style is optional; shared edits work immediately after startTask. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
@@ -54,6 +54,7 @@ const PROJECT_TOOLS = {
   getFrames: { description: 'If a read returns pending, follow nextAction with its checkId to retrieve the same frozen render. Look at the edit: render 1 to 6 frames of the saved timeline at the given timeline seconds, composited exactly as the export draws them (footage, text, effects). Use it to check framing, captions and effects after editing. Takes about 10-30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision: look at an earlier version the user refers to before bringing it back with restoreSection or restoreClip.', inputSchema: z.object({ checkId: z.string().min(1).optional().describe('Resume the pending frame read returned by this tool; retain its original arguments.'), resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing; use only for precise layout inspection.'), projectId: projectIdField, timelineId: z.string().min(1).optional().describe('The timeline tab to render (from listTimelines); without it, the open tab.'), times: z.array(z.number().min(0)).min(1).max(6), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to render instead of the current timeline.') }) },
   listExports: { description: 'Recent exports of a project, newest first: queued and rendering ones with progress, and finished ones with a temporary download link. current is false when the timeline changed after the export started.', inputSchema: z.object({ projectId: projectIdField, limit: z.number().int().min(1).max(20).optional() }) },
   getExport: { description: 'Status of an export; a completed export includes a temporary download link.', inputSchema: z.object({ jobId: z.string().min(1) }) },
+  cancelExport: { description: 'Stop a queued or rendering export by its jobId (from exportVideo or listExports), the same as Cancel in the editor. Use it when an export is stuck or no longer wanted: a stuck export holds the render queue, so frame and sound checks and the next export wait behind it. Only the render stops; saved edits and finished exports are untouched, so it needs no confirmation. Optional projectId must be the export\'s project.', inputSchema: z.object({ jobId: z.string().min(1), projectId: projectIdField.optional() }) },
 } as const;
 type ProjectToolName = keyof typeof PROJECT_TOOLS;
 
@@ -274,6 +275,7 @@ async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToo
       const jobs = await ctx.runQuery(internal.mcp.listExports, { ownerId, projectId: input.projectId, limit: input.limit ?? 10 }) as { output: { storageId?: Id<'_storage'>; r2Key?: string; fileName: string } | null }[];
       return result(await Promise.all(jobs.map(async ({ output, ...job }) => { const downloadUrl = output ? await mediaDownloadUrl(ctx, { storageId: output.storageId, r2Key: output.r2Key }, output.fileName) : null; return { ...job, ...(downloadUrl ? { downloadUrl } : {}) }; })));
     }
+    case 'cancelExport': return result(await ctx.runMutation(internal.mcp.cancelExport, { ownerId, jobId: input.jobId, ...(input.projectId ? { projectId: input.projectId } : {}) }));
     case 'getExport': {
       const { output, ...job } = await ctx.runQuery(internal.mcp.exportJob, { ownerId, jobId: input.jobId });
       const downloadUrl = output ? await mediaDownloadUrl(ctx, { storageId: output.storageId, r2Key: output.r2Key }, output.fileName) : null;
