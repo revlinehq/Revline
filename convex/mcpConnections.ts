@@ -35,7 +35,7 @@ export async function projectWorkingAgents(ctx: QueryCtx, ownerId: string, proje
   const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', Date.now())).order('desc').take(100);
   const agents = new Map<string, WorkingAgent>();
   for (const row of rows) {
-    if (row.ownerId !== ownerId || !row.agentName || !row.activeUntil) continue;
+    if (row.ownerId !== ownerId || !row.agentName || !row.activeUntil || row.supersededAt !== undefined) continue;
     const id = row.agentClientId ?? row._id, key = `${id}:${row.timelineId}`;
     if (!agents.has(key)) agents.set(key, { id, name: row.agentName, company: agentCompany(row.agentName), timelineId: row.timelineId, until: row.activeUntil });
   }
@@ -51,9 +51,10 @@ export async function touchTaskAgent(ctx: MutationCtx, ownerId: string, taskId: 
   const now = Date.now();
   // Each lease write reruns every open dashboard's project and assistant queries. Keep a lease with
   // more than half its idle window left, so a busy task writes (and schedules expiry) at most every five minutes.
-  if (row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return;
+  // A call of a task a newer one hid shows it again at once: touches happen when a call starts, so this agent is still working.
+  if (row.supersededAt === undefined && row.agentName === agentName && row.agentClientId === agentClientId && (row.activeUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return;
   const activeUntil = now + MCP_AGENT_IDLE_MS;
-  await ctx.db.patch(row._id, { agentName, agentClientId, activeUntil });
+  await ctx.db.patch(row._id, { agentName, agentClientId, activeUntil, supersededAt: undefined });
   // Convex queries don't rerun as wall time passes. Retire the lease with a
   // scheduled write so every open dashboard and editor updates at expiry.
   await ctx.scheduler.runAt(activeUntil, internal.mcpConnections.expire, { sessionId: row._id, activeUntil });
@@ -76,6 +77,19 @@ export const endTask = internalMutation({
     return null;
   },
 });
+
+/** A new task on a tab hides the working badge of every older task still live there. An interrupted agent never
+ * calls finish, so without this its badge outlasts it by the full idle lease. Only the badge changes: the lease,
+ * task-free continuation, saved edits, lane results and failed attempts stay, and nothing is marked passed.
+ * Any later call of a hidden task shows it again (touchTaskAgent clears supersededAt). */
+export async function supersedeTabTasks(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, timelineId: string, taskId: string) {
+  const now = Date.now();
+  const rows = await ctx.db.query('mcpLaneSessions').withIndex('by_project_activity', q => q.eq('projectId', projectId).gt('activeUntil', now)).take(100);
+  for (const row of rows) {
+    if (row.ownerId !== ownerId || row.timelineId !== timelineId || row.taskId === taskId || row.supersededAt !== undefined) continue;
+    await ctx.db.patch(row._id, { supersededAt: now });
+  }
+}
 
 export const close = internalMutation({
   args: scope, returns: v.null(),

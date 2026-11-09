@@ -152,7 +152,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=newMcpTaskId();
     const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
-    await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen});
+    // Earlier tasks on this tab that never called finish stop showing as working until they call again.
+    await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen,supersede:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
     return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,checkLevel,instructions:LANES[selection.lane].instructions,checks:checkInstructions(selection.lane,checkLevel),next:'Shared editing tools are ready. Style selection is optional. tools/list already holds every tool; load only the supporting capabilities you need, and a [Needs: …] tool runs once its lane or capability is loaded. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
   }
