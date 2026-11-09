@@ -156,7 +156,7 @@ function retimeRoom(timeline: Timeline, clip: Clip, id: string, duration: number
   const ids = new Set(linkedClipIds(timeline, [id]));
   if (duration > clip.duration && timeline.clips.some(member => ids.has(member.id) && timeline.clips.some(other => !ids.has(other.id)
     && layerGroup(member.kind) === layerGroup(other.kind) && trackOf(member) === trackOf(other)
-    && other.start < member.start + duration - 1e-6 && member.start < other.start + other.duration - 1e-6))) {
+    && rangesOverlap(other, { start: member.start, duration })))) {
     throw new Error('The slower clip would overlap another clip. Move it or make room before changing speed.');
   }
   return ids;
@@ -274,25 +274,51 @@ export function addTransitionClip(timeline: Timeline, id: string, preset: Transi
   transitionSources(next.clips, next.fps);
   return next;
 }
+/** Same-layer clips may share an edge: overlap up to this many seconds is float drift
+ * (10.644 + 1.451 = 12.095000000000002), never a collision. */
+export const OVERLAP_TOLERANCE = 0.000001;
+/** Whether two time ranges overlap by more than `tolerance`; touching edges never do. */
+export function rangesOverlap(a: { start: number; duration: number }, b: { start: number; duration: number }, tolerance = OVERLAP_TOLERANCE) {
+  return b.start < a.start + a.duration - tolerance && a.start < b.start + b.duration - tolerance;
+}
+/** Start offsets within `window` of `requested` that butt `clip` exactly against a
+ * neighbor's edge (or zero), nearest first. A frame-snapped or rounded start then
+ * lands on the join instead of overlapping it by a fraction of a frame. */
+export function joinOffsets(clip: { start: number; duration: number }, neighbors: { start: number; duration: number }[], requested: number, window: number) {
+  const offsets = new Set<number>([-clip.start]);
+  for (const other of neighbors) { offsets.add(other.start - clip.duration - clip.start); offsets.add(other.start + other.duration - clip.start); }
+  return [...offsets].filter(value => Math.abs(value - requested) <= window).sort((a, b) => Math.abs(a - requested) - Math.abs(b - requested));
+}
 /** The first layer at or above `track` where `clip` meets no other clip of its group. */
 export function freeLayer(clips: Clip[], clip: Clip, track: number, ignore: ReadonlySet<string>) {
   const group = layerGroup(clip.kind);
-  const overlaps = (other: Clip) => !ignore.has(other.id) && layerGroup(other.kind) === group && trackOf(other) === track && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001;
+  const overlaps = (other: Clip) => !ignore.has(other.id) && layerGroup(other.kind) === group && trackOf(other) === track && rangesOverlap(other, clip);
   const maximum = maxTrackCount(group);
   while (track <= maximum && clips.some(overlaps)) track++;
   if (track > maximum) throw new Error(`All ${maximum} layers overlap here. Move the clip to another time or remove a layer.`);
   return track;
 }
+/** A new clip asked to start within half a frame of a neighbor's edge on its layer starts
+ * exactly on that join when it fits there, instead of bumping to another layer. A linked
+ * clip keeps its partner's start so the pair stays in sync. */
+function settleNewClip(timeline: Timeline, clip: Clip): Clip {
+  if (isTransitionClip(clip) || clip.linkedClipId) return clip;
+  const group = layerGroup(clip.kind), track = trackOf(clip);
+  const neighbors = timeline.clips.filter(other => other.id !== clip.id && layerGroup(other.kind) === group && trackOf(other) === track);
+  if (!neighbors.some(other => rangesOverlap(other, clip))) return clip;
+  const offset = joinOffsets(clip, neighbors, 0, 0.5 / timeline.fps).find(offset => clip.start + offset >= -1e-9 && !neighbors.some(other => rangesOverlap(other, { start: clip.start + offset, duration: clip.duration })));
+  return offset === undefined ? clip : { ...clip, start: Math.max(0, clip.start + offset) };
+}
 /** Keep overlapping clips separate; an existing ID moves rather than duplicates. */
 export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   timeline = normalizeTimeline(timeline);
   const previous = timeline.clips.find(current => current.id === clip.id);
+  if (!previous && clip.track !== undefined) clip = settleNewClip(timeline, clip);
   if (previous?.linkedClipId) timeline = patchClip(timeline, clip.id, { start: clip.start, duration: clip.duration, sourceStart: clip.sourceStart, playbackRate: clip.playbackRate });
   if (clip.kind === 'video' && clip.audioSeparated) clip = { ...clip, volume: 0 };
   let track = trackOf(clip);
   if (clip.track === undefined && (clip.kind === 'caption' || clip.kind === 'graphic' || clip.kind === 'scene')) {
-    const beneath = timeline.clips.filter(other => other.id !== clip.id && layerGroup(other.kind) === 'visual'
-      && other.start < clip.start + clip.duration - 0.000001 && clip.start < other.start + other.duration - 0.000001);
+    const beneath = timeline.clips.filter(other => other.id !== clip.id && layerGroup(other.kind) === 'visual' && rangesOverlap(other, clip));
     track = Math.max(0, ...beneath.map(trackOf)) + 1;
   }
   const placed = { ...clip, track: freeLayer(timeline.clips, clip, track, new Set([clip.id])) };
@@ -307,7 +333,7 @@ export function placeOnFreeLayer(timeline: Timeline, clip: Clip): Timeline {
   return reconcileTransitionEdits(timeline, { ...next, tracks: deriveTrackCounts(next) });
 }
 /** Same-layer clip pairs overlapping by more than `tolerance` seconds; touching edges never overlap. */
-function layerOverlaps(timeline: Timeline, tolerance = 0.000001): [Clip, Clip][] {
+function layerOverlaps(timeline: Timeline, tolerance = OVERLAP_TOLERANCE): [Clip, Clip][] {
   const layers = new Map<string, Clip[]>();
   for (const clip of timeline.clips) {
     const key = `${layerGroup(clip.kind)}:${trackOf(clip)}`;
@@ -324,7 +350,7 @@ function layerOverlaps(timeline: Timeline, tolerance = 0.000001): [Clip, Clip][]
 /** Overlaps an edit introduces. Collisions already saved stay editable: the same pair
  * may keep overlapping (even after a layer reorder), and split or re-identified pieces
  * may stay inside a span that already overlapped on that layer. */
-export function newLayerOverlaps(before: Timeline, after: Timeline, tolerance = 0.000001): [Clip, Clip][] {
+export function newLayerOverlaps(before: Timeline, after: Timeline, tolerance = OVERLAP_TOLERANCE): [Clip, Clip][] {
   before = normalizeTimeline(before); after = normalizeTimeline(after);
   const key = ([a, b]: [Clip, Clip]) => a.id < b.id ? `${a.id}\n${b.id}` : `${b.id}\n${a.id}`;
   const layer = (clip: Clip) => `${layerGroup(clip.kind)}:${trackOf(clip)}`;

@@ -1,4 +1,4 @@
-import { linkedClipIds, placeOnFreeLayer } from './operations';
+import { linkedClipIds, placeOnFreeLayer, rangesOverlap } from './operations';
 import { layerGroup, maxTrackCount, normalizeTimeline, TIMELINE_LAYER_GROUPS, trackOf, type Clip, type Timeline, type TransitionPreset } from './types';
 import { isTransitionClip, transitionSources } from './clip-transitions';
 import { placeTransitionAt } from './transition-placement';
@@ -45,7 +45,7 @@ export function pasteTimelineClips(timeline: Timeline, source: Clip[], time: num
     const maximum = maxTrackCount(group), highest = Math.max(...members.map(trackOf));
     let offset = 0;
     while (highest + offset <= maximum && members.some(clip => timeline.clips.some(other => layerGroup(other.kind) === group
-      && trackOf(other) === trackOf(clip) + offset && other.start < clip.start + clip.duration - 1e-6 && clip.start < other.start + other.duration - 1e-6))) offset++;
+      && trackOf(other) === trackOf(clip) + offset && rangesOverlap(other, clip)))) offset++;
     if (highest + offset > maximum) throw new Error(`There is no room for this selection within ${maximum} layers. Paste at another time or remove a layer.`);
     copies = copies.map(clip => layerGroup(clip.kind) === group ? { ...clip, track: trackOf(clip) + offset } : clip);
   }
