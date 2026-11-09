@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { processingThreads } from './processing-resources';
 
@@ -24,8 +25,8 @@ export async function probeMedia(path: string, signal: AbortSignal) {
 }
 
 export async function extractTranscriptionAudio(input: string, output: string, signal: AbortSignal, window?: { start: number; end: number }) {
-  const seek = window ? ['-ss', window.start.toFixed(6)] : [];
-  const length = window ? ['-t', (window.end - window.start).toFixed(6)] : [];
+  const seek = window ? ['-ss', ffmpegTime(window.start)] : [];
+  const length = window ? ['-t', ffmpegTime(window.end - window.start)] : [];
   await run('ffmpeg', ['-v', 'error', ...seek, '-i', input, ...length, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'libmp3lame', '-b:a', '32k', '-y', output], { signal, timeout: !window && /^https?:\/\//.test(input) ? undefined : 120_000, maxBuffer: 1024 * 1024 });
 }
 
@@ -37,7 +38,7 @@ export async function extractVideoWindow(input: string, output: string, start: n
   const profile = analysisProfiles.inspection;
   const geometry = `scale=w='min(${profile.maxEdge},iw)':h='min(${profile.maxEdge},ih)':force_original_aspect_ratio=decrease:force_divisible_by=2`;
   // Preserve VFR PTS: the default encoder clock rounds cuts onto a fixed frame grid.
-  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', start.toFixed(6), '-i', input, '-t', (end - start).toFixed(6), '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-enc_time_base:v', '1:1000000', '-c:v', 'libx264', '-threads', String(processingThreads()), '-preset', 'veryfast', '-crf', String(profile.crf), '-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', ffmpegTime(start), '-i', input, '-t', ffmpegTime(end - start), '-map', '0:v:0', '-map', '0:a:0?', '-vf', geometry, '-fps_mode', 'vfr', '-enc_time_base:v', '1:1000000', '-c:v', 'libx264', '-threads', String(processingThreads()), '-preset', 'veryfast', '-crf', String(profile.crf), '-maxrate', `${profile.videoKbps}k`, '-bufsize', `${profile.videoKbps * 2}k`, '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', `${profile.audioKbps}k`, '-movflags', '+faststart', '-y', output], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
 }
 
 export async function prepareVideo(input: string, output: string, signal: AbortSignal, purpose?: AnalysisVideoPurpose) {

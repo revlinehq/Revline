@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import {execFile} from 'node:child_process';
 import {statfs} from 'node:fs/promises';
 import {dirname} from 'node:path';
@@ -29,7 +30,7 @@ export async function prepareRenderAudioSource(input:string,output:string,signal
     // Integer-second preroll keeps resampling phase stable across an AAC seek.
     // Trim in the output sample clock and return the new file's source origin.
     const seek=Math.max(0,Math.floor(start)-1),skip=Math.round((start-seek)*SAMPLE_RATE);
-    const inputWindow=window?['-ss',String(seek),'-t',String(end-seek+.1)]:[];
+    const inputWindow=window?['-ss',ffmpegTime(seek),'-t',ffmpegTime(end-seek+.1)]:[];
     const filter=window?['-af',`aresample=${SAMPLE_RATE},atrim=start_sample=${skip}:end_sample=${skip+sampleCount},asetpts=PTS-STARTPTS`]:[];
     await run('ffmpeg',['-v','error','-threads','1',...inputWindow,'-i',input,'-map','0:a:0','-vn',...filter,'-c:a','pcm_s16le','-ar',String(SAMPLE_RATE),'-rf64','auto','-y',output],{signal,maxBuffer:1024*1024});
     return {path:output,decoded:true,sourceStart:start,elapsedMs:performance.now()-started};

@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
@@ -27,6 +28,7 @@ const SEGMENT_FORMAT = 1;
 const known = (value?: string) => value && value !== 'unknown' && value !== 'reserved' ? value : undefined;
 const rate = (value?: string) => { const [n, d] = (value ?? '').split('/').map(Number); return n > 0 && d > 0 ? n / d : 0; };
 // Fixed notation keeps FFmpeg expressions free of exponents and locale effects.
+// Filter values keep sub-microsecond precision; time options go through ffmpegTime.
 const num = (value: number) => Number.isInteger(value) ? String(value) : value.toFixed(12).replace(/\.?0+$/, '');
 const expressionNumber = (value: number) => `(${num(value)})`;
 
@@ -162,7 +164,7 @@ async function audioMix(plan: PlainAudioPlan, probe: (assetId: string) => Promis
     // Input 0 is the picture. Then the native producer's prepared track: accurate
     // seek, stereo PCM at 48 kHz with atempo, gain baked into 16-bit samples, fades, delay.
     const input = audioInputs.length + 1;
-    audioInputs.push(['-ss', num(Math.max(0, track.sourceStart - offset)), '-t', num(track.duration * track.playbackRate), '-vn', '-sn', '-dn', '-threads', '1', '-i', pathOf(track.assetId)]);
+    audioInputs.push(['-ss', ffmpegTime(Math.max(0, track.sourceStart - offset)), '-t', ffmpegTime(track.duration * track.playbackRate), '-vn', '-sn', '-dn', '-threads', '1', '-i', pathOf(track.assetId)]);
     const stereo = source.audioChannels === 1 ? 'pan=stereo|FL=FL+FC|FR=FR+FC' : 'aformat=channel_layouts=stereo';
     const stages: number[] = [];
     let remaining = track.playbackRate;
@@ -338,7 +340,7 @@ async function encodeSegment(item: { index: number; segment: PlainExportPlan['vi
       if (!source.video || source.videoStreams !== 1) throw new Error('Fast export needs exactly one video stream per source.');
       if (!(layer.sourceStart < source.duration)) throw new Error('Video media start is outside the source duration.');
       sampled.push({ video: source.video });
-      inputs.push([...source.video.vfr ? [] : ['-noaccurate_seek'], '-ss', num(layer.sourceStart), '-an', '-sn', '-dn', '-threads', '1', '-i', pathOf(layer.assetId)]);
+      inputs.push([...source.video.vfr ? [] : ['-noaccurate_seek'], '-ss', ffmpegTime(layer.sourceStart), '-an', '-sn', '-dn', '-threads', '1', '-i', pathOf(layer.assetId)]);
     }
     graph.push(...stackChain(segment, 0, sampled, plan, 'v'));
   } else {
@@ -348,7 +350,7 @@ async function encodeSegment(item: { index: number; segment: PlainExportPlan['vi
     // No input duration limit: a non-accurate seek starts at the previous keyframe with negative
     // timestamps, as in HyperFrames. Decoding stops once the clip's trim ends its chain.
     graph.push(`${clipChain(0, segment, source.video, plan)}[v]`);
-    inputs.push([...source.video.vfr ? [] : ['-noaccurate_seek'], '-ss', num(segment.sourceStart), '-an', '-sn', '-dn', '-threads', '1', '-i', pathOf(segment.assetId)]);
+    inputs.push([...source.video.vfr ? [] : ['-noaccurate_seek'], '-ss', ffmpegTime(segment.sourceStart), '-an', '-sn', '-dn', '-threads', '1', '-i', pathOf(segment.assetId)]);
   }
   // Static text, rasterized by the browser text renderer, over the footage in paint order.
   let picture = 'v';
