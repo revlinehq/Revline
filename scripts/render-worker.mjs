@@ -32,13 +32,17 @@ try {
   // captured-frame files on disk (a 4K60 export needed ~16 GB of them). Other platforms
   // keep screenshots automatically. PRODUCER_FORCE_SCREENSHOT=true restores the old path.
   const forceScreenshot = process.env.PRODUCER_FORCE_SCREENSHOT === 'true';
+  // A SwiftShader re-render after a GPU attempt continues from that attempt's progress instead of
+  // restarting at 0 under it: the bar keeps moving and the queue's stalled-export check stays quiet.
+  let reported = 0, resumeFrom = 0;
+  const progressOf = value => { reported = Math.max(reported, resumeFrom + (100 - resumeFrom) * value / 100); return reported; };
   const render = async gpu => {
     // GPU-drawn frames leave CPU for more capture workers and encoder threads (same x264 preset and CRF).
     const sized = gpu.browserGpuMode === 'hardware' ? gpuRenderResources(resources) : resources;
     configureRenderFfmpeg(directory, sized);
     const producerConfig = resolveConfig({ concurrency: sized.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128, forceScreenshot, ...gpu });
     const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: sized.workers, strictness: 'strict', logger: createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error') });
-    try { await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progress.progress }), controller.signal); }
+    try { await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progressOf(progress.progress) }), controller.signal); }
     catch (error) { throw job.error && !controller.signal.aborted ? new Error(job.error, { cause: error }) : error; }
     if (job.status !== 'complete') throw new Error(job.error || 'The render did not finish.');
     return job;
@@ -56,6 +60,7 @@ try {
       console.error(`[revline] GPU render dropped an effect (${message.slice(0, 300)}); rendering again with SwiftShader.`);
       await writeFile(page, html);
       await rm(output, { force: true });
+      resumeFrom = reported;
       job = await render({ browserGpuMode: 'software' });
     } finally { await writeFile(page, html); }
   } else job = await render(gpu);
