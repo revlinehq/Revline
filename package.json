@@ -45,7 +45,6 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",
-    "@ai-sdk/google": "4.0.95",
     "@ai-sdk/openai": "^4.0.94",
     "@apple/app-store-server-library": "^3.1.0",
     "@clerk/backend": "^3.23.2",

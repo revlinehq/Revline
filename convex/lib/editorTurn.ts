@@ -16,7 +16,7 @@ import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
 import { wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
-import { googleEditorRequests, leadingSystemMessages } from "../../lib/ai/google-editor-requests";
+import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
 import { AssistantTokenBudget, editorTokenLimits, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../../lib/ai/token-budget";
 import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
@@ -26,7 +26,6 @@ import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTE
 import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
-import { google } from '@ai-sdk/google';
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { type ObjectType } from "convex/values";
@@ -115,7 +114,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
       if(provider==='openai'&&activeOpenAIKey())countInput=openAITokenCounter(modelId,activeOpenAIKey(),measurement=>console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,model:modelId,...measurement})}`));
     }
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
-    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : provider === 'google' ? google(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'google' ? [googleEditorRequests] : []), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
+    const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
     const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name==='clip' ? editorCommandInstructions(args.command) : ''}

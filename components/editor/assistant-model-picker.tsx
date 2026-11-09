@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { ChevronDown, LockKeyhole } from 'lucide-react';
 import { EDITOR_MODEL_CATALOG, EDITOR_MODELS, EDITOR_REASONING_EFFORTS, FREE_EDITOR_MODEL_CHOICE, type ClaudeModelChoice, type EditorReasoningEffort } from '@/lib/ai/claude-model';
-import { ClaudeLogo, GoogleLogo, McpLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
+import { ClaudeLogo, McpLogo, OpenAILogo } from '@/components/workspace/ai-app-logos';
 import { McpConnectorDialog } from '@/components/workspace/mcp-connector-section';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent } from '@/components/ui/dropdown-menu';
@@ -11,10 +11,10 @@ import './inspector-select.css';
 import './assistant-model-picker.css';
 
 /** The provider's mark beside each model. */
-const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : id.startsWith('gemini') ? <GoogleLogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
+const providerLogo = (id: ClaudeModelChoice) => id.startsWith('gpt') ? <OpenAILogo className="assistant-model-logo" /> : <ClaudeLogo className="assistant-model-logo" />;
 
 /** Compatibility with servers that still route Claude choices through MCP. */
-const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet'];
+const MCP_ONLY_MODELS: readonly ClaudeModelChoice[] = ['opus', 'sonnet', 'haiku'];
 const effortLabels: Record<EditorReasoningEffort, string> = { low: 'Low', medium: 'Medium', high: 'High', xhigh: 'X-high' };
 /** X-high shimmers in the brand gradient so the strongest effort reads as powerful. */
 const EffortText = ({ value }: { value: EditorReasoningEffort }) => value === 'xhigh' ? <span className="assistant-effort-xhigh">{effortLabels[value]}</span> : <>{effortLabels[value]}</>;
@@ -45,7 +45,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button type="button" variant="ghost" size="sm" className="inspector-select-trigger" aria-label={`AI editing model${effort ? ' and reasoning effort' : ''}`} disabled={disabled}>
-          {providerLogo(value)}<span className="inspector-select-value">{selected && 'shortLabel' in selected ? selected.shortLabel : selected?.label}</span>{effort && <span className="assistant-model-effort">· {effortLabel}</span>}<ChevronDown size={13}/>
+          {providerLogo(value)}<span className="inspector-select-value">{selected?.label}</span>{effort && <span className="assistant-model-effort">· {effortLabel}</span>}<ChevronDown size={13}/>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent className="workspace-menu inspector-select-menu assistant-picker-menu" aria-label="AI editing model options" sideOffset={5}>
