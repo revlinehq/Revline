@@ -118,6 +118,8 @@ function toolFailureMessage(text: string): string {
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
   const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS) : undefined;
+  // The task whose working badge this call raised, and the task this call ends. Settled in finally, so thrown failures count.
+  let busyTask: string | undefined, endedTask: string | undefined;
   try {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   const projectTool=args.name in PROJECT_TOOLS;
@@ -131,6 +133,9 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     ...(typeof input.timelineId==='string'?{timelineId:input.timelineId}:{}),
     ...(taskScoped&&typeof input.taskId==='string'?{taskId:input.taskId}:{}),
   }) as Doc<'mcpLaneSessions'>|null;
+  // finish always ends the task's live session, passed or not; its result still records the attempt honestly, and any
+  // later call on the task reopens it (touchTaskAgent) so the agent can fix the failures and finish again.
+  if(session&&args.name==='finish')endedTask=session.taskId;
   if(taskScoped&&input.taskId&&!session)return result('Task not found for this owner and project. Use the taskId and projectId returned by startTask.',true);
   // Only an explicit task ID may supply omitted targets. A connection's last
   // task must never choose the project or timeline of an edit.
@@ -155,6 +160,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     // Earlier tasks on this tab that never called finish stop showing as working until they call again.
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen,supersede:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId,taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
+    busyTask=taskId;
     return result({projectId,taskId,timelineId,lane:selection.lane,currentLane:selection.lane,lockedLane:selection.lockedLane,checkLevel,instructions:LANES[selection.lane].instructions,checks:checkInstructions(selection.lane,checkLevel),next:'Shared editing tools are ready. Style selection is optional. tools/list already holds every tool; load only the supporting capabilities you need, and a [Needs: …] tool runs once its lane or capability is loaded. Keep projectId and taskId on calls. Finish actual editing tasks before claiming completion.'});
   }
   if(args.name==='setLane'){
@@ -164,6 +170,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     await ctx.runMutation(internal.lanes.switchLane,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,reason:parsed.data.reason,taskType:parsed.data.taskType});
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:session.connectionId,projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,laneChosen:true});
     await ctx.runMutation(internal.mcp.touchAgent,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId,agentName,startedAt,...(agentClientId?{agentClientId}:{})});
+    busyTask=session.taskId;
     const checkLevel=taskCheckLevel(task);
     return result({projectId:session.projectId,taskId:session.taskId,timelineId,lane:parsed.data.lane,checkLevel,checks:checkInstructions(parsed.data.lane,checkLevel),next:'The lane’s tools now run; tools/list is unchanged. Read needed workflow skills; finish the primary deliverable before reporting completion.'});
   }
@@ -177,22 +184,15 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     if(!input.projectId||!input.timelineId)return result('Pass projectId and timelineId explicitly, or taskId from startTask to pin both.',true);
   }
   if(session&&['createTimeline','renameTimeline','deleteTimeline'].includes(args.name))await ctx.runMutation(internal.lanes.requireFinish,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId});
-  // The editor shows the agent as working across its whole request, not only during each call.
-  // One touch per call. touchAgent rewrites the ten-minute lease only once less than half is left, so a call
-  // longer than five minutes can outlast it; the next call renews it.
+  // The editor shows the agent as working while a call runs and briefly after (settled in finally); the ten-minute
+  // lease keeps the task open between calls. touchAgent rewrites the lease only once less than half is left.
   const projectId = typeof input.projectId === 'string' && args.name !== 'deleteProject' ? input.projectId : undefined;
-  if (projectId) await ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, agentName, startedAt, ...(session?{taskId:session.taskId}:{}), ...(agentClientId?{agentClientId}:{}) }).catch(() => null);
+  if (projectId) { await ctx.runMutation(internal.mcp.touchAgent, { ownerId: args.ownerId, projectId, agentName, startedAt, ...(session?{taskId:session.taskId}:{}), ...(agentClientId?{agentClientId}:{}) }).catch(() => null); if (session) busyTask = session.taskId; }
   try {
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
       : await callEditorTool(ctx, args.ownerId, args.name, input, agentName, comparisonDeadline, args.name==='reportIssue'?undefined:session??undefined);
-    if(session&&(args.name==='finish'||output.ended)){
-      let completion: {passed?:boolean;exhausted?:boolean}|undefined;
-      try{completion=JSON.parse(output.text);}catch{/* A tool failure keeps its ordinary idle lease. */}
-      if(output.ended||completion?.passed||completion?.exhausted){
-        await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:session.taskId});
-      }
-    }
+    if(session&&output.ended)endedTask=session.taskId;
     if(session&&!output.isError&&['createTimeline','openTimeline'].includes(args.name)){
       const opened=JSON.parse(output.text) as {timelineId?:string;opened?:string|boolean};
       const target=opened.timelineId??(typeof opened.opened==='string'?opened.opened:undefined);
@@ -216,6 +216,10 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     return output;
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   } catch(error){return result(message(error),true);}
+  finally{
+    if(endedTask)await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:endedTask}).catch(()=>null);
+    else if(busyTask)await ctx.runMutation(internal.mcpConnections.settleTaskAgent,{ownerId:args.ownerId,taskId:busyTask,startedAt}).catch(()=>null);
+  }
 }});
 
 async function callProjectTool(ctx: ActionCtx, ownerId: string, name: ProjectToolName, raw: Record<string, unknown>): Promise<CallResult> {
