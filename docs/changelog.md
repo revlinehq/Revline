@@ -1,4 +1,6 @@
 ## 2026-11-08
+- MCP: new `cancelExport({jobId})` stops a queued or rendering export, sharing the editor Cancel button's logic (`cancelRenderJob`); no confirmation, saved edits stay. Why: a stuck export blocked checks and the next export for 40+ minutes with no agent way out.
+- MCP: `startTask` hides the working badge of older tasks still live on the same tab; any later call of a hidden task shows it again. Why: abandoned tasks kept "Claude is working" on a tab after their agent was gone.
 - Clipping: `findHighlights` on gaming/action/music sources now measures missing scene cuts and audio levels itself (no Gemini), falls back to loudness onsets when a loud source has no spikes, and returns `signalsPending` with a retry hint while analysis runs. Why: the Warzone trailer clip run got an empty, silent result on a fresh upload and fell back to local ffmpeg.
 
 ## 2026-11-07

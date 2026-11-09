@@ -33,7 +33,7 @@ Revline is a video editor driven over MCP. Every edit call saves immediately to 
 
 ## 5. Rules
 
-- **Export only after the user confirms.** Show frames with `getFrames`, ask, then call `exportVideo`. Exports cost render time.
+- **Export only after the user confirms.** Show frames with `getFrames`, ask, then call `exportVideo` and poll `getExport`. Exports cost render time. If one is stuck or no longer wanted, stop it with `cancelExport` (no confirmation needed; saved edits stay); a stuck export holds frame checks and the next export.
 - To bring back an earlier version, use `listRevisions`, then `restoreSection` or `restoreClip`. Do not chain `undoLatestEdit` to reach an old state.
 - If a Revline tool fails unexpectedly or contradicts its description, call `reportIssue` once with the tool name, a short input summary, what happened and what you expected. Never include tokens, user text or media.
 - End your reply with the `editorUrl`, not a summary of how the edit was made.

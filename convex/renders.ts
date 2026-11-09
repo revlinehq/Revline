@@ -10,7 +10,7 @@ import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { action, internalQuery, mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { currentTimeline, validateTimeline } from "./lib/timeline";
 import { renderSummaryDocument } from "./schema";
@@ -53,13 +53,19 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   return jobId;
 }
 export const start = mutation({ args: startRenderForArgs, returns: v.id("renderJobs"), handler: async (ctx, args) => startRenderFor(ctx, await requireOwner(ctx), args) });
+/** Stops a queued or rendering export, shared by the editor's Cancel and the MCP cancelExport tool.
+ * Only the render stops: saved edits and finished exports are untouched. Returns false when it had already ended. */
+export async function cancelRenderJob(ctx: MutationCtx, job: Doc<'renderJobs'>) {
+  if(job.status!=='queued'&&job.status!=='rendering')return false;
+  if(job.taskId)await cancelMediaTask(ctx,job.taskId);
+  await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  return true;
+}
 export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx),job=await ctx.db.get(args.jobId);
   if(!job||job.ownerId!==ownerId)throw new ConvexError('Export not found');
   await requireProject(ctx,job.projectId,ownerId);
-  if(job.status!=='queued'&&job.status!=='rendering')return null;
-  if(job.taskId)await cancelMediaTask(ctx,job.taskId);
-  await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  await cancelRenderJob(ctx,job);
   return null;
 }});
 // Worker leases recover disconnected renders, but nothing else ends an export
