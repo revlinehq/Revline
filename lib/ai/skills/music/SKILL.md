@@ -52,6 +52,7 @@ Terms: a **beat** is one pulse (0.5 s at 120 BPM); a **bar** is beatsPerBar beat
 
 ## Voice
 - Song under speech or narration: configureAudio { role: "music", ducking: { enabled: true, amount: 0.65 } } (about 9 dB lower under the voice, attack 0.12 s, release 0.25 s), and the voice clip labelled role voice.
+- Several clips needing the same change (every voice clip labelled voice, a song split into pieces) take one call with clipIds, not one call per clip.
 - Music volume under a voice starts at 0.25–0.35; a music-only edit keeps volume 1.
 - Keep moment 1 off spoken words where possible: a drop under a sentence masks it. Move the moment into a pause, or start one bar later.
 

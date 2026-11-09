@@ -42,8 +42,9 @@ import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
 import { deriveMedia, measureColor } from './derive-media';
 import { prepareComposition,writeComposition } from './prepare-composition';
-import { renderPlainExport } from './plain-export-render';
-import { plainExportPlan } from '@/lib/editor/plain-export';
+import { remuxExportAudio, renderPlainExport } from './plain-export-render';
+import { rasterizeTextOverlays } from './plain-export-text';
+import { plainAudioPlan, plainExportPlan } from '@/lib/editor/plain-export';
 import { captureTimelineFrames, reviewComposition } from './review-composition';
 import { readCompare } from './read-compare';
 import { extractInspectionFrames, extractReferenceKeyframes } from './inspect-video-frames';
@@ -108,12 +109,34 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // Report monotonically; a fast-path fallback maps the browser render onto the remaining range.
       let reported = 0, base = 5, span = 90;
       const renderProgress = (progress: { progress: number }) => { reported = Math.max(reported, base + Math.round(progress.progress / 100 * span)); onProgress(reported); };
-      // Plain video/audio timelines skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
+      // Plain video/audio timelines, stacked layouts and static text skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
       const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as ExportResolution, snapshot.fps);
       let rendered = false;
-      if (decision.eligible) {
+      // An audio-only change to a timeline the fast path cannot draw: the last export of the same picture
+      // keeps its video stream, remuxed with freshly mixed sound. (Fast-path timelines reuse their cached
+      // segments instead.) REVLINE_RENDER_REUSE=0 disables it; any failure renders normally.
+      const reuse = snapshot.reuseVideo && !decision.eligible && process.env.REVLINE_RENDER_REUSE !== '0' ? plainAudioPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.fps) : undefined;
+      if (snapshot.reuseVideo && reuse?.eligible) {
+        const earlier = join(directory, 'earlier-export.mp4'), video = snapshot.reuseVideo;
         try {
-          await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, decision.plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal));
+          await runPhase('Downloading the unchanged picture', () => downloadOwnedMedia(video.url, earlier, convexUrl, video.size, signal));
+          await runPhase('Remuxing the unchanged picture with new sound', () => remuxExportAudio(directory, output, earlier, reuse.plan, dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), assetUrls, audioSourceOffsets, signal));
+          rendered = true;
+          renderProgress({ progress: 100 });
+        } catch (error) {
+          if (signal.aborted) throw error;
+          console.warn(`Media task ${task.taskId}: picture reuse failed; rendering the export.`, error instanceof Error ? error.message : error);
+          await rm(output, { force: true });
+        }
+      } else if (snapshot.reuseVideo && reuse && !reuse.eligible) logPhase('Picture reuse', 'skipped', Date.now(), reuse.reason);
+      if (!rendered && decision.eligible) {
+        try {
+          const plan = decision.plan;
+          // Segments and text rasters are cached on this worker per backend project, by source file identity.
+          const cache = { scope: JSON.stringify(['export-segments-v1', new URL(convexUrl).origin, task.projectId]), assets: Object.fromEntries((snapshot.assets as (MediaAsset & { size: number; r2Key?: string; storageId?: string })[]).map(asset => [asset._id, JSON.stringify([asset.r2Key ?? asset.storageId ?? asset._id, asset.size])])) };
+          const texts = () => runPhase('Rasterizing static text', () => rasterizeTextOverlays(directory, snapshot.timeline, plan, snapshot.resolution as ExportResolution, signal, cache.scope));
+          const result = await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal, texts, cache));
+          if (result.segments) logPhase('FFmpeg segments', 'reused', Date.now(), `${result.segments.reused} of ${result.segments.total} segments from cache · ${result.segments.encodedFrames} of ${plan.frames} frames encoded · ${(result.elapsedMs / 1000).toFixed(1)}s`);
           rendered = true;
         } catch (error) {
           if (signal.aborted) throw error;
@@ -121,7 +144,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
           await rm(output, { force: true });
           base = Math.max(5, reported); span = 95 - base;
         }
-      } else logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
+      } else if (!rendered && !decision.eligible) logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
       // Only the browser renderer reads the HTML composition.
       if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
       // Hosted export workers split the render across parallel chunk machines (REVLINE_DISTRIBUTED_EXPORT).

@@ -179,8 +179,7 @@ export function foldMirrorBlurStacks(input: Timeline, clipIds?: readonly string[
  * appended after every saved clip so saved clips keep their composition indices. Idempotent. The
  * composition stacks them just beneath their sharp clip (mirrorFillOwner); preview draws them from the
  * sharp clip's decoder (mirrorBlurSources).
- * TODO(fast export): plainExportPlan refuses clips that set backgroundFill, so these timelines take the
- * browser export. An FFmpeg path could render the bands with split/vflip/boxblur/overlay of the one decode.
+ * The fast FFmpeg export (plainExportPlan) expands the same bands and draws them as a stack from one decode.
  */
 export function expandBackgroundFills(timeline: Timeline, assets: readonly LayoutSource[]): Timeline {
   if (!timeline.clips.some(clip => clip.backgroundFill)) return timeline;
