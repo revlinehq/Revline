@@ -3,6 +3,7 @@ import { canonical } from './export-reuse';
 import { expandBackgroundFills, mirrorFillOwner } from './mirror-blur-layout';
 import { layerZIndex, type ExportResolution } from './composition';
 import { calculateVisualRect } from './visual-source-geometry';
+import { validateVisualTransform } from './visual-inputs';
 import { audioFadeAttributes, audioVolumeEnvelope, validateAudioTimeline } from './audio-settings';
 import { MAX_CLIP_VOLUME } from './clip-volume';
 import { playbackRateOf, validatePlaybackRate } from './playback-rate';
@@ -45,18 +46,21 @@ export type PlainVideoSegment =
     scaleWidth: number; scaleHeight: number; x: number; y: number;
   })
   | { kind: 'stack'; frames: number; layers: PlainLayer[] };
-/** A static text clip, rasterized once by the browser text renderer and laid over the footage on these frames. */
-export type PlainTextOverlay = { clipId: string; first: number; end: number;
-  /** Everything that sets the text's pixels, for caching its raster and the segments under it. */
+/**
+ * A static text or image clip, rasterized once by the browser renderer and laid over the footage
+ * on these frames. An image overlay also names its asset, whose file identity joins the cache key.
+ */
+export type PlainOverlay = { clipId: string; kind: 'text' | 'image'; assetId?: string; first: number; end: number;
+  /** Everything in the clip that sets its pixels, for caching its raster and the segments under it. */
   look: string };
 export type PlainAudioTrack = { clipId: string; assetId: string; kind: 'video' | 'audio'; start: number; duration: number; sourceStart: number; playbackRate: number; volume: number; fadeIn: number; fadeOut: number };
-export type PlainExportPlan = { width: number; height: number; fps: 24 | 30 | 60; duration: number; frames: number; video: PlainVideoSegment[]; text: PlainTextOverlay[]; audio: PlainAudioTrack[] };
+export type PlainExportPlan = { width: number; height: number; fps: 24 | 30 | 60; duration: number; frames: number; video: PlainVideoSegment[]; overlays: PlainOverlay[]; audio: PlainAudioTrack[] };
 export type PlainExportDecision = { eligible: true; plan: PlainExportPlan } | { eligible: false; reason: string };
 
 /** The encoder opens every sounding clip at once (footage is chunked). Larger mixes keep the browser path. */
 const PLAIN_EXPORT_MAX_AUDIO_TRACKS = 64;
-/** Each static text is captured in one bounded browser session; more keep the browser path. */
-export const PLAIN_EXPORT_MAX_TEXT_OVERLAYS = 12;
+/** Each static text or image is captured in one bounded browser session; more keep the browser path. */
+export const PLAIN_EXPORT_MAX_OVERLAYS = 12;
 /** Distinct decoded sources one stack may open at once (a producer holds them all). */
 export const PLAIN_EXPORT_MAX_STACK_SOURCES = 8;
 // HyperFrames snaps clip edges within 1/1000 frame to the frame grid (parityContract FRAME_BOUNDARY_EPSILON).
@@ -66,6 +70,11 @@ const VIDEO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'fit', 'transform', 'cro
 const AUDIO_KEYS = new Set<keyof Clip>([...SHARED_KEYS, 'audio', 'audioFadeTiming']);
 // Everything the browser text layer reads for a clip without a template, gradient or entrance.
 const TEXT_KEYS = new Set<keyof Clip>(['id', 'kind', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'text', 'fontSize', 'color', 'background', 'x', 'y', 'textStyle', 'fontFamily', 'transform', 'blendMode', 'animation', 'textAnimationTiming', 'approval', 'approvedSections']);
+
+// A still image the browser draws without motion, effects or fades: framing, transform, crop and flip only.
+const IMAGE_KEYS = new Set<keyof Clip>(['id', 'kind', 'assetId', 'track', 'start', 'duration', 'sourceStart', 'playbackRate', 'volume', 'linkedClipId', 'audioSeparated', 'effectPreset', 'motion', 'motionOffset', 'approval', 'approvedSections', 'fit', 'transform', 'crop', 'flip', 'blendMode', 'visualFade']);
+/** Still formats only: GIF, WebP and APNG can animate. */
+const STILL_IMAGE_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg']);
 
 const TEXT_PLACEMENT_KEYS = new Set<keyof Clip>(['id', 'start', 'duration', 'track', 'sourceStart', 'playbackRate', 'volume', 'approval', 'approvedSections', 'textAnimationTiming']);
 
@@ -155,6 +164,22 @@ function textReason(clip: Clip): string | undefined {
   if (!clip.text?.trim()) return `a ${clip.kind} clip has no text`;
 }
 
+/** Why a still image clip cannot be laid over the footage as one raster; undefined when it can. */
+function imageReason(clip: Clip, asset: MediaAsset | undefined): string | undefined {
+  const extra = unsupportedKey(clip, IMAGE_KEYS);
+  if (extra) return `an image clip sets ${extra}`;
+  if (!asset || asset.kind !== 'image') return 'an image clip references unavailable or mismatched media';
+  // Export snapshots carry the stored content type; the editor's asset type does not declare it.
+  const type = ((asset as MediaAsset & { contentType?: string }).contentType ?? '').toLowerCase();
+  if (!STILL_IMAGE_TYPES.has(type)) return `an image clip uses ${type || 'an unknown format'}, which may animate`;
+  if (!(asset.width! > 0 && asset.height! > 0)) return 'an image has no recorded dimensions';
+  if (clip.motion?.length) return 'an image clip has motion keyframes';
+  if (clip.effectPreset !== undefined && clip.effectPreset !== 'none') return 'an image clip uses an effect preset';
+  if (clip.blendMode !== undefined && clip.blendMode !== 'normal') return 'an image clip uses a blend mode';
+  if (clip.visualFade && (clip.visualFade.fadeIn || clip.visualFade.fadeOut)) return 'an image clip has a visual fade';
+  try { validateVisualTransform({ ...DEFAULT_TRANSFORM, ...clip.transform }); } catch { return 'an image clip has an invalid transform'; }
+}
+
 /** A clip's sound as the native producer mixes it: undefined when silent, a reason when its gain varies. */
 function soundOf(timeline: Timeline, clip: Clip): PlainAudioTrack | undefined | string {
   const volume = Number.isFinite(clip.volume) ? Math.min(MAX_CLIP_VOLUME, Math.max(0, clip.volume!)) : 1;
@@ -201,7 +226,7 @@ export function plainAudioPlan(timeline: Timeline, assets: MediaAsset[], fps: nu
  * Decide whether an export can skip browser compositing. Eligible when every clip is
  * video/audio the plan reproduces exactly (full-frame footage, or stacked clips moved,
  * scaled, flipped, soft-blurred or exposure-graded, as mirror blur builds) or static text
- * above all footage, with a static-gain audio mix; any field this plan does not explicitly
+ * and still PNG/JPEG images above all footage, with a static-gain audio mix; any field this plan does not explicitly
  * reproduce makes the timeline ineligible.
  */
 export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolution: ExportResolution, fps: number): PlainExportDecision {
@@ -222,7 +247,7 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
   const { width, height } = dimensions(timeline.aspectRatio, resolution);
   try { validateAudioTimeline(timeline); } catch { return no('audio settings are invalid'); }
   const visuals: { clip: Clip; look: LayerLook; z: number; first: number; end: number }[] = [];
-  const texts: { clip: Clip; z: number; first: number; end: number }[] = [];
+  const overlays: { clip: Clip; kind: 'text' | 'image'; z: number; first: number; end: number }[] = [];
   const audio: PlainAudioTrack[] = [];
   for (const [index, clip] of timeline.clips.entries()) {
     if (clip.kind === 'graphic' || clip.kind === 'caption') {
@@ -230,7 +255,15 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
       if (reason) return no(reason);
       if (!finite(clip.start, clip.duration) || clip.start < 0 || clip.duration <= 0) return no('a clip has invalid timing');
       const { first, end } = visibleTicks(clip, fps);
-      if (end > first) texts.push({ clip, z: zOf(clip, index), first, end });
+      if (end > first) overlays.push({ clip, kind: 'text', z: zOf(clip, index), first, end });
+      continue;
+    }
+    if (clip.kind === 'image') {
+      const reason = imageReason(clip, clip.assetId ? assetMap.get(clip.assetId) : undefined);
+      if (reason) return no(reason);
+      if (!finite(clip.start, clip.duration) || clip.start < 0 || clip.duration <= 0) return no('a clip has invalid timing');
+      const { first, end } = visibleTicks(clip, fps);
+      if (end > first) overlays.push({ clip, kind: 'image', z: zOf(clip, index), first, end });
       continue;
     }
     if (clip.kind !== 'video' && clip.kind !== 'audio') return no(`the timeline contains a ${clip.kind} clip`);
@@ -258,9 +291,10 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
     if (sound) audio.push(sound);
   }
   if (audio.length > PLAIN_EXPORT_MAX_AUDIO_TRACKS) return no(`more than ${PLAIN_EXPORT_MAX_AUDIO_TRACKS} sounding clips`);
-  if (texts.length > PLAIN_EXPORT_MAX_TEXT_OVERLAYS) return no(`more than ${PLAIN_EXPORT_MAX_TEXT_OVERLAYS} text clips`);
-  // Text is laid over the finished footage, so it must paint above every clip it overlaps.
-  if (texts.some(text => visuals.some(visual => visual.first < text.end && text.first < visual.end && visual.z > text.z))) return no('a text clip sits beneath footage');
+  if (overlays.length > PLAIN_EXPORT_MAX_OVERLAYS) return no(`more than ${PLAIN_EXPORT_MAX_OVERLAYS} text and image clips`);
+  // Overlays are laid over the finished footage, so each must paint above every clip it overlaps.
+  const beneath = overlays.find(overlay => visuals.some(visual => visual.first < overlay.end && overlay.first < visual.end && visual.z > overlay.z));
+  if (beneath) return no(`a${beneath.kind === 'image' ? 'n image' : ' text'} clip sits beneath footage`);
   const duration = Math.max(timelineDuration(timeline), 1 / fps);
   const frames = exportFrameCount(duration, fps);
   // Overlapping footage forms one stack; a lone full-frame clip keeps the exact single-layer chain.
@@ -299,8 +333,8 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
   if (cursor < frames) video.push({ kind: 'gap', frames: frames - cursor });
   // Timing only places the raster; the rest of the clip (and the canvas) decides its pixels.
   const look = (clip: Clip) => canonical({ clip: Object.fromEntries(Object.entries(clip).filter(([key]) => !TEXT_PLACEMENT_KEYS.has(key as keyof Clip))), width, height });
-  const text = texts.sort((a, b) => a.z - b.z).flatMap(({ clip, first, end }) => first < frames ? [{ clipId: clip.id, first, end: Math.min(end, frames), look: look(clip) }] : []);
-  return { eligible: true, plan: { width, height, fps, duration, frames, video, text, audio } };
+  const placed = overlays.sort((a, b) => a.z - b.z).flatMap(({ clip, kind, first, end }): PlainOverlay[] => first < frames ? [{ clipId: clip.id, kind, ...kind === 'image' ? { assetId: clip.assetId! } : {}, first, end: Math.min(end, frames), look: look(clip) }] : []);
+  return { eligible: true, plan: { width, height, fps, duration, frames, video, overlays: placed, audio } };
 }
 
 /** Layers showing the same source frames at the same output frames decode once and are split. */
