@@ -41,7 +41,7 @@ export async function renderGpuConfig(directory, env = process.env) {
     await writeFile(wrapper, `#!/bin/sh\nexec ${shellQuote(chrome)} "$@" ${GPU_CHROME_FLAGS.join(' ')}\n`);
     await chmod(wrapper, 0o755);
     // The export's own footage: the crash above only shows once Chrome decodes real video.
-    const video = (await readdir(directory)).find(name => /\.(mp4|mov|m4v|webm)$/i.test(name));
+    const video = (await readdir(directory)).find(name => /^asset-\d+.*\.(mp4|mov|m4v|webm)$/i.test(name));
     const renderer = await effectsPreflight(wrapper, video && join(directory, video));
     env.PRODUCER_HEADLESS_SHELL_PATH = wrapper;
     log(`GPU effects preflight passed on ${renderer}; drawing export frames on the GPU.`);
@@ -53,14 +53,14 @@ export async function renderGpuConfig(directory, env = process.env) {
 }
 
 
+const shellQuote = value => `'${value.replaceAll("'", `'\\''`)}'`;
+
 /**
  * Draws injected-frame images through several WebGL canvases, as the mirror-blur
  * bands do, with the exact Chrome flags HyperFrames uses for hardware capture.
  * Resolves with the GPU's name; rejects on a software renderer, a lost context,
  * a GL error or wrong pixels, since any of those would drop effects from the MP4.
  */
-const shellQuote = value => `'${value.replaceAll("'", `'\\''`)}'`;
-
 async function effectsPreflight(executablePath, video) {
   const [{ default: puppeteer }, { buildChromeArgs }] = await Promise.all([import('puppeteer'), import('@hyperframes/engine')]);
   const browser = await puppeteer.launch({

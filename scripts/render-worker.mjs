@@ -1,7 +1,7 @@
 // HyperFrames' internal Hono server replaces global Request/Response. Keep it
 // inside this isolated, awaited process so Next's HTTP constructors stay intact.
 import { createRenderJob, executeRenderJob, createConsoleLogger, resolveConfig } from '@hyperframes/producer';
-import { RENDER_X264, configureRenderFfmpeg, configureRenderX264, renderResources } from '../lib/render-resources.mjs';
+import { RENDER_X264, configureRenderFfmpeg, configureRenderX264, gpuRenderResources, renderResources } from '../lib/render-resources.mjs';
 import { STRICT_EFFECTS_FAILURE, STRICT_EFFECTS_META, renderGpuConfig } from './render-gpu.mjs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -19,7 +19,6 @@ try {
   const settings = JSON.parse(serialized);
   if (!directory || !output || ![24, 30, 60].includes(settings.fps) || !['draft', 'standard', 'high'].includes(settings.quality)) throw new Error('Invalid render worker settings.');
   const resources = renderResources();
-  configureRenderFfmpeg(directory, resources);
   // Cheaper compression searches at the same resolution and frame rate.
   // Standard keeps CRF 18; high moves from slow/CRF 15 to medium/CRF 16,
   // roughly halving its encode CPU for a small SSIM change.
@@ -34,8 +33,11 @@ try {
   // keep screenshots automatically. PRODUCER_FORCE_SCREENSHOT=true restores the old path.
   const forceScreenshot = process.env.PRODUCER_FORCE_SCREENSHOT === 'true';
   const render = async gpu => {
-    const producerConfig = resolveConfig({ concurrency: resources.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128, forceScreenshot, ...gpu });
-    const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: resources.workers, strictness: 'strict', logger: createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error') });
+    // GPU-drawn frames leave CPU for more capture workers and encoder threads (same x264 preset and CRF).
+    const sized = gpu.browserGpuMode === 'hardware' ? gpuRenderResources(resources) : resources;
+    configureRenderFfmpeg(directory, sized);
+    const producerConfig = resolveConfig({ concurrency: sized.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128, forceScreenshot, ...gpu });
+    const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: sized.workers, strictness: 'strict', logger: createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error') });
     try { await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progress.progress }), controller.signal); }
     catch (error) { throw job.error && !controller.signal.aborted ? new Error(job.error, { cause: error }) : error; }
     if (job.status !== 'complete') throw new Error(job.error || 'The render did not finish.');
