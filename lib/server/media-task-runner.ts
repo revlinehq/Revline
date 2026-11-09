@@ -43,7 +43,7 @@ import { removeBackground } from './remove-background';
 import { deriveMedia, measureColor } from './derive-media';
 import { prepareComposition,writeComposition } from './prepare-composition';
 import { remuxExportAudio, renderPlainExport } from './plain-export-render';
-import { rasterizeTextOverlays } from './plain-export-text';
+import { rasterizeOverlays } from './plain-export-overlays';
 import { plainAudioPlan, plainExportPlan } from '@/lib/editor/plain-export';
 import { captureTimelineFrames, reviewComposition } from './review-composition';
 import { readCompare } from './read-compare';
@@ -109,8 +109,10 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // Report monotonically; a fast-path fallback maps the browser render onto the remaining range.
       let reported = 0, base = 5, span = 90;
       const renderProgress = (progress: { progress: number }) => { reported = Math.max(reported, base + Math.round(progress.progress / 100 * span)); onProgress(reported); };
-      // Plain video/audio timelines, stacked layouts and static text skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
+      // Plain video/audio timelines, stacked layouts, static text and still images skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
       const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as ExportResolution, snapshot.fps);
+      // Every export states its path: the FFmpeg fast path, or why it renders in the browser.
+      logPhase('Fast export decision', decision.eligible ? 'eligible' : 'rejected', Date.now(), decision.eligible ? `${decision.plan.video.length} segments · ${decision.plan.overlays.length} overlays · ${decision.plan.audio.length} sounds · ${decision.plan.frames} frames` : decision.reason);
       let rendered = false;
       // An audio-only change to a timeline the fast path cannot draw: the last export of the same picture
       // keeps its video stream, remuxed with freshly mixed sound. (Fast-path timelines reuse their cached
@@ -134,7 +136,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
           const plan = decision.plan;
           // Segments and text rasters are cached on this worker per backend project, by source file identity.
           const cache = { scope: JSON.stringify(['export-segments-v1', new URL(convexUrl).origin, task.projectId]), assets: Object.fromEntries((snapshot.assets as (MediaAsset & { size: number; r2Key?: string; storageId?: string })[]).map(asset => [asset._id, JSON.stringify([asset.r2Key ?? asset.storageId ?? asset._id, asset.size])])) };
-          const texts = () => runPhase('Rasterizing static text', () => rasterizeTextOverlays(directory, snapshot.timeline, plan, snapshot.resolution as ExportResolution, signal, cache.scope));
+          const texts = () => runPhase('Rasterizing static overlays', () => rasterizeOverlays(directory, snapshot.timeline, plan, snapshot.resolution as ExportResolution, signal, { assets: snapshot.assets as MediaAsset[], assetUrls, identities: cache.assets }, cache.scope));
           const result = await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal, texts, cache));
           if (result.segments) logPhase('FFmpeg segments', 'reused', Date.now(), `${result.segments.reused} of ${result.segments.total} segments from cache · ${result.segments.encodedFrames} of ${plan.frames} frames encoded · ${(result.elapsedMs / 1000).toFixed(1)}s`);
           rendered = true;

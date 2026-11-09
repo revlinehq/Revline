@@ -186,8 +186,8 @@ async function audioMix(plan: PlainAudioPlan, probe: (assetId: string) => Promis
 export type PlainExportResult = { frames: number; elapsedMs: number; segments?: { total: number; reused: number; encodedFrames: number } };
 /** Where segments are cached (worker disk, scoped to one backend project) and the identity of each source file. */
 export type SegmentCache = { scope?: string; assets: Record<string, string> };
-/** Static text rasters, made on first use: an export whose segments are all cached opens no browser. */
-export type TextRasters = () => Promise<string[]>;
+/** Static text and image rasters, made on first use: an export whose segments are all cached opens no browser. */
+export type OverlayRasters = () => Promise<string[]>;
 
 /** Prepared export media by asset, each probed once. */
 function exportSources(directory: string, assetUrls: Record<string, string>, signal: AbortSignal) {
@@ -239,12 +239,12 @@ export async function remuxExportAudio(directory: string, output: string, video:
 /**
  * Render an eligible timeline without a browser. Every footage segment (a cut, stack or gap)
  * is encoded alone with the export's x264 settings, starting on its own keyframe, with HyperFrames-
- * identical frame sampling and framing and its static text laid over it. Segments whose
+ * identical frame sampling and framing and its static text and images laid over it. Segments whose
  * fingerprint (clips, source ranges, layout, effects, text and encoder settings) is in the
  * worker's cache are reused; the rest are encoded. The segments are joined with stream copy and
  * muxed with the native producer's audio mix, so an audio-only change encodes no video at all.
  */
-export async function renderPlainExport(directory: string, output: string, plan: PlainExportPlan, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, quality: Quality, onProgress: (render: { progress: number }) => void, signal: AbortSignal, texts: TextRasters, cache: SegmentCache): Promise<PlainExportResult> {
+export async function renderPlainExport(directory: string, output: string, plan: PlainExportPlan, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, quality: Quality, onProgress: (render: { progress: number }) => void, signal: AbortSignal, texts: OverlayRasters, cache: SegmentCache): Promise<PlainExportResult> {
   signal.throwIfAborted();
   try {
     return await render(directory, output, plan, assetUrls, audioSourceOffsets, quality, onProgress, signal, texts, cache);
@@ -265,7 +265,7 @@ function encoderArgs(quality: Quality, threads: number) {
     '-video_track_timescale', '90000', '-pix_fmt', 'yuv420p', '-threads', String(threads)];
 }
 
-async function render(directory: string, output: string, plan: PlainExportPlan, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, quality: Quality, onProgress: (render: { progress: number }) => void, signal: AbortSignal, texts: TextRasters, cache: SegmentCache): Promise<PlainExportResult> {
+async function render(directory: string, output: string, plan: PlainExportPlan, assetUrls: Record<string, string>, audioSourceOffsets: Record<string, number>, quality: Quality, onProgress: (render: { progress: number }) => void, signal: AbortSignal, texts: OverlayRasters, cache: SegmentCache): Promise<PlainExportResult> {
   const started = performance.now();
   const { pathOf, probe } = exportSources(directory, assetUrls, signal);
   await Promise.all([...plan.video.flatMap(segment => segment.kind === 'clip' ? [segment.assetId] : segment.kind === 'stack' ? segment.layers.map(layer => layer.assetId) : []), ...plan.audio.map(track => track.assetId)].map(probe));
@@ -273,18 +273,19 @@ async function render(directory: string, output: string, plan: PlainExportPlan, 
   const threads = Math.max(1, Math.floor(renderResources().encodeThreads / SEGMENT_CONCURRENCY));
   let rasters: Promise<string[]> | undefined;
   const raster = (index: number) => (rasters ??= texts()).then(images => {
-    if (images.length !== plan.text.length) throw new Error('Fast export text overlays were not rasterized.');
+    if (images.length !== plan.overlays.length) throw new Error('Fast export overlays were not rasterized.');
     return images[index];
   });
-  // Each segment's frames on the output timeline, the text over it, and its fingerprint.
+  // Each segment's frames on the output timeline, the text and images over it, and its fingerprint.
   let cursor = 0;
   const segments = plan.video.map((segment, index) => {
     const first = cursor;
     cursor += segment.frames;
-    const overlays = plan.text.flatMap((text, textIndex) => text.first < first + segment.frames && text.end > first ? [{ textIndex, look: text.look, first: Math.max(0, text.first - first), end: Math.min(segment.frames, text.end - first) }] : []);
+    const overlays = plan.overlays.flatMap((overlay, textIndex) => overlay.first < first + segment.frames && overlay.end > first ? [{ textIndex, look: overlay.look, assetId: overlay.assetId, first: Math.max(0, overlay.first - first), end: Math.min(segment.frames, overlay.end - first) }] : []);
     const assetIds = segment.kind === 'clip' ? [segment.assetId] : segment.kind === 'stack' ? segment.layers.map(layer => layer.assetId) : [];
-    const key = createHash('sha256').update(JSON.stringify([SEGMENT_FORMAT, width, height, fps, encoderArgs(quality, 0), pixelsOf(segment), assetIds.map(id => cache.assets[id] ?? null), overlays.map(({ look, first: from, end }) => [look, from, end])])).digest('hex');
-    return { index, segment, overlays, key, path: join(directory, `segment-${index}.mp4`), cacheable: !!cache.scope && assetIds.every(id => cache.assets[id]) };
+    const overlayAssets = overlays.flatMap(overlay => overlay.assetId ? [overlay.assetId] : []);
+    const key = createHash('sha256').update(JSON.stringify([SEGMENT_FORMAT, width, height, fps, encoderArgs(quality, 0), pixelsOf(segment), assetIds.map(id => cache.assets[id] ?? null), overlays.map(({ look, assetId, first: from, end }) => [look, assetId ? cache.assets[assetId] ?? null : null, from, end])])).digest('hex');
+    return { index, segment, overlays, key, path: join(directory, `segment-${index}.mp4`), cacheable: !!cache.scope && [...assetIds, ...overlayAssets].every(id => cache.assets[id]) };
   });
   let done = 0, reused = 0, encodedFrames = 0;
   await forEachLimited(segments, SEGMENT_CONCURRENCY, async (item, stop) => {
@@ -327,7 +328,7 @@ function pixelsOf(segment: PlainExportPlan['video'][number]) {
   return { ...segment, layers: segment.layers.map(({ clipId: _clipId, ...rest }) => rest) };
 }
 
-/** One footage segment as its own H.264 file: black, one framed clip, or a stack, with its static text over it. */
+/** One footage segment as its own H.264 file: black, one framed clip, or a stack, with its static text and images over it. */
 async function encodeSegment(item: { index: number; segment: PlainExportPlan['video'][number]; overlays: { textIndex: number; first: number; end: number }[]; path: string }, plan: PlainExportPlan, pathOf: (assetId: string) => string, probe: (assetId: string) => Promise<SourceInfo>, raster: (index: number) => Promise<string>, quality: Quality, threads: number, signal: AbortSignal) {
   const { segment } = item, { fps, width, height } = plan;
   const inputs: string[][] = [], graph: string[] = [];
@@ -352,7 +353,7 @@ async function encodeSegment(item: { index: number; segment: PlainExportPlan['vi
     graph.push(`${clipChain(0, segment, source.video, plan)}[v]`);
     inputs.push([...source.video.vfr ? [] : ['-noaccurate_seek'], '-ss', ffmpegTime(segment.sourceStart), '-an', '-sn', '-dn', '-threads', '1', '-i', pathOf(segment.assetId)]);
   }
-  // Static text, rasterized by the browser text renderer, over the footage in paint order.
+  // Static text and images, rasterized by the browser renderer, over the footage in paint order.
   let picture = 'v';
   for (const [index, overlay] of item.overlays.entries()) {
     inputs.push(['-i', await raster(overlay.textIndex)]);
