@@ -427,23 +427,28 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     }));
     if (assets.some(item => !item?.url)) { throw new ConvexError('Export source media is unavailable.'); }
     const settings = { resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
-    render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], ...settings, ...await reusableExportVideo(ctx, job, snapshot, settings) };
+    render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], ...settings, recordsRenderer: true as const, ...await reusableExportVideo(ctx, job, snapshot, settings) };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 /** Recent exports checked for an identical picture; an audio-only change re-exports by remuxing it. */
 const REUSABLE_EXPORTS_CHECKED = 5;
-/** The latest completed export of this project whose video stream this export would render identically. */
+/**
+ * The latest completed export of this project whose video stream this export would render identically.
+ * Only exports whose worker recorded its renderer qualify; the worker reuses one only when it would draw
+ * this picture with that same renderer, so an older or differently drawn (for example broken) picture
+ * is never handed back as a new export.
+ */
 async function reusableExportVideo(ctx: QueryCtx, job: Doc<'renderJobs'>, snapshot: Timeline, settings: { resolution: number; fps: number; quality: string }) {
   const key = exportVisualKey(snapshot, settings);
   const previous = await ctx.db.query('renderJobs').withIndex('by_owner_project_status', q => q.eq('ownerId', job.ownerId).eq('projectId', job.projectId).eq('status', 'completed')).order('desc').take(REUSABLE_EXPORTS_CHECKED);
   for (const candidate of previous) {
-    if (candidate._id === job._id || !candidate.outputR2Key || !candidate.outputSize || candidate.resolution !== settings.resolution || candidate.fps !== settings.fps || candidate.quality !== settings.quality) continue;
+    if (candidate._id === job._id || !candidate.renderer || !candidate.outputR2Key || !candidate.outputSize || candidate.resolution !== settings.resolution || candidate.fps !== settings.fps || candidate.quality !== settings.quality) continue;
     const earlier = await loadRenderSnapshot(ctx, candidate);
     if (!earlier || exportVisualKey(earlier, settings) !== key) continue;
     const url = await mediaUrl(ctx, { r2Key: candidate.outputR2Key }, true);
-    return url ? { reuseVideo: { jobId: candidate._id, url, size: candidate.outputSize } } : {};
+    return url ? { reuseVideo: { jobId: candidate._id, url, size: candidate.outputSize, renderer: candidate.renderer } } : {};
   }
   return {};
 }
@@ -616,10 +621,10 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     // A share card goes onto its share; the request itself is not kept.
     if (snapshot.shareId && frames[0]) await ctx.scheduler.runAfter(0, internal.timelineShares.storeCard, { snapshotId: snapshot._id });
   },
-  render: async (ctx, task) => {
+  render: async (ctx, task, result) => {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
-    await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now() });
+    await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now(), ...(result.renderer ? { renderer: result.renderer.slice(0, 200) } : {}) });
   },
   import: async (ctx, task) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
