@@ -145,7 +145,9 @@ export function startMediaWorker(options: MediaWorkerOptions) {
           signal.throwIfAborted();
           const result = await processMediaTask(snapshot, client, options.convexUrl, signal, percent => {
             progress = Math.max(progress, Math.min(snapshot.kind==='preview'?100:99, percent));
-            if (progress - reported >= (snapshot.kind==='preview'?1:10) && (snapshot.kind!=='preview'||Date.now()-renewedAt>=1000)) heartbeat();
+            // Previews and exports show a live bar: report each point, spaced out; other kinds every ten.
+            const live = snapshot.kind === 'preview' || snapshot.kind === 'render';
+            if (progress - reported >= (live ? 1 : 10) && (!live || Date.now() - renewedAt >= (snapshot.kind === 'preview' ? 1000 : 2000))) heartbeat();
           }, next => { if (activity !== next) { activity = next; heartbeat(); } }, exclusive);
           if(result.analysis?.transcript)result.analysis.transcript=transportTranscript(result.analysis.transcript);
           // Publishing a frame sheet can itself need network retries. Renew its
