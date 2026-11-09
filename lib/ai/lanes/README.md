@@ -16,7 +16,7 @@ Each lane's `definition.ts` owns its check recipe. The lane is the only thing th
 - `motion`: always full checks.
 - `recreate`: always full checks plus reference comparison.
 
-One automatic step-up, the `final` level, runs the lane's full checks (clip: checkClip framing and decode-health on every accepted tab). The server sets it in `lanes.begin` from the request: a final export or publish request, or an explicit request to double-check everything. The agent never chooses it. Stored `editMode` values on older queue rows, turns, runner checkpoints and browser storage still validate and are ignored.
+One automatic step-up, the `final` level, runs the lane's full checks (clip: checkClip decode-health on every accepted tab; clip finish never requires rendered frames). The server sets it in `lanes.begin` from the request: a final export or publish request, or an explicit request to double-check everything. The agent never chooses it. Stored `editMode` values on older queue rows, turns, runner checkpoints and browser storage still validate and are ignored.
 
 History keeps source evidence and edit receipts across workflow changes. Only obsolete instruction results are retired; tool pairs remain valid. Older bulky results retain bounded structured IDs, findings and receipts, and omitted turns carry forward bounded user decisions and evidence. Current user instructions always take precedence.
 

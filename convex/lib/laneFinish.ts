@@ -80,10 +80,17 @@ export async function finishLane(
   const initialKey = await checkKey(task.evidence);
   if (initialKey && task.result?.checkKey === initialKey && !task.result.passed)
     return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
-  for (const tab of task.lane === 'clip' ? [] : checked) {
+  // A clip-lane task that is not a /clip request, started no clipping run and created no tab is a follow-up edit on a
+  // finished short (a restyled title, a mute, a trim). It gets the cheap timeline data checks below: no frames, no new run.
+  const clipFollowUp = task.lane === 'clip' && task.lockedLane !== 'clip' &&
+    checked.every((tab) => task.initialTabIds.includes(tab.timelineId)) &&
+    !(await ctx.runQuery(internal.clipping.runStarted, { ...run, runId: taskId }));
+  for (const tab of task.lane === 'clip' && !clipFollowUp ? [] : checked) {
     const baseline = task.baselines.find(
       (item) => item.timelineId === tab.timelineId,
     );
+    // A follow-up checks only the tabs it edited; other shorts keep their earlier delivery.
+    if (clipFollowUp && !baseline) continue;
     if (!tab.timeline) {
       failures.push(`Timeline ${tab.timelineId} was removed before its check.`);
       continue;
@@ -145,8 +152,11 @@ export async function finishLane(
         `${prefix}${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    // Reference lanes already require dense rendered pairs, or explicit OFF windows, below.
-    if (!failures.length && summary.clipCount && summary.duration > 0 && !checksReference) {
+    // A short keeps its 15–60 s length unless the user asked otherwise, so leaving that range only warns.
+    if (clipFollowUp && (summary.duration < 15 - 1 / tab.timeline.fps || summary.duration > 60 + 1 / tab.timeline.fps))
+      warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
+    // Reference lanes already require dense rendered pairs, or explicit OFF windows, below. Clip-lane checks never render frames.
+    if (!clipFollowUp && !failures.length && summary.clipCount && summary.duration > 0 && !checksReference) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
       const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
       const times = fastTimes ?? (baseline
@@ -193,7 +203,7 @@ export async function finishLane(
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
     }
   }
-  if (task.lane === 'clip') {
+  if (task.lane === 'clip' && !clipFollowUp) {
     // The stable task key spans separate MCP calls; the upstream ledger verifies every actual tab.
     failures.push(
       ...(await checkCompletion(
