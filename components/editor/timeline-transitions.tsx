@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { SlidersHorizontal, Trash2 } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { addTransitionClip, deleteClip, patchClip } from '@/lib/editor/operations';
@@ -11,7 +11,8 @@ import type { Clip, Timeline, TransitionPreset } from '@/lib/editor/types';
 import { EffectIcon } from './effect-icon';
 import './timeline-transitions.css';
 
-export function TimelineCutTransition({ timeline, from, to, clip, px, origin, selected, readOnly, onSelect, onEdit, onChange, onError }: {
+/** Memoized: the panel passes stable callbacks, so cuts re-render only for their own timing, selection or the timeline. */
+export const TimelineCutTransition = memo(function TimelineCutTransition({ timeline, from, to, clip, px, origin, selected, readOnly, onSelect, onEdit, onChange, onError }: {
   timeline: Timeline; from: Clip; to: Clip; clip?: Clip; px: number; origin: number; selected: boolean; readOnly?: boolean;
   onSelect: (id: string | null) => void; onEdit?: (id: string) => void; onChange: (timeline: Timeline) => void; onError: (error: unknown) => void;
 }) {
@@ -80,4 +81,4 @@ export function TimelineCutTransition({ timeline, from, to, clip, px, origin, se
       {clip && <><DropdownMenuItem disabled={readOnly} onSelect={() => { onSelect(clip.id); onEdit?.(clip.id); }}><SlidersHorizontal size={14}/>Transition settings</DropdownMenuItem><DropdownMenuItem disabled={readOnly} onSelect={() => { onChange(deleteClip(timeline, clip.id)); onSelect(null); }}><Trash2 size={14}/>Remove transition</DropdownMenuItem></>}
     </DropdownMenuContent></DropdownMenu>}
   </div>;
-}
+});
