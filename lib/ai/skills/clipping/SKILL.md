@@ -34,7 +34,7 @@ Each short lives in its own titled tab of one shared project, keeps the source f
 - Do not run checkPacing, 10 fps windows or getFrames sweeps on finished shorts.
 - Never claim a skipped check passed or that an unsupported action was observed.
 - Finding moments alone is an inspection request: return the ranked candidates without changing timelines.
-- A small follow-up edit to a finished short (caption, trim, style) starts with writing-scenes page edit-lanes and uses its local checks where they apply; do not repeat whole-source discovery for it.
+- A small follow-up edit to a finished short (caption, trim, style, mute) in the clip lane: make the edit, then finish. finish checks saved timeline data and needs no getFrames evidence; do not repeat whole-source discovery for it.
 
 ## Example
 "Clip this" on a 45-minute podcast:

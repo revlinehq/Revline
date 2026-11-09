@@ -13,14 +13,15 @@ export const definition: LaneDefinition = {
       frames: 'data',
       fullTools: false,
       boundedReads: false,
-      instructions: 'finishClipping validates saved data inline: accepted candidates, populated tabs, names, source ranges and durations. Speech-led moments use transcript and voice evidence; confirm visuals with short inspectVideo windows only for action moments. checkClip QA runs only when the user asks for it. No automatic normalization.',
+      instructions: 'finishClipping validates saved data inline: accepted candidates, populated tabs, names, source ranges and durations. Speech-led moments use transcript and voice evidence; confirm visuals with short inspectVideo windows only for action moments. checkClip QA runs only when the user asks for it. finish requires no getFrames evidence; a follow-up edit to a finished short (restyle, mute, trim) finishes on saved timeline data. No automatic normalization.',
     },
     final: {
       frames: 'data',
       fullTools: false,
       boundedReads: false,
-      clipQa: ['decode-health', 'framing'],
-      instructions: 'Full checks for a final export, publish or double-check request: run checkClip on every accepted tab (framing and decode-health are required), fix what it reports, then finishClipping and finish. No automatic normalization.',
+      // Clip finish never requires rendered frames; framing QA runs only when the user asks for it.
+      clipQa: ['decode-health'],
+      instructions: 'Full checks for a final export, publish or double-check request: run checkClip on every accepted tab (decode-health is required; add framing only when the user asks for it), fix what it reports, then finishClipping and finish. No getFrames evidence and no automatic normalization.',
     },
   },
   instructions:
