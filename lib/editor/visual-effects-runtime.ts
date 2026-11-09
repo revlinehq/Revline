@@ -48,10 +48,39 @@ export function installVisualEffects(sources: VisualEffectSource[], fps: number,
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
-  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; impactProgram?: WebGLProgram; impactUniforms?: Record<string, WebGLUniformLocation | null>; parallaxProgram?: WebGLProgram; parallaxUniforms?: Record<string, WebGLUniformLocation | null>; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
+  type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; impactProgram?: WebGLProgram; impactUniforms?: Record<string, WebGLUniformLocation | null>; parallaxProgram?: WebGLProgram; parallaxUniforms?: Record<string, WebGLUniformLocation | null>; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; listened?: HTMLVideoElement; mirror?: HTMLVideoElement; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight' | 'curvesTexture' | 'lutTexture' | 'parallaxProgram' | 'parallaxUniforms' | 'impactProgram' | 'impactUniforms'>;
   const entries = new Map<string, Entry>();
   const available: Resources[] = [];
+  // A preview cut swaps a whole effect stack at once (mirror blur: four blurred layers). Spare
+  // contexts wait for the next cut instead of being lost and recompiled, under Chrome's 16
+  // live WebGL contexts per page.
+  const SPARE_CONTEXTS = 4, CONTEXT_BUDGET = 12, PREPARE_AHEAD_SECONDS = 1.5;
+  const liveContexts = () => { let count = available.length; for (const entry of entries.values()) if (entry.gl) count++; return count; };
+  // The nearest clip start after the playhead, computed once per clock time rather than per entry.
+  let nearest = { time: NaN, start: Infinity };
+  function nearestStart(time: number) {
+    if (nearest.time === time) return nearest.start;
+    let start = Infinity;
+    for (const entry of entries.values()) { const value = Number(entry.source.dataset.start); if (value > time + 1e-6 && value < start) start = value; }
+    nearest = { time, start };
+    return start;
+  }
+  /** The decoder an entry draws: its own video, or in preview the sharp clip a mirror-blur copy repeats. */
+  function videoOf(entry: Entry): HTMLVideoElement | undefined {
+    const twin = preview ? entry.source.dataset.revlineMirrorOf : undefined;
+    if (!twin) return entry.source instanceof HTMLVideoElement ? entry.source : undefined;
+    if (!entry.mirror?.isConnected || entry.mirror.dataset.sourceClip !== twin) entry.mirror = document.querySelector<HTMLVideoElement>(`video[data-source-clip="${CSS.escape(twin)}"]`) ?? undefined;
+    return entry.mirror;
+  }
+  /** A clip starting shortly is drawn while still hidden, from its warmed decoder waiting at the clip's first frame. */
+  function preparing(entry: Entry, time: number) {
+    if (!preview || entry.source.hasAttribute('data-revline-transition-visible')) return false;
+    const start = Number(entry.source.dataset.start);
+    // Only the nearest cut: its stack takes the contexts the outgoing stack returns to the pool.
+    if (!(time < start - 1e-6 && start - time <= PREPARE_AHEAD_SECONDS) || start > nearestStart(time) + 1e-6) return false;
+    return !!videoOf(entry);
+  }
   let disposed = false;
   const baseEffects=new Map<string,VisualEffectInput>();
   const defaultNeonColor=Number.parseInt(DEFAULT_NEON_EDGES.color.slice(1),16);
@@ -246,7 +275,8 @@ void main(){
     if (preview && !disposed && !entry.failed && entry.canvas && entry.gl && !entry.gl.isContextLost()) {
       const { canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms } = entry;
       available.push({ canvas, gl, program, texture, buffer, uniforms, passTextures, framebuffer, passWidth, passHeight, curvesTexture, lutTexture, parallaxProgram, parallaxUniforms, impactProgram, impactUniforms });
-      if (available.length > 1) destroy(available.shift()!);
+      if (available.length > SPARE_CONTEXTS) destroy(available.shift()!);
+      else if (liveContexts() - 1 > CONTEXT_BUDGET) destroy(available.pop()!);
     } else destroy(entry);
     entry.impactProgram = undefined; entry.impactUniforms = undefined; entry.parallaxProgram = undefined; entry.parallaxUniforms = undefined; entry.gl = undefined; entry.canvas = undefined; entry.program = undefined; entry.uploadCanvas = undefined; entry.passTextures = undefined; entry.framebuffer = undefined; entry.passWidth = undefined; entry.passHeight = undefined; entry.lastSource = undefined; entry.lastFrame = undefined; entry.curvesTexture = undefined; entry.lutTexture = undefined; entry.finishKey = undefined;
   }
@@ -359,17 +389,27 @@ void main(){
     if(entry.gl?.isContextLost()){
       entry.failed=true;release(entry);report(new Error('WebGL context was lost. Reload the preview to restore these effects.'));return;
     }
-    const time = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
+    const now = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
+    const video = videoOf(entry);
+    if (video !== entry.listened) decoded(entry);
+    const ahead = preparing(entry, now), time = ahead ? start : now;
+    if (ahead) {
+      // The warmup holds the next shot's element paused on its first frame. Anything else is a stale frame.
+      const positioned = video!.paused && Math.abs(video!.currentTime - Number(video!.dataset.mediaStart ?? 0)) < .02;
+      // A drawn first frame stays correct for the cut even if the element moves again.
+      if (!positioned) return;
+      if (!entry.canvas && !available.length && liveContexts() >= CONTEXT_BUDGET) return;
+    }
     // Keyframed controls are evaluated in the clip's motion path time, the same clock as its movement.
     const animated=entry.effects.effectKeyframes?.length?{...entry.effects,...effectsAt(entry.effects,entry.effects.effectKeyframes,time-start+(entry.effects.motionOffset??0))}:entry.effects;
     const reactive=entry.effects.audioReactive,levels=reactive?(entry.levels??=decodeLevels(reactive.levels)):undefined;
     const passes=effectPasses(reactiveEffectsAt(animated,reactive,levels,time),time);
     if(nativeCorners(entry,passes))return;
-    if (!passes.length || !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
+    if (!passes.length || !ahead && !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) { if (entry.canvas) release(entry); return; }
     const renderId = entry.source.getAttribute('data-hf-render-id') || entry.source.id;
     const held = entry.source.hasAttribute('data-revline-transition-hold');
     const injected = held ? null : document.getElementById(`__render_frame_${renderId}__`) as HTMLImageElement | null;
-    const source = injected || entry.source;
+    const source = injected || (video && video !== entry.source ? video : entry.source);
     if (source instanceof HTMLVideoElement ? source.readyState < 2 || source.seeking : !source.complete || !source.naturalWidth) return;
     const width = source instanceof HTMLVideoElement ? source.videoWidth : source.naturalWidth;
     const height = source instanceof HTMLVideoElement ? source.videoHeight : source.naturalHeight;
@@ -506,13 +546,22 @@ void main(){
     const time = clock.time();
     for (const entry of entries.values()) {
       const start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
-      if (entry.canvas && !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) release(entry);
+      if (entry.canvas && !preparing(entry, time) && !entry.source.hasAttribute('data-revline-transition-visible') && (time < start - 1e-6 || time >= end - 1e-6)) release(entry);
     }
     for (const entry of entries.values()) draw(entry, force);
   }
+  function unlisten(entry: Entry) {
+    const video = entry.listened;
+    if (!video) return;
+    if (entry.videoCallback !== undefined) video.cancelVideoFrameCallback(entry.videoCallback);
+    if (entry.decodedListener) { video.removeEventListener('seeked', entry.decodedListener); video.removeEventListener('loadeddata', entry.decodedListener); }
+    entry.listened = undefined; entry.videoCallback = undefined; entry.decodedListener = undefined; entry.decodedFrame = undefined;
+  }
   function decoded(entry: Entry) {
-    if (!(entry.source instanceof HTMLVideoElement)) return;
-    const video = entry.source;
+    const video = videoOf(entry);
+    if (video !== entry.listened) unlisten(entry);
+    if (!video) return;
+    entry.listened = video;
     if (!entry.decodedListener) {
       entry.decodedListener = () => { entry.decodedFrame = undefined; entry.dirty = true; draw(entry, true); };
       video.addEventListener('seeked', entry.decodedListener);
@@ -520,7 +569,7 @@ void main(){
     }
     if (!video.requestVideoFrameCallback) return;
     entry.videoCallback = video.requestVideoFrameCallback((_now, metadata) => {
-      if (disposed || entries.get(video.id) !== entry) return;
+      if (disposed || entries.get(entry.source.id) !== entry || entry.listened !== video) return;
       entry.decodedFrame = metadata.presentedFrames; entry.dirty = true; draw(entry, true); decoded(entry);
     });
   }
@@ -528,8 +577,7 @@ void main(){
     const previous = entries.get(id);
     if (previous) {
       clearNativeCorners(previous);
-      if (previous.source instanceof HTMLVideoElement && previous.videoCallback !== undefined) previous.source.cancelVideoFrameCallback(previous.videoCallback);
-      if (previous.decodedListener) { previous.source.removeEventListener('seeked', previous.decodedListener); previous.source.removeEventListener('loadeddata', previous.decodedListener); }
+      unlisten(previous);
       release(previous); entries.delete(id);
     }
   }

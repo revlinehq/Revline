@@ -1,3 +1,6 @@
+## 2026-11-09
+- Editor preview: mirror-blur copies no longer decode their own video; they draw the sharp clip's frames on WebGL canvases that are kept across cuts and drawn before the cut (5 decoders per shot become 1, 0 GL contexts rebuilt per cut). Why: the founder saw playback lag or glitch at almost every cut with mirror blur on, and smooth playback with it off.
+
 ## 2026-11-08
 - Clipping: `findHighlights` on gaming/action/music sources now measures missing scene cuts and audio levels itself (no Gemini), falls back to loudness onsets when a loud source has no spikes, and returns `signalsPending` with a retry hint while analysis runs. Why: the Warzone trailer clip run got an empty, silent result on a fresh upload and fell back to local ffmpeg.
 

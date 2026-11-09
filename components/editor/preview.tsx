@@ -266,7 +266,7 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
       if(cancelled||!container.current)return;
       playbackAssets=prepared;callbacks.current.onPlaybackAssets?.(prepared);p=document.createElement('hyperframes-player') as HyperframesPlayer;
       p.muted=true;p.style.cssText='position:absolute;inset:0;width:100%;height:100%;z-index:0;pointer-events:none';p.setAttribute('assets-loading-ui','none');p.setAttribute('runtime-src',`${window.location.origin}/vendor/hyperframe.runtime.iife.js?v=managed-media-5`);p.setAttribute('disable-click-to-play','');p.setAttribute('controls','');
-      p.setAttribute('srcdoc',generateComposition(timeline,playbackAssets,{preview:true,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=pixel-track-streams-14`,textRuntimeUrl:`${window.location.origin}/vendor/text-runtime.js?v=custom-typography-4`,transitionsRuntimeUrl:`${window.location.origin}/vendor/transitions-runtime.js?v=short-whip-1`}));
+      p.setAttribute('srcdoc',generateComposition(timeline,playbackAssets,{preview:true,gsapUrl:`${window.location.origin}/vendor/gsap.min.js`,visualEffectsUrl:`${window.location.origin}/vendor/visual-effects.js?v=mirror-blur-shared-decoder-1`,textRuntimeUrl:`${window.location.origin}/vendor/text-runtime.js?v=custom-typography-4`,transitionsRuntimeUrl:`${window.location.origin}/vendor/transitions-runtime.js?v=short-whip-1`}));
       const swap=()=>{
         if(cancelled||!p||swapped||!loaded||waitingForMedia||!session)return;
         waitingForMedia=true;

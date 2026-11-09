@@ -1,6 +1,7 @@
 import { DEFAULT_COLOR_GRADE, VISUAL_EFFECT_LIMITS } from './visual-effects';
 import { validateVisualTransform } from './visual-inputs';
 import { calculateVisualRect } from './visual-source-geometry';
+import { playbackRateOf } from './playback-rate';
 import { DEFAULT_TRANSFORM, deriveTrackCounts, dimensions, layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Clip, type MediaAsset, type Timeline } from './types';
 
 type LayoutSource = Pick<MediaAsset, '_id' | 'kind' | 'width' | 'height'>;
@@ -90,4 +91,24 @@ export function applyMirrorBlurLayout(input: Timeline, assets: readonly LayoutSo
   const clips = [...added, ...shifted.map(clip => middles.get(clip.id) ?? clip)].map(clip => Object.fromEntries(Object.entries(clip).filter(([, value]) => value !== undefined)) as Clip);
   const next = { ...timeline, clips, tracks: { ...deriveTrackCounts(timeline), visual: visualCount + layers } };
   return { timeline: { ...next, tracks: deriveTrackCounts(next) }, copies };
+}
+
+/**
+ * Blurred copies that show exactly the frames of a sharp clip: same footage, timing and speed.
+ * Editor preview draws them from that clip's decoder instead of decoding the file again per copy.
+ * Maps each copy's id to its sharp clip's id. Export still renders every copy from its own decode.
+ */
+export function mirrorBlurSources(clips: readonly Clip[]): Map<string, string> {
+  const key = (clip: Clip) => JSON.stringify([clip.assetId, clip.start, clip.duration, clip.sourceStart, playbackRateOf(clip), clip.speedRamp ?? null]);
+  const sharp = new Map<string, string>();
+  for (const clip of clips) if (clip.kind === 'video' && clip.assetId && !clip.softBlur?.enabled && !sharp.has(key(clip))) sharp.set(key(clip), clip.id);
+  // A transition samples its own clips' decoders, and an audible copy needs its own element.
+  const transitioning = new Set(clips.flatMap(clip => clip.transition ? [clip.transition.fromClipId, clip.transition.toClipId] : []));
+  const sources = new Map<string, string>();
+  for (const clip of clips) {
+    const copy = clip.kind === 'video' && clip.softBlur?.enabled && clip.softBlur.amount > 0 && (clip.volume ?? 1) === 0 && !transitioning.has(clip.id);
+    const twin = copy ? sharp.get(key(clip)) : undefined;
+    if (twin) sources.set(clip.id, twin);
+  }
+  return sources;
 }
