@@ -10,6 +10,7 @@ import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
 import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
+import { exportVisualKey } from '../lib/editor/export-reuse';
 import { hydrateAsset,transportAsset } from './lib/asset_analysis';
 import { shouldUnderstandFootage } from '../lib/media-analysis/overview-policy';
 import { TRANSCRIPT_VERSION } from '../lib/media-analysis/transcript';
@@ -422,10 +423,26 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
       return item && item.ownerId === task.ownerId && item.projectId === task.projectId ? { ...item, url: await mediaUrl(ctx, item, true) } : null;
     }));
     if (assets.some(item => !item?.url)) { throw new ConvexError('Export source media is unavailable.'); }
-    render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
+    const settings = { resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
+    render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], ...settings, ...await reusableExportVideo(ctx, job, snapshot, settings) };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+}
+/** Recent exports checked for an identical picture; an audio-only change re-exports by remuxing it. */
+const REUSABLE_EXPORTS_CHECKED = 5;
+/** The latest completed export of this project whose video stream this export would render identically. */
+async function reusableExportVideo(ctx: QueryCtx, job: Doc<'renderJobs'>, snapshot: Timeline, settings: { resolution: number; fps: number; quality: string }) {
+  const key = exportVisualKey(snapshot, settings);
+  const previous = await ctx.db.query('renderJobs').withIndex('by_owner_project_status', q => q.eq('ownerId', job.ownerId).eq('projectId', job.projectId).eq('status', 'completed')).order('desc').take(REUSABLE_EXPORTS_CHECKED);
+  for (const candidate of previous) {
+    if (candidate._id === job._id || !candidate.outputR2Key || !candidate.outputSize || candidate.resolution !== settings.resolution || candidate.fps !== settings.fps || candidate.quality !== settings.quality) continue;
+    const earlier = await loadRenderSnapshot(ctx, candidate);
+    if (!earlier || exportVisualKey(earlier, settings) !== key) continue;
+    const url = await mediaUrl(ctx, { r2Key: candidate.outputR2Key }, true);
+    return url ? { reuseVideo: { jobId: candidate._id, url, size: candidate.outputSize } } : {};
+  }
+  return {};
 }
 export const claim = mutation({ args: { projectId:v.optional(v.id('projects')),workerSecret: v.string(),compact:v.optional(v.boolean()),processorVersion:v.optional(v.number()),lane:v.optional(v.union(v.literal('ultra'),v.literal('any'))),rendersOnly:v.optional(v.boolean()),renderProvider:v.optional(v.literal('railway')),excludedKinds:v.optional(v.array(mediaTaskKind)),processorBackend:v.optional(v.union(v.literal('railway'),v.literal('cloudflare'),v.literal('local'))) }, returns: v.union(workItem, v.null()), handler: async (ctx, args): Promise<MediaWorkItem | null> => {
   const role=requireMediaWorker(args.workerSecret);
