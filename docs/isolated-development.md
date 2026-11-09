@@ -38,6 +38,18 @@ Each worktree has a private agent runner built from its branch, with its `CONVEX
 
 The local media worker and log tail connect to the selected backend. Hosted processor wakeups are disabled, so an agent's frontend and worker must keep running during media processing. Billing and Discord alerts are disabled; live Stripe/webhook credentials are omitted. Runner, media-signing and queue secrets are unique per backend.
 
+## GPU export rendering
+
+Browser exports draw frames in chrome-headless-shell with SwiftShader (CPU WebGL) by default, as on the hosted media processor. A development worker on a machine with a real GPU can draw them on the GPU instead:
+
+```sh
+REVLINE_RENDER_GPU=1 npm run worker   # or add REVLINE_RENDER_GPU=1 to .env.local
+```
+
+Before each export, `scripts/render-gpu.mjs` launches Chrome with HyperFrames' hardware flags plus `--disable-accelerated-video-decode`, decodes the export's own footage and draws through four WebGL canvases. If it gets a software renderer, a lost context, a GL error or wrong pixels, the export uses SwiftShader. The worker log shows `Export renderer: [revline] GPU effects preflight passed on <GPU>` or `... failed (<reason>); drawing export frames with SwiftShader`. GPU exports are also strict: if an effect cannot draw mid-render, that frame fails and the export renders again on SwiftShader, so effects are never silently dropped. On Linux the NVIDIA EGL vendor is preferred when installed; without it, hybrid machines draw on the integrated GPU. A non-software `PRODUCER_BROWSER_GPU_MODE` takes the same checks.
+
+GPU mode raises capture workers to `min(6, CPUs/2, memory)`, FFmpeg slots to 4 and x264 threads to `min(8, CPUs)`; preset, CRF, resolution and frame rate stay what the export asked for. `REVLINE_RENDER_WORKERS`, `REVLINE_RENDER_FFMPEG_SLOTS` and `REVLINE_RENDER_ENCODE_THREADS` still override. Without `REVLINE_RENDER_GPU`, or with `PRODUCER_BROWSER_GPU_MODE=software` (the media processor image), rendering is unchanged.
+
 ## Cleanup and limits
 
 Stop this worktree's development services, then remove its resources before removing the worktree:

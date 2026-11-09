@@ -41,12 +41,50 @@ function softBlurSteps(amount: number) {
   return steps;
 }
 
+/** Error prefix a strict (GPU) export throws when an effect could not draw; scripts/render-worker.mjs matches it. */
+export const STRICT_EFFECTS_FAILURE = 'Revline effects could not draw on this GPU:';
+
+/** The GPU or its driver failed (no context, lost context, shader or target): strict exports retry on SwiftShader. */
+class GpuEffectError extends Error {}
+
 /** One browser bundle runs the same kernel in preview and exported compositions. */
 export function installVisualEffects(sources: VisualEffectSource[], fps: number, resolution: number) {
   type Clock = { time(): number; render: (...args: unknown[]) => unknown; eventCallback?(name:string,callback?:(()=>void)|null):unknown;paused?(value?:boolean):boolean|Clock };
-  type RuntimeWindow = Window & { __timelines: { revline: Clock & { __hfReal?: Clock } }; __revlineEffects?: VisualEffectsController; __hf?: { colorGrading?: { redraw?: () => void } } };
+  type RuntimeWindow = Window & { __timelines: { revline: Clock & { __hfReal?: Clock } }; __revlineEffects?: VisualEffectsController; __hf?: { colorGrading?: { redraw?: () => void; waitForActiveLuts?: () => Promise<void> } } };
   const host = window as unknown as RuntimeWindow;
   const preview = !!document.querySelector('meta[name="hyperframes-studio-preview"]');
+  // A GPU export (scripts/render-gpu.mjs) marks its composition strict: an effect that cannot draw
+  // fails the frame, so the renderer retries on SwiftShader instead of shipping the raw source.
+  const strict = !preview && !!document.querySelector('meta[name="revline-strict-effects"]');
+  let strictFailure: string | undefined;
+  const retired = new WeakSet<HTMLCanvasElement>();
+  // GPU export (strict): an injected frame decodes once into an ImageBitmap that every effect showing it uploads.
+  // Uploading the <img> itself costs ~40 ms per effect at 1080p (an unpremultiplied CPU path);
+  // a mirror-blur shot shows the same frame in four bands. Capture awaits the decodes (waitForDraws).
+  // WebGL ignores UNPACK_FLIP_Y for bitmaps, so the bitmap carries the flip the source upload sets.
+  type FrameBitmap = { bitmap?: ImageBitmap; failed?: boolean; ready: Promise<void>; waiting: Set<Entry> };
+  const frameBitmaps = new Map<string, FrameBitmap>();
+  function frameBitmap(image: HTMLImageElement, entry: Entry): ImageBitmap | HTMLImageElement | undefined {
+    const key = image.currentSrc || image.src;
+    let record = frameBitmaps.get(key);
+    if (!record) {
+      const created: FrameBitmap = { waiting: new Set(), ready: Promise.resolve() };
+      created.ready = createImageBitmap(image, { premultiplyAlpha: 'none', imageOrientation: 'flipY' }).then(bitmap => { if (disposed) bitmap.close(); else created.bitmap = bitmap; }, () => { created.failed = true; }).then(() => {
+        const waiting = [...created.waiting]; created.waiting.clear();
+        for (const next of waiting) draw(next, true);
+      });
+      frameBitmaps.set(key, record = created);
+      // Frames already uploaded are no longer needed; keep a few for effects drawn out of order.
+      for (const [oldKey, old] of frameBitmaps) { if (frameBitmaps.size <= 8) break; if (!old.bitmap && !old.failed) continue; old.bitmap?.close(); frameBitmaps.delete(oldKey); }
+    }
+    if (record.failed) return image;
+    if (!record.bitmap) record.waiting.add(entry);
+    return record.bitmap;
+  }
+  // A draw released by one decode can start another (a newer frame), so wait until none is pending.
+  const waitForDraws = async () => {
+    for (let pending = [...frameBitmaps.values()].filter(record => !record.bitmap && !record.failed); pending.length; pending = [...frameBitmaps.values()].filter(record => !record.bitmap && !record.failed)) await Promise.all(pending.map(record => record.ready));
+  };
   const clock = host.__timelines.revline.__hfReal ?? host.__timelines.revline;
   type Entry = { source: HTMLVideoElement | HTMLImageElement; effects: VisualEffectInput; levels?: Uint8Array; finishKey?: string; curvesTexture?: WebGLTexture; lutTexture?: WebGLTexture; lutSize?: number; nativeCorners?: { node:HTMLElement; originalRadius:string }; neonColor?: number; canvas?: HTMLCanvasElement; gl?: WebGLRenderingContext; program?: WebGLProgram; impactProgram?: WebGLProgram; impactUniforms?: Record<string, WebGLUniformLocation | null>; parallaxProgram?: WebGLProgram; parallaxUniforms?: Record<string, WebGLUniformLocation | null>; gradeOnly?: boolean; texture?: WebGLTexture; buffer?: WebGLBuffer; uniforms?: Record<string, WebGLUniformLocation | null>; passTextures?: WebGLTexture[]; framebuffer?: WebGLFramebuffer; passWidth?: number; passHeight?: number; nominalWidth?: number; nominalHeight?: number; detailWidth?: number; detailHeight?: number; lastPassKey?: string; lastPassCount?: number; lastFrame?: number; lastSource?: string | number; lastTransform?: string; dirty: boolean; injected?: HTMLImageElement; failed?: boolean; videoCallback?: number; listened?: HTMLVideoElement; mirror?: HTMLVideoElement; decodedFrame?: number; decodedListener?: () => void; uploadCanvas?: HTMLCanvasElement };
   type Resources = Pick<Entry, 'canvas' | 'gl' | 'program' | 'texture' | 'buffer' | 'uniforms' | 'passTextures' | 'framebuffer' | 'passWidth' | 'passHeight' | 'curvesTexture' | 'lutTexture' | 'parallaxProgram' | 'parallaxUniforms' | 'impactProgram' | 'impactUniforms'>;
@@ -282,6 +320,7 @@ void main(){
   }
   function destroy(resources: Resources) {
     const gl = resources.gl; if (!gl) return;
+    if (resources.canvas) retired.add(resources.canvas);
     gl.deleteTexture(resources.texture ?? null); gl.deleteBuffer(resources.buffer ?? null); gl.deleteProgram(resources.program ?? null); gl.deleteProgram(resources.parallaxProgram ?? null); gl.deleteProgram(resources.impactProgram ?? null);
     for(const texture of [...resources.passTextures??[],resources.curvesTexture,resources.lutTexture])if(texture)gl.deleteTexture(texture);
     gl.deleteFramebuffer(resources.framebuffer??null);
@@ -290,6 +329,7 @@ void main(){
   function report(error: unknown) {
     const message = error instanceof Error ? error.message : 'Visual effects could not render.';
     document.documentElement.dataset.visualEffectsError = message;
+    if (strict && error instanceof GpuEffectError) strictFailure ??= message;
     console.error('Revline visual effects:', message);
     window.dispatchEvent(new CustomEvent('revline-effects-error', { detail: message }));
   }
@@ -307,7 +347,7 @@ void main(){
   function makeProgram(gl:WebGLRenderingContext,code:string){
     const compile = (type: number, sourceCode: string) => {
       const shader = gl.createShader(type)!; gl.shaderSource(shader, sourceCode); gl.compileShader(shader);
-      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw new Error(`Visual effect shader failed: ${log}`); }
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) { const log = gl.getShaderInfoLog(shader); gl.deleteShader(shader); throw new GpuEffectError(`Visual effect shader failed: ${log}`); }
       return shader;
     };
     const program = gl.createProgram()!, vs = compile(gl.VERTEX_SHADER, vertex), fs = compile(gl.FRAGMENT_SHADER, code);
@@ -336,7 +376,10 @@ void main(){
       Object.assign(entry, reusable); entry.source.parentElement!.appendChild(canvas); return;
     }
     const gl = canvas.getContext('webgl', { alpha: true, premultipliedAlpha: false, antialias: false, preserveDrawingBuffer: true });
-    if (!gl) throw new Error('WebGL is unavailable. Enable hardware acceleration to preview these effects.');
+    if (!gl) throw new GpuEffectError('WebGL is unavailable. Enable hardware acceleration to preview these effects.');
+    // A context can be lost after this frame's last draw; strict capture must still see it before the next one.
+    // destroy() loses retired contexts on purpose; only a loss the runtime did not ask for counts.
+    if (strict) canvas.addEventListener('webglcontextlost', () => { if (!retired.has(canvas)) report(new GpuEffectError('WebGL context was lost.')); }, { once: true });
     const program = makeProgram(gl,gradeOnly?gradeFragment:fragment);
     gl.useProgram(program);
     const buffer = gl.createBuffer()!; gl.bindBuffer(gl.ARRAY_BUFFER, buffer); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1,-1,1,-1,-1,1,-1,1,1,-1,1,1]), gl.STATIC_DRAW);
@@ -380,14 +423,14 @@ void main(){
       gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE);
       gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,canvas.width,canvas.height,0,gl.RGBA,gl.UNSIGNED_BYTE,null);
       gl.framebufferTexture2D(gl.FRAMEBUFFER,gl.COLOR_ATTACHMENT0,gl.TEXTURE_2D,texture,0);
-      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new Error('Visual effect intermediate target is unavailable.');
+      if(gl.checkFramebufferStatus(gl.FRAMEBUFFER)!==gl.FRAMEBUFFER_COMPLETE)throw new GpuEffectError('Visual effect intermediate target is unavailable.');
     }
     entry.passWidth=canvas.width;entry.passHeight=canvas.height;
   }
   function draw(entry: Entry, force = false) {
     if (disposed || entry.failed) return;
     if(entry.gl?.isContextLost()){
-      entry.failed=true;release(entry);report(new Error('WebGL context was lost. Reload the preview to restore these effects.'));return;
+      entry.failed=true;release(entry);report(new GpuEffectError('WebGL context was lost. Reload the preview to restore these effects.'));return;
     }
     const now = clock.time(), start = Number(entry.source.dataset.start), end = start + Number(entry.source.dataset.duration);
     const video = videoOf(entry);
@@ -449,6 +492,12 @@ void main(){
           if (upload.height !== canvas.height) upload.height = canvas.height;
           upload.getContext('2d')!.drawImage(source, 0, 0, upload.width, upload.height);
           textureSource = upload;
+        }
+        // Injected video frames only: a photo keeps the <img> upload, which applies its EXIF orientation.
+        if (strict && textureSource === injected) {
+          const decoded = frameBitmap(textureSource, entry);
+          if (!decoded) return;
+          textureSource = decoded;
         }
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, textureSource);
       }
@@ -606,19 +655,22 @@ void main(){
   if(preview&&originalPaused)clock.paused=paused;
   // Export injects FFmpeg-decoded image siblings, then calls this existing runtime bridge.
   // Chain its draw hook so capture waits for the same kernel after the injected image decodes.
-  let bridge: { redraw?: () => void } | undefined, originalRedraw: (() => void) | undefined;
+  let bridge: { redraw?: () => void; waitForActiveLuts?: () => Promise<void> } | undefined, originalRedraw: (() => void) | undefined, originalWait: (() => Promise<void>) | undefined;
+  const assertDrawn = () => { if (strictFailure) throw new Error(`${STRICT_EFFECTS_FAILURE} ${strictFailure}`); };
   function bindExportBridge() {
     const next = host.__hf?.colorGrading;
     if (!next || next === bridge) return;
-    bridge = next; originalRedraw = next.redraw;
-    next.redraw = () => { originalRedraw?.(); redraw(true); };
+    bridge = next; originalRedraw = next.redraw; originalWait = next.waitForActiveLuts;
+    next.redraw = () => { originalRedraw?.(); redraw(true); assertDrawn(); };
+    // Capture awaits this before every frame: finish frame decodes, then fail a strict frame that lost an effect.
+    if (strict) next.waitForActiveLuts = async () => { await originalWait?.call(next); await waitForDraws(); assertDrawn(); };
   }
   bindExportBridge(); document.addEventListener('DOMContentLoaded', bindExportBridge, { once: true });
   const controller: VisualEffectsController = {
     set,
     setTimedEffects:clips=>{timedEffects=clips.filter(clip=>clip.effectPreset==='zoom-blur'||clip.effectPreset==='impact-frame').sort((a,b)=>trackOf(a)-trackOf(b));for(const [id,effects] of baseEffects)set(id,effects);redraw(true);},
     redraw: () => { bindExportBridge(); redraw(true); },
-    dispose: () => { disposed = true; for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; if(clock.render===wrapped)clock.render = originalRender;if(clock.paused===paused)clock.paused=originalPaused;if(clock.eventCallback?.('onUpdate')===update)clock.eventCallback?.('onUpdate',originalUpdate??null); if (bridge) bridge.redraw = originalRedraw; },
+    dispose: () => { disposed = true; for (const id of entries.keys()) remove(id); for (const resources of available) destroy(resources); available.length = 0; if(clock.render===wrapped)clock.render = originalRender;if(clock.paused===paused)clock.paused=originalPaused;if(clock.eventCallback?.('onUpdate')===update)clock.eventCallback?.('onUpdate',originalUpdate??null); if (bridge) { bridge.redraw = originalRedraw; if (strict) bridge.waitForActiveLuts = originalWait; } for (const record of frameBitmaps.values()) record.bitmap?.close(); frameBitmaps.clear(); },
   };
   host.__revlineEffects = controller;
   for (const source of sources) set(source.id, source);
