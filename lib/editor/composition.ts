@@ -22,6 +22,7 @@ import { validateVisualEffects } from './visual-effects';
 import { clipVisualEffectSource } from './visual-effect-sources';
 import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
+import { mirrorBlurSources } from './mirror-blur-layout';
 import { textLayerSources } from './text-layers';
 import { sceneFonts, sceneLayerSources, sceneMediaAssetIds, sceneRuntimeScript, validateScene } from './scene-layers';
 import { textStyle, textAppearance } from './text-style';
@@ -92,6 +93,9 @@ export function trimmedFocus(clip: Clip) {
   return [focusAt(samples, clip.sourceStart)!, ...samples.filter(sample => sample.time > clip.sourceStart && sample.time < end), focusAt(samples, end)!];
 }
 
+/** A transparent pixel: a mirror-blur copy shows its effect canvas, never its own image. */
+const MIRROR_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
 /** One trusted template drives both the player and MP4 renderer. User text stays text. */
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
   timeline=resolvedAudioTimeline(timeline);
@@ -120,6 +124,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     for (let k = 1; k < motion.length; k++) animation.push(`timeline.fromTo('${selector}',${JSON.stringify(vars(motion[k - 1]))},${JSON.stringify({ ...vars(motion[k]), duration: motion[k].time - motion[k - 1].time, ease, immediateRender: false })},${clip.start + motion[k - 1].time});`);
     if (clip.kind === 'effect') animation.push(`timeline.set('${selector}',${JSON.stringify(vars(neutral))},${clip.start + clip.duration});`);
   }
+  // Preview decodes each shot once: mirror-blur copies draw the sharp clip's video frames.
+  const mirrors = options.preview ? mirrorBlurSources(timeline.clips) : new Map<string, string>();
   const nodes = timeline.clips.map((clip, index) => {
     validateClip(clip);
     validateClipEffects(clip);
@@ -211,6 +217,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
       return `<div id="${id}-frame" data-visual-clip="${escapeHtml(clip.id)}" class="visual-frame" style="${frameStyle}${outline ? `;filter:${outline}` : ''}">${view}</div>`;
     };
     if (clip.kind === 'image') return frame(`<img ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" alt="" />`);
+    const mirrorOf = mirrors.get(clip.id);
+    if (mirrorOf) return frame(`<img ${attrs} data-revline-mirror-of="${escapeHtml(mirrorOf)}" src="${MIRROR_PLACEHOLDER}" class="visual" style="${sourceStyle}" alt="" />`);
     const preload=options.preview&&clip.start>0?'none':'auto';
     if (clip.kind === 'audio') return `<audio ${attrs} crossorigin="anonymous" src="${src}" preload="${preload}"></audio>`;
     return frame(`<video ${attrs} crossorigin="anonymous" src="${src}" class="visual" style="${sourceStyle}" playsinline preload="${preload}"${volume === 0 ? ' muted' : ''}></video>`);
@@ -256,6 +264,8 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const previewRuntimeBridge=options.preview?'<script>window.__player=window.__player||{};</script>':'';
   // Fully transparent video is throttled by Chromium at clip activation. A
   // small nonzero opacity keeps preview decoding active under its effect canvas.
+  // An effect canvas drawn ahead of its cut stays hidden with its clip and shows on
+  // the exact frame HyperFrames reveals it. (Export hides videos behind injected frames.)
   return `<!doctype html><html${options.preview?' data-revline-media-loading="managed"':''}><head><meta charset="utf-8">${options.preview?`<meta name="hyperframes-studio-preview" content="true"><script>
 function reportPreviewError(error,label){const message=String(error&&error.message||error).replace(/([?&]token=)[^\\s'"<>]+/g,'$1[redacted]');parent.postMessage({source:'revline-preview-error',message,label},parent.location.origin);}
 window.addEventListener('error',event=>{if(event.error)reportPreviewError(event.error,'uncaught');});
@@ -266,7 +276,7 @@ ${textFontFaceCss(fontUrls)}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer,.solid-color-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
 .scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
-[data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
+[data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}.source-window>[data-start][style*="visibility: hidden"]~.visual-effect-output{visibility:hidden}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><meta name="revline-text-runtime" content="${textRuntimeUrl}"><meta name="revline-transitions-runtime" content="${transitionsRuntimeUrl}">${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
 const timeline=gsap.timeline({paused:true});

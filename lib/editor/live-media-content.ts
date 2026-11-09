@@ -1,12 +1,14 @@
 import { previewSourceAt } from './preview-segments';
 import type { CompositionWindow } from './composition-window';
 import { generateComposition } from './composition';
+import { mirrorBlurSources } from './mirror-blur-layout';
 import { audioFadeAttributes, audioVolumeEnvelope } from './audio-settings';
 import { playbackRateOf, sourceTimeAt } from './playback-rate';
 import { timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 
 const mediaClip=(clip:Clip)=>clip.kind==='video'||clip.kind==='image'||clip.kind==='audio';
 const activeAt=(clip:Clip,time:number)=>time>=clip.start&&time<clip.start+clip.duration;
+const mirrorPairs=(timeline:Timeline)=>JSON.stringify([...mirrorBlurSources(timeline.clips)].sort());
 
 /** Refresh native activation after timing/identity edits, without seeking for effect drafts. */
 export function needsLiveMediaSync(previous:Timeline,next:Timeline):boolean {
@@ -24,6 +26,8 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   const composition=document.getElementById('composition');if(!host?.gsap||!clock||!composition)return false;
   if(!host.__revlineVisualFadeController&&next.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0))return false;
   if(previous.aspectRatio!==next.aspectRatio||previous.fps!==next.fps)return false;
+  // A mirror-blur copy is a placeholder drawn from its sharp clip's decoder; a changed pairing needs a rebuild.
+  if(mirrorPairs(previous)!==mirrorPairs(next))return false;
   const nodes=new Map(Array.from(document.querySelectorAll<HTMLElement>('[data-source-clip]'),node=>[node.dataset.sourceClip!,node]));
   const old=new Map(previous.clips.map(clip=>[clip.id,clip])),assetMap=new Map(assets.map(asset=>[asset._id,asset]));
   const nextMedia=next.clips.filter(mediaClip),wanted=new Set(nextMedia.map(clip=>clip.id)),time=clock.time();
@@ -68,7 +72,7 @@ export function updateLiveMediaContent(document:Document,previous:Timeline,next:
   for(const clip of nextMedia){
     const node=nodes.get(clip.id)!,asset=assetMap.get(clip.assetId!);if(!asset?.url)return false;
     const playback=previewSourceAt(asset,sourceTimeAt(clip,Math.max(clip.start,Math.min(time,clip.start+clip.duration-1/next.fps))));
-    if(node.getAttribute('src')!==playback.url){
+    if(!node.dataset.revlineMirrorOf&&node.getAttribute('src')!==playback.url){
       node.setAttribute('src',playback.url??asset.url);
       if(clip.kind==='video'||clip.kind==='audio'){
         // Before metadata arrives currentTime becomes the native default start

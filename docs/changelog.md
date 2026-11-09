@@ -1,3 +1,6 @@
+## 2026-11-09
+- Editor preview: mirror-blur copies no longer decode their own video; they draw the sharp clip's frames on WebGL canvases that are kept across cuts and drawn before the cut (5 decoders per shot become 1, 0 GL contexts rebuilt per cut). Why: the founder saw playback lag or glitch at almost every cut with mirror blur on, and smooth playback with it off.
+
 ## 2026-11-08
 - MCP: new `cancelExport({jobId})` stops a queued or rendering export, sharing the editor Cancel button's logic (`cancelRenderJob`); no confirmation, saved edits stay. Why: a stuck export blocked checks and the next export for 40+ minutes with no agent way out.
 - MCP: `startTask` hides the working badge of older tasks still live on the same tab; any later call of a hidden task shows it again. Why: abandoned tasks kept "Claude is working" on a tab after their agent was gone.
