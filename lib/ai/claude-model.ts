@@ -1,5 +1,4 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
-import type { GoogleGenerativeAIProviderOptions } from '@ai-sdk/google';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
 
 export const CLAUDE_EDIT_MODELS = [
@@ -21,12 +20,12 @@ export const OPENAI_EDIT_MODELS = [
   // Rejects prompt_cache_options; reasoning modes are GPT-6 only.
   { id: 'gpt-5.4-mini', label: 'GPT-5.4 mini', modelId: 'gpt-5.4-mini', pricing: { input: .75, cacheRead: .075, cacheWrite: .9375, output: 4.5 }, legacyOptions: true },
 ] as const;
-// Google rates, USD / 1M tokens, from ai.google.dev/gemini-api/docs/pricing (2026-10-29): $2 input,
-// $10 output, $0.10 implicit cache reads until 2026-11-30; $4 / $20 / $0.20 from 2026-12-01.
-const GOOGLE_EDIT_MODELS = [
-  { id: 'gemini-4-argon', label: 'Gemini 4 Argon', shortLabel: 'Argon 4', modelId: 'gemini-4-argon' },
-] as const;
-export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, CLAUDE_EDIT_MODELS[1], CLAUDE_EDIT_MODELS[2], ...GOOGLE_EDIT_MODELS] as const;
+export const EDITOR_MODELS = [...OPENAI_EDIT_MODELS, ...CLAUDE_EDIT_MODELS] as const;
+/** Editor models no longer offered. Saved choices and queued turns that name one run on the default model. */
+export const RETIRED_EDITOR_MODEL_CHOICES = ['gemini-4-argon'] as const;
+export function isRetiredEditorModelChoice(choice: unknown): choice is typeof RETIRED_EDITOR_MODEL_CHOICES[number] {
+  return RETIRED_EDITOR_MODEL_CHOICES.some(item => item === choice);
+}
 
 type ModelPolicyEnvironment = Readonly<Record<string, string | undefined>>;
 /** The GPT editing models, always offered; running them needs OPENAI_API_KEY. */
@@ -35,20 +34,18 @@ export const OPENAI_EDIT_CHOICES = [OPENAI_EDIT_MODELS[0].id, OPENAI_EDIT_MODELS
 export const DEFAULT_EDITOR_MODEL = OPENAI_EDIT_MODELS[0].id;
 /** The model free accounts edit with: GPT-6.1 Terra. */
 export const FREE_EDITOR_MODEL_CHOICE = OPENAI_EDIT_MODELS[2].id;
-/** Claude editing models, offered when ANTHROPIC_API_KEY is configured. */
-const ANTHROPIC_EDIT_CHOICES = [CLAUDE_EDIT_MODELS[1].id, CLAUDE_EDIT_MODELS[2].id] as const;
-const ANTHROPIC_EDIT_MODEL_IDS: readonly string[] = [CLAUDE_EDIT_MODELS[1].modelId, CLAUDE_EDIT_MODELS[2].modelId];
-/** Gemini editing models, offered when GOOGLE_GENERATIVE_AI_API_KEY is configured. */
-const GOOGLE_EDIT_CHOICES = [GOOGLE_EDIT_MODELS[0].id] as const;
-export const EDITOR_MODEL_CATALOG = [...OPENAI_EDIT_CHOICES, ...ANTHROPIC_EDIT_CHOICES, ...GOOGLE_EDIT_CHOICES] as const;
+/** Claude editing models, offered on paid plans when ANTHROPIC_API_KEY is configured. Fast to strong: Haiku, Sonnet, Opus. */
+const ANTHROPIC_EDIT_CHOICES = CLAUDE_EDIT_MODELS.map(model => model.id);
+const ANTHROPIC_EDIT_MODEL_IDS: readonly string[] = CLAUDE_EDIT_MODELS.map(model => model.modelId);
+export const EDITOR_MODEL_CATALOG = [...OPENAI_EDIT_CHOICES, ...ANTHROPIC_EDIT_CHOICES] as const;
 const modelLabels = (ids: readonly string[]) => ids.map(id => EDITOR_MODELS.find(model => model.id === id)!.label);
 const listLabels = (labels: readonly string[]) => `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}`;
 export const GPT_ONLY_EDITING_ERROR = `Revline editing supports ${listLabels(modelLabels(EDITOR_MODEL_CATALOG))}. Choose a supported model.`;
 /** Which backend key enables which models, for the not-configured message. */
-export const EDITOR_PROVIDER_REASON = `Configure OPENAI_API_KEY (${modelLabels(OPENAI_EDIT_CHOICES).join(', ')}), ANTHROPIC_API_KEY (${modelLabels(ANTHROPIC_EDIT_CHOICES).join(', ')}) or GOOGLE_GENERATIVE_AI_API_KEY (${modelLabels(GOOGLE_EDIT_CHOICES).join(', ')}) in Convex to edit.`;
+export const EDITOR_PROVIDER_REASON = `Configure OPENAI_API_KEY (${modelLabels(OPENAI_EDIT_CHOICES).join(', ')}) or ANTHROPIC_API_KEY (${modelLabels(ANTHROPIC_EDIT_CHOICES).join(', ')}) in Convex to edit.`;
 
-export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ((typeof OPENAI_EDIT_CHOICES)[number] | (typeof ANTHROPIC_EDIT_CHOICES)[number] | (typeof GOOGLE_EDIT_CHOICES)[number])[] {
-  return [...OPENAI_EDIT_CHOICES, ...(env.ANTHROPIC_API_KEY?.trim() ? ANTHROPIC_EDIT_CHOICES : []), ...(env.GOOGLE_GENERATIVE_AI_API_KEY?.trim() ? GOOGLE_EDIT_CHOICES : [])];
+export function allowedClaudeModelChoices(env: ModelPolicyEnvironment = process.env): readonly ((typeof OPENAI_EDIT_CHOICES)[number] | (typeof ANTHROPIC_EDIT_CHOICES)[number])[] {
+  return [...OPENAI_EDIT_CHOICES, ...(env.ANTHROPIC_API_KEY?.trim() ? ANTHROPIC_EDIT_CHOICES : [])];
 }
 
 export function enforceClaudeModelPolicy(selection: ClaudeModelSelection, env: ModelPolicyEnvironment = process.env): ClaudeModelSelection {
@@ -63,11 +60,6 @@ export function enforceClaudeModelPolicy(selection: ClaudeModelSelection, env: M
     if (!env.ANTHROPIC_API_KEY?.trim()) throw new Error('Claude editing requires ANTHROPIC_API_KEY in this Convex environment.');
     return selection;
   }
-  if (selection.provider === 'google') {
-    if (!GOOGLE_EDIT_CHOICES.some(item => item === selection.modelId) || (choice !== undefined && !GOOGLE_EDIT_CHOICES.some(item => item === choice))) throw new Error(GPT_ONLY_EDITING_ERROR);
-    if (!env.GOOGLE_GENERATIVE_AI_API_KEY?.trim()) throw new Error('Gemini editing requires GOOGLE_GENERATIVE_AI_API_KEY in this Convex environment.');
-    return selection;
-  }
   throw new Error(GPT_ONLY_EDITING_ERROR);
 }
 export const EDITOR_REASONING_EFFORTS = ['low', 'medium', 'high', 'xhigh'] as const;
@@ -75,14 +67,16 @@ export type EditorReasoningEffort = typeof EDITOR_REASONING_EFFORTS[number];
 export const EDITOR_SPEED_MODES = ['standard', 'fast'] as const;
 export type EditorSpeedMode = typeof EDITOR_SPEED_MODES[number];
 // Every editor model takes an effort level; Fast mode is OpenAI-only here.
-// Sonnet 5.5 rejects `speed`, and Opus 5.5 fast mode is a research preview
+// Sonnet 5.5 and Haiku 5.5 reject `speed`, and Opus 5.5 fast mode is a research preview
 // this Anthropic org has no rate limit for (0 tokens/min, 2026-10-25).
 function editorModelSupportsFast(selection: Pick<ClaudeModelSelection, 'provider'>) {
   return selection.provider === 'openai';
 }
 // Legacy IDs remain decodable for historical records and stale queued requests.
-export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'] | typeof GOOGLE_EDIT_MODELS[number]['id'];
-export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'google' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode };
+export type ClaudeModelChoice = typeof OPENAI_EDIT_MODELS[number]['id'] | typeof CLAUDE_EDIT_MODELS[number]['id'];
+export type ClaudeModelSelection = { provider: 'anthropic' | 'gateway' | 'openai'; modelId: string; modelChoice?: ClaudeModelChoice; reasoningEffort?: EditorReasoningEffort; speedMode?: EditorSpeedMode };
+/** A pin as saved in queued turns, which may still name a retired model or provider. */
+export type StoredModelSelection = Omit<ClaudeModelSelection, 'provider' | 'modelChoice' | 'reasoningEffort'> & { provider: ClaudeModelSelection['provider'] | 'google'; modelChoice?: ClaudeModelChoice | typeof RETIRED_EDITOR_MODEL_CHOICES[number]; reasoningEffort?: unknown };
 type ClaudeModelEnvironment = Readonly<Record<string, string | undefined>>;
 
 export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process.env) {
@@ -91,11 +85,10 @@ export function claudeModelSwitcherEnabled(env: ClaudeModelEnvironment = process
 
 export function resolveClaudeModel(modelChoice?: ClaudeModelChoice, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (modelChoice !== undefined && !claudeModelSwitcherEnabled(env)) throw new Error('Manual model selection is currently disabled.');
-  const choice = modelChoice ?? (env.EDITOR_DEFAULT_MODEL?.trim() || DEFAULT_EDITOR_MODEL);
+  const configured = env.EDITOR_DEFAULT_MODEL?.trim();
+  const choice = modelChoice ?? (configured && !isRetiredEditorModelChoice(configured) ? configured : DEFAULT_EDITOR_MODEL);
   const selected = OPENAI_EDIT_MODELS.find(model => model.id === choice);
   if (selected) return enforceClaudeModelPolicy({ provider: 'openai', modelId: selected.modelId, modelChoice: selected.id }, env);
-  const gemini = GOOGLE_EDIT_MODELS.find(model => model.id === choice);
-  if (gemini) return enforceClaudeModelPolicy({ provider: 'google', modelId: gemini.modelId, modelChoice: gemini.id }, env);
   const claude = CLAUDE_EDIT_MODELS.find(model => model.id === choice && EDITOR_MODELS.some(item => item.id === model.id));
   if (!claude) throw new Error(GPT_ONLY_EDITING_ERROR);
   return enforceClaudeModelPolicy({ provider: 'anthropic', modelId: claude.modelId, modelChoice: claude.id }, env);
@@ -122,11 +115,14 @@ export function defaultEditorModelChoice(env:ClaudeModelEnvironment=process.env)
   return EDITOR_MODELS.find(model=>model.modelId===selected.modelId)?.id;
 }
 
-export function validatePinnedClaudeModel(input: Omit<ClaudeModelSelection, 'reasoningEffort'> & { reasoningEffort?: unknown }, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection & { reasoningEffort: EditorReasoningEffort } {
-  const selection = { ...input, reasoningEffort: normalizeEditorReasoningEffort(input.reasoningEffort, env) };
+export function validatePinnedClaudeModel(input: StoredModelSelection, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection & { reasoningEffort: EditorReasoningEffort } {
+  const reasoningEffort = normalizeEditorReasoningEffort(input.reasoningEffort, env);
+  // A turn queued with a retired model (Gemini 4 Argon) runs on the deployment default instead of failing.
+  if (input.provider === 'google' || isRetiredEditorModelChoice(input.modelChoice)) return { ...resolveClaudeModel(undefined, env), modelChoice: undefined, reasoningEffort };
+  const selection = { ...input, provider: input.provider, modelChoice: input.modelChoice, reasoningEffort };
   enforceClaudeModelPolicy(selection, env);
   if (selection.speedMode !== undefined && (!EDITOR_SPEED_MODES.includes(selection.speedMode) || (selection.speedMode === 'fast' && !editorModelSupportsFast(selection)))) throw new Error('Fast mode is not available for this model.');
-  const pinned = selection.provider === 'openai' || selection.provider === 'google' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
+  const pinned = selection.provider === 'openai' ? selection.modelChoice : CLAUDE_EDIT_MODELS.find(model => model.id === selection.modelChoice)?.modelId;
   if (selection.modelChoice !== undefined && pinned !== selection.modelId) throw new Error('Pinned editor model does not match its selection.');
   return selection;
 }
@@ -162,14 +158,7 @@ function claudeProviderOptions(modelId: string, effort: EditorReasoningEffort = 
   return { anthropic };
 }
 
-/** Gemini thinks at low, medium or high; the higher editor efforts map to high. */
-function googleProviderOptions(effort: EditorReasoningEffort = defaultEditorReasoningEffort()) {
-  const google = { thinkingConfig: { thinkingLevel: effort === 'low' || effort === 'medium' ? effort : 'high' } } satisfies GoogleGenerativeAIProviderOptions;
-  return { google };
-}
-
 export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?: string) {
-  if (selection.provider === 'google') return googleProviderOptions(selection.reasoningEffort ?? defaultEditorReasoningEffort());
   if (selection.provider !== 'openai') { const options = claudeProviderOptions(selection.modelId, selection.reasoningEffort); if (!options) throw new Error(GPT_ONLY_EDITING_ERROR); return options; }
   // GPT-6 models take reasoning modes, cache retention and all four efforts; older
   // models reject those request fields outright.
@@ -192,11 +181,9 @@ export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   // Claude gets its model maximum: thinking and the scene share this allowance, and a lower cap cut runs off
   // after they had already paid for the thinking.
   if (selection.provider === 'anthropic') return 128_000;
-  // GPT and Gemini need room for a whole scene (about 10k tokens of code) plus their reasoning in one step; a lower cap
+  // GPT needs room for a whole scene (about 10k tokens of code) plus their reasoning in one step; a lower cap
   // cut scenes off mid-write ("reached the model output limit") or pushed models to shorten them. Billing is per token used.
-  const cap = { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
-  // Gemini 4 Argon's documented outputTokenLimit is 32,768; asking for more can fail mid-turn.
-  return selection.provider === 'google' ? Math.min(cap, 32_768) : cap;
+  return { low: 32_768, medium: 49_152, high: 65_536, xhigh: 65_536 }[selection.reasoningEffort ?? defaultEditorReasoningEffort()];
 }
 
 export function assertEditorModelConfigured(selection: ClaudeModelSelection, env: ClaudeModelEnvironment = process.env) {
