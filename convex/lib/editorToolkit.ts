@@ -13,7 +13,7 @@ import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imag
 import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
-import { sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
+import { HIGHLIGHT_SIGNALS_ONLY, readHighlights, sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
@@ -482,10 +482,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const zoomInput=z.object({direction:z.enum(['in','out']).optional(),amount:z.number().min(ZOOM_LIMITS.amount[0]).max(ZOOM_LIMITS.amount[1]).optional(),speed:z.number().min(ZOOM_LIMITS.speed[0]).max(ZOOM_LIMITS.speed[1]).optional(),centerX:z.number().min(0).max(1).optional(),centerY:z.number().min(0).max(1).optional()});
   const solidColorInput=z.object({color:z.string().regex(/^#[\da-f]{6}$/i).optional(),width:z.number().min(SOLID_COLOR_LIMITS.width[0]).max(SOLID_COLOR_LIMITS.width[1]).optional(),height:z.number().min(SOLID_COLOR_LIMITS.height[0]).max(SOLID_COLOR_LIMITS.height[1]).optional(),x:z.number().min(0).max(1).optional(),y:z.number().min(0).max(1).optional(),opacity:z.number().min(0).max(1).optional()});
   const textInput = z.object({ text: z.string().min(1).max(2000), track: z.number().int().min(1).max(24).optional(), start: z.number().min(0), duration: z.number().positive(), fontSize: z.number().min(8).max(300).optional(),fontFamily:fontFamily.optional(), color: textColor.optional(), background: textColor.optional(), blendMode: z.enum(BLEND_MODES).optional(), x: z.number().min(0).max(1).optional(), y: z.number().min(0).max(1).optional(), animation: z.enum(["none", "fade", "rise"]).optional(),textStyle:textStyleInput.optional() });
-  const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }) => {
+  const withAnalysis = async <T,>(assetId: string, mode: "highlights" | "transcribe" | "shots" | "beats" | "track" | "video" | "frames" | "reference" | "facecam" | "speakers", read: (request: Doc<"analysisRequests">) => Promise<T>, inspection?: { highlightSkipGemini?:string; highlightSourceType?:z.infer<typeof sourceType>; videoRequest?: VideoInspectionInput; frameRequest?: FrameInspectionInput; speakerRequest?:{start:number;end:number} }, waitMs?: number) => {
     // Healthy worker heartbeats extend the durable request, but must not extend
     // an MCP call past its transport budget while it holds the edit lock.
-    const waitDeadline = isMcpRun(run.runId) ? Date.now() + MCP_WORKER_WAIT_MS : Infinity;
+    const waitDeadline = waitMs !== undefined || isMcpRun(run.runId) ? Date.now() + Math.min(waitMs ?? MCP_WORKER_WAIT_MS, MCP_WORKER_WAIT_MS) : Infinity;
     const requestId = await retryAbortedTransaction(() => ctx.runMutation(internal.assistant.requestAnalysis, { ...run, assetId, mode, ...inspection }), abortSignal);
     try {
       while (true) {
@@ -905,15 +905,40 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const tools = {
     findHighlights:createTool({metadata:EDITOR_TOOL_DEFINITIONS.findHighlights,
-      description:'Read saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
+      description:'Read saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. On the visual path it first measures missing scene cuts and audio peaks for the source (no Gemini), and says so when they are still running instead of returning an empty set. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
 
       inputSchema:z.object({assetId:z.string(),sourceType:sourceType.optional(),speechLed:z.boolean().optional().describe("True when the requested moments are spoken dialogue, including interview or stream dialogue. Commentary over gaming/action does not make visuals irrelevant."),visualReview:z.boolean().optional().describe('True when this request depends on visual context. Discovery still uses targeted short video windows, never whole-video judging.'),count:z.number().int().min(1).max(10).optional(),delivery:z.enum(['candidates','clips']).default('candidates')}),execute:async(_ctx,input)=>{
         let asset = await loadAsset(input.assetId);
         const transcriptOnly = !input.visualReview && (input.speechLed || input.sourceType === 'podcast' || input.sourceType === 'talk');
         if (transcriptOnly && !asset.analysis?.transcript?.words.length) asset = await analyze(input.assetId, 'transcribe');
+        // Visual discovery reads cheap helpers (scene cuts, audio peaks). A fresh upload has
+        // none saved yet, so measure them here; Gemini only watches targeted inspectVideo windows.
+        const pending: string[] = [];
+        let pendingNext = '';
+        if (!transcriptOnly && asset.kind === 'video') {
+          // A bounded wait in every run type: the worker keeps going and saves results after a timeout.
+          let running = false;
+          const note = (what: string) => (error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            if (/taking longer|too many media jobs/i.test(message)) running = true;
+            pending.push(`${what}: ${message}`);
+          };
+          await Promise.all([
+            asset.analysis?.shots ? null : withAnalysis(input.assetId, 'shots', () => loadAsset(input.assetId), undefined, MCP_WORKER_WAIT_MS).catch(note('Scene cuts are not measured yet')),
+            readHighlights(asset.analysis?.highlights) ? null : withAnalysis(input.assetId, 'highlights', () => loadAsset(input.assetId), { highlightSkipGemini: HIGHLIGHT_SIGNALS_ONLY, ...(input.sourceType ? { highlightSourceType: input.sourceType } : {}) }, MCP_WORKER_WAIT_MS).catch(note('Audio peaks are not measured yet')),
+          ]);
+          asset = await loadAsset(input.assetId);
+          if (pending.length) pendingNext = running
+            ? 'Source analysis is still running in the background and saves its results. Call findHighlights again in about a minute to read the saved scene cuts and audio peaks; meanwhile inspectVideo short SOURCE windows to observe events.'
+            : 'Scene cuts or audio peaks could not be measured for this source; calling findHighlights again will not change that. Discover moments with short inspectVideo SOURCE windows instead.';
+        }
         clippingActive = input.delivery === 'clips';
-        return ctx.runMutation(internal.clipping.begin, { ...clippingRun, assetId: asset._id, delivery: clippingActive,
+        const result = await ctx.runMutation(internal.clipping.begin, { ...clippingRun, assetId: asset._id, delivery: clippingActive,
           transcriptOnly, ...(input.sourceType ? { sourceType: input.sourceType } : {}), ...(input.count ? { count: input.count } : {}) });
+        if (!pending.length) return result;
+        // Never hand back an empty result that looks like "nothing worth clipping".
+        return { ...result, signalsPending: pending, warnings: [...(result.warnings ?? []), ...pending],
+          next: `${pendingNext} ${result.next ?? ''}`.trim() };
       }}),
     planClips:createTool({metadata:EDITOR_TOOL_DEFINITIONS.planClips,
       description:'For transcript-first discovery or if findHighlights fell back, first register the COMPLETE found:[{title,start,end,kind,hook,payoff,reactionEnd,score,reason}] set after reading the transcript; each successful found call replaces the previous candidate set. On the visual path, spoken moments are grounded by their quotes; action or non-verbal hook/payoff moments need a saved targeted inspectVideo observation, and come back unresolved when Gemini is unavailable or the inspection budget is spent. Quotes must match saved words/times; leave non-verbal quotes empty. It returns current server IDs and suggested clean start/end. Use those ranges by default; changes must stay within 12s of each suggested boundary, retain hook/payoff, and last 15-60s. Then record every reviewed top-10 ID as accepted or dropped with a concrete reason. Accepted candidates each need one unique title, clean SOURCE start/end and their own populated tab (source aspect/framing unless the user requests reframing). Use candidate IDs from findHighlights. Bind timelineId when known; exact unique tab titles also resolve. Revise this plan if a candidate is dropped after building; restore/remove its abandoned tab. No padding. Finish compares the plan to populated tabs and cheap data; only explicitly selected QA needs receipts. shortfallReason is included in finishClipping\'s finalMessage. Updating the plan after dropping a built candidate removes its abandoned tab only when this batch created it and it holds no user-approved work.',

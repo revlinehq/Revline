@@ -1,6 +1,6 @@
 import { geminiBillingUnavailable, recordGeminiBilling, usesGemini } from './lib/gemini_billing';
 import { persistVideoUnavailable } from './lib/video_unavailable';
-import { readHighlights } from '../lib/media-analysis/highlights';
+import { HIGHLIGHT_SIGNALS_ONLY, readHighlights } from '../lib/media-analysis/highlights';
 import { recordClipCheck } from './clipping';
 import { frameCacheKey, snapshotResultDescriptor } from '../lib/media-analysis/frame-cache';
 import { processorBackend } from './lib/processor_backend';
@@ -534,7 +534,7 @@ const saveAnalysisResult: ResultHandler = async (ctx, task, result) => {
   await saveAssetAnalysis(ctx, asset, result.analysis);
   if(task.kind==='highlights'&&task.analysisRequestId){
     const request=await ctx.db.get(task.analysisRequestId),tracks=readHighlights(result.analysis.highlights);
-    if(request&&tracks?.judge==='fallback'&&tracks.unavailableReason){const project=await projectRun(ctx,task.projectId,task.ownerId);await persistVideoUnavailable(ctx,project,request.aiRunId,tracks.unavailableReason);}
+    if(request&&tracks?.judge==='fallback'&&tracks.unavailableReason&&tracks.unavailableReason!==HIGHLIGHT_SIGNALS_ONLY){const project=await projectRun(ctx,task.projectId,task.ownerId);await persistVideoUnavailable(ctx,project,request.aiRunId,tracks.unavailableReason);}
   }
   if(task.kind==='speakers'&&task.analysisRequestId&&await ctx.db.get(task.analysisRequestId))await ctx.db.patch(task.analysisRequestId,{speakerInspection:result.analysis.speakers});
 };
