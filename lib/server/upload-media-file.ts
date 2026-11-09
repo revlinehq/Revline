@@ -11,6 +11,8 @@ export type UploadContext = {
   convex: ConvexHttpClient; refreshAuth: () => Promise<void>;
   /** Runs a call that writes the media task's row so it never overlaps a lease renewal. */
   exclusive?: <T>(run: () => Promise<T>) => Promise<T>;
+  /** Called after each stored part, so a long upload keeps reporting progress. */
+  onPart?: (stored: number, total: number) => void;
 };
 
 export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<typeof api.r2.start>, 'size'>, context: UploadContext, signal: AbortSignal) {
@@ -37,6 +39,7 @@ export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<
           const part = await response.json() as { partNumber: number; etag: string };
           if (part.partNumber !== partNumber || !part.etag) throw new Error('The media upload returned an invalid part.');
           parts.push(part);
+          context.onPart?.(parts.length, upload.partCount);
         } finally { body.destroy(); }
       }, partSignal);
     });

@@ -71,25 +71,42 @@ export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(
 // Worker leases recover disconnected renders, but nothing else ends an export
 // that no renderer ever claims or one that keeps heartbeating without finishing.
 const STALLED_QUEUE_MS = 30 * 60_000, STALLED_RENDER_MS = 2 * 3600_000;
+// A running export whose progress has not advanced for this long is stuck, even while
+// its worker keeps heartbeating. Each render phase reports progress well within it.
+const STALLED_PROGRESS_MS = 8 * 60_000;
+// Lease expiry normally retries a silent worker within a minute; this catches a missed expiry.
+const SILENT_WORKER_MS = 5 * 60_000;
 const STALLED_QUEUE_ERROR = 'No renderer became available to start this export. Your saved edit is unchanged; try exporting again.';
 const STALLED_RENDER_ERROR = 'This export took too long to finish and was stopped. Your saved edit is unchanged; try exporting again.';
+const STALLED_PROGRESS_ERROR = `This export stopped making progress for ${STALLED_PROGRESS_MS / 60_000} minutes and was stopped. Your saved edit is unchanged; try exporting again.`;
+const SILENT_WORKER_ERROR = 'The renderer stopped responding during this export. Your saved edit is unchanged; try exporting again.';
 export const failStalled = internalMutation({ args: {}, returns: v.null(), handler: async ctx => {
   const now = Date.now();
-  // Only jobs older than the shorter limit can be stalled; few exports are active at once.
+  // Only jobs older than the shortest limit can be stalled; few exports are active at once.
   for (const status of ['queued', 'rendering'] as const) {
-    const jobs = await ctx.db.query('renderJobs').withIndex('by_status_createdAt', q => q.eq('status', status).lt('createdAt', now - STALLED_QUEUE_MS)).take(100);
+    const jobs = await ctx.db.query('renderJobs').withIndex('by_status_createdAt', q => q.eq('status', status).lt('createdAt', now - Math.min(STALLED_PROGRESS_MS, SILENT_WORKER_MS))).take(100);
     for (const job of jobs) {
       const task = job.taskId ? await ctx.db.get(job.taskId) : null;
       const active = task && ['queued', 'running', 'retrying'].includes(task.status) ? task : null;
       // Time the current attempt, or the current wait for a renderer.
       const running = active ? active.status === 'running' : status === 'rendering';
       const since = active ? running ? active.attemptStartedAt ?? active.updatedAt : active.updatedAt : job.updatedAt;
-      if (now - since < (running ? STALLED_RENDER_MS : STALLED_QUEUE_MS)) continue;
-      const error = running ? STALLED_RENDER_ERROR : STALLED_QUEUE_ERROR;
+      // Attempts claimed before progressAt existed keep only the overall limit.
+      // Only frame rendering (5–94%) and the per-part upload (97%+) report steadily; media
+      // preparation and true-peak passes can run long silently and keep the overall limit.
+      const reporting = active ? (active.progress >= 5 && active.progress < 95) || active.progress >= 97 : false;
+      const progressed = active?.status === 'running' && reporting ? active.progressAt : undefined;
+      const silent = active?.status === 'running' && active.leaseExpiresAt !== undefined && now - active.leaseExpiresAt >= SILENT_WORKER_MS;
+      const error = silent ? SILENT_WORKER_ERROR
+        : progressed !== undefined && now - progressed >= STALLED_PROGRESS_MS ? STALLED_PROGRESS_ERROR
+        : now - since >= (running ? STALLED_RENDER_MS : STALLED_QUEUE_MS) ? running ? STALLED_RENDER_ERROR : STALLED_QUEUE_ERROR
+        : null;
+      if (!error) continue;
+      // Failing the task cancels its workflow and frees its worker slot and export seat.
       if (active) await failMediaTask(ctx, active._id, error);
       const current = await ctx.db.get(job._id);
       if (current && (current.status === 'queued' || current.status === 'rendering')) {
-        await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render' }, projectId: job.projectId, deployment: incidentDeployment() });
+        await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render', ...(active ? { attempt: active.attempt, progress: active.progress } : {}) }, projectId: job.projectId, deployment: incidentDeployment() });
         await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
       }
     }

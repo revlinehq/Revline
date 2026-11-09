@@ -26,6 +26,13 @@ export type MediaWorkerOptions = {
   draining?: () => boolean;
   log: (event: MediaWorkerEvent, fields: Record<string, unknown>) => void;
 };
+type MediaKind = import('../../convex/lib/media_task_contract').MediaWorkItem['kind'];
+/** Short checks an agent waits on. A worker with several slots keeps one for them,
+ *  so a long export or analysis in its other slots never starves frames or sound. */
+const QUICK_KINDS = { preview: true, read: true, snapshot: true, blueprint: true, review: true, frames: true,
+  render: false, import: false, extract: false, waveform: false, cutout: false, derive: false, highlights: false, transcribe: false,
+  understand: false, shots: false, beats: false, track: false, video: false, reference: false, facecam: false, speakers: false } satisfies Record<MediaKind, boolean>;
+const SLOW_KINDS = (Object.keys(QUICK_KINDS) as MediaKind[]).filter(kind => !QUICK_KINDS[kind]);
 export type MediaWorkerState = { activeTasks: number; lastWorkAt: number; ready: boolean };
 
 /** The claim → heartbeat → complete loop shared by the local dev worker and the production
@@ -46,8 +53,10 @@ export function startMediaWorker(options: MediaWorkerOptions) {
   // Slots share claims, but never the HTTP client's mutation queue: a slow
   // claim/upload for another task must not hold up a live task's lease renewal.
   let claiming = Promise.resolve();
-  const claimNext = () => {
-    const next = claiming.then(() => client.mutation(api.mediaTasks.claim, { ...claimArgs, compact: true }, { skipQueue: true }));
+  const reserveQuickSlot = options.slots > 1 && !options.claim.rendersOnly && options.claim.lane !== 'ultra';
+  const quickArgs = { ...claimArgs, excludedKinds: [...new Set([...options.claim.excludedKinds ?? [], ...SLOW_KINDS])] };
+  const claimNext = (quickOnly: boolean) => {
+    const next = claiming.then(() => client.mutation(api.mediaTasks.claim, { ...(quickOnly ? quickArgs : claimArgs), compact: true }, { skipQueue: true }));
     claiming = next.then(() => {}, () => {});
     return next;
   };
@@ -78,11 +87,12 @@ export function startMediaWorker(options: MediaWorkerOptions) {
     });
   }
 
-  async function runSlot() {
+  async function runSlot(slot: number) {
+    const quickOnly = reserveQuickSlot && slot === 0;
     while (!shutdown.aborted && !draining()) {
       try {
         const observed = revision, claimedAt = Date.now();
-        const task = await claimNext();
+        const task = await claimNext(quickOnly);
         if (!task) { await waitForWork(observed); continue; }
         state.activeTasks++; state.lastWorkAt = Date.now();
         const controller = new AbortController();
@@ -162,6 +172,6 @@ export function startMediaWorker(options: MediaWorkerOptions) {
     }
   }
 
-  const done = Promise.all(Array.from({ length: options.slots }, runSlot)).then(() => {}).finally(unsubscribe);
+  const done = Promise.all(Array.from({ length: options.slots }, (_, slot) => runSlot(slot))).then(() => {}).finally(unsubscribe);
   return { state, wake, done };
 }

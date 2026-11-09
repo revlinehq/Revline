@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 import { internalQuery } from './_generated/server';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
-import { hostedRendersEnabled, seatedRenders } from './lib/render_seats';
+import { hostedRendersEnabled, processorHasRenderRoom, seatedRenders } from './lib/render_seats';
 import type { FilterBuilder, GenericTableInfo } from 'convex/server';
 
 const LANES = ['ultra', 'standard'] satisfies Array<'ultra' | 'standard'>;
@@ -9,7 +9,9 @@ const LANES = ['ultra', 'standard'] satisfies Array<'ultra' | 'standard'>;
 export const processingDemand = internalQuery({ args: {}, returns: v.object({ waiting: v.number(), running: v.number() }), handler: async ctx => {
   // Processors also claim exports unless dedicated Railway export workers run them,
   // so a queued export must wake a processor when RENDER_PROVIDER is local.
-  const processorWork = (q: FilterBuilder<GenericTableInfo>) => q.and(hostedRendersEnabled() ? q.neq(q.field('kind'), 'render') : true, q.or(q.eq(q.field('requiredProcessorVersion'), undefined), q.lte(q.field('requiredProcessorVersion'), MEDIA_PROCESSOR_VERSION)));
+  // A queued export waiting for processor room is not demand: a new processor would not claim it.
+  const skipRenders = hostedRendersEnabled() || !await processorHasRenderRoom(ctx);
+  const processorWork = (q: FilterBuilder<GenericTableInfo>) => q.and(skipRenders ? q.neq(q.field('kind'), 'render') : true, q.or(q.eq(q.field('requiredProcessorVersion'), undefined), q.lte(q.field('requiredProcessorVersion'), MEDIA_PROCESSOR_VERSION)));
   const waiting = await ctx.db.query('mediaTasks').withIndex('by_status_claimable_created', q => q.eq('status', 'queued').eq('claimable', true))
     .filter(processorWork).take(8);
   const legacy = waiting.length < 8 ? await ctx.db.query('mediaTasks').withIndex('by_status_createdAt', q => q.eq('status', 'queued'))
