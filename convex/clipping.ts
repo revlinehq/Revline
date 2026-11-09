@@ -92,6 +92,13 @@ function discoveryTracks(
   if (saved) {
     tracks.signals = saved.signals;
     tracks.sceneCuts = saved.sceneCuts;
+    tracks.coverage = { ...tracks.coverage, audioSeconds: saved.coverage.audioSeconds };
+  }
+  const shots = asset.analysis?.shots?.shots.map((s) => s.start);
+  if (shots?.length) tracks.sceneCuts = shots;
+  if (!transcriptOnly) {
+    const declared = type ?? saved?.sourceType;
+    tracks.typeReason = `${declared ? `Visual discovery for ${declared} footage` : "Visual discovery"}: pick moments from audio peaks, scene cuts${tracks.coverage.transcriptWords ? " and the saved transcript" : ""}, confirmed with targeted inspectVideo windows.`;
   }
   return tracks;
 }

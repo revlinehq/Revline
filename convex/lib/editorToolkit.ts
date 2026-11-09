@@ -13,7 +13,7 @@ import { generateImagePlates, imageGenerationInput, imageGenerationQuality, imag
 import { generatedImageSummary } from './generated_image_summary';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest } from '../../lib/media-analysis/pixel-track';
 import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/editor/audio-normalization';
-import { sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
+import { HIGHLIGHT_SIGNALS_ONLY, readHighlights, sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
@@ -905,15 +905,30 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const tools = {
     findHighlights:createTool({metadata:EDITOR_TOOL_DEFINITIONS.findHighlights,
-      description:'Read saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
+      description:'Read saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. On the visual path it first measures missing scene cuts and audio peaks for the source (no Gemini), and says so when they are still running instead of returning an empty set. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
 
       inputSchema:z.object({assetId:z.string(),sourceType:sourceType.optional(),speechLed:z.boolean().optional().describe("True when the requested moments are spoken dialogue, including interview or stream dialogue. Commentary over gaming/action does not make visuals irrelevant."),visualReview:z.boolean().optional().describe('True when this request depends on visual context. Discovery still uses targeted short video windows, never whole-video judging.'),count:z.number().int().min(1).max(10).optional(),delivery:z.enum(['candidates','clips']).default('candidates')}),execute:async(_ctx,input)=>{
         let asset = await loadAsset(input.assetId);
         const transcriptOnly = !input.visualReview && (input.speechLed || input.sourceType === 'podcast' || input.sourceType === 'talk');
         if (transcriptOnly && !asset.analysis?.transcript?.words.length) asset = await analyze(input.assetId, 'transcribe');
+        // Visual discovery reads cheap helpers (scene cuts, audio peaks). A fresh upload has
+        // none saved yet, so measure them here; Gemini only watches targeted inspectVideo windows.
+        const pending: string[] = [];
+        if (!transcriptOnly && asset.kind === 'video') {
+          const note = (what: string) => (error: unknown) => { pending.push(`${what}: ${error instanceof Error ? error.message : String(error)}`); };
+          await Promise.all([
+            asset.analysis?.shots ? null : analyze(input.assetId, 'shots').catch(note('Scene cuts are not measured yet')),
+            readHighlights(asset.analysis?.highlights) ? null : withAnalysis(input.assetId, 'highlights', () => loadAsset(input.assetId), { highlightSkipGemini: HIGHLIGHT_SIGNALS_ONLY, ...(input.sourceType ? { highlightSourceType: input.sourceType } : {}) }).catch(note('Audio peaks are not measured yet')),
+          ]);
+          asset = await loadAsset(input.assetId);
+        }
         clippingActive = input.delivery === 'clips';
-        return ctx.runMutation(internal.clipping.begin, { ...clippingRun, assetId: asset._id, delivery: clippingActive,
+        const result = await ctx.runMutation(internal.clipping.begin, { ...clippingRun, assetId: asset._id, delivery: clippingActive,
           transcriptOnly, ...(input.sourceType ? { sourceType: input.sourceType } : {}), ...(input.count ? { count: input.count } : {}) });
+        if (!pending.length) return result;
+        // Never hand back an empty result that looks like "nothing worth clipping".
+        return { ...result, signalsPending: pending, warnings: [...(result.warnings ?? []), ...pending],
+          next: `Source analysis is not finished (${pending.join('; ')}). Call findHighlights again in about a minute to read the saved scene cuts and audio peaks; meanwhile inspectVideo short SOURCE windows to observe events. ${result.next ?? ''}`.trim() };
       }}),
     planClips:createTool({metadata:EDITOR_TOOL_DEFINITIONS.planClips,
       description:'For transcript-first discovery or if findHighlights fell back, first register the COMPLETE found:[{title,start,end,kind,hook,payoff,reactionEnd,score,reason}] set after reading the transcript; each successful found call replaces the previous candidate set. On the visual path, spoken moments are grounded by their quotes; action or non-verbal hook/payoff moments need a saved targeted inspectVideo observation, and come back unresolved when Gemini is unavailable or the inspection budget is spent. Quotes must match saved words/times; leave non-verbal quotes empty. It returns current server IDs and suggested clean start/end. Use those ranges by default; changes must stay within 12s of each suggested boundary, retain hook/payoff, and last 15-60s. Then record every reviewed top-10 ID as accepted or dropped with a concrete reason. Accepted candidates each need one unique title, clean SOURCE start/end and their own populated tab (source aspect/framing unless the user requests reframing). Use candidate IDs from findHighlights. Bind timelineId when known; exact unique tab titles also resolve. Revise this plan if a candidate is dropped after building; restore/remove its abandoned tab. No padding. Finish compares the plan to populated tabs and cheap data; only explicitly selected QA needs receipts. shortfallReason is included in finishClipping\'s finalMessage. Updating the plan after dropping a built candidate removes its abandoned tab only when this batch created it and it holds no user-approved work.',

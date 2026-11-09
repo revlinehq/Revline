@@ -87,6 +87,9 @@ export function readHighlights(value?: string): HighlightTracks | undefined {
   );
   if (result.success) return result.data;
 }
+/** Marks a fallback that skipped Gemini on purpose: visual discovery measures audio and
+ * scene cuts here and observes video only through targeted inspectVideo windows. */
+export const HIGHLIGHT_SIGNALS_ONLY = 'Signals only: audio peaks and scene cuts for targeted visual discovery.';
 /** Spoken-content discovery needs only existing word timings, never a media job. */
 export function transcriptHighlightTracks(duration: number, transcript: Transcript | undefined, type: SourceType = 'talk', requireWords = true): HighlightTracks {
   if (requireWords && !transcript?.words.length) throw new Error('Transcribe the source before transcript-first clipping.');
