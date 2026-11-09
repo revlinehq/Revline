@@ -1,3 +1,6 @@
+## 2026-11-08
+- Clipping: `findHighlights` on gaming/action/music sources now measures missing scene cuts and audio levels itself (no Gemini), falls back to loudness onsets when a loud source has no spikes, and returns `signalsPending` with a retry hint while analysis runs. Why: the Warzone trailer clip run got an empty, silent result on a fresh upload and fell back to local ffmpeg.
+
 ## 2026-11-07
 - Landing page: the hero product video no longer fades and slides in on load; it is static. Why: the founder wanted no animation on the hero.
 - Repo: Cloudflare Workers move to `cf-workers/` (`agent-runner`, `media`, `mcp`, and the old edge processor as `media-edge`), and the Railway media processor moves from `infra/media-worker` to `media-processor/`; paths only, no behavior change. Why: the founder wanted folders grouped by what runs where, not by vendor.

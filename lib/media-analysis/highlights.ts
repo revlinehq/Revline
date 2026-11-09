@@ -90,6 +90,21 @@ export function readHighlights(value?: string): HighlightTracks | undefined {
 /** Marks a fallback that skipped Gemini on purpose: visual discovery measures audio and
  * scene cuts here and observes video only through targeted inspectVideo windows. */
 export const HIGHLIGHT_SIGNALS_ONLY = 'Signals only: audio peaks and scene cuts for targeted visual discovery.';
+/** Loud, compressed sources (trailers, music, action) rarely spike 7 dB over their rolling
+ * median, so fall back to loudness onsets: a level at least 6 dB above the quietest of
+ * the previous 3 s (drops, hits, re-entries). Cut helper only, strongest first. */
+export function loudnessOnsets(levels: number[], step = 0.5, duration = levels.length * step): HighlightSignal[] {
+  const lookback = Math.max(1, Math.round(3 / step)), onsets: HighlightSignal[] = [];
+  for (let i = 1; i < levels.length; i++) {
+    const floor = Math.min(...levels.slice(Math.max(0, i - lookback), i)), rise = levels[i] - floor;
+    if (rise < 60 || levels[i] < -450) continue;
+    const start = i * step, end = Math.min(duration, start + step), previous = onsets.at(-1);
+    const strength = Math.min(1, rise / 200);
+    if (previous && Math.abs(previous.end - start) < 0.01) { previous.end = end; previous.strength = Math.max(previous.strength, strength); continue; }
+    onsets.push({ start, end, kind: 'spike', strength, detail: `RMS ${(levels[i] / 10).toFixed(1)} dB, ${(rise / 10).toFixed(1)} dB above the previous 3 s. Loudness onset; cut helper only.` });
+  }
+  return onsets.sort((a, b) => b.strength - a.strength);
+}
 /** Spoken-content discovery needs only existing word timings, never a media job. */
 export function transcriptHighlightTracks(duration: number, transcript: Transcript | undefined, type: SourceType = 'talk', requireWords = true): HighlightTracks {
   if (requireWords && !transcript?.words.length) throw new Error('Transcribe the source before transcript-first clipping.');

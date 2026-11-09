@@ -31,6 +31,7 @@ import {
   transcriptHighlightTracks,
   type SemanticMoment,
   type SourceType,
+  loudnessOnsets,
 } from "../lib/media-analysis/highlights";
 import {
   clippingChoice,
@@ -92,6 +93,8 @@ function discoveryTracks(
   if (saved) {
     tracks.signals = saved.signals;
     tracks.sceneCuts = saved.sceneCuts;
+    tracks.levels = saved.levels;
+    tracks.levelStep = saved.levelStep;
     tracks.coverage = { ...tracks.coverage, audioSeconds: saved.coverage.audioSeconds };
   }
   const shots = asset.analysis?.shots?.shots.map((s) => s.start);
@@ -101,6 +104,11 @@ function discoveryTracks(
     tracks.typeReason = `${declared ? `Visual discovery for ${declared} footage` : "Visual discovery"}: pick moments from audio peaks, scene cuts${tracks.coverage.transcriptWords ? " and the saved transcript" : ""}, confirmed with targeted inspectVideo windows.`;
   }
   return tracks;
+}
+/** Relative spikes first; a uniformly loud source falls back to loudness onsets. */
+function peaksOf(tracks: ReturnType<typeof discoveryTracks>) {
+  const spikes = tracks.signals.filter((s) => s.kind === "spike").sort((a, b) => b.strength - a.strength);
+  return (spikes.length ? spikes : loudnessOnsets(tracks.levels, tracks.levelStep, tracks.duration)).slice(0, 60);
 }
 // A quote needs a letter or digit; "..." or "—" is not spoken evidence.
 const spoken = (text: string) => /[\p{L}\p{N}]/u.test(text);
@@ -233,10 +241,7 @@ export const begin = internalMutation({
         ? {
             geminiUnavailableReason: tracks.unavailableReason,
             transcript: asset.analysis?.transcript?.segments ?? [],
-            peaks: tracks.signals
-              .filter((s) => s.kind === "spike")
-              .sort((a, b) => b.strength - a.strength)
-              .slice(0, 60),
+            peaks: peaksOf(tracks),
             sceneCuts:
               asset.analysis?.shots?.shots.map((s) => s.start) ??
               tracks.sceneCuts,
