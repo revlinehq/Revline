@@ -13,7 +13,7 @@
 import { offsetClipMotion, ownClockTimingPatch, resizeEffectMotion } from './clip-effects';
 import { anchoredFadeTimingPatch } from './fade-clock';
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
-import { frameSeekTime, freeLayer, linkedClipIds } from './operations';
+import { frameSeekTime, freeLayer, joinOffsets, linkedClipIds, newLayerOverlaps, rangesOverlap } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
 import { playbackRateOf } from './playback-rate';
 import { isTransitionClip, reconcileTransitionEdits, transitionPair } from './clip-transitions';
@@ -95,7 +95,8 @@ function placeMovedClips(timeline:Timeline,moved:import('./types').Clip[],direct
   const counts=deriveTrackCounts(timeline);
   for(const group of TIMELINE_LAYER_GROUPS){
     const members=moved.filter(clip=>layerGroup(clip.kind)===group);if(!members.length)continue;
-    const collides=members.some(clip=>rest.some(other=>layerGroup(other.kind)===group&&trackOf(other)===trackOf(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6));
+    // Only clips outside the moving group can collide: a reorder never meets its own old positions.
+    const collides=members.some(clip=>rest.some(other=>layerGroup(other.kind)===group&&trackOf(other)===trackOf(clip)&&rangesOverlap(other,clip)));
     if(!collides)continue;
     const linkedAudio=group==='audio'&&members.every(clip=>moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId));
     if(!createLayers||createLayers==='linked-audio'&&!linkedAudio)throw new TimelineGestureRejection('Overlaps a clip', 'overlap');
@@ -145,22 +146,22 @@ function selectedMoveDelta(timeline: Timeline, members: import('./types').Clip[]
   return Math.max(minimum, Math.min(maximum, snapped));
 }
 
-/** Prefer a nearby legal join over a magnetic edge on an unrelated row. */
+/** Prefer a nearby legal join over a magnetic edge on an unrelated row. Without a magnet
+ * (tool moves), a requested start within half a frame of a join lands exactly on it, so
+ * frame snapping or 3-decimal rounding never turns an exact join into an overlap. */
 function settleMovedClips(timeline:Timeline,moved:Clip[],requestedOffset:number,magnet?:TimelineMagnet,allowLinkedAudio=false):Clip[] {
-  if(!magnet)return moved;
   const movingIds=new Set(moved.map(clip=>clip.id));
   const rest=timeline.clips.filter(clip=>!movingIds.has(clip.id));
-  const constrained=moved.filter(clip=>!allowLinkedAudio||clip.kind!=='audio'||!moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId));
+  const constrained=moved.filter(clip=>!isTransitionClip(clip)&&(!allowLinkedAudio||clip.kind!=='audio'||!moved.some(other=>other.kind==='video'&&other.id===clip.linkedClipId)));
   const neighbors=constrained.map(clip=>({clip,others:rest.filter(other=>layerGroup(other.kind)===layerGroup(clip.kind)&&trackOf(other)===trackOf(clip))}));
-  const fits=(offset:number)=>moved.every(clip=>clip.start+offset>=-1e-9)&&neighbors.every(({clip,others})=>others.every(other=>other.start>=clip.start+offset+clip.duration-1e-6||clip.start+offset>=other.start+other.duration-1e-6));
-  if(fits(0))return moved;
-  const offsets=new Set<number>();
-  for(const {clip,others} of neighbors){
-    offsets.add(-clip.start);
-    for(const other of others){offsets.add(other.start-clip.duration-clip.start);offsets.add(other.start+other.duration-clip.start);}
-  }
-  const offset=[...offsets].filter(value=>Math.abs(value-requestedOffset)<=magnet.threshold).sort((a,b)=>Math.abs(a-requestedOffset)-Math.abs(b-requestedOffset)).find(fits);
-  return offset===undefined?moved:moved.map(clip=>({...clip,start:clip.start+offset}));
+  const fits=(offset:number)=>moved.every(clip=>clip.start+offset>=-1e-9)&&neighbors.every(({clip,others})=>others.every(other=>!rangesOverlap(other,{start:clip.start+offset,duration:clip.duration})));
+  const window=magnet?magnet.threshold:0.5/timeline.fps;
+  const candidates=neighbors.flatMap(({clip,others})=>joinOffsets(clip,others,requestedOffset,window)).sort((a,b)=>Math.abs(a-requestedOffset)-Math.abs(b-requestedOffset));
+  // A tool move that already fits keeps its frame-snapped start unless the requested start is
+  // itself a join, allowing for 3-decimal rounding of the neighbor's edge.
+  if(fits(0)&&(magnet||!candidates.some(value=>Math.abs(value-requestedOffset)<=0.001)))return moved;
+  const offset=candidates.find(fits);
+  return offset===undefined||Math.abs(offset)<1e-12?moved:moved.map(clip=>({...clip,start:Math.max(0,clip.start+offset)}));
 }
 
 export function moveSelectedClips(timeline:Timeline,ids:string[],timeDelta:number,layerDelta:number,direction:'above'|'below'='above',anchorId?:string,magnet?:TimelineMagnet):Timeline {
@@ -187,6 +188,10 @@ export function moveClipTo(timeline:Timeline,id:string,start?:number,track?:numb
   if(layer>maximum)throw new Error(`Choose a layer from 1 to ${maximum} for this clip.`);
   // Refusals below change nothing, so they stay overlap rejections a staged draft can recover from.
   if(!isTransitionClip(clip)){
+    // The requested layer wins when the move fits there, including an exact join a
+    // frame-snapped start alone would have turned into a sub-frame overlap.
+    try{const direct=moveSelectedClips(timeline,[id],requested,layer-trackOf(clip),'above',id);if(trackOf(direct.clips.find(c=>c.id===id)!)===layer&&!newLayerOverlaps(timeline,direct).length)return direct;}
+    catch(error){if(!(error instanceof TimelineGestureRejection))throw error;}
     // Search at the frame-rounded, clamped start the drag itself will apply.
     const ids=linkedClipIds(timeline,[id]),members=timeline.clips.filter(c=>ids.includes(c.id));
     try{layer=freeLayer(timeline.clips,{...clip,start:clip.start+selectedMoveDelta(timeline,members,requested,id)},layer,new Set(ids));}
@@ -295,7 +300,7 @@ function rippleTrim(timeline:Timeline,clips:Clip[],members:Clip[],side:'left'|'r
   for(const clip of moved){
     if(clip.start<-1e-6)throw new TimelineGestureRejection('There is no room to ripple this trim.');
     if(isTransitionClip(clip))continue;
-    if(next.some(other=>other.id!==clip.id&&!isTransitionClip(other)&&lane(other)===lane(clip)&&other.start<clip.start+clip.duration-1e-6&&clip.start<other.start+other.duration-1e-6))throw new TimelineGestureRejection('There is no room to ripple this trim.');
+    if(next.some(other=>other.id!==clip.id&&!isTransitionClip(other)&&lane(other)===lane(clip)&&rangesOverlap(other,clip)))throw new TimelineGestureRejection('There is no room to ripple this trim.');
   }
   return next;
 }

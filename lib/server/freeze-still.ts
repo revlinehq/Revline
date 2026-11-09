@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { join } from 'node:path';
 import { AnalysisError } from '@/lib/media-analysis/errors';
@@ -10,7 +11,7 @@ export async function freezeStill(source: string, directory: string, time: numbe
   const alpha = probe.codec === 'vp9' || probe.codec === 'vp8';
   const path = join(directory, alpha ? 'freeze.png' : 'freeze.jpg');
   const seek = Math.max(0, Math.min(time, Math.max(0, probe.duration - 1 / Math.max(1, probe.fps || 30))));
-  await run('ffmpeg', ['-v', 'error', ...(alpha ? ['-c:v', probe.codec === 'vp9' ? 'libvpx-vp9' : 'libvpx'] : []), '-ss', seek.toFixed(6), '-i', source, '-frames:v', '1', ...(alpha ? ['-pix_fmt', 'rgba'] : ['-q:v', '2']), '-y', path], { signal, timeout: 120_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', ...(alpha ? ['-c:v', probe.codec === 'vp9' ? 'libvpx-vp9' : 'libvpx'] : []), '-ss', ffmpegTime(seek), '-i', source, '-frames:v', '1', ...(alpha ? ['-pix_fmt', 'rgba'] : ['-q:v', '2']), '-y', path], { signal, timeout: 120_000, maxBuffer: 1024 * 1024 });
   const info = await videoInfo(path, signal);
   if (!info.width || !info.height) throw new AnalysisError('The freeze frame could not be read from this video.', 422);
   return { path, kind: 'image', contentType: alpha ? 'image/png' : 'image/jpeg', width: info.width, height: info.height };

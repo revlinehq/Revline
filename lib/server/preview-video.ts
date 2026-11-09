@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { mediaInputOptions } from './media-command';
 import { runMediaCommand as run } from './media-command';
 import { spawn } from 'node:child_process';
@@ -191,7 +192,7 @@ export async function extractPreviewPoster(input: string, output: string, signal
       '-threads',
       '1',
       '-ss',
-      String(time),
+      ffmpegTime(time),
       '-i',
       input,
       '-frames:v',
@@ -286,13 +287,13 @@ async function encodePreviewRange(
         '-threads',
         String(threads),
         '-ss',
-        range.start.toFixed(6),
+        ffmpegTime(range.start),
         '-copyts',
         '-start_at_zero',
         '-i',
         input,
         '-to',
-        range.end.toFixed(6),
+        ffmpegTime(range.end),
         '-map',
         '0:v:0',
         '-map',
@@ -406,7 +407,7 @@ async function concatenatePreview(
         '-i',
         manifest,
         '-itsoffset',
-        String(-source.origin),
+        ffmpegTime(-source.origin),
         '-i',
         input,
         '-map',

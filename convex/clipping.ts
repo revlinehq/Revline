@@ -715,6 +715,16 @@ export async function recordClipCheck(
   });
 }
 
+/** Whether this task started its own clipping run (findHighlights or planClips). A clip-lane follow-up edit on a finished short has none. */
+export const runStarted = internalQuery({
+  args: runArgs,
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    await requireProject(ctx, args.projectId, args.ownerId);
+    const row = await rowFor(ctx, args);
+    return !!row && row.ownerId === args.ownerId;
+  },
+});
 export const completionState = internalQuery({
   args: {
     ...runArgs,

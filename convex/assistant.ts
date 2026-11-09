@@ -50,7 +50,7 @@ import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, isRetiredEditorModelChoice, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
@@ -152,10 +152,12 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   const mobile = args.clientPlatform === 'ios';
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
   if (mobile && (args.modelChoice !== FREE_EDITOR_MODEL_CHOICE || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
+  // An old client may still send a retired model (Gemini 4 Argon): edit with the default instead.
+  const modelChoice = isRetiredEditorModelChoice(args.modelChoice) ? undefined : args.modelChoice;
   const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
-  if (paidModelAccess && !mobile && (args.modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(args.modelChoice)) throw new ConvexError('This AI model is not available.');
+  if (paidModelAccess && !mobile && (modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(modelChoice)) throw new ConvexError('This AI model is not available.');
   let pinnedModel;
-  try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(args.modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}

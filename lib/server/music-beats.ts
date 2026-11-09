@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { beatTrackModelPath, beatTrackPython } from './worker-tool-path';
 import { mkdtemp, open, rm } from 'node:fs/promises';
@@ -14,7 +15,7 @@ export async function detectMusicBeats(source: string, duration: number, signal:
   try {
     const audio = join(directory, 'music.wav'), raw = join(directory, 'music.f32');
     // One decode, two outputs: mono 22.05 kHz for the tracker, and 48 kHz stereo floats (up to the energy limit) for the energy.
-    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio, '-map', '0:a:0', '-vn', '-t', String(MAX_MUSIC_ENERGY_SECONDS), '-ac', '2', '-ar', String(SOUND_RATE), '-f', 'f32le', '-y', raw], { signal, timeout: /^https?:\/\//.test(source) ? undefined : 60_000, maxBuffer: 1024 * 1024 });
+    await run('ffmpeg', ['-v', 'error', '-threads', '1', '-i', source, '-map', '0:a:0', '-vn', '-ac', '1', '-ar', '22050', '-c:a', 'pcm_s16le', '-y', audio, '-map', '0:a:0', '-vn', '-t', ffmpegTime(MAX_MUSIC_ENERGY_SECONDS), '-ac', '2', '-ar', String(SOUND_RATE), '-f', 'f32le', '-y', raw], { signal, timeout: /^https?:\/\//.test(source) ? undefined : 60_000, maxBuffer: 1024 * 1024 });
     const python = beatTrackPython();
     const model = beatTrackModelPath();
     let stdout: string;

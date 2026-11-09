@@ -1,5 +1,5 @@
 'use client';
-import { memo, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Film } from 'lucide-react';
 import { filmstripFrames, filmstripFrameWidth } from '@/lib/editor/filmstrip';
 import { cachedNearestVideoThumbnail, cachedVideoThumbnail, videoThumbnails } from '@/lib/editor/video-thumbnails';
@@ -20,17 +20,24 @@ export const MediaFilmstrip = memo(function MediaFilmstrip({ asset, width, heigh
   hasDecodedFrame.current = decoded.sourceId === asset._id && Object.keys(decoded.images).length > 0;
   const previousFrames = useMemo(() => decoded.sourceId === asset._id ? Object.entries(decoded.images).map(([time, image]) => ({ time: Number(time), image })) : [], [decoded, asset._id]);
   const frameWidth = imageAspect ? Math.max(16, height * imageAspect) : filmstripFrameWidth(height, asset.width, asset.height);
+  // Zoom changes the width on every step: keep one viewport subscription and re-measure instead of resubscribing.
+  const geometry = useRef({ frameWidth, width });
+  // Written during render: the clip's CSS width is already new when a resize triggers the next measure.
+  geometry.current = { frameWidth, width };
+  const observer = useRef<ReturnType<typeof observeTimelineViewport> | null>(null);
   useEffect(() => {
     const node = root.current, rail = viewport.current;
     if (!node || !rail) return;
-    const observer = observeTimelineViewport(rail, node, (clip, visible) => {
+    const subscription = observer.current = observeTimelineViewport(rail, node, (clip, visible) => {
+      const { frameWidth, width } = geometry.current;
       const intersects = clip.bottom > visible.top && clip.top < visible.bottom;
       const start = intersects ? Math.max(0, Math.floor((visible.left - clip.left) / frameWidth) * frameWidth - frameWidth) : 0;
       const end = intersects ? Math.min(width, Math.ceil((visible.right - clip.left) / frameWidth) * frameWidth + frameWidth) : 0;
       setRange(old => old.start === start && old.end === end ? old : { start, end });
     });
-    return observer.unsubscribe;
-  }, [frameWidth, width, timelineStart, viewport]);
+    return () => { subscription.unsubscribe(); if (observer.current === subscription) observer.current = null; };
+  }, [viewport, !!sourceUrl]);
+  useLayoutEffect(() => { observer.current?.schedule(); }, [frameWidth, width, timelineStart]);
   const samples = useMemo(() => filmstripFrames({ clipWidth: width, frameWidth, visibleStart: range.start, visibleEnd: range.end, pxPerSecond: px, sourceStart, duration, fps, sourceDuration: asset.duration, playbackRate }), [width, frameWidth, range, px, sourceStart, duration, fps, asset.duration, playbackRate]);
   useEffect(() => {
     if (paused || asset.kind !== 'video' || !sourceUrl || !samples.length) return;

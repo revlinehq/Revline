@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { execFile } from 'node:child_process';
 import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -21,7 +22,7 @@ export async function localizeTrackingObject(source: string, directory: string, 
   const probe = await run('ffprobe', ['-v', 'error', '-show_entries', 'format=start_time', '-of', 'json', source], { signal, maxBuffer: 65536 });
   const origin = originInfo.parse(JSON.parse(probe.stdout)).format.start_time ?? 0;
   try {
-    const decoded = await run('ffmpeg', ['-v', 'info', '-copyts', '-ss', String(Math.max(0, time - .5)), '-i', source, '-map', '0:v:0', '-vf', `select='gte(t,${time + origin - 1e-6})',showinfo`, '-frames:v', '1', '-fps_mode', 'vfr', '-q:v', '2', '-y', path], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
+    const decoded = await run('ffmpeg', ['-v', 'info', '-copyts', '-ss', ffmpegTime(Math.max(0, time - .5)), '-i', source, '-map', '0:v:0', '-vf', `select='gte(t,${time + origin - 1e-6})',showinfo`, '-frames:v', '1', '-fps_mode', 'vfr', '-q:v', '2', '-y', path], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
     const pts = /\bn:\s*0\s+pts:\s*[-\d]+\s+pts_time:([-\d.]+)/.exec(decoded.stderr);
     if (!pts || !Number.isFinite(Number(pts[1]))) throw new AnalysisError('The object seed frame has no measured timestamp.', 422);
     const seedTime = Math.max(0, Number(pts[1]) - origin);

@@ -2,6 +2,7 @@ import { runningMediaTaskCount } from './media_task_data';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Doc } from '../_generated/dataModel';
 import { accountLimit } from './account_limits';
+import { workerCapacity } from '../../lib/worker-capacity.mjs';
 
 export const hostedRendersEnabled = () => process.env.RENDER_PROVIDER === 'railway';
 
@@ -15,6 +16,17 @@ const renderSeats = (lane?: 'ultra') => lane === 'ultra'
 export const queuedExportLimit = (ultra: boolean) => ultra
   ? accountLimit('MAX_QUEUED_EXPORTS_ULTRA', 30, 1, 200)
   : accountLimit('MAX_QUEUED_EXPORTS_STANDARD', 10, 1, 100);
+
+/** Without a dedicated export pool, exports run on the media processors. They may hold
+ * all but one processor, so a long or stalled export never starves the quick checks
+ * (frames, sound, reads, reviews) an agent waits on. With one processor, exports keep it. */
+export async function processorHasRenderRoom(ctx: MutationCtx | QueryCtx) {
+  const cap = Math.max(1, workerCapacity().processor - 1);
+  // Slots change only on status transitions, so worker ready subscriptions do not re-run on
+  // every export heartbeat. They carry no lane: an Ultra export counts too, leaving room to spare.
+  const running = await ctx.db.query('mediaTaskSlots').withIndex('by_status_kind', q => q.eq('status', 'running').eq('kind', 'render')).take(cap);
+  return running.length < cap;
+}
 
 const SCAN = 64;
 type Versioned = (q: import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>) => import('convex/server').Expression<boolean>;

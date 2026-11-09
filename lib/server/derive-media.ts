@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { processingThreads } from './processing-resources';
 import type { SubjectSelection } from './subject-segmentation';
@@ -20,7 +21,7 @@ export async function deriveMedia(source: string, kind: 'video' | 'image', direc
   const probe = await videoInfo(source, signal), fps = Math.min(60, Math.max(1, Math.round(probe.fps || 30)));
   // Only the window goes to fal, which bills by the work it does.
   const clip = join(directory, 'derive-source.mp4');
-  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', request.start.toFixed(6), '-i', source, '-t', (request.end - request.start).toFixed(6), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-threads', String(processingThreads()), '-ss', ffmpegTime(request.start), '-i', source, '-t', ffmpegTime(request.end - request.start), '-map', '0:v:0', '-an', '-vf', `fps=${fps}`, '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-pix_fmt', 'yuv420p', '-y', clip], { signal, timeout: 600_000, maxBuffer: 1024 * 1024 });
   onProgress(15);
   let current = clip, outputFps = fps;
   if (request.op === 'slowmo') {
@@ -97,7 +98,7 @@ export async function measureColor(source: string, kind: 'video' | 'image', time
   const probe = await videoInfo(source, signal), out: ColorStats[] = [];
   for (const time of kind === 'image' ? [0] : times) {
     const seek = Math.max(0, Math.min(time, Math.max(0, probe.duration - .05)));
-    const { stdout } = await run('ffmpeg', ['-v', 'error', ...(kind === 'video' ? ['-ss', seek.toFixed(4)] : []), '-i', source, '-frames:v', '1', '-vf', 'scale=160:-2:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { signal, timeout: 60_000, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' }) as unknown as { stdout: Buffer };
+    const { stdout } = await run('ffmpeg', ['-v', 'error', ...(kind === 'video' ? ['-ss', ffmpegTime(seek)] : []), '-i', source, '-frames:v', '1', '-vf', 'scale=160:-2:flags=area', '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { signal, timeout: 60_000, maxBuffer: 8 * 1024 * 1024, encoding: 'buffer' }) as unknown as { stdout: Buffer };
     if (stdout.length < 300) throw new AnalysisError('Could not read a frame to measure color.', 422);
     const count = Math.floor(stdout.length / 3), red: number[] = [], green: number[] = [], blue: number[] = [], luma: number[] = [];
     let saturation = 0, neutral = 0, neutralR = 0, neutralG = 0, neutralB = 0;

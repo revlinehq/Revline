@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { sceneDetectPython } from './worker-tool-path';
 import { execFile } from 'node:child_process';
 import { readFile, writeFile, rm } from 'node:fs/promises';
@@ -34,7 +35,7 @@ export async function detectSourceFacecam(source: string, directory: string, dur
         const images = [];
         for (const sample of uncertain.slice(first, first + 8)) {
           const path = join(directory, 'facecam-fallback.jpg');
-          await run('ffmpeg', ['-v', 'error', '-ss', String(sample.time), '-i', source, '-frames:v', '1', '-q:v', '2', '-y', path], { signal, maxBuffer: 1024 * 1024 });
+          await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(sample.time), '-i', source, '-frames:v', '1', '-q:v', '2', '-y', path], { signal, maxBuffer: 1024 * 1024 });
           try { images.push({ time: sample.time, data: (await readFile(path)).toString('base64') }); }
           finally { await rm(path, { force: true }); }
         }

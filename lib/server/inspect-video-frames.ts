@@ -1,3 +1,4 @@
+import { ffmpegTime } from '../ffmpeg-time.mjs';
 import { runMediaCommand as run } from './media-command';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -25,7 +26,7 @@ export async function extractInspectionFrames(path: string, directory: string, i
   // FFprobe prints microsecond PTS. Match those measured instants after seeking;
   // local decoder indices or average-FPS arithmetic would relabel VFR frames.
   const select = selected.map(frame => `between(t,${frame.time+origin-1e-6},${frame.time+origin+1e-6})`).join('+'),seek=Math.max(0,input.start-.5);
-  await run('ffmpeg', ['-v', 'error', '-copyts','-ss',seek.toFixed(6),'-t',(input.end-seek+1).toFixed(6),'-i', path, '-map', '0:v:0', '-vf', `select='${select}',scale=960:960:force_original_aspect_ratio=decrease`, '-frames:v', String(selected.length), '-fps_mode', 'vfr', '-q:v', '4', '-y', join(directory, 'inspect-%02d.jpg')], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
+  await run('ffmpeg', ['-v', 'error', '-copyts','-ss',ffmpegTime(seek),'-t',ffmpegTime(input.end-seek+1),'-i', path, '-map', '0:v:0', '-vf', `select='${select}',scale=960:960:force_original_aspect_ratio=decrease`, '-frames:v', String(selected.length), '-fps_mode', 'vfr', '-q:v', '4', '-y', join(directory, 'inspect-%02d.jpg')], { signal, timeout: 60_000, maxBuffer: 1024 * 1024 });
   const images = await Promise.all(selected.map(async (frame, index) => ({ ...frame, data: (await readFile(join(directory, `inspect-${String(index + 1).padStart(2, '0')}.jpg`))).toString('base64') })));
   if (images.reduce((bytes, image) => bytes + image.data.length, 0) > 12 * 1024 * 1024) throw new AnalysisError('Frame inspection images exceed the request size limit.', 400);
   const {stdout:decoded}=await run('ffprobe',['-v','error','-select_streams','v:0','-show_entries','stream=width,height','-of','json',join(directory,'inspect-01.jpg')],{signal,timeout:10000,maxBuffer:65536});
@@ -42,7 +43,7 @@ export async function extractReferenceKeyframes(path: string, directory: string,
   const images: (ReferenceKeyframe & { data: string })[] = new Array(keyframes.length);
   await forEachLimited(keyframes.map((frame, index) => ({ frame, index })), 4, async ({ frame, index }, stop) => {
     const output = join(directory, `reference-${String(index).padStart(3, '0')}.jpg`);
-    await run('ffmpeg', ['-v', 'error', '-ss', frame.time.toFixed(3), '-i', path, '-map', '0:v:0', '-frames:v', '1', '-vf', 'scale=640:640:force_original_aspect_ratio=decrease', '-q:v', '5', '-y', output], { signal: AbortSignal.any([signal, stop]), timeout: 30_000, maxBuffer: 1024 * 1024 });
+    await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(frame.time), '-i', path, '-map', '0:v:0', '-frames:v', '1', '-vf', 'scale=640:640:force_original_aspect_ratio=decrease', '-q:v', '5', '-y', output], { signal: AbortSignal.any([signal, stop]), timeout: 30_000, maxBuffer: 1024 * 1024 });
     images[index] = { ...frame, data: (await readFile(output)).toString('base64') };
   });
   if (images.reduce((bytes, image) => bytes + image.data.length, 0) > 14 * 1024 * 1024) throw new AnalysisError('Reference keyframes exceed the request size limit.', 400);

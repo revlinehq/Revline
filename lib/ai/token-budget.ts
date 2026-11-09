@@ -8,7 +8,7 @@ import { compactEditorPrompt } from './editor-context';
 const EDITOR_TOKEN_LIMITS = { requestBytes: 450_000, transportBytes: 24_000_000, inputTokens: 2_000_000, outputTokens: 150_000, outputPerCall: 128_000 } as const;
 /** Models with a 1M-token context hold a whole film's reads, logs and scene code: give their requests room before
  * anything is compacted or left out. Others keep the default ceiling. */
-const LONG_CONTEXT_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'gemini-4-argon']);
+const LONG_CONTEXT_MODELS = new Set(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5']);
 export function editorTokenLimits(modelId?: string): TokenLimits {
   return modelId && LONG_CONTEXT_MODELS.has(modelId) ? { ...EDITOR_TOKEN_LIMITS, requestBytes: 2_000_000 } : { ...EDITOR_TOKEN_LIMITS };
 }

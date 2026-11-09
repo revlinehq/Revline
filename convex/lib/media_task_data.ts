@@ -89,14 +89,15 @@ export async function deleteMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>
 }
 
 /** Fairness and seat reads depend on status transitions, never lease/progress writes. */
-export async function runningMediaTaskCount(ctx: MutationCtx | QueryCtx, ownerId: string, limit: number, kind?: Doc<'mediaTasks'>['kind']) {
+export async function runningMediaTaskCount(ctx: MutationCtx | QueryCtx, ownerId: string, limit: number, kind?: Doc<'mediaTasks'>['kind'], exceptKind?: Doc<'mediaTasks'>['kind']) {
   if (await initializeMediaCapacity(ctx, ownerId)) {
-    return (await ctx.db.query('mediaTaskSlots').withIndex('by_owner_status_kind', q => {
+    const slots = ctx.db.query('mediaTaskSlots').withIndex('by_owner_status_kind', q => {
       const owner = q.eq('ownerId', ownerId).eq('status', 'running');
       return kind ? owner.eq('kind', kind) : owner;
-    }).take(limit)).length;
+    });
+    return (await (exceptKind ? slots.filter(q => q.neq(q.field('kind'), exceptKind)) : slots).take(limit)).length;
   }
   // Legacy owners are upgraded by their next mutation; read-only queries stay compatible.
   const running = ctx.db.query('mediaTasks').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', 'running'));
-  return (await (kind ? running.filter(q => q.eq(q.field('kind'), kind)) : running).take(limit)).length;
+  return (await running.filter(q => q.and(kind ? q.eq(q.field('kind'), kind) : true, exceptKind ? q.neq(q.field('kind'), exceptKind) : true)).take(limit)).length;
 }
