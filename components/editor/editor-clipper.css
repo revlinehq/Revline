@@ -1,0 +1,38 @@
+/* The clipper editor's chrome, on the shared dashboard tokens (components/ui/dashboard-tokens.css): the editor's
+   own palette variables point at them, and buttons use the shared soft and primary variants. Static: no transitions. */
+html[data-workspace-theme=dark] .editor-app{--ed-bg:var(--dash-page);--ed-panel:var(--dash-page);--ed-surface:var(--dash-card);--ed-surface-2:var(--dash-tile);--ed-border:var(--dash-border);--revline-accent:var(--dash-accent);--revline-primary-background:var(--dash-accent)}
+
+/* Top bar: back arrow, project name, campaign chip, saved mark; quiet actions at the right. */
+html[data-workspace-theme=dark] .editor-app header.workspace-nav{height:48px;gap:6px;padding:0 12px 0 10px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav [data-slot=button]{transition:none}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav :is([data-slot=button],a):focus-visible{outline:none;box-shadow:none}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]{width:32px;height:32px;border-radius:9999px;color:var(--dash-text)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]:hover{background:var(--dash-pill)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger[data-slot=button]{height:32px;padding:0 10px;border-radius:9999px;font-size:13px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger:is(:hover,[data-state=open]){background:var(--dash-pill)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save{margin-right:8px;font-size:12px;color:var(--dash-muted)}
+/* Saving and Saved share one place beside the name, at every width wider than a phone. */
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save[data-editor]{order:-1;margin:0 auto 0 6px}
+@media(min-width:901px){html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save[data-editor]{display:flex}}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-actions{flex:1;justify-content:flex-end;gap:6px;min-width:0}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history{margin-right:8px;padding-right:10px;border-right:1px solid var(--dash-divider)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]{border-radius:9999px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]:hover:not(:disabled){background:var(--dash-pill);color:var(--dash-text)}
+/* The campaign chip beside the project name: the shared soft pill, sized to its name. */
+.project-campaign-chip{flex:0 1 auto}
+.project-campaign-trigger.project-campaign-trigger{max-width:320px;font-weight:400}
+.project-campaign-trigger.project-campaign-trigger svg{flex:none;width:13px;height:13px;color:var(--dash-muted)}
+
+/* Media panel: the tab's content, and Add files as a soft pill. */
+html[data-workspace-theme=dark] .conversation-editor .preview-inspector .inspector-media-content,html[data-workspace-theme=dark] .preview-inspector-sheet .inspector-media-content{padding:14px 12px}
+html[data-workspace-theme=dark] .preview-inspector .footage-content-library button.source-import-files{height:32px;border:0;border-radius:9999px;background:var(--dash-pill);color:var(--dash-text);font-size:13px;transition:none}
+html[data-workspace-theme=dark] .preview-inspector .footage-content-library button.source-import-files:hover:not(:disabled){background:var(--dash-pill-hover)}
+.preview-inspector-sheet .mobile-inspector-close{position:absolute;top:8px;right:8px;z-index:2;width:44px;height:44px}
+/* Without tabs (the demo), the media list starts below the close button. */
+html[data-workspace-theme=dark] .preview-inspector-sheet .preview-inspector>.inspector-content.inspector-media-content{padding-top:56px}
+
+/* Timeline: a white playhead, as in the design; clips keep their own colours. */
+html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .playhead{background:#fff}
+html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .timeline-playhead-cap{color:#fff}
+/* On a phone the chip is its icon alone, so the project name keeps its room. */
+@media(max-width:900px){.project-campaign-trigger.project-campaign-trigger{padding:0 9px}.project-campaign-trigger.project-campaign-trigger :is(span,svg:last-child){display:none}}
