@@ -30,7 +30,6 @@ import { AspectRatioControl } from './aspect-ratio-control';
 import type { SafeAreaPlatform } from '@/lib/editor/safe-areas';
 import { MediaImportDialog } from './media-import-dialog';
 import { PreviewInspector } from './preview-inspector';
-import { MediaTab } from './media-tab';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
 import type { UploadProgress } from './footage-panel';
@@ -100,8 +99,7 @@ export type EditorShellProps = {
 const TIMELINE_MIN_HEIGHT = 160;
 const INSPECTOR_OPEN_KEY = 'revline-inspector-open';
 const SAFE_AREA_KEY = 'revline.safeArea';
-const MCP_CHAT_CLOSED_KEY = 'revline.mcpChatClosed';
-const decodeOpen = (stored: string | null) => stored === 'true';
+const CHAT_CLOSED_KEY = 'revline.chatClosed';
 const TIMELINE_MAX_SHARE = .65;
 /** A panel's imperative API throws until its group has measured it (first paint, leaving compact); until then there is nothing to read or move. */
 const measured = <T,>(read: () => T): T | undefined => { try { return read(); } catch { return undefined; } };
@@ -186,25 +184,22 @@ export function EditorShell(p: EditorShellProps) {
   // Phones open on the conversation.
   const [mobileConversation, setMobileChat] = useState(true);
   const mobileChat = compact && mobileConversation;
-  // The media panel stays mounted so it can slide open and closed; widths animate only during a toggle, never while dragging.
-  const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);const [inspectorMotion,setInspectorMotion]=useState(false);const inspectorMoving=useRef(false);inspectorMoving.current=inspectorMotion;
-  const [inspectorOpen, setInspectorOpen] = useStoredPreference(INSPECTOR_OPEN_KEY, decodeOpen, String);
-  useEffect(() => { if (params.get('panel') === 'footage') setInspectorOpen(true); }, [params, setInspectorOpen]);
-  useEffect(() => { const panel = inspectorPanel.current; if (panel && !compact && inspectorOpen === measured(() => panel.isCollapsed())) setInspectorMotion(true); }, [inspectorOpen, compact, inspectorPanel]);
-  useEffect(() => {
-    if (!inspectorMotion) return;
-    // Resizing after the transition class has rendered lets the width change animate.
-    const panel = inspectorPanel.current;
-    if (panel && inspectorOpen === measured(() => panel.isCollapsed())) measured(() => { if (inspectorOpen) panel.resize(inspectorWidth.current); else panel.collapse(); });
-    const done = setTimeout(() => setInspectorMotion(false), 400);
-    return () => clearTimeout(done);
-  }, [inspectorMotion, inspectorOpen, inspectorPanel]);
+  // The media panel stays mounted; it opens and closes at once from the stage's toggle. Phones show media in a sheet with its own state.
+  const inspectorPanel=usePanelRef();const inspectorWidth=useRef(480);
+  // Coming back from the phone layout the panel remounts at a stale share of the stage; it gets its last width back instead.
+  const mediaRestore=useRef(false);
+  // The media panel is open until the user closes it. With no choice made yet, it starts closed in a window too narrow for both side panels and a usable preview.
+  const [mediaFits] = useState(() => typeof window === 'undefined' || window.innerWidth >= 1280);
+  const [inspectorOpen, setInspectorOpen] = useStoredPreference(INSPECTOR_OPEN_KEY, stored => stored === null ? mediaFits : stored === 'true', String);
+  const [mobileMedia, setMobileMedia] = useState(false);
   const inspectorRequest = useRef(params.get('panel') === 'footage' ? 1 : 0);
   const [sourceRequest, setSourceRequest] = useState(inspectorRequest.current);
-  const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); return p.onDropUpload(files); }, onError });
+  const showMedia = useCallback(() => { setSourceRequest(++inspectorRequest.current); if (matchMedia('(max-width:900px)').matches) setMobileMedia(true); else setInspectorOpen(true); }, [setInspectorOpen]);
+  useEffect(() => { if (params.get('panel') !== 'footage') return; if (matchMedia('(max-width:900px)').matches) setMobileMedia(true); else setInspectorOpen(true); }, [params, setInspectorOpen]);
+  const fileDrop = useMediaFileDrop({ busy: !!p.upload, onUpload: files => { showMedia(); return p.onDropUpload(files); }, onError });
   const editorRoot = useRef<HTMLElement>(null);
   const bodyRef = useRef<HTMLElement>(null);
-  const chatPanel=usePanelRef();const [chatCollapsed,setChatCollapsed]=useState(false);
+  const chatPanel=usePanelRef();const chatWidth=useRef(400);const [chatCollapsed,setChatCollapsed]=useState(false);
   const timelinePanel=usePanelRef();const timelineInitialized=useRef(false);const expandedTimelineHeight=useRef<number|null>(null);const collapsed=useEditorState(s=>s.timelineCollapsed);
   const toggleTimeline=()=>{
     const panel=timelinePanel.current;if(!panel)return;
@@ -230,7 +225,7 @@ export function EditorShell(p: EditorShellProps) {
   // Empty edits are still projects: keep the conversation, stop button and timeline mounted.
   const pendingImport=p.videoImports?.some(task=>!['failed','completed','cancelled'].includes(task.status));
   const preparing = !p.assistantPanel && !p.aiRunning && (!workspace.current.opened || !timeline.clips.length&&!!pendingImport);
-  // Desktop has one layout: chat on the left, each side minimizable. Phones switch between the two.
+  // Desktop has one layout: media on the left, chat on the right, each side minimizable. Phones switch between the two.
   const mode = compact ? mobileConversation ? 'agentic' : 'tracks' : 'agentic';
   const conversationVisible = compact ? mobileChat : true;
   useLayoutEffect(() => {
@@ -240,24 +235,38 @@ export function EditorShell(p: EditorShellProps) {
       const retry = requestAnimationFrame(() => chatPanel.current?.collapse());
       return () => cancelAnimationFrame(retry);
     }
-    const panel = chatPanel.current;
-    panel?.expand();
     // A chat first opened at width 0 (MCP mode) expands to its minimum; give it the usual width.
-    if (panel && panel.getSize().inPixels < 310) panel.resize(400);
+    const show = () => measured(() => { const panel = chatPanel.current; if (!panel) return; panel.expand(); if (panel.getSize().inPixels < 310) panel.resize(chatWidth.current); });
+    show();
+    // Leaving the phone layout, the panels register again after this runs; show the chat once they have.
+    const retry = requestAnimationFrame(show);
+    return () => cancelAnimationFrame(retry);
   }, [compact, conversationVisible, preparing, chatPanel]);
-  // While an outside agent edits over MCP, the chat stays closed if the user closed it last time.
-  const mcpChatReady=useRef(false);
+  // The chat stays closed if the user closed it last time, in their own edits and while an outside agent edits over MCP.
+  const chatReady=useRef(false);
   useLayoutEffect(()=>{
-    mcpChatReady.current=false;
-    if(!p.externalAgent||compact)return;
-    if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1'){chatPanel.current?.collapse();}
-    const settle=requestAnimationFrame(()=>{if(readStoredPreference(MCP_CHAT_CLOSED_KEY)==='1')chatPanel.current?.collapse();requestAnimationFrame(()=>{mcpChatReady.current=true;});});
-    return ()=>cancelAnimationFrame(settle);
-  },[p.externalAgent,compact,conversationVisible,preparing,chatPanel]);
+    chatReady.current=false;
+    if(compact)return;
+    const closed=()=>readStoredPreference(CHAT_CLOSED_KEY)==='1';
+    if(closed())chatPanel.current?.collapse();
+    let ready=0;
+    const settle=requestAnimationFrame(()=>{if(closed())chatPanel.current?.collapse();ready=requestAnimationFrame(()=>{chatReady.current=true;});});
+    return ()=>{cancelAnimationFrame(settle);cancelAnimationFrame(ready);};
+  },[compact,conversationVisible,preparing,chatPanel]);
   useEffect(()=>{
-    if(!p.externalAgent||compact||!mcpChatReady.current)return;
-    writeStoredPreference(MCP_CHAT_CLOSED_KEY,chatCollapsed?'1':null);
-  },[chatCollapsed,p.externalAgent,compact]);
+    if(compact||!chatReady.current)return;
+    writeStoredPreference(CHAT_CLOSED_KEY,chatCollapsed?'1':null);
+  },[chatCollapsed,compact]);
+  useLayoutEffect(() => {
+    // The phone layout has no media column: its divider goes, and the sheet does not outlive the layout.
+    if (compact) { mediaRestore.current = true; bodyRef.current?.style.setProperty('--editor-media-width', '0px'); bodyRef.current?.style.setProperty('--editor-media-divider', '0px'); return; }
+    setMobileMedia(false);
+    const sync = () => measured(() => { const panel = inspectorPanel.current; if (!panel) return; const collapsed = panel.isCollapsed(); if (inspectorOpen && collapsed) panel.resize(inspectorWidth.current); else if (!inspectorOpen && !collapsed) panel.collapse(); });
+    sync();
+    // On first load and on leaving the phone layout the panel registers after this runs; sync again once it has.
+    const retry = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(retry);
+  }, [inspectorOpen, compact, preparing, inspectorPanel]);
   useLayoutEffect(() => {
     const body = bodyRef.current;
     if (!body) return;
@@ -508,26 +517,26 @@ export function EditorShell(p: EditorShellProps) {
     <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} onShare={p.onShare} shareDisabled={!timeline.clips.length || editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={compact ? undefined : modeSwitch}/>
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
-    {!preparing&&<>{compact && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />My media</button></div>}
+    {!preparing&&<>{compact && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={showMedia}><Film size={14} />My media</button></div>}
     <section ref={bodyRef} id="editor-mode-view" data-mode={mode} data-chat-collapsed={!compact && chatCollapsed || undefined} className="editor-body" role={modeSwitch ? "tabpanel" : undefined} aria-labelledby={modeSwitch ? `editor-${mode}-tab` : undefined} aria-hidden={opening} inert={opening}><ResizablePanelGroup orientation="vertical" className="editor-canvas-panels"><ResizablePanel id="preview" className="editor-preview-row" defaultSize="70%" minSize={180}><ResizablePanelGroup orientation="horizontal" className="editor-horizontal-panels">
-      {/* Dragging keeps the chat between 300 and 600px; only phone layouts collapse it. */}
-      <ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); setChatCollapsed(size.inPixels === 0); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={400} minSize={300} maxSize={600}>{chat}</ResizablePanel>
-      <ResizableHandle aria-label="Resize conversation" className="chat-resize-handle" disabled={compact || !conversationVisible} style={compact || !conversationVisible ? {display:"none"} : undefined}/>
-
       <ResizablePanel id="workspace" minSize={compact?0:320}><div className="editor-workspace">
-        <ResizablePanelGroup orientation="horizontal" className="preview-layout" data-inspector-motion={inspectorMotion || undefined}><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings onShowChat={!compact && chatCollapsed ? () => chatPanel.current?.expand() : undefined} onHideChat={!compact && !chatCollapsed ? () => { flushSync(() => setChatCollapsed(true)); chatPanel.current?.collapse(); } : undefined}>{!ratioOnFrame && ratioControl}</CanvasSettings>
+        <ResizablePanelGroup orientation="horizontal" className="preview-layout">{!compact && <><ResizablePanel id="inspector" className="inspector-panel" panelRef={inspectorPanel} groupResizeBehavior="preserve-pixel-size" collapsible collapsedSize={0} defaultSize={inspectorOpen ? 480 : 0} minSize={320} maxSize={680} onResize={size => { bodyRef.current?.style.setProperty('--editor-media-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-media-divider', size.inPixels ? '1px' : '0px'); const collapsed = measured(() => inspectorPanel.current?.isCollapsed()); if (mediaRestore.current && collapsed === false && size.inPixels) { mediaRestore.current = false; const width = inspectorWidth.current; requestAnimationFrame(() => measured(() => { const panel = inspectorPanel.current; if (panel && !panel.isCollapsed()) panel.resize(width); })); return; } if (collapsed === false && size.inPixels >= 320) inspectorWidth.current = size.inPixels; else if (collapsed && inspectorOpen) setInspectorOpen(false); }}>{inspectorOpen && inspector}</ResizablePanel><ResizableHandle aria-label="Resize media panel" className="inspector-resize-handle" disabled={!inspectorOpen} style={inspectorOpen ? undefined : {display:'none'}}/></>}<ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings media={compact ? undefined : { open: inspectorOpen, onToggle: () => { if (inspectorOpen) setInspectorOpen(false); else showMedia(); } }} chat={compact ? undefined : { open: !chatCollapsed, onToggle: () => { if (chatCollapsed) { chatPanel.current?.expand(); /* A chat that loaded closed expands to its minimum; give it the width it last had. */ if ((measured(() => chatPanel.current?.getSize().inPixels) ?? chatWidth.current) < 310) chatPanel.current?.resize(chatWidth.current); } else { flushSync(() => setChatCollapsed(true)); chatPanel.current?.collapse(); } } }}>{!ratioOnFrame && ratioControl}</CanvasSettings>
         <div className="editor-stage">
 
           <div className="preview-player"><div className="stage-center" data-ratio-on-frame={ratioOnFrame || undefined} style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{previewTimeline.clips.length ? <><PreviewViewport><Preview controls={collapsed} safeArea={safeArea} onPlaybackAssets={onPlaybackAssets} onSlowLoad={onSlowLoad} onReady={onPlaybackReady} onThumbnail={onLoadingThumbnail} debugId={p.projectId} ref={preview} timeline={previewTimeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={previewError} onRefreshMedia={p.onRefreshMedia} muted={muted} onMutedChange={setMuted} selectedClip={editing ? undefined : clip} cropping={cropping && !editing} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { changeClip(id,{crop}); setCroppingClip(null); } }} onSelectClip={selectClip} onEditClip={selectClip} onEditText={editText} onClipChange={changeClip} onVisualChange={patch=>{if(clip)changeClip(clip.id,patch);}} /></PreviewViewport><PreviewFrameOverlay above={ratioOnFrame ? ratioControl : undefined}/></> : editing ? <div className="empty-canvas" role="status" aria-live="polite"><div className="scene-placeholder" style={{'--scene-hue': 222} as React.CSSProperties}><i/></div><div className="empty-canvas-copy"><h2>Building your film</h2><p>Each scene appears here as Revline makes it.</p></div></div> : <div className="empty-drop"><div className="empty-drop-copy"><h2>Start with a clip or an idea</h2><Button type="button" className="empty-drop-add" onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14}/>}Add footage</Button><p>Drop files anywhere in the editor</p>{p.upload && <Progress aria-label="Footage preparation progress" max={100} value={p.upload.percent} />}</div></div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
 
-        </div></div></PreviewZoomProvider></ResizablePanel>{!compact && <><ResizableHandle aria-label="Resize media panel" className="inspector-resize-handle" disabled={!inspectorOpen} style={inspectorOpen ? undefined : {display:'none'}}/><ResizablePanel id="inspector" className="inspector-panel" panelRef={inspectorPanel} collapsible collapsedSize={0} defaultSize={inspectorOpen ? 480 : 0} minSize={320} maxSize={680} onResize={size => { bodyRef.current?.style.setProperty('--editor-media-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-media-divider', size.inPixels ? '1px' : '0px'); if (inspectorMoving.current) return; const collapsed = measured(() => inspectorPanel.current?.isCollapsed()) ?? true; if (!collapsed && size.inPixels >= 320) inspectorWidth.current = size.inPixels; else if (collapsed && inspectorOpen) setInspectorOpen(false); }}><MediaTab open={inspectorOpen} onToggle={() => { if (inspectorOpen) { setInspectorOpen(false); return; } setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}/>{(inspectorOpen || inspectorMotion) && inspector}</ResizablePanel></>}</ResizablePanelGroup>
-        </div></ResizablePanel></ResizablePanelGroup></ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={collapsedTimelineHeight} defaultSize={collapsedTimelineHeight} minSize={TIMELINE_MIN_HEIGHT} maxSize={`${TIMELINE_MAX_SHARE*100}%`} onResize={size=>{const isCollapsed=timelineCollapsedAt(size);if(!isCollapsed)expandedTimelineHeight.current=size.inPixels;store.setState({timelineCollapsed:isCollapsed});}}><div className="editor-timeline-content"><TimelinePanel ultra={p.ultra} sceneThumbs={p.sceneThumbs} sceneRendering={p.sceneRendering} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} key={openingAttempt} liveEdit={p.liveEdit} filmDraft={p.filmDraft} onExportClip={p.demo?undefined:id=>{setExportClipId(id);setExportOpen(true);}} tabs={p.timelineTabs} tabActions={p.timelineTabActions&&{...p.timelineTabActions,onExport:()=>{setExportClipId(null);setExportOpen(true);}}} aiWorking={aiWorking} workingAgent={p.externalAgent??null} workingLabel={p.externalAgent?`${p.externalAgent} is working`:'AI is working'} editingLocked={editing} onAddStockAudio={p.onRegisterStockAudio ? addStockAudio : undefined} playbackControls={collapsed?undefined:<div className="preview-playback" aria-label="Playback controls"><Button type="button" variant="ghost" size="icon-sm" aria-label={playing?'Pause':'Play'} disabled={!duration} onClick={togglePlay}>{playing?<Pause size={18} strokeWidth={1.5}/>:<Play size={18} strokeWidth={1.5}/>}</Button><PlaybackTime className="preview-time" time={time} duration={duration} fps={timeline.fps} playing={playing} readTime={readPlaybackTime}/></div>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={timelineAssets} selected={selected} onSelect={selectClip} onEditText={editText} onEditClip={selectClip} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
+        </div></div></PreviewZoomProvider></ResizablePanel></ResizablePanelGroup>
+        </div></ResizablePanel>
+      {/* Dragging keeps the chat between 300 and 600px; its toggle and phone layouts collapse it. */}
+      <ResizableHandle aria-label="Resize conversation" className="chat-resize-handle" disabled={compact || !conversationVisible} style={compact || !conversationVisible ? {display:"none"} : undefined}/>
+      <ResizablePanel id="chat" className="editor-chat-panel" onResize={size => { bodyRef.current?.style.setProperty('--editor-chat-width', `${size.inPixels}px`); bodyRef.current?.style.setProperty('--editor-chat-divider', size.inPixels ? '1px' : '0px'); if (size.inPixels >= 300) chatWidth.current = size.inPixels; setChatCollapsed(size.inPixels === 0); }} panelRef={chatPanel} collapsible collapsedSize={0} defaultSize={400} minSize={300} maxSize={600}>{chat}</ResizablePanel>
+      </ResizablePanelGroup></ResizablePanel><ResizableHandle aria-label="Resize preview and timeline" className="timeline-resize-handle"/><ResizablePanel id="timeline" panelRef={timelinePanel} collapsible collapsedSize={collapsedTimelineHeight} defaultSize={collapsedTimelineHeight} minSize={TIMELINE_MIN_HEIGHT} maxSize={`${TIMELINE_MAX_SHARE*100}%`} onResize={size=>{const isCollapsed=timelineCollapsedAt(size);if(!isCollapsed)expandedTimelineHeight.current=size.inPixels;store.setState({timelineCollapsed:isCollapsed});}}><div className="editor-timeline-content"><TimelinePanel ultra={p.ultra} sceneThumbs={p.sceneThumbs} sceneRendering={p.sceneRendering} onUndo={undo} onRedo={redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} key={openingAttempt} liveEdit={p.liveEdit} filmDraft={p.filmDraft} onExportClip={p.demo?undefined:id=>{setExportClipId(id);setExportOpen(true);}} tabs={p.timelineTabs} tabActions={p.timelineTabActions&&{...p.timelineTabActions,onExport:()=>{setExportClipId(null);setExportOpen(true);}}} aiWorking={aiWorking} workingAgent={p.externalAgent??null} workingLabel={p.externalAgent?`${p.externalAgent} is working`:'AI is working'} editingLocked={editing} onAddStockAudio={p.onRegisterStockAudio ? addStockAudio : undefined} playbackControls={collapsed?undefined:<div className="preview-playback" aria-label="Playback controls"><Button type="button" variant="ghost" size="icon-sm" aria-label={playing?'Pause':'Play'} disabled={!duration} onClick={togglePlay}>{playing?<Pause size={18} strokeWidth={1.5}/>:<Play size={18} strokeWidth={1.5}/>}</Button><PlaybackTime className="preview-time" time={time} duration={duration} fps={timeline.fps} playing={playing} readTime={readPlaybackTime}/></div>} onPreviewVolume={(id,volume)=>preview.current?.clipVolume(id,volume)} onTogglePlay={togglePlay} muted={muted} onToggleMute={()=>{setMuted(!muted);preview.current?.mute(!muted);}} collapsed={collapsed} onToggleCollapse={toggleTimeline} timeline={timeline} assets={timelineAssets} selected={selected} onSelect={selectClip} onEditText={editText} onEditClip={selectClip} time={time} playing={playing} readPlaybackTime={readPlaybackTime} onSeek={seek} onChange={onChange} onDelete={doDelete} onDuplicate={doDuplicate} onCopy={doCopy} onPaste={doPaste} canPaste={clipboard.length>0} onAddText={addText} onAddMarker={addMarker} onError={onError} />
 
         </div></ResizablePanel></ResizablePanelGroup>
     </section></>}
     {opening&&<FootagePreparation progressKey={p.projectId?`project:${p.projectId}`:undefined} progress={footageProgress} thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} label={!playbackReady?'Loading footage…':!audioPrepared?'Preparing audio…':initialAnalysis||'Preparing timeline thumbnails…'} detail={playbackSlow&&!playbackReady?'Still loading the video. The editor will open when it is ready.':playbackReady&&audioPrepared&&!initialAnalysis&&thumbnailProgress.total?`${thumbnailProgress.ready} of ${thumbnailProgress.total} visible thumbnails loaded.`:undefined} error={playbackError} onRetry={()=>{setPlaybackError('');setPlaybackSlow(false);onError('');setOpeningAttempt(value=>value+1);preview.current?.retry();}}/>}
     {preparing&&<ProjectImportStage progressKey={p.projectId?`project:${p.projectId}`:undefined} importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload} onStartFromPrompt={p.demo?undefined:()=>setPromptStart(p.projectId??null)}/>}
-    {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
+    {compact && mobileMedia && <Sheet open={mobileMedia} onOpenChange={setMobileMedia}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setMobileMedia(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload} {...(importDestination==='composer'&&p.onAttachAsset?{projectMedia:assets.filter(asset=>asset.url&&!asset.preparation&&!assets.some(video=>video.audioAssetId===asset._id)&&!p.composerAttachments?.some(item=>item.id===asset._id)).sort((a,b)=>Number(a.kind==='audio')-Number(b.kind==='audio')),onPickProjectMedia:(asset:MediaAsset)=>p.onAttachAsset!(asset._id)}:{})}/>
     <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={exportCover} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):1} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration,cover:tab.active?exportCover:tab.cover})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />
   </main>;
