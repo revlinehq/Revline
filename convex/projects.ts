@@ -248,7 +248,14 @@ export async function paginateProjectsFor(ctx: QueryCtx, ownerId: string, pagina
   return {...result,page:await Promise.all(result.page.map(project=>legacyListItem(ctx,ownerId,project)))};
 }
 const projectPage=v.object({page:v.array(projectListItem),isDone:v.boolean(),continueCursor:v.string(),splitCursor:v.optional(v.union(v.string(),v.null())),pageStatus:v.optional(v.union(v.literal("SplitRecommended"),v.literal("SplitRequired"),v.null()))});
-export const list = query({ args: { paginationOpts: paginationOptsValidator }, returns: projectPage, handler: async (ctx, args) => paginateProjectsFor(ctx, await requireOwner(ctx), args.paginationOpts) });
+/** The dashboard's paged list. New shapes get a new name: `list` below is frozen for installed iOS builds. */
+export const listPage = query({ args: { paginationOpts: paginationOptsValidator }, returns: projectPage, handler: async (ctx, args) => paginateProjectsFor(ctx, await requireOwner(ctx), args.paginationOpts) });
+/** FROZEN CONTRACT: installed iOS builds call `projects:list` with `{ limit }` and decode this array
+ * (mobile/Revline/Projects/ProjectSummary.swift); a server deploy cannot update them. Never change its arguments or
+ * drop or retype a field. `agent` and `agents` stay in the shape with empty values: badges moved to `workingAgents`,
+ * and reading lease rows here would re-sign every cover on each agent call. */
+const legacyProjectListItem = v.object({ ...projectListItem.fields, agent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), agents: v.array(workingAgentValidator) });
+export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(legacyProjectListItem), handler: async (ctx, args) => (await listProjectsFor(ctx, await requireOwner(ctx), args)).map(row => ({ ...row, agent: null, agents: [] })) });
 /** The MCP agents working on the owner's projects right now: a small row per project with any agent badge to show. */
 export const workingAgents = query({ args: {}, returns: v.array(v.object({ projectId: v.id('projects'), agents: v.array(workingAgentValidator) })), handler: async ctx => {
   const agents=await ownerWorkingAgents(ctx,await requireOwner(ctx));
