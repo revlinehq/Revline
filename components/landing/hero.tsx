@@ -1,6 +1,5 @@
-import { ArrowDown } from 'lucide-react';
 import { LandingStartButton } from './start-button';
-import { LandingButton, LandingSection, LandingShot } from './ui';
+import { LandingSection, LandingShot } from './ui';
 
 export function LandingHero() {
   return <LandingSection className="landing-hero" headingId="landing-hero-heading">
@@ -9,7 +8,6 @@ export function LandingHero() {
       <p>Revline finds campaigns that pay per view, cuts the clips with AI, and posts them to your accounts.</p>
       <div className="landing-hero-actions">
         <LandingStartButton />
-        <LandingButton href="#how-it-works" variant="quiet">See how it works<ArrowDown size={16} aria-hidden="true" /></LandingButton>
       </div>
     </div>
     <figure className="landing-hero-shot">

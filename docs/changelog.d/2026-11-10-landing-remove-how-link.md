@@ -1,0 +1,1 @@
+- Landing: removed the "See how it works" button from the hero. Why: the founder asked for it gone; the start button is the only action.
