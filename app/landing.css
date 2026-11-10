@@ -92,7 +92,7 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-plan footer .landing-button{font-size:15px}
 .landing-plan footer small{font-size:14px;color:var(--l-fg-2)}
 
-/* Questions: a shadcn accordion with every answer open by default. */
+/* Questions: a shadcn accordion, closed by default, one answer open at a time. */
 .landing-faq{display:flex;flex-direction:column;align-items:center;gap:40px;padding-bottom:160px}
 .landing-faq-list{width:880px;max-width:100%;border-block:1px solid var(--l-border)}
 .landing-faq-list [data-slot=accordion-item]{border-color:var(--l-border)}
