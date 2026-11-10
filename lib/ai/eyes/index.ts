@@ -73,3 +73,9 @@ export class FrameBudget {
   take(frames: number, group = 1) { const granted = Math.min(frames, Math.floor(this.left / group) * group); this.used += granted; return granted; }
   report() { return `used ${this.used} of ${this.total} frames`; }
 }
+
+/** Deployment switch, read where the server's environment is (Convex): REEL_LOOKS=off disables the looks read. Default on. */
+export const looksSwitchedOff = (env: Record<string, string | undefined> = process.env) => env.REEL_LOOKS?.trim().toLowerCase() === 'off';
+export const LOOKS_OFF = 'Look measurement is switched off on this server (REEL_LOOKS=off).';
+/** What the reel lane says when no face measurement exists: a warning, never a failed check. */
+export const LOOKS_UNMEASURED = 'cut edges could not be measured on this server; not verified';

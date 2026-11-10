@@ -1,12 +1,15 @@
 import { mkdir, writeFile, readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { command } from './release-command.mjs';
-import { verifyStagingPromotion } from './railway-promotion.mjs';
+import { verifyStagingPromotion, stagingManifestFor } from './railway-promotion.mjs';
 import { railwayConfig, verifyRailwayTarget, verifyRailwaySlot } from '../lib/railway-workers.mjs';
 
 /** Release only a queue role that was explicitly migrated. Initial provisioning
  * and cutover remain operator commands, outside the main push workflow. */
-export async function releaseRailway({ target, kind, values, env, dry }) {
+/** `founderBypass` (a reason, from `release:prod --founder-bypass`) stages production without the staging job receipt
+ *  for this one run. It still promotes only the image the `Railway staging` workflow built and runtime-checked for
+ *  this exact commit, and scripts/railway-workers.mjs logs who, when and why before changing anything. */
+export async function releaseRailway({ target, kind, values, env, dry, founderBypass }) {
   let config = railwayConfig(values.RAILWAY_WORKERS_JSON);
   if (config.convexUrl !== `https://${target.deployment}.convex.cloud`) throw new Error('Release Railway/Convex target mismatch.');
   if (dry) { console.log(`${target.name}: would build and runtime-preflight Railway ${kind}, drain slots, then stage the verified digest. Queue selection unchanged.`); return; }
@@ -14,13 +17,22 @@ export async function releaseRailway({ target, kind, values, env, dry }) {
   if (config.environment === 'production') {
     const receiptFile = env.REVLINE_RAILWAY_STAGING_RECEIPT;
     const stagingEnvFile = env.REVLINE_RAILWAY_STAGING_ENV_FILE;
-    if (!receiptFile || !stagingEnvFile) throw new Error('Production release requires live staging job evidence before any Railway deployment.');
-    const staged = railwayConfig(JSON.parse(await readFile(receiptFile, 'utf8')).config);
-    const commit = kind === 'processor' ? staged.processorCommit : staged.exportsCommit;
-    if (commit !== env.GITHUB_SHA) throw new Error('Staging must verify the exact main release commit.');
-    config = railwayConfig({ ...config, [`${kind}Commit`]: commit, [`${kind}Image`]: staged[`${kind}Image`] });
-    await verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds: [kind] });
-    promotionArgs.push('--staging-receipt', receiptFile, '--staging-env-file', stagingEnvFile);
+    if (founderBypass) {
+      // No job evidence, but still the reviewed artifact: the digest CI built from this commit, read from its staging manifest.
+      if (!/^[a-f0-9]{40}$/.test(env.GITHUB_SHA ?? '')) throw new Error('A founder bypass still needs the exact release commit (GITHUB_SHA).');
+      const { staging: staged } = await stagingManifestFor({ commit: env.GITHUB_SHA, env, file: env.REVLINE_RAILWAY_STAGING_MANIFEST });
+      if (staged.distributedExports !== config.distributedExports) throw new Error('Staging and production differ in distributed-export mode; a bypass cannot change it.');
+      config = railwayConfig({ ...config, [`${kind}Commit`]: staged[`${kind}Commit`], [`${kind}Image`]: staged[`${kind}Image`] });
+      promotionArgs.push('--founder-bypass', founderBypass);
+    } else {
+      if (!receiptFile || !stagingEnvFile) throw new Error('Production release requires live staging job evidence before any Railway deployment.');
+      const staged = railwayConfig(JSON.parse(await readFile(receiptFile, 'utf8')).config);
+      const commit = kind === 'processor' ? staged.processorCommit : staged.exportsCommit;
+      if (commit !== env.GITHUB_SHA) throw new Error('Staging must verify the exact main release commit.');
+      config = railwayConfig({ ...config, [`${kind}Commit`]: commit, [`${kind}Image`]: staged[`${kind}Image`] });
+      await verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds: [kind] });
+      promotionArgs.push('--staging-receipt', receiptFile, '--staging-env-file', stagingEnvFile);
+    }
   }
   const directory = resolve('.data/railway-release');
   await mkdir(directory, { recursive: true });
