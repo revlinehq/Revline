@@ -3,7 +3,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { userError } from '@/lib/user-error';
 
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@clerk/nextjs';
@@ -20,7 +20,7 @@ import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningReference, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
-import { Plus, Upload, Link2 } from 'lucide-react';
+import { LoaderCircle, Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
@@ -41,6 +41,9 @@ import './shared.css';
 import './new-conversation.css';
 
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
+
+/** Recent projects on the start page: a light first page, then two columns by six rows per "Load more". */
+const RECENT_PROJECTS_FIRST = 6, RECENT_PROJECTS_MORE = 12;
 
 export function NewConversation() {
   const router = useRouter();
@@ -89,7 +92,14 @@ export function NewConversation() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = startingBlank || sendAfterImport || processing !== null && processing.phase !== 'error';
-  const { chats: workspaceChats, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
+  const { chats: workspaceChats, loading: projectsLoading, loadMore: loadMoreProjects, canLoadMore: moreProjects, loadingMore: loadingMoreProjects } = useWorkspaceChats(false, !processing, RECENT_PROJECTS_FIRST);
+  // The composer sits in the free space above the list; its top is fixed at the first "Load more" so a longer list grows downward.
+  const [composeTop, setComposeTop] = useState<number | null>(null);
+  function showMoreProjects(event: MouseEvent<HTMLButtonElement>) {
+    const group = event.currentTarget.closest('.new-conversation-compose-group');
+    if (composeTop === null && group?.parentElement) setComposeTop(group.getBoundingClientRect().top - group.parentElement.getBoundingClientRect().top);
+    loadMoreProjects(RECENT_PROJECTS_MORE);
+  }
   const holderIds: string[] = [...Object.values(linkHolders), ...(linkImport ? [linkImport.projectId] : [])];
   const recentProjects = workspaceChats.filter(project => !holderIds.includes(project.id));
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
@@ -408,12 +418,13 @@ export function NewConversation() {
     return { id, name: asset?.fileName ?? 'Saved footage', kind: asset?.kind ?? 'video', url: asset?.url ?? undefined };
   }), ...previews];
 
-  return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}${showRecentProjects ? ' new-conversation-has-projects' : ''}`} {...fileDrop.handlers}>
+  return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}${showRecentProjects ? ' new-conversation-has-projects' : ''}`} style={composeTop === null ? undefined : { '--new-conversation-top': `${composeTop}px` } as CSSProperties} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={showRecentProjects ? <section className="new-conversation-recent" aria-labelledby="recent-projects-title">
       <div className="new-conversation-recent-heading"><h2 id="recent-projects-title" className="new-conversation-actions-title">Recent projects</h2><Button type="button" variant="ghost" size="sm" className="new-conversation-upload-new" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/>Upload new</Button></div>
       <div className="new-conversation-projects" aria-busy={projectsLoading}>{projectsLoading ? Array.from({ length: 6 }, (_, index) => <Button key={index} type="button" variant="ghost" className="new-conversation-project" disabled aria-label="Loading project"><Skeleton as="span" className="workspace-chat-cover"/><span className="new-conversation-project-details"><Skeleton as="span" className="h-3 w-28 bg-[#2a2a2a]"/><Skeleton as="span" className="h-3 w-16 bg-[#2a2a2a]"/></span></Button>) : recentProjects.map(project => <Button key={project.id} asChild variant="ghost" className="new-conversation-project"><Link href={`/editor/${project.id}`}><ProjectCover url={project.coverUrl} kind={project.coverKind}/><span className="new-conversation-project-details"><strong>{project.title}</strong><span>{project.running ? 'Editing…' : chatRecency(project.updatedAt)}</span></span></Link></Button>)}</div>
       {projectsLoading && <span className="sr-only" role="status">Loading recent projects…</span>}
+      {!projectsLoading && (moreProjects || loadingMoreProjects) && <div className="new-conversation-load-more"><Button type="button" variant="outline" size="md" disabled={loadingMoreProjects} onClick={showMoreProjects}>{loadingMoreProjects && <LoaderCircle size={14} className="animate-spin" aria-hidden="true"/>}Load more</Button></div>}
     </section> : <section className="new-conversation-actions" aria-labelledby="new-edit-actions-title">
       <h2 id="new-edit-actions-title" className="new-conversation-actions-title">Start new edit</h2>
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>

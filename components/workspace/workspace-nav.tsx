@@ -98,7 +98,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
   const router = useRouter();
   const startingWorkspace = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const { chats, loading } = useWorkspaceChats(demo, historyOpen, 6);
+  const { chats, loading, loadMore, canLoadMore, loadingMore } = useWorkspaceChats(demo, historyOpen, 6);
   // Ticks while the menu is open so an agent's working state ends on time.
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (!historyOpen) return; setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 5000); return () => clearInterval(timer); }, [historyOpen]);
@@ -146,7 +146,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
-        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? chats.slice(0, 6).map(chat => { const agent = chat.agent && (chat.agent.running || chat.agent.until > clock) ? chat.agent : null; return <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong className={chat.running || agent ? 'shimmer' : undefined}>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>; }) : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? <div className="workspace-menu-chats">{chats.map(chat => { const agent = chat.agent && (chat.agent.running || chat.agent.until > clock) ? chat.agent : null; return <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong className={chat.running || agent ? 'shimmer' : undefined}>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>; })}</div> : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        {!loading && (canLoadMore || loadingMore) && <DropdownMenuItem className="workspace-menu-item workspace-menu-load-more" aria-busy={loadingMore} onSelect={event => { event.preventDefault(); if (!loadingMore) loadMore(12); }}>{loadingMore ? <LoaderCircle size={15} className="animate-spin" /> : <ChevronDown size={15} />}Load more</DropdownMenuItem>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
       </DropdownMenuContent>
