@@ -5,7 +5,7 @@ import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilitie
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
 import { LANE_IDS } from '../lib/ai/lanes/types';
 import { SKILL_TOOLS } from '../lib/ai/lanes/base-tools';
-import { initialLaneSelection, MCP_SELECTION_TOOLS } from '../lib/ai/lanes/selection';
+import { initialLaneSelection, MCP_SELECTION_TOOLS, reelRequested } from '../lib/ai/lanes/selection';
 import { parseEditorCommand } from '../lib/ai/slash-commands';
 import type { LaneTask } from './lib/run_types';
 import { v } from 'convex/values';
@@ -156,7 +156,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const {project}=await ctx.runQuery(internal.assistant.getRun,{ownerId:args.ownerId,projectId,runId:readRunId(request.timelineId)});
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
-    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane),taskId=newMcpTaskId();
+    const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane,!command&&reelRequested(request.request,project.timeline)),taskId=newMcpTaskId();
     const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     // Earlier tasks on this tab that never called finish stop showing as working until they call again.

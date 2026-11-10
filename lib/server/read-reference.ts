@@ -18,6 +18,7 @@ import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
 import { traceShape } from './trace-shape';
 import { matchFont, type FontCategory } from './match-font';
+import { MAX_LOOK_SAMPLES, scanSourceLooks } from './source-looks';
 
 type Work = NonNullable<MediaWorkItem['read']>;
 type Result = NonNullable<MediaTaskResult['read']>;
@@ -313,6 +314,32 @@ async function readMotion(path: string, source: Source, work: Work, signal: Abor
 }
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
+/** The shared "eyes" read. With times alone: measured face signals at those frames (no image, no model service).
+ * With count: the same times as strips of `count` frames side by side, each frame about 480 px wide, one strip per spot. */
+async function readLooks(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
+  const times = (work.times ?? []).filter(time => time >= 0 && time <= source.duration + .05).map(time => Math.min(time, Math.max(0, source.duration - 1 / Math.max(1, source.fps))));
+  if (!times.length || times.length > MAX_LOOK_SAMPLES) throw new AnalysisError(`Give 1 to ${MAX_LOOK_SAMPLES} source times to look at.`, 400);
+  const base = { sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3) };
+  if (!work.count) {
+    const looks = await scanSourceLooks(path, times, signal, percent => onProgress(5 + percent * .9));
+    return { ...base, width: looks.width, height: looks.height, frames: [], looks: looks.samples };
+  }
+  const per = Math.max(1, Math.min(6, work.count)), strips: string[] = [];
+  let width = 0, height = 0;
+  for (let index = 0; index < times.length; index += per) {
+    const group = times.slice(index, index + per);
+    const images = await Promise.all(group.map((time, tile) => frameAt(path, directory, time, undefined, `look-${index + tile}`, signal, cache)));
+    const strip = await sheet(images.map((image, tile) => ({ image, label: `${group[tile].toFixed(2)}s` })), source.width / source.height, group.length);
+    // About 480 px per frame keeps a look judgment cheap; text checks use full-resolution reads instead.
+    const target = Math.min(strip.width, 16 + group.length * 488);
+    const small = target < strip.width ? await sharp(Buffer.from(strip.image, 'base64')).resize({ width: target }).jpeg({ quality: 78 }).toBuffer({ resolveWithObject: true }) : undefined;
+    strips.push(small ? small.data.toString('base64') : strip.image);
+    width = small?.info.width ?? strip.width; height = small?.info.height ?? strip.height;
+    onProgress(5 + 90 * Math.min(1, (index + per) / times.length));
+  }
+  return { ...base, width, height, frames: times.map(time => ({ time })), extraImages: strips };
+}
+
 function boxOverlay(item: { x: number; y: number; w: number; h: number; rotation: number }, source: Source) {
   const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
   return `<svg viewBox="0 0 ${source.width} ${source.height}" width="{w}" height="{h}" preserveAspectRatio="none"><rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" transform="rotate(${item.rotation} ${cx} ${cy})" fill="none" stroke="#3dd68c" stroke-width="${Math.max(3, source.width / 300)}"/></svg>`;
@@ -341,6 +368,7 @@ export async function readReference(path: string, directory: string, work: Work,
   if (work.mode === 'trace') return readTrace(path, directory, source, work, signal, cache);
   if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress, cache);
   if (work.mode === 'motion') return readMotion(path, source, work, signal, onProgress, cache);
+  if (work.mode === 'looks') return readLooks(path, directory, source, work, signal, onProgress, cache);
   if (work.mode === 'sounds') return readSounds(path, directory, source, work, signal, onProgress, cache);
   if (work.momentsOnly) return readMoments(path, source, work, signal, cache);
   return readSheet(path, directory, source, work, signal, onProgress, cache);

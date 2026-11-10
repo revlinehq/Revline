@@ -1,6 +1,7 @@
 import type { Timeline } from '../../editor/types';
 import type { EditorSkill } from '../skills/types';
 import type { MotionCheck, MotionOff, MotionWindow } from '../motion-coverage';
+import type { EyesPolicy } from '../eyes';
 
 export const LANE_IDS = [
   'edit',
@@ -69,6 +70,8 @@ export type LaneDefinition = {
   /** Advisory findings reported with finish; they never block it. */
   warn?: (context: LaneCheckContext) => string[];
   checks: Record<CheckLevel, CheckRecipe>;
+  /** What this lane's eyes examine (lib/ai/eyes): spots, flags, frame budget, what fails finish. Lanes without one keep their getFrames rules. */
+  eyes?: EyesPolicy;
   instructions: string;
   referenceMotion?: 'required' | 'bound';
 };
