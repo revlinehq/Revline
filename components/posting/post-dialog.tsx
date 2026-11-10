@@ -1,23 +1,30 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { LoaderCircle, Send } from 'lucide-react';
+import { CalendarDays, Pencil, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CAPTION_LIMIT, TITLE_LIMIT } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
+import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
+import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { PlatformIcon } from './account-avatar';
 import { BatchLinks } from './batch-links';
+import { postTime } from './post-time';
 import './posting.css';
 
 /** `datetime-local` wants local time without a zone. */
 function localInputValue(time: number) { const date = new Date(time - new Date(time).getTimezoneOffset() * 60_000); return date.toISOString().slice(0, 16); }
+function clipLength(seconds: number) { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; }
 
 /** "Post" on a finished export: opens the dialog that sends it to connected accounts, now or on a schedule. */
 export function PostButton({ jobId, campaignId, size = 'default', className }: { jobId: string; campaignId?: string; size?: 'default' | 'sm'; className?: string }) {
@@ -28,60 +35,126 @@ export function PostButton({ jobId, campaignId, size = 'default', className }: {
   </>;
 }
 
-function PostDialog({ jobId, campaignId, onClose }: { jobId: Id<'renderJobs'>; campaignId?: string; onClose: () => void }) {
+/**
+ * Post one clip (a finished export) to connected accounts, now or at a picked time. Without `jobId` the dialog
+ * offers the owner's recent finished exports to choose from. `onPostsPage`: the new row is already in view behind
+ * the dialog, so it closes on success instead of pointing at the Posts page.
+ */
+export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; campaignId?: string; onPostsPage?: boolean; onClose: () => void }) {
   const { isAuthenticated } = useConvexAuth();
+  const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId ? {} : 'skip');
+  const [choice, setChoice] = useState<Id<'renderJobs'> | null>(null);
+  // The newest export is offered first, then stays put: an export finishing while the dialog is open must not swap the clip under the caption.
+  const newest = finished?.[0]?.jobId;
+  useEffect(() => { if (newest) setChoice(previous => previous ?? newest); }, [newest]);
+  const current = jobId ?? choice ?? undefined;
+  const clip = useQuery(api.posting.clip, isAuthenticated && current ? { jobId: current } : 'skip');
+  const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
   const createBatch = useMutation(api.posting.createBatch);
   const [caption, setCaption] = useState(''), [title, setTitle] = useState('');
-  const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [custom, setCustom] = useState<Set<string>>(() => new Set());
-  const [later, setLater] = useState(false), [when, setWhen] = useState(() => localInputValue(Date.now() + 3600_000));
+  const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [perAccount, setPerAccount] = useState(false);
+  const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [sent, setSent] = useState<{ batchId: Id<'postingBatches'>; count: number; scheduled: boolean } | null>(null);
-  const usable = accounts?.filter(account => account.status === 'connected') ?? [];
-  // Counted from the accounts still connected, so the button never promises more posts than it sends.
+  const [sent, setSent] = useState<{ batchId: Id<'postingBatches'>; count: number; scheduledAt?: number; campaign: boolean } | null>(null);
+  const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));
+  // Only accounts that can post right now can be picked, so the buttons never promise more posts than they send.
+  const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
-  const toggle = (set: Set<string>, id: string, on: boolean) => { const next = new Set(set); if (on) next.add(id); else next.delete(id); return next; };
-  async function submit() {
-    if (busy || !picked.length) return;
-    const scheduledAt = later ? new Date(when).getTime() : undefined;
-    if (later && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a time in the future.'); return; }
+  const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
+  const linked = campaignId ?? clip?.campaign?.id;
+  async function submit(schedule: boolean) {
+    if (busy || !picked.length || !clip) return;
+    const scheduledAt = schedule ? new Date(when).getTime() : undefined;
+    if (schedule && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a time in the future.'); return; }
     setBusy(true); setError('');
     try {
-      const targets = picked.map(account => ({ accountId: account.id, ...(custom.has(account.id) && overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}) }));
-      const batchId = await createBatch({ jobId, caption, ...(title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(campaignId ? { campaignId } : {}), targets });
-      setSent({ batchId, count: targets.length, scheduled: !!scheduledAt });
-    } catch (reason) { setError(userError(reason, 'Could not create these posts.')); }
+      const targets = picked.map(account => ({ accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}) }));
+      const batchId = await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(linked ? { campaignId: linked } : {}), targets });
+      if (onPostsPage) onClose();
+      else setSent({ batchId, count: targets.length, scheduledAt, campaign: !!linked });
+    } catch (reason) { setError(userError(reason, 'Could not post this clip.')); }
     finally { setBusy(false); }
   }
-  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="posting-dialog">
+  const label = clip?.label ?? finished?.find(entry => entry.jobId === current)?.label;
+  const detail = clip ? [clip.durationSeconds !== null ? clipLength(clip.durationSeconds) : null, clip.campaign?.name].filter(Boolean).join(' · ') : '';
+  const missing = jobId ? clip === null : finished !== undefined && !finished.length;
+  return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="post-dialog">
+    <div className="post-dialog-head"><DialogTitle>{sent ? sent.scheduledAt ? 'Scheduled' : 'Posting now' : 'Post clip'}</DialogTitle></div>
+    <DialogDescription className="sr-only">Send this clip to your connected accounts, now or at a time you pick.</DialogDescription>
     {sent ? <>
-      <DialogTitle>{sent.scheduled ? 'Scheduled.' : 'On its way.'}</DialogTitle>
-      <DialogDescription>{sent.count} {sent.count === 1 ? 'post is' : 'posts are'} {sent.scheduled ? `scheduled for ${new Date(when).toLocaleString()}` : 'being sent now'}. Follow them on the Posts page.</DialogDescription>
-      {campaignId && <BatchLinks batchId={sent.batchId} />}
-      <div className="posting-dialog-actions"><Button variant="secondary" onClick={onClose}>Done</Button><Button asChild><Link href="/posts">View posts</Link></Button></div>
+      <div className="post-dialog-done">
+        <p>{sent.scheduledAt ? `${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
+        {sent.campaign && <BatchLinks batchId={sent.batchId} />}
+      </div>
+      <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
+    </> : missing ? <>
+      <div className="post-dialog-done">{jobId ? <p>This clip can no longer be posted. Export it again, then post it.</p> : <><h3>No clips to post yet</h3><p>Export a clip in the editor, then post it from here.</p></>}</div>
+      <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Close</Button>{!jobId && <Button asChild variant="primary"><Link href={NEW_PROJECT_PATH}>Open the editor</Link></Button>}</div>
     </> : <>
-      <DialogTitle>Post this video</DialogTitle>
-      <DialogDescription>Send this export to your connected accounts, now or at a time you pick.</DialogDescription>
-      {!accounts ? <p className="posting-hint" role="status">Loading your accounts…</p> : !usable.length ? <>
-        <p className="posting-hint">You have no connected accounts yet. Connect one to post this video.</p>
-        <div className="posting-dialog-actions"><Button asChild><Link href="/accounts">Connect an account</Link></Button></div>
-      </> : <>
-        <div className="posting-field"><label htmlFor="posting-caption">Caption</label><Textarea id="posting-caption" rows={3} maxLength={CAPTION_LIMIT} placeholder="Shared by every account unless you change it below" value={caption} onChange={event => setCaption(event.target.value)} /></div>
-        <div className="posting-field"><label htmlFor="posting-title">Title (optional)</label><Input id="posting-title" maxLength={TITLE_LIMIT} placeholder="Used where the platform has titles, such as YouTube" value={title} onChange={event => setTitle(event.target.value)} /></div>
-        <div className="posting-field"><span>Accounts</span><div className="posting-targets">{usable.map(account => <div key={account.id} className="posting-target">
-          <div className="posting-target-head">
-            <label><Checkbox checked={chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => toggle(previous, account.id, checked === true))} /><span>@{account.username}</span><small>{PLATFORM_NAMES[account.platform]}</small></label>
-            {chosen.has(account.id) && <Button variant="ghost" size="sm" onClick={() => setCustom(previous => toggle(previous, account.id, !previous.has(account.id)))}>{custom.has(account.id) ? 'Use shared caption' : 'Custom caption'}</Button>}
+      <div className="post-dialog-body">
+        <div className="post-dialog-side">
+          <Card variant="tile" className="post-clip">
+            <span className="post-clip-thumb"><ProjectCover url={clip?.coverUrl ?? null} kind={clip?.coverKind ?? null} /></span>
+            <div className="post-clip-text">
+              {finished && finished.length > 1 && current ? <Select value={current} onValueChange={value => setChoice(value as Id<'renderJobs'>)}>
+                <SelectTrigger className="post-clip-select" aria-label="Clip to post"><SelectValue /></SelectTrigger>
+                <SelectContent className="post-select">{finished.map(entry => <SelectItem key={entry.jobId} value={entry.jobId}>{entry.label} · {postTime(entry.createdAt)}</SelectItem>)}</SelectContent>
+              </Select> : <strong title={label}>{label ?? 'Loading…'}</strong>}
+              {clip === null ? <span>This clip can no longer be posted.</span> : detail && <span title={clip?.campaign ? `Campaign: ${clip.campaign.name}` : undefined}>{detail}</span>}
+            </div>
+          </Card>
+          <div className="post-accounts">
+            <div className="post-accounts-head"><h3>Accounts</h3><span>{picked.length} selected</span></div>
+            {!platforms || !accounts ? <p className="post-note" role="status">Loading your accounts…</p> : platforms.map(entry => {
+              const own = accounts.filter(account => account.platform === entry.platform);
+              return <div key={entry.platform} className="post-platform">
+                <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span>{!entry.live && <small>Coming soon</small>}</div>
+                {entry.live && own.map(account => {
+                  const expired = account.status !== 'connected';
+                  return <label key={account.id} className="post-account" data-disabled={expired || undefined}>
+                    <Checkbox disabled={expired} checked={!expired && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
+                    <span>@{account.username}</span>{expired && <small>Sign-in expired</small>}
+                  </label>;
+                })}
+                {entry.live && !own.length && <p className="post-note">No accounts connected yet.</p>}
+              </div>;
+            })}
+            {platforms && accounts && live.size > 0 && !usable.length && <Button asChild variant="soft" size="sm" className="post-connect"><Link href="/accounts">Connect an account</Link></Button>}
           </div>
-          {chosen.has(account.id) && custom.has(account.id) && <Textarea rows={2} maxLength={CAPTION_LIMIT} aria-label={`Caption for @${account.username}`} placeholder={`Caption for @${account.username}`} value={overrides[account.id] ?? ''} onChange={event => setOverrides(previous => ({ ...previous, [account.id]: event.target.value }))} />}
-        </div>)}</div></div>
-        <div className="posting-field">
-          <label className="posting-target-head"><Checkbox checked={later} onCheckedChange={checked => setLater(checked === true)} /><span>Schedule for later</span></label>
-          {later && <Input type="datetime-local" aria-label="Post at" min={localInputValue(Date.now())} value={when} onChange={event => setWhen(event.target.value)} />}
         </div>
-        {error && <p className="posting-hint" role="alert" style={{ color: '#b5553d', opacity: 1 }}>{error}</p>}
-        <div className="posting-dialog-actions"><Button variant="secondary" disabled={busy} onClick={onClose}>Cancel</Button><Button disabled={busy || !picked.length} onClick={() => void submit()}>{busy ? <LoaderCircle size={14} className="animate-spin" /> : <Send size={14} />}{later ? `Schedule ${picked.length || ''} ${picked.length === 1 ? 'post' : 'posts'}` : `Post to ${picked.length || ''} ${picked.length === 1 ? 'account' : 'accounts'}`}</Button></div>
-      </>}
+        <div className="post-dialog-main">
+          <div className="post-field">
+            <label htmlFor="post-caption">Caption</label>
+            <Textarea id="post-caption" rows={4} maxLength={CAPTION_LIMIT} value={caption} onChange={event => setCaption(event.target.value)} />
+            <div className="post-field-note">
+              <span>Used for all accounts.{custom > 0 && ` ${custom} ${custom === 1 ? 'account has its own caption' : 'accounts have their own caption'}.`}</span>
+              <Button variant="ghost" size="sm" className="post-quiet" disabled={!picked.length} aria-expanded={perAccount} onClick={() => setPerAccount(open => !open)}><Pencil aria-hidden="true" />Edit per account</Button>
+            </div>
+            {perAccount && picked.map(account => <div key={account.id} className="post-own">
+              <label htmlFor={`post-caption-${account.id}`}><PlatformIcon platform={account.platform} />@{account.username}</label>
+              <Textarea id={`post-caption-${account.id}`} rows={2} maxLength={CAPTION_LIMIT} placeholder="Leave empty to use the caption above" value={overrides[account.id] ?? ''} onChange={event => setOverrides(previous => ({ ...previous, [account.id]: event.target.value }))} />
+            </div>)}
+          </div>
+          {titled && <div className="post-field">
+            <label htmlFor="post-title">Title <small>YouTube</small></label>
+            <Input id="post-title" maxLength={TITLE_LIMIT} value={title} onChange={event => setTitle(event.target.value)} />
+          </div>}
+          <div className="post-field">
+            <label htmlFor="post-when">Schedule <small>Optional</small></label>
+            <div className="post-when" data-empty={!when || undefined}>
+              <CalendarDays aria-hidden="true" />
+              <Input id="post-when" type="datetime-local" min={localInputValue(Date.now())} value={when} onChange={event => { setWhen(event.target.value); setError(''); }} />
+              <span aria-hidden="true">Pick a date and time</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div className="post-dialog-foot">
+        {error && <p className="dash-error" role="alert">{error}</p>}
+        <Button variant="soft" disabled={busy || !picked.length || !clip || !when} onClick={() => void submit(true)}>Schedule</Button>
+        <Button variant="primary" disabled={busy || !picked.length || !clip} onClick={() => void submit(false)}>Post now</Button>
+      </div>
     </>}
   </DialogContent></Dialog>;
 }

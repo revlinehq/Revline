@@ -3,76 +3,119 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { ExternalLink, LoaderCircle, RotateCcw } from 'lucide-react';
+import { CircleAlert, CircleCheck, Clock, Ellipsis, Plus, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { MAX_ATTEMPTS } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
-import { WorkspaceNav } from '@/components/workspace/workspace-nav';
-import { Badge } from '@/components/ui/badge';
+import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
+import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AccountAvatar } from './account-avatar';
 import { BatchLinks } from './batch-links';
-import '@/components/workspace/workspace-pages.css';
+import { PostDialog } from './post-dialog';
+import { postTime } from './post-time';
 import './posting.css';
 
-type Post = FunctionReturnType<typeof api.posting.posts>[number];
-type Group = 'queued' | 'scheduled' | 'published' | 'failed';
-const groups: [Group | 'all', string][] = [['all', 'All'], ['queued', 'Queued'], ['scheduled', 'Scheduled'], ['published', 'Published'], ['failed', 'Failed']];
-/** Queued covers everything in motion: waiting to go now, waiting to retry, posting, or processing on the platform. */
-function groupOf(post: Post): Group {
-  if (post.status === 'published' || post.status === 'failed') return post.status;
-  return post.status === 'scheduled' && post.scheduledAt !== null && post.attempts === 0 ? 'scheduled' : 'queued';
-}
-function statusLine(post: Post) {
-  if (post.status === 'published') return `Published ${post.publishedAt ? new Date(post.publishedAt).toLocaleString() : ''}${post.views !== null ? ` · ${post.views} views · ${post.likes ?? 0} likes · ${post.comments ?? 0} comments` : ''}`;
-  if (post.status === 'posting') return 'Posting now…';
-  if (post.status === 'processing') return 'The platform is processing the video.';
-  if (post.status === 'scheduled') return post.attempts > 0 ? `Try ${post.attempts} of ${MAX_ATTEMPTS} did not go through. Trying again at ${new Date(post.dueAt).toLocaleTimeString()}.` : post.scheduledAt !== null ? `Scheduled for ${new Date(post.scheduledAt).toLocaleString()}` : 'Waiting to post.';
-  return null;
+type Clip = FunctionReturnType<typeof api.posting.clipPosts>[number];
+type ClipPost = Clip['posts'][number];
+const SHOWN_ACCOUNTS = 4;
+
+/** Still waiting for a time the user picked that has not come yet; nothing has been sent. */
+const waiting = (post: ClipPost, now: number) => post.status === 'scheduled' && post.attempts === 0 && post.scheduledAt !== null && post.scheduledAt > now;
+/** Why a post failed: what the platform or Revline recorded, shortened to a few words when it is an expired sign-in. */
+function reason(post: ClipPost) {
+  if (post.accountStatus === 'needs_reconnect' && (!post.error || /reconnect|expired/i.test(post.error))) return `${PLATFORM_NAMES[post.platform]} sign-in expired`;
+  return post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post`;
 }
 
-/** Every post in one list: queued, scheduled, published, and failed with its reason and a retry. */
+/** One clip as one row: which section it belongs to, when, one status word, and what can be done about it. */
+function describe(clip: Clip) {
+  const { posts } = clip, now = Date.now();
+  const failed = posts.filter(post => post.status === 'failed'), published = posts.filter(post => post.status === 'published'), queued = posts.filter(post => waiting(post, now));
+  const scheduled = queued.length > 0;
+  const time = scheduled ? Math.min(...queued.map(post => post.scheduledAt!)) : Math.max(...posts.map(post => post.publishedAt ?? post.scheduledAt ?? clip.createdAt));
+  const counted = published.filter(post => post.views !== null);
+  return {
+    clip, scheduled, time, failed, published,
+    status: failed.length ? `${failed.length} of ${posts.length} failed` : scheduled ? 'Scheduled' : published.length === posts.length ? 'Posted' : 'Posting',
+    icon: failed.length ? CircleAlert : scheduled ? Clock : published.length === posts.length ? CircleCheck : Send,
+    reasons: [...new Set(failed.map(reason))],
+    views: counted.length ? counted.reduce((sum, post) => sum + post.views!, 0) : null,
+    retryable: failed.filter(post => post.accountStatus === 'connected'),
+    reconnect: failed.some(post => post.accountStatus === 'needs_reconnect'),
+    cancellable: posts.filter(post => post.status === 'scheduled'),
+  };
+}
+type Row = ReturnType<typeof describe>;
+
+/** Every clip Revline is about to post or has posted: one row per clip, however many accounts it went to. */
 export function PostsPage() {
   const { isAuthenticated } = useConvexAuth();
-  const posts = useQuery(api.posting.posts, isAuthenticated ? {} : 'skip');
+  const clips = useQuery(api.posting.clipPosts, isAuthenticated ? {} : 'skip');
   const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel);
-  const [group, setGroup] = useState<Group | 'all'>('all'), [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
-  const [links, setLinks] = useState<Id<'postingBatches'> | null>(null);
-  async function run(postId: Id<'postingPosts'>, action: typeof retry, fallback: string) {
+  const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
+  const [composing, setComposing] = useState(false), [links, setLinks] = useState<Id<'postingBatches'> | null>(null);
+  async function run(row: Row, posts: ClipPost[], action: typeof retry, fallback: string) {
     if (busy) return;
-    setBusy(postId); setError('');
-    try { await action({ postId }); }
-    catch (reason) { setError(userError(reason, fallback)); }
-    finally { setBusy(null); }
+    setBusy(row.clip.batchId); setError('');
+    const results = await Promise.allSettled(posts.map(post => action({ postId: post.id })));
+    const failure = results.find(result => result.status === 'rejected');
+    if (failure) setError(userError(failure.reason, fallback));
+    setBusy(null);
   }
-  const shown = posts?.filter(post => group === 'all' || groupOf(post) === group) ?? [];
-  return <div className="workspace-page workspace-profile-page">
-    <WorkspaceNav title="Posts" active="posts" />
-    <main className="workspace-profile-content">
-      <div className="posting-heading-row"><div className="workspace-page-heading"><h1>Posts</h1><p>Everything Revline has posted or is about to post.</p></div><Button asChild variant="outline" size="md"><Link href="/accounts">Connected accounts</Link></Button></div>
-      <Tabs className="posting-tabs" value={group} onValueChange={value => setGroup(value as Group | 'all')}><TabsList aria-label="Post status">{groups.map(([value, label]) => <TabsTrigger key={value} value={value}>{label}{posts && value !== 'all' ? ` ${posts.filter(post => groupOf(post) === value).length}` : ''}</TabsTrigger>)}</TabsList></Tabs>
-      {error && <p className="workspace-inline-error" role="alert">{error}</p>}
-      {!posts ? <div className="workspace-empty-state" role="status"><LoaderCircle size={20} className="animate-spin" /><p>Loading your posts…</p></div>
-        : !shown.length ? <div className="workspace-empty-state"><h2>{group === 'all' ? 'No posts yet' : `Nothing ${group}`}</h2><p>Open a finished export in the editor and choose Post to send it to your accounts.</p></div>
-        : <ul className="posting-list">{shown.map(post => <li key={post.id} className="posting-row posting-post-row">
-          <div className="posting-row-text">
-            <strong>{PLATFORM_NAMES[post.platform]} · @{post.username} · {post.exportLabel}</strong>
-            {post.caption && <span className="posting-caption">{post.caption}</span>}
-            {statusLine(post) && <span>{statusLine(post)}</span>}
-            {post.error && <span className="posting-error">{post.error}</span>}
-          </div>
-          <div className="posting-post-actions">
-            <Badge variant={post.status === 'failed' ? 'destructive' : 'outline'}>{groupOf(post) === 'queued' ? post.status === 'scheduled' ? 'Queued' : post.status === 'posting' ? 'Posting' : 'Processing' : groups.find(([value]) => value === groupOf(post))![1]}</Badge>
-            {post.status === 'published' && post.url && <Button asChild variant="outline" size="md"><a href={post.url} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} />View</a></Button>}
-            {post.campaignId && post.status === 'published' && <Button variant="outline" size="md" onClick={() => setLinks(post.batchId)}>Campaign links</Button>}
-            {post.status === 'failed' && <Button variant="outline" size="md" disabled={!!busy} onClick={() => void run(post.id, retry, 'Could not retry this post.')}>{busy === post.id ? <LoaderCircle size={12} className="animate-spin" /> : <RotateCcw size={12} />}Retry</Button>}
-            {post.status === 'scheduled' && <Button variant="outline" size="md" disabled={!!busy} onClick={() => void run(post.id, cancel, 'Could not cancel this post.')}>{busy === post.id && <LoaderCircle size={12} className="animate-spin" />}Cancel</Button>}
-          </div>
-        </li>)}</ul>}
+  const rows = clips?.map(describe) ?? [];
+  const sections = [
+    { name: 'Scheduled', rows: rows.filter(row => row.scheduled).sort((a, b) => a.time - b.time) },
+    { name: 'Posted', rows: rows.filter(row => !row.scheduled).sort((a, b) => b.time - a.time) },
+  ].filter(section => section.rows.length);
+  const newPost = <Button variant="primary" onClick={() => setComposing(true)}><Plus aria-hidden="true" />New post</Button>;
+  return <div className="dash-page">
+    <DashboardNavbar title="Posts" />
+    <main className="dash-content posts-page">
+      <h1 className="sr-only">Posts</h1>
+      {error && <p className="dash-error" role="alert">{error}</p>}
+      {!clips ? <div className="dash-empty" role="status"><p>Loading your posts…</p></div>
+        : !sections.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>
+        : sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
+          <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && newPost}</div>
+          <Card variant="dash" className="posts-list"><ul>{section.rows.map(row => <PostRow key={row.clip.batchId} row={row} busy={!!busy}
+            onRetry={() => void run(row, row.retryable, retry, 'Could not retry this post.')} onCancel={() => void run(row, row.cancellable, cancel, 'Could not cancel this post.')} onLinks={() => setLinks(row.clip.batchId)} />)}</ul></Card>
+        </section>)}
     </main>
-    <Dialog open={!!links} onOpenChange={open => { if (!open) setLinks(null); }}><DialogContent className="workspace-dialog posting-dialog"><DialogTitle>Campaign links</DialogTitle><DialogDescription>Content Rewards has no way to receive these automatically, so submit them there by hand.</DialogDescription>{links && <BatchLinks batchId={links} />}</DialogContent></Dialog>
+    {composing && <PostDialog onPostsPage onClose={() => setComposing(false)} />}
+    <Dialog open={!!links} onOpenChange={open => { if (!open) setLinks(null); }}><DialogContent className="post-dialog post-dialog-links"><div className="post-dialog-head"><DialogTitle>Campaign links</DialogTitle></div><div className="post-dialog-done"><DialogDescription>Content Rewards cannot receive these from Revline, so submit them there by hand.</DialogDescription>{links && <BatchLinks batchId={links} />}</div></DialogContent></Dialog>
   </div>;
+}
+
+function PostRow({ row, busy, onRetry, onCancel, onLinks }: { row: Row; busy: boolean; onRetry: () => void; onCancel: () => void; onLinks: () => void }) {
+  const { clip } = row, Icon = row.icon, text = clip.caption || clip.label;
+  const extra = clip.posts.length - SHOWN_ACCOUNTS, live = row.published.filter(post => post.url);
+  const menu = row.cancellable.length > 0 || live.length > 0 || row.reconnect;
+  return <li className="posts-row">
+    <span className="posts-thumb"><ProjectCover url={clip.coverUrl} kind={clip.coverKind} /></span>
+    <span className="posts-caption" title={text}>{text}</span>
+    <span className="posts-accounts" role="img" aria-label={clip.posts.map(post => `@${post.username} on ${PLATFORM_NAMES[post.platform]}`).join(', ')}>
+      {clip.posts.slice(0, SHOWN_ACCOUNTS).map(post => <AccountAvatar key={post.id} username={post.username} avatarUrl={post.avatarUrl} platform={post.platform} />)}
+      {extra > 0 && <span className="posts-accounts-more">+{extra}</span>}
+    </span>
+    <span className="posts-time">{postTime(row.time)}</span>
+    <span className="posts-status"><span><Icon aria-hidden="true" />{row.status}</span>{row.reasons.map(text => <small key={text} title={text}>{text}</small>)}</span>
+    <span className="posts-views">{row.views !== null && `${row.views.toLocaleString()} ${row.views === 1 ? 'view' : 'views'}`}</span>
+    <span className="posts-actions">
+      {row.retryable.length > 0 && <Button variant="soft" size="sm" disabled={busy} onClick={onRetry}>Retry</Button>}
+      {menu && <DropdownMenu>
+        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for ${text}`}><Ellipsis /></Button></DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="dash-menu">
+          {row.cancellable.length > 0 && <DropdownMenuItem disabled={busy} onSelect={onCancel}>Cancel post</DropdownMenuItem>}
+          {row.reconnect && <DropdownMenuItem asChild><Link href="/accounts">Reconnect account</Link></DropdownMenuItem>}
+          {live.map(post => <DropdownMenuItem key={post.id} asChild><a href={post.url!} target="_blank" rel="noopener noreferrer"><span>View on {PLATFORM_NAMES[post.platform]} · @{post.username}</span></a></DropdownMenuItem>)}
+          {clip.campaignId && live.length > 0 && <DropdownMenuItem onSelect={onLinks}>Copy campaign links</DropdownMenuItem>}
+        </DropdownMenuContent>
+      </DropdownMenu>}
+    </span>
+  </li>;
 }

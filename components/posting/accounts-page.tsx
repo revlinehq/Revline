@@ -1,30 +1,30 @@
 'use client';
 import { useState } from 'react';
-import Link from 'next/link';
 import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
-import { LoaderCircle } from 'lucide-react';
+import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
-import { WorkspaceNav } from '@/components/workspace/workspace-nav';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
+import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { Button } from '@/components/ui/button';
-import '@/components/workspace/workspace-pages.css';
-import './posting.css';
+import { Card } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { AccountAvatar, PlatformIcon } from './account-avatar';
+import '@/components/dashboard/dash-list.css';
 
-/** Connected social accounts per platform: connect, disconnect, and "Coming soon" for platforms that are not live. */
+/** Connected social accounts, a card per platform: connect, reconnect, disconnect, and "Coming soon" for platforms that are not live. */
 export function AccountsPage({ connected }: { connected?: string }) {
   const { isAuthenticated } = useConvexAuth();
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
   const startConnect = useAction(api.postingActions.startConnect), disconnect = useMutation(api.posting.disconnect);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
-  async function connect(platform: PostingPlatform) {
+  /** Connecting and reconnecting are the same round trip: the platform's consent screen, then back to /accounts/callback. */
+  async function connect(platform: PostingPlatform, key: string = platform) {
     if (busy) return;
-    setBusy(platform); setError('');
+    setBusy(key); setError('');
     // The page leaves for the platform's consent screen, so `busy` stays set on success.
     try { window.location.assign(await startConnect({ platform })); }
     catch (reason) { setError(userError(reason, 'Could not start connecting this account.')); setBusy(null); }
@@ -37,27 +37,35 @@ export function AccountsPage({ connected }: { connected?: string }) {
     finally { setBusy(null); }
   }
   const connectedName = connected && connected in PLATFORM_NAMES ? PLATFORM_NAMES[connected as PostingPlatform] : null;
-  return <div className="workspace-page workspace-profile-page">
-    <WorkspaceNav title="Connected accounts" active="accounts" />
-    <main className="workspace-profile-content">
-      <div className="posting-heading-row"><div className="workspace-page-heading"><h1>Connected accounts</h1><p>The social accounts Revline posts your exports to.</p></div><Button asChild variant="outline" size="md"><Link href="/posts">View posts</Link></Button></div>
-      {connectedName && !error && <p className="posting-notice" role="status">Your {connectedName} account is connected.</p>}
-      {error && <p className="workspace-inline-error" role="alert">{error}</p>}
-      {!platforms || !accounts ? <div className="workspace-empty-state" role="status"><LoaderCircle size={20} className="animate-spin" /><p>Loading your accounts…</p></div> : platforms.map(({ platform, live }) => {
+  return <div className="dash-page">
+    <DashboardNavbar title="Connected accounts" />
+    <main className="dash-content"><div className="dash-column">
+      <h1 className="sr-only">Connected accounts</h1>
+      <p className="dash-column-note">Revline posts your clips to the accounts you connect here.</p>
+      {connectedName && !error && <p className="dash-column-note" role="status">Your {connectedName} account is connected.</p>}
+      {error && <p className="dash-error" role="alert">{error}</p>}
+      {!platforms || !accounts ? <div className="dash-empty" role="status"><p>Loading your accounts…</p></div> : platforms.map(({ platform, live }) => {
         const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
-        return <section key={platform} className="workspace-profile-section">
-          <div className="workspace-section-label"><h2>{name}</h2><p>{live ? `${own.length} connected` : 'Coming soon'}</p></div>
-          <div className="workspace-section-content">
-            {own.length ? <ul className="posting-list">{own.map(account => <li key={account.id} className="posting-row">
-              <Avatar>{account.avatarUrl && <AvatarImage src={account.avatarUrl} alt="" />}<AvatarFallback>{account.username.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>
-              <div className="posting-row-text"><strong>@{account.username}</strong>{account.status === 'needs_reconnect' ? <span className="posting-error">{account.error ?? 'The connection expired.'} Connect it again to keep posting.</span> : account.displayName && <span>{account.displayName}</span>}</div>
-              {account.status === 'needs_reconnect' && <Badge variant="destructive">Reconnect</Badge>}
-              <Button variant="outline" size="md" disabled={!!busy} onClick={() => void remove(account.id)}>{busy === account.id && <LoaderCircle size={12} className="animate-spin" />}Disconnect</Button>
-            </li>)}</ul> : <p className="posting-empty">{live ? `No ${name} accounts connected yet.` : `${name} posting is not available yet.`}</p>}
-            <div className="posting-section-action"><Button variant="outline" size="md" disabled={!live || !!busy} onClick={() => void connect(platform)}>{busy === platform && <LoaderCircle size={12} className="animate-spin" />}{live ? `Connect ${own.length ? 'another ' : 'a '}${name} account` : 'Coming soon'}</Button></div>
+        return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">
+          <div className="dash-list-head">
+            <PlatformIcon platform={platform} /><h2>{name}</h2>
+            <span className="dash-list-meta">{!live ? 'Coming soon' : own.length ? `${own.length} ${own.length === 1 ? 'account' : 'accounts'}` : ''}</span>
+            <div className="dash-list-actions"><Button variant="soft" size="sm" disabled={!live || !!busy} aria-label={`Connect a ${name} account`} onClick={() => void connect(platform)}>Connect</Button></div>
           </div>
-        </section>;
+          {own.map(account => <div key={account.id} className="dash-list-row">
+            <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} />
+            <span className="dash-list-row-name">@{account.username}{account.status === 'needs_reconnect' && account.error && !/expired/i.test(account.error) && <small>{account.error}</small>}</span>
+            {account.status === 'needs_reconnect'
+              ? <><span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />Sign-in expired</span><Button variant="soft" size="sm" disabled={!live || !!busy} onClick={() => void connect(platform, account.id)}>Reconnect</Button></>
+              : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
+            </DropdownMenu>
+          </div>)}
+          {!own.length && <div className="dash-list-row dash-list-note">{live ? 'No accounts connected yet.' : `Posting to ${name} is not available yet.`}</div>}
+        </Card>;
       })}
-    </main>
+    </div></main>
   </div>;
 }
