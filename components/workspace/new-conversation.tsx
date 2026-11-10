@@ -25,8 +25,8 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { VideoLinkImport } from '@/components/editor/video-link-import';
+import { isVideoLinkOnly } from '@/lib/editor/video-link';
+import { ComposerLinkShelf } from './composer-link-shelf';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
@@ -47,7 +47,10 @@ export function NewConversation() {
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
   const picker=useRef<HTMLInputElement>(null);
-  const [linkOpen, setLinkOpen] = useState(false);
+  const [linkShelf, setLinkShelf] = useState({ open: false, prefill: '', focusKey: 0 });
+  const declinedLink = useRef('');
+  const focusLinkAfterMenu = useRef(false);
+  const [importingLink, setImportingLink] = useState(false);
   const importVideo = useMutation(api.mediaTasks.importVideo);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
@@ -73,7 +76,7 @@ export function NewConversation() {
   const [draft, setDraft] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
-  const busy = startingBlank || processing !== null && processing.phase !== 'error';
+  const busy = startingBlank || importingLink || processing !== null && processing.phase !== 'error';
   const { chats: recentProjects, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
@@ -271,6 +274,36 @@ export function NewConversation() {
     setDraft(value); brief.current = value;
     try { saveNewProjectBrief(value); } catch { /* The draft stays in this page. */ }
   }
+  function openLinkShelf(prefill = '') {
+    setLinkShelf(shelf => ({ open: true, prefill, focusKey: shelf.focusKey + 1 }));
+  }
+  function closeLinkShelf() {
+    // A pasted link the user dismissed pastes as plain text next time.
+    declinedLink.current = linkShelf.prefill;
+    setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
+  }
+  /** A lone video link pasted into the empty prompt opens the link shelf with it. */
+  function pasteLink(text: string) {
+    const link = text.trim();
+    if (draft || !draftReady || busy || !isVideoLinkOnly(link)) return false;
+    if (link === declinedLink.current) { declinedLink.current = ''; return false; }
+    openLinkShelf(link);
+    return true;
+  }
+  async function importLink(url: string) {
+    if (submitting.current) return;
+    // Lock the prompt too, so a second project cannot start while this one is being created.
+    setImportingLink(true);
+    try { await startLinkProject(url); } catch (cause) { setImportingLink(false); throw cause; }
+  }
+  async function startLinkProject(url: string) {
+    const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
+    await importVideo({ url, projectId });
+    rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);
+    await stashFiles(files.map(item => item.file));
+    setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
+    router.push('/editor/' + projectId);
+  }
   async function submit() {
     if (!draftReady || !settings || busy || submitting.current) return;
     if (hasMedia) { await processFootage(); return; }
@@ -311,18 +344,14 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200"><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => setLinkOpen(true)}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
+          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} onImport={importLink} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+              // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
+              if (!focusLinkAfterMenu.current) return;
+              focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));
+            }}><DropdownMenuItem onSelect={() => picker.current?.click()}><Upload />Upload files</DropdownMenuItem><DropdownMenuItem onSelect={() => { focusLinkAfterMenu.current = true; openLinkShelf(); }}><Link2 />Paste a link</DropdownMenuItem></DropdownMenuContent></DropdownMenu>} placeholder="Describe your video, or drop footage here"/>
           <input ref={picker} type="file" accept="video/*,audio/*,image/*" multiple className="sr-only" tabIndex={-1} aria-label="Choose media to upload" onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; if (files.length) attach(files); }}/>
           {error && <p className="new-conversation-error" role="alert">{error}</p>}
         </div>
     </ConversationStart>}
-    <Dialog open={linkOpen} onOpenChange={setLinkOpen}><DialogContent className="border-[#363636] bg-[#222] text-neutral-100"><DialogTitle>Paste a link</DialogTitle><DialogDescription>Import footage from YouTube or a video URL.</DialogDescription><VideoLinkImport disabled={busy} onUpload={()=>{setLinkOpen(false);picker.current?.click();}} onImport={async url => {
-      const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
-      await importVideo({ url, projectId });
-      rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);
-      await stashFiles(files.map(item => item.file));
-      setLinkOpen(false);
-      router.push('/editor/' + projectId);
-    }} /></DialogContent></Dialog>
   </div>;
 }

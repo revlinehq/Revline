@@ -17,22 +17,28 @@ import { useFootageProgress } from '@/lib/editor/footage-progress-store';
 
 export type VideoImportState = { _id: string; status: string; progress: number; overallProgress?: number; progressKey?: string; attempt: number; error?: string };
 
-export function VideoLinkImport({ onImport, onUpload, disabled = false }: { onImport: (url: string) => Promise<void>; onUpload?: () => void; disabled?: boolean }) {
-  const id = useId();
+/** URL field state and the import call shared by every "import a video link" form. */
+export function useVideoLinkImport(onImport: (url: string) => Promise<void>, disabled = false) {
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const submitting = useRef(false);
-  return <form className="video-link-import" onSubmit={async event => {
-    event.preventDefault();
+  async function submit() {
     if (disabled || submitting.current) return;
     submitting.current = true; setBusy(true); setError('');
     try { await onImport(parseVideoLink(url).url); setUrl(''); }
     catch (error) { setError(userError(error, 'Could not import this video.')); }
     finally { submitting.current = false; setBusy(false); }
-  }}>
+  }
+  return { url, busy, error, submit, change: (value: string) => { setUrl(value); setError(''); } };
+}
+
+export function VideoLinkImport({ onImport, onUpload, disabled = false }: { onImport: (url: string) => Promise<void>; onUpload?: () => void; disabled?: boolean }) {
+  const id = useId();
+  const { url, busy, error, submit, change } = useVideoLinkImport(onImport, disabled);
+  return <form className="video-link-import" onSubmit={event => { event.preventDefault(); void submit(); }}>
     <label htmlFor={id}><Link2 size={13}/>Import a video link</label>
-    <div className="video-link-field"><Input id={id} type="url" required maxLength={2048} placeholder="YouTube or MP4 URL" autoComplete="off" value={url} disabled={disabled || busy} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} aria-invalid={!!error} onChange={event => { setUrl(event.target.value); setError(''); }}/><Button type="submit" variant="outline" disabled={disabled || busy || !url.trim()}>{busy ? <LoaderCircle size={14} className="animate-spin" aria-label="Starting import"/> : 'Import'}</Button></div>
+    <div className="video-link-field"><Input id={id} type="url" required maxLength={2048} placeholder="YouTube or MP4 URL" autoComplete="off" value={url} disabled={disabled || busy} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} aria-invalid={!!error} onChange={event => change(event.target.value)}/><Button type="submit" variant="outline" disabled={disabled || busy || !url.trim()}>{busy ? <LoaderCircle size={14} className="animate-spin" aria-label="Starting import"/> : 'Import'}</Button></div>
     <small id={`${id}-hint`}>Long recordings and podcasts are supported. If a link cannot be downloaded, upload the file instead.</small>
     {error && <p id={`${id}-error`} className="video-link-error" role="alert">{error}</p>}
     {onUpload && <Button type="button" variant="ghost" size="sm" className="video-link-upload" disabled={disabled || busy} onClick={onUpload}><Upload size={14}/>Upload the file instead</Button>}
