@@ -43,7 +43,11 @@
     "incidents:listen": "node --import tsx scripts/incident-listener/index.ts",
     "incidents:install": "node --import tsx scripts/incident-listener/install.ts",
     "incidents:fix": "node scripts/fix-save-incidents.mjs",
-    "typecheck:processor-edge": "tsc -p cf-workers/media-edge/tsconfig.json"
+    "typecheck:processor-edge": "tsc -p cf-workers/media-edge/tsconfig.json",
+    "compat:check": "node scripts/compat-check.mjs",
+    "changelog:check": "node scripts/changelog.mjs check",
+    "release:prod": "node scripts/release-prod.mjs",
+    "release:status": "node scripts/release-status.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.78",
