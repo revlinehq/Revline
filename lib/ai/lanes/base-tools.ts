@@ -5,6 +5,7 @@ import { tools as recreateTools } from './recreate/tools';
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [
   'reportIssue',
+  'reportLimitation',
   'listTimelines',
   'createTimeline',
   'openTimeline',
