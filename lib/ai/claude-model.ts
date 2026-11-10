@@ -132,6 +132,25 @@ export function freeEditorModel(env: ClaudeModelEnvironment = process.env): Clau
   return enforceClaudeModelPolicy({ provider: 'openai', modelId: FREE_EDITOR_MODEL_CHOICE, modelChoice: FREE_EDITOR_MODEL_CHOICE, reasoningEffort: 'low' }, env);
 }
 
+/** EDITOR_EFFORT_SWITCHER=false turns the effort picker off for everyone; unset leaves it to the plan. */
+export function editorEffortSwitcherOffered(env: ClaudeModelEnvironment = process.env) {
+  return env.EDITOR_EFFORT_SWITCHER !== 'false';
+}
+
+/** Choosing an effort is an Ultra feature. Deployments without billing meter no one, so every account keeps it there. */
+export function editorEffortChoiceAllowed(plan: { billing: boolean; ultra: boolean }, env: ClaudeModelEnvironment = process.env) {
+  return editorEffortSwitcherOffered(env) && (!plan.billing || plan.ultra);
+}
+
+/** Without the Ultra choice a saved turn never runs above the deployment default: a higher or unknown
+ * effort becomes the default, and a lower fixed one (iPhone's medium, the free model's low) stays. */
+export function withPlanReasoning<T extends { reasoningEffort?: unknown }>(selection: T, effortChoice: boolean, env: ClaudeModelEnvironment = process.env): T {
+  if (effortChoice) return selection;
+  const limit = defaultEditorReasoningEffort(env);
+  const saved = EDITOR_REASONING_EFFORTS.findIndex(effort => effort === selection.reasoningEffort);
+  return saved >= 0 && saved <= EDITOR_REASONING_EFFORTS.indexOf(limit) ? selection : { ...selection, reasoningEffort: limit };
+}
+
 /** Capture manual effort with the model so a queued run cannot change settings. */
 export function withEditorReasoning(selection: ClaudeModelSelection, effort?: string, env: ClaudeModelEnvironment = process.env): ClaudeModelSelection {
   if (effort !== undefined && effort !== 'auto' && !claudeModelSwitcherEnabled(env)) throw new Error('Manual reasoning selection is currently disabled.');

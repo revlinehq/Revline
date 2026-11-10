@@ -5,13 +5,15 @@ import {
   stat,
   statfs,
   readFile,
+  readdir,
   writeFile,
   rm,
   rename,
 } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { request } from "node:https";
 import { BlockList, isIP } from "node:net";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
@@ -221,12 +223,123 @@ async function downloadMp4(
 }
 
 export type ImportRange = { start: number; end: number };
+type ImportStrategy = {
+  name: string;
+  fragments: string;
+  args: string[];
+  youtubeOnly?: boolean;
+};
+const client = (value: string) => [
+  "--force-ipv4",
+  "--extractor-args",
+  `youtube:player_client=${value}`,
+];
+/** Tried in order when the site refuses a download. Each one reaches the video
+ * a different way; all were checked against yt-dlp 2026.10.26 on 2026-11-09.
+ * The last one only offers 360p, so it stays last. */
+const IMPORT_STRATEGIES: ImportStrategy[] = [
+  { name: "default", fragments: "4", args: [] },
+  { name: "ipv4-single", fragments: "1", args: ["--force-ipv4"] },
+  {
+    name: "web_embedded",
+    fragments: "1",
+    args: client("web_embedded"),
+    youtubeOnly: true,
+  },
+  {
+    name: "web_safari",
+    fragments: "1",
+    args: client("web_safari"),
+    youtubeOnly: true,
+  },
+  {
+    name: "mobile-360p",
+    fragments: "1",
+    args: client("mweb,tv_simply,android"),
+    youtubeOnly: true,
+  },
+];
+/** The strategy that last worked on this worker goes first next time. */
+let preferredStrategy = IMPORT_STRATEGIES[0];
+/** Nothing another client or route can fix. */
+const PERMANENT_REFUSAL =
+  /private video|video unavailable|has been removed|copyright|age.restricted|confirm your age|members.only|not available in your country/i;
+/** The site answered but would not hand over the media: another client, format or route may work. */
+const SITE_REFUSAL =
+  /HTTP Error 40[13]|HTTP Error 429|unable to download video data|sign in|confirm.*bot|requested format.*not available|no video formats|needs to be reloaded|po.?token/i;
+
+const DAY = 24 * 3600_000;
+let importer:
+  | { at: number; ready: Promise<{ version: string; pythonPath?: string }> }
+  | undefined;
+/** The image bakes a pinned yt-dlp, and sites change faster than images are
+ * rebuilt. Where VIDEO_IMPORT_AUTO_UPDATE is set (the processor image), the
+ * newest release is installed into scratch space once a day and loaded ahead
+ * of the baked copy; any failure keeps the baked one. Nothing under /opt is
+ * written, so this works as the unprivileged `node` user. */
+async function prepareImporter() {
+  const executable = videoImporterPath();
+  const version = (pythonPath?: string) =>
+    run(executable, ["--version"], {
+      timeout: 20_000,
+      env: { ...process.env, ...(pythonPath ? { PYTHONPATH: pythonPath } : {}) },
+    }).then((result) => result.stdout.trim());
+  const baked = await version().catch(() => "unavailable");
+  if (!/^(1|true)$/i.test(process.env.VIDEO_IMPORT_AUTO_UPDATE ?? ""))
+    return { version: baked };
+  const target = join(tmpdir(), `revline-yt-dlp-${process.pid}-${Date.now()}`);
+  try {
+    await run(
+      join(dirname(executable), "python"),
+      [
+        "-m",
+        "pip",
+        "install",
+        "--quiet",
+        "--disable-pip-version-check",
+        "--no-cache-dir",
+        "--upgrade",
+        "--target",
+        target,
+        "yt-dlp",
+        "yt-dlp-ejs",
+      ],
+      { timeout: 90_000 },
+    );
+    const updated = await version(target);
+    // Versions are zero-padded dates (2026.10.26), so text order is release order.
+    if (!/^\d/.test(baked) || updated > baked)
+      return { version: updated, pythonPath: target };
+  } catch {
+    /* Offline or no pip: the baked version still works. */
+  }
+  await rm(target, { recursive: true, force: true }).catch(() => {});
+  return { version: baked };
+}
+/** Version in use, for readiness logs and failure messages. Refreshes daily. */
+export function videoImporter() {
+  if (!importer || Date.now() - importer.at > DAY) {
+    const previous = importer?.ready;
+    const ready = prepareImporter();
+    importer = { at: Date.now(), ready };
+    // Drop the scratch copy the new one replaces, so a long-lived worker keeps one.
+    void Promise.all([previous, ready])
+      .then(([old, next]) =>
+        old?.pythonPath && old.pythonPath !== next.pythonPath
+          ? rm(old.pythonPath, { recursive: true, force: true })
+          : undefined,
+      )
+      .catch(() => {});
+  }
+  return importer.ready;
+}
 /** Any length imports. With a range, only that window downloads, cut on exact frames. */
 function youtubeArguments(
   url: string,
   path: string,
   maxBytes: number,
-  range?: ImportRange,
+  range: ImportRange | undefined,
+  strategy: ImportStrategy,
 ) {
   const window = range
     ? [
@@ -249,7 +362,7 @@ function youtubeArguments(
     "--fragment-retries",
     "2",
     "--concurrent-fragments",
-    "4",
+    strategy.fragments,
     "--extractor-retries",
     "2",
     "--retry-sleep",
@@ -259,6 +372,10 @@ function youtubeArguments(
     "--match-filters",
     range ? `duration > ${range.start} & !is_live` : "!is_live",
     ...window,
+    ...strategy.args,
+    ...(process.env.VIDEO_IMPORT_PROXY
+      ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
+      : []),
     "--js-runtimes",
     `node:${process.execPath}`,
     "-f",
@@ -280,11 +397,15 @@ function downloadYoutube(
   executable: string,
   args: string[],
   signal: AbortSignal,
+  pythonPath?: string,
 ) {
   return new Promise<string>((resolve, reject) => {
     const child = spawn(executable, args, {
       signal,
       stdio: ["ignore", "pipe", "pipe"],
+      ...(pythonPath
+        ? { env: { ...process.env, PYTHONPATH: pythonPath } }
+        : {}),
     });
     let stdout = "",
       stderr = "";
@@ -342,41 +463,73 @@ export async function importVideoLink(
   let title = "Imported video";
   if (link.kind !== "file") {
     const executable = videoImporterPath();
-    try {
-      const stdout = await downloadYoutube(
-        executable,
-        youtubeArguments(link.url, source, maxBytes, range),
-        signal,
-      );
-      title = stdout.trim().split("\n").at(-1) || title;
-    } catch (error) {
-      if (signal.aborted || isMediaDiskFull(error)) throw error;
-      const stderr = String((error as { stderr?: string }).stderr ?? "");
-      if (
-        /sign in|confirm.*bot|private video|not available|unavailable|copyright|age.restricted/i.test(
-          stderr,
-        )
-      )
-        throw new AnalysisError(
-          "The video provider blocked this download. Use a public MP4 link or upload the video file instead.",
-          400,
+    const { version, pythonPath } = await videoImporter();
+    const strategies = [
+      preferredStrategy,
+      ...IMPORT_STRATEGIES.filter((item) => item !== preferredStrategy),
+    ].filter((item) => link.kind === "youtube" || !item.youtubeOnly);
+    const refusals: string[] = [];
+    for (const strategy of strategies) {
+      try {
+        const stdout = await downloadYoutube(
+          executable,
+          youtubeArguments(link.url, source, maxBytes, range, strategy),
+          signal,
+          pythonPath,
         );
-      if ((error as NodeJS.ErrnoException).code === "ENOENT")
-        throw new AnalysisError(
-          "Video-link import is unavailable on this media worker. Install yt-dlp first.",
-          503,
-        );
-      if (/requested format.*not available|no video formats|unsupported url/i.test(stderr))throw new AnalysisError('This link has no downloadable video format.',422);
-      throw new AnalysisError(
-        `Video-link download failed: ${
+        title = stdout.trim().split("\n").at(-1) || title;
+        preferredStrategy = strategy;
+        if (refusals.length)
+          console.log(
+            `Video import: strategy "${strategy.name}" worked after ${refusals.length} refused (yt-dlp ${version}).`,
+          );
+        break;
+      } catch (error) {
+        if (signal.aborted || isMediaDiskFull(error)) throw error;
+        if ((error as NodeJS.ErrnoException).code === "ENOENT")
+          throw new AnalysisError(
+            "Video-link import is unavailable on this media worker. Install yt-dlp first.",
+            503,
+          );
+        const stderr = String((error as { stderr?: string }).stderr ?? "");
+        const reason =
           stderr
             .replace(/https?:\/\/\S+/g, "[video URL]")
-            .trim()
-            .slice(-500) || "The downloader returned no diagnostic."
-        }`,
-        502,
-      );
+            .split("\n")
+            .filter((line) => line.startsWith("ERROR"))
+            .at(-1)
+            ?.slice(0, 300) ?? "The downloader returned no diagnostic.";
+        if (PERMANENT_REFUSAL.test(stderr))
+          throw new AnalysisError(
+            "The video provider blocked this download. Use a public MP4 link or upload the video file instead.",
+            400,
+          );
+        if (/unsupported url/i.test(stderr))
+          throw new AnalysisError(
+            "This link has no downloadable video format.",
+            422,
+          );
+        if (!SITE_REFUSAL.test(stderr))
+          throw new AnalysisError(
+            `Video-link download failed (yt-dlp ${version}): ${reason}`,
+            502,
+          );
+        refusals.push(`${strategy.name}: ${reason}`);
+        // The raw lines stay in the worker log; the user gets the plain sentence below.
+        console.warn(
+          `Video import: strategy "${strategy.name}" refused (yt-dlp ${version}): ${reason}`,
+        );
+        // Another client picks other formats, so earlier partial files cannot resume.
+        for (const name of await readdir(directory))
+          if (name.startsWith("download."))
+            await rm(join(directory, name), { force: true });
+      }
     }
+    if (refusals.length === strategies.length)
+      throw new AnalysisError(
+        `The video site refused this download from our servers, so the link could not be imported. Download the video on your device and upload the file instead. (Ref: yt-dlp ${version}, ${refusals.length} ways tried, ${/HTTP Error \d+/.exec(refusals.at(-1)!)?.[0] ?? "refused"}.)`,
+        400,
+      );
   } else {
     await downloadMp4(link.url, source, signal, onProgress, maxBytes);
     try {
