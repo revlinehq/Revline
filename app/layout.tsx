@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { shadcn } from "@clerk/ui/themes";
-import { Geist, Geist_Mono, Inter, Outfit, Space_Grotesk } from "next/font/google";
+import { Geist, Inter, Outfit, Space_Grotesk } from "next/font/google";
 import { Providers } from "@/components/providers";
 import { DARK_ROUTE_PRE_PAINT_SCRIPT, NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import "./globals.css";
@@ -11,24 +11,23 @@ import '@/components/workspace/workspace-pages.css';
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
-// Landing fonts live here so their variables exist after any client navigation (sign-out lands on /).
+// The blog and use-case heading font lives here so its variable exists after any client navigation.
 const outfit = Outfit({ subsets: ["latin"], variable: "--landing-font-head" });
-const geistMono = Geist_Mono({ subsets: ["latin"], variable: "--landing-font-mono" });
 
-const shareTitle = "Revline: the AI video editor that actually does the editing";
-const shareDescription = "From podcasts and YouTube videos to product demos, ads, and social clips. Revline cuts, captions, reframes, and polishes every video for you.";
+const shareTitle = "Revline: get paid to clip";
+const shareDescription = "Revline finds campaigns that pay per view, cuts the clips with AI, and posts them to your accounts.";
 export const metadata: Metadata = {
   metadataBase: new URL("https://tryrevline.com"),
-  title: "Revline AI video editor",
-  description: "Edit your videos in conversation. Make every cut your own.",
+  title: "Revline: the AI video editor for clippers",
+  description: shareDescription,
   // Version the image URL when changing the artwork so preview caches fetch the new card.
-  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v3.png", width: 1200, height: 630, alt: "Revline AI video editor" }] },
-  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v3.png"] },
+  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v4.png", width: 1200, height: 630, alt: "Revline: get paid to clip" }] },
+  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v4.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${spaceGrotesk.variable} ${inter.variable} ${geist.variable} ${outfit.variable} ${geistMono.variable}`}>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${spaceGrotesk.variable} ${inter.variable} ${geist.variable} ${outfit.variable}`}>
       <body className="antialiased" suppressHydrationWarning>
         <script dangerouslySetInnerHTML={{ __html: DARK_ROUTE_PRE_PAINT_SCRIPT }} />
         <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl={NEW_PROJECT_PATH} signUpFallbackRedirectUrl={NEW_PROJECT_PATH} appearance={{ theme: shadcn }}>

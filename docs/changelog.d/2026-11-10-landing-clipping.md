@@ -1,0 +1,1 @@
+- Landing: the public page, pricing and site metadata now sell Revline as the AI editor for paid clipping (campaigns, AI cuts, posting), on one static dark page with a new share card; the animated sections, MCP band and their assets are gone. Why: the product pivoted to clipping for money and the old page described motion design that was removed.

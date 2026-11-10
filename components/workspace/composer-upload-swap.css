@@ -15,9 +15,6 @@
 .composer-video-badge{margin-left:4px;padding:3px 8px;border-radius:7px;background:#ffffff24;font-size:10px;font-weight:600;line-height:1.4}
 @media(prefers-reduced-motion:reduce){.edit-composer .composer-upload-swap,.edit-composer.composer-height-transition{transition:none}}
 
-/* Landing stays light even when the account last used the dark workspace theme. */
-.landing .composer-upload-enabled{--ws-composer-bg:#fff;--ws-text:#292929;--ws-muted:#777;--ws-hover:#f2f2f2}
-
 @supports (field-sizing:content){
   .edit-composer-compact [data-slot=input-group-control]{height:auto;overflow-y:auto}
   .edit-composer-compact [data-slot=input-group-control]:placeholder-shown{field-sizing:fixed;overflow-y:hidden}
