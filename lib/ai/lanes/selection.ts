@@ -1,7 +1,8 @@
 import type { LaneId } from './types';
 
 // "Edit my rough for a reel", "make this a reel", "clean my rough cut": one talking take into a short.
-const REEL_REQUEST = /\b(?:reels?|shorts?|short[- ]form|tiktoks?)\b|\brough\s+(?:cut|edit)\b|\b(?:my|the|this)\s+rough\b/i;
+// "short" alone is an adjective ("a short fade"), so only the nouns count.
+const REEL_REQUEST = /\b(?:reels?|short[- ]form|tiktoks?|youtube shorts?)\b|\brough\s+cut\b|\bmy\s+rough\b/i;
 // Several separate shorts from a long source are clipping, and a film is built from scenes.
 const OTHER_DELIVERABLE = /\b(?:clips|highlights|best (?:moments|parts)|launch|film|motion|animation|recreate|remake)\b/i;
 

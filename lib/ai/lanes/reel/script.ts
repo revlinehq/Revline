@@ -59,6 +59,8 @@ export type SavedScript = {
   target?: RequestedLength;
   estimatedSeconds: number;
   removedTakes: number;
+  /** The retained SOURCE spans the outline was read from; finish rebuilds the same lines from them. */
+  spans?: { start: number; end: number }[];
   /** Shots of the take with no speaker in frame (SOURCE seconds). kept: a wordless shot inside the script that the cut keeps as footage. */
   broll?: { start: number; end: number; kept: boolean }[];
 };
@@ -88,8 +90,9 @@ function common(a: string[], b: string[]) {
 }
 
 /** The take as numbered lines with its opening, closing, chatter and repeated takes. Deterministic. */
-export function scriptOutline(transcript: Pick<Transcript, 'words'>, range?: { start: number; end: number }): ScriptOutline {
-  const evidence = retakeEvidence(transcript.words.filter(word => !range || (word.start + word.end) / 2 > range.start && (word.start + word.end) / 2 < range.end));
+export function scriptOutline(transcript: Pick<Transcript, 'words'>, spans?: { start: number; end: number }[]): ScriptOutline {
+  // Only words still on the timeline: a second plan of an already cut take reads what is left of it.
+  const evidence = retakeEvidence(transcript.words.filter(word => !spans || spans.some(span => wordAnchor(word) >= span.start && wordAnchor(word) < span.end)));
   const words: Word[] = evidence.sorted;
   const stutters = evidence.restarts.filter(cut => { const tokens = cut.detail.split(/\s+/).map(token).filter(Boolean); return tokens.length > 1 || STUTTER_WORDS.has(tokens[0] ?? ''); });
   const removable = [...stutters, ...evidence.retakes].sort((a, b) => a.start - b.start).map(cut => ({ start: cut.start, end: cut.end, detail: cut.detail }));
@@ -151,6 +154,12 @@ const quote = (text: string, count = 7, tail = false) => { const parts = text.sp
 const seconds = (value: number) => `${value.toFixed(1)} s`;
 export const lineLabel = (line: ScriptLine) => `L${line.n} ${quote(line.text)} (${seconds(line.start)})`;
 
+/** Where a line is actually spoken once fillers and abandoned stumbles are gone: what a cut of it keeps. */
+export function lineSpeech(outline: ScriptOutline, line: ScriptLine) {
+  const spoken = outline.words.slice(line.from, line.to + 1).filter(word => { const middle = (word.start + word.end) / 2; return token(word.text) && !FILLERS.has(token(word.text)) && !outline.removable.some(cut => middle >= cut.start && middle < cut.end); });
+  return spoken.length ? { start: spoken[0].start, end: spoken.at(-1)!.end } : { start: line.start, end: line.end };
+}
+
 /** Lines for the model: one short string each, so a long take stays cheap to read. */
 export function outlineLines(outline: ScriptOutline) {
   const long = outline.lines.length > 250;
@@ -162,9 +171,11 @@ export function outlineLines(outline: ScriptOutline) {
 }
 
 /** Source ranges that keep these lines whole: neighbours join, stumbles and abandoned takes inside are left out. */
-export function linesToRanges(outline: ScriptOutline, kept: number[]) {
+export function linesToRanges(outline: ScriptOutline, kept: number[], forced: number[] = []) {
   const { words, lines } = outline, ranges: { start: number; end: number }[] = [];
-  const cuts: CleanupCut[] = outline.removable.map(cut => ({ ...cut, kind: 'restart', confidence: 1 }));
+  // A take the plan forces back (keepLines) is kept whole: the cut that marked it as an earlier take does not apply.
+  const whole = forced.map(n => lines[n - 1]).filter(line => line?.note === 'earlier take');
+  const cuts: CleanupCut[] = outline.removable.filter(cut => !whole.some(line => cut.start < line.end && cut.end > line.start)).map(cut => ({ ...cut, kind: 'restart', confidence: 1 }));
   const sorted = [...new Set(kept)].sort((a, b) => a - b);
   for (let index = 0; index < sorted.length; index++) {
     const first = lines[sorted[index] - 1];
@@ -185,6 +196,8 @@ export function resolveScriptPlan(outline: ScriptOutline, input: ScriptPlanInput
   const inBeat = new Set(input.beats.flatMap(beat => Array.from({ length: beat.to - beat.from + 1 }, (_, i) => beat.from + i)));
   const kept = new Set<number>();
   for (const beat of input.beats) if (beat.keep !== false) for (let n = beat.from; n <= beat.to; n++) if (!line(n).note || forced.has(n)) kept.add(n);
+  // Keeping an earlier take means its later take goes: one line, one take.
+  for (const n of forced) { const again = line(n)?.takeOf; if (line(n)?.note === 'earlier take' && again && kept.has(n)) kept.delete(again); }
   if (input.opening !== undefined) {
     if (!line(input.opening)) problems.push(`opening L${input.opening} is not a line.`);
     else { for (const n of [...kept]) if (n < input.opening) kept.delete(n); kept.add(input.opening); }
@@ -200,7 +213,6 @@ export function resolveScriptPlan(outline: ScriptOutline, input: ScriptPlanInput
     problems.push(`The script ends at ${lineLabel(line(outline.closing))} but this plan stops at ${lineLabel(line(last))}. Keep the payoff and closing line; pass endingReason only when the user asked to end earlier.`);
   const loose = lines.filter(item => !item.note && item.n > first && item.n < last && !inBeat.has(item.n));
   if (loose.length) problems.push(`These script lines are in no beat: ${loose.slice(0, 8).map(item => `L${item.n}`).join(', ')}. Put every script line in a beat; drop a whole beat with keep:false.`);
-  for (const n of order) { const again = line(n).takeOf; if (line(n).note === 'earlier take' && again && kept.has(again)) problems.push(`L${n} and L${again} are takes of the same line. Keep one (L${again} is the last complete take).`); }
   return { problems, kept: order };
 }
 
@@ -235,7 +247,7 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
     .map(clip => ({ start: clip.sourceStart, end: sourceEndOf(clip) }));
   // The take left the timeline: nothing of this script to check.
   if (!spans.length) return [];
-  const outline = scriptOutline(transcript), { words, lines } = outline;
+  const outline = scriptOutline(transcript, script.spans), { words, lines } = outline;
   // A provider word's end can run on through trailing silence, past where the measured cut ends: the word is kept when its onset is.
   const kept = (word: Word) => { const onset = wordAnchor(word); return spans.some(span => onset >= span.start && onset < span.end); };
   const retained = words.filter(kept);

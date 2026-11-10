@@ -33,6 +33,8 @@ export type SpotReading = {
   seen: string[];
   /** The nearest clean frame the edge can move to; undefined when the pause holds none. */
   moveTo?: number;
+  /** No frame of this edge was measured: it is unverified, never clean. */
+  unmeasured?: boolean;
 };
 type SpeechAsset = { _id: string; audioAssetId?: string; duration?: number; analysis?: { transcript?: Transcript } };
 
@@ -81,7 +83,7 @@ export function readSpot(spot: Spot, samples: LookSample[], policy: EyesPolicy, 
   const judged = local.map(sample => ({ time: sample.time, flags: flagsOf(sample) }));
   const bad = (time: number) => (judged.find(item => Math.abs(item.time - time) < .01)?.flags.length ?? 0) > 0;
   const nearest = (time: number) => judged.reduce((best, item) => Math.abs(item.time - time) < Math.abs(best.time - time) ? item : best, judged[0]);
-  if (!judged.length) return { spot, flagged: false, seen: [] };
+  if (!judged.length) return { spot, flagged: false, seen: ['not measured'], unmeasured: true };
   const lasting = (time: number) => (judged.find(item => Math.abs(item.time - time) < .01)?.flags ?? []).some(flag => !TRANSIENT_FLAGS.includes(flag));
   // What the viewer sees: the retained air between the edge and the word, edge frame included.
   const shown = judged.filter(item => spot.side === 'in' ? item.time >= spot.source - .01 && item.time <= spot.word + .01 : item.time >= spot.word - .01 && item.time <= spot.source + .01);
