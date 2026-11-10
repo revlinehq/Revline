@@ -15,6 +15,16 @@ const object = z.record(z.string(), z.unknown());
 const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string() });
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 1000);
 
+/** One field the model can quote: the flags beside it are easy to misread once the draft is published later. */
+const SAVE_STATES: Record<ToolSaveReceipt['status'], string> = {
+  saved: 'saved',
+  staged: 'unsaved draft: saved when finish passes or this request ends, discarded by a user Stop or a conflicting manual edit',
+  unchanged: 'unchanged',
+  queued: 'queued',
+  failed: 'not saved',
+  interrupted: 'not confirmed',
+};
+
 /** Async scopes keep concurrent tool calls from claiming one another's writes. */
 export class ToolSaveReceipts {
   private active = new AsyncLocalStorage<Execution>();
@@ -27,7 +37,7 @@ export class ToolSaveReceipts {
   private stamp(output: unknown, receipt: ToolSaveReceipt) {
     const parsed = object.safeParse(output);
     const result = parsed.success ? parsed.data : { result: output ?? null };
-    return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, saveReceipt: receipt };
+    return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, saveState: SAVE_STATES[receipt.status], saveReceipt: receipt };
   }
 
   publishedResult(output: unknown, revision: number) {
