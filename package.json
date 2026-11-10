@@ -39,6 +39,7 @@
     "deploy:mcp": "npm run mcp:install && npm run typecheck:mcp && wrangler deploy --config cf-workers/mcp/wrangler.jsonc",
     "deploy:mcp:production": "npm run mcp:install && npm run typecheck:mcp && wrangler deploy --config cf-workers/mcp/wrangler.production.jsonc",
     "incidents:issues": "node --import tsx scripts/incident-listener/issues.ts",
+    "incidents:limitations": "node --import tsx scripts/incident-listener/limitations.ts",
     "incidents:listen": "node --import tsx scripts/incident-listener/index.ts",
     "incidents:install": "node --import tsx scripts/incident-listener/install.ts",
     "incidents:fix": "node scripts/fix-save-incidents.mjs",

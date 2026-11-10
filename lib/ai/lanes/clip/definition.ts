@@ -24,6 +24,16 @@ export const definition: LaneDefinition = {
       instructions: 'Full checks for a final export, publish or double-check request: run checkClip on every accepted tab (decode-health is required; add framing only when the user asks for it), fix what it reports, then finishClipping and finish. No getFrames evidence and no automatic normalization.',
     },
   },
+  // Policy slot only: the shared eyes can already measure these flags at each clip's first and last second, but the clip
+  // lane's own detectors (cut mid-action, facecam cropped out, black or blurred frame, UI over the subject) are not built,
+  // so no tool or finish check applies this yet. No gaze rules: gameplay has none.
+  eyes: {
+    spots: 'clip-edges',
+    flags: ['no-face', 'movement'],
+    frames: { firstLook: 3, extraRound: 5, broll: 0, total: 27 },
+    failsFinish: 'none',
+    status: 'slot',
+  },
   instructions:
     'Read clipping. findHighlights returns saved transcript/helpers without whole-video Gemini, measuring missing scene cuts and audio peaks first; if it reports signalsPending, call it again shortly instead of treating the source as empty. Speech-led moments use transcript/voice; gaming/action uses targeted inspectVideo windows only where visual context matters. Silent footage uses bounded adaptive video discovery; stills/cuts alone cannot establish action. Preserve source audio/framing unless requested otherwise. No automatic normalization or heavy QA. Persist planClips, build accepted tabs, then finishClipping and finish directly; cheap data checks run inline. Optional checkClip checks only an explicit concern and reuses unchanged results. Disclose skipped checks and visual coverage.',
 };

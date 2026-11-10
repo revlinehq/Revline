@@ -16,12 +16,19 @@ export function analyzeSpeech(words: SpeechWord[], samples: Float32Array, sample
 }
 
 function cleanupCuts(words: SpeechWord[], edges: WordEdge[], frames: ReturnType<typeof analyzeFrames>, settings: CleanupOptions): CleanupCut[] {
+  const { sorted, restarts, fillers, retakes } = retakeEvidence(words, settings);
+  const cuts = mergeCuts([...fillers, ...restarts, ...retakes, ...acousticCuts(sorted, frames, settings, edges)]);
+  return joinWordless(cuts, sorted);
+}
+
+/** What the words alone show, without audio: repeated-phrase restarts, filler words and re-recorded
+ * sentences (the last take is kept). The cleanup map and the reel script outline share it. */
+export function retakeEvidence(words: SpeechWord[], settings: CleanupOptions = DEFAULT_CLEANUP_OPTIONS) {
   const sorted = [...words].sort((a, b) => a.start - b.start);
   const restarts = restartCuts(sorted, settings), fillers = fillerWordCuts(sorted);
   // Sentences are compared without their stutters and fillers, so two takes of a line match.
   const spoken = sorted.filter(word => ![...restarts, ...fillers].some(cut => word.start >= cut.start - 1e-6 && word.start < cut.end));
-  const cuts = mergeCuts([...fillers, ...restarts, ...retakeCuts(spoken, settings), ...acousticCuts(sorted, frames, settings, edges)]);
-  return joinWordless(cuts, sorted);
+  return { sorted, restarts, fillers, retakes: retakeCuts(spoken, settings) };
 }
 
 /** Snap a kept source range to the measured edges of the words inside it: it starts just before the

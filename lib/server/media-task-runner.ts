@@ -218,7 +218,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       ? { url: asset.previewUrl, size: asset.previewSize!, width: asset.previewWidth!, height: asset.previewHeight!, contentType: 'video/mp4' } : undefined;
     const download = preview ?? { url: sourceAsset.url, size: sourceAsset.size, width: sourceAsset.width, height: sourceAsset.height, contentType: sourceAsset.contentType };
     const audioOnly = ['extract', 'waveform', 'transcribe', 'beats'].includes(task.kind);
-    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout'));
+    const rangeRead = (sourceAsset.kind === 'video' && (task.kind === 'read' && task.read?.mode !== 'track' && task.read?.mode !== 'looks' || task.kind === 'frames' || task.kind === 'derive' || task.kind === 'cutout'));
     const localSource = join(directory, 'source'), sourceUrl = download.url;
     let source = rangeRead ? ownedMediaUrl(download.url, new URL(convexUrl).origin) : localSource;
     const cacheIdentity = mediaSourceCacheIdentity(convexUrl, task.projectId, sourceAsset);

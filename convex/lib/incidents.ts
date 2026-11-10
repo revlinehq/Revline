@@ -2,31 +2,39 @@ import { z } from 'zod';
 import { v, type Infer } from 'convex/values';
 import type { MutationCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
-import { incidentContext, incidentNormalized, incidentText } from '../../lib/incidents';
+import { incidentContext, incidentNormalized, incidentText, isAgentFiled } from '../../lib/incidents';
 
 export const incidentArgs = {
   source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()),
   context: v.any(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()), deployment: v.string(),
+  /** Replaces the message/location identity when the caller defines what makes two reports the same (limitations). */
+  identity: v.optional(v.array(v.string())),
 };
 const incidentInput = v.object(incidentArgs);
 export function incidentDeployment() { return process.env.CONVEX_CLOUD_URL === 'https://different-gnu-398.convex.cloud' ? 'prod' : 'dev'; }
+
+export async function incidentFingerprint(identity: string[]) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(identity)));
+  return `incident-v1-${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+}
 
 export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incidentInput>) {
   const scrub = (text: string) => {
     for (const [key, value] of Object.entries(process.env)) if (/SECRET|TOKEN|KEY|PASSWORD/.test(key) && value && value.length >= 8) text = text.replaceAll(value, '[redacted]');
     return text;
   };
-  const message = incidentText(scrub(input.message));
-  const context = scrub(incidentContext(input.context));
+  const message = incidentText(scrub(input.message), 2000, input.kind === 'agent-limitation');
+  const context = scrub(incidentContext(input.context, input.kind === 'agent-limitation'));
   const diagnostic = z.object({ location: z.string().optional(), toolName: z.string().optional(), taskKind: z.string().optional() }).catch({}).parse(JSON.parse(context));
   const location = diagnostic.location ?? input.stack?.split('\n').find(line => /\bat\b|:\d+:\d+/.test(line)) ?? input.source;
-  const identity = [incidentNormalized(message), incidentNormalized(location), input.kind, diagnostic.toolName ?? diagnostic.taskKind ?? ''];
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(identity)));
-  const fingerprint = `incident-v1-${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
+  const fingerprint = await incidentFingerprint(input.identity ?? [incidentNormalized(message), incidentNormalized(location), input.kind, diagnostic.toolName ?? diagnostic.taskKind ?? '']);
+  // Agent-filed rows are published as issues by their own lease and never reopen or reach the fixer webhook.
+  // A limitation is a feature gap for a person to triage, so it never waits in the fixer's delivery queue.
+  const agentFiled = isAgentFiled(input.kind);
   const existing = await ctx.db.query('incidents').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
   const now = Date.now();
   const sample = { at: now, context, ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.runId ? { runId: incidentText(input.runId, 150) } : {}) };
-  const opens = !existing || (existing.status === 'resolved' && input.kind !== 'agent-report');
+  const opens = !existing || (existing.status === 'resolved' && !agentFiled);
   const priority = (input.kind === 'turn-failure' || input.kind === 'export' || input.kind === 'save-confirmation' ? 1000 : 0) + Math.min(999, (existing?.count ?? 0) + 1);
   const value = {
     source: incidentText(input.source, 100), kind: incidentText(input.kind, 100), message,
@@ -36,10 +44,10 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
     samples: [...(existing?.samples ?? []).slice(-3), sample],
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
-  const id = existing?._id ?? await ctx.db.insert('incidents', { ...value, status: 'open', delivery: 'pending', generation, ...(input.kind === 'agent-report' ? { issueAttempts: 0 } : {}) });
+  const id = existing?._id ?? await ctx.db.insert('incidents', { ...value, status: 'open', delivery: input.kind === 'agent-limitation' ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}) });
   // A new occurrence gives an exhausted issue delivery a fresh budget; issue bodies are bounded now.
-  const issueRetry = input.kind === 'agent-report' && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
+  const issueRetry = agentFiled && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
   if (existing) await ctx.db.patch(id, { ...value, ...issueRetry, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) });
-  if (opens && input.kind !== 'agent-report' && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
+  if (opens && !agentFiled && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
   return id;
 }

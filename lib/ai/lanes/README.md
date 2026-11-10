@@ -22,6 +22,16 @@ History keeps source evidence and edit receipts across workflow changes. Only ob
 
 Reel means one coherent short-form rough cut: transcript/audio first, false starts and accidental repeats removed while preserving full meaning and natural delivery, with targeted visual inspection as needed. Duration follows the message unless specified. New captions share minimal static, transparent-background creation defaults. Existing captions retain their styling. No automatic normalization or decoded-opening/full-film QA is required; structural, changed-range and applicable transcript-sync checks remain real.
 
+## Script understanding and eyes
+
+The reel lane reads a take as a script before cutting: `readScript` (deterministic outline: lines, opening, closing, repeated takes, chatter, b-roll shots) then `planScript` (the model's beats and priorities; saved on the task row as `script`, returns the ranges to cut). `finish` holds the cut to that plan. An app reel request on a raw take refuses the first speech cut until the plan exists; MCP flows without a plan are unchanged.
+
+Eyes are one shared layer in `lib/ai/eyes` (measured face signals from the media worker's `looks` read, flags, a per-task frame budget, strips of about 480 px frames) with a per-lane policy on `LaneDefinition.eyes`: which spots, which flags, how many frames, what fails `finish`.
+
+- `reel` (enforced): speech edges plus the first and last frame; `checkSpots` measures, shows 3 frames per flagged spot, one extra round of 5, 27 per request; `finish` fails on an unreviewed flagged first or last frame and reports the rest. B-roll: shots with no face, one frame each, at most 6.
+- `clip` (slot): policy declared (clip edges; no gaze rules), not applied by any tool or by `finish`. Its own detectors (cut mid-action, facecam cropped out, black or blurred frame, UI over the subject) are not built.
+- `edit`, `motion`, `recreate`: no policy; their getFrames rules are unchanged and do not go through the frame budget.
+
 ## Branch integrations
 
 - `find-highlights` (draft PR #58, commit `c7c8f53`, processor contract 38; not merged or deployed): reserve `findHighlights`, `planClips`, `checkClip`, `finishClipping`. Pass server-owned `EditorToolkitOptions.taskId`. Query `clipping:completionState` with `runId:taskId` and explicit `timelineId` when supplying a draft. Both `required:true` and `passed:true` are necessary; missing or candidates-only manifests fail. Discovery uses PR #58’s required Gemini judgment, with no silent signal-only substitute. The upstream persisted candidate ledger and worker receipts supply found/accepted/tab counts. `mcp-task:<uuid>` is used verbatim as the ledger `runId`, independently of each MCP execution run. Only snapshot worker completion writes check receipts; completion rechecks the current tab fingerprint and rejects an untrusted or stale supplied draft. Preserve PR #58’s deterministic `finalMessage` close-out when resolving the shared `editorTurn` integration. Deploy the merged Convex functions and matching Cloudflare runner together, with a contract-38-capable processor. Live ledger/UI verification remains pending.

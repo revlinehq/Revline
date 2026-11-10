@@ -5,6 +5,7 @@ import { tools as recreateTools } from './recreate/tools';
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [
   'reportIssue',
+  'reportLimitation',
   'listTimelines',
   'createTimeline',
   'openTimeline',
@@ -122,7 +123,7 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
   // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).
   'music': ['markMusicBeats', 'alignCutsToBeat', 'setAudioReactive'],
-  'reel': ['readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
+  'reel': ['readScript', 'planScript', 'checkSpots', 'readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
   // Sound, effect, color and VFX tools for footage edits.
   'footage-editing': [
     'addSoundEffect', 'generateSound', 'editSound', 'matchMusic', 'useStrongestMoment', 'markMusicBeats', 'alignCutsToBeat',

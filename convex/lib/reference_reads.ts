@@ -7,6 +7,7 @@ import type { Id } from '../_generated/dataModel';
 import { internal } from '../_generated/api';
 import type { MotionMap } from '../../lib/inspo-motion/motion-map';
 import { referenceReadResult } from '../schema';
+import type { LookSample } from '../../lib/ai/eyes';
 
 // Reading a source video for an agent: the worker cuts frames into one labeled sheet image the model looks at,
 // follows a boxed object frame by frame, or reads exact pixels of one frame. Times and boxes are SOURCE seconds and pixels.
@@ -118,6 +119,27 @@ export async function runRead(ctx: ActionCtx, ownerId: string, projectId: Id<'pr
     }
     // Say which wait it was: a read that never started was stuck behind other media work, not too big.
     throw new Error(started ? 'Reading frames took too long. Try a shorter window or fewer frames.' : 'This read never started: the media worker stayed busy with other jobs for 9 minutes. Try again shortly; the window and frame count were not the problem.');
+  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+}
+
+/** The shared eyes read on the media worker. Without `strip`: measured face signals at these SOURCE times.
+ * With `strip`: the same frames as strips of that many frames side by side (base64 JPEG each), for the model to look at. */
+export async function runLooksRead(ctx: ActionCtx, ownerId: string, projectId: Id<'projects'>, assetId: string, times: number[], strip?: number, signal?: AbortSignal): Promise<{ samples: LookSample[]; strips: string[] }> {
+  const sorted = strip ? times : [...new Set(times)].sort((a, b) => a - b), work = { mode: 'looks' as const, start: Math.min(...sorted), end: Math.max(...sorted), times: sorted, ...(strip ? { count: strip } : {}) };
+  const read = (result: ReadResult) => ({ samples: (result.looks ?? []) as LookSample[], strips: result.extraImages ?? [] });
+  const cached = await ctx.runAction(internal.frameCache.readResult, { ownerId, projectId, assetId, work });
+  if (cached) return read(cached as ReadResult);
+  const readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, ...work });
+  const deadline = Date.now() + 420_000;
+  try {
+    while (Date.now() < deadline) {
+      if (signal?.aborted) throw new Error('Stopped.');
+      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      if (state.status === 'failed') throwReadFailure(state.error, 'The frames could not be measured');
+      if (state.status === 'completed') return read((state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead, { ownerId, readId }) : state.result) as ReadResult);
+      await new Promise(resolve => setTimeout(resolve, 1500));
+    }
+    throw new Error('Measuring the frames took too long.');
   } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
 }
 
