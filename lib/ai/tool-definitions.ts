@@ -83,6 +83,8 @@ export const EDITOR_TOOL_DEFINITIONS = {
   inspectAssetAnalysis: { effect: 'analysis', mcp: 'exclusive', label: ['Reading footage notes', 'Read footage notes'] },
   closeGaps: { effect: 'timeline', mcp: 'exclusive', label: ['Closing gaps', 'Closed gaps'] },
   retainSourceRanges: { effect: 'timeline', mcp: 'exclusive' },
+  readScript: { effect: 'analysis', mcp: 'exclusive', label: ['Reading your script', 'Read your script'] },
+  planScript: { effect: 'analysis', mcp: 'exclusive', label: ['Planning the cut', 'Planned the cut'] },
   cleanSpeech: { effect: 'timeline', mcp: 'exclusive', label: ['Cleaning up speech', 'Cleaned up speech'] },
   setSplitEdits: { effect: 'timeline', mcp: 'exclusive', label: ['Adding J and L cuts', 'Added J and L cuts'] },
   split: { effect: 'timeline', mcp: 'exclusive', label: ['Splitting clips', 'Split clips'] },

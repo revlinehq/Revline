@@ -190,6 +190,8 @@ export const begin = internalMutation({
     exportConfirmed: v.boolean(),
     /** From requestChecks: a final export/publish or full double-check request. Never set by a tool. */
     checkLevel: v.optional(v.literal('final')),
+    /** From requestChecks: a finished length the request asked for, in seconds. */
+    lengthTarget: v.optional(v.object({ min: v.optional(v.number()), max: v.optional(v.number()) })),
     required: v.boolean(),
     timelineId: v.optional(v.string()),
   },
@@ -237,6 +239,7 @@ export const begin = internalMutation({
       attempts: 0,
       exportConfirmed: args.exportConfirmed,
       ...(args.checkLevel ? { checkLevel: args.checkLevel } : {}),
+      ...(args.lengthTarget ? { lengthTarget: args.lengthTarget } : {}),
       required: args.required,
       initialTabIds: tabsOf(project).map((tab) => tab.id),
       baselines: [
@@ -354,6 +357,26 @@ export const evidence = internalMutation({
     )
       throw new ConvexError('Task not found.');
     await saveEvidence(ctx, row, args.evidence);
+    return null;
+  },
+});
+/** The reel lane's reading of the take as a script (planScript); finish checks the cut against it. */
+export const saveScript = internalMutation({
+  args: { ...taskScope, script: v.any() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await projectIdentity(ctx, args.projectId, args.ownerId);
+    const row = await ctx.db
+      .query('editingLaneTasks')
+      .withIndex('by_task', (q) => q.eq('taskId', args.taskId))
+      .unique();
+    if (
+      !row ||
+      row.ownerId !== args.ownerId ||
+      row.projectId !== args.projectId
+    )
+      throw new ConvexError('Task not found.');
+    await ctx.db.patch(row._id, { script: args.script, ...(args.script?.target ? { lengthTarget: args.script.target } : {}) });
     return null;
   },
 });
