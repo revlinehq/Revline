@@ -17,6 +17,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "postinstall": "node scripts/copy-vendor.mjs && node scripts/install-convex-guard.mjs",
     "convex:dev": "convex dev",
+    "video-import:install": "node scripts/install-video-import.mjs",
     "preworker": "node scripts/copy-vendor.mjs",
     "worker": "node --env-file=.env.local --import tsx scripts/media-worker.ts",
     "preworker:production": "node scripts/copy-vendor.mjs",

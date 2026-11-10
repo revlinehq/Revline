@@ -27,3 +27,15 @@ Distributed exports are disabled on Hobby. When enabled in the verified manifest
 Local development uses `npm run dev:isolated` in an agent worktree. It starts the frontend and local media worker against a scoped development backend. See [isolated development](../docs/isolated-development.md).
 
 Hosted releases use explicit manifests and separate environment files, runtime preflight, authenticated queue verification, and real staging jobs before production promotion. See the [Railway hosting runbook](../docs/railway-worker-migration.md). No release command runs during install or build.
+
+## Video-link imports (yt-dlp)
+
+The image bakes the yt-dlp pinned in `scripts/video-import-requirements.txt`; `npm run video-import:install` installs the same file into `.data/video-import` for local development. Because sites change faster than images are promoted, the processor (`VIDEO_IMPORT_AUTO_UPDATE=1` in the Dockerfile) installs the newest yt-dlp release into its scratch directory at start and once a day, loads it ahead of the baked copy, and keeps the baked copy if that fails. Set `VIDEO_IMPORT_AUTO_UPDATE=0` on the service to stay on the pin. The version in use is logged as `video-importer-ready` and appears in failure messages.
+
+When a site refuses a download (HTTP 403, "Sign in to confirm you're not a bot", no usable format), the importer tries the next strategy instead of repeating the same call: default, IPv4 with single-threaded fragments, then the YouTube clients `web_embedded`, `web_safari` and finally `mweb,tv_simply,android` (360p only). The strategy that worked goes first for the next import on that worker. Worker logs name each refused strategy with yt-dlp's own error line.
+
+If every strategy is refused from the hosting provider's addresses, the remaining options are:
+
+- `VIDEO_IMPORT_PROXY`: a residential or ISP proxy URL passed to yt-dlp as `--proxy`. `railway-workers.mjs stage` forwards it to processor services when it is set; it is unset by default and no proxy service is bundled.
+- A YouTube cookies file (`--cookies`): not wired, since it needs a logged-in account and a file mounted into the container.
+- Downloading in the user's browser or desktop app and uploading the file, which is what the failure message asks for.
