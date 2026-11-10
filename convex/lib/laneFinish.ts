@@ -13,6 +13,7 @@ import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
+import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
@@ -129,6 +130,9 @@ export async function finishLane(
       failures.push(
         `${prefix}Resolve ${summary.overlapCount} same-layer collisions.`,
       );
+    // The length the user asked for is part of the request; a /clip batch has its own per-clip length rules.
+    const lengthFailure = tab.timelineId === timelineId && task.lane !== 'clip' ? requestedLengthFailure(task.requestedLength, summary.duration, tab.timeline.fps) : undefined;
+    if (lengthFailure) failures.push(lengthFailure);
     const newGaps = summary.gaps.filter(
       (gap) =>
         !baseline?.gaps.some(

@@ -190,6 +190,8 @@ export const begin = internalMutation({
     exportConfirmed: v.boolean(),
     /** From requestChecks: a final export/publish or full double-check request. Never set by a tool. */
     checkLevel: v.optional(v.literal('final')),
+    /** From requestChecks: a length the user asked the finished video to have. finish enforces it. */
+    requestedLength: v.optional(v.object({ min: v.optional(v.number()), max: v.optional(v.number()) })),
     required: v.boolean(),
     timelineId: v.optional(v.string()),
   },
@@ -237,6 +239,7 @@ export const begin = internalMutation({
       attempts: 0,
       exportConfirmed: args.exportConfirmed,
       ...(args.checkLevel ? { checkLevel: args.checkLevel } : {}),
+      ...(args.requestedLength ? { requestedLength: args.requestedLength } : {}),
       required: args.required,
       initialTabIds: tabsOf(project).map((tab) => tab.id),
       baselines: [
