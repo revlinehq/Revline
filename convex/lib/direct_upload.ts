@@ -1,4 +1,6 @@
 import { AwsClient } from 'aws4fetch';
+import { ConvexError } from 'convex/values';
+import { uploadPartBytes, uploadPartCount } from '../../lib/storage/upload-parts';
 
 // Direct-to-storage uploads: browsers PUT part bytes straight to R2's S3 endpoint with
 // presigned URLs instead of through the media Worker. Off unless all four settings exist
@@ -11,16 +13,21 @@ const PART_LINK_SECONDS = 3600;
 type DirectUpload = { key: string; uploadId: string };
 export type DirectPart = { partNumber: number; etag: string; size: number };
 
+let cached: { id: string; client: AwsClient; base: string } | null = null;
 function config() {
   const { R2_UPLOAD_ACCESS_KEY_ID: accessKeyId, R2_UPLOAD_SECRET_ACCESS_KEY: secretAccessKey, R2_UPLOAD_ENDPOINT: endpoint, R2_UPLOAD_BUCKET: bucket } = process.env;
   if (!accessKeyId || !secretAccessKey || !endpoint || !bucket) return null;
-  return { client: new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' }), base: `${endpoint.replace(/\/$/, '')}/${bucket}` };
+  // One client per settings, so its derived signing key is reused across a batch of links.
+  const id = [accessKeyId, secretAccessKey, endpoint, bucket].join('\n');
+  if (cached?.id !== id) cached = { id, client: new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' }), base: `${endpoint.replace(/\/$/, '')}/${bucket}` };
+  return cached;
 }
 /** True when this deployment hands out presigned storage links. */
 export const directUploadsEnabled = () => config() !== null;
 function storage() {
   const settings = config();
-  if (!settings) throw new Error('Direct uploads are not configured');
+  // Switched off while this upload was open: the browser starts it again through the Worker.
+  if (!settings) throw new ConvexError('This upload can no longer continue. Add the file again.');
   return settings;
 }
 const objectUrl = (base: string, { key }: { key: string }, query = '') => `${base}/${key.split('/').map(encodeURIComponent).join('/')}${query}`;
@@ -43,10 +50,11 @@ export async function createDirectUpload(key: string, contentType: string) {
   return uploadId;
 }
 
-/** A one-hour URL the browser PUTs one part to; storage answers with the part's ETag header. */
-export async function directPartUrl(upload: DirectUpload, partNumber: number) {
+/** A one-hour URL the browser PUTs one part to; storage answers with the part's ETag header.
+ * The part's exact byte length is part of the signature, so the link accepts nothing else. */
+export async function directPartUrl(upload: DirectUpload, partNumber: number, size: number) {
   const { client, base } = storage();
-  const signed = await client.sign(objectUrl(base, upload, `?partNumber=${partNumber}&${uploadQuery(upload.uploadId)}&X-Amz-Expires=${PART_LINK_SECONDS}`), { method: 'PUT', aws: { signQuery: true } });
+  const signed = await client.sign(objectUrl(base, upload, `?partNumber=${partNumber}&${uploadQuery(upload.uploadId)}&X-Amz-Expires=${PART_LINK_SECONDS}`), { method: 'PUT', headers: { 'Content-Length': String(size) }, aws: { signQuery: true, allHeaders: true } });
   return signed.url;
 }
 export const DIRECT_PART_LINK_MS = PART_LINK_SECONDS * 1000;
@@ -75,24 +83,21 @@ async function head(key: string) {
   const response = await client.fetch(objectUrl(base, { key }), { method: 'HEAD' });
   if (response.status === 404) return null;
   if (!response.ok) return failed('read the file', response);
-  return { size: Number(response.headers.get('Content-Length')), contentType: response.headers.get('Content-Type') ?? undefined };
+  return true;
 }
 
-/** Assembles the listed parts into the object and returns its stored size and type. */
+/** True when the object already exists, as after a completion whose response was lost. */
+export const directObjectExists = async (key: string) => await head(key) !== null;
+
+/** Assembles the listed parts into the object. */
 export async function completeDirectUpload(upload: DirectUpload, parts: { partNumber: number; etag: string }[]) {
   const { client, base } = storage();
-  // A retry after a lost completion response reuses the completed object.
-  const existing = await head(upload.key);
-  if (existing) return existing;
   const body = `<CompleteMultipartUpload>${parts.map(part => `<Part><PartNumber>${part.partNumber}</PartNumber><ETag>&quot;${unquote(part.etag)}&quot;</ETag></Part>`).join('')}</CompleteMultipartUpload>`;
   const response = await client.fetch(objectUrl(base, upload, `?${uploadQuery(upload.uploadId)}`), { method: 'POST', headers: { 'Content-Type': 'application/xml' }, body });
   if (!response.ok) return failed('finish the upload', response);
   // S3 can report a failed completion inside a 200 response.
   const xml = await response.text();
   if (/<Error>/.test(xml)) throw new Error(`Cloud storage could not finish the upload (${tag(xml, 'Code') ?? 'error'}). Please retry.`);
-  const object = await head(upload.key);
-  if (!object) throw new Error('Completed media could not be read');
-  return object;
 }
 
 /** Releases an unfinished upload's parts. An upload that is already gone counts as released. */
@@ -102,17 +107,17 @@ export async function abortDirectUpload(upload: DirectUpload) {
   if (!response.ok && response.status !== 404) return failed('release the upload', response);
 }
 
-const expectedSize = (upload: { size: number; partSize: number }, partNumber: number) => Math.min(upload.partSize, upload.size - (partNumber - 1) * upload.partSize);
+type SizedUpload = DirectUpload & { size: number; partSize: number };
+const rightSize = (upload: SizedUpload, part: DirectPart) => part.partNumber >= 1 && part.partNumber <= uploadPartCount(upload.size, upload.partSize) && part.size === uploadPartBytes(upload.size, upload.partSize, part.partNumber);
 /** The stored parts a resumed upload may skip: right part number, exact size. */
-export async function resumableDirectParts(upload: DirectUpload & { size: number; partSize: number }) {
-  const count = Math.ceil(upload.size / upload.partSize);
-  return (await listDirectParts(upload)).filter(part => part.partNumber >= 1 && part.partNumber <= count && part.size === expectedSize(upload, part.partNumber)).map(({ partNumber, etag }) => ({ partNumber, etag }));
+export async function resumableDirectParts(upload: SizedUpload) {
+  return (await listDirectParts(upload)).filter(part => rightSize(upload, part)).map(({ partNumber, etag }) => ({ partNumber, etag }));
 }
 /** The media Worker no longer sees these bytes, so before completion storage itself must show
  * every part with its exact size and the etag the browser reported. Null when it does not. */
-export async function verifiedDirectParts(upload: DirectUpload & { size: number; partSize: number }, claimed: { partNumber: number; etag: string }[]) {
-  const stored = await listDirectParts(upload), count = Math.ceil(upload.size / upload.partSize);
+export async function verifiedDirectParts(upload: SizedUpload, claimed: { partNumber: number; etag: string }[]) {
+  const stored = await listDirectParts(upload), count = uploadPartCount(upload.size, upload.partSize);
   if (stored.length !== count || claimed.length !== count) return null;
-  const valid = stored.every((part, index) => part.partNumber === index + 1 && part.size === expectedSize(upload, part.partNumber) && unquote(claimed[index].etag) === part.etag && claimed[index].partNumber === part.partNumber);
+  const valid = stored.every((part, index) => part.partNumber === index + 1 && rightSize(upload, part) && claimed[index].partNumber === part.partNumber && unquote(claimed[index].etag) === part.etag);
   return valid ? stored.map(({ partNumber, etag }) => ({ partNumber, etag })) : null;
 }

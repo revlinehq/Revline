@@ -56,7 +56,9 @@ export function uploadPart(url: string, partNumber: number, blob: Blob, onProgre
         // Reading a header the server did not expose logs a browser error; look before asking.
         const headers = request.getAllResponseHeaders(), header = (name: string) => new RegExp(`^${name}:`, 'im').test(headers) ? request.getResponseHeader(name) : null;
         // The media Worker answers with JSON; storage itself answers with an empty body and the part's ETag header.
-        const direct = request.responseText.trim() ? null : header('etag')?.replace(/"/g, '');
+        const empty = !request.responseText.trim(), direct = empty ? header('etag')?.replace(/"/g, '') : null;
+        // Sending the part again cannot help when storage took it but its ETag cannot be read.
+        if (empty && !direct) { reject(new PartFailure('Cloud storage accepted this part but did not let the page read its confirmation. Please contact support.', 'never')); return; }
         const result = direct ? { partNumber, etag: direct } : JSON.parse(request.responseText) as UploadedPart;
         if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error();
         const receipt = header('x-part-receipt');
@@ -198,9 +200,9 @@ export async function uploadMultipart(file: Blob, partSize: number, options: Mul
         // The server refusing the lease (expired, cancelled) is final; so is a refused part.
         if (error instanceof ConvexError || error instanceof PartFailure && error.retry === 'never') throw error;
         links.drop(partNumber);
-        // A new link is tried once for free; a second refusal is not about expiry.
+        // A new link is tried once for free. A second refusal is not about expiry; the stored parts stay for a later resume.
         const refused = error instanceof PartFailure && error.retry === 'new-link';
-        if (refused && relinked) throw error;
+        if (refused && relinked) throw new UploadInterruptedError(`Cloud storage refused this upload. Add the file again to continue from ${announce()}%.`);
         const expired = refused; relinked ||= refused;
         if (!expired) pace.failed();
         const wait = expired ? 0 : Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5)) + Math.random() * 500;

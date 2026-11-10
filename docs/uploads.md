@@ -21,7 +21,7 @@ Measured on a ~500 Mbps+ uplink in headless Chrome (November 9, 2026): 32 MiB pa
 
 With four Convex environment variables set, browser uploads PUT their parts straight to R2's S3 endpoint with presigned links instead of through the media Worker. Without them nothing changes: every upload uses the Worker as above. Uploads from the media worker process, the MCP scripts and the iOS app always use the Worker.
 
-A direct upload lives entirely on the S3 API (`convex/lib/direct_upload.ts`): it is created, listed, completed and aborted there, and its lease carries `direct: true`. The Worker never sees the bytes, so before completing, Convex lists the parts in storage and requires every part to be present with its exact size and the etag the browser reported; resume uses the same list in place of Worker receipts. R2's S3 endpoint speaks HTTP/1.1, so a browser sends at most 6 parts at once there (12 through the Worker).
+A direct upload lives entirely on the S3 API (`convex/lib/direct_upload.ts`): it is created, listed, completed and aborted there, and its lease carries `direct: true`. The Worker never sees the bytes, so each link is signed for its part's exact byte length, and before completing, Convex lists the parts in storage and requires every part to be present with its exact size and the etag the browser reported; resume uses the same list in place of Worker receipts. The finished object is then read back through the Worker, which fails if the S3 settings point at a different bucket. R2's S3 endpoint speaks HTTP/1.1, so a browser sends at most 6 parts at once there (12 through the Worker).
 
 ### What to set
 
@@ -51,8 +51,8 @@ npx convex env set R2_UPLOAD_ENDPOINT https://<account id>.r2.cloudflarestorage.
 npx convex env set R2_UPLOAD_BUCKET revline-editor-media
 ```
 
-Removing any one of them switches new uploads back to the Worker. Uploads already open finish on the transport they started with, so keep the token valid for 24 hours after switching off.
+Removing any one of them switches new uploads back to the Worker. A direct upload that was open at that moment cannot continue: the browser starts that file again through the Worker, and R2 drops the unfinished parts after 7 days. If the token is wrong or revoked while the variables stay set, new uploads fall back to the Worker by themselves.
 
 ### Not yet verified
 
-No R2 S3 credentials exist on the development PC, so this path has not run against R2 and was not benchmarked. The S3 calls were exercised against a local S3-compatible server (presigned PUT, ETag header, part listing, the completion checks, abort). Before turning it on in production, set it up on development, upload a multi-GB file in the editor, and compare its time with the Worker path.
+No R2 S3 credentials exist on the development PC, so this path has not run against R2 and was not benchmarked. The S3 calls were exercised against local S3-compatible servers (presigned PUT, ETag header, part listing, the completion checks, abort). Those servers do not enforce the signed part length, so whether R2 refuses a wrong-sized part at the link is unconfirmed; the completion check refuses it either way. Before turning it on in production, set it up on development, upload a multi-GB file in the editor, and compare its time with the Worker path.
