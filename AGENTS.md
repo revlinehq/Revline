@@ -28,6 +28,8 @@ Agent worktrees start with `npm run dev:isolated` and use `scripts/isolated-mcp.
 
 Public Convex functions called by the iOS app (call sites in `mobile/`, e.g. `projects:list`) keep their arguments and return shape: installed builds cannot be updated by a deploy. Add a new function name for a new shape (`projects:listPage`).
 
+CI enforces this on every pull request with `scripts/compat-check.mjs` (`npm run compat:check`), which also fails a removed or changed table, index or field in `convex/schema.ts` and a new media-processor read mode or task kind that is not listed as gated in `lib/server/processor-capabilities.ts` with its Convex caller guarded by `processorCan`. An intended break needs a reviewed line in `mobile/CONTRACT_CHANGES.md` in the same pull request.
+
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
 The agent that built the change writes its pull request, because it knows what it built:
@@ -47,9 +49,12 @@ The agent that built the change writes its pull request, because it knows what i
   **Risk:** <one line, or "None">
   ```
   Keep **What it is for** and **Why** short and concrete, not a retelling of the conversation. No file-by-file walkthrough, no list of checks you ran, no headings beyond these. Add a Mermaid diagram only when the change rewires how systems talk to each other.
-- An entry in `docs/changelog.md` (newest first, under a `## YYYY-MM-DD` heading): `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
+- A changelog fragment: one new file `docs/changelog.d/<YYYY-MM-DD>-<slug>.md` holding `- <System>: <what changed>. Why: <reason>.`, at most two lines, committed on the branch.
+  Never edit `docs/changelog.md` in a pull request (CI fails it): the release command assembles the fragments into it, so entries never conflict.
 - Before and after screenshots of every page or screen a change touches visibly (web: desktop and phone width; iOS: the Simulator), taken from the running app, never mocked. Do not commit them to your branch: push them to the `pr-assets` branch under `<your-branch>/before/` and `<your-branch>/after/`, and show them in the description as a before | after table per page, linked as `https://github.com/zuraHQ/revline-editor/blob/pr-assets/<path>?raw=true`.
 If you were told not to push, hand the description and the screenshot folders to whoever started you, and they open the draft PR with your text unchanged.
+
+Production is released with one command on the Mac that holds the production credentials, `npm run release:prod` (`--dry-run` prints the plan anywhere; `npm run release:status` shows what is deployed); the whole flow is in `docs/releases.md`.
 
 After the user approves a merge, deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
 

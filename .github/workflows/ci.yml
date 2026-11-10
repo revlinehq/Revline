@@ -15,6 +15,9 @@ jobs:
       NEXT_PUBLIC_CONVEX_URL: https://ci.convex.cloud
     steps:
       - uses: actions/checkout@v4
+        with:
+          # The compatibility check compares this change with origin/main.
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -25,6 +28,19 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: python -m venv .data/scene-detection && .data/scene-detection/bin/pip install -r scripts/scene-detection-requirements.txt
       - run: npm ci
+      # Fails a change that breaks the installed iOS app, the deployed media processor or stored data (docs/releases.md).
+      - name: Compatibility with what is already shipped
+        if: github.event_name == 'pull_request'
+        run: node scripts/compat-check.mjs --base "$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)"
+      # Each pull request adds its own file under docs/changelog.d/, so changelog entries never conflict.
+      - name: Changelog entries are fragments
+        if: github.event_name == 'pull_request'
+        run: |
+          node scripts/changelog.mjs check
+          if git diff --name-only "$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)" HEAD | grep -qx 'docs/changelog.md'; then
+            echo "::error::Do not edit docs/changelog.md in a pull request. Add docs/changelog.d/<YYYY-MM-DD>-<slug>.md with your entry; the release command assembles it (docs/releases.md)."
+            exit 1
+          fi
       - run: npm run agent-runner:install
       - run: npm run typecheck
       - run: npm run typecheck:agent-runner
