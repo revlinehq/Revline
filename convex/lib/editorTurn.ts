@@ -23,7 +23,7 @@ import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
@@ -197,6 +197,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: async event => { costLog.toolsFinished(event); await toolkit.filmDrafts.landed(); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
+          // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
+          timeout: MODEL_SILENCE_LIMITS,
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
