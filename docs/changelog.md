@@ -1,4 +1,5 @@
 ## 2026-11-10
+- Editor agent: calling a real tool that the current step withholds (capability not loaded, full check outside its lane, export without confirmation, tools closed after a passed finish) now returns the next step to take, as MCP already does, instead of the SDK's "Model tried to call unavailable tool" line. Why: each chat message starts with no loaded capabilities, so a follow-up that reuses a tool from the previous turn hit a raw error and, repeated three times, ended the turn.
 - Editor agent: a `finish` refusal that spends no attempt (changed frames not viewed yet) no longer counts toward the three-identical-failures stop. Why: in the edit lane three such refusals ended the turn with "Stopped after the same tool command failed three times" although the result said no attempt was used; MCP agents never hit this rule.
 
 ## 2026-11-09

@@ -1,8 +1,8 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
-import { laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
-import { FULL_CHECK_TOOLS, checkInstructions, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
@@ -14,7 +14,7 @@ import { filmDraftMiddleware } from './filmDraftStream';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { wrapLanguageModel } from "ai";
+import { NoSuchToolError, wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -166,6 +166,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const offset = steps.length;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
+          // A real tool that this step withholds gets the same next step an MCP agent is given, not the SDK's
+          // "unavailable tool" line and a list of ninety names.
+          experimental_repairToolCall: async ({ toolCall, error }) => {
+            if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
+            throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
+          },
           prepareStep: async ({ steps: current, messages }) => {
             const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
             if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
@@ -284,6 +290,15 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** Why a known tool is not callable in this step, and the call that makes it so. */
+function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {
+  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed. Reply to the user now; further edits need a new request.`;
+  if (!state.allowed) return laneToolError(lane, name);
+  if (name === 'exportVideo') return 'Export needs explicit user confirmation in the current request. Ask the user before exporting.';
+  if (FULL_CHECK_TOOLS.has(name)) return fullCheckRefusal(lane, name);
+  return `${name} is not available in this step. Continue with the tools provided.`;
 }
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */
