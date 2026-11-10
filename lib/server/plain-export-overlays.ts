@@ -38,7 +38,8 @@ export async function rasterizeOverlays(directory: string, timeline: Timeline, p
   const clips = missing.map(overlay => plan.overlays[overlay]).map(({ clipId }, index): Clip => {
     const clip = timeline.clips.find(item => item.id === clipId);
     if (!clip) throw new Error('A fast export overlay clip is missing.');
-    return { ...clip, track: 2, start: index * slot / fps, duration: slot / fps };
+    // Captured fully opaque: fades and the basic text entrance are applied per frame by FFmpeg.
+    return { ...clip, track: 2, start: index * slot / fps, duration: slot / fps, animation: undefined, textAnimationTiming: undefined, visualFade: undefined, visualFadeTiming: undefined };
   });
   const white: Clip = { id: 'fast-export-text-matte', kind: 'solid', track: 1, start: 0, duration: missing.length * slot / fps, sourceStart: 0, solidColor: { color: '#ffffff', width: 1, height: 1, x: .5, y: .5, opacity: 1 } };
   const root = join(directory, 'text-raster');
