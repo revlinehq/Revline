@@ -206,8 +206,14 @@ export function unresolvedToolFailureIds(steps: ToolSteps) {
   return new Set(unresolvedEdits(steps).flatMap(([, failure]) => failure.ids));
 }
 
+/** A refusal that says it spent no attempt (finish waiting on frames the agent has not viewed yet) asks for another
+ * step first; it is not the same command failing again. Step limits still bound a turn that never does that step. */
+function withoutFreeRefusals(steps: ToolSteps): ToolSteps {
+  return steps.map(step => ({ content: step.content.filter(value => { const part = record(value); return part.type !== 'tool-result' || outputValue(part.output).attemptRecorded !== false; }) }));
+}
+
 export function hasRepeatedToolFailures(steps: ToolSteps) {
-  return [...unresolvedFailures(steps).values()].some(failure => failure.count >= 3);
+  return [...unresolvedFailures(withoutFreeRefusals(steps)).values()].some(failure => failure.count >= 3);
 }
 
 export type RenderReviewRequirements = {
@@ -295,6 +301,14 @@ export function hasFailedRenderChecks(steps: ToolSteps, requirements?: RenderRev
   return unfinishedRenderChecks(steps, requirements).length > 0;
 }
 
+/** A rejected input's error echoes the whole input before the reason, which pushed the reason (the field and its
+ * limit) past the cut. The input is reported beside it already, so keep the reason. */
+function failureText(error:unknown){
+  const text=String(error);
+  // JSON escapes newlines inside the echoed value, so the first real "\nError message: " starts the reason.
+  return (text.includes('Type validation failed')?text.replace(/: Value: [\s\S]*?\nError message: /,': '):text).slice(0,1000);
+}
+
 /** Server feedback for the same request, not a new user message. Recovery
  * reads the exact existing failures; it never invents another editing goal. */
 export function completionRepairFeedback(steps: ToolSteps, finishReason: string, requirements?: RenderReviewRequirements) {
@@ -304,7 +318,7 @@ export function completionRepairFeedback(steps: ToolSteps, finishReason: string,
     const part=record(value),id=String(part.toolCallId??'');
     if(part.type==='tool-call')calls.set(id,part.input);
     const output=outputValue(part.output);
-    if(ids.has(id)&&part.type!=='tool-call'&&!part.preliminary)failures.push({tool:part.toolName,input:part.input??calls.get(id),error:String(part.error??output.error??record(part.output).value??'Tool did not complete.').slice(0,1000)});
+    if(ids.has(id)&&part.type!=='tool-call'&&!part.preliminary)failures.push({tool:part.toolName,input:part.input??calls.get(id),error:failureText(part.error??output.error??record(part.output).value??'Tool did not complete.')});
   }
   const failedChecks=unfinishedRenderChecks(steps,requirements);
   if(!failures.length&&!failedChecks.length&&!['tool-calls','length'].includes(finishReason))return;

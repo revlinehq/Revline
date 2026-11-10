@@ -22,6 +22,8 @@ const EffortText = ({ value }: { value: EditorReasoningEffort }) => value === 'x
 type EffortSelection = {
   value: EditorReasoningEffort;
   onChange: (value: EditorReasoningEffort) => void;
+  /** Below Ultra the plan's own level is the only choice; the others show what unlocks them. */
+  locked?: boolean;
 };
 
 export function AssistantModelPicker({ value, onChange, disabled, allowedModels, catalogModels = allowedModels, claudeViaMcp = false, restricted = true, modelAccessNeedsSync = false, effort }: {
@@ -40,6 +42,7 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
   const models = EDITOR_MODELS.filter(model => EDITOR_MODEL_CATALOG.some(choice => choice === model.id));
   const locked = (id: ClaudeModelChoice) => restricted ? id !== FREE_EDITOR_MODEL_CHOICE : !allowedModels.includes(id) && !mcpOnly(id);
   const selected = EDITOR_MODELS.find(model => model.id === value);
+  const effortLocked = (choice: EditorReasoningEffort) => !!effort?.locked && choice !== effort.value;
   const effortLabel = effort ? <EffortText value={effort.value}/> : undefined;
   return <div className="assistant-model-picker assistant-combined-model-picker">
     <DropdownMenu>
@@ -66,9 +69,9 @@ export function AssistantModelPicker({ value, onChange, disabled, allowedModels,
             <DropdownMenuSubTrigger className="workspace-menu-item assistant-effort-subtrigger">Reasoning effort<span className="assistant-effort-value">{effortLabel}</span></DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="workspace-menu inspector-select-menu assistant-picker-menu assistant-effort-menu" aria-label="AI reasoning effort options">
               <DropdownMenuRadioGroup value={effort.value} onValueChange={next => {
-                const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice && (!restricted || choice === 'low')) effort.onChange(choice);
+                const choice = EDITOR_REASONING_EFFORTS.find(item => item === next); if (choice && !effortLocked(choice)) effort.onChange(choice);
               }}>
-                {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} disabled={restricted && choice !== 'low'} data-locked={restricted && choice !== 'low'} className="workspace-menu-item inspector-select-option"><EffortText value={choice}/>{restricted && choice !== 'low' && <small><LockKeyhole size={10}/> Paid plan</small>}</DropdownMenuRadioItem>)}
+                {EDITOR_REASONING_EFFORTS.map(choice => <DropdownMenuRadioItem key={choice} value={choice} disabled={effortLocked(choice)} data-locked={effortLocked(choice)} className="workspace-menu-item inspector-select-option"><EffortText value={choice}/>{effortLocked(choice) && <small><LockKeyhole size={10}/> Ultra</small>}</DropdownMenuRadioItem>)}
               </DropdownMenuRadioGroup>
             </DropdownMenuSubContent>
           </DropdownMenuSub>

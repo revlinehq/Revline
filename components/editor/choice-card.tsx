@@ -53,8 +53,9 @@ export function ChoiceCard({ question, choices, onChoose, disabled }: { question
           {choice.logo && <span className="choice-card-logo" style={{ maskImage: `url("${choice.logo}")`, WebkitMaskImage: `url("${choice.logo}")` }} aria-hidden="true" />}
           {choice.audio && <Button type="button" variant="outline" size="icon-sm" aria-label={playing === choice.value ? `Pause ${choice.title}` : `Play ${choice.title}`} onClick={event => { event.preventDefault(); event.stopPropagation(); toggle(choice); }}>{playing === choice.value ? <Pause aria-hidden="true" /> : <Play aria-hidden="true" />}</Button>}
           <FieldContent>
-            <FieldTitle>{choice.title}</FieldTitle>
-            {choice.description && <FieldDescription>{choice.description}</FieldDescription>}
+            {/* Long text is clamped in choice-card.css; the title shows what the clamp hid. */}
+            <FieldTitle title={choice.title}>{choice.title}</FieldTitle>
+            {choice.description && <FieldDescription title={choice.description}>{choice.description}</FieldDescription>}
           </FieldContent>
           <RadioGroupItem value={choice.value} id={`${id}-${choice.value}`} />
         </Field>
