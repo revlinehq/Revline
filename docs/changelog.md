@@ -1,3 +1,6 @@
+## 2026-11-10
+- Editor agent: when a request ends unfinished the chat names what is still open (the failing checks or the steps that did not complete) instead of the model's repair prompt and diagnostic JSON, and exhausted finish checks read as sentences, not a JSON array. Why: users saw "The request is still active. Finish the remaining work before ending…" and `["…","…"]` in the failure card.
+
 ## 2026-11-09
 - Editor agent: tool results carry one `saveState` field ("saved" or "unsaved draft" with when it is saved or discarded), `finish` reports whether the request's edits are saved, at which revision and what Undo restores, and each turn is told the saved revision and that older `staged:true` results are history. Why: after a failed finish the app had saved the draft (the banner was right) but the agent read its old `saved:false, staged:true` results and told the founder nothing was saved.
 - Editor agent: `askUser`, `askBrandKit` and `previewBackgrounds` shorten over-long question, label and description text to the card's budget (300/60/140 characters, cut at a word with an ellipsis) and tell the model what was cut, instead of rejecting the call; the choice card clamps long text. Why: the founder saw the agent say its question failed to send because the option descriptions were too long.

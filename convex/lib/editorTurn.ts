@@ -33,7 +33,7 @@ import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
@@ -180,7 +180,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
-            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,JSON.stringify(failed.failures));
+            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
             return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
@@ -197,7 +197,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         steps.push(...completed);
         if (streamError) throw streamError;
         const terminalLaneFailure=toolkit.laneFailure();
-        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,JSON.stringify(terminalLaneFailure.failures));
+        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
         if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
         // Reuse only server-validated review snapshots of the current visible
@@ -206,7 +206,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const reviewState=!toolkit.recipe().fullTools?{plans:[],validReviews:[]}:toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
         reviewRequirements={...reviewState,revision:editSession.revision};
         const failedLane=toolkit.laneFailure();
-        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,JSON.stringify(failedLane.failures));
+        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,failedLane.failures.join(' '));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
           if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
@@ -221,7 +221,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           if(clipping.required&&clipping.passed&&'finalMessage' in clipping&&clipping.finalMessage)await saveMessage(ctx,chatAgent,{threadId:args.threadId,userId:args.ownerId,promptMessageId:args.promptMessageId,message:{role:'assistant',content:clipping.finalMessage}});
           break;
         }
-        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The task is unfinished after three bounded attempts. ${repairFeedback}`);
+        // repairFeedback is written for the model (instructions and diagnostic JSON); the user gets what is still open.
+        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The request is unfinished after three attempts. ${unfinishedSummary(steps,failedLane&&!failedLane.passed?failedLane.failures:undefined)} Send the request again to continue from the current timeline.`);
       } catch(passError) {
         if(pass===MAX_REPAIR_PASSES||abortSignal.aborted||!repairable(passError))throw passError;
         repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
@@ -284,6 +285,14 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** What is still open when the bounded passes run out, in the user's terms: the failing checks, or the steps that never completed. */
+function unfinishedSummary(steps: readonly { content: readonly unknown[] }[], checkFailures?: readonly string[]) {
+  if (checkFailures?.length) return `The completion check still fails: ${checkFailures.slice(0, 3).join(' ')}`;
+  const ids = unresolvedToolFailureIds(steps);
+  const tools = [...new Set(steps.flatMap(step => step.content.flatMap(value => { const part = value as { type?: string; toolCallId?: string; toolName?: string } | null; return part && part.type !== 'tool-call' && part.toolCallId && ids.has(part.toolCallId) && part.toolName ? [part.toolName] : []; })))];
+  return tools.length ? `These steps did not complete: ${tools.slice(0, 5).join(', ')}.` : 'Some requested steps did not complete.';
 }
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */
