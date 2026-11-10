@@ -11,6 +11,7 @@ import { projectIdentity } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaConfig, mediaUrl, newProjectMediaKey } from './lib/media_storage';
 import { signMediaToken, verifyMediaToken } from '../lib/storage/media-tokens';
+import { looksSwitchedOff } from '../lib/ai/eyes';
 import { frameCacheKey, referenceCacheScope, referenceResultDescriptor, type CacheScope } from '../lib/media-analysis/frame-cache';
 
 const args = { ...mediaTaskCredentials, processorVersion:v.number(), output: v.any() };
@@ -98,6 +99,7 @@ export const referenceLookup = internalQuery({ args: { ownerId: v.string(), proj
   const id = ctx.db.normalizeId('assets', args.assetId), asset = id ? await ctx.db.get(id) : null;
   if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId) throw new ConvexError('That media is not in this project.');
   let work = args.work;
+  if (work.mode === 'looks' && looksSwitchedOff()) return null;
   if (work.mode === 'compare') {
     const snapshot = args.snapshotId ? await ctx.db.get(args.snapshotId) : null;
     if (!snapshot || snapshot.ownerId !== args.ownerId || snapshot.projectId !== args.projectId || snapshot.status !== 'completed' || !snapshot.cacheIdentity) return null;

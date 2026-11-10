@@ -14,9 +14,12 @@ export type CacheScope = { ownerId: string; projectId: string; assetId?: string;
 export const frameCacheKey = (scope: CacheScope, output: unknown) => cacheHash({ version: MEDIA_PROCESSOR_VERSION, ...scope, output });
 
 /** Keep request and worker descriptors identical; never include request IDs or expiring URLs. */
+/** Bump when the looks read changes what it returns. A processor from before the looks read ran an ordinary frame
+ * sheet for it and cached that under the plain key; this marker keeps those entries out of every lookup. */
+export const LOOKS_READ_VERSION = 1;
 export function referenceResultDescriptor(work: Record<string, unknown>) {
   const fields = ['mode', 'comparisonIdentity', 'start', 'end', 'times', 'compareCrop', 'referenceCropKeyframes', 'count', 'fps', 'momentsOnly', 'stillsOnly', 'crop', 'box', 'frameTime', 'backgroundTime', 'points', 'lines', 'color', 'tolerance', 'text', 'categories'];
-  return { kind: 'reference-result', ...Object.fromEntries(fields.filter(key => work[key] !== undefined && !(key === 'momentsOnly' && work[key] === false)).map(key => [key, work[key]])) };
+  return { kind: 'reference-result', ...(work.mode === 'looks' ? { looksVersion: LOOKS_READ_VERSION } : {}), ...Object.fromEntries(fields.filter(key => work[key] !== undefined && !(key === 'momentsOnly' && work[key] === false)).map(key => [key, work[key]])) };
 }
 export const snapshotResultDescriptor = (identity: string, times: number[]) => ({ kind: 'snapshot-result', identity, times });
 export function referenceCacheScope(ownerId: string, projectId: string, asset: { _id: string; r2Key?: string; storageId?: string; size: number; width?: number; height?: number; duration?: number; contentType: string }): CacheScope {
