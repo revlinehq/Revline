@@ -62,13 +62,14 @@ export async function putMediaObject(key: string, bytes: Uint8Array<ArrayBuffer>
 }
 
 export const PREVIEW_VERSION = 1;
-type PreviewSource = { previewR2Key?:string;previewSize?:number;previewWidth?:number;previewHeight?:number;previewFps?:number;previewVersion?:number; _id?:string };
+type PreviewSource = { previewR2Key?:string;previewSize?:number;previewWidth?:number;previewHeight?:number;previewFps?:number;previewVersion?:number; _id?:string; kind?:string };
 export function hasPreview(source:PreviewSource) {
   return source.previewVersion===PREVIEW_VERSION&&!!source.previewR2Key&&Number.isSafeInteger(source.previewSize)&&source.previewSize!>0&&source.previewSize!<=15_000_000_000&&Number.isInteger(source.previewWidth)&&source.previewWidth!>0&&source.previewWidth!<=16384&&Number.isInteger(source.previewHeight)&&source.previewHeight!>0&&source.previewHeight!<=16384&&Number.isFinite(source.previewFps)&&source.previewFps!>0&&source.previewFps!<=240;
 }
 export async function previewUrl(ctx:QueryCtx|MutationCtx|ActionCtx,source:PreviewSource,fresh=false) {
   if(hasPreview(source))return {previewUrl:await mediaUrl(ctx,{r2Key:source.previewR2Key},fresh)};
-  if(!source._id||!('db' in ctx))return {};
+  // Only video gets a playback proxy; audio, images and models have no segments to look up.
+  if(!source._id||!('db' in ctx)||(source.kind!==undefined&&source.kind!=='video'))return {};
   const assetId=ctx.db.normalizeId('assets',source._id);if(!assetId)return {};
   const segments=await ctx.db.query('previewSegments').withIndex('by_asset',q=>q.eq('assetId',assetId)).collect();
   return {previewSegments:await Promise.all(segments.filter(segment=>segment.version===PREVIEW_VERSION).map(async segment=>({start:segment.start,end:segment.end,size:segment.size,url:(await mediaUrl(ctx,{r2Key:segment.r2Key},fresh))!})))};

@@ -56,7 +56,7 @@ export const claim = internalMutation({ args: { ...runArgs, claimId: v.string() 
 }});
 
 /** A bridge request's nonce, once: false when it was already used. It touches only its own nonce, so parallel
- * calls never conflict; the heartbeat clears expired ones. */
+ * calls never conflict; a cron clears expired ones (pruneNonces). */
 export const useNonce = internalMutation({ args: { nonce: v.string() }, returns: v.boolean(), handler: async (ctx, { nonce }) => {
   if (await ctx.db.query('agentRunnerNonces').withIndex('by_nonce', q => q.eq('nonce', nonce)).first()) return false;
   await ctx.db.insert('agentRunnerNonces', { nonce, expiresAt: Date.now() + 2 * RUNNER_REQUEST_WINDOW_MS });
@@ -90,8 +90,15 @@ export const release = internalMutation({ args: runArgs, returns: v.null(), hand
   return null;
 }});
 
+/** Expired bridge and consent nonces. MCP requests add them too, so this cannot depend on an in-app turn's heartbeat. */
+export const pruneNonces = internalMutation({ args: {}, returns: v.null(), handler: async ctx => {
+  const stale = await ctx.db.query('agentRunnerNonces').withIndex('by_expiresAt', q => q.lt('expiresAt', Date.now())).take(500);
+  for (const row of stale) await ctx.db.delete(row._id);
+  if (stale.length === 500) await ctx.scheduler.runAfter(0, internal.agentRunner.pruneNonces, {});
+  return null;
+}});
+
 export const heartbeat = internalMutation({ args: runArgs, returns: v.boolean(), handler: async (ctx, args) => {
-  for (const stale of await ctx.db.query('agentRunnerNonces').withIndex('by_expiresAt', q => q.lt('expiresAt', Date.now())).take(500)) await ctx.db.delete(stale._id);
   const row = await turnRow(ctx, args.runId);
   if (!row) return false;
   await ctx.db.patch(row._id, { seenAt: Date.now() });
