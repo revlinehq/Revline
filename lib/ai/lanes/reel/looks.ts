@@ -96,7 +96,8 @@ export function readSpot(spot: Spot, samples: LookSample[], policy: EyesPolicy, 
   // The clean frame nearest the cut. The reel's last frame may run on to a short natural tail.
   const limit = spot.last ? Math.min(spot.word, spot.source) + NATURAL_TAIL : Infinity, reachable = open.filter(time => time <= limit + .001);
   const clean = !reachable.length ? undefined : spot.last && !flagged ? Math.max(...reachable) : reachable.reduce((best, time) => Math.abs(time - spot.source) < Math.abs(best - spot.source) ? time : best);
-  if (!flagged) return { spot, flagged: false, seen, ...(spot.last && clean !== undefined && clean > spot.source + .1 ? { moveTo: round(clean) } : {}) };
+  // The tail is added once: an ending already past the last word is left where it is.
+  if (!flagged) return { spot, flagged: false, seen, ...(spot.last && spot.source <= spot.word + TAIL && clean !== undefined && clean > spot.source + .1 ? { moveTo: round(clean) } : {}) };
   return { spot, flagged: true, seen, ...(clean !== undefined && Math.abs(clean - spot.source) > .02 ? { moveTo: round(Math.max(spot.from, Math.min(spot.to, clean))) } : {}) };
 }
 
