@@ -15,6 +15,44 @@ flowchart LR
   PR -->|record-pr.ts or monitor recovery| Convex
 ```
 
+## Agent limitations (`reportLimitation`)
+
+A limitation is not a defect. `reportIssue` is for a tool that misbehaves or contradicts its contract; `reportLimitation` is for tools that work as designed but cannot do what the user asked, or when the agent falls back to a workaround with a lesser result (no tool for a requested effect, a missing option, a hard limit on duration, tracks or resolution, an unsupported format or font, a check that forbids the requested structure). The agent calls it once per distinct limitation, continues with the best available approach and tells the user. It is a shared base tool: every lane in the app and over MCP, with or without a task, and its result is never a failed step (a refused or unsaved note returns `recorded: false` and "do not retry").
+
+```mermaid
+flowchart LR
+  Agent[Agent: reportLimitation] --> Row[incidents row, kind agent-limitation]
+  Row -->|same category + tool + limitation| Count[count and latest 4 samples]
+  Row -->|incidents:issues publisher| Issue[Public issue, label limitation, structured fields only]
+  Row -->|incidents:limitations| Triage[Private text for the maintainer]
+```
+
+- **Input:** `request`, `limitation`, `category` (`missing-tool`, `missing-option`, `hard-limit`, `unsupported-media`, `quality-ceiling`, `policy-or-check`, `other`), `impact` (`blocked`, `degraded`, `slower`), and optional `tool`, `workaround`, `wanted`. Over-long text is shortened at a word (request, workaround and wanted 300 characters, limitation 400, tool 100), never rejected; an unknown category becomes `other`, an unknown impact `degraded`, and unknown keys are dropped. A tool written as `functions.addTransition` or `mcp__Revline__addTransition` is stored as `addTransition`.
+- **Storage:** the `incidents` table, kind `agent-limitation`, source `editing-agent`. The fingerprint is `incident-v1-` plus the SHA-256 of `["agent-limitation", category, tool, limitation]`, with tool and limitation scrubbed, lower-cased and reduced to letters and digits (numbers stay: 4K and 8K are different limits). The scrub is the incident one (links, emails, file names, tokens and quoted text removed) except that apostrophes in ordinary words are kept. The same limitation from any user is one row with a rising `count`; each of the latest four samples carries the project, the run, the lane, the model (the client's name over MCP) and the scrubbed text. The row's `deployment` is set by the server.
+- **Limits:** three limitations per run (a chat turn in the app, a task over MCP, the project for an MCP call without a task), counted over a day; the same limitation again in one run is acknowledged and not counted. Per owner 5 a minute and 20 a day, and 60 a minute and 1,000 a day across the deployment, counted apart from defect reports.
+- **Never a fixer job:** limitation rows are excluded from the fixer listener's queue, its claim, the webhook and `--dispatch`. A person decides what to build.
+
+### GitHub
+
+The same publisher files them (`npm run incidents:issues -- --deployment prod --deliver --watch` covers both kinds; each kind has its own cap of 5 new issues an hour and 20 a day). The issue is titled `Agent limitation (<deployment>): <category>: <tool> (<last 8 of fingerprint>)`, gets the `limitation` label when it is created (the publisher creates the label if it is missing; later updates leave labels alone so triage labels survive), and carries the marker `<!-- revline-agent-limitation:<deployment>:<fingerprint> -->`. A repeat rewrites the same issue with the new occurrence count and latest time, exactly as agent reports do.
+
+The repository is public, so the issue holds only what the server controls: category, latest impact, the allow-listed tool name (otherwise `unlisted capability`), occurrences, first and latest times and the fingerprint. What users asked for, the limitation text, the workaround and the wanted capability are model-written and stay in Convex. Read them privately:
+
+```sh
+npm run incidents:limitations -- --deployment prod          # most frequent first
+npm run incidents:limitations -- --deployment prod --json   # the same rows as JSON
+```
+
+It uses the publisher's private config (`~/.revline-incidents/config.json`) and prints to the terminal only. `npm run incidents:issues -- --deployment prod --preview` prints the exact public title and body of each eligible row without writing anything.
+
+### Triage
+
+1. Run `incidents:limitations` and read from the top: `count` is how many runs met the limit, `impact` says whether users were blocked or got a lesser result, `wanted` is the agent's proposed capability.
+2. Decide per issue: build it (link the PR to the issue and close it when merged), fold it into an existing plan (close as duplicate of that issue), or decline (close as not planned and add a line to the lane's skill so the agent stops offering it).
+3. Agents word the same limitation differently, so near-duplicates get separate issues. Close the rarer one as a duplicate; the counts stay in Convex.
+4. A closed issue is still updated when the limitation recurs: a rising count on a closed issue means the fix did not cover it, or the agent was not told about the new capability. Reopen it.
+5. A report that is really a defect (the tool should have worked) is moved by hand: open a normal issue and close the limitation.
+
 ## Install on the PC
 
 Use Node 22+, GitHub CLI signed in with repository access, and the existing T3 Code background service. Add the Revline repository as a T3 project and configure provider instance `codex`. Only the development `.env.local` belongs in this checkout; it must target `majestic-alpaca-541`.
