@@ -1,5 +1,6 @@
 import { DEFAULT_COLOR_GRADE } from './visual-effects';
 import { DEFAULT_OUTLINE } from './clip-outline';
+import { DEFAULT_SOLID_COLOR } from './clip-effects';
 import { deriveTrackCounts, dimensions, layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Clip, type Timeline } from './types';
 
 /** One-shot looks built from a clip and its transparent cut-out: the original stays
@@ -10,7 +11,7 @@ export type CutoutEffect = { kind: CutoutEffectKind; text?: string; color?: stri
 
 export const CUTOUT_EFFECT_INFO: Record<CutoutEffectKind, { label: string; description: string; target: 'person' | 'object' }> = {
   'text-behind': { label: 'Text behind you', description: 'A big title between your background and you.', target: 'person' },
-  backdrop: { label: 'Visuals behind you', description: 'Replaces your background with an animated gradient scene.', target: 'person' },
+  backdrop: { label: 'Color behind you', description: 'Replaces your background with a solid color; change the color or put other footage on that layer.', target: 'person' },
   outline: { label: 'Outline glow', description: 'A neon stroke and glow that follows your silhouette.', target: 'person' },
   'color-pop': { label: 'Colour pop', description: 'Background in black and white, you stay in colour.', target: 'person' },
   spotlight: { label: 'Spotlight object', description: 'Dims the background and keeps the salient foreground bright.', target: 'object' },
@@ -57,10 +58,10 @@ export function applyCutoutEffect(input: Timeline, clipId: string, cutoutAssetId
       return withClips(opened, clips => [...clips, title, copy(track + 2)]);
     }
     case 'backdrop': {
-      // The clip itself becomes the cut-out (keeping its linked audio); the scene fills its old row.
+      // The clip itself becomes the cut-out (keeping its linked audio); a solid color fills its old row.
       const opened = openLayersAbove(timeline, track, 1);
-      const scene: Clip = { id: newId(), kind: 'scene', track, ...timing, scene: { title: 'Gradient backdrop', code: BACKDROP_SCENE } };
-      return withClips(opened, clips => [...clips.map(item => item.id === clip.id ? { ...item, assetId: cutoutAssetId, track: track + 1 } : item), scene]);
+      const backdrop: Clip = { id: newId(), kind: 'solid', track, ...timing, solidColor: { ...DEFAULT_SOLID_COLOR, color: effect.color ?? '#0B0B14' } };
+      return withClips(opened, clips => [...clips.map(item => item.id === clip.id ? { ...item, assetId: cutoutAssetId, track: track + 1 } : item), backdrop]);
     }
     case 'outline':
       return withClips(openLayersAbove(timeline, track, 1), clips => [...clips, copy(track + 1, { outline: { ...DEFAULT_OUTLINE, color: effect.color ?? DEFAULT_OUTLINE.color } })]);
@@ -72,27 +73,3 @@ export function applyCutoutEffect(input: Timeline, clipId: string, cutoutAssetId
       return withClips(openLayersAbove(timeline, track, 1), clips => [...clips, copy(track + 1, { softBlur: { enabled: true, amount: 28 } })]);
   }
 }
-
-/** Slow drifting colour fields; cheap radial gradients rather than CSS blur filters. */
-const BACKDROP_SCENE = `const FIELDS = [
-  ['#ff4d8d', 0.2, 0.25, 0.8, 3.1, 2.6],
-  ['#5b6cff', 0.8, 0.3, 0.9, 2.5, 3.4],
-  ['#22d3ee', 0.35, 0.8, 0.85, 3.7, 2.3],
-  ['#ffb347', 0.85, 0.85, 0.7, 2.8, 3.0],
-] as const;
-
-export default function scene({ root, tl, width, height }) {
-  const size = Math.max(width, height);
-  const stage = document.createElement('div');
-  stage.style.cssText = 'position:absolute;inset:0;background:#0b0b14;overflow:hidden';
-  root.appendChild(stage);
-  for (const [color, x, y, radius, driftX, driftY] of FIELDS) {
-    const diameter = size * radius;
-    const field = document.createElement('div');
-    field.style.cssText = \`position:absolute;left:\${width * x - diameter / 2}px;top:\${height * y - diameter / 2}px;width:\${diameter}px;height:\${diameter}px;border-radius:50%;background:radial-gradient(circle, \${color} 0%, transparent 65%);opacity:0.85\`;
-    stage.appendChild(field);
-    tl.fromTo(field, { x: -0.12 * width }, { x: 0.12 * width, duration: driftX, ease: 'sine.inOut', repeat: -1, yoyo: true }, 0)
-      .fromTo(field, { y: 0.1 * height }, { y: -0.1 * height, duration: driftY, ease: 'sine.inOut', repeat: -1, yoyo: true }, 0);
-  }
-}
-`;

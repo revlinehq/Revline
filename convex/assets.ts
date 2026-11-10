@@ -26,6 +26,7 @@ import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { stockAudio } from '../lib/editor/stock-audio';
+import { readHighlights } from '../lib/media-analysis/highlights';
 import { signMediaToken } from '../lib/storage/media-tokens';
 
 /** Public playback is restricted to immutable CC0 catalog IDs, never arbitrary stored keys. */
@@ -196,6 +197,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     if (energy.step !== MUSIC_ENERGY_STEP || count > MAX_MUSIC_ENERGY_SECONDS / MUSIC_ENERGY_STEP + 1 || energy.low.length !== count || energy.onsets.length !== count || (count - 1) * energy.step > duration + .5 || [...energy.loudness, ...energy.low].some(value => !Number.isFinite(value) || value < -120 || value > 20) || energy.onsets.some(value => !Number.isInteger(value) || value < 0 || value > 100)) throw new ConvexError('Invalid music energy');
   }
   if (changes.reference) throw new ConvexError('Reference breakdowns are no longer supported');
+  if(changes.highlights){const tracks=readHighlights(changes.highlights);if(!tracks||Math.abs(tracks.duration-duration)>.5)throw new ConvexError('Invalid highlight signal tracks.');}
   const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
   if (serializedBytes(compactAnalysis(analysis)) > 900_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();

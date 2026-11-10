@@ -64,7 +64,7 @@ async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId:
 /** Store the open tab with as much undo history as fits one document. */
 async function stashActive(ctx: MutationCtx, project: Doc<'projects'>) {
   const timeline = (currentTimeline(project)), timelineId = activeTabOf(project);
-  const history = await Promise.all((project.history ?? []).map(item => item));
+  const history = [...project.history ?? []];
   while (history.length && serializedBytes({ timeline, history }) > STASHED_BYTES) history.shift();
   const existing = await stashedRow(ctx, project._id, timelineId), stored = await historyRow(ctx, project._id, timelineId);
   const row = { projectId: project._id, ownerId: project.ownerId, timelineId, timeline };
@@ -78,7 +78,7 @@ async function openTab(ctx: MutationCtx, project: Doc<'projects'>, tabs: Tab[], 
   const assets = new Set((await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', project.ownerId).eq('projectId', project._id)).take(400)).map(asset => String(asset._id)));
   const present = (item: Timeline) => ({ ...item, clips: item.clips.filter(clip => !clip.assetId || assets.has(clip.assetId)) });
   const opened = present(timeline);
-  const restoredHistory = await Promise.all(history.map(item => item));
+  const restoredHistory = history;
   await writeProject(ctx, project._id, { timeline: opened, aspectRatio: opened.aspectRatio, history: restoredHistory.map(present), revision: (project.revision ?? 0) + (preserveRevision ? 0 : 1), timelineTabs: tabs, activeTimelineId: timelineId, updatedAt: Date.now() });
 }
 

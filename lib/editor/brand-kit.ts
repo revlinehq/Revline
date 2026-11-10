@@ -1,4 +1,3 @@
-import { bytesToBase64 } from '../encoding';
 /** A user's saved brand: what a launch film looks like (colors, fonts, logo) and what it says (context). */
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';

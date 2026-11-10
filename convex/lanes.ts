@@ -278,7 +278,7 @@ export const switchLane = internalMutation({
       throw new ConvexError('Start a task first.');
     if (row.laneChosen === false && !args.taskType)
       throw new ConvexError('Choose taskType edit or question with the lane.');
-    if (row.lockedLane && args.lane !== row.lockedLane)
+    if (row.lockedLane && isLane(row.lockedLane) && args.lane !== row.lockedLane)
       throw new ConvexError(
         `This task was explicitly selected for the ${row.lockedLane} lane. Start a new user request to change the work; missing tools are not a lane change.`,
       );

@@ -14,7 +14,7 @@ import {laneChecks, taskCheckLevel} from '../lib/ai/lanes/checks';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
 const mutations = new Set([
-  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup', 'aiCosts:record',
+  'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',
   'assistant:beginEditing', 'assistant:previewDraft', 'assistant:requestAnalysis', 'assistant:clearAnalysis',
   'assistant:attachRunStockAudio', 'assistant:reserveAudioRequest', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',

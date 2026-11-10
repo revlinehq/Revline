@@ -12,7 +12,6 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 const TURN_FUNCTIONS = new Set([
   'lanes:loadCapability','lanes:requireFinish','lanes:forRun','lanes:begin','lanes:task','lanes:switchLane','lanes:baseline','lanes:evidence','lanes:saveScript','lanes:validate','lanes:timelines','lanes:recordFinish',
   'clipping:begin', 'clipping:review', 'clipping:prepareCheck', 'clipping:checkTranscript', 'clipping:selectChecks', 'clipping:reserveVisual', 'clipping:recordVisual', 'clipping:completionState',
-  'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
   'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportLimitation', 'incidents:reportRunner',

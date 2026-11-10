@@ -75,9 +75,8 @@ export async function hydrateProject(ctx:Context,project:Doc<'projects'>,include
   const payload=await runPayload(ctx,projectId);
   const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT):[];
   // Legacy fields support rollout and old saved fixtures until their next write.
-  const restore=(timeline:Timeline)=>timeline;
-  const history=includeHistory?await Promise.all((project.history??revisions.reverse().map(row=>row.timeline)).map(restore)):undefined;
-  return {...project,...aiFields(run??{}),...aiFields(payload??{}),...aiFields(project),timeline:project.timeline&&await restore(project.timeline),history};
+  const history=includeHistory?project.history??revisions.reverse().map(row=>row.timeline):undefined;
+  return {...project,...aiFields(run??{}),...aiFields(payload??{}),...aiFields(project),timeline:project.timeline,history};
 }
 /** Undo snapshots are up to 10 full timelines; this small row lists them (id, fingerprint, size) so
  * writes and the editor's subscription never re-read every snapshot. */

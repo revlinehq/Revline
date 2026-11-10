@@ -265,8 +265,6 @@ export const update = mutation({ args: { projectId: v.id("projects"), title: v.o
 export const saveTimeline = mutation({ args: { projectId: v.id("projects"), timeline: timelineValidator, baseTimeline: v.optional(timelineValidator), undoTo: v.optional(timelineValidator), undoHistoryKeys: v.optional(v.array(v.string())), undoTargetKey: v.optional(v.string()), expectedRevision: v.number() }, returns: v.object({ revision: v.number(), timeline: timelineValidator }), handler: async (ctx, args) => {
   // commitTimeline reads stored history itself; skip hydrating it here.
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
-  // Editors send full scene code; any scene still referencing stored code by hash gets it restored.
-  args = { ...args, timeline: args.timeline, ...(args.baseTimeline ? { baseTimeline: args.baseTimeline } : {}), ...(args.undoTo ? { undoTo: args.undoTo } : {}) };
   let timeline = args.timeline;
   let undoTo = args.undoTo, undoTargetKey = args.undoTargetKey;
   let expectedRevision = args.expectedRevision;
