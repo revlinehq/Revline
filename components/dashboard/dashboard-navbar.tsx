@@ -3,7 +3,7 @@
 import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { ArrowLeft, Bell } from 'lucide-react';
+import { Bell, ChevronLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { SidebarTrigger } from '@/components/ui/sidebar';
@@ -31,7 +31,7 @@ export function DashboardNavbar({ title, back, children, actions }: { title?: st
   const name = title ?? activeDashboardItem(pathname)?.label ?? 'Revline';
   return <header className="dash-navbar">
     <SidebarTrigger className="dash-navbar-menu" aria-label="Open the menu" />
-    {back ? <Button asChild variant="soft" size="sm"><Link href={back.href}><ArrowLeft aria-hidden="true" />{back.label ?? 'Back'}</Link></Button> : <span className="dash-navbar-title">{name}</span>}
+    {back ? <Button asChild variant="soft" className="dash-navbar-back"><Link href={back.href}><ChevronLeft aria-hidden="true" />{back.label ?? 'Back'}</Link></Button> : <span className="dash-navbar-title">{name}</span>}
     {children}
     <div className="dash-navbar-actions">{actions}<NotificationsBell /><WorkspaceAccountMenu shell /></div>
   </header>;

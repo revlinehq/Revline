@@ -312,6 +312,35 @@ export const stats = query({
   },
 });
 
+/**
+ * Estimated earnings: each published post's views x the rate its campaign pays on that platform, summed per
+ * campaign. An estimate only: Content Rewards sets the real payout (minimums, caps and approval are not applied).
+ * Posts without a campaign add nothing; a platform the campaign states no rate for counts its views at $0.
+ */
+export const earnings = query({
+  args: {},
+  returns: v.object({ estimatedCents: v.number(), campaigns: v.array(v.object({
+    campaignId: v.id('campaigns'), name: v.string(), imageUrl: v.optional(v.string()), ended: v.boolean(), posts: v.number(), views: v.number(), estimatedCents: v.number(),
+  })) }),
+  handler: async ctx => {
+    const ownerId = await requireOwner(ctx);
+    const rows = await ctx.db.query('postingPosts').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', 'published')).order('desc').take(2000);
+    const found = new Map<string, Doc<'campaigns'> | null>(), sums = new Map<Id<'campaigns'>, { campaign: Doc<'campaigns'>; posts: number; views: number; estimatedCents: number }>();
+    for (const row of rows) {
+      if (!row.campaignId) continue;
+      if (!found.has(row.campaignId)) { const id = ctx.db.normalizeId('campaigns', row.campaignId); found.set(row.campaignId, id ? await ctx.db.get(id) : null); }
+      const campaign = found.get(row.campaignId);
+      if (!campaign) continue;
+      const sum = sums.get(campaign._id) ?? { campaign, posts: 0, views: 0, estimatedCents: 0 };
+      sums.set(campaign._id, sum);
+      const rateCents = campaign.payouts.find(payout => payout.platform === row.platform)?.rateCents ?? 0;
+      sum.posts += 1; sum.views += row.views ?? 0; sum.estimatedCents += (row.views ?? 0) * rateCents / 1000;
+    }
+    const campaigns = [...sums].map(([campaignId, { campaign, ...sum }]) => ({ campaignId, name: campaign.name, ...(campaign.imageUrl ? { imageUrl: campaign.imageUrl } : {}), ended: campaign.ended, ...sum, estimatedCents: Math.round(sum.estimatedCents) }));
+    return { estimatedCents: campaigns.reduce((total, campaign) => total + campaign.estimatedCents, 0), campaigns };
+  },
+});
+
 // ---------------------------------------------------------------- scheduler state machine
 
 /**

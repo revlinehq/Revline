@@ -1,10 +1,8 @@
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
+import { CampaignsPage } from '@/components/campaigns/campaigns-page';
 
 export const metadata = { title: 'Campaigns · Revline' };
 
-export default function CampaignsRoute() {
-  return <div className="dash-page">
-    <DashboardNavbar title="Campaigns" />
-    <main className="dash-content"><div className="dash-empty"><h2>No campaigns yet</h2><p>Campaigns you can clip for will show here.</p></div></main>
-  </div>;
+export default async function CampaignsRoute({ searchParams }: { searchParams: Promise<{ view?: string }> }) {
+  const { view } = await searchParams;
+  return <CampaignsPage view={view === 'mine' ? 'mine' : 'all'} />;
 }
