@@ -1,0 +1,1 @@
+- Editor: the workspace takes the clipper look (dark neutral surfaces, one blue accent, soft pill buttons), the media panel is two tabs (Media, Effects), the campaign chip sits beside the project name, and Share is gone from the editor (existing shared links still open). Why: the founder's approved editor redesign for clippers.

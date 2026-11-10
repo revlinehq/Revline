@@ -1,0 +1,40 @@
+/* The clipper editor's chrome: the look shared with the dashboard (page #111111, card #1B1B1B, nested #202020,
+   1px borders of white at 5%, borderless soft pills #2A2A2A, one accent #3960E8). Static: no transitions. */
+html[data-workspace-theme=dark] .editor-app{--ed-bg:#111111;--ed-panel:#111111;--ed-surface:#1b1b1b;--ed-surface-2:#202020;--ed-border:#ffffff0d;--ed-pill:#2a2a2a;--ed-pill-hover:#333333;--ed-accent:#3960e8;--revline-accent:#3960e8;--revline-primary-background:#3960e8}
+
+/* Top bar: back arrow, project name, campaign chip, saved mark; quiet actions at the right. */
+html[data-workspace-theme=dark] .editor-app header.workspace-nav{height:44px;gap:6px;padding:0 12px 0 10px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav [data-slot=button]{transition:none}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav :is([data-slot=button],a):focus-visible{outline:none;box-shadow:none}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]{width:28px;height:28px;border-radius:999px;color:var(--ed-text)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]:hover{background:var(--ed-pill)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger[data-slot=button]{height:28px;padding:0 8px;border-radius:999px;font-size:13px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger:is(:hover,[data-state=open]){background:var(--ed-pill)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save{margin-right:8px;font-size:12px;color:var(--ed-text-3)}
+/* Saving and Saved share one place beside the name, at every width wider than a phone. */
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save[data-editor]{order:-1;margin:0 auto 0 6px}
+@media(min-width:901px){html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save[data-editor]{display:flex}}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-actions{flex:1;justify-content:flex-end;gap:6px;min-width:0}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history{margin-right:8px;padding-right:10px;border-right:1px solid #ffffff14}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]{border-radius:999px}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]:hover:not(:disabled){background:var(--ed-pill);color:var(--ed-text)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-export[data-slot=button]{height:28px;padding:0 12px;gap:6px;border:0;border-radius:999px;background:var(--ed-pill);color:var(--ed-text);font-size:13px;font-weight:500;box-shadow:none}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-export[data-slot=button]:hover:not(:disabled){background:var(--ed-pill-hover)}
+/* The campaign chip beside the project name. */
+.project-campaign-chip{flex:0 1 auto}
+html[data-workspace-theme=dark] .project-campaign-trigger[data-slot=button]{height:28px;max-width:320px;padding:0 10px;gap:6px;border:0;background:#1b1b1b;color:#ededed;font-size:13px;font-weight:400;box-shadow:none;transition:none}
+html[data-workspace-theme=dark] .project-campaign-trigger[data-slot=button]:is(:hover,[data-state=open]){background:#2a2a2a}
+.project-campaign-trigger[data-slot=button] svg{flex:none;width:13px;height:13px;color:#969696}
+
+/* Media panel: two tabs as one segmented control, then the tab's content. */
+html[data-workspace-theme=dark] .conversation-editor .preview-inspector .inspector-media-content,html[data-workspace-theme=dark] .preview-inspector-sheet .inspector-media-content{padding:14px 12px}
+html[data-workspace-theme=dark] .preview-inspector .footage-content-library button.source-import-files{height:32px;border:0;border-radius:999px;background:#2a2a2a;color:#ededed;font-size:13px;transition:none}
+html[data-workspace-theme=dark] .preview-inspector .footage-content-library button.source-import-files:hover:not(:disabled){background:#333}
+.preview-inspector-sheet .mobile-inspector-close{position:absolute;top:8px;right:8px;z-index:2;width:44px;height:44px}
+/* Without tabs (the demo), the media list starts below the close button. */
+html[data-workspace-theme=dark] .preview-inspector-sheet .preview-inspector>.inspector-content.inspector-media-content{padding-top:56px}
+
+/* Timeline: a white playhead, as in the design; clips keep their own colours. */
+html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .playhead{background:#fff}
+html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .timeline-playhead-cap{color:#fff}
+html[data-workspace-theme=dark] .preview-inspector-sheet{--revline-accent:#3960e8}

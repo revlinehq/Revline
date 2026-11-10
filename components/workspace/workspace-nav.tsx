@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { useConvexAuth, usePaginatedQuery, useQuery } from 'convex/react';
-import { Check, ChevronDown, CircleAlert, Copy, Download, Film, History, Link2, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronLeft, CircleAlert, Copy, Download, Film, History, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -84,9 +84,8 @@ export interface WorkspaceNavProps {
   onRedo?: () => void;
   onFootage?: () => void;
   onExport?: () => void;
-  /** Opens the share dialog: a public link to the timeline, with a preview card. */
-  onShare?: () => void;
-  shareDisabled?: boolean;
+  /** The editor's bar: a back arrow to this page instead of the logo, and a "Saved" mark once changes are stored. */
+  backHref?: string;
   exportDisabled?: boolean;
   /** Explains a disabled export or its limit before the dialog opens. */
   exportHint?: string;
@@ -95,7 +94,7 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -137,8 +136,8 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
     finally { startingWorkspace.current = false; }
   }
   return <><header className="workspace-nav">
-    <Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
-    <span className="workspace-nav-divider" aria-hidden="true" />
+    {backHref ? <Button asChild variant="ghost" size="icon-sm" className="workspace-nav-back"><Link href={backHref} onClick={backHref === NEW_PROJECT_PATH ? newWorkspace : undefined} aria-label="Back to AI Editor"><ChevronLeft size={18} /></Link></Button> : <><Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <span className="workspace-nav-divider" aria-hidden="true" /></>}
     {settingsPage ? <Breadcrumb className="workspace-breadcrumb"><BreadcrumbList><BreadcrumbItem><BreadcrumbLink asChild><Link href="/chats">Workspace</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>{title}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb> : <>
     <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><Button ref={historyTrigger} variant="ghost" size="md" className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
@@ -155,12 +154,12 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
     </DropdownMenu></>}
     {editorControls}
     <div className="workspace-nav-actions">
-      {saving && <span className="workspace-nav-save" role="status"><LoaderCircle size={13} className="animate-spin" />Saving…</span>}
+      {saving && <span className="workspace-nav-save" data-editor={backHref ? '' : undefined} role="status"><LoaderCircle size={13} className="animate-spin" />Saving…</span>}
+      {backHref && !demo && saving === false && !saveFailed && <span className="workspace-nav-save" data-editor="" role="status"><Check size={13} />Saved</span>}
       {saveFailed && onRetrySave && <Button variant="outline" size="md" type="button" className="workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></Button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><Button variant="ghost" size="icon-sm" aria-label="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></Button></div>}
       {onFootage && <Button variant="outline" size="md" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></Button>}
-      {onShare && !demo && <Button variant="outline" size="md" className="workspace-nav-share" onClick={onShare} disabled={shareDisabled} aria-description={shareDisabled ? 'Add a clip to share' : 'Share a link to this timeline'}><Link2 size={14} /><span>Share</span></Button>}
-      {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>Export<Download size={13} /></Button></span>}
+      {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" variant={backHref ? 'secondary' : 'default'} className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>{backHref && <Download size={14} />}Export{!backHref && <Download size={13} />}</Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
       <WorkspaceAccountMenu active={active} error={accountError} />
