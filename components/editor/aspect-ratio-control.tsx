@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronDown, RectangleHorizontal } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -19,14 +19,13 @@ const FORMATS: { value: AspectRatio; ratio: string; label: string }[] = ([
 ] as const).map(format => ({ ...format, ratio: aspectRatioLabel(format.value) }));
 const SAFE_AREA_CHOICES: { value: SafeAreaPlatform | 'off'; label: string }[] = [{ value: 'off', label: 'Off' }, { value: 'tiktok', label: 'TikTok' }, { value: 'instagram', label: 'Reels' }];
 
-export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange, appearance = 'preview', disabled = false }: { appearance?: 'preview' | 'composer'; disabled?: boolean; value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
+export function AspectRatioControl({ value, onChange, safeArea = null, onSafeAreaChange, disabled = false }: { disabled?: boolean; value: AspectRatio; onChange: (value: AspectRatio) => void; safeArea?: SafeAreaPlatform | null; onSafeAreaChange?: (value: SafeAreaPlatform | null) => void }) {
   const ratio = aspectRatioLabel(value);
 
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <Button type="button" variant="ghost" disabled={disabled} className={`aspect-ratio-trigger focus-visible:ring-0${appearance === 'composer' ? ' composer-header-chip' : ''}`} aria-label={`Aspect ratio: ${ratio}`}>
-        {appearance === 'composer' && <RectangleHorizontal size={12} aria-hidden="true" />}
-        <span className="aspect-ratio-value">{appearance === 'composer' ? `Aspect ratio · ${ratio}` : ratio}</span>
+      <Button type="button" variant="ghost" disabled={disabled} className="aspect-ratio-trigger focus-visible:ring-0" aria-label={`Aspect ratio: ${ratio}`}>
+        <span className="aspect-ratio-value">{ratio}</span>
         <ChevronDown size={12} aria-hidden="true" />
       </Button>
     </DropdownMenuTrigger>
