@@ -18,7 +18,11 @@ import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
 import { visualHits } from '../media-analysis/sound';
 import { measureTimelineSound } from './sound-check';
+import { forEachLimited } from './run-limited';
 
+/** Frames of footage this close together (timeline seconds) are cut from one stretch of source: re-encoding the gap
+ * costs less than a second stretch with its own one-second lead-in. */
+const FRAME_GROUP_GAP=2;
 /** A frame inside a transition needs both clips around its cut: the outgoing one ends exactly at the cut, so a
  * window at or after it would leave that clip's media undownloaded and undecoded. Widen by one frame each side of
  * the cut (both sources are sampled at most there), so the window stays a few frames long. */
@@ -66,12 +70,25 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||[...timeline.clips].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
   const range=snapshot.pacing??snapshot.sound;
   const windows=contactSheet?[{start:0,end:last+frame}]:range?[withTransitions(timeline,Math.max(0,range.start-.5),Math.min(last+frame,range.end+.5))]:times.map(time=>withTransitions(timeline,Math.max(0,Math.min(time,last)),Math.min(time,last)+frame));
-  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,[],windows);
-  // Listening to a range needs only its decoded audio, not a page.
-  if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
-  const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
   const resolution=snapshot.resolution??720,size=dimensions(timeline.aspectRatio,resolution);
-  await writeComposition(path,timeline,assets,assetUrls,resolution,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
+  // One page over the media of these windows. A source video is cut to one stretch from its first window to its last.
+  const stage=async(root:string,windows:{start:number;end:number}[],signal:AbortSignal)=>{
+    const prepared=await prepareComposition(root,timeline,assets,convexUrl,signal,[],windows);
+    return {...prepared,compose:async()=>{
+      const path=join(root,'edited');await mkdir(path);await linkCompositionResources(root,path,prepared.assetUrls);
+      await writeComposition(path,timeline,assets,prepared.assetUrls,resolution,timeline.fps as 24|30|60,'./',signal,prepared.audioSourceOffsets);
+      return path;
+    }};
+  };
+  // Separate frames of footage (getFrames at 0 s, 10 s and 21 s) are staged per group of nearby times further down:
+  // one stage for all of them re-encoded the whole stretch between the first and the last frame at source resolution,
+  // 76 s of work for three frames of a 4K source.
+  const perGroup=!contactSheet&&!range&&timeline.clips.some(clip=>clip.kind==='video');
+  const whole=perGroup?undefined:await stage(directory,windows,signal);
+  // Listening to a range needs only its decoded audio, not a page.
+  if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,whole!.assetUrls,whole!.audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
+  const path=whole?await whole.compose():join(directory,'edited');
+  const assetUrls=whole?.assetUrls??{},audioSourceOffsets=whole?.audioSourceOffsets??{};
   onProgress(20);
   // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
   const sampled=async(range:{start:number;end:number},fps:number)=>{
@@ -121,11 +138,26 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
         for(const [sample,item] of group.entries())images.set(item.index,await readFile(join(path,`sample-${sample}.png`)));
         first=next+1;onProgress(20+Math.round(75*first/order.length));
       }
-    }else for(const [done,index] of indices.entries()){
-      const time=at[index];
-      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:[time],...withTransitions(timeline,time,time+frame),variants:['edited']},signal);
-      images.set(index,await readFile(join(path,'sample-0.png')));
-      onProgress(20+Math.round(75*(done+1)/indices.length));
+    }else{
+      // Frames within two seconds of each other share one stretch of source; frames further apart get their own, so
+      // the footage between them is never decoded. Each group has its own directory and page.
+      const order=indices.map(index=>({time:at[index],index})).sort((a,b)=>a.time-b.time),groups:(typeof order)[]=[];
+      for(const item of order){const group=groups.at(-1);if(group&&item.time-group.at(-1)!.time<=FRAME_GROUP_GAP)group.push(item);else groups.push([item]);}
+      const staged=new Map<number,string>();
+      // Two groups at a time: each one already cuts up to three sources at once.
+      await forEachLimited([...groups.entries()],2,async([number,group],stop)=>{
+        const root=join(directory,`frames-${indices[0]}-${number}`);await mkdir(root);
+        // The asked time and the frame it snaps to can differ by part of a frame; the stretch covers both.
+        const own=await stage(root,group.map(item=>{const asked=Math.max(0,Math.min(times[item.index],last));return withTransitions(timeline,Math.min(asked,item.time),Math.max(asked,item.time)+frame);}),AbortSignal.any([signal,stop]));
+        await own.compose();staged.set(number,root);
+      });
+      let done=0;
+      for(const [number,group] of groups.entries())for(const item of group){
+        const root=staged.get(number)!;
+        await runCompositionCapture(root,{...size,fps:timeline.fps,times:[item.time],...withTransitions(timeline,item.time,item.time+frame),variants:['edited']},signal);
+        images.set(item.index,await readFile(join(root,'edited','sample-0.png')));
+        onProgress(20+Math.round(75*++done/indices.length));
+      }
     }
     return indices.map(index=>images.get(index)!);
   };
