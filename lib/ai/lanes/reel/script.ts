@@ -71,7 +71,10 @@ const STUTTER_WORDS = new Set(['i', 'the', 'a', 'an', 'and', 'so', 'but', 'it', 
 const SETUP = /\b(mic check|testing|test one two|check one two|one two three|is (this|it|that) (thing )?(recording|on|working|rolling)|are we (recording|rolling|live|good)|we('re| are) (recording|rolling)|(recording|rolling) now|can you hear|let me (just )?(start|try|do|fix|check|adjust|see|get|redo|say|go)|let'?s (go|do this|start|try)|here we go|hold on|is the (camera|mic|light)|camera('s| is) (on|rolling)|three two one|3 2 1|and action)\b/;
 const RESTART = /\b((start|go|try|do|say) (it |that |this )?(again|over)|one more (time|take)|take (two|three|four|\d+)|from the top|scratch that|my bad|messed (that |it )?up|where was i|what was i|let me (redo|restart|start|try))\b/;
 const WRAP = /\b(cut|that'?s (it|a wrap|the one|good)|i think (that'?s|we('re| are)|that was) (it|good|done)|stop (the )?recording|(was|is) that (ok|okay|good|alright)|how was that|we got it|got it|end of (recording|take)|let me (stop|check|watch|see)|turn (it|this|the camera) off|nailed it|good take)\b/;
-const NOISE = new Set(['ok', 'okay', 'alright', 'right', 'so', 'cool', 'yeah', 'yep', 'well', 'sorry', 'wait', 'ready', 'action', 'done', 'perfect', 'good', 'great', 'cut', 'and']);
+const NOISE = new Set(['ok', 'okay', 'alright', 'right', 'so', 'cool', 'yeah', 'yep', 'well', 'sorry', 'wait', 'ready', 'action', 'done', 'perfect', 'good', 'great', 'cut', 'and', 'one', 'two', 'three', 'check', 'mic', 'test', 'testing', 'hello', 'hi', 'hey']);
+
+/** Where a word certainly sounds: just after its start. Its transcribed end may be padded with silence. */
+export const wordAnchor = (word: { start: number; end: number }) => word.start + Math.min(.1, (word.end - word.start) / 2);
 
 /** Longest common subsequence length of two token lists. */
 function common(a: string[], b: string[]) {
@@ -96,7 +99,7 @@ export function scriptOutline(transcript: Pick<Transcript, 'words'>, range?: { s
   let from = 0;
   words.forEach((word, index) => {
     const next = words[index + 1];
-    if (next && !/[.!?…]["')\]]?$/.test(word.text) && next.start - word.end <= (punctuated ? 1.2 : .6)) return;
+    if (next && !/[.!?…]["')\]]?$/.test(word.text) && next.start - word.end <= (punctuated ? .9 : .6)) return;
     lines.push({ n: lines.length + 1, from, to: index, start: words[from].start, end: word.end, text: words.slice(from, index + 1).map(item => item.text).join(' ') });
     from = index + 1;
   });
@@ -118,8 +121,12 @@ export function scriptOutline(transcript: Pick<Transcript, 'words'>, range?: { s
   const text = (index: number) => tokens[index].join(' ');
   const setup = (index: number) => !tokens[index].length || noise(index) || short(index) && (SETUP.test(text(index)) || RESTART.test(text(index)));
   const wrap = (index: number) => setup(index) || short(index) && WRAP.test(text(index));
-  let first = 0;
-  while (first < lines.length && (lines[first].note || setup(first))) first++;
+  // The script starts at its first full sentence. Short lines before it are setup talk, except ones that lead
+  // straight into it and are not about the recording ("Stop scrolling." right before the first long line).
+  let first = lines.findIndex((line, index) => !line.note && !setup(index) && tokens[index].length >= 5);
+  if (first < 0) first = lines.findIndex((line, index) => !line.note && !setup(index));
+  if (first < 0) first = lines.length;
+  while (first > 0 && first < lines.length && !lines[first - 1].note && !setup(first - 1) && lines[first].start - lines[first - 1].end <= 1.2) first--;
   let last = lines.length - 1;
   while (last > first && (lines[last].note || wrap(last))) last--;
   // Nothing reads as a script line: treat the whole take as the script rather than guess.
@@ -199,20 +206,22 @@ export function resolveScriptPlan(outline: ScriptOutline, input: ScriptPlanInput
 
 /** Which whole middle beats to drop, lowest priority first, so the cut lands inside the requested length. */
 export function beatsToDrop(beats: { index: number; priority: number; seconds: number; droppable: boolean }[], estimate: number, target: RequestedLength) {
-  if (target.max === undefined || estimate <= target.max + .5) return [];
+  if (target.max === undefined) return [];
+  // The same margin planScript holds: room for a short natural tail at the end.
+  const max = target.max - .4, min = target.min ?? 0;
+  if (estimate <= max) return [];
   const drop: number[] = [];
   let length = estimate;
   const candidates = beats.filter(beat => beat.droppable && beat.seconds > 0).sort((a, b) => b.priority - a.priority || a.seconds - b.seconds);
   for (const [position, beat] of candidates.entries()) {
-    if (length <= target.max + .5) break;
+    if (length <= max) break;
+    if (drop.includes(beat.index)) continue;
     // A larger beat of the same priority that lands inside the range beats several small ones that overshoot.
-    const fitting = candidates.slice(position).find(item => item.priority === beat.priority && !drop.includes(item.index) && length - item.seconds <= target.max! + .5 && length - item.seconds >= (target.min ?? 0) - .5);
-    const pick = fitting ?? beat;
-    if (drop.includes(pick.index)) continue;
+    const pick = candidates.slice(position).find(item => item.priority === beat.priority && !drop.includes(item.index) && length - item.seconds <= max && length - item.seconds >= min) ?? beat;
     drop.push(pick.index);
     length -= pick.seconds;
   }
-  return length <= target.max + .5 ? drop.sort((a, b) => a - b) : [];
+  return length <= max ? drop.sort((a, b) => a - b) : [];
 }
 
 type CheckAsset = { _id: string; audioAssetId?: string; analysis?: { transcript?: Transcript } };
@@ -227,7 +236,8 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
   // The take left the timeline: nothing of this script to check.
   if (!spans.length) return [];
   const outline = scriptOutline(transcript), { words, lines } = outline;
-  const kept = (word: Word) => { const middle = (word.start + word.end) / 2; return spans.some(span => middle >= span.start && middle < span.end); };
+  // A provider word's end can run on through trailing silence, past where the measured cut ends: the word is kept when its onset is.
+  const kept = (word: Word) => { const onset = wordAnchor(word); return spans.some(span => onset >= span.start && onset < span.end); };
   const retained = words.filter(kept);
   if (!retained.length) return [];
   const failures: string[] = [], head = retained[0], tail = retained.at(-1)!;

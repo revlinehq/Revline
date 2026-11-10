@@ -41,12 +41,15 @@ export function sampleFlags(sample: LookSample, baseline: LookBaseline, near: (L
   const flags: EyeFlag[] = [];
   if (sample.yaw !== null && Math.abs(sample.yaw - baseline.yaw) > 20 || sample.pitch !== null && Math.abs(sample.pitch - baseline.pitch) > 14) flags.push('head-away');
   const lowered = (item?: LookSample) => !!item && item.face > 0 && ((item.down ?? 0) > .5 || (item.blink ?? 0) > .5);
-  if (lowered(sample)) flags.push(near.some(item => lowered(item) && Math.abs(item!.time - sample.time) <= .2) ? 'eyes-down' : 'blink');
+  if (lowered(sample)) flags.push(near.some(item => lowered(item) && Math.abs(item!.time - sample.time) <= .2 && Math.abs(item!.time - sample.time) >= .06) ? 'eyes-down' : 'blink');
   else if ((sample.side ?? 0) > .6) flags.push('eyes-off-camera');
   if (baseline.face > 0 && (sample.face > baseline.face * 1.22 || sample.face < baseline.face * .6)) flags.push('reach');
-  if (sample.motion !== null && sample.motion > Math.max(.09, baseline.motion * 3)) flags.push('movement');
+  if (sample.motion !== null && sample.motion > Math.max(.12, baseline.motion * 4)) flags.push('movement');
   return flags;
 }
+
+/** A blink passes in a frame or two: awkward to cut on, harmless inside the shot. Every other flag lasts. */
+export const TRANSIENT_FLAGS: readonly EyeFlag[] = ['blink'];
 
 /** "eyes down 12.3-12.9 s, large movement 13.0 s": consecutive flagged samples joined per flag. */
 export function describeFlags(flagged: { time: number; flags: EyeFlag[] }[], step = .2) {

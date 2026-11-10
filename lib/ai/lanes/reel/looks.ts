@@ -1,7 +1,8 @@
-import { describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
+import { TRANSIENT_FLAGS, describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
 import { playbackRateOf, sourceEndOf } from '../../../editor/playback-rate';
 import type { Clip, Timeline } from '../../../editor/types';
 import type { Transcript } from '../../../media-analysis/transcript';
+import { wordAnchor } from './script';
 
 /** The reel lane's use of the shared eyes: where a talking take is cut, what the speaker looks like there,
  * and the nearest clean frame inside the pause the cut sits in. Pure; the worker measures the frames. */
@@ -50,7 +51,7 @@ export function reelSpots(timeline: Timeline, assets: SpeechAsset[], broll: Reco
   const pieces = timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId && !clip.speedRamp?.length).sort((a, b) => a.start - b.start);
   const speech = pieces.flatMap(clip => {
     const asset = assets.find(item => item._id === clip.assetId), words: Word[] = asset?.analysis?.transcript?.words ?? [];
-    const kept = words.filter(word => { const middle = (word.start + word.end) / 2; return middle >= clip.sourceStart && middle < sourceEndOf(clip); });
+    const kept = words.filter(word => { const onset = wordAnchor(word); return onset >= clip.sourceStart && onset < sourceEndOf(clip); });
     return asset && kept.length ? [{ clip, asset, words, kept }] : [];
   });
   return speech.flatMap(({ clip, asset, words, kept }, index) => {
@@ -76,21 +77,25 @@ export function spotTimes(spot: Spot, duration = Infinity) {
 /** Judge one edge from measured frames: is the speaker presentable at the cut, and if not, where is the nearest clean frame in the pause. */
 export function readSpot(spot: Spot, samples: LookSample[], policy: EyesPolicy, baseline = lookBaseline(samples)): SpotReading {
   const local = samples.filter(sample => sample.time >= Math.min(spot.from, spot.source, spot.word - .25) - .01 && sample.time <= Math.max(spot.to, spot.source, spot.word + .25) + .01).sort((a, b) => a.time - b.time);
-  const flagsOf = (sample: LookSample) => { const index = local.indexOf(sample); return sampleFlags(sample, baseline, [local[index - 1], local[index + 1]]).filter(flag => policy.flags.includes(flag)); };
+  const flagsOf = (sample: LookSample) => sampleFlags(sample, baseline, local.filter(item => item !== sample && Math.abs(item.time - sample.time) <= .2)).filter(flag => policy.flags.includes(flag));
   const judged = local.map(sample => ({ time: sample.time, flags: flagsOf(sample) }));
   const bad = (time: number) => (judged.find(item => Math.abs(item.time - time) < .01)?.flags.length ?? 0) > 0;
   const nearest = (time: number) => judged.reduce((best, item) => Math.abs(item.time - time) < Math.abs(best.time - time) ? item : best, judged[0]);
   if (!judged.length) return { spot, flagged: false, seen: [] };
+  const lasting = (time: number) => (judged.find(item => Math.abs(item.time - time) < .01)?.flags ?? []).some(flag => !TRANSIENT_FLAGS.includes(flag));
   // What the viewer sees: the retained air between the edge and the word, edge frame included.
   const shown = judged.filter(item => spot.side === 'in' ? item.time >= spot.source - .01 && item.time <= spot.word + .01 : item.time >= spot.word - .01 && item.time <= spot.source + .01);
-  const edge = nearest(spot.source), flagged = edge.flags.length > 0 || shown.some(item => item.flags.length > 0);
-  // The clean run touching the word: every frame between a candidate edge and the word must be clean.
+  // Awkward: any flag on the frame the cut lands on (a blink included), or a lasting one in the air it keeps.
+  const edge = nearest(spot.source), flagged = edge.flags.length > 0 || shown.some(item => lasting(item.time));
+  // From the word outward, the frames with nothing lasting wrong: a blink may pass inside the shot, a look down may not.
   const pause = judged.filter(item => item.time >= spot.from - .01 && item.time <= spot.to + .01);
   const run: number[] = [];
-  for (const item of spot.side === 'in' ? [...pause].reverse() : pause) { if (bad(item.time)) break; run.push(item.time); }
+  for (const item of spot.side === 'in' ? [...pause].reverse() : pause) { if (lasting(item.time)) break; run.push(item.time); }
+  const open = run.filter(time => !bad(time));
   const seen = describeFlags(judged.filter(item => item.flags.length), STEP + .08);
-  // In: the first clean frame before the word. Out: the last clean frame after it, with at most a short natural tail on the reel's last frame.
-  const clean = !run.length ? undefined : spot.side === 'in' ? Math.min(...run) : Math.min(Math.max(...run), spot.last ? spot.word + NATURAL_TAIL : Infinity);
+  // The clean frame nearest the cut. The reel's last frame may run on to a short natural tail.
+  const limit = spot.last ? Math.min(spot.word, spot.source) + NATURAL_TAIL : Infinity, reachable = open.filter(time => time <= limit + .001);
+  const clean = !reachable.length ? undefined : spot.last && !flagged ? Math.max(...reachable) : reachable.reduce((best, time) => Math.abs(time - spot.source) < Math.abs(best - spot.source) ? time : best);
   if (!flagged) return { spot, flagged: false, seen, ...(spot.last && clean !== undefined && clean > spot.source + .1 ? { moveTo: round(clean) } : {}) };
   return { spot, flagged: true, seen, ...(clean !== undefined && Math.abs(clean - spot.source) > .02 ? { moveTo: round(Math.max(spot.from, Math.min(spot.to, clean))) } : {}) };
 }
