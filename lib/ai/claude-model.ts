@@ -132,6 +132,12 @@ export function freeEditorModel(env: ClaudeModelEnvironment = process.env): Clau
   return enforceClaudeModelPolicy({ provider: 'openai', modelId: FREE_EDITOR_MODEL_CHOICE, modelChoice: FREE_EDITOR_MODEL_CHOICE, reasoningEffort: 'low' }, env);
 }
 
+/** The one model production edits with, at medium effort: Haiku 5.5. Production offers no picker. */
+export function productionEditorModel(): ClaudeModelSelection & { modelChoice: ClaudeModelChoice; reasoningEffort: EditorReasoningEffort } {
+  const haiku = CLAUDE_EDIT_MODELS.find(model => model.id === 'haiku')!;
+  return { provider: 'anthropic', modelId: haiku.modelId, modelChoice: haiku.id, reasoningEffort: 'medium' };
+}
+
 /** EDITOR_EFFORT_SWITCHER=false turns the effort picker off for everyone; unset leaves it to the plan. */
 export function editorEffortSwitcherOffered(env: ClaudeModelEnvironment = process.env) {
   return env.EDITOR_EFFORT_SWITCHER !== 'false';

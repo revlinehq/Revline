@@ -44,7 +44,7 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   }, [draftKey]);
 
   const actions = <div className="assistant-model-controls">
-    {(restricted || modelSwitcher || claudeViaMcp) && <AssistantModelPicker catalogModels={settings.catalogModels} modelAccessNeedsSync={settings.modelAccessNeedsSync} restricted={restricted} claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={effortChoosable || restricted || modelSwitcher && effortLocked ? { value: effectiveEffort, onChange: chooseEffort, locked: !effortChoosable } : undefined}/>}
+    {(modelSwitcher || claudeViaMcp) && <AssistantModelPicker catalogModels={settings.catalogModels} modelAccessNeedsSync={settings.modelAccessNeedsSync} restricted={restricted} claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={effortChoosable || restricted || modelSwitcher && effortLocked ? { value: effectiveEffort, onChange: chooseEffort, locked: !effortChoosable } : undefined}/>}
   </div>;
   return { actions, request: { modelChoice: restricted ? FREE_EDITOR_MODEL_CHOICE : modelSwitcher ? selectedModelChoice : undefined, reasoningEffort: restricted ? 'low' : effortChoosable ? effectiveEffort : undefined } };
 }
