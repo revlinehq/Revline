@@ -709,11 +709,19 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     try { return await measureBroll(asset, range); }
     catch (error) {
       if (abortSignal.aborted) throw error;
-      // No face measurement is "unknown", never "no b-roll": shots that saved scene cuts close off inside a wordless
-      // stretch are kept as footage, and the result says detection was unavailable.
+      // No face measurement is "unknown", never "no b-roll". Scene cuts (measured locally by every processor) stand in:
+      // a shot with no words in it is kept as footage. Without scene cuts either, long wordless stretches are kept.
+      const reason = error instanceof Error ? error.message : 'faces could not be measured';
       const words = asset.analysis?.transcript?.words ?? [], wordless = (shot: Range) => !words.some(word => { const middle = (word.start + word.end) / 2; return middle > shot.start && middle < shot.end; });
-      const cut = (asset.analysis?.shots?.shots ?? []).slice(1, -1).map(shot => ({ start: shot.start, end: shot.end })).filter(shot => shot.start >= range.start && shot.end <= range.end && shot.end - shot.start >= .8 && shot.end - shot.start <= 20 && wordless(shot));
-      return { shots: cut, unavailable: true, note: `B-roll detection unavailable (${error instanceof Error ? error.message : 'faces could not be measured'}). ${cut.length ? 'Shots between saved scene cuts with no words in them are kept as footage.' : 'No shot was ruled out as b-roll: if the take has cutaways, look with readFrames before cutting wordless stretches.'}` };
+      let detected = asset.analysis?.shots;
+      if (!detected) try { detected = (await analyze(asset._id, 'shots')).analysis?.shots; } catch (shotError) { if (abortSignal.aborted) throw shotError; }
+      if (detected) {
+        const cut = detected.shots.slice(1, -1).map(shot => ({ start: shot.start, end: shot.end })).filter(shot => shot.start >= range.start && shot.end <= range.end && shot.end - shot.start >= .8 && shot.end - shot.start <= 20 && wordless(shot));
+        return { shots: cut, unavailable: true, note: `B-roll detection unavailable (${reason}). ${cut.length ? 'Shots between scene cuts with no words in them are kept as footage instead.' : 'Scene cuts show no wordless shot inside the take.'}` };
+      }
+      const spoken = words.filter(word => word.end > range.start && word.start < range.end).sort((x, y) => x.start - y.start), gaps: Range[] = [];
+      spoken.forEach((word, index) => { const next = spoken[index + 1]; if (next && next.start - word.end >= 1.5) gaps.push({ start: Math.round((word.end + .1) * 100) / 100, end: Math.round((next.start - .1) * 100) / 100 }); });
+      return { shots: gaps, unavailable: true, note: `B-roll detection unavailable (${reason}) and scene cuts could not be measured. Wordless stretches of 1.5 s or more inside the script are kept in case they are b-roll; look with readFrames to decide which to drop.` };
     }
   };
   const measureBroll = async (asset: (typeof assets)[number], range: Range): Promise<{ shots: Range[]; note?: string }> => {
