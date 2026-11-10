@@ -1,3 +1,6 @@
+## 2026-11-10
+- Editor agent: a model call that produces nothing for 8 minutes, or stops mid-answer for 5, is ended; the turn retries the step within its usual three attempts and otherwise ends with "stopped responding" and the partial draft saved by the normal rule. Why: a prod turn stayed "running" for over six minutes with a staged restore and no output while the runner heartbeat kept it alive, blocking the project until Stop discarded the draft.
+
 ## 2026-11-09
 - Editor agent: tool results carry one `saveState` field ("saved" or "unsaved draft" with when it is saved or discarded), `finish` reports whether the request's edits are saved, at which revision and what Undo restores, and each turn is told the saved revision and that older `staged:true` results are history. Why: after a failed finish the app had saved the draft (the banner was right) but the agent read its old `saved:false, staged:true` results and told the founder nothing was saved.
 - Editor agent: `askUser`, `askBrandKit` and `previewBackgrounds` shorten over-long question, label and description text to the card's budget (300/60/140 characters, cut at a word with an ellipsis) and tell the model what was cut, instead of rejecting the call; the choice card clamps long text. Why: the founder saw the agent say its question failed to send because the option descriptions were too long.
