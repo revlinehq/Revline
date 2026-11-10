@@ -1,12 +1,13 @@
 import { remapTimelineAssets } from '../lib/editor/copy-timeline';
 import { shareAnalysis } from './lib/asset_analysis';
-import { writeProject,createProject,readProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
+import { writeProject,createProject,hydrateProject,projectIdentity,projectRun,readHistoryIndex,projectCoverOf } from './lib/project_data';
 import { loadSceneCode, storeSceneCode, sceneCodeText } from './lib/scene_code';
 import { storedTimelineBytes } from '../lib/editor/scene-code';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type Infer, type ObjectType } from "convex/values";
+import { paginationOptsValidator, type PaginationOptions, type PaginationResult } from "convex/server";
 import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
@@ -21,7 +22,7 @@ import { aspectRatio, projectDocument, timelineValidator } from "./schema";
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { LOCAL_UNDO_LIMIT, timelineHistoryKey } from '../lib/editor/timeline-history-key';
-import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
+import { ownerWorkingAgents, workingAgentValidator } from './mcpConnections';
 function projectTitle(value: string) { const title = value.trim(); if (!title || title.length > 120) throw new ConvexError("Title must contain between 1 and 120 characters"); return title; }
 const createProjectForArgs = { title: v.string(), aspectRatio, assetIds: v.optional(v.array(v.id('assets'))), placeOnTimeline: v.optional(v.boolean()) };
 export async function createProjectFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createProjectForArgs>) {
@@ -176,7 +177,7 @@ export const get = query({ args: { projectId: v.string(),includeHistory:v.option
   const ownerId=await requireOwner(ctx),projectId=ctx.db.normalizeId('projects',args.projectId);
   if(!projectId)return null;
   const raw=await ctx.db.get(projectId);if(!raw||raw.deleting||raw.ownerId!==ownerId)return null;
-  const project=(await readProject(ctx,projectId,args.includeHistory!==false,args.sceneCode!=='refs'))!; return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
+  const project=await hydrateProject(ctx,raw,args.includeHistory!==false,args.sceneCode!=='refs'); return { ...project, timeline: currentTimeline(project), ...(project.history ? { history: project.history.map(normalizeTimeline) } : {}), revision: project.revision ?? 0 };
 }});
 export const history=query({args:{projectId:v.string()},returns:v.array(timelineValidator),handler:async(ctx,args)=>{
   const projectId=routeProjectId(ctx,args.projectId);
@@ -211,27 +212,48 @@ export const sceneCode=query({args:{projectId:v.string(),hash:v.string()},return
   await projectIdentity(ctx,projectId,await requireOwner(ctx));
   return /^[a-f0-9]{64}$/.test(args.hash)?await sceneCodeText(ctx,args.hash):null;
 }});
-export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()), agent: v.union(v.object({ name: v.string(), until: v.number(), running: v.boolean() }), v.null()), agents: v.array(workingAgentValidator) });
-export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<Infer<typeof projectListItem>[]> {
-  const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();
-  if(migration?.completed){
-    const rows=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.neq(q.field('deleting'),true)).order('desc').take(listLimit(args.limit));
-    return Promise.all(rows.map(async row=>{
-      const [coverUrl,agents]=await Promise.all([mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key}),projectWorkingAgents(ctx,ownerId,row.projectId)]);
-      const agent=agents[0];
-      return {_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl,coverKind:row.coverKind==='video'&&row.coverR2Key?'video' as const:row.coverStorageId||row.coverR2Key?'image' as const:null,agent:agent?{name:agent.name,until:agent.until,running:false}:null,agents};
-    }));
-  }
-  const projects = await ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).filter(q=>q.neq(q.field("deleting"),true)).order("desc").take(listLimit(args.limit));
-  return await Promise.all(projects.map(async project => {
-    const [media,agents] = await Promise.all([ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5),projectWorkingAgents(ctx,ownerId,project._id)]);
-    const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
-    const picture=cover?projectCoverOf(cover):null;
-    const agent=agents[0];
-    return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: picture ? await mediaUrl(ctx, {storageId:picture.coverStorageId,r2Key:picture.coverR2Key}) : null, coverKind: picture?.coverKind??null, agent: agent?{name:agent.name,until:agent.until,running:false}:null, agents };
-  }));
+/** A project list row. Working MCP agents are a separate query (`workingAgents`): they depend on the clock and on
+ * lease rows, and joining them here re-ran every row's cover signing on each agent call. */
+export const projectListItem = v.object({ _id: v.id('projects'), title: v.string(), createdAt: v.number(), updatedAt: v.number(), aspectRatio, clipCount: v.number(), aiRunning: v.boolean(), coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal("video"), v.literal("image"), v.null()) });
+type ProjectListItem=Infer<typeof projectListItem>;
+async function catalogReady(ctx:QueryCtx){const migration=await ctx.db.query('projectDataMigration').withIndex('by_key',q=>q.eq('key','project-data-v1')).unique();return !!migration?.completed;}
+// Deleting is only ever set to true, so live rows are the ones without it; the index keeps every page full.
+function catalogRows(ctx:QueryCtx,ownerId:string){return ctx.db.query('projectCatalog').withIndex('by_owner_deleting_updated',q=>q.eq('ownerId',ownerId).eq('deleting',undefined)).order('desc');}
+function legacyRows(ctx:QueryCtx,ownerId:string){return ctx.db.query("projects").withIndex("by_ownerId_updatedAt", q => q.eq("ownerId", ownerId)).order("desc").filter(q=>q.neq(q.field("deleting"),true));}
+async function catalogListItem(ctx:QueryCtx,row:Doc<'projectCatalog'>):Promise<ProjectListItem>{
+  const coverUrl=await mediaUrl(ctx,{storageId:row.coverStorageId,r2Key:row.coverR2Key});
+  return {_id:row.projectId,title:row.title,createdAt:row.createdAt,updatedAt:row.updatedAt,aspectRatio:row.aspectRatio,clipCount:row.clipCount,aiRunning:row.aiRunning,coverUrl,coverKind:row.coverKind==='video'&&row.coverR2Key?'video':row.coverStorageId||row.coverR2Key?'image':null};
 }
-export const list = query({ args: { limit: v.optional(v.number()) }, returns: v.array(projectListItem), handler: async (ctx, args) => listProjectsFor(ctx, await requireOwner(ctx), args) });
+async function legacyListItem(ctx:QueryCtx,ownerId:string,project:Doc<'projects'>):Promise<ProjectListItem>{
+  const media=await ctx.db.query("assets").withIndex("by_ownerId_projectId", q => q.eq("ownerId", ownerId).eq("projectId", project._id)).order("desc").take(5);
+  const cover = media.find(asset => asset.kind === "video" || asset.kind === "image");
+  const picture=cover?projectCoverOf(cover):null;
+  return { _id: project._id, title: project.title, createdAt: project.createdAt, updatedAt: project.updatedAt, aspectRatio: project.aspectRatio, clipCount: project.timeline?.clips.length ?? 0, aiRunning: !!project.aiRunning, coverUrl: picture ? await mediaUrl(ctx, {storageId:picture.coverStorageId,r2Key:picture.coverR2Key}) : null, coverKind: picture?.coverKind??null };
+}
+/** The newest projects in one read, for the MCP `listProjects` tool. */
+export async function listProjectsFor(ctx: QueryCtx, ownerId: string, args: { limit?: number }): Promise<ProjectListItem[]> {
+  const limit=listLimit(args.limit);
+  if(await catalogReady(ctx))return Promise.all((await catalogRows(ctx,ownerId).take(limit)).map(row=>catalogListItem(ctx,row)));
+  return Promise.all((await legacyRows(ctx,ownerId).take(limit)).map(project=>legacyListItem(ctx,ownerId,project)));
+}
+/** Pages of the newest projects. Each page is its own subscription, so a change to one project re-runs only the
+ * page holding it, and cover URLs are signed for the rows on screen rather than for every project at once. */
+export async function paginateProjectsFor(ctx: QueryCtx, ownerId: string, paginationOpts: PaginationOptions): Promise<PaginationResult<ProjectListItem>> {
+  if(paginationOpts.numItems<1||paginationOpts.numItems>100)throw new ConvexError('Load between 1 and 100 projects at a time');
+  if(await catalogReady(ctx)){
+    const result=await catalogRows(ctx,ownerId).paginate(paginationOpts);
+    return {...result,page:await Promise.all(result.page.map(row=>catalogListItem(ctx,row)))};
+  }
+  const result=await legacyRows(ctx,ownerId).paginate(paginationOpts);
+  return {...result,page:await Promise.all(result.page.map(project=>legacyListItem(ctx,ownerId,project)))};
+}
+const projectPage=v.object({page:v.array(projectListItem),isDone:v.boolean(),continueCursor:v.string(),splitCursor:v.optional(v.union(v.string(),v.null())),pageStatus:v.optional(v.union(v.literal("SplitRecommended"),v.literal("SplitRequired"),v.null()))});
+export const list = query({ args: { paginationOpts: paginationOptsValidator }, returns: projectPage, handler: async (ctx, args) => paginateProjectsFor(ctx, await requireOwner(ctx), args.paginationOpts) });
+/** The MCP agents working on the owner's projects right now: a small row per project with any agent badge to show. */
+export const workingAgents = query({ args: {}, returns: v.array(v.object({ projectId: v.id('projects'), agents: v.array(workingAgentValidator) })), handler: async ctx => {
+  const agents=await ownerWorkingAgents(ctx,await requireOwner(ctx));
+  return [...agents].map(([projectId,agents])=>({projectId,agents}));
+}});
 export const update = mutation({ args: { projectId: v.id("projects"), title: v.optional(v.string()), aspectRatio: v.optional(aspectRatio) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx), false); await requireEditorAccess(ctx, project.ownerId);
   if (args.aspectRatio !== undefined && args.aspectRatio !== currentTimeline(project).aspectRatio) {
@@ -289,7 +311,7 @@ export const remove = mutation({ args: { projectId: v.id('projects') }, returns:
 }});
 export const pendingDeletions=query({args:{},returns:v.array(v.id('projects')),handler:async ctx=>{
   const ownerId=await requireOwner(ctx);
-  const projects=await ctx.db.query('projectCatalog').withIndex('by_owner_updated',q=>q.eq('ownerId',ownerId)).filter(q=>q.eq(q.field('deleting'),true)).take(200);
+  const projects=await ctx.db.query('projectCatalog').withIndex('by_owner_deleting_updated',q=>q.eq('ownerId',ownerId).eq('deleting',true)).take(200);
   return projects.map(project=>project.projectId);
 }});
 export const deletionStatus=query({args:{projectIds:v.array(v.id('projects'))},returns:v.union(v.literal('pending'),v.literal('failed'),v.literal('complete')),handler:async(ctx,{projectIds})=>{

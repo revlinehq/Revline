@@ -48,5 +48,6 @@ Boundaries:
 - Read exact word timings around speech boundaries from the saved transcript in short source windows.
 - The first sentence names its subject: for "That's why it failed", also retain "The upload stalled."
 - End after the payoff and its real reaction, before the reset. Keep words and the thought complete.
-- If a candidate cannot stand alone within 60 s, choose another or explain the constraint.
+- If a candidate cannot stand alone within 60 s, choose another or explain the constraint. When no word-timed pause follows the payoff, planClips suggests the moment's own range; finishClipping then checks the built tab's in and out points against the words.
+- A moment longer than 60 s is deliverable only as a requested montage or trailer: one tab cutting several of its ranges to 15–60 s, accepted by its retained source span and timelineId.
 - Respect exact user timestamps and flag any conflict with the 15–60 s range.

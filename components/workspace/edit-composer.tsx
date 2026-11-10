@@ -19,10 +19,15 @@ export type EditComposerProps = {
   attachControl?: ReactNode; onAttach?: () => void; attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void;
   placeholder?: string; disabled?: boolean; submitDisabled?: boolean; running?: boolean; allowQueue?:boolean; onStop?: () => void | Promise<void>; stopping?: boolean;
   className?: string; variant?: 'landing' | 'studio' | 'compact'; appearance?: 'raised' | 'flat'; attachmentLimit?: number; emptyHint?: string;
-  header?: ReactNode; slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
+  header?: ReactNode;
+  /** A shelf tucked under the composer, the mirror of `header`; it slides open while `footerOpen` is true. */
+  footer?: ReactNode; footerOpen?: boolean;
+  /** Offered plain pasted text before it is inserted; return true to take it over instead. */
+  onPasteText?: (text: string) => boolean;
+  slashCommands?: boolean; actions?: ReactNode; submitLabel?: string; statusLabel?: string; uploadOnHover?: boolean; uploadState?: 'dragging'; requireMedia?: boolean;
 };
 
-export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, submitDisabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', appearance = 'raised', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header }: EditComposerProps) {
+export function EditComposer({ value, onChange, onSubmit, attachControl, onAttach, attachments = [], onRemoveAttachment, placeholder = 'Describe your next edit…', disabled = false, submitDisabled = false, running = false, allowQueue=false, onStop, stopping: stoppingRequest = false, className, variant = 'studio', appearance = 'raised', attachmentLimit = 2, emptyHint, actions, submitLabel, statusLabel, uploadOnHover = false, uploadState, requireMedia = false, slashCommands = false, header, footer, footerOpen = false, onPasteText }: EditComposerProps) {
   const commandListId = useId();
   const [commandDismissed, setCommandDismissed] = useState(false);
   const [activeCommand, setActiveCommand] = useState<EditorCommandName>('clip');
@@ -74,6 +79,11 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     }
     attachmentCount.current = attachments.length;
   }, [attachments.length, uploadOnHover]);
+  const footerWasOpen = useRef(footerOpen);
+  useEffect(() => {
+    if (footerWasOpen.current && !footerOpen) textarea.current?.focus({ preventScroll: true });
+    footerWasOpen.current = footerOpen;
+  }, [footerOpen]);
   useLayoutEffect(() => {
     const field = textarea.current;
     if (!field || variant === 'compact' && CSS.supports('field-sizing', 'content')) return;
@@ -127,7 +137,7 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     <Popover open={menuOpen && !busy && fieldsFocused} onOpenChange={open => { if (!open) setCommandDismissed(true); }}>
     <PopoverAnchor asChild><InputGroup className="composer-input-group border-[#363636] bg-[#2a2a2a]">
     {!!attachments.length && <InputGroupAddon align="block-start" className="composer-attachments">{attachments.slice(0, attachmentLimit).map(chip)}{attachments.length > attachmentLimit && <InputGroupButton variant="secondary" onClick={() => setSheetOpen(true)}>+{attachments.length - attachmentLimit} clips</InputGroupButton>}</InputGroupAddon>}
-    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
+    <InputGroupTextarea ref={textarea} className="min-h-14 px-3.5 pt-2.5" aria-label="Describe your next edit" placeholder={mediaMissing ? 'Drop in media to start chatting' : chosenCommand === 'clip' ? 'Add a video link or use project footage…' : placeholder} value={value} maxLength={2000} rows={variant==='compact'?1:2} aria-disabled={busy || undefined} readOnly={mediaMissing || busy} onPointerDown={e => { if (mediaMissing) { e.preventDefault(); onAttach?.(); } }} onChange={e => { if (!mediaMissing && !busy) changeInput(e.target.value); }} onPaste={e => { if (onPasteText && !mediaMissing && !busy && !e.clipboardData.files.length && onPasteText(e.clipboardData.getData('text/plain'))) e.preventDefault(); }} aria-expanded={slashCommands ? menuOpen && fieldsFocused && !busy : undefined} aria-haspopup={slashCommands ? "listbox" : undefined} aria-controls={menuOpen && fieldsFocused && !busy ? commandListId : undefined} aria-activedescendant={menuOpen && fieldsFocused && !busy && highlightedCommand ? `${commandListId}-${highlightedCommand.name}` : undefined} onKeyDown={e => {
       if (menuOpen && highlightedCommand && !e.nativeEvent.isComposing) {
         if (e.key === 'Escape') { e.preventDefault(); setCommandDismissed(true); return; }
         if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); const index = commands.indexOf(highlightedCommand); setActiveCommand(commands[(index + (e.key === 'ArrowDown' ? 1 : commands.length - 1)) % commands.length].name); return; }
@@ -143,9 +153,10 @@ export function EditComposer({ value, onChange, onSubmit, attachControl, onAttac
     </PopoverContent></Popover>
     {(error || attachmentError) && <p className="composer-error" role="alert">{error || `${attachmentError!.name}: ${attachmentError!.error}`}</p>}
   </>;
-  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', header && 'has-composer-header', uploadOnHover && 'composer-height-transition', className)} data-appearance={appearance} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
+  return <><form className={cn('edit-composer', `edit-composer-${variant}`, attachments.length && 'has-attachments', 'composer-upload-enabled', header && 'has-composer-header', footer !== undefined && 'has-composer-footer', uploadOnHover && 'composer-height-transition', className)} data-appearance={appearance} data-upload-view={showUpload || undefined} onPointerEnter={e => { if (uploadOnHover && e.pointerType !== 'touch') setHovered(true); }} onPointerLeave={() => { if (uploadOnHover) { setHovered(false); setEditing(false); } }} onSubmit={e => { e.preventDefault(); if (!showUpload) void submit(); }} aria-label="Edit request">
     {header && <Card className="composer-header" role="group" aria-label="Video settings">{header}</Card>}
     <div ref={fields} className="composer-edit-fields" aria-hidden={showUpload || undefined} inert={showUpload} onFocusCapture={() => setFieldsFocused(true)} onBlurCapture={e => { if (!fields.current?.contains(e.relatedTarget as Node | null)) setFieldsFocused(false); }}>{editFields}</div>
+    {footer !== undefined && <div className="composer-footer" data-open={footerOpen || undefined} aria-hidden={!footerOpen || undefined} inert={!footerOpen}><div className="composer-footer-clip"><Card className="composer-footer-card">{footer}</Card></div></div>}
     <div className="composer-upload-swap" aria-hidden={!showUpload} inert={!showUpload}>
       <button type="button" className="composer-new-video" onClick={() => { setEditing(true); onAttach?.(); }} disabled={busy} aria-label="New video: add footage">
         <span><Plus size={24} strokeWidth={2} aria-hidden="true" />{uploadState === 'dragging' ? 'Drop your footage' : 'New video'}<span className="composer-video-badge">AI</span></span>

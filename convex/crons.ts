@@ -9,4 +9,5 @@ crons.interval('Fail stalled exports',{minutes:2},internal.renders.failStalled,{
 crons.daily('Prune MCP tokens, codes and unused clients',{hourUTC:9,minuteUTC:30},internal.mcpAuth.prune,{});
 crons.interval('Recover Railway workers and expired chunk services',{minutes:1},internal.railwayWorkers.dispatch,{});
 crons.daily('Prune cached timeline frames', {hourUTC:9,minuteUTC:35}, internal.frameCache.prune, {});
+crons.interval('Prune expired agent bridge nonces',{minutes:10},internal.agentRunner.pruneNonces,{});
 export default crons;
