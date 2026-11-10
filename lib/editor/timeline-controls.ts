@@ -15,7 +15,7 @@ import { anchoredFadeTimingPatch } from './fade-clock';
 import { layerGroup,trackOf,deriveTrackCounts,normalizeTimeline,maxTrackCount,TIMELINE_LAYER_GROUPS,type Timeline,type LayerGroup,type MediaAsset,type Clip } from './types';
 import { frameSeekTime, freeLayer, joinOffsets, linkedClipIds, newLayerOverlaps, rangesOverlap } from './operations';
 import { TimelineGestureRejection } from './timeline-edit-errors';
-import { playbackRateOf } from './playback-rate';
+import { sourceSpanOf, timelineSpanOf } from './playback-rate';
 import { isTransitionClip, reconcileTransitionEdits, transitionPair } from './clip-transitions';
 import { moveTransitionAt } from './transition-placement';
 export function timelineTimeAtPointer(x:number,geometry:{left:number;scrollLeft:number;origin:number;px:number;end:number;fps:number}){
@@ -330,11 +330,11 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
       }
     }
     if(side==='left'){
-      minimum=Math.max(minimum,rippling?-Infinity:left-clip.start,timedSource?-clip.sourceStart/playbackRateOf(clip):-Infinity);
+      minimum=Math.max(minimum,rippling?-Infinity:left-clip.start,timedSource?timelineSpanOf(clip,-clip.sourceStart):-Infinity);
       maximum=Math.min(maximum,clip.duration-frame);
     }else{
       minimum=Math.max(minimum,frame-clip.duration);
-      maximum=Math.min(maximum,rippling?Infinity:right-end,timedSource&&asset?.duration!==undefined?(asset.duration-clip.sourceStart)/playbackRateOf(clip)-clip.duration:Infinity);
+      maximum=Math.min(maximum,rippling?Infinity:right-end,timedSource&&asset?.duration!==undefined?timelineSpanOf(clip,asset.duration-clip.sourceStart)-clip.duration:Infinity);
     }
   }
   // Imported timings/source limits can fall between project frames. Once the
@@ -354,7 +354,7 @@ export function resizeSelectedClips(timeline:Timeline,assets:MediaAsset[],ids:st
     const duration=Math.abs(rawDuration-frame)<=tolerance?frame:rawDuration;
     if(clip.kind==='effect')return {...clip,...resizeEffectMotion(clip,duration),start:side==='left'?clip.start+dt:clip.start,duration};
     // The fade clocks are re-anchored to the moved edge, replacing their frozen copies.
-    return side==='right'?{...clip,...ownClockTimingPatch(clip),...anchoredFadeTimingPatch(clip,{start:clip.start,duration}),duration}:{...clip,...offsetClipMotion(clip,dt),...anchoredFadeTimingPatch(clip,{start:clip.start+dt,duration}),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+dt*playbackRateOf(clip):clip.sourceStart};
+    return side==='right'?{...clip,...ownClockTimingPatch(clip),...anchoredFadeTimingPatch(clip,{start:clip.start,duration}),duration}:{...clip,...offsetClipMotion(clip,dt),...anchoredFadeTimingPatch(clip,{start:clip.start+dt,duration}),start:clip.start+dt,duration,sourceStart:clip.kind==='video'||clip.kind==='audio'||clip.kind==='scene'?clip.sourceStart+sourceSpanOf(clip,dt):clip.sourceStart};
   });
   if(!rippling)return reconcileTransitionEdits(timeline,{...timeline,clips});
   // A lane without room for the ripple keeps the ordinary, neighbor-bounded trim.

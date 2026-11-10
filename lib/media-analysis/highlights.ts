@@ -115,7 +115,7 @@ export function transcriptHighlightTracks(duration: number, transcript: Transcri
 }
 export const HIGHLIGHT_QUALITY_BAR = 65;
 
-const round = (n: number) => Math.round(n * 1000) / 1000;
+export const round = (n: number) => Math.round(n * 1000) / 1000;
 const sentenceEnd = (w: TranscriptWord) => /[.!?]["'”’)]*$/.test(w.text);
 export const thoughtStart = (words: TranscriptWord[], i: number) =>
   i === 0 ||
@@ -172,43 +172,59 @@ export function cleanHighlightRange(
     .map(({ w }) => w.start);
   // A visual hook can start in a speech pause. Never move it forward to a
   // later, unrelated sentence merely because that is the next timed word.
-  if (words[first].start > latestStart)
+  // Crosstalk can leave no clean thought start at all; the moment's own start
+  // is then the only in point to refine from.
+  if (words[first].start > latestStart || !starts.length)
     starts.unshift(moment.start);
-  for (const start of starts) {
-    for (let i = first; i < words.length; i++) {
-      const word = words[i],
-        next = words[i + 1],
-        pauseEnd = next?.start ?? duration;
-      // The cursor must lie after ALL overlapping speaker words, and inside
-      // a measured pause, never in an 80ms pad borrowed from the prior word.
-      const spokenEnd = Math.max(
-        word.end,
-        ...words.slice(Math.max(0, i - 30), i).map((w) => w.end),
-      );
-      const end = Math.max(target + 0.08, spokenEnd + 0.08, start + 15);
-      const pause = pauseEnd - spokenEnd;
-      if (end > start + 60 || spokenEnd > start + 60) break;
-      if (
-        end <= pauseEnd - 0.03 &&
-        pause >= 0.25 &&
-        (sentenceEnd(word) || pause >= 0.6) &&
-        end >= target
-      )
-        return { start: round(start), end: round(Math.min(duration, end)) };
-      if (
-        !next &&
-        duration >= target &&
-        duration - start >= 15 &&
-        duration - start <= 60
-      )
-        return { start: round(start), end: round(duration) };
+  // First pass: a sentence end or a long pause. Second pass: any word-timed
+  // pause of 0.25 s, the same gap the finish boundary check accepts.
+  for (const relaxed of [false, true])
+    for (const start of starts) {
+      for (let i = first; i < words.length; i++) {
+        const word = words[i],
+          next = words[i + 1],
+          pauseEnd = next?.start ?? duration;
+        // The cursor must lie after ALL overlapping speaker words, and inside
+        // a measured pause, never in an 80ms pad borrowed from the prior word.
+        const spokenEnd = Math.max(
+          word.end,
+          ...words.slice(Math.max(0, i - 30), i).map((w) => w.end),
+        );
+        const end = Math.max(target + 0.08, spokenEnd + 0.08, start + 15);
+        const pause = pauseEnd - spokenEnd;
+        if (end > start + 60 || spokenEnd > start + 60) break;
+        if (
+          end <= pauseEnd - 0.03 &&
+          pause >= 0.25 &&
+          (relaxed || sentenceEnd(word) || pause >= 0.6) &&
+          end >= target
+        )
+          return { start: round(start), end: round(Math.min(duration, end)) };
+        if (
+          !next &&
+          duration >= target &&
+          duration - start >= 15 &&
+          duration - start <= 60
+        )
+          return { start: round(start), end: round(duration) };
+      }
     }
-  }
-  // No complete thought + payoff + pause fits. Returning an overlong range
-  // keeps it out of the ranked 15-60s candidates instead of truncating words.
+  // No word-timed pause follows the payoff within 60 s. Suggest the moment's
+  // own range, moved past any word the payoff end would cut when that still
+  // fits in 60 s: it qualifies when it is 15-60 s, and finishClipping checks
+  // the built tab's actual in/out points against the words. The earlier
+  // fallback pushed the end to start + 60.001 s, which disqualified every
+  // such moment.
+  const start = Math.max(0, Math.min(moment.start, words[first].start));
+  const at = words.findIndex((w) => w.end >= target);
+  const spokenEnd = at < 0 ? target : Math.max(
+    words[at].end,
+    ...words.slice(Math.max(0, at - 30), at).map((w) => w.end),
+  );
+  const wordEnd = Math.max(target + 0.08, spokenEnd + 0.08);
   return {
-    start: Math.max(0, words[first].start),
-    end: Math.max(target, words[first].start + 60.001),
+    start: round(start),
+    end: round(Math.min(duration, wordEnd <= start + 60 ? wordEnd : target)),
   };
 }
 

@@ -67,6 +67,11 @@ export async function writeRunState(ctx:MutationCtx,projectId:Id<'projects'>,pat
 /** `sceneCode: false` keeps scene code as stored (by hash) for editors that load each code once. */
 export async function readProject(ctx:Context,projectId:Id<'projects'>,includeHistory=false,sceneCode=true):Promise<Doc<'projects'>|null> {
   const project=await ctx.db.get(projectId);if(!project)return null;
+  return hydrateProject(ctx,project,includeHistory,sceneCode);
+}
+/** The public project shape from a document already read, so a caller that checked the raw row does not read it twice. */
+export async function hydrateProject(ctx:Context,project:Doc<'projects'>,includeHistory=false,sceneCode=true):Promise<Doc<'projects'>> {
+  const projectId=project._id;
   const run=await ctx.db.query('aiRuns').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   const payload=await runPayload(ctx,projectId);
   const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT):[];

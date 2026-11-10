@@ -22,7 +22,7 @@ Sources:
 - Never claim an unsupported or live stream was imported.
 
 Tabs:
-- One tab holds one short. Do not substitute a montage in one tab, or one project per short.
+- One tab holds one short. Do not substitute a montage in one tab, or one project per short, unless the user asked for a montage or trailer short: then that one tab cuts several ranges of one moment, its accepted start/end are the tab's retained source span (first in to last out, bound by timelineId), the 15–60 s rule applies to the tab's duration, and the hook and payoff must sit in retained footage.
 - On retries, inspect existing tabs and resume completed work instead of duplicating it.
 - Use openTimeline to revisit an existing short when the editing surface needs it.
 - Preserve unrelated tabs and edits.

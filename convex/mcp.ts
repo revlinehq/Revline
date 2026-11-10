@@ -349,12 +349,20 @@ export const discardFrames = internalMutation({ args: { snapshotId: v.id('frameS
   return null;
 }});
 
+/** A frame request is dropped ten minutes after it starts; one still rendering then gets until this age. */
+const FRAME_REQUEST_LIMIT_MS=30*60_000;
 export const expireFrames = internalMutation({args:{snapshotId:v.id('frameSnapshots')},returns:v.null(),handler:async(ctx,args)=>{
   const snapshot=await ctx.db.get(args.snapshotId);
   if(!snapshot||snapshot.sound||snapshot.pacing)return null;
   const task=snapshot.taskId?await ctx.db.get(snapshot.taskId):null;
-  if(snapshot.status==='queued'&&task&&(task.status==='queued'||task.status==='running'||task.status==='retrying')){
-    await ctx.scheduler.runAfter(15*60_000,internal.mcp.expireFrames,args);
-  }else {await removeFrameControl(ctx,snapshot._id);await ctx.db.delete(snapshot._id);}
+  const active=snapshot.status==='queued'&&!!task&&(task.status==='queued'||task.status==='running'||task.status==='retrying');
+  // A render already drawing may finish for a caller still polling; give it until FRAME_REQUEST_LIMIT_MS.
+  if(active&&task.status==='running'&&Date.now()-snapshot.createdAt<FRAME_REQUEST_LIMIT_MS){
+    await ctx.scheduler.runAfter(5*60_000,internal.mcp.expireFrames,args);
+    return null;
+  }
+  // Nobody is waiting on an expired request: its render must not stay queued ahead of exports or hold a task slot.
+  if(active)await cancelMediaTask(ctx,task._id);
+  await removeFrameControl(ctx,snapshot._id);await ctx.db.delete(snapshot._id);
   return null;
 }});
