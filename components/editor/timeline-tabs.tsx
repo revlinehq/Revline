@@ -22,7 +22,7 @@ export type TimelineTabActions = {
 };
 
 
-/** Spreadsheet-style tabs on top of the timeline: each is its own video in this project. */
+/** Spreadsheet-style tabs in the bar above the preview: each is its own video in this project. */
 export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
   const [busy, setBusy] = useState(false);
   // The clicked tab highlights on the next frame; the timeline it opens follows.
@@ -56,7 +56,8 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
     return () => element.removeEventListener('wheel', onWheel);
   }, []);
   useEffect(() => { if (shown) strip.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(shown)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [shown, tabs.length]);
-  return <div ref={strip} className="timeline-tabs" role="tablist" aria-label="Timelines">
+  // Tabs scroll inside their own slot; the add button sits outside it, so it is always on screen.
+  return <div className="timeline-tabs"><div ref={strip} className="timeline-tabs-scroll" role="tablist" aria-label="Timelines">
     {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" data-tab-id={tab.id} role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={!!tab.agents?.length || tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
       <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
         {tab.agents?.length ? <WorkingAgents agents={tab.agents}/> : tab.id === workingId ? <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span> : null}
@@ -71,6 +72,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
         <DropdownMenuItem variant="destructive" disabled={blocked || tabs.length <= 1} onSelect={() => setDialog({ mode: 'remove', id: tab.id, name: tab.name })}><Trash2/>Delete timeline</DropdownMenuItem>
       </DropdownMenuContent></DropdownMenu>}
     </div>; })}
+    </div>
     <button type="button" className="timeline-tab-add" aria-label="New blank timeline" title="New blank timeline" disabled={blocked} onClick={() => void run(() => actions.onCreate('blank'))}><Plus size={14}/></button>
     <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
       {dialog?.mode === 'remove' ? <>
