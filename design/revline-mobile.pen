@@ -1,5 +1,5 @@
 {
-  "version": "2.19",
+  "version": "2.22",
   "children": [
     {
       "type": "frame",
@@ -22,7 +22,7 @@
             "type": "image",
             "enabled": true,
             "url": "generated-1.png",
-            "mode": "fill"
+            "mode": "cover"
           }
         },
         {
@@ -35,7 +35,7 @@
             "type": "image",
             "enabled": true,
             "url": "generated-3.png",
-            "mode": "fill"
+            "mode": "cover"
           }
         },
         {
@@ -48,7 +48,7 @@
             "type": "image",
             "enabled": true,
             "url": "generated-2.png",
-            "mode": "fill"
+            "mode": "cover"
           }
         },
         {
@@ -61,7 +61,7 @@
             "type": "image",
             "enabled": true,
             "url": "generated.png",
-            "mode": "fill"
+            "mode": "cover"
           }
         }
       ]
@@ -246,7 +246,8 @@
                   "fill": "$muted",
                   "content": "Add footage or describe the cut",
                   "fontFamily": "Inter",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -303,7 +304,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-1.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6
                     },
@@ -332,7 +333,8 @@
                           "fill": "$muted",
                           "content": "Edited 2h ago · 0:34",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -721,7 +723,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "generated-1.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   }
                 }
               ]
@@ -769,7 +771,8 @@
                       "fill": "$text",
                       "content": "Open on the biggest kill and cut the dead air",
                       "fontFamily": "Inter",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -863,7 +866,8 @@
                           "fill": "$text",
                           "content": "Reading media",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -872,7 +876,8 @@
                           "fill": "$muted",
                           "content": "stream_0614.mov",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -908,7 +913,8 @@
                           "fill": "$text",
                           "content": "Trimming clips",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -917,7 +923,8 @@
                           "fill": "$muted",
                           "content": "×6",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -953,7 +960,8 @@
                           "fill": "$text",
                           "content": "Adding to your timeline",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -962,7 +970,8 @@
                           "fill": "$muted",
                           "content": "Biggest kill first",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -978,7 +987,8 @@
                   "content": "Done. The squad wipe opens the cut now, and 11 seconds of dead air are gone.",
                   "lineHeight": 1.5,
                   "fontFamily": "Inter",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -1063,7 +1073,8 @@
                       "fill": "$faint",
                       "content": "Ask for a change",
                       "fontFamily": "Inter",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -1463,7 +1474,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "generated-1.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   }
                 }
               ]
@@ -1508,7 +1519,8 @@
                   "fill": "$muted",
                   "content": "0:07 / 0:34",
                   "fontFamily": "Inter",
-                  "fontSize": 13
+                  "fontSize": 13,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -1535,7 +1547,8 @@
                   "fill": "$faint",
                   "content": "0:00",
                   "fontFamily": "Inter",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -1546,7 +1559,8 @@
                   "fill": "$faint",
                   "content": "0:05",
                   "fontFamily": "Inter",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -1557,7 +1571,8 @@
                   "fill": "$faint",
                   "content": "0:10",
                   "fontFamily": "Inter",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -1568,7 +1583,8 @@
                   "fill": "$faint",
                   "content": "0:15",
                   "fontFamily": "Inter",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "text",
@@ -1579,7 +1595,8 @@
                   "fill": "$faint",
                   "content": "0:20",
                   "fontFamily": "Inter",
-                  "fontSize": 10
+                  "fontSize": 10,
+                  "fontWeight": "normal"
                 },
                 {
                   "type": "frame",
@@ -1814,7 +1831,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-1.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6,
                       "stroke": "$clip-video",
@@ -1830,7 +1847,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-3.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6,
                       "stroke": "$clip-video",
@@ -1846,7 +1863,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-1.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6,
                       "stroke": "$clip-video",
@@ -1862,7 +1879,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-2.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6,
                       "stroke": "$clip-video",
@@ -1878,7 +1895,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-3.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6,
                       "stroke": "$clip-video",
@@ -2989,7 +3006,7 @@
                     "type": "image",
                     "enabled": true,
                     "url": "generated-1.png",
-                    "mode": "fill"
+                    "mode": "cover"
                   }
                 }
               ]
@@ -3037,7 +3054,8 @@
                       "fill": "$text",
                       "content": "Open on the biggest kill and cut the dead air",
                       "fontFamily": "Inter",
-                      "fontSize": 14
+                      "fontSize": 14,
+                      "fontWeight": "normal"
                     }
                   ]
                 }
@@ -3131,7 +3149,8 @@
                           "fill": "$text",
                           "content": "Reading media",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -3140,7 +3159,8 @@
                           "fill": "$muted",
                           "content": "stream_0614.mov",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -3176,7 +3196,8 @@
                           "fill": "$text",
                           "content": "Trimming clips",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -3185,7 +3206,8 @@
                           "fill": "$muted",
                           "content": "×6",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -3221,7 +3243,8 @@
                           "fill": "$text",
                           "content": "Adding to your timeline",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         },
                         {
                           "type": "text",
@@ -3230,7 +3253,8 @@
                           "fill": "$muted",
                           "content": "Biggest kill first",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     }
@@ -3246,7 +3270,8 @@
                   "content": "Done. The squad wipe opens the cut now, and 11 seconds of dead air are gone.",
                   "lineHeight": 1.5,
                   "fontFamily": "Inter",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             }
@@ -3331,7 +3356,8 @@
                       "fill": "$faint",
                       "content": "Ask for a change",
                       "fontFamily": "Inter",
-                      "fontSize": 16
+                      "fontSize": 16,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -3497,7 +3523,8 @@
                       "fill": "$muted",
                       "content": "Warzone Season 1 · 0:34 · 9:16",
                       "fontFamily": "Inter",
-                      "fontSize": 13
+                      "fontSize": 13,
+                      "fontWeight": "normal"
                     }
                   ]
                 },
@@ -4025,7 +4052,8 @@
                   "fill": "$muted",
                   "content": "Add footage or describe the cut",
                   "fontFamily": "Inter",
-                  "fontSize": 14
+                  "fontSize": 14,
+                  "fontWeight": "normal"
                 }
               ]
             },
@@ -4082,7 +4110,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-1.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6
                     },
@@ -4111,7 +4139,8 @@
                           "fill": "$muted",
                           "content": "Edited 2h ago · 0:34",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -4156,7 +4185,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-3.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6
                     },
@@ -4185,7 +4214,8 @@
                           "fill": "$muted",
                           "content": "Yesterday · 0:41",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -4230,7 +4260,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated-2.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6
                     },
@@ -4259,7 +4289,8 @@
                           "fill": "$muted",
                           "content": "Tuesday · 0:28",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
@@ -4304,7 +4335,7 @@
                         "type": "image",
                         "enabled": true,
                         "url": "generated.png",
-                        "mode": "fill"
+                        "mode": "cover"
                       },
                       "cornerRadius": 6
                     },
@@ -4333,7 +4364,8 @@
                           "fill": "$muted",
                           "content": "Jun 9 · 0:52",
                           "fontFamily": "Inter",
-                          "fontSize": 13
+                          "fontSize": 13,
+                          "fontWeight": "normal"
                         }
                       ]
                     },
