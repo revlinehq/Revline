@@ -3,8 +3,9 @@ import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner, requireProject } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
-import { activeTabOf } from './timelineTabs';
-import { startRenderFor } from './renders';
+import { activeTabOf, tabsOf } from './timelineTabs';
+import { exportsFull, startRenderFor } from './renders';
+import { internal } from './_generated/api';
 import { hasUltraPlan } from './lib/billing_access';
 import { batchText, createBatchFor } from './posting';
 import { pendingPostStatus } from './postingTables';
@@ -48,7 +49,7 @@ async function targetsProblem(ctx: QueryCtx | MutationCtx, ownerId: string, acco
 export const start = mutation({
   args: {
     projectId: v.id('projects'), caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()), campaignId: v.optional(v.string()), accountIds: v.array(v.id('postingAccounts')),
-    /** The timeline tab on the user's screen. The post is refused when another tab is the open one, so it never sends a different clip. */
+    /** The timeline tab to post: the one on the user's screen, or a clip picked in the chat. Without it, the open tab. */
     timelineId: v.optional(v.string()),
   },
   returns: v.id('postingPending'),
@@ -59,26 +60,28 @@ export const start = mutation({
     const { caption, title } = batchText(args, now);
     const problem = await targetsProblem(ctx, ownerId, args.accountIds);
     if (problem) throw new ConvexError(problem);
-    const timelineId = activeTabOf(project);
-    if (args.timelineId !== undefined && args.timelineId !== timelineId) throw new ConvexError('Another timeline is open in this project right now. Open the one you want to post, then post again.');
+    const open = activeTabOf(project), timelineId = args.timelineId ?? open;
+    if (!tabsOf(project).some(tab => tab.id === timelineId)) throw new ConvexError('That timeline no longer exists.');
     if (project.aiRunning) throw new ConvexError('Wait for the current edit to finish, then post.');
     // One press, one post: a second editor tab or a repeated request must not send the same clip twice.
     const recent = await ctx.db.query('postingPending').withIndex('by_owner_project', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).order('desc').take(5);
-    if (recent.some(row => row.status === 'waiting' && row.timelineId === timelineId)) throw new ConvexError('This clip is already exporting for a post. Wait for it, or cancel it first.');
+    if (recent.some(row => (row.status === 'waiting' || row.status === 'queued') && row.timelineId === timelineId)) throw new ConvexError('This clip is already exporting for a post. Wait for it, or cancel it first.');
     if (recent.some(row => row.status === 'created' && now - row.createdAt < DOUBLE_PRESS_MS && row.timelineId === timelineId && row.accountIds.length === args.accountIds.length && row.accountIds.every(id => args.accountIds.includes(id)))) throw new ConvexError('This clip was just posted to these accounts.');
     const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).order('desc').take(50);
-    const settings = exportSettings(jobs, project.timeline?.fps ?? 30, await hasUltraPlan(ctx, ownerId));
+    const ultra = await hasUltraPlan(ctx, ownerId), settings = exportSettings(jobs, project.timeline?.fps ?? 30, ultra);
     // Only an export made with the settings this post would use counts: a draft or a smaller render is not what the user means to publish.
     const usable = (job: Doc<'renderJobs'>) => sameVersion(job, project, timelineId) && job.resolution === settings.resolution && job.fps === settings.fps && job.quality === settings.quality;
     // A finished export of this exact version is posted as it is; one still rendering is waited for instead of doubled.
     const ready = jobs.find(job => job.status === 'completed' && (job.outputR2Key || job.outputStorageId) && usable(job));
     const running = ready ? undefined : jobs.find(job => (job.status === 'queued' || job.status === 'rendering') && usable(job));
-    const jobId = ready?._id ?? running?._id ?? await startRenderFor(ctx, ownerId, { projectId: project._id, ...settings });
+    // Several clips posted at once can outnumber the exports an account may run: the rest queue and start as exports finish.
+    const queued = !ready && !running && !!await exportsFull(ctx, ownerId, ultra);
+    const jobId = queued ? undefined : ready?._id ?? running?._id ?? await startRenderFor(ctx, ownerId, { projectId: project._id, ...settings, ...(timelineId !== open ? { timelineId } : {}) });
     const pendingId = await ctx.db.insert('postingPending', {
-      ownerId, projectId: project._id, timelineId, jobId, caption, ...(title ? { title } : {}), ...(args.scheduledAt !== undefined && args.scheduledAt > now ? { scheduledAt: args.scheduledAt } : {}),
-      ...(args.campaignId ? { campaignId: args.campaignId } : {}), accountIds: args.accountIds, status: 'waiting', createdAt: now, updatedAt: now,
+      ownerId, projectId: project._id, timelineId, ...(jobId ? { jobId } : {}), caption, ...(title ? { title } : {}), ...(args.scheduledAt !== undefined && args.scheduledAt > now ? { scheduledAt: args.scheduledAt } : {}),
+      ...(args.campaignId ? { campaignId: args.campaignId } : {}), accountIds: args.accountIds, status: queued ? 'queued' : 'waiting', createdAt: now, updatedAt: now,
     });
-    if (ready) await settleJob(ctx, jobId);
+    if (ready && jobId) await settleJob(ctx, jobId);
     return pendingId;
   },
 });
@@ -89,7 +92,7 @@ export const cancel = mutation({
   handler: async (ctx, { pendingId }) => {
     const ownerId = await requireOwner(ctx), pending = await ctx.db.get(pendingId);
     if (!pending || pending.ownerId !== ownerId) throw new ConvexError('Post not found');
-    if (pending.status !== 'waiting') throw new ConvexError('This post has already started.');
+    if (pending.status !== 'waiting' && pending.status !== 'queued') throw new ConvexError('This post has already started.');
     await ctx.db.patch(pendingId, { status: 'cancelled', updatedAt: Date.now() });
     return null;
   },
@@ -119,7 +122,37 @@ async function settleJob(ctx: MutationCtx, jobId: Id<'renderJobs'>) {
   }
 }
 /** Scheduled when an export completes, fails or is stopped, and by the posting tick as the safety net. */
-export const settle = internalMutation({ args: { jobId: v.id('renderJobs') }, returns: v.null(), handler: async (ctx, { jobId }) => { await settleJob(ctx, jobId); return null; } });
+export const settle = internalMutation({ args: { jobId: v.id('renderJobs') }, returns: v.null(), handler: async (ctx, { jobId }) => {
+  await settleJob(ctx, jobId);
+  // An export ended, so a queued post of this owner may be able to start its own.
+  const job = await ctx.db.get(jobId);
+  if (job) await ctx.scheduler.runAfter(0, internal.postExports.advance, { ownerId: job.ownerId });
+  return null;
+} });
+
+/** Start the export of the owner's oldest queued post when one can run. One post per run, so a refusal fails only that post. */
+export const advance = internalMutation({ args: { ownerId: v.string() }, returns: v.null(), handler: async (ctx, { ownerId }) => {
+  const queued = (await ctx.db.query('postingPending').withIndex('by_status', q => q.eq('status', 'queued')).take(200)).filter(row => row.ownerId === ownerId);
+  const pending = queued[0], now = Date.now();
+  if (!pending) return null;
+  const ultra = await hasUltraPlan(ctx, ownerId);
+  if (await exportsFull(ctx, ownerId, ultra)) return null;
+  const project = await ctx.db.get(pending.projectId);
+  if (!project || project.ownerId !== ownerId) { await ctx.db.patch(pending._id, { status: 'failed', error: 'The project was deleted before this clip could be exported.', updatedAt: now }); }
+  else {
+    const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).order('desc').take(50);
+    try {
+      // Every refusal in startRenderFor comes before it writes anything, so catching one here leaves no half-made export.
+      const jobId = await startRenderFor(ctx, ownerId, { projectId: project._id, ...exportSettings(jobs, project.timeline?.fps ?? 30, ultra), ...(pending.timelineId !== activeTabOf(project) ? { timelineId: pending.timelineId } : {}) });
+      await ctx.db.patch(pending._id, { status: 'waiting', jobId, updatedAt: now });
+    } catch (error) {
+      if (!(error instanceof ConvexError)) throw error;
+      await ctx.db.patch(pending._id, { status: 'failed', error: `The export could not start, so nothing was posted. ${String(error.data)}`.slice(0, ERROR_LIMIT), updatedAt: now });
+    }
+  }
+  if (queued.length > 1) await ctx.scheduler.runAfter(0, internal.postExports.advance, { ownerId });
+  return null;
+} });
 
 const pendingView = v.object({
   id: v.id('postingPending'), status: pendingPostStatus, error: v.union(v.string(), v.null()), createdAt: v.number(), scheduledAt: v.union(v.number(), v.null()),
@@ -130,7 +163,7 @@ const pendingView = v.object({
   batchId: v.union(v.id('postingBatches'), v.null()), published: v.number(), failed: v.number(), sending: v.number(), scheduled: v.number(), postError: v.union(v.string(), v.null()),
 });
 async function view(ctx: QueryCtx, pending: Doc<'postingPending'>) {
-  const job = await ctx.db.get(pending.jobId);
+  const job = pending.jobId ? await ctx.db.get(pending.jobId) : null;
   const posts = pending.batchId ? await ctx.db.query('postingPosts').withIndex('by_batch', q => q.eq('batchId', pending.batchId!)).collect() : [];
   const count = (...statuses: Doc<'postingPosts'>['status'][]) => posts.filter(post => statuses.includes(post.status)).length;
   const later = posts.filter(post => post.status === 'scheduled' && post.attempts === 0 && post.scheduledAt !== undefined).length;

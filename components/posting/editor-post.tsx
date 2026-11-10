@@ -46,10 +46,12 @@ function LinksCard({ batchId, total }: { batchId: Id<'postingBatches'>; total: n
   </>;
 }
 
-export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
+export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBeforePost }: {
   projectId: Id<'projects'>;
-  /** The timeline tab on screen: the server refuses the post when another tab is the open one. */
+  /** The timeline tab on screen, so the post is of the clip the user is looking at. */
   timelineId?: string;
+  /** In the chat: every finished clip. Each is exported and posted on its own. */
+  timelineIds?: string[];
   /** Nothing to post yet, or an edit is running. */
   disabled?: boolean;
   /** Waits for the editor's pending saves, so the export is the version on screen. */
@@ -72,7 +74,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   const selectable = (accounts ?? []).filter(account => account.status === 'connected' && live.has(account.platform));
   const picked = selectable.filter(account => chosen.has(account.id));
 
-  const exporting = pending?.status === 'waiting';
+  const exporting = pending?.status === 'waiting' || pending?.status === 'queued';
   const total = pending?.accounts ?? 0;
   const inFlight = pending?.status === 'created' && pending.sending > 0;
   const posted = pending?.status === 'created' && !inFlight && pending.published > 0 && pending.scheduled === 0;
@@ -95,7 +97,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
     setBusy(true); setError('');
     try {
       await onBeforePost();
-      await start({ projectId, ...(timelineId ? { timelineId } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}), ...(campaign ? { campaignId: campaign._id } : {}) });
+      for (const id of timelineIds?.length ? timelineIds : [timelineId]) await start({ projectId, ...(id ? { timelineId: id } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}), ...(campaign ? { campaignId: campaign._id } : {}) });
       setOpen(false);
     } catch (reason) { setError(userError(reason, 'Could not start this post.')); }
     finally { setBusy(false); }
@@ -141,7 +143,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
         </div>
         <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit(false)}>Post now</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">Revline exports this clip first, then posts it.</p>
+        <p className="editor-post-hint">{timelineIds && timelineIds.length > 1 ? `Revline exports these ${timelineIds.length} clips first, then posts them.` : 'Revline exports this clip first, then posts it.'}</p>
       </PopoverContent>
     </Popover>
   </div>;

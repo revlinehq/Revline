@@ -418,9 +418,13 @@ export const tick = internalMutation({
     // Posts waiting for an export are settled when it ends; this catches an export that ended without saying so.
     const waiting = await ctx.db.query('postingPending').withIndex('by_status', q => q.eq('status', 'waiting')).take(100);
     for (const pending of waiting) {
+      if (!pending.jobId) continue;
       const job = await ctx.db.get(pending.jobId);
       if (!job || job.status !== 'queued' && job.status !== 'rendering') await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: pending.jobId });
     }
+    // Posts queued behind the account's export limit start as exports finish; this catches a missed start.
+    const queued = await ctx.db.query('postingPending').withIndex('by_status', q => q.eq('status', 'queued')).take(100);
+    for (const ownerId of new Set(queued.map(pending => pending.ownerId))) await ctx.scheduler.runAfter(0, internal.postExports.advance, { ownerId });
     const expired = await ctx.db.query('postingOauthStates').withIndex('by_expiresAt', q => q.lte('expiresAt', now)).take(100);
     for (const state of expired) await ctx.db.delete(state._id);
     return null;
