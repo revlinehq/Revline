@@ -1,2 +1,2 @@
-- Editor: removed motion films, scenes, blueprints, reference recreation and image generation; Revline now edits real footage only (clip, edit and reel lanes). Why: the product is pivoting to clipping and short-form editing of real footage.
-- Old scene and film clips stay on the timeline as unsupported clips that draw nothing in preview or export.
+- Editor: removed motion films, scenes, blueprints, reference recreation and image generation; Revline edits real footage only (clip, edit and reel lanes). Why: the product is pivoting to clipping and short-form editing of real footage.
+- Editor: old scene and film clips stay on the timeline as unsupported clips that draw nothing in preview or export. Why: projects that still hold them must open and export without crashing.

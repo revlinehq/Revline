@@ -84,7 +84,7 @@ export const touchAgent = internalMutation({ args: { ownerId: v.string(), projec
   try { await projectIdentity(ctx, id, args.ownerId); } catch { return null; }
   const name = args.agentName?.slice(0, 60) || 'AI agent', now = Date.now();
   // The editor keeps showing the agent as working for MCP_AGENT_IDLE_MS after its last call. Agents think between calls,
-  // and writing a film part for patchScene or addFilm can take several minutes, so a short window drops the status mid-request.
+  // and a long tool call can take several minutes, so a short window drops the status mid-request.
   if(args.taskId)await touchTaskAgent(ctx,args.ownerId,args.taskId,name,args.agentClientId,args.startedAt);
   const run = await ctx.db.query('aiRuns').withIndex('by_project', q => q.eq('projectId', id)).unique();
   if (run && run.aiAgentName === name && (run.aiAgentActiveUntil ?? 0) > now + MCP_AGENT_IDLE_MS / 2) return null;

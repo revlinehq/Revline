@@ -1,4 +1,4 @@
-/** Display budgets, in characters, for the text of a choice card (askUser, askBrandKit, previewBackgrounds).
+/** Display budgets, in characters, for the text of a choice card (askUser, askBrandKit).
  * The card is at most 420 px wide: at 390 px a label fits two lines and a description three (one more beside a logo or play button). */
 export const CHOICE_TEXT = { question: 300, label: 60, description: 140 } as const;
 

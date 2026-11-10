@@ -73,7 +73,7 @@ export function turnPublicationReceipt(messages:readonly ChatMessage[]):Timeline
 }
 const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
 function unpack(value: unknown): { output?: Record<string, unknown>; error?: string } {
-  // Tools that return images (getFrames, compareScreen) store the model content: a list of text and image parts.
+  // Tools that return images (getFrames) store the model content: a list of text and image parts.
   if (Array.isArray(value)) {
     // Image-producing tools keep their JSON result in a text part before the images.
     const structured = value.flatMap(part => {
@@ -112,7 +112,6 @@ export function liveActivity(replies: readonly ChatMessage[]): { label: string; 
   const step = last?.type === 'tools' ? last.steps.at(-1) : undefined;
   if (!step || step.state !== 'running') return { label: 'Working' };
   const title = typeof step.input?.title === 'string' ? step.input.title : undefined;
-  if (step.name === 'addScene' || step.name === 'addScenes' || step.name === 'addFilm' || step.name === 'editScene' || step.name === 'patchScene') return { label: step.name === 'editScene' || step.name === 'patchScene' ? 'Changing scene code' : step.name === 'addFilm' ? 'Writing the film' : 'Writing scene code', ...(title ? { detail: title } : {}) };
   return { label: toolBehavior(step.name)?.label?.[0] ?? 'Running a step' };
 }
 
