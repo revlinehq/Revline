@@ -10,6 +10,7 @@ ENV NODE_ENV=production \
     BEAT_TRACK_MODEL_PATH=/opt/models/beat_this-final0.ckpt \
     SCENE_DETECT_PYTHON=/opt/scene-detection/bin/python \
     YT_DLP_PATH=/opt/video-import/bin/yt-dlp \
+    VIDEO_IMPORT_AUTO_UPDATE=1 \
     MEDIA_WORKER_CONCURRENCY=1 \
     BEAT_TRACK_THREADS=2 \
     OMP_NUM_THREADS=2 \
