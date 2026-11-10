@@ -1,5 +1,6 @@
 // Explicit operator commands. Nothing in this file runs during install, build or a PR.
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, appendFile, mkdir, rm } from 'node:fs/promises';
+import { hostname, userInfo } from 'node:os';
 import { resolve, join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { randomUUID, createHash } from 'node:crypto';
@@ -10,7 +11,7 @@ import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
 import { workerCapacity } from '../lib/worker-capacity.mjs';
 import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
-import { verifyStagingPromotion } from './railway-promotion.mjs';
+import { verifyStagingPromotion, founderBypassReason } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
@@ -18,12 +19,20 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
   apply: { type: 'boolean' }, kind: { type: 'string', default: 'all' }, 'image-first': { type: 'boolean' },
   processors: { type: 'string' }, standard: { type: 'string' }, ultra: { type: 'string' },
-  'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' },
+  'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' }, 'founder-bypass': { type: 'string' },
 } });
 const [operation] = positionals;
 const operations = ['plan', 'build', 'preflight', 'stage-repository', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
-if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'staging', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|staging|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--apply]`);
+if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'staging', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|staging|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--founder-bypass "<reason>" (production stage only)] [--apply]`);
 if (values['image-first'] && (operation !== 'stage' || values.kind !== 'processor')) throw new Error('--image-first is only for staging a processor before its immediately following Convex release.');
+// A founder-approved exception to the staging receipt, for one production `stage` run. It is never implied:
+// the reason is required, it cannot be combined with a receipt, and the run is logged before anything changes.
+let founderBypass;
+if (values['founder-bypass'] !== undefined) {
+  if (operation !== 'stage' || values.environment !== 'production') throw new Error('--founder-bypass applies only to `stage --environment production`.');
+  founderBypass = founderBypassReason(values['founder-bypass']);
+  if (values['staging-receipt']) throw new Error('Pass a staging receipt or --founder-bypass, not both.');
+}
 const configPath = resolve(values.config);
 let config = railwayConfig(await readFile(configPath, 'utf8'));
 if (config.environment !== values.environment) throw new Error('Explicit environment and manifest differ.');
@@ -56,7 +65,16 @@ if (values.apply) {
   } else if (gitDir !== '.git' || (branch !== 'main' && !mainPush && !stagingCi)) throw new Error('Apply queue migration commands only from the primary checkout on reviewed main or its main-push release runner.');
   if (execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim()) throw new Error('Migration commands require a clean reviewed checkout; keep local manifests in ignored .data/.');
 }
-if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds });
+if (founderBypass) {
+  const gitValue = name => { try { return execFileSync('git', ['config', name], { encoding: 'utf8' }).trim(); } catch { return ''; } };
+  const entry = { at: new Date().toISOString(), osUser: userInfo().username, host: hostname(), gitName: gitValue('user.name'), gitEmail: gitValue('user.email'), reason: founderBypass,
+    environment: config.environment, operation, kinds, commit: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), processorCommit: config.processorCommit, exportsCommit: config.exportsCommit, manifestHash: hash() };
+  const log = resolve('.data/railway/founder-bypass.log');
+  // No log, no bypass: a failure here throws before any Railway or Convex call.
+  await mkdir(resolve('.data/railway'), { recursive: true });
+  await appendFile(log, JSON.stringify(entry) + '\n', { mode: 0o600 });
+  console.log(`\n*** FOUNDER BYPASS: staging promotion receipt NOT checked for this production stage. Reason: ${founderBypass}. Logged to ${log}. ***\n`);
+} else if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds });
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
 const env = { ...process.env, ...settings };
 mask(env);

@@ -45,3 +45,39 @@ export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFi
   console.log(`Staging promotion verified: ${receipt.projectId}; processing and configured export lanes completed on the exact source commits and artifacts.`);
   return staging;
 }
+
+/** The staging manifest the `Railway staging` workflow built, runtime-checked and uploaded for one main commit
+ *  (artifact `railway-staging-manifest`). It pins the image digests that commit produced; nothing here is trusted
+ *  beyond that: promotion still checks them against the live staging backend, and a bypass logs itself.
+ * @param {{ commit: string, env?: NodeJS.ProcessEnv, directory?: string, file?: string }} args */
+export async function stagingManifestFor({ commit, env = process.env, directory = '.data/railway', file }) {
+  if (!/^[a-f0-9]{40}$/.test(commit)) throw new Error('A full commit SHA is required to find its staging manifest.');
+  const { mkdir, mkdtemp, copyFile, rm } = await import('node:fs/promises');
+  const { join, resolve } = await import('node:path');
+  const { tmpdir } = await import('node:os');
+  const { command } = await import('./release-command.mjs');
+  const { REPOSITORY } = await import('../lib/repository.mjs');
+  const path = file ? resolve(file) : resolve(directory, `staging-${commit}.json`);
+  // Always the newest successful run: a rerun of the workflow for the same commit builds new digests.
+  if (!file) {
+    const runs = JSON.parse(await command('gh', ['run', 'list', '--repo', REPOSITORY, '--workflow', 'Railway staging', '--commit', commit, '--status', 'success', '--limit', '1', '--json', 'databaseId'], { env, quiet: true }));
+    if (!runs.length) throw new Error(`Staging has not staged ${commit} yet: no successful "Railway staging" run for that commit. It runs on every push to main; wait for it (or rerun it) and try again.`);
+    const scratch = await mkdtemp(join(tmpdir(), 'railway-staging-manifest-'));
+    try {
+      await command('gh', ['run', 'download', String(runs[0].databaseId), '--repo', REPOSITORY, '--name', 'railway-staging-manifest', '--dir', scratch], { env, quiet: true });
+      await mkdir(resolve(directory), { recursive: true });
+      await copyFile(join(scratch, 'staging.json'), path);
+    } finally { await rm(scratch, { recursive: true, force: true }); }
+  }
+  const staging = railwayConfig(await readFile(path, 'utf8'));
+  if (staging.environment !== 'staging' || staging.processorCommit !== commit || staging.exportsCommit !== commit) throw new Error(`${path} is not the staging manifest of ${commit}.`);
+  return { staging, path };
+}
+
+/** The one rule for a founder bypass reason, shared by release:prod and railway-workers.mjs so a bad reason is
+ *  refused before anything is deployed. Returns the trimmed reason. @param {string | undefined} value */
+export function founderBypassReason(value) {
+  const reason = value?.trim();
+  if (!reason || reason.length < 15 || !/[a-z]/i.test(reason)) throw new Error('--founder-bypass needs the reason the founder gave, in words (at least 15 characters).');
+  return reason;
+}
