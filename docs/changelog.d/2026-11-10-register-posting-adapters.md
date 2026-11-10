@@ -1,0 +1,1 @@
+- Posting: Instagram, TikTok and YouTube adapters are registered with the posting base. Why: each still reads "Coming soon" until its credentials and POSTING_TOKEN_KEY are set on the server.
