@@ -8,6 +8,7 @@ import { internal } from '../_generated/api';
 import type { MotionMap } from '../../lib/inspo-motion/motion-map';
 import { referenceReadResult } from '../schema';
 import { LOOKS_OFF, type LookSample } from '../../lib/ai/eyes';
+import { processorCan } from './processor_capabilities';
 
 // Reading a source video for an agent: the worker cuts frames into one labeled sheet image the model looks at,
 // follows a boxed object frame by frame, or reads exact pixels of one frame. Times and boxes are SOURCE seconds and pixels.
@@ -138,6 +139,10 @@ export async function runLooksRead(ctx: ActionCtx, ownerId: string, projectId: I
   };
   const cached = await ctx.runAction(internal.frameCache.readResult, { ownerId, projectId, assetId, work }) as ReadResult | null;
   if (measured(cached)) return read(cached!);
+  // Ask before queuing: a processor that reported without the looks read would only return an empty "success".
+  // A processor that has never reported (an image from before reporting) may or may not have it, so the read is
+  // queued and measured() decides, as before; it is also the fallback for a stale report (mixed fleet, rollback).
+  if (!await processorCan(ctx, 'read:looks', { whenUnreported: true })) throw new LooksUnavailableError('The media processor on this server cannot measure faces yet.');
   let readId: Id<'referenceReads'>;
   try { readId = await ctx.runMutation(internal.referenceReads.request, { ownerId, projectId, assetId, ...work }); }
   catch (error) { if (error instanceof Error && error.message.includes(LOOKS_OFF)) throw new LooksUnavailableError(LOOKS_OFF); throw error; }

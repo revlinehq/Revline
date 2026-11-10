@@ -41,6 +41,7 @@ export function releasePlan(base) {
     processor: { graph: imports(ENTRIES), paths: [...RUNTIME_PREFIXES, 'lib/media-analysis/processor-version.ts'] },
     convex: { graph: imports(tracked.filter(file => file.startsWith('convex/') && file.endsWith('.ts'))), paths: ['convex/', 'convex.json'] },
     media: { graph: imports(['cf-workers/media/worker.ts']), paths: ['cf-workers/media/'] },
+    mcp: { graph: imports(['cf-workers/mcp/worker.ts']), paths: ['cf-workers/mcp/'] },
     agent: { graph: imports(['cf-workers/agent-runner/worker.ts']), paths: ['cf-workers/agent-runner/', 'lib/ai/', 'convex/lib/editorTurn.ts', 'scripts/sync-agent-runner-env.mjs'] },
     exports: { graph: imports(['media-processor/consumer.ts', ...ENTRIES.slice(2)]), paths: ['media-processor/', 'public/vendor/', 'public/fonts/', 'scripts/render-', 'scripts/composition-review-worker.mjs', 'scripts/copy-vendor.mjs', 'scripts/hyperframes-playback-compat.mjs', 'lib/render-resources.mjs', ...WORKER_RUNTIME_FILES] },
     frontend: { graph: new Set(), paths: ['app/', 'components/', 'lib/', 'public/', 'landing/', 'next.config.ts', 'vite.config.ts', 'wrangler.jsonc', 'postcss.config.mjs', 'proxy.ts', 'scripts/cloudflare-frontend.mjs', 'scripts/copy-vendor.mjs'] },

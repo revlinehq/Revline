@@ -1,0 +1,35 @@
+name: Release gates
+# The two checks that keep merges and releases fast (docs/releases.md). Their own small workflow, so they run on
+# every pull request whether or not the full Validate workflow is enabled. Runs pull request code, including from
+# forks: GitHub-hosted runner only, read-only token, never the self-hosted release runner.
+on:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Both gates compare this change with the base branch.
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # Each pull request adds its own file under docs/changelog.d/, so changelog entries never conflict.
+      - name: Changelog entries are fragments
+        run: |
+          node scripts/changelog.mjs check
+          if git diff --name-only "$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)" HEAD | grep -qx 'docs/changelog.md'; then
+            echo "::error::Do not edit docs/changelog.md in a pull request. Add docs/changelog.d/<YYYY-MM-DD>-<slug>.md with your entry; the release command assembles it (docs/releases.md)."
+            exit 1
+          fi
+      # Fails a change that breaks the installed iOS app, the deployed media processor or stored data.
+      - name: Compatibility with what is already shipped
+        run: node scripts/compat-check.mjs --base "$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)"
