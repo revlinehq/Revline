@@ -42,7 +42,7 @@ export function ProjectCampaign({ projectId, placement = 'composer' }: { project
   return <div className={header ? 'project-campaign-chip flex min-w-0 items-center' : 'mb-2 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-muted-foreground'} data-project-campaign={placement}>
     {campaign ? <>
       <Popover open={open} onOpenChange={setOpen}>
-        <PopoverTrigger asChild><Button type="button" variant="secondary" size="md" className={`project-campaign-trigger min-w-0 shrink rounded-full ${NO_RING}`} title="Change campaign"><Megaphone aria-hidden="true"/><span className="truncate">{campaign.name}</span><ChevronDown aria-hidden="true"/></Button></PopoverTrigger>
+        <PopoverTrigger asChild><Button type="button" variant="soft" size="sm" className={`project-campaign-trigger min-w-0 shrink ${NO_RING}`} title="Change campaign"><Megaphone aria-hidden="true"/><span className="truncate">{campaign.name}</span><ChevronDown aria-hidden="true"/></Button></PopoverTrigger>
         <PopoverContent align="start" side="bottom" className="campaign-popover w-80">
           <div className="flex flex-col gap-0.5">
             <span className="font-medium text-foreground">{campaign.name}</span>

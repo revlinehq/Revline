@@ -1,0 +1,99 @@
+/* Dashboard design tokens (signed-in app redesign). Defined once on :root so every surface can use them:
+   the shell, Campaigns, Stats, Posts, the editor and the landing page. Neutral greys only; one accent. */
+:root {
+  --dash-page: #111111;
+  --dash-sidebar: #141414;
+  --dash-card: #1B1B1B;
+  --dash-tile: #202020;
+  --dash-border: #FFFFFF0D;
+  --dash-border-nested: #FFFFFF0A;
+  --dash-divider: #FFFFFF0D;
+  --dash-pill: #2A2A2A;
+  --dash-pill-hover: #333333;
+  --dash-pill-quiet: #1E1E1E;
+  --dash-row-active: #1F1F1F;
+  --dash-accent: #3960E8;
+  --dash-accent-highlight: rgb(110, 150, 255);
+  --dash-green: #22C55E;
+  --dash-text: #F5F5F5;
+  --dash-text-soft: #D6D6D6;
+  --dash-muted: #8E8E8E;
+  --dash-navbar-height: 56px;
+  --dash-sidebar-width: 256px;
+  --dash-content-width: 960px;
+  --dash-gutter: 32px;
+}
+
+/* Put `dash-theme` on a page root to map shadcn's tokens to the dashboard palette. The mapping sits on the
+   document so dialogs, popovers and sheets (portalled to <body>) get it too. */
+:root:has(.dash-theme) {
+  --background: var(--dash-page);
+  --foreground: var(--dash-text);
+  --card: var(--dash-card);
+  --card-foreground: var(--dash-text);
+  --popover: var(--dash-card);
+  --popover-foreground: var(--dash-text);
+  --primary: var(--dash-accent);
+  --primary-foreground: #fff;
+  --secondary: var(--dash-pill);
+  --secondary-foreground: var(--dash-text);
+  --muted: var(--dash-tile);
+  --muted-foreground: var(--dash-muted);
+  --accent: var(--dash-pill);
+  --accent-foreground: var(--dash-text);
+  --border: #FFFFFF14;
+  --input: #FFFFFF1F;
+  --sidebar: var(--dash-sidebar);
+  --sidebar-foreground: var(--dash-text-soft);
+  --sidebar-accent: var(--dash-row-active);
+  --sidebar-accent-foreground: var(--dash-text);
+  --sidebar-border: var(--dash-border);
+  --revline-accent: var(--dash-accent);
+  --revline-primary-background: var(--dash-accent);
+  --ws-bg: var(--dash-page);
+  --font-ui: var(--font-inter);
+  --font-sans: var(--font-inter);
+}
+:root:has(.dash-theme) body { background: var(--dash-page); font-family: var(--font-inter), sans-serif; }
+
+/* Primary button: <Button variant="primary">. A 36px full pill, accent fill with a soft highlight on the top edge. */
+[data-slot=button][data-variant=primary] {
+  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: 9999px;
+  color: #fff; font-size: 14px; font-weight: 500;
+  background: radial-gradient(ellipse 50% 64% at 50% 0%, var(--dash-accent-highlight), transparent), var(--dash-accent);
+}
+[data-slot=button][data-variant=primary]:hover { filter: brightness(1.08); }
+[data-slot=button][data-variant=primary][data-size^=icon] { width: 36px; padding: 0; }
+
+/* Secondary button: <Button variant="soft">. A soft filled pill with no border. */
+[data-slot=button][data-variant=soft] {
+  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: 9999px;
+  background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500;
+}
+[data-slot=button][data-variant=soft]:hover { background: var(--dash-pill-hover); }
+[data-slot=button][data-variant=soft][data-size^=icon] { width: 36px; padding: 0; }
+[data-slot=button]:is([data-variant=primary], [data-variant=soft])[data-size=sm] { height: 32px; padding: 0 14px; font-size: 13px; }
+
+/* Card: <Card variant="dash"> for a page card, <Card variant="tile"> for a tile or row nested inside one. */
+[data-slot=card]:is([data-variant=dash], [data-variant=tile]) { box-shadow: none; border-radius: 12px; color: var(--dash-text); }
+[data-slot=card][data-variant=dash] { background: var(--dash-card); border: 1px solid var(--dash-border); }
+[data-slot=card][data-variant=tile] { background: var(--dash-tile); border: 1px solid var(--dash-border-nested); border-radius: 10px; }
+
+/* Chip: <Badge variant="chip">; the small accent pill: <Badge variant="new">. */
+[data-slot=badge][data-variant=chip] {
+  height: 30px; padding: 0 12px; gap: 6px; border: 0; border-radius: 9999px;
+  background: var(--dash-pill); color: var(--dash-text-soft); font-size: 13px; font-weight: 400;
+}
+[data-slot=badge][data-variant=new] {
+  height: 20px; padding: 0 8px; border: 0; border-radius: 9999px;
+  background: var(--dash-accent); color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .02em;
+}
+
+/* Segmented switch: <Segmented> (components/ui/segmented.tsx), a full pill built on ToggleGroup. */
+[data-slot=toggle-group][data-segmented] { height: 36px; padding: 3px; gap: 0; border-radius: 9999px; background: var(--dash-pill-quiet); }
+[data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item] {
+  height: 30px; min-width: 0; padding: 0 16px; border: 0; border-radius: 9999px; background: transparent;
+  color: var(--dash-muted); font-size: 14px; font-weight: 500; transition: none;
+}
+[data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item]:hover { color: var(--dash-text); }
+[data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item][data-state=on] { background: var(--dash-pill); color: var(--dash-text); }

@@ -1,11 +1,11 @@
 /* The media panel's tabs and its Effects tab. Neutral surfaces, hover states only, no motion. */
 .inspector-tab-root[data-slot=tabs]{flex:1;min-height:0;gap:0}
 /* The two tabs are one segmented control. */
-.inspector-tab-list[data-slot=tabs-list]{flex:none;align-self:stretch;width:auto;height:28px;margin:12px 12px 0;padding:0;gap:0;border:0;border-radius:8px;background:#1b1b1b}
-.inspector-tab-list [data-slot=tabs-trigger]{flex:1;height:28px;padding:0;border:0;border-radius:7px;background:none!important;color:#969696;font-size:13px;font-weight:400;box-shadow:none;transition:none}
+.inspector-tab-list[data-slot=tabs-list]{flex:none;align-self:stretch;width:auto;height:28px;margin:12px 12px 0;padding:0;gap:0;border:0;border-radius:8px;background:var(--dash-card)}
+.inspector-tab-list [data-slot=tabs-trigger]{flex:1;height:28px;padding:0;border:0;border-radius:7px;background:none!important;color:var(--dash-muted);font-size:13px;font-weight:400;box-shadow:none;transition:none}
 .inspector-tab-list [data-slot=tabs-trigger]::after{display:none}
-.inspector-tab-list [data-slot=tabs-trigger]:hover{color:#ededed}
-.inspector-tab-list [data-slot=tabs-trigger][data-state=active]{background:#2a2a2a!important;color:#ededed;font-weight:500}
+.inspector-tab-list [data-slot=tabs-trigger]:hover{color:var(--dash-text)}
+.inspector-tab-list [data-slot=tabs-trigger][data-state=active]{background:var(--dash-pill)!important;color:var(--dash-text);font-weight:500}
 .inspector-tab-list [data-slot=tabs-trigger]:focus-visible{outline:none;box-shadow:none}
 /* In the phone sheet the tabs leave room for the close button and are a finger tall. */
 .preview-inspector-sheet .inspector-tab-list[data-slot=tabs-list]{height:36px;margin:12px 60px 0 12px}
@@ -24,17 +24,17 @@
 .effect-switch[data-slot=switch]:focus-visible{outline:none;border-color:transparent;box-shadow:none}
 .effect-switch [data-slot=switch-thumb]{background:#f2f2f2;transition:none}
 .effect-switch[data-state=checked] [data-slot=switch-thumb]{background:#171717}
-.effect-toggle[data-slot=toggle-group]{width:100%;padding:2px;border-radius:8px;background:#1b1b1b}
+.effect-toggle[data-slot=toggle-group]{width:100%;padding:2px;border-radius:8px;background:var(--dash-card)}
 .preview-inspector .effect-toggle [data-slot=toggle-group-item]{flex:1;height:28px;min-width:0;padding:0 8px;border:0;border-radius:6px!important;background:none;color:var(--ws-muted,#999);font-size:12px;font-weight:400;box-shadow:none;transition:none}
-.preview-inspector .effect-toggle [data-slot=toggle-group-item]:hover{background:#202020;color:#ededed}
-.preview-inspector .effect-toggle [data-slot=toggle-group-item][data-state=on]{background:#2a2a2a;color:#ededed;font-weight:500}
+.preview-inspector .effect-toggle [data-slot=toggle-group-item]:hover{background:var(--dash-tile);color:var(--dash-text)}
+.preview-inspector .effect-toggle [data-slot=toggle-group-item][data-state=on]{background:var(--dash-pill);color:var(--dash-text);font-weight:500}
 .preview-inspector .effect-toggle [data-slot=toggle-group-item]:focus-visible{outline:none;box-shadow:none}
 html:not([data-workspace-theme=dark]) .effect-switch[data-slot=switch]{background:#d4d4d4}
 html:not([data-workspace-theme=dark]) .effect-switch[data-slot=switch][data-state=checked]{background:#292929}
 html:not([data-workspace-theme=dark]) .effect-switch [data-slot=switch-thumb]{background:#fff}
 html:not([data-workspace-theme=dark]) .preview-inspector .effect-toggle [data-slot=toggle-group-item]:hover{background:#e8e8e8;color:#292929}
 html:not([data-workspace-theme=dark]) .preview-inspector .effect-toggle [data-slot=toggle-group-item][data-state=on]{background:#fff;color:#292929}
-.effect-input[data-slot=input]{height:36px;padding:0 10px;border:1px solid #ffffff14;border-radius:8px;background:#1b1b1b;color:var(--ws-text,#f2f2f2);font-size:13px;box-shadow:none;transition:none}
+.effect-input[data-slot=input]{height:36px;padding:0 10px;border:1px solid #ffffff14;border-radius:8px;background:var(--dash-card);color:var(--ws-text,#f2f2f2);font-size:13px;box-shadow:none;transition:none}
 .effect-input[data-slot=input]::placeholder{color:var(--ws-muted,#999)}
 .effect-input[data-slot=input]:hover:not(:disabled){border-color:#ffffff26}
 .effect-input[data-slot=input]:focus,.effect-input[data-slot=input]:focus-visible{outline:none;box-shadow:none}

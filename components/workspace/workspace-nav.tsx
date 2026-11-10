@@ -24,6 +24,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './workspace-pages.css';
 import type { WorkingAgent } from '@/lib/mcp/agent-identity';
+import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
+import { useInDashboardShell } from '@/components/dashboard/shell-context';
+import { activeDashboardItem } from '@/components/dashboard/dashboard-nav';
 
 export type WorkspaceChat = {
   id: Id<'projects'> | 'demo'; title: string; updatedAt: number; clipCount: number;
@@ -94,7 +97,16 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+/** Pages inside the signed-in shell get its navbar (named after their sidebar item); the editor keeps this bar. */
+export const WorkspaceNav = memo(function WorkspaceNav(props: WorkspaceNavProps) {
+  const inShell = useInDashboardShell();
+  const pathname = usePathname();
+  // A sidebar item's own page takes the item's name ("Settings"); pages under it keep their title ("Your chats").
+  if (inShell) { const item = activeDashboardItem(pathname); return <DashboardNavbar title={item && item.href === pathname ? item.label : props.title} />; }
+  return <WorkspaceTopBar {...props} />;
+});
+
+const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -159,7 +171,7 @@ export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_L
       {saveFailed && onRetrySave && <Button variant="outline" size="md" type="button" className="workspace-nav-unsaved" aria-label="Unsaved changes. Retry saving" onClick={onRetrySave}><CircleAlert size={14} aria-hidden="true" /><span>Unsaved changes — Retry</span></Button>}
       {(onUndo || onRedo) && <div className="workspace-nav-history"><Button variant="ghost" size="icon-sm" aria-label="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></Button></div>}
       {onFootage && <Button variant="outline" size="md" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></Button>}
-      {onExport && !demo && <span className="workspace-nav-action-hint"><Button size="md" variant={backHref ? 'secondary' : 'default'} className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>{backHref && <Download size={14} />}Export{!backHref && <Download size={13} />}</Button></span>}
+      {onExport && !demo && <span className="workspace-nav-action-hint"><Button size={backHref ? 'sm' : 'md'} variant={backHref ? 'soft' : 'default'} className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>{backHref && <Download size={14} />}Export{!backHref && <Download size={13} />}</Button></span>}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
       <WorkspaceAccountMenu active={active} error={accountError} />
