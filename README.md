@@ -2,7 +2,7 @@
 
 [![License: Apache 2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Revline is an open source, general-purpose agentic video editor. Ask the AI to turn your rough cut into a finished video, or create motion design for your startup in plain HTML + GSAP.
+Revline is an open source agentic video editor for real footage. Ask the AI to turn your rough cut into a finished video, a reel, or a batch of clips.
 
 [tryrevline.com](https://tryrevline.com)
 
@@ -11,9 +11,7 @@ Revline is an open source, general-purpose agentic video editor. Ask the AI to t
 ## What it does
 
 - **Rough cut to finished video.** Cuts, speech cleanup, captions, b-roll, layers, transitions and effects on talking heads, vlogs, podcasts, reels and screen recordings.
-- **Motion design in HTML + GSAP.** Launch films, feature films and teasers built from scratch as plain HTML + GSAP scenes on the same timeline.
 - **Clipping.** Turns a long stream, VOD or podcast (or a Twitch, Kick or YouTube link) into separate 15–60 second shorts, with clipper-style captions and vertical layouts.
-- **Remakes.** Recreates a video you share, or borrows one part of it (a transition, a title style, the pacing, the look) for your own edit.
 - **A real timeline.** Every AI edit lands as tracks and clips you can open, adjust and undo in the browser.
 
 ## Use it from your coding agent

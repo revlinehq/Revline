@@ -22,7 +22,7 @@ import {
   checkClipData,
   retainedFootage,
   timelineFingerprint,
-  type RetainedFootage,
+  
 } from "../lib/media-analysis/clip-check";
 import {
   defaultClipCount,
@@ -44,7 +44,6 @@ import {
 } from "./lib/clipping_validator";
 import { timelineDuration, type Timeline } from "../lib/editor/types";
 import { timelineValidator } from "./schema";
-import { loadSceneCode } from "./lib/scene_code";
 import { clipQuoteProblems, clipChoiceProblems } from '../lib/media-analysis/clip-plan-feedback';
 
 const runKey = (runId: string) =>
@@ -702,7 +701,7 @@ export async function recordClipCheck(
     throw new ConvexError(
       "The accepted range or critical regions changed during checkClip.",
     );
-  const timeline = await loadSceneCode(ctx, snapshot.sourceTimeline);
+  const timeline = snapshot.sourceTimeline;
   const raw = await ctx.db.get(row.assetId);
   if (!raw) throw new ConvexError("Source removed during check.");
   const asset = await hydrateAsset(ctx, raw),
@@ -792,7 +791,7 @@ export const completionState = internalQuery({
           !draft ||
           draft.baseRevision !== (project.revision ?? 0) ||
           draft.runId !== project.aiRunId ||
-          timelineFingerprint(await loadSceneCode(ctx, draft.timeline)) !==
+          timelineFingerprint(draft.timeline) !==
             timelineFingerprint(args.timeline)
         )
           return {

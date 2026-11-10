@@ -12,7 +12,6 @@ const NEXT_LINK_IMPORTS_KEY = 'revline:next-link-imports';
 /** Points at the IndexedDB record holding footage staged before sign-in. */
 export const FOOTAGE_DRAFT_KEY = 'revline:footage-draft';
 const briefKey = (projectId: string) => `revline:brief:${projectId}`;
-const briefReferenceKey = (projectId: string) => `revline:brief-reference:${projectId}`;
 const briefOptionsKey = (projectId: string) => `revline:brief-options:${projectId}`;
 
 /** The editor's composer draft for one project; model and effort choices hang off it. */
@@ -78,15 +77,11 @@ export function rememberOpeningRequest(projectId: string, prompt: string, option
     if (options.reasoningEffort) storeDraftEffort(editorDraftKey(projectId), options.reasoningEffort);
   } catch { /* The first request still carries the choices when preference storage is unavailable. */ }
 }
-/** The brief goes out with the imported media attached instead of placed on the timeline. */
-export const rememberOpeningReference = (projectId: string) => sessionStorage.setItem(briefReferenceKey(projectId), '1');
-
 export function openingBrief(projectId: string) {
-  return { prompt: sessionStorage.getItem(briefKey(projectId)), reference: sessionStorage.getItem(briefReferenceKey(projectId)) === '1' };
+  return { prompt: sessionStorage.getItem(briefKey(projectId)) };
 }
 export function clearOpeningBrief(projectId: string) {
   sessionStorage.removeItem(briefKey(projectId));
-  sessionStorage.removeItem(briefReferenceKey(projectId));
 }
 
 /** The caller supplies the choices it accepts, so the editor model stays independent of the AI catalog. */

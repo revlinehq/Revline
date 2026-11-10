@@ -33,9 +33,9 @@ import type { CompositionWindow } from '@/lib/editor/composition-window';
 import { previewVisualEffects } from '@/lib/editor/live-visual-effects';
 import type { RefreshPlaybackMedia } from '@/lib/editor/media-source-recovery';
 import { previewAdjustmentEffect } from '@/lib/editor/live-adjustment-effects';
-import { loadPreviewRuntimes } from '@/lib/editor/preview-runtimes';import { sceneMediaAssetIds } from '@/lib/editor/scene-layers';
-/** Assets the preview must load: every clip's media plus images and videos shown inside scenes. */
-const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>([...timeline.clips.map(clip=>clip.assetId),...sceneMediaAssetIds(timeline)]);
+import { loadPreviewRuntimes } from '@/lib/editor/preview-runtimes';
+/** Assets the preview must load: every clip's media. */
+const usedAssetIds=(timeline:Timeline)=>new Set<string|undefined>(timeline.clips.map(clip=>clip.assetId));
 
 function LiveTextControls(props: Omit<React.ComponentProps<typeof TextControls>, 'time'>) {
   const time=usePausedPlaybackTime(),playing=useEditorState(state=>state.playing);

@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { CallToolRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { assertIsolated, isolatedRuntime } from './isolated-common.mjs';
 
 // A worktree-scoped revline-local transport. The global connector remains on main.
@@ -10,7 +10,7 @@ const state = assertIsolated();
 const settings = await isolatedRuntime();
 // REVLINE_MCP_URL points it at another server for the same backend, such as `npm run dev:mcp` (cf-workers/mcp).
 const upstream = new StreamableHTTPClientTransport(new URL(process.env.REVLINE_MCP_URL || `https://${state.name}.convex.site/mcp`), { requestInit: { headers: { Authorization: `Bearer ${settings.REVLINE_MCP_TOKEN}` } } });
-const server = new Server({ name: 'revline-local', version: '1.0.0' }, { capabilities: { tools: {}, resources: {} } });
+const server = new Server({ name: 'revline-local', version: '1.0.0' }, { capabilities: { tools: {} } });
 let client, ready, closing = false;
 server.oninitialized = () => {
   client = new Client(server.getClientVersion() ?? { name: 'revline-local', version: '1.0.0' });
@@ -23,8 +23,6 @@ async function connected() {
   return client;
 }
 server.setRequestHandler(ListToolsRequestSchema, async () => (await connected()).listTools());
-server.setRequestHandler(ListResourcesRequestSchema, async request => (await connected()).listResources(request.params));
-server.setRequestHandler(ReadResourceRequestSchema, async request => (await connected()).readResource(request.params));
 server.setRequestHandler(CallToolRequestSchema, async request => (await connected()).callTool(request.params, undefined, { timeout: 600_000 }));
 async function close() {
   if (closing) return;

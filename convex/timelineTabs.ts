@@ -1,6 +1,5 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
 import { isMcpRun } from './lib/run_ids';
-import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
@@ -40,7 +39,7 @@ async function takeStashed(ctx: MutationCtx, row: Doc<'projectTimelines'>) {
 /** A stored tab's timeline, for exports of a tab that is not open. */
 export async function storedTabTimeline(ctx: QueryCtx, project: Doc<'projects'>, timelineId: string): Promise<Timeline | null> {
   const timeline = timelineId === activeTabOf(project) ? currentTimeline(project) : (await stashedRow(ctx, project._id, timelineId))?.timeline;
-  return timeline ? loadSceneCode(ctx, timeline) : null;
+  return timeline ? timeline : null;
 }
 
 /** Every tab's timeline, for checks that must see media used anywhere in the project. */
@@ -64,8 +63,8 @@ async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId:
 
 /** Store the open tab with as much undo history as fits one document. */
 async function stashActive(ctx: MutationCtx, project: Doc<'projects'>) {
-  const timeline = await storeSceneCode(ctx, currentTimeline(project)), timelineId = activeTabOf(project);
-  const history = await Promise.all((project.history ?? []).map(item => storeSceneCode(ctx, item)));
+  const timeline = (currentTimeline(project)), timelineId = activeTabOf(project);
+  const history = [...project.history ?? []];
   while (history.length && serializedBytes({ timeline, history }) > STASHED_BYTES) history.shift();
   const existing = await stashedRow(ctx, project._id, timelineId), stored = await historyRow(ctx, project._id, timelineId);
   const row = { projectId: project._id, ownerId: project.ownerId, timelineId, timeline };
@@ -78,8 +77,8 @@ async function stashActive(ctx: MutationCtx, project: Doc<'projects'>) {
 async function openTab(ctx: MutationCtx, project: Doc<'projects'>, tabs: Tab[], timelineId: string, timeline: Timeline, history: Timeline[], preserveRevision = false) {
   const assets = new Set((await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', project.ownerId).eq('projectId', project._id)).take(400)).map(asset => String(asset._id)));
   const present = (item: Timeline) => ({ ...item, clips: item.clips.filter(clip => !clip.assetId || assets.has(clip.assetId)) });
-  const opened = present(await loadSceneCode(ctx, timeline));
-  const restoredHistory = await Promise.all(history.map(item => loadSceneCode(ctx, item)));
+  const opened = present(timeline);
+  const restoredHistory = history;
   await writeProject(ctx, project._id, { timeline: opened, aspectRatio: opened.aspectRatio, history: restoredHistory.map(present), revision: (project.revision ?? 0) + (preserveRevision ? 0 : 1), timelineTabs: tabs, activeTimelineId: timelineId, updatedAt: Date.now() });
 }
 
@@ -115,7 +114,7 @@ export const snapshots = query({ args: { projectId: v.id('projects'), sceneCode:
   // stored tab changes (on a switch), not on every edit of the open timeline.
   await projectIdentity(ctx, args.projectId, await requireOwner(ctx));
   const rows = await ctx.db.query('projectTimelines').withIndex('by_project_timeline', q => q.eq('projectId', args.projectId)).take(MAX_TIMELINE_TABS);
-  return Promise.all(rows.map(async row => ({ id: row.timelineId, timeline: args.sceneCode === 'refs' ? row.timeline : await loadSceneCode(ctx, row.timeline) })));
+  return Promise.all(rows.map(async row => ({ id: row.timelineId, timeline: row.timeline })));
 }});
 
 export const create = mutation({ args: createArgs, returns: v.string(), handler: async (ctx, args) => createTabFor(ctx, await requireOwner(ctx), args) });
@@ -219,7 +218,7 @@ export const importTab = internalMutation({ args: { projectId: v.id('projects'),
   if (missing.length) throw new ConvexError(`No mapping for media ${[...new Set(missing.map(clip => clip.assetId))].join(', ')}`);
   const timeline = { ...args.timeline, clips: args.timeline.clips.map(clip => clip.assetId ? { ...clip, assetId: args.assetMap[clip.assetId] } : clip) };
   const timelineId = crypto.randomUUID(), name = tabName(args.name);
-  await ctx.db.insert('projectTimelines', { projectId: project._id, ownerId: project.ownerId, timelineId, timeline: await storeSceneCode(ctx, timeline) });
+  await ctx.db.insert('projectTimelines', { projectId: project._id, ownerId: project.ownerId, timelineId, timeline: timeline });
   await writeProject(ctx, project._id, { timelineTabs: [...tabs, { id: timelineId, name, ...summaryOf(timeline) }], activeTimelineId: activeTabOf(project), updatedAt: Date.now() });
   return timelineId;
 } });

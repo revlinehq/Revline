@@ -44,8 +44,7 @@ export function modelTimeline(timeline: Timeline, selectedClipIds: readonly stri
       ...(normalizedAudio?{normalizedAudio:modelNormalization(normalizedAudio,()=>normalizedAudio.key===audioNormalizationKey(timeline,clip))}:{}),
       ...(motion ? selected.has(clip.id) || motion.length <= 16 ? { motion } : { motionSummary: { sampleCount: motion.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
       ...(focus ? { focusSummary: { sampleCount: focus.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
-      // Compacted history can hold timelines whose scene code was already summarized.
-      ...(scene ? selected.has(clip.id) || typeof scene.code !== 'string' ? { scene } : { scene: { title: scene.title, codeCharacters: scene.code.length, detailsOmitted: true, readTool: 'inspectClip' } } : {}),
+      ...(scene ? { unsupported: 'Scene clips are no longer supported: this clip draws nothing in preview or export. Delete it when the user asks to clean up.' } : {}),
     };
   }) };
 }
@@ -119,23 +118,6 @@ function timelineOutput(output: LanguageModelV4ToolResultOutput): Record<string,
   }
 }
 
-/** Keep call/result pairs, receipts, user constraints and all multimodal evidence.
- * Only obsolete timeline snapshots and dense timeline samples are compacted.
- * Applying this at the provider boundary also covers tool results in this run.
- */
-/** Earlier turns keep a scene's title and size; inspectClip returns its current code. */
-const SCENE_TOOLS = new Set(['addScene', 'addScenes', 'addFilm', 'patchScene', 'editScene']);
-function sceneCodeNote(code: string) { return `[${code.length} characters of earlier scene code omitted; inspectClip returns the current code]`; }
-/** A scene call's input with its code and each batched scene's code reduced to their sizes. */
-function withoutInputCode(input: Record<string, unknown>): Record<string, unknown> {
-  const code = (value: unknown) => typeof value === 'string' ? sceneCodeNote(value) : value;
-  if (typeof input.code !== 'string' && !Array.isArray(input.scenes) && !Array.isArray(input.edits)) return input;
-  return { ...input, ...(Array.isArray(input.edits) ? { edits: input.edits.map(edit => object(edit) && typeof edit.replace === 'string' && edit.replace.length > 400 ? { ...edit, replace: code(edit.replace) } : edit) } : {}), ...(input.code !== undefined ? { code: code(input.code) } : {}), ...(Array.isArray(input.scenes) ? { scenes: input.scenes.map(scene => object(scene) ? { ...scene, code: code(scene.code) } : scene) } : {}) };
-}
-function withoutSceneCode(clip: unknown): unknown {
-  if (!object(clip) || !object(clip.scene) || typeof clip.scene.code !== 'string') return clip;
-  return { ...clip, scene: { ...clip.scene, code: sceneCodeNote(clip.scene.code) } };
-}
 
 export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipIds: readonly string[] = [], initialRevision?: number): LanguageModelV4Prompt {
   // Full-source fallback transcripts only. Exact serialized keys avoid hash collisions.
@@ -185,7 +167,6 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
     if (!content.length) return [];
     return { ...message, content: content.map(original => {
       const part = withoutDiagnostics(original);
-      if (part.type === 'tool-call' && index < lastUser && SCENE_TOOLS.has(part.toolName) && object(part.input)) { const compacted = withoutInputCode(part.input); if (compacted !== part.input) return { ...part, input: compacted }; }
       if (part.type !== 'tool-result') return part;
       const value = timelineOutput(part.output);
       if (!value) return part;
@@ -204,7 +185,6 @@ export function compactEditorPrompt(prompt: LanguageModelV4Prompt, selectedClipI
           else transcripts.set(key, part.toolCallId);
         }
       }
-      if (index < lastUser && (object(value.clip) || Array.isArray(value.changedClips))) projected = { ...projected, ...(object(value.clip) ? { clip: withoutSceneCode(value.clip) } : {}), ...(Array.isArray(value.changedClips) ? { changedClips: value.changedClips.map(withoutSceneCode) } : {}) };
       if (part.toolName === 'inspectVideo' && Array.isArray(value.matches) && Array.isArray(value.timelineOccurrences)) {
         // Keep every original visual observation once; mapped occurrences retain
         // exact source/timeline timing and point to their original description.

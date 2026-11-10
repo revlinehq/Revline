@@ -2,7 +2,7 @@ import { checkCompletion } from '../../lib/ai/lanes/clip/check';
 import { makeFunctionReference } from 'convex/server';
 import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
-import type { Doc, Id } from '../_generated/dataModel';
+import type { Doc } from '../_generated/dataModel';
 import { LANES, type LaneId } from '../../lib/ai/lanes';
 import {
   changedFrameTimes,
@@ -18,9 +18,7 @@ import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks
 import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
-import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
-import { referenceMotionTargets } from '../../lib/ai/lanes/recreate/motion';
-import { motionReport, motionTimelineKey } from '../../lib/ai/motion-coverage';
+import type { LaneEvidence } from '../../lib/ai/lanes/types';
 export type FinishResult = NonNullable<LaneTask['result']>;
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
@@ -73,8 +71,6 @@ export async function finishLane(
     failures.push(...looks.failures);
     warnings.push(...looks.warnings);
   }
-  const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
-  let currentRevision: number | undefined;
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;
@@ -112,23 +108,11 @@ export async function finishLane(
     const summary = summarizeTimeline(tab.timeline, assets),
       prefix =
         tab.timelineId === timelineId ? '' : `Timeline ${tab.timelineId}: `;
-    const referencePolicy = LANES[task.lane].referenceMotion;
-    const targets = referencePolicy ? referenceMotionTargets(tab.timeline, assets, tab.timelineId, referencePolicy === 'required') : [];
-    const referenceMotion: ReferenceMotionEvidence[] = [];
-    for (const target of targets) {
-      currentRevision ??= (await ctx.runQuery(internal.assistant.getRunTimeline, run)).revision;
-      const state = await ctx.runQuery(internal.referenceMotion.state, { ownerId: run.ownerId, projectId: run.projectId, assetId: target.assetId as Id<'assets'>, timelineId: tab.timelineId });
-      const evidence = { ...target, ...state, projectId: run.projectId, revision: currentRevision!, timelineKey: await motionTimelineKey(tab.timeline) };
-      referenceMotion.push(evidence);
-      motionReports.push(prefix + motionReport(evidence));
-      motionOff.push(...state.off.map(item => ({ ...item, assetId: target.assetId, timelineId: tab.timelineId })));
-    }
-    const checksReference = referencePolicy === 'required' || targets.length > 0;
     if (
       !summary.clipCount ||
       summary.duration <= 0 ||
       !tab.timeline.clips.some((clip) =>
-        ['video', 'image', 'solid', 'scene'].includes(clip.kind),
+        ['video', 'image', 'solid'].includes(clip.kind),
       )
     )
       failures.push(`${prefix}The task has no nonempty visual edit to finish.`);
@@ -169,8 +153,8 @@ export async function finishLane(
     // A short keeps its 15–60 s length unless the user asked otherwise, so leaving that range only warns.
     if (clipFollowUp && (summary.duration < 15 - 1 / tab.timeline.fps || summary.duration > 60 + 1 / tab.timeline.fps))
       warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
-    // Reference lanes already require dense rendered pairs, or explicit OFF windows, below. Clip-lane checks never render frames.
-    if (!clipFollowUp && !failures.length && summary.clipCount && summary.duration > 0 && !checksReference) {
+    // Clip-lane checks never render frames.
+    if (!clipFollowUp && !failures.length && summary.clipCount && summary.duration > 0) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
       const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
       const times = fastTimes ?? (baseline
@@ -211,7 +195,7 @@ export async function finishLane(
         fingerprint: key,
         timelineId: tab.timelineId,
         assets,
-        referenceMotion,
+
       };
       failures.push(...LANES[task.lane].check(context).map((error) => prefix + error));
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
@@ -240,9 +224,7 @@ export async function finishLane(
     fingerprint,
     timelineId,
     ...(finalCheckKey ? { checkKey: finalCheckKey } : {}),
-    ...(motionReports.length ? { motionCheck: motionReports.join('\n') } : {}),
     ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
-    ...(motionOff.length ? { motionOff } : {}),
   };
   return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result });
 }

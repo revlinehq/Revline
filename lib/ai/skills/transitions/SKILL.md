@@ -6,7 +6,6 @@ description: "How one footage shot becomes the next (reels, vlogs, clips, gaming
 
 A good shot change is a hard cut, unless a chosen beat earns more. A whip is 4–5 frames: both shots stay composed where they are, the outgoing one flicks a short way in one direction with motion blur along that direction, and the incoming one arrives already moving the same way and settles. Nothing slides a full frame.
 
-Films made from scratch whip with `whip()`: launch-films-motions page `shot-changes`.
 
 Terms: the **cut** is the first frame of the incoming shot; `f` is one frame (1/30 s at 30 fps); **travel** is how far the picture moves, as a share of the frame's width (left/right) or height (up/down).
 
@@ -58,7 +57,7 @@ The direction is where the picture travels on screen: in a whip left, both shots
 - Other presets (spin-zoom, film-burn, gradient-wipe, iris-wipe, blur-dissolve, zoom-through) only when the user asks for one or a reference uses one.
 
 ### Settings
-addTransition is part of every footage lane (edits, reels, clips); film lanes use launch-films-motions page `shot-changes` instead.
+addTransition is part of every lane (edits, reels, clips).
 
 | Whip | addTransition |
 |---|---|

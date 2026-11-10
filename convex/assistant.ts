@@ -18,18 +18,15 @@ import {stopRunnerTurn} from './lib/runner_turns';
 import {dispatchTurn,rememberTurn,turnForRun} from './assistantTurnRecovery';
 import type {WorkflowId} from '@convex-dev/workflow';
 import { describeLiveEdit } from '../lib/editor/live-edit';
-import { clearFilmDrafts } from './filmDrafts';
 import { equalTimelineValue } from '../lib/editor/timeline-equality';
 import { transportAsset, storeAnalysis } from './lib/asset_analysis';
 import { attachStockAudio, validateWaveform } from './assets';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
-import { loadSceneCode, storeSceneCode, storedSceneCode } from './lib/scene_code';
 import { importVideoFor } from './mediaTasks';
 import { startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
-import { withoutSceneCode } from '../lib/editor/scene-code';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
 import { canChooseReasoningEffort, hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -56,8 +53,6 @@ import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
 import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
-import { sceneCodeSource } from '../lib/editor/scene-code-edits';
-import { sceneCodeDiff } from '../lib/editor/scene-code-diff';
 const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(FREE_EDITOR_MODEL_CHOICE)), 'medium');
 function configured(paidModelAccess = true) {
   try{assertEditorModelConfigured(paidModelAccess ? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
@@ -133,18 +128,16 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   return { configured: ready, mobileConfigured:(()=>{try{assertEditorModelConfigured(mobileModel());return true;}catch{return false;}})(), ...settings, running: project.aiRunning ?? false, externalAgents, externalAgent: latestAgent ? { name: latestAgent.name, until: latestAgent.until, running: !!project.aiRunning && isMcpRun(project.aiRunId) } : null, editing, workflowActive, error: project.aiError ?? null, reason: ready ? null : EDITOR_PROVIDER_REASON, activity, activityProgress: null, activityStartedAt: requestStartedAt, activitySource: source?.ownerId === project.ownerId && source.projectId === project._id ? source.fileName : null, ...(budget&&budget.runId===project.aiRunId?{budgetUsed:budget.used}:{}), ...(budgetRow?.effort?{liveEffort:normalizeEditorReasoningEffort(budgetRow.effort)}:{}) };
 }});
 const livePreviewValidator = v.object({runId:v.string(),baseRevision:v.number(),timeline:timelineValidator,label:v.string(),changedClipIds:v.array(v.string()),removedClips:v.array(clipValidator),at:v.number(),sequence:v.number(),updatedAt:v.number()});
-/** `sceneCode: 'refs'` keeps scene code by hash for editors that load each code once. */
-export const livePreview = query({args:{projectId:v.id('projects'),sceneCode:v.optional(v.literal('refs'))},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId,sceneCode})=>{
+/** `sceneCode` is accepted for older clients and ignored. */
+export const livePreview = query({args:{projectId:v.id('projects'),sceneCode:v.optional(v.literal('refs'))},returns:v.union(v.null(),livePreviewValidator),handler:async(ctx,{projectId})=>{
   const run=await projectRunContext(ctx,projectId,await requireOwner(ctx));
   if(!run.aiRunning)return null;
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(!preview||preview.ownerId!==run.ownerId||preview.runId!==run.aiRunId||preview.baseRevision!==run.revision)return null;
   const {_id,_creationTime,ownerId,projectId:_,...result}=preview;
-  if(sceneCode==='refs')return result;
-  return {...result,timeline:await loadSceneCode(ctx,result.timeline),removedClips:(await loadSceneCode(ctx,{clips:result.removedClips})).clips};
+  return result;
 }});
 async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,projectId:import('./_generated/dataModel').Id<'projects'>){
-  await clearFilmDrafts(ctx,projectId);
   const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(preview)await ctx.db.delete(preview._id);
 }
@@ -354,7 +347,7 @@ async function prepareRunTab(ctx: MutationCtx, args: { projectId: Doc<'projects'
   const project = await requireActiveRun(ctx, args);
   if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Inspect the current timeline before continuing.');
   const preview = await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
-  if (preview && (preview.runId !== args.runId || preview.baseRevision !== args.expectedRevision || !equalTimelineValue(await loadSceneCode(ctx, preview.timeline), currentTimeline(project)))) throw new ConvexError('Finish the current timeline draft before opening another timeline.');
+  if (preview && (preview.runId !== args.runId || preview.baseRevision !== args.expectedRevision || !equalTimelineValue(preview.timeline, currentTimeline(project)))) throw new ConvexError('Finish the current timeline draft before opening another timeline.');
   await clearLivePreview(ctx, args.projectId);
   return project;
 }
@@ -363,7 +356,7 @@ async function openedRunTab(ctx: MutationCtx, args: { projectId: Doc<'projects'>
   const plan = await ctx.db.query('assistantPlans').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
   if (plan?.runId === args.runId) await ctx.db.delete(plan._id);
   const project = await requireActiveRun(ctx, args);
-  return { timelineId: activeTabOf(project), timeline: await loadSceneCode(ctx, currentTimeline(project)), revision: project.revision ?? 0 };
+  return { timelineId: activeTabOf(project), timeline: (currentTimeline(project)), revision: project.revision ?? 0 };
 }
 export const createRunTimeline = internalMutation({ args: { ...runTabArgs, from: v.union(v.literal('blank'), v.literal('duplicate')), name: v.optional(v.string()), aspectRatio: v.optional(v.union(v.literal('landscape'), v.literal('vertical'), v.literal('square'))) }, handler: async (ctx, args) => {
   await prepareRunTab(ctx, args);
@@ -372,7 +365,7 @@ export const createRunTimeline = internalMutation({ args: { ...runTabArgs, from:
 }});
 export const openRunTimeline = internalMutation({ args: { ...runTabArgs, timelineId: v.string() }, handler: async (ctx, args) => {
   const project = await prepareRunTab(ctx, args);
-  if (activeTabOf(project) === args.timelineId) return { timelineId: args.timelineId, timeline: await loadSceneCode(ctx, currentTimeline(project)), revision: project.revision ?? 0 };
+  if (activeTabOf(project) === args.timelineId) return { timelineId: args.timelineId, timeline: (currentTimeline(project)), revision: project.revision ?? 0 };
   await openTabFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: args.timelineId }, args.runId);
   return openedRunTab(ctx, args);
 }});
@@ -422,37 +415,18 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   const assets=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   // A read of a named tab (MCP timelineId) serves that tab's stored timeline without opening it.
   const tab=boundRunTab(args.runId);
-  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:await loadSceneCode(ctx,stored)},assets};}
-  return {project:{...project,...run,timeline:await loadSceneCode(ctx,currentTimeline(project))},assets};
+  if(tab&&tab!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,tab);if(!stored)throw new ConvexError('That timeline no longer exists.');return {project:{...project,...run,activeTimelineId:tab,aspectRatio:stored.aspectRatio,timeline:stored},assets};}
+  return {project:{...project,...run,timeline:(currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   const project=(await ctx.db.get(args.projectId))!,tab=mcpRunTab(args.runId);
   const timeline=tab?await storedTabTimeline(ctx,project,tab):currentTimeline(project);
   if(!timeline)throw new ConvexError('That timeline no longer exists.');
-  return {timeline:await loadSceneCode(ctx,timeline),revision:project.revision??0};
+  return {timeline:timeline,revision:project.revision??0};
 }});
 /** The tab a run works on: a read of a named tab, or the open one. */
 const runTab=(project:Doc<'projects'>,runId:string)=>boundRunTab(runId)??activeTabOf(project);
-/** Diff both saved snapshots in one query, so concurrent edits cannot mix their states. */
-export const diffScene=internalQuery({args:{...runArgs,clipId:v.string(),fromRevision:v.number(),toRevision:v.number(),offset:v.optional(v.number()),limit:v.optional(v.number()),context:v.optional(v.number())},returns:v.any(),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
-  const project=(await ctx.db.get(args.projectId))!,current=project.revision??0,timelineId=runTab(project,args.runId);
-  const start=await historyStart(ctx,project._id,current);
-  for(const revision of [args.fromRevision,args.toRevision])if(!Number.isInteger(revision)||revision<start||revision>current)throw new ConvexError(`Choose a saved revision from ${start} to ${current}. Call listRevisions for revision numbers.`);
-  const timeline=timelineId===activeTabOf(project)?currentTimeline(project):await storedTabTimeline(ctx,project,timelineId);
-  if(!timeline)throw new ConvexError('That timeline no longer exists.');
-  const at=async(revision:number)=>{
-    const change=await clipChangeAfter(ctx,project._id,timelineId,args.clipId,revision);
-    const clip=change?change.before:timeline.clips.find(item=>item.id===args.clipId);
-    if(!clip)throw new ConvexError(`Clip ${args.clipId} did not exist on this tab at revision ${revision}.`);
-    const loaded=(await loadSceneCode(ctx,{clips:[clip]})).clips[0];
-    return sceneCodeSource(loaded);
-  };
-  const [before,after]=await Promise.all([at(args.fromRevision),at(args.toRevision)]);
-  return {clipId:args.clipId,timelineId,target:'scene',...sceneCodeDiff(before,after,args.fromRevision,args.toRevision,args)};
-}});
 /** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
 export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
@@ -532,9 +506,9 @@ export const apply = scopedRunMutation({ args: { ...runArgs, expectedRevision: v
   const receipt=async(revision:number)=>{
     const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
     // The preview stores scene code by hash like the project; compare and describe in that form.
-    const timeline=await storeSceneCode(ctx,normalizeTimeline(args.timeline),storedSceneCode(previous?.timeline));
+    const timeline=(normalizeTimeline(args.timeline));
     const unchanged=previous?.runId===args.runId&&equalTimelineValue(previous.timeline,timeline);
-    const change=unchanged?{label:previous.label,changedClipIds:previous.changedClipIds,removedClips:previous.removedClips,at:previous.at}:describeLiveEdit(previous?.runId===args.runId?previous.timeline:(await withoutSceneCode(currentTimeline(project))).timeline,timeline);
+    const change=unchanged?{label:previous.label,changedClipIds:previous.changedClipIds,removedClips:previous.removedClips,at:previous.at}:describeLiveEdit(previous?.runId===args.runId?previous.timeline:currentTimeline(project),timeline);
     const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:revision,timeline,...change,sequence:(previous?.runId===args.runId?previous.sequence:0)+(unchanged?0:1),updatedAt:Date.now()};
     if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
     if(args.publication)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',status:'saved',...args.publication,runId:args.runId,stagedRevision:args.expectedRevision,revision});
@@ -594,9 +568,9 @@ export const previewDraft = scopedRunMutation({args:{...runArgs,expectedRevision
   rejectNewLayerOverlaps(currentTimeline(project),timeline);
   const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const current=previous?.runId===args.runId&&previous.baseRevision===args.expectedRevision?previous:null;
-  const stored=await storeSceneCode(ctx,timeline,storedSceneCode(previous?.timeline));
+  const stored=timeline;
   if(current&&equalTimelineValue(current.timeline,stored))return null;
-  const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:args.expectedRevision,timeline:stored,...describeLiveEdit(current?.timeline??(await withoutSceneCode(currentTimeline(project))).timeline,stored),sequence:(current?.sequence??0)+1,updatedAt:Date.now()};
+  const values={projectId:project._id,ownerId:args.ownerId,runId:args.runId,baseRevision:args.expectedRevision,timeline:stored,...describeLiveEdit(current?.timeline??currentTimeline(project),stored),sequence:(current?.sequence??0)+1,updatedAt:Date.now()};
   if(previous)await ctx.db.replace(previous._id,values);else await ctx.db.insert('aiTimelinePreviews',values);
   return null;
 }});

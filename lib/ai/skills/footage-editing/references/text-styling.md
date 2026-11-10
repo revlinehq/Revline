@@ -8,7 +8,7 @@ Good text is readable at a glance, clear of faces and app controls, and styled t
 
 ## Workflow
 1. New captions: run addSubtitlesFromTranscript after the final cuts. Their default look per lane is in the footage-editing Defaults.
-2. Existing text: run inspectClip first, then change only the requested words or controls. Caption text or timing fixes follow writing-scenes page `edit-lanes`, which also sets the frame checks.
+2. Existing text: run inspectClip first, then change only the requested words or controls. Caption text or timing fixes follow footage-editing page `edit-lanes`, which also sets the frame checks.
 3. Style in one call per change: batch the same appearance across exact clipIds.
 
 ## Defaults

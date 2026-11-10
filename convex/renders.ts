@@ -17,7 +17,7 @@ import { renderSummaryDocument } from "./schema";
 import { MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { timelineDuration } from '../lib/editor/types';
 import { cancelMediaTask, enqueueMediaTask, failMediaTask } from './lib/media_queue';
-import { accountLimit } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+import { accountLimit } from './lib/account_limits';
 
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
 const startRenderForArgs = { burnCaptions: v.optional(v.boolean()), projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), timelineId:v.optional(v.string()) };
@@ -44,7 +44,7 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
   if (accountActive.reduce((count, jobs) => count + jobs.length, 0) >= limit) throw new ConvexError(`You already have ${limit} exports in progress. Wait for one to finish or cancel it before exporting again.`);
   const assetIds: Id<"assets">[] = [];
-  for (const assetId of [...timeline.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.normalizedAudio ? [clip.normalizedAudio.assetId] : []]), ...sceneMediaAssetIds(timeline),...timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
+  for (const assetId of [...timeline.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.normalizedAudio ? [clip.normalizedAudio.assetId] : []]),...timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
   const jobId = await ctx.db.insert("renderJobs", { ownerId, projectId: project._id, sourceRevision:project.revision??0, ...(args.clipId!==undefined?{sourceClipId:args.clipId}:{}), sourceTimelineId:tab?.id??activeTabOf(project), ...(timelineLabel?{label:timelineLabel}:{}), assetIds, resolution: args.resolution, fps: args.fps, quality: args.quality, status: "queued", progress: 0, createdAt: now, updatedAt: now }); await saveRenderSnapshot(ctx, jobId, timeline);
   // Ultra exports take the Ultra lane: dedicated Ultra export workers.

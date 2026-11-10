@@ -2,11 +2,9 @@ import { AuthorizationError, OAuthError, OAuthProvider, type OAuthHelpers, type 
 import { getAgentByName } from 'agents';
 import { McpAgent } from 'agents/mcp';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
-import { CallToolRequestSchema, InitializeRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, InitializeRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { env as workerEnv } from 'cloudflare:workers';
 import { MCP_INSTRUCTIONS } from '../../lib/mcp/instructions';
-import { listMcpResources, readMcpResource } from '../../lib/mcp/resources';
-import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../../lib/ai/reference-comparison';
 import { bridge, forwardToConvex, type Auth, type AuthError, type ToolOutcome } from './bridge';
 
 // Revline's public MCP server: the protocol (one McpAgent Durable Object per MCP session) and the OAuth provider run
@@ -44,11 +42,11 @@ function refused(auth: AuthError) {
   return rpcError(-32003, 'The Revline MCP connector is part of the Ultra plan.', 403);
 }
 
-type CallAuth = { credential: string; comparisonDeadline: number };
+type CallAuth = { credential: string };
 function callAuth(headers: Record<string, string | string[] | undefined> | undefined): CallAuth | null {
   const value = headers?.[AUTH_HEADER];
   if (typeof value !== 'string') return null;
-  try { const auth = JSON.parse(decodeURIComponent(value)) as CallAuth; return typeof auth.credential === 'string' && typeof auth.comparisonDeadline === 'number' ? auth : null; } catch { return null; }
+  try { const auth = JSON.parse(decodeURIComponent(value)) as CallAuth; return typeof auth.credential === 'string' ? auth : null; } catch { return null; }
 }
 
 // One stable catalog for every session: clients that never re-fetch tools/list (Codex ignores list_changed) still
@@ -60,12 +58,10 @@ let toolCatalog: { tools: Promise<Tool[]>; at: number } | undefined;
 /** One MCP session. It speaks the protocol and keeps the session's streams; each tool call runs in Convex as the
  * credential the Worker authenticated for that request, under the same connection identity the Convex server uses. */
 export class RevlineMcp extends McpAgent<Env, unknown, Record<string, never>> {
-  server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {}, resources: {} }, instructions: MCP_INSTRUCTIONS });
+  server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
 
   async init() {
     const env = this.env;
-    this.server.setRequestHandler(ListResourcesRequestSchema, async () => listMcpResources());
-    this.server.setRequestHandler(ReadResourceRequestSchema, async request => readMcpResource(request.params.uri));
     this.server.setRequestHandler(ListToolsRequestSchema, async () => {
       if (!toolCatalog || Date.now() - toolCatalog.at > CATALOG_TTL_MS) {
         const entry = { at: Date.now(), tools: bridge<{ tools: Tool[] }>(env, { op: 'listTools' }).then(reply => reply.tools) };
@@ -79,7 +75,7 @@ export class RevlineMcp extends McpAgent<Env, unknown, Record<string, never>> {
       if (!auth) return { content: [{ type: 'text' as const, text: 'Sign in to Revline to use this connector.' }], isError: true };
       const reply = await bridge<{ outcome: ToolOutcome } | AuthError | { error: 'session_closed' }>(env, {
         op: 'callTool', credential: auth.credential, sessionId: this.getSessionId(),
-        name: request.params.name, arguments: request.params.arguments ?? {}, comparisonDeadline: auth.comparisonDeadline,
+        name: request.params.name, arguments: request.params.arguments ?? {},
       });
       if ('error' in reply) {
         const text = reply.error === 'session_closed' ? 'This MCP session ended. Initialize a new session.' : reply.error === 'rate_limited' ? 'Too many tool calls. Wait a minute and retry.' : reply.error === 'plan' ? 'The Revline MCP connector is part of the Ultra plan.' : 'This Revline connection expired or was revoked. Connect again.';
@@ -119,7 +115,6 @@ async function serveMcp(request: Request, env: Env, ctx: OAuthResourceContext<Pr
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
   const credential = ctx.props?.credential;
   if (!credential) return rpcError(-32001, 'Sign in to Revline to use this connector.', 401, { 'WWW-Authenticate': challenge() });
-  const comparisonDeadline = Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS;
   let method: unknown, clientInfo: { name: string; title?: string; version: string } | undefined;
   if (request.method === 'POST') {
     let body: unknown;
@@ -140,7 +135,7 @@ async function serveMcp(request: Request, env: Env, ctx: OAuthResourceContext<Pr
   // The session object gets this request's credential in memory only: no bearer token, and no props in its storage.
   const headers = new Headers(request.headers);
   headers.delete('Authorization');
-  headers.set(AUTH_HEADER, encodeURIComponent(JSON.stringify({ credential, comparisonDeadline } satisfies CallAuth)));
+  headers.set(AUTH_HEADER, encodeURIComponent(JSON.stringify({ credential } satisfies CallAuth)));
   const forwarded = new Request(request, { headers });
   const response = await sessions.fetch(forwarded, env, { waitUntil: promise => ctx.waitUntil(promise), passThroughOnException: () => ctx.passThroughOnException(), props: {} } as ExecutionContext);
   const opened = method === 'initialize' && response.ok ? response.headers.get('mcp-session-id') : null;

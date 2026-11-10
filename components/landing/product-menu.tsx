@@ -6,7 +6,6 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 // What the product does beyond the basics, in page order.
 const sections = [
   { label: 'Clipping', note: 'Turn streams into vertical clips', href: '/#clippers' },
-  { label: 'Motion design', note: 'Launch films and motion graphics', href: '/#motion-design' },
   { label: 'Features', note: 'Effects done by asking', href: '/#features' },
 ];
 

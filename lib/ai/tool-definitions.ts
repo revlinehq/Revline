@@ -1,12 +1,8 @@
 /** Shared by tool registration, execution, MCP and chat presentation. */
-import { BACKGROUND_PREVIEW_URI } from '../editor/background-preview';
-
 export type ToolBehavior = {
   mcp: 'read' | 'exclusive' | 'hidden';
   /** Chat progress text while the tool runs and once it finished; unlabeled tools use a generic line. */
   label?: readonly [running: string, done: string];
-  /** MCP App view (a ui:// resource) that MCP clients render inline for this tool's result. */
-  ui?: string;
 } & (
   | { effect: 'read' | 'analysis' | 'timeline'; writes?: never }
   | { effect: 'resource' | 'job'; writes: readonly [string, ...string[]] }
@@ -35,11 +31,9 @@ export const EDITOR_TOOL_DEFINITIONS = {
   setBlendMode: { effect: 'timeline', mcp: 'exclusive', label: ['Adjusting compositing', 'Adjusted compositing'] },
   undoLatestEdit: { effect: 'timeline', mcp: 'exclusive', label: ['Reverting latest edit', 'Reverted latest edit'] },
   listRevisions: { effect: 'read', mcp: 'read' },
-  diffScene: { effect: 'read', mcp: 'read' },
   recordFix: { effect: 'analysis', mcp: 'exclusive' },
   restoreClip: { effect: 'timeline', mcp: 'exclusive' },
   restoreTimeline: { effect: 'timeline', mcp: 'exclusive' },
-  restoreSection: { effect: 'timeline', mcp: 'exclusive' },
   readBrief: { effect: 'read', mcp: 'read' },
   updateBrief: { effect: 'resource', mcp: 'exclusive', writes: ['briefs:update'], label: ['Saving project brief', 'Saved project brief'] },
   unlink: { effect: 'timeline', mcp: 'exclusive', label: ['Unlinking video and audio', 'Unlinked video and audio'] },
@@ -54,7 +48,6 @@ export const EDITOR_TOOL_DEFINITIONS = {
   checkClip: { effect: 'analysis', mcp: 'exclusive' },
   finishClipping: { effect: 'read', mcp: 'read' },
   analyzeMedia: { effect: 'analysis', mcp: 'exclusive', label: ['Analyzing footage', 'Analyzed footage'] },
-  inspectReference: { effect: 'analysis', mcp: 'exclusive' },
   inspectVideo: { effect: 'analysis', mcp: 'exclusive', label: ['Finding moments', 'Reviewed footage'] },
   inspectFrames: { effect: 'analysis', mcp: 'exclusive', label: ['Inspecting frames', 'Inspected frames'] },
   editText: { effect: 'timeline', mcp: 'exclusive', label: ['Updating text', 'Updated text'] },
@@ -98,35 +91,14 @@ export const EDITOR_TOOL_DEFINITIONS = {
   remember: { effect: 'resource', mcp: 'exclusive', writes: ['memories:remember'], label: ['Saving to memory', 'Saved to memory'] },
   recallMemory: { effect: 'read', mcp: 'exclusive' },
   forget: { effect: 'resource', mcp: 'exclusive', writes: ['memories:forget'], label: ['Removing from memory', 'Removed from memory'] },
-  compareReference: { effect: 'read', mcp: 'read', label: ['Comparing with the reference', 'Compared with the reference'] },
   getFrames: { effect: 'read', mcp: 'hidden' },
-  compareMotion: { effect: 'read', mcp: 'read' },
-  motionMap: { effect: 'read', mcp: 'read' },
   checkPacing: { effect: 'read', mcp: 'read' },
   getSound: { effect: 'read', mcp: 'read' },
   checkSound: { effect: 'read', mcp: 'read' },
   askUser: { effect: 'read', mcp: 'hidden', label: ['Asking you', 'Asked you'] },
   askBrandKit: { effect: 'read', mcp: 'hidden', label: ['Asking which brand', 'Asked which brand'] },
-  previewBackgrounds: { effect: 'read', mcp: 'read', label: ['Previewing backgrounds', 'Previewed backgrounds'], ui: BACKGROUND_PREVIEW_URI },
-  measureScreen: { effect: 'read', mcp: 'read', label: ['Measuring screen', 'Measured screen'] },
-  compareScreen: { effect: 'read', mcp: 'read', label: ['Comparing with screen', 'Compared with screen'] },
   readFrames: { effect: 'read', mcp: 'read', label: ['Reading frames', 'Read frames'] },
-  listenReference: { effect: 'read', mcp: 'read' },
-  trackReference: { effect: 'read', mcp: 'read', label: ['Tracking motion', 'Tracked motion'] },
-  measureFrame: { effect: 'read', mcp: 'read', label: ['Measuring frame', 'Measured frame'] },
-  matchFont: { effect: 'read', mcp: 'read', label: ['Matching the font', 'Matched the font'] },
-  traceShape: { effect: 'read', mcp: 'read', label: ['Tracing shape', 'Traced shape'] },
-  findIcon: { effect: 'read', mcp: 'read', label: ['Finding icon', 'Found icon'] },
-  generateImage: { effect: 'resource', mcp: 'exclusive', writes: ['generatedImages:save'] },
-  saveBlueprint: { effect: 'resource', mcp: 'read', writes: ['blueprints:saveFromCheck'], label: ['Saving blueprint', 'Saved blueprint'] },
-  listBlueprints: { effect: 'read', mcp: 'read', label: ['Checking blueprints', 'Checked blueprints'] },
-  getBlueprint: { effect: 'read', mcp: 'read', label: ['Loading blueprint', 'Loaded blueprint'] },
   readSkill: { effect: 'read', mcp: 'read', label: ['Reading editing guide', 'Read editing guide'] },
-  addScene: { effect: 'timeline', mcp: 'exclusive', label: ['Adding scene', 'Added scene'] },
-  editScene: { effect: 'timeline', mcp: 'exclusive', label: ['Updating scene', 'Updated scene'] },
-  addScenes: { effect: 'timeline', mcp: 'exclusive', label: ['Adding scenes', 'Added scenes'] },
-  addFilm: { effect: 'timeline', mcp: 'exclusive', label: ['Building the film', 'Built the film'] },
-  patchScene: { effect: 'timeline', mcp: 'exclusive', label: ['Editing scene code', 'Edited scene code'] },
   addMedia: { effect: 'timeline', mcp: 'exclusive', label: ['Adding footage', 'Added footage'] },
   addSoundEffect: { effect: 'timeline', mcp: 'exclusive' },
   listBrandKits: { effect: 'read', mcp: 'read' },
@@ -134,8 +106,6 @@ export const EDITOR_TOOL_DEFINITIONS = {
   createBrandKit: { effect: 'resource', mcp: 'exclusive', writes: ['brandKits:create'], label: ['Building brand kit', 'Saved brand kit'] },
   updateBrandKit: { effect: 'resource', mcp: 'exclusive', writes: ['brandKits:update'], label: ['Updating brand kit', 'Updated brand kit'] },
   generateSound: { effect: 'timeline', mcp: 'exclusive' },
-  listVoices: { effect: 'read', mcp: 'read', label: ['Sampling voices', 'Sampled voices'] },
-  generateVoice: { effect: 'timeline', mcp: 'exclusive', label: ['Recording narration', 'Recorded narration'] },
   editSound: { effect: 'timeline', mcp: 'exclusive' },
   addLayer: { effect: 'timeline', mcp: 'exclusive', label: ['Adding track', 'Added track'] },
   deleteEmptyLayer: { effect: 'timeline', mcp: 'exclusive', label: ['Removing empty track', 'Removed empty track'] },

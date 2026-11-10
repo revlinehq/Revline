@@ -11,6 +11,7 @@
 //   head defaults to HEAD, base to merge-base(origin/main, head). Exit 0 pass, 1 incompatible, 2 usage/internal error.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -49,6 +50,19 @@ function snapshot(rev, temp) {
   return { rev, source, out };
 }
 
+const require = createRequire(join(root, 'package.json'));
+/** Packages stay external, as before. A package one revision imports and the checkout no longer installs (a pull
+ *  request that removes a dependency) loads as an inert stub: only validators are read, never package code. */
+const installedPackages = { name: 'installed-packages', setup(build) {
+  build.onResolve({ filter: /^[^./]/ }, args => {
+    // Path aliases (@/lib/...) and Node built-ins resolve as usual.
+    if (args.kind === 'entry-point' || /^(@\/|node:)/.test(args.path)) return undefined;
+    try { require.resolve(args.path); return undefined; }
+    catch (error) { return error.code === 'MODULE_NOT_FOUND' ? { path: args.path, namespace: 'missing-package' } : undefined; }
+  });
+  build.onLoad({ filter: /.*/, namespace: 'missing-package' }, () => ({ loader: 'js', contents: 'const stub = new Proxy(function () {}, { get: (_, key) => key === "__esModule" ? false : stub, apply: () => stub, construct: () => stub }); module.exports = stub;' }));
+} };
+
 /** Bundles the named modules of a snapshot and loads them. A module absent at that revision loads as null. */
 async function load(snap, files) {
   const { build } = await import('esbuild');
@@ -56,7 +70,7 @@ async function load(snap, files) {
   if (present.length) {
     try {
       await build({ absWorkingDir: snap.source, entryPoints: present, outbase: snap.source, outdir: snap.out, bundle: true, format: 'esm', platform: 'node',
-        packages: 'external', logLevel: 'silent', outExtension: { '.js': '.mjs' }, loader: { '.node': 'empty' } });
+        packages: 'external', plugins: [installedPackages], logLevel: 'silent', outExtension: { '.js': '.mjs' }, loader: { '.node': 'empty' } });
     } catch (error) { throw new Error(`Could not bundle the Convex modules of ${snap.rev}: ${error.errors?.[0]?.text ?? error.message}`); }
   }
   const modules = {};

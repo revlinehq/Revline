@@ -1,0 +1,1 @@
+- Campaigns: scaffold for public clipping campaigns (reader, hot score, meaning search, My campaigns, a campaign chip on projects); the reader ships off behind `CAMPAIGN_READER_ENABLED` and has never run against the live site. Why: Revline is becoming a clipping tool where the user picks a paying campaign and Revline makes the clips.

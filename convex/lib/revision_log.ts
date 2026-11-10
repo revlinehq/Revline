@@ -2,7 +2,6 @@ import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Clip, Timeline } from '../../lib/editor/types';
 import { equalTimelineValue } from '../../lib/editor/timeline-equality';
-import { loadSceneCode } from './scene_code';
 import { runAuthorLabel } from './run_ids';
 
 /** Revisions kept per project. Each row is small (scene code is stored by hash), so this covers weeks of editing. */
@@ -112,7 +111,7 @@ export async function listRevisions(ctx: QueryCtx, projectId: Id<'projects'>, op
 }
 
 /** Load a stored clip's scene code. */
-const loadClip = async (ctx: QueryCtx, clip: Clip) => (await loadSceneCode(ctx, { clips: [clip] })).clips[0];
+const loadClip = async (ctx: QueryCtx, clip: Clip) => (({ clips: [clip] })).clips[0];
 
 /** One clip's state at a revision: the `before` of its first change after it, or unchanged since (null `change`). */
 export async function clipChangeAfter(ctx: QueryCtx, projectId: Id<'projects'>, timelineId: string, clipId: string, revision: number) {

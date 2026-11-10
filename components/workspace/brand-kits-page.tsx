@@ -69,14 +69,13 @@ function BrandKitCard({ kit }: { kit: Kit }) {
       </section>
       <Editable title="Product" editing={editing === 'context'} onEdit={() => open('context')} onCancel={close} onSave={async () => { await update({ kitId, context }); close(); }}
         form={<Textarea className="brand-kit-product-input" value={context.product} placeholder="What it is, the problem it solves, the features worth showing." onChange={event => setContext({ product: event.target.value })} />}>
-        {kit.context?.product ? <p className="brand-kit-product">{kit.context.product}</p> : <p className="brand-kit-muted">Not confirmed yet. The assistant drafts it from your site before the first launch video, or write it here.</p>}
+        {kit.context?.product ? <p className="brand-kit-product">{kit.context.product}</p> : <p className="brand-kit-muted">Not confirmed yet. The assistant drafts it from your site, or write it here.</p>}
       </Editable>
     </div>
-    <section className="brand-kit-section">
-      <div className="brand-kit-section-head"><h3>Screens{kit.screens.length ? ` (${kit.screens.length})` : ''}</h3></div>
-      {kit.screens.length ? <ul className="brand-kit-screens">{kit.screens.map(screen => <li key={screen.name}><strong>{screen.name}</strong><div className="brand-kit-screen"><img src={screen.url} alt={screen.note ?? screen.name} loading="lazy" /><Button type="button" variant="secondary" size="icon-xs" className="brand-kit-screen-remove" aria-label={`Remove ${screen.name}`} onClick={() => void removeScreen({ kitId, name: screen.name })}><X /></Button></div></li>)}</ul>
-        : <p className="brand-kit-muted">No product screens saved. Give the assistant screenshots of your product and ask it to save them to this kit; every later video for {kit.name} can use them.</p>}
-    </section>
+    {kit.screens.length > 0 && <section className="brand-kit-section">
+      <div className="brand-kit-section-head"><h3>Screens ({kit.screens.length})</h3></div>
+      <ul className="brand-kit-screens">{kit.screens.map(screen => <li key={screen.name}><strong>{screen.name}</strong><div className="brand-kit-screen"><img src={screen.url} alt={screen.note ?? screen.name} loading="lazy" /><Button type="button" variant="secondary" size="icon-xs" className="brand-kit-screen-remove" aria-label={`Remove ${screen.name}`} onClick={() => void removeScreen({ kitId, name: screen.name })}><X /></Button></div></li>)}</ul>
+    </section>}
   </article>;
 }
 
@@ -88,7 +87,7 @@ function DeleteKit({ kitId, name }: { kitId: Id<'brandKits'>; name: string }) {
   return <>
     <Button type="button" variant="ghost" size="icon-xs" aria-label={`Delete ${name}`} onClick={() => setOpen(true)}><Trash2 /></Button>
     <Dialog open={open} onOpenChange={open => { if (!deleting) setOpen(open); }}><DialogContent className="workspace-dialog">
-      <DialogHeader><DialogTitle>Delete {name}?</DialogTitle><DialogDescription>Its colors, fonts, screens and blueprints are deleted. Videos already made keep their look.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Delete {name}?</DialogTitle><DialogDescription>Its colors, fonts and screens are deleted. Videos already made keep their look.</DialogDescription></DialogHeader>
       {error && <p className="brand-kit-error" role="alert">{error}</p>}
       <DialogFooter><DialogClose asChild><Button type="button" variant="ghost" disabled={deleting}>Cancel</Button></DialogClose><Button type="button" variant="destructive" onClick={() => void confirm()} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete kit'}</Button></DialogFooter>
     </DialogContent></Dialog>

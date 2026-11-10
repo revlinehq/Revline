@@ -13,16 +13,21 @@
 export const PROCESSOR_CAPABILITIES_VERSION = 1;
 
 /** Shipped before processors reported anything: every deployed processor has these, so they are never checked. */
-export const BASELINE_READ_MODES = ['sheet', 'track', 'measure', 'compare', 'trace', 'font', 'sounds', 'motion'] as const;
-export const BASELINE_TASK_KINDS = ['highlights', 'transcribe', 'understand', 'shots', 'beats', 'track', 'frames', 'video', 'reference', 'facecam', 'speakers',
-  'extract', 'preview', 'waveform', 'render', 'import', 'review', 'snapshot', 'cutout', 'derive', 'blueprint', 'read'] as const;
+export const BASELINE_READ_MODES = ['sheet'] as const;
+export const BASELINE_TASK_KINDS = ['highlights', 'transcribe', 'understand', 'shots', 'beats', 'track', 'frames', 'video', 'facecam', 'speakers',
+  'extract', 'preview', 'waveform', 'render', 'import', 'review', 'snapshot', 'cutout', 'derive', 'read'] as const;
 
 /** Added since. A deployed processor may not have these: Convex checks `processorCan` first. */
 export const GATED_READ_MODES = ['looks'] as const;
 export const GATED_TASK_KINDS = [] as const;
 
-export type ProcessorReadMode = (typeof BASELINE_READ_MODES)[number] | (typeof GATED_READ_MODES)[number];
-export type ProcessorTaskKind = (typeof BASELINE_TASK_KINDS)[number] | (typeof GATED_TASK_KINDS)[number];
+/** Removed with the motion and recreate lanes. Stored rows may still name them, so the schema keeps them; no processor
+ *  runs or reports them, and nothing queues them. */
+export const RETIRED_READ_MODES = ['track', 'measure', 'compare', 'trace', 'font', 'sounds', 'motion'] as const;
+export const RETIRED_TASK_KINDS = ['reference', 'blueprint'] as const;
+
+export type ProcessorReadMode = (typeof BASELINE_READ_MODES)[number] | (typeof GATED_READ_MODES)[number] | (typeof RETIRED_READ_MODES)[number];
+export type ProcessorTaskKind = (typeof BASELINE_TASK_KINDS)[number] | (typeof GATED_TASK_KINDS)[number] | (typeof RETIRED_TASK_KINDS)[number];
 export type ProcessorCapability = `read:${ProcessorReadMode}` | `kind:${ProcessorTaskKind}`;
 
 const ids = (prefix: 'read' | 'kind', names: readonly string[]) => names.map(name => `${prefix}:${name}`);
