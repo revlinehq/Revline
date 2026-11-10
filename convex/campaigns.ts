@@ -124,7 +124,8 @@ export const campaignForPost = query({ args: { campaignId: v.string() }, returns
 
 const filters = v.object(campaignFilters);
 const found = v.array(v.object({ campaign: campaignView, score: v.optional(v.number()) }));
-const pageSize = (limit: number | undefined) => Math.max(1, Math.min(limit ?? 24, 50));
+// 200 is the "All campaigns" page; every other caller asks for 50 or fewer.
+const pageSize = (limit: number | undefined) => Math.max(1, Math.min(limit ?? 24, 200));
 const BROWSE_SCAN = 2000;
 
 /** The signed-in owner, with the same account checks as every query (an action has no database to run them on). */

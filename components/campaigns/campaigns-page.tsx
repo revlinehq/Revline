@@ -1,7 +1,9 @@
 'use client';
 // Campaigns: All (search, Popular now, More campaigns) and Mine (the user's saved campaigns), one card for both.
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import type { CampaignView } from '@/convex/campaignsModel';
@@ -18,12 +20,30 @@ export type CampaignsView = 'all' | 'mine';
 const VIEWS = [{ value: 'all', label: 'All' }, { value: 'mine', label: 'Mine' }] as const;
 /** Cards in "More campaigns" before "See all". */
 const MORE_PREVIEW = 8;
+/** Cards on the "All campaigns" page; the backend caps one request at this many (convex/campaigns.ts). */
+const ALL_LIMIT = 200;
 
-function Section({ title, expanded, onToggle, children }: { title: string; expanded?: boolean; onToggle?: () => void; children: React.ReactNode }) {
+/** Every campaign, on its own page. */
+const ALL_PATH = '/campaigns/all';
+
+/** A titled group of cards. "See all" opens the full list on its own page; it never grows the group in place. */
+function Section({ title, seeAll, tools, children }: { title: string; seeAll?: boolean; tools?: React.ReactNode; children: React.ReactNode }) {
   return <section className="campaigns-section">
-    <div className="campaigns-section-head"><h2>{title}</h2>{onToggle && <Button variant="ghost" size="sm" className="campaigns-see-all" onClick={onToggle} aria-expanded={expanded}>{expanded ? 'Show less' : 'See all'}</Button>}</div>
+    <div className="campaigns-section-head"><h2>{title}</h2><div className="campaigns-section-tools">{tools}{seeAll && <Button asChild variant="ghost" size="sm" className="campaigns-see-all"><Link href={ALL_PATH}>See all</Link></Button>}</div></div>
     {children}
   </section>;
+}
+
+/** One line of cards that scrolls sideways, with arrows for a mouse without a sideways wheel. */
+function CardRow({ title, campaigns, now }: { title: string; campaigns: CampaignView[]; now: number }) {
+  const row = useRef<HTMLDivElement>(null);
+  const move = (direction: 1 | -1) => row.current?.scrollBy({ left: direction * row.current.clientWidth * 0.8, behavior: 'auto' });
+  return <Section title={title} seeAll tools={<>
+    <Button variant="ghost" size="icon" className="campaigns-row-arrow" aria-label={`Scroll ${title} back`} onClick={() => move(-1)}><ChevronLeft /></Button>
+    <Button variant="ghost" size="icon" className="campaigns-row-arrow" aria-label={`Scroll ${title} forward`} onClick={() => move(1)}><ChevronRight /></Button>
+  </>}>
+    <div ref={row} className="campaigns-row">{campaigns.map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div>
+  </Section>;
 }
 
 function AllCampaigns({ now }: { now: number }) {
@@ -33,8 +53,6 @@ function AllCampaigns({ now }: { now: number }) {
   const [text, setText] = useState('');
   const [found, setFound] = useState<{ text: string; campaigns: CampaignView[] } | null>(null);
   const [error, setError] = useState('');
-  const [popularOpen, setPopularOpen] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
   const latest = useRef(0), pending = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   async function run(wanted: string) {
     // A search asked for now (Enter, Try again) replaces the one waiting on the typing pause.
@@ -69,11 +87,9 @@ function AllCampaigns({ now }: { now: number }) {
       : !campaigns.length ? <div className="dash-empty"><h2>{searching ? 'No campaigns match' : 'No campaigns yet'}</h2><p>{searching ? 'Try other words, or clear the search to see every campaign.' : 'Campaigns you can clip for will show here.'}</p></div>
       : searching ? <Section title="Results"><div className="campaigns-grid">{campaigns.map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div></Section>
       : <>
-        <Section title="Popular now" expanded={popularOpen} onToggle={popular.length > 3 ? () => setPopularOpen(open => !open) : undefined}>
-          <div className={popularOpen ? 'campaigns-grid' : 'campaigns-row'}>{popular.map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div>
-        </Section>
-        {more.length > 0 && <Section title="More campaigns" expanded={moreOpen} onToggle={more.length > MORE_PREVIEW ? () => setMoreOpen(open => !open) : undefined}>
-          <div className="campaigns-grid">{(moreOpen ? more : more.slice(0, MORE_PREVIEW)).map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div>
+        <CardRow title="Popular now" campaigns={popular} now={now} />
+        {more.length > 0 && <Section title="More campaigns" seeAll>
+          <div className="campaigns-grid">{more.slice(0, MORE_PREVIEW).map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div>
         </Section>}
       </>}
   </main>;
@@ -90,6 +106,34 @@ function MyCampaigns({ now }: { now: number }) {
         : <div className="campaigns-grid">{mine.map(entry => <CampaignCard key={entry.campaign._id} campaign={entry.campaign} now={now} />)}</div>}
     </section>
   </main>;
+}
+
+/** /campaigns/all: every open campaign in one grid, hottest first. */
+export function AllCampaignsPage() {
+  const { isAuthenticated } = useConvexAuth();
+  const search = useAction(api.campaignsSearch.search);
+  const now = useNow();
+  const [campaigns, setCampaigns] = useState<CampaignView[] | null>(null);
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let current = true;
+    search({ limit: ALL_LIMIT }).then(result => { if (current) { setError(false); setCampaigns(result.campaigns.map(entry => entry.campaign)); } }, () => { if (current) setError(true); });
+    return () => { current = false; };
+  }, [isAuthenticated, search, attempt]);
+  return <div className="dash-page">
+    <DashboardNavbar back={{ href: '/campaigns' }} />
+    <main className="dash-content campaigns-content">
+      <section className="campaigns-section campaigns-mine">
+        <div className="campaigns-section-head"><h1>All campaigns</h1></div>
+        {error ? <div className="dash-empty" role="alert"><h2>Could not load campaigns</h2><p>Check your connection and try again.</p><Button variant="soft" onClick={() => setAttempt(count => count + 1)}>Try again</Button></div>
+          : !campaigns ? <p className="campaigns-loading" role="status">Loading campaigns…</p>
+          : !campaigns.length ? <div className="dash-empty"><h2>No campaigns yet</h2><p>Campaigns you can clip for will show here.</p></div>
+          : <div className="campaigns-grid">{campaigns.map(campaign => <CampaignCard key={campaign._id} campaign={campaign} now={now} />)}</div>}
+      </section>
+    </main>
+  </div>;
 }
 
 export function CampaignsPage({ view }: { view: CampaignsView }) {

@@ -19,6 +19,10 @@
 .campaigns-section-head :is(h1, h2) { margin: 0; font-size: 16px; font-weight: 500; line-height: 1.3; }
 .campaigns-see-all[data-slot=button] { height: 28px; padding: 0 8px; margin-right: -8px; color: var(--dash-muted); font-size: 14px; font-weight: 400; }
 .campaigns-see-all[data-slot=button]:hover { background: transparent; color: var(--dash-text); }
+.campaigns-section-tools { display: flex; align-items: center; gap: 2px; }
+.campaigns-row-arrow[data-slot=button] { width: 28px; height: 28px; color: var(--dash-muted); }
+.campaigns-row-arrow[data-slot=button]:hover { background: transparent; color: var(--dash-text); }
+.campaigns-row-arrow[data-slot=button] svg { width: 16px; height: 16px; }
 .campaigns-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 /* Popular now runs off the right edge; the row scrolls sideways. */
 .campaigns-row { display: flex; gap: 12px; margin-right: calc(-1 * var(--dash-gutter)); padding-right: var(--dash-gutter); overflow-x: auto; scrollbar-width: none; }
