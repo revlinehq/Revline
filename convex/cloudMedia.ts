@@ -38,7 +38,7 @@ export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2
   await ctx.scheduler.runAfter(IDLE_MS,internal.cloudMedia.cleanup,{uploadId:id});
   return id;
 }});
-export const start = action({args:metadata,returns:v.object({uploadId:v.id('cloudMedia'),partSize:v.number(),expiresAt:v.number()}),handler:async(ctx,args):Promise<{uploadId:Id<'cloudMedia'>;partSize:number;expiresAt:number}>=>{
+export const start = action({args:metadata,returns:v.object({uploadId:v.id('cloudMedia'),partSize:v.number()}),handler:async(ctx,args):Promise<{uploadId:Id<'cloudMedia'>;partSize:number}>=>{
   const ownerId=await ctx.runQuery(internal.cloudMedia.authorize,{});
   const fileName=args.fileName.trim();
   if(!fileName||fileName.length>255||args.contentType.length>128||(!args.contentType.startsWith(`${args.kind}/`)&&!(args.kind==='audio'&&/^video\/(mp4|quicktime|webm)$/.test(args.contentType))))throw new ConvexError('Choose a supported video, audio or image file.');
@@ -51,7 +51,7 @@ export const start = action({args:metadata,returns:v.object({uploadId:v.id('clou
   const opened=await storageControl({action:'create',key:r2Key,contentType:args.contentType});
   if(!opened.uploadId)throw new ConvexError('Could not open cloud storage.');
   const multipartId=opened.uploadId;
-  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...args,fileName,ownerId,r2Key,uploadId:multipartId,partSize}),partSize,expiresAt:Date.now()+IDLE_MS};}
+  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...args,fileName,ownerId,r2Key,uploadId:multipartId,partSize}),partSize};}
   catch(error){await storageControl({action:'abort',key:r2Key,uploadId:multipartId}).catch(()=>{});throw error;}
 }});
 /** The signed-in owner's uploads that never finished, for cancelling from Cloud storage. */
@@ -94,11 +94,11 @@ export const partUrls = action({args:{...uploadArgs,from:v.number(),count:v.numb
 }});
 /** Continues an interrupted library upload: which remembered parts storage holds, so only the rest are sent.
  * Null when the upload was cancelled, cleared after two idle hours, or is another file. */
-export const resume = action({args:{...uploadArgs,size:v.number(),parts:storedPartsValidator},returns:v.union(v.null(),v.object({partSize:v.number(),expiresAt:v.number(),parts:partsValidator})),handler:async(ctx,args):Promise<{partSize:number;expiresAt:number;parts:{partNumber:number;etag:string}[]}|null>=>{
+export const resume = action({args:{...uploadArgs,size:v.number(),parts:storedPartsValidator},returns:v.union(v.null(),v.object({partSize:v.number(),parts:partsValidator})),handler:async(ctx,args):Promise<{partSize:number;parts:{partNumber:number;etag:string}[]}|null>=>{
   const row:Doc<'cloudMedia'>|null=await ctx.runQuery(internal.cloudMedia.resumable,{uploadId:args.uploadId,size:args.size});
   if(!row)return null;
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
-  return {partSize:row.partSize,expiresAt:Math.min(row.createdAt+MAX_AGE_MS,Date.now()+IDLE_MS),parts:await verifiedParts({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.parts)};
+  return {partSize:row.partSize,parts:await verifiedParts({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.parts)};
 }});
 export const finish = internalMutation({args:{...uploadArgs,size:v.number(),contentType:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const row=await ctx.db.get(args.uploadId);

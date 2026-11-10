@@ -8,14 +8,15 @@ import { uploadResumable, type ResumableTransport } from './upload-resume';
 type SourceMetadata = Awaited<ReturnType<typeof inspectMedia>>;
 
 export type SourceUploadTransport = Omit<ResumableTransport<Id<'r2Uploads'>, Id<'assets'> | null>, 'start'> & {
-  start: (metadata: SourceMetadata) => Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; expiresAt?: number }>;
+  start: (metadata: SourceMetadata) => Promise<{ uploadId: Id<'r2Uploads'>; partSize: number }>;
   saveThumbnail?: (assetId:Id<'assets'>,thumbnail:Blob)=>Promise<void>;
   onThumbnail?: (thumbnail: Blob) => void;
 };
 
-/** What a progress label says instead of the usual wording while an upload resumes or waits. */
-export function uploadActivityLabel(activity: UploadActivity, percent: number) {
-  return activity === 'resuming' ? `Resuming… ${percent}%` : activity === 'waiting' ? 'Waiting for your connection…' : undefined;
+/** What a progress label says instead of the usual wording while an upload resumes or waits.
+ * Pass `percent` only where no percentage is already shown beside the label. */
+export function uploadActivityLabel(activity: UploadActivity, percent?: number) {
+  return activity === 'resuming' ? `Resuming…${percent === undefined ? '' : ` ${percent}%`}` : activity === 'waiting' ? 'Waiting for your connection…' : undefined;
 }
 
 export type SourceUploadPhase = 'reading' | 'uploading' | 'saving';
@@ -48,7 +49,7 @@ export async function uploadSourceFile(
     const assetId = await uploadResumable(
       file,
       { ...transport, start: () => transport.start(metadata) },
-      (percent, activity) => onProgress(percent, 'uploading', uploadActivityLabel(activity, percent)),
+      (percent, activity) => onProgress(percent, 'uploading', uploadActivityLabel(activity)),
       signal,
       () => { onProgress(100, 'saving'); log('Transfer finished; finalizing cloud storage'); },
     );

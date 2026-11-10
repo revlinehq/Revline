@@ -50,7 +50,7 @@ async function main() {
     if (!prepared.ok) throw new Error(upload.error ?? 'Could not prepare the upload.');
     // Four parts travel at once, each streamed from disk, so memory stays flat for any file size.
     const parts = new Array(upload.urls.length);
-    let next = 0;
+    let next = 0, failure;
     const sendPart = async index => {
       const start = index * upload.partSize, length = Math.min(upload.partSize, size - start);
       for (let attempt = 0; ; attempt++) {
@@ -63,12 +63,15 @@ async function main() {
           parts[index] = { partNumber: part.partNumber, etag: part.etag };
           return;
         } catch (error) {
-          if (attempt >= 2) throw new Error(error.message + ' Request a new upload and retry.');
+          // One part failing for good stops the others: the upload cannot complete without it.
+          if (failure) return;
+          if (attempt >= 2) { failure = new Error(error.message + ' Request a new upload and retry.'); return; }
           await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
         } finally { body.destroy(); }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(4, upload.urls.length) }, async () => { while (next < upload.urls.length) await sendPart(next++); }));
+    await Promise.all(Array.from({ length: Math.min(4, upload.urls.length) }, async () => { while (!failure && next < upload.urls.length) await sendPart(next++); }));
+    if (failure) throw failure;
     if ((await file.stat()).size !== size) throw new Error('The local file size changed during upload. Request a new upload.');
     console.log(JSON.stringify({ uploadId: upload.uploadId, parts }));
   } finally { await file.close(); }

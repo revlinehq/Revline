@@ -20,7 +20,7 @@ import type { PartLink } from '../lib/storage/part-links';
 
 const metadata = { fileName: v.string(), contentType: v.string(), kind: assetKind, size: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()) };
 const LEASE_MS = 24 * 3600_000;
-const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number(), expiresAt: v.number() });
+const uploadInfo = v.object({ uploadId: v.id('r2Uploads'), partSize: v.number(), partCount: v.number() });
 const taskAuth = { taskId: v.optional(v.id('mediaTasks')), leaseToken: v.optional(v.string()) };
 const previewUpload = { previewRange:v.optional(v.object({start:v.number(),end:v.number()})), purpose:v.optional(v.literal('preview')),sourceAssetId:v.optional(v.id('assets')),previewFps:v.optional(v.number()),previewVersion:v.optional(v.number()) };
 function uprightDimensions(source:Pick<Doc<'assets'>,'width'|'height'>,width:number,height:number) {
@@ -82,7 +82,7 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
   if (!task && !args.jobId) await requireMediaTaskCapacity(ctx, ownerId, uploadPreparationTasks(args.kind));
   return ownerId;
 }});
-export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.object({ uploadId: v.id('r2Uploads'), expiresAt: v.number() }), handler: async (ctx, args) => {
+export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   const task=args.taskId?await requireMediaTask(ctx,args.taskId,args.leaseToken??''):null;
@@ -91,10 +91,9 @@ export const createLease = internalMutation({ args: { ...metadata, ownerId: v.st
   if (!task && !args.jobId) await requireMediaTaskCapacity(ctx, args.ownerId, uploadPreparationTasks(args.kind));
   const { leaseToken, ...fields } = args;
   await recordStorageObject(ctx,{...args,r2Key:args.key,createdAt:Date.now(),kind:args.jobId?'export':args.kind,pending:true,auxiliary:args.purpose==='preview'});
-  const expiresAt = Date.now() + LEASE_MS;
-  const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt });
+  const id = await ctx.db.insert('r2Uploads', { ...fields, ...(leaseToken ? { taskLeaseToken: leaseToken } : {}), completed: false, expiresAt: Date.now() + LEASE_MS });
   await ctx.scheduler.runAfter(LEASE_MS, internal.r2.cleanupLease, { uploadId: id });
-  return { uploadId: id, expiresAt };
+  return id;
 }});
 async function authorizedLease(ctx:QueryCtx|MutationCtx,args:{uploadId:Id<'r2Uploads'>;taskId?:Id<'mediaTasks'>;leaseToken?:string;forCleanup?:boolean;ownerId?:string}) {
   const lease = await ctx.db.get(args.uploadId);
@@ -120,7 +119,7 @@ export const beginAbort = internalMutation({args:{uploadId:v.id('r2Uploads'),...
 const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, ...metadata };
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
-export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number; expiresAt: number }> {
+export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
   const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}) });
   if(!args.purpose&&(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
@@ -137,8 +136,8 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
   const multipartId = created.uploadId;
   try {
-    const lease = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
-    return { ...lease, partSize, partCount };
+    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
+    return { uploadId, partSize, partCount };
   } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }); throw error; }
 }
 export const partUrl = action({ args: { uploadId: v.id('r2Uploads'), partNumber: v.number(), ...taskAuth }, returns: v.string(), handler: async (ctx, args): Promise<string> => {
@@ -163,9 +162,9 @@ export const resumableLease = internalQuery({ args: { uploadId: v.id('r2Uploads'
 }});
 /** Continues an interrupted upload: which remembered parts storage holds, so only the rest are sent.
  * A lease lasts 24 hours from its start; after that the file uploads from the beginning. */
-export const resume = action({ args: { uploadId: v.id('r2Uploads'), projectId: v.id('projects'), size: v.number(), parts: storedPartsValidator }, returns: v.union(v.null(), v.object({ partSize: v.number(), expiresAt: v.number(), parts: partsValidator })), handler: async (ctx, args): Promise<{ partSize: number; expiresAt: number; parts: { partNumber: number; etag: string }[] } | null> => {
+export const resume = action({ args: { uploadId: v.id('r2Uploads'), projectId: v.id('projects'), size: v.number(), parts: storedPartsValidator }, returns: v.union(v.null(), v.object({ partSize: v.number(), parts: partsValidator })), handler: async (ctx, args): Promise<{ partSize: number; parts: { partNumber: number; etag: string }[] } | null> => {
   const lease: Doc<'r2Uploads'> | null = await ctx.runQuery(internal.r2.resumableLease, { uploadId: args.uploadId, projectId: args.projectId, size: args.size });
-  return lease && { partSize: lease.partSize, expiresAt: lease.expiresAt, parts: await verifiedParts(lease, args.parts) };
+  return lease && { partSize: lease.partSize, parts: await verifiedParts(lease, args.parts) };
 }});
 /** A one-hour URL that accepts exactly one part's bytes by PUT. */
 export async function signPartUrl(lease: Doc<'r2Uploads'>, partNumber: number) {

@@ -9,6 +9,8 @@ type ResumeRecord = { uploadId: string; name: string; size: number; lastModified
 export type UnfinishedUpload = { name: string; size: number; percent: number };
 
 const SAMPLE_BYTES = 2 * 1024 * 1024;
+/** Notes outlive no upload: the server keeps an unfinished one for at most 24 hours and decides whether it can continue. */
+const REMEMBER_MS = 24 * 3600_000;
 const changed = 'revline-upload-resume';
 // IndexedDB, not localStorage: Chrome batches localStorage writes for up to a minute, so a
 // crashed or killed browser would forget most of the parts it had stored.
@@ -83,9 +85,9 @@ export const backendLacks = (error: unknown) => error instanceof Error && /Could
 export type ResumableTransport<Id extends string, Result> = {
   /** Where this upload goes; resume notes are kept per destination. */
   scope: string;
-  start: () => Promise<{ uploadId: Id; partSize: number; expiresAt?: number }>;
-  /** The parts of an earlier upload that storage holds, or null when it cannot continue. */
-  resume?: (uploadId: Id, parts: StoredPart[]) => Promise<{ partSize: number; expiresAt: number; parts: UploadedPart[] } | null>;
+  start: () => Promise<{ uploadId: Id; partSize: number }>;
+  /** The parts of an earlier upload that storage holds; null when it cannot continue, undefined when the backend cannot say. */
+  resume: (uploadId: Id, parts: StoredPart[]) => Promise<{ partSize: number; parts: UploadedPart[] } | null | undefined>;
   partUrls: (uploadId: Id, from: number, count: number) => Promise<PartLink[]>;
   complete: (uploadId: Id, parts: UploadedPart[]) => Promise<Result>;
   abort: (uploadId: Id) => Promise<unknown>;
@@ -101,23 +103,24 @@ export async function uploadResumable<Id extends string, Result>(file: File, tra
     const earlier = key ? await read(key) : null;
     if (earlier && key) {
       const sameFile = earlier.name === file.name && earlier.size === file.size && earlier.lastModified === file.lastModified;
-      const resumed = sameFile && transport.resume ? await transport.resume(earlier.uploadId as Id, earlier.parts).catch(error => { if (error instanceof ConvexError) return null; throw error; }) : null;
+      const resumed = sameFile ? await transport.resume(earlier.uploadId as Id, earlier.parts).catch(error => { if (error instanceof ConvexError) return null; throw error; }) : undefined;
       signal?.throwIfAborted();
       if (resumed) {
         const receipts = new Map(earlier.parts.map(part => [`${part.partNumber}:${part.etag}`, part.receipt]));
-        record = { ...earlier, partSize: resumed.partSize, expiresAt: resumed.expiresAt, parts: resumed.parts.map(part => ({ ...part, receipt: receipts.get(`${part.partNumber}:${part.etag}`) })) };
+        record = { ...earlier, partSize: resumed.partSize, parts: resumed.parts.map(part => ({ ...part, receipt: receipts.get(`${part.partNumber}:${part.etag}`) })) };
         uploadId = earlier.uploadId as Id;
         console.info(`[upload] ${new Date().toISOString()} Resuming an interrupted upload: ${record.parts.length} parts already stored.`);
       } else {
-        // The old upload expired, was cancelled or holds another file: release it and start over.
+        // Start over. An upload the server refused to continue (expired, cancelled) is released;
+        // one it was not asked about may still be running in another tab and is left alone.
         void write(key, null);
-        void transport.abort(earlier.uploadId as Id).catch(() => undefined);
+        if (resumed === null) void transport.abort(earlier.uploadId as Id).catch(() => undefined);
       }
     }
     if (!uploadId) {
       const opened = await transport.start();
       uploadId = opened.uploadId;
-      record = { uploadId, name: file.name, size: file.size, lastModified: file.lastModified, partSize: opened.partSize, expiresAt: opened.expiresAt ?? Date.now() + 3600_000, parts: [] };
+      record = { uploadId, name: file.name, size: file.size, lastModified: file.lastModified, partSize: opened.partSize, expiresAt: Date.now() + REMEMBER_MS, parts: [] };
     }
     const current = record!, id = uploadId;
     if (key) void write(key, current);

@@ -23,8 +23,8 @@ export function useSourceUpload() {
     start: metadata => startUpload({ projectId, fileName: file.name, contentType: file.type, size: file.size, ...metadata }),
     scope: `project:${projectId}`,
     // A backend that does not have the batched calls yet signs one part at a time and restarts interrupted uploads.
-    partUrls: (uploadId, from, count) => partUrls({ uploadId, from, count }).catch(async error => { if (!backendLacks(error)) throw error; return [{ partNumber: from, url: await partUrl({ uploadId, partNumber: from }), expiresAt: Date.now() + 3600_000 }]; }),
-    resume: (uploadId, parts) => resumeUpload({ uploadId, projectId, size: file.size, parts }).catch(error => { if (!backendLacks(error)) throw error; return null; }),
+    partUrls: (uploadId, from, count) => partUrls({ uploadId, from, count }).catch(async error => { if (!backendLacks(error)) throw error; return [{ partNumber: from, url: await partUrl({ uploadId, partNumber: from }), ttlMs: 3600_000 }]; }),
+    resume: (uploadId, parts) => resumeUpload({ uploadId, projectId, size: file.size, parts }).catch(error => { if (!backendLacks(error)) throw error; return undefined; }),
     complete: (uploadId, parts) => finishUpload({ uploadId, parts }),
     abort: uploadId => abortUpload({ uploadId }),
     ...extra,

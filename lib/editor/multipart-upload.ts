@@ -77,16 +77,21 @@ function createPace(onRaise: () => void) {
   let limit = slow ? SLOW_PARALLEL : START_PARALLEL, ceiling = slow ? START_PARALLEL : HTTP1_PARALLEL;
   let state: 'baseline' | 'probing' | 'holding' = 'baseline', baseline = 0, previous = limit, holdUntil = 0;
   // The first probe doubles; later re-probes after a hold add two.
-  let windowStart = Date.now(), windowBytes = 0, first = true;
+  let windowStart = Date.now(), windowBytes = 0, first = true, capped = false;
   const restart = () => { windowStart = Date.now(); windowBytes = 0; };
   const raise = (strong: boolean) => {
-    if (limit >= ceiling) { state = 'holding'; holdUntil = Date.now() + HOLD_MS; return; }
+    if (limit >= ceiling) { state = 'holding'; capped = true; holdUntil = Date.now() + HOLD_MS; return; }
     previous = limit; limit = Math.min(ceiling, strong ? limit * 2 : limit + 2); state = 'probing'; onRaise();
   };
   return {
     get limit() { return limit; },
     /** HTTP/2 and HTTP/3 carry every part on one connection, so more of them may run at once. */
-    multiplexed() { if (!slow) ceiling = MULTIPLEXED_PARALLEL; },
+    multiplexed() {
+      if (slow) return;
+      ceiling = MULTIPLEXED_PARALLEL;
+      // A hold that began only because the HTTP/1.1 ceiling was reached ends here.
+      if (capped && state === 'holding') { capped = false; state = 'baseline'; restart(); }
+    },
     /** Count transferred bytes; `saturated` says every allowed part was in flight. */
     sent(bytes: number, saturated: boolean) {
       windowBytes += bytes;
@@ -101,7 +106,7 @@ function createPace(onRaise: () => void) {
         else { limit = previous; state = 'holding'; holdUntil = now + HOLD_MS; }
       } else if (now >= holdUntil) state = 'baseline';
     },
-    failed() { limit = Math.max(1, Math.ceil(limit / 2)); state = 'holding'; holdUntil = Date.now() + FAILURE_HOLD_MS; restart(); },
+    failed() { limit = Math.max(1, Math.ceil(limit / 2)); capped = false; state = 'holding'; holdUntil = Date.now() + FAILURE_HOLD_MS; restart(); },
   };
 }
 

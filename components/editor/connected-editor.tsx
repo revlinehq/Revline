@@ -290,7 +290,7 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
         try{
           const assetId=await uploadSourceFile(file,sourceUpload.transport(projectId,file),(percent,phase,activity)=>report(index,phase==='reading'?0:transferProgress(percent),phase,activity),cancellation.signal);
           transferred.push({file,index,assetId});
-        }catch(e){incomplete=true;if(!cancellation.signal.aborted)failed(file,e);}
+        }catch(e){incomplete=true;queue[index].activity=undefined;if(!cancellation.signal.aborted)failed(file,e);}
       }
       // Cancelled files must not resume from the local draft on the next open.
       if(cancellation.signal.aborted)await acknowledgeDraftFiles(files.filter(file=>!transferred.some(item=>item.file===file))).catch(()=>undefined);
