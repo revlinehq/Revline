@@ -23,6 +23,11 @@ export async function checkCompletion(
     ];
   }
 }
+/** A clip task whose cuts were given as source ranges: the request did not ask Revline to choose the moments
+ * (findMoments, set by lanes.begin from the request) and the task never started a clipping run with findHighlights.
+ * Task rows from before findMoments existed keep the plan and analysis requirement. */
+export const cutsGiven = (task: { lane: string; findMoments?: boolean }, clipRunStarted: boolean) =>
+  task.lane === 'clip' && task.findMoments === false && !clipRunStarted;
 export function check(_context: LaneCheckContext): string[] {
   return [
     'Read persisted clipping.completionState using the stable taskId; do not accept caller-provided counts.',

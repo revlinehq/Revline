@@ -275,7 +275,7 @@ export const review = internalMutation({
     const project = await requireProject(ctx, args.projectId, args.ownerId);
     const row = await rowFor(ctx, args);
     if (!row || row.ownerId !== args.ownerId)
-      throw new ConvexError("Call findHighlights before planning this batch.");
+      throw new ConvexError("planClips registers moments Revline found: call findHighlights first when the request asks Revline to choose them. For cuts at source ranges you were given, skip both: build the tabs and call finish.");
     if (args.found) {
       if (!row.unavailableReason && !row.targeted && row.reviewMode !== "transcript")
         throw new ConvexError(
@@ -756,7 +756,7 @@ export const completionState = internalQuery({
         required: false,
         passed: false,
         errors: [
-          "Call findHighlights and planClips before reporting this clipping request complete.",
+          "This request asks Revline to choose the moments: call findHighlights and planClips before reporting it complete.",
         ],
       };
     if (row.ownerId !== args.ownerId)

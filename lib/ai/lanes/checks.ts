@@ -52,10 +52,42 @@ export function requestedLengthFailure(target: RequestedLength | undefined, dura
   return `Requested length ${asked}; the timeline is ${duration.toFixed(1)} s. ${long ? `Cut ${(duration - target.max!).toFixed(1)} s or more` : `Keep ${(target.min! - duration).toFixed(1)} s more`}, or if the message cannot fit, stop and tell the user the actual length.`;
 }
 
+// "Find three clips", "pick the best moments": the request hands the choice to Revline even when it also names a stretch to look in.
+// The thing to find sits within a few words of the verb, so "select the part from 50 to 71 s and cut it into a clip" is not a search.
+const FIND_MOMENTS = /\b(?:find|pick|choose|select|suggest|identify|look for|search for)(?:\s+[^\s.!?]+){0,4}?\s+(?:clips?|shorts?|moments?|highlights?)\b/i;
+// "Clip this", "make 5 shorts from this podcast", "turn the stream into TikToks", "the highlights", "the best moments":
+// a batch from a long source with no moments named. "Cut four clips from the trailer" is not here: it says nothing about who chooses.
+const OPEN_BATCH = /\bclip\s+(?:this|it|that|the\s+(?:stream|vod|podcast|video|episode|interview|recording))\b|\b(?:make|create|generate|get|give me|want|need)\b[^.!?\n]{0,40}\b(?:clips|shorts|tiktoks|reels)\b|\b(?:cut|chop|split|break|turn)\b[^.!?\n]{0,40}\binto\b[^.!?\n]{0,20}\b(?:clips|shorts|tiktoks|reels)\b|\bhighlights?\b|\b(?:best|top|funniest|strongest|most (?:viral|interesting|engaging|exciting))\s+(?:\w+\s+){0,2}(?:clips?|shorts?|moments?|parts?|bits?|scenes?)\b/i;
+const CLOCK = '\\d+(?::\\d{2}){1,2}', SECONDS = '\\d+(?:\\.\\d+)?', TIME_UNIT = '(?:s|secs?|seconds?|m|mins?|minutes?)\\b';
+// "50-71 s", "0:50 to 1:11", "between 50 and 71 seconds": two times joined as a stretch. A clock time or a unit is required, so "2-3 clips" is not one.
+const TIME_RANGE = new RegExp(`(?:(${CLOCK})|(${SECONDS})\\s*(${TIME_UNIT})?)\\s*(?:-|–|—|to|until|through|and)\\s*(?:(${CLOCK})|(${SECONDS})\\s*(${TIME_UNIT})?)`, 'gi');
+// "clips of 30-45 seconds", "30-45 second clips", "30 to 45 s long": how long each clip should be, not where it sits in the source.
+const LENGTH_BEFORE = /\b(?:of|lasting|about|around|roughly|each|length|duration|under|over)\s+$/i, LENGTH_AFTER = /^[\s-]*(?:long|each|per|clips?|shorts?|videos?|reels?)\b/i;
+
+/** Whether the request names where in the source to cut: at least one stretch of time that is not a clip length. */
+export function namesSourceRange(request: string): boolean {
+  for (const match of request.matchAll(TIME_RANGE)) {
+    const clock = match[1] !== undefined || match[4] !== undefined, unit = match[3] !== undefined || match[6] !== undefined;
+    if (!clock && !unit) continue;
+    // "and" joins a stretch only after "between"; "at 50 s and 88 s" names two moments.
+    if (/\band\b/i.test(match[0]) && !/\bbetween\s+$/i.test(request.slice(0, match.index))) continue;
+    if (clock) return true;
+    if (!LENGTH_BEFORE.test(request.slice(0, match.index)) && !LENGTH_AFTER.test(request.slice(match.index + match[0].length))) return true;
+  }
+  return false;
+}
+
+/** Whether the request asks Revline to choose the moments: the /clip command (its workflow is discovery), wording
+ * that asks to find them, or a batch from a long source that names no stretch to cut. A clip task without it, and
+ * without a findHighlights/planClips run, cut what it was told to cut and finishes on the cheap checks alone. */
+export function momentsRequested(request: string, command?: { name: string }): boolean {
+  return command?.name === 'clip' || /^\s*\/clip\b/.test(request) || FIND_MOMENTS.test(request) || OPEN_BATCH.test(request) && !namesSourceRange(request);
+}
+
 /** What lanes.begin stores for a request. The app and MCP both start tasks with it. */
-export function requestChecks(request: string): { exportConfirmed: boolean; checkLevel?: 'final'; requestedLength?: RequestedLength } {
+export function requestChecks(request: string, command?: { name: string }): { exportConfirmed: boolean; findMoments: boolean; checkLevel?: 'final'; requestedLength?: RequestedLength } {
   const length = requestedLength(request);
-  return { exportConfirmed: exportConfirmed(request), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}), ...(length ? { requestedLength: length } : {}) };
+  return { exportConfirmed: exportConfirmed(request), findMoments: momentsRequested(request, command), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}), ...(length ? { requestedLength: length } : {}) };
 }
 
 /** Older task rows have no level; an export they confirmed still runs final checks. */

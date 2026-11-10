@@ -7,6 +7,10 @@ description: "Turns a long stream, VOD or podcast into separate 15 to 60 second 
 A good batch is a few distinct, self-contained shorts, each opening on its hook and ending after its payoff, with every claim backed by saved transcript or observed video.
 Each short lives in its own titled tab of one shared project, keeps the source framing and audio, and is closed out with cheap data checks rather than heavy QA.
 
+## Two paths
+- The user gave the source ranges ("cut 50–71 s and 88–104 s into clips"): the moments are already chosen. Do not call findHighlights, planClips or finishClipping, and do not wait for source analysis. Read page batching, build one tab per range (createTimeline, then addMedia with that range), then call finish. finish checks each new tab's length (15–60 s), its source footage and the first and last frames of every cut for a stray frame of a neighbouring shot.
+- The user asked Revline to choose ("clip this", "find the best moments", /clip): follow the workflow below. Its plan and analysis stay required.
+
 ## Workflow
 1. Read page moments, then call findHighlights on the shared source.
 2. Pick the evidence path by the requested content, not by voice presence:
@@ -32,6 +36,7 @@ Each short lives in its own titled tab of one shared project, keeps the source f
 - Change framing, aspect or loudness only when the user asks, for every kind of source, gaming and action included.
 - Heavy QA is optional for every kind of clipping: use checkClip only for the user's stated concern.
 - Do not run checkPacing, 10 fps windows or getFrames sweeps on finished shorts.
+- Never run findHighlights or planClips only to satisfy finish: a task that cut ranges it was given finishes without them, and calling either turns the task into a discovery batch that needs a full plan.
 - Never claim a skipped check passed or that an unsupported action was observed.
 - Finding moments alone is an inspection request: return the ranked candidates without changing timelines.
 - A small follow-up edit to a finished short (caption, trim, style, mute) in the clip lane: make the edit, then finish. finish checks saved timeline data and needs no getFrames evidence; do not repeat whole-source discovery for it.

@@ -1,4 +1,4 @@
-import { checkCompletion } from '../../lib/ai/lanes/clip/check';
+import { checkCompletion, cutsGiven } from '../../lib/ai/lanes/clip/check';
 import { makeFunctionReference } from 'convex/server';
 import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
@@ -15,7 +15,7 @@ import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../l
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
-import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
+import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
@@ -49,6 +49,8 @@ export async function finishLane(
       errors: string[];
       finalMessage?: string;
     }>;
+    /** Reads the frames at each cut edge of the tabs a range-cut clip task built (lib/ai/lanes/clip/edges). */
+    clipEdges?: (tabs: { label: string; timeline: Timeline }[]) => Promise<{ failures: string[]; warnings: string[] }>;
   },
 ): Promise<FinishResult> {
   const { run, taskId, timelineId, timeline, assets } = options,
@@ -89,25 +91,42 @@ export async function finishLane(
     return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
   // A clip-lane task that is not a /clip request, started no clipping run and created no tab is a follow-up edit on a
   // finished short (a restyled title, a mute, a trim). It gets the cheap timeline data checks below: no frames, no new run.
+  const clipRun = task.lane === 'clip' && (await ctx.runQuery(internal.clipping.runStarted, { ...run, runId: taskId }));
   const clipFollowUp = task.lane === 'clip' && task.lockedLane !== 'clip' &&
     checked.every((tab) => task.initialTabIds.includes(tab.timelineId)) &&
-    !(await ctx.runQuery(internal.clipping.runStarted, { ...run, runId: taskId }));
-  for (const tab of task.lane === 'clip' && !clipFollowUp ? [] : checked) {
+    !clipRun;
+  // Cuts made at source ranges the request named: nobody asked Revline to choose the moments and the task started no
+  // clipping run, so there is no plan or whole-source analysis to hold the tabs to. The cheap checks below run instead:
+  // timeline data, the 15-60 s clip length, populated source footage and a look at every cut edge.
+  const rangeCuts = !clipFollowUp && cutsGiven(task, clipRun);
+  const cheapClip = clipFollowUp || rangeCuts;
+  const builtTabs: { label: string; timeline: Timeline }[] = [];
+  // Range cuts are judged on the tabs the task built or changed. When it changed none (a task restarted on a tab an
+  // earlier task built), the tab finish was called on is checked as it stands.
+  const builtAny = rangeCuts && (await Promise.all(checked.map(async (tab) => {
+    const baseline = task.baselines.find((item) => item.timelineId === tab.timelineId);
+    return !!tab.timeline && !!baseline && baseline.fingerprint !== (await timelineHistoryKey(tab.timeline));
+  }))).some(Boolean);
+  for (const tab of task.lane === 'clip' && !cheapClip ? [] : checked) {
     const baseline = task.baselines.find(
       (item) => item.timelineId === tab.timelineId,
     );
     // A follow-up checks only the tabs it edited; other shorts keep their earlier delivery.
-    if (clipFollowUp && !baseline) continue;
+    if (cheapClip && !baseline) continue;
     if (!tab.timeline) {
       failures.push(`Timeline ${tab.timelineId} was removed before its check.`);
       continue;
     }
     const key = await timelineHistoryKey(tab.timeline);
-    if (tab.timelineId !== timelineId && baseline?.fingerprint === key)
+    if ((tab.timelineId !== timelineId || builtAny) && baseline?.fingerprint === key)
       continue;
     const summary = summarizeTimeline(tab.timeline, assets),
       prefix =
         tab.timelineId === timelineId ? '' : `Timeline ${tab.timelineId}: `;
+    const newClipTab = rangeCuts && !task.initialTabIds.includes(tab.timelineId);
+    if (rangeCuts) builtTabs.push({ label: prefix, timeline: tab.timeline });
+    if (newClipTab && summary.clipCount && !tab.timeline.clips.some((clip) => clip.kind === 'video'))
+      failures.push(`${prefix}A clip needs populated source footage; this tab has no video.`);
     if (
       !summary.clipCount ||
       summary.duration <= 0 ||
@@ -150,11 +169,13 @@ export async function finishLane(
         `${prefix}${error instanceof Error ? error.message : String(error)}`,
       );
     }
-    // A short keeps its 15–60 s length unless the user asked otherwise, so leaving that range only warns.
-    if (clipFollowUp && (summary.duration < 15 - 1 / tab.timeline.fps || summary.duration > 60 + 1 / tab.timeline.fps))
-      warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
+    // A new clip must be 15–60 s. An existing short keeps that length unless the user asked otherwise, so leaving the range only warns.
+    if (cheapClip && summary.duration > 0 && (summary.duration < 15 - 1 / tab.timeline.fps || summary.duration > 60 + 1 / tab.timeline.fps)) {
+      if (newClipTab) failures.push(`${prefix}This clip is ${summary.duration.toFixed(2)}s; a clip must be 15–60 s. Lengthen or shorten its source range, or tell the user the range they gave is outside the clip length.`);
+      else warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
+    }
     // Clip-lane checks never render frames.
-    if (!clipFollowUp && !failures.length && summary.clipCount && summary.duration > 0) {
+    if (!cheapClip && !failures.length && summary.clipCount && summary.duration > 0) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
       const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
       const times = fastTimes ?? (baseline
@@ -201,7 +222,18 @@ export async function finishLane(
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
     }
   }
-  if (task.lane === 'clip' && !clipFollowUp) {
+  if (rangeCuts) {
+    // The first and last frames of each cut, read from the source: a stray frame of the neighbouring shot fails here.
+    // It runs beside any failure above, so one finish reports everything there is to repair.
+    if (options.clipEdges && builtTabs.length) {
+      const edges = await options.clipEdges(builtTabs);
+      failures.push(...edges.failures);
+      warnings.push(...edges.warnings);
+    }
+    // The final level's decode-health check is a checkClip receipt against a registered plan; range cuts have none.
+    if (taskCheckLevel(task) === 'final') warnings.push('Decode health of the source was not checked: that check needs a registered clip plan, and these clips were cut at given source ranges.');
+  }
+  if (task.lane === 'clip' && !cheapClip) {
     // The stable task key spans separate MCP calls; the upstream ledger verifies every actual tab.
     failures.push(
       ...(await checkCompletion(
