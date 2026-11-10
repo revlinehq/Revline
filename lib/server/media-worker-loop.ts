@@ -6,6 +6,7 @@ import { AnalysisError, isMediaLeaseLost, isRetryableAnalysisError, mediaErrorMe
 import type { MediaTaskActivity } from '../media-analysis/activity';
 import { MEDIA_PROCESSOR_VERSION } from '../media-analysis/processor-version';
 import { retryMediaOperation } from '../media-analysis/network';
+import { PROCESSOR_CAPABILITIES, PROCESSOR_CAPABILITIES_VERSION } from './processor-capabilities';
 
 const HEARTBEAT_MS = 20_000;
 const CANCEL_CHECK_MS = 3_000;
@@ -43,6 +44,27 @@ export function startMediaWorker(options: MediaWorkerOptions) {
   const draining = () => options.draining?.() ?? false;
   const claimArgs = { workerSecret, processorVersion: MEDIA_PROCESSOR_VERSION, ...options.claim };
   const deadlineMinutes = Math.round(options.deadlineMs / 60_000);
+  // Sign-in report, next to the contract number: what this processor can do. Its own mutation, so a backend
+  // released before it (no such function yet) only logs once here; claims are unaffected either way. The image is
+  // released before Convex, so a processor that started first tries again (30 s, then doubling to 5 minutes) until
+  // the backend accepts the report. Kinds this worker refuses to claim are not advertised.
+  if (!options.claim.rendersOnly) {
+    const refused = new Set<string>(options.claim.excludedKinds ?? []);
+    const capabilities = PROCESSOR_CAPABILITIES.filter(capability => !capability.startsWith('kind:') || !refused.has(capability.slice(5)));
+    let warned = false, delay = 30_000, timer: ReturnType<typeof setTimeout> | undefined;
+    shutdown.addEventListener('abort', () => clearTimeout(timer), { once: true });
+    const report = () => retryMediaOperation(() => client.mutation(api.mediaProcessor.reportCapabilities, { workerSecret, processorVersion: MEDIA_PROCESSOR_VERSION, capabilitiesVersion: PROCESSOR_CAPABILITIES_VERSION,
+      capabilities, backend: options.claim.processorBackend ?? (options.claim.lane === 'any' ? 'local' : 'cloudflare') }, { skipQueue: true }), shutdown)
+      .catch(error => {
+        if (shutdown.aborted) return;
+        if (!warned) console.warn(`Processor capabilities were not reported (${mediaErrorMessage(error)}); trying again until the backend accepts them.`);
+        warned = true;
+        timer = setTimeout(report, delay);
+        timer.unref?.();
+        delay = Math.min(delay * 2, 5 * 60_000);
+      });
+    void report();
+  }
   let revision = 0;
   const queueError = (operation: string, error: unknown, taskId?: string) => {
     const detail = error as { code?: string; cause?: { code?: string } };
