@@ -8,8 +8,9 @@ import { requireEditorAccess } from './lib/billing_access';
 import { storageControl } from './lib/media_storage';
 import { cloudMediaKind } from './schema';
 import { forgetStorageObject, recordStorageObject } from './lib/storage_accounting';
-import { partsValidator, partsComplete, signedPartUrl, validPartNumber } from './lib/upload_limits';
+import { partsValidator, partsComplete, partLinksValidator, signedPartUrl, signedPartUrls, storedPartsValidator, validPartNumber, verifiedParts } from './lib/upload_limits';
 import { uploadPartSize } from '../lib/editor/limits';
+import type { PartLink } from '../lib/storage/part-links';
 
 const metadata = { fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()) };
 const uploadArgs = { uploadId:v.id('cloudMedia') };
@@ -75,6 +76,29 @@ export const partUrl = action({args:{...uploadArgs,partNumber:v.number()},return
   if(row.completed||!validPartNumber(args.partNumber,row.size,row.partSize))throw new ConvexError('Invalid upload part.');
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
   return signedPartUrl({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.partNumber);
+}});
+/** The unfinished upload this owner may continue, or null when it has to start over. */
+export const resumable = internalQuery({args:{...uploadArgs,size:v.number()},handler:async(ctx,args):Promise<Doc<'cloudMedia'>|null>=>{
+  const ownerId=await requireOwner(ctx),row=await ctx.db.get(args.uploadId);
+  if(!row||row.ownerId!==ownerId||row.size!==args.size||row.completed||row.aborting||row.expiresAt<=Date.now()+60_000)return null;
+  await requireEditorAccess(ctx,ownerId);
+  return row;
+}});
+/** Links for up to 100 consecutive parts in one round trip. */
+export const partUrls = action({args:{...uploadArgs,from:v.number(),count:v.number()},returns:partLinksValidator,handler:async(ctx,args):Promise<PartLink[]>=>{
+  const row:Doc<'cloudMedia'>=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
+  const links=row.completed?null:await signedPartUrls({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.from,args.count);
+  if(!links)throw new ConvexError('Invalid upload part.');
+  await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
+  return links;
+}});
+/** Continues an interrupted library upload: which remembered parts storage holds, so only the rest are sent.
+ * Null when the upload was cancelled, cleared after two idle hours, or is another file. */
+export const resume = action({args:{...uploadArgs,size:v.number(),parts:storedPartsValidator},returns:v.union(v.null(),v.object({partSize:v.number(),parts:partsValidator})),handler:async(ctx,args):Promise<{partSize:number;parts:{partNumber:number;etag:string}[]}|null>=>{
+  const row:Doc<'cloudMedia'>|null=await ctx.runQuery(internal.cloudMedia.resumable,{uploadId:args.uploadId,size:args.size});
+  if(!row)return null;
+  await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
+  return {partSize:row.partSize,parts:await verifiedParts({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.parts)};
 }});
 export const finish = internalMutation({args:{...uploadArgs,size:v.number(),contentType:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const row=await ctx.db.get(args.uploadId);

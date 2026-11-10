@@ -5,7 +5,10 @@ import { useAction } from 'convex/react';
 import { Check, ChevronDown, FileVideo, LoaderCircle, Upload, X, AlertCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { inspectMedia, uploadMultipart } from '@/lib/editor/media';
+import { inspectMedia } from '@/lib/editor/media';
+import type { UploadActivity } from '@/lib/editor/multipart-upload';
+import { backendLacks, uploadResumable } from '@/lib/editor/upload-resume';
+import { uploadActivityLabel } from '@/lib/editor/upload-source';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,7 +16,7 @@ import { Progress } from '@/components/ui/progress';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PrimaryButton } from './primary-button';
 
-type UploadState = {kind:'waiting'} | {kind:'reading'} | {kind:'uploading';percent:number} | {kind:'saving'} | {kind:'done'} | {kind:'failed';message:string} | {kind:'cancelled'};
+type UploadState = {kind:'waiting'} | {kind:'reading'} | {kind:'uploading';percent:number;activity?:UploadActivity} | {kind:'saving'} | {kind:'done'} | {kind:'failed';message:string} | {kind:'cancelled'};
 type UploadRow = {name:string;size:number;state:UploadState};
 function displayName(name:string){return name.replace(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}__/i,'');}
 function bytes(value:number){if(value===0)return '0 MB';if(value<1_000_000)return `${Math.max(1,Math.round(value/1_000))} KB`;return value>=1_000_000_000?`${(value/1_000_000_000).toFixed(1)} GB`:`${Math.max(1,Math.round(value/1_000_000))} MB`;}
@@ -22,7 +25,7 @@ function label(state:UploadState) {
   switch(state.kind){
     case 'waiting':return 'Waiting';
     case 'reading':return 'Reading media…';
-    case 'uploading':return `${state.percent}% uploaded`;
+    case 'uploading':return (state.activity&&uploadActivityLabel(state.activity,state.percent))??`${state.percent}% uploaded`;
     case 'saving':return 'Saving to cloud…';
     case 'done':return 'Saved to cloud';
     case 'failed':return state.message;
@@ -34,7 +37,7 @@ export function CloudUpload({disabled,onUploaded}:{disabled:boolean;onUploaded:(
   const pendingFiles=useRef<File[]>([]);
   const input=useRef<HTMLInputElement>(null),controller=useRef<AbortController|null>(null),running=useRef(false);
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[rows,setRows]=useState<UploadRow[]>([]),[error,setError]=useState('');
-  const start=useAction(api.cloudMedia.start),partUrl=useAction(api.cloudMedia.partUrl),complete=useAction(api.cloudMedia.complete),abort=useAction(api.cloudMedia.abort);
+  const start=useAction(api.cloudMedia.start),partUrl=useAction(api.cloudMedia.partUrl),partUrls=useAction(api.cloudMedia.partUrls),resume=useAction(api.cloudMedia.resume),complete=useAction(api.cloudMedia.complete),abort=useAction(api.cloudMedia.abort);
   async function upload(files:File[]) {
     if(running.current||!files.length)return;
     setError('');setOpen(true);
@@ -45,21 +48,24 @@ export function CloudUpload({disabled,onUploaded}:{disabled:boolean;onUploaded:(
     try{
       for(const [index,file] of files.entries()){
         if(request.signal.aborted){update(index,{kind:'cancelled'});continue;}
-        let uploadId:Id<'cloudMedia'>|undefined;
-        let saved=false;
         try{
           update(index,{kind:'reading'});
           const metadata=await inspectMedia(file);
           request.signal.throwIfAborted();
-          if(metadata.kind==='model')throw new Error('Choose video, audio or image files.');
-          const opened=await start({...metadata,kind:metadata.kind,fileName:file.name,contentType:file.type,size:file.size});
-          uploadId=opened.uploadId;request.signal.throwIfAborted();
-          const parts=await uploadMultipart(file,opened.partSize,partNumber=>partUrl({uploadId:opened.uploadId,partNumber}),percent=>update(index,{kind:'uploading',percent}),request.signal);
-          request.signal.throwIfAborted();update(index,{kind:'saving'});
-          await complete({uploadId,parts});saved=true;
+          const kind=metadata.kind;
+          if(kind==='model')throw new Error('Choose video, audio or image files.');
+          // Choosing a file whose upload was interrupted continues it; the transport releases or keeps the unfinished upload.
+          await uploadResumable<Id<'cloudMedia'>,null>(file,{
+            scope:'library',
+            start:()=>start({...metadata,kind,fileName:file.name,contentType:file.type,size:file.size}),
+            resume:(uploadId,parts)=>resume({uploadId,size:file.size,parts}).catch(error=>{if(!backendLacks(error))throw error;return undefined;}),
+            // Each request for links marks the upload active; small batches keep that mark current on slow lines.
+            partUrls:(uploadId,from,count)=>partUrls({uploadId,from,count:Math.min(count,8)}).catch(async error=>{if(!backendLacks(error))throw error;return [{partNumber:from,url:await partUrl({uploadId,partNumber:from}),ttlMs:3600_000}];}),
+            complete:(uploadId,parts)=>complete({uploadId,parts}),
+            abort:uploadId=>abort({uploadId}),
+          },(percent,activity)=>update(index,{kind:'uploading',percent,activity}),request.signal,()=>update(index,{kind:'saving'}));
           update(index,{kind:'done'});onUploaded();
         }catch(reason){
-          if(uploadId&&!saved)await abort({uploadId}).catch(()=>undefined);
           update(index,request.signal.aborted?{kind:'cancelled'}:{kind:'failed',message:userError(reason,'Could not upload this file. Try again.')});
         }
       }

@@ -1,7 +1,7 @@
 import type { MediaAsset } from './types';
 
 /** A source shown as a chip in the composer while it is attached to the next request. */
-export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string };
+export type ComposerAttachment = { id: string; name: string; url?: string; kind?: 'video' | 'image' | 'audio' | 'model'; progress?: number; error?: string; /** Shown instead of the name while its upload resumes or waits for the connection. */ activity?: string };
 
 /** Only newly attached sources belong here; extracted audio is not a second upload. */
 export function composerMedia(assets: readonly MediaAsset[], ids: readonly string[]): ComposerAttachment[] {
