@@ -707,7 +707,7 @@ export function TimelinePanel(p:Props){
   const latestCutActions=useRef({onSelect,onEdit:p.onEditClip,onChange,onError:report});
   useLayoutEffect(()=>{latestCutActions.current={onSelect,onEdit:p.onEditClip,onChange,onError:report};});
   const cutActions=useMemo(()=>({onSelect:(id:string|null)=>latestCutActions.current.onSelect(id),onEdit:(id:string)=>latestCutActions.current.onEdit?.(id),onChange:(next:Timeline)=>latestCutActions.current.onChange(next),onError:(error:unknown)=>latestCutActions.current.onError(error)}),[]);
-  const aspectSize=dimensions(timeline.aspectRatio);const aspect=aspectSize.width/aspectSize.height;
+
   const filmstripPaused=!!drag||scrubbing||!!movingLayer;
   const scale=useMemo(()=>({px,filmstripPaused}),[px,filmstripPaused]);
 

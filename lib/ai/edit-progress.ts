@@ -8,8 +8,8 @@ const EDITOR_VERIFICATION_STEPS = 8;
 type Steps = readonly { content: readonly unknown[] }[];
 const record = (value: unknown): Record<string, unknown> => value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
 const ids = (value: unknown) => Array.isArray(value) && value.some(id => typeof id === 'string' && id.length > 0);
-/** Reading a reference and comparing against it are a recreation's work, not stalling: its study and fix loops keep going. */
-const STUDY_TOOLS = new Set(['readFrames', 'compareReference']);
+/** Reading source frames is work, not stalling. */
+const STUDY_TOOLS = new Set(['readFrames']);
 export function hasRecentEditProgress(steps: Steps) {
   return steps.slice(-EDITOR_PROGRESS_WINDOW).some(step => step.content.some(value => {
     const part = record(value);

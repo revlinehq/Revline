@@ -18,7 +18,6 @@ execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
 const exportsOnly = process.env.REVLINE_RUNTIME_CHECK === 'exports';
 if (!exportsOnly) {
   if (!existsSync('scripts/detect-facecam.py') || !existsSync('public/vendor/face-landmarker.task')) throw new Error('Local clipping vision assets are missing.');
-  if (!existsSync('scripts/track-reference.py')) throw new Error('Reference element tracker entry point is missing.');
   if (!existsSync('scripts/track-pixels.py')) throw new Error('Pixel tracker entry point is missing.');
   if (!existsSync('scripts/source_frames.py')) throw new Error('Shared tracker source-frame reader is missing.');
   execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
