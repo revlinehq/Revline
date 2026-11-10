@@ -6,7 +6,7 @@ import { audioFadeTimingPatch } from './audio-settings';
 import { anchoredFadeTimingPatch } from './fade-clock';
 import { rescaleSmoothZoom } from './smooth-zoom-settings';
 import { rescaleCameraMotion } from './camera-motion-settings';
-import { playbackRateOf, sourceDurationOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
+import { playbackRateOf, sourceDurationOf, sourceSpanOf, sourceEndOf, validatePlaybackRate } from './playback-rate';
 import { bakeSpeedRamp, meanRampRate, rampSpan, MAX_RAMP_RATE, MIN_RAMP_RATE, type RampAnchor } from './speed-ramp';
 import { boundedTransitionRange, DEFAULT_TRANSITION_DIRECTION, findTransitionPlacement, isTransitionClip, isTransitionPreset, reconcileTransitionEdits, transitionPair, transitionSources } from './clip-transitions';
 import { Clip, Timeline, type BlendMode, type ClipTransition, type EffectPreset, type TransitionDirection, type TransitionPreset, timelineDuration, layerGroup, trackOf, deriveTrackCounts, normalizeTimeline, maxTrackCount } from './types';
@@ -99,7 +99,7 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   const pairId = `${newId}-audio`;
   const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [
     { ...c, ...ownClockTimingPatch(c), duration: offset },
-    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' || c.kind === 'solid' ? 0 : c.sourceStart + offset * playbackRateOf(c), duration: tail },
+    { ...c, ...offsetClipMotion(c, offset), id: c.id === clipId ? newId : pairId, linkedClipId: pair ? c.id === clipId ? pairId : newId : undefined, start: c.start + offset, sourceStart: c.kind === 'effect' || c.kind === 'solid' ? 0 : c.sourceStart + sourceSpanOf(c, offset), duration: tail },
   ]) };
   // Only the outgoing piece touching the original cut inherits that transition.
   next.clips = next.clips.flatMap(c => {
