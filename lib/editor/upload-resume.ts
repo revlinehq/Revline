@@ -79,6 +79,12 @@ export function watchUnfinishedUploads(listener: () => void) {
   return () => window.removeEventListener(changed, listener);
 }
 
+/** Opens an upload asking for direct storage links. A backend from before that option
+ * existed rejects the unknown argument; ask again the old way. */
+export async function startDirect<T>(start: (options: { direct?: true }) => Promise<T>): Promise<T> {
+  try { return await start({ direct: true }); }
+  catch (error) { if (error instanceof Error && /ArgumentValidationError/.test(error.message)) return start({}); throw error; }
+}
 /** True while the frontend is ahead of the backend during a release: the function is not deployed yet. */
 export const backendLacks = (error: unknown) => error instanceof Error && /Could not find public function/.test(error.message);
 

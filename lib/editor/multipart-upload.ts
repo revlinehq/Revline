@@ -30,7 +30,7 @@ class PartFailure extends Error {
   constructor(message: string, readonly retry: 'again' | 'new-link' | 'never') { super(message); }
 }
 
-export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) => void, signal?: AbortSignal): Promise<StoredPart> {
+export function uploadPart(url: string, partNumber: number, blob: Blob, onProgress: (bytes: number) => void, signal?: AbortSignal): Promise<StoredPart> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) { reject(signal.reason); return; }
     const request = new XMLHttpRequest();
@@ -48,15 +48,18 @@ export function uploadPart(url: string, blob: Blob, onProgress: (bytes: number) 
       const status = request.status;
       if (status < 200 || status >= 300) {
         diagnostic('http');
-        // 401: the signed link expired. 408, 429 and server errors pass; other refusals are final.
-        reject(new PartFailure('Upload failed. Please try again.', status === 401 ? 'new-link' : status === 408 || status === 429 || status >= 500 ? 'again' : 'never'));
+        // 401 (media Worker) and 403 (storage): the signed link expired. 408, 429 and server errors pass; other refusals are final.
+        reject(new PartFailure('Upload failed. Please try again.', status === 401 || status === 403 ? 'new-link' : status === 408 || status === 429 || status >= 500 ? 'again' : 'never'));
         return;
       }
       try {
-        const result = JSON.parse(request.responseText) as UploadedPart;
-        if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error();
         // Reading a header the server did not expose logs a browser error; look before asking.
-        const receipt = /^x-part-receipt:/im.test(request.getAllResponseHeaders()) ? request.getResponseHeader('X-Part-Receipt') : null;
+        const headers = request.getAllResponseHeaders(), header = (name: string) => new RegExp(`^${name}:`, 'im').test(headers) ? request.getResponseHeader(name) : null;
+        // The media Worker answers with JSON; storage itself answers with an empty body and the part's ETag header.
+        const direct = request.responseText.trim() ? null : header('etag')?.replace(/"/g, '');
+        const result = direct ? { partNumber, etag: direct } : JSON.parse(request.responseText) as UploadedPart;
+        if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error();
+        const receipt = header('x-part-receipt');
         resolve({ partNumber: result.partNumber, etag: result.etag, ...(receipt ? { receipt } : {}) });
       } catch { reject(new PartFailure('Cloudflare did not confirm this upload part.', 'again')); }
     };
@@ -180,13 +183,13 @@ export async function uploadMultipart(file: Blob, partSize: number, options: Mul
   const send = async (index: number) => {
     const partNumber = index + 1, blob = file.slice(index * partSize, index * partSize + sizeOf(index));
     // `outage` is time spent failing on this part; a sleeping laptop adds none.
-    for (let attempt = 0, outage = 0; ; attempt++) {
+    for (let attempt = 0, outage = 0, relinked = false; ; attempt++) {
       controller.signal.throwIfAborted();
       if (navigator.onLine === false) { await pause(30_000, 'online'); outage += 30_000; }
       const began = Date.now();
       try {
         const link = await links.get(partNumber);
-        const uploaded = await uploadPart(link.url, blob, bytes => report(index, bytes), controller.signal);
+        const uploaded = await uploadPart(link.url, partNumber, blob, bytes => report(index, bytes), controller.signal);
         if (uploaded.partNumber !== partNumber) throw new PartFailure('Cloudflare confirmed the wrong upload part.', 'never');
         parts[index] = { partNumber, etag: uploaded.etag }; report(index, blob.size); options.onPart?.(uploaded);
         return;
@@ -195,7 +198,10 @@ export async function uploadMultipart(file: Blob, partSize: number, options: Mul
         // The server refusing the lease (expired, cancelled) is final; so is a refused part.
         if (error instanceof ConvexError || error instanceof PartFailure && error.retry === 'never') throw error;
         links.drop(partNumber);
-        const expired = error instanceof PartFailure && error.retry === 'new-link' && attempt === 0;
+        // A new link is tried once for free; a second refusal is not about expiry.
+        const refused = error instanceof PartFailure && error.retry === 'new-link';
+        if (refused && relinked) throw error;
+        const expired = refused; relinked ||= refused;
         if (!expired) pace.failed();
         const wait = expired ? 0 : Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5)) + Math.random() * 500;
         outage += Math.min(Date.now() - began, 60_000) + wait;
