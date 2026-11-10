@@ -29,6 +29,7 @@ export const ULTRA_FEATURES = [
   'Frontier models',
   'Fast mode',
   'Pick the model for every edit',
+  'Pick the reasoning effort for every edit',
   '4K render',
   'Faster, parallel exports',
   '500 GB storage',
