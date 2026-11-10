@@ -24,6 +24,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import './workspace-pages.css';
 import type { WorkingAgent } from '@/lib/mcp/agent-identity';
+import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
+import { useInDashboardShell } from '@/components/dashboard/shell-context';
+import { activeDashboardItem } from '@/components/dashboard/dashboard-nav';
 
 export type WorkspaceChat = {
   id: Id<'projects'> | 'demo'; title: string; updatedAt: number; clipCount: number;
@@ -95,7 +98,16 @@ export interface WorkspaceNavProps {
   editorControls?: ReactNode;
 }
 
-export const WorkspaceNav = memo(function WorkspaceNav({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+/** Pages inside the signed-in shell get its navbar (named after their sidebar item); the editor keeps this bar. */
+export const WorkspaceNav = memo(function WorkspaceNav(props: WorkspaceNavProps) {
+  const inShell = useInDashboardShell();
+  const pathname = usePathname();
+  // A sidebar item's own page takes the item's name ("Settings"); pages under it keep their title ("Your chats").
+  if (inShell) { const item = activeDashboardItem(pathname); return <DashboardNavbar title={item && item.href === pathname ? item.label : props.title} />; }
+  return <WorkspaceTopBar {...props} />;
+});
+
+const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, onShare, shareDisabled, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
