@@ -206,8 +206,14 @@ export function unresolvedToolFailureIds(steps: ToolSteps) {
   return new Set(unresolvedEdits(steps).flatMap(([, failure]) => failure.ids));
 }
 
+/** A refusal that says it spent no attempt (finish waiting on frames the agent has not viewed yet) asks for another
+ * step first; it is not the same command failing again. Step limits still bound a turn that never does that step. */
+function withoutFreeRefusals(steps: ToolSteps): ToolSteps {
+  return steps.map(step => ({ content: step.content.filter(value => { const part = record(value); return part.type !== 'tool-result' || outputValue(part.output).attemptRecorded !== false; }) }));
+}
+
 export function hasRepeatedToolFailures(steps: ToolSteps) {
-  return [...unresolvedFailures(steps).values()].some(failure => failure.count >= 3);
+  return [...unresolvedFailures(withoutFreeRefusals(steps)).values()].some(failure => failure.count >= 3);
 }
 
 export type RenderReviewRequirements = {

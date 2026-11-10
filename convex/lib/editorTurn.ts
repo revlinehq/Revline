@@ -1,8 +1,8 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
-import { laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
-import { FULL_CHECK_TOOLS, checkInstructions, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
@@ -14,7 +14,7 @@ import { filmDraftMiddleware } from './filmDraftStream';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { wrapLanguageModel } from "ai";
+import { NoSuchToolError, wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -23,7 +23,7 @@ import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
@@ -167,6 +167,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const offset = steps.length;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
+          // A real tool that this step withholds gets the same next step an MCP agent is given, not the SDK's
+          // "unavailable tool" line and a list of ninety names.
+          experimental_repairToolCall: async ({ toolCall, error }) => {
+            if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
+            throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
+          },
           prepareStep: async ({ steps: current, messages }) => {
             const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
             if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
@@ -192,6 +198,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: async event => { costLog.toolsFinished(event); await toolkit.filmDrafts.landed(); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
+          // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
+          timeout: MODEL_SILENCE_LIMITS,
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
@@ -286,6 +294,15 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** Why a known tool is not callable in this step, and the call that makes it so. */
+function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {
+  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed. Reply to the user now; further edits need a new request.`;
+  if (!state.allowed) return laneToolError(lane, name);
+  if (name === 'exportVideo') return 'Export needs explicit user confirmation in the current request. Ask the user before exporting.';
+  if (FULL_CHECK_TOOLS.has(name)) return fullCheckRefusal(lane, name);
+  return `${name} is not available in this step. Continue with the tools provided.`;
 }
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */

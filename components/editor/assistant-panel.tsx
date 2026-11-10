@@ -106,7 +106,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
 function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia }: {
   externalAgent?: string | null;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
-  /** Model and effort choices; effortSwitcher (development only) picks a fixed effort for each request. */
+  /** Model and effort choices; effortSwitcher (Ultra) picks the effort for each request, effortLocked (other paid plans) shows the levels locked. */
   settings?: ComposerSettings;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (promptMessageId:string) => Promise<void>;
