@@ -2,7 +2,9 @@ import { keptRanges, retakeEvidence, type CleanupCut } from '../../../speech-cle
 import { sourceEndOf } from '../../../editor/playback-rate';
 import type { Timeline } from '../../../editor/types';
 import type { Transcript } from '../../../media-analysis/transcript';
-import { formatLength, type LengthTarget } from '../length-target';
+
+/** A finished length the user asked for (lanes/checks requestedLength), in seconds. */
+type RequestedLength = { min?: number; max?: number };
 
 /** Reading a talking-head take as a script: its lines, where it begins and ends, and which takes repeat. */
 
@@ -54,7 +56,7 @@ export type SavedScript = {
   keepLines: number[];
   openingReason?: string;
   endingReason?: string;
-  target?: LengthTarget;
+  target?: RequestedLength;
   estimatedSeconds: number;
   removedTakes: number;
 };
@@ -194,7 +196,7 @@ export function resolveScriptPlan(outline: ScriptOutline, input: ScriptPlanInput
 }
 
 /** Which whole middle beats to drop, lowest priority first, so the cut lands inside the requested length. */
-export function beatsToDrop(beats: { index: number; priority: number; seconds: number; droppable: boolean }[], estimate: number, target: LengthTarget) {
+export function beatsToDrop(beats: { index: number; priority: number; seconds: number; droppable: boolean }[], estimate: number, target: RequestedLength) {
   if (target.max === undefined || estimate <= target.max + .5) return [];
   const drop: number[] = [];
   let length = estimate;
@@ -250,18 +252,4 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
     else if (!kept(needed.at(-1)!)) failures.push(`A sentence is cut mid-sentence: ${quote(line.text)} (source ${seconds(line.start)}) stops at ${quote(present.slice(-4).map(word => word.text).join(' '), 4, true)} (source ${seconds(present.at(-1)!.end)}) before its end. Keep the whole line or drop it.`);
   }
   return failures.slice(0, 5);
-}
-
-/** Finish: a length the user asked for is met by the timeline, not by the plan's estimate. */
-export function reelLengthCheck(duration: number, target?: LengthTarget | null, script?: SavedScript | null): { failures: string[]; warnings: string[] } {
-  if (!target || duration <= 0) return { failures: [], warnings: [] };
-  const asked = `requested ${formatLength(target)}, timeline is ${seconds(duration)}`;
-  if (target.max !== undefined && duration > target.max + .5)
-    return { failures: [`Length: ${asked}. Drop a whole lower-priority beat, tangent or redundant take and tighten pauses; never the opening or the payoff, never mid-sentence.`], warnings: [] };
-  if (target.min !== undefined && duration < target.min - .5) {
-    const dropped = script?.beats.some(beat => beat.keep === false);
-    const message = `Length: ${asked}.`;
-    return dropped ? { failures: [`${message} Restore a dropped beat instead of padding.`], warnings: [] } : { failures: [], warnings: [`${message} The whole script is kept; nothing was padded.`] };
-  }
-  return { failures: [], warnings: [] };
 }

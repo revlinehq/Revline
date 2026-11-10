@@ -13,7 +13,7 @@ import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
-import { reelLengthCheck, reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence, ReferenceMotionEvidence } from '../../lib/ai/lanes/types';
@@ -64,10 +64,8 @@ export async function finishLane(
     warnings: string[] = [];
   if (task.lane === 'reel') {
     failures.push(...reelCaptionFailures(timeline, assets));
-    // The cut is held to the script the agent read: its opening and closing lines, whole sentences, and a requested length.
-    const script = task.script as SavedScript | undefined, length = reelLengthCheck(summarizeTimeline(timeline, assets).duration, task.lengthTarget, script);
-    failures.push(...reelScriptFailures(timeline, assets, script), ...length.failures);
-    warnings.push(...length.warnings);
+    // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
+    failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
   }
   const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
   let currentRevision: number | undefined;
@@ -83,7 +81,7 @@ export async function finishLane(
   const sparseReel = task.lane === 'reel' && options.fastFrameTimes !== undefined && isPlainReelTimeline(timeline);
   const revision = sparseReel ? (await ctx.runQuery(internal.assistant.getRunTimeline, run)).revision : undefined;
   const checkedTimelines = sparseReel ? await Promise.all(checked.map(async tab => ({ timelineId: tab.timelineId, fingerprint: tab.timeline ? await timelineHistoryKey(tab.timeline) : null }))) : [];
-  const checkKey = (evidence: LaneEvidence[]) => revision === undefined ? undefined : reelFinishKey({ fingerprint, revision, evidence: task.script || task.lengthTarget ? [...evidence, { tool: 'planScript', timelineId, fingerprint, input: {}, output: { script: task.script, lengthTarget: task.lengthTarget } }] : evidence, timelines: checkedTimelines, assets });
+  const checkKey = (evidence: LaneEvidence[]) => revision === undefined ? undefined : reelFinishKey({ fingerprint, revision, evidence: task.script ? [...evidence, { tool: 'planScript', timelineId, fingerprint, input: {}, output: { script: task.script } }] : evidence, timelines: checkedTimelines, assets });
   const initialKey = await checkKey(task.evidence);
   if (initialKey && task.result?.checkKey === initialKey && !task.result.passed)
     return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result: task.result });
@@ -136,6 +134,9 @@ export async function finishLane(
       failures.push(
         `${prefix}Resolve ${summary.overlapCount} same-layer collisions.`,
       );
+    // The length the user asked for is part of the request; a /clip batch has its own per-clip length rules.
+    const lengthFailure = tab.timelineId === timelineId && task.lane !== 'clip' ? requestedLengthFailure(task.requestedLength, summary.duration, tab.timeline.fps) : undefined;
+    if (lengthFailure) failures.push(lengthFailure);
     const newGaps = summary.gaps.filter(
       (gap) =>
         !baseline?.gaps.some(
