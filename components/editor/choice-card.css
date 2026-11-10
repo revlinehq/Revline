@@ -1,6 +1,12 @@
 /* The assistant's questions as shadcn choice cards, sized to the chat column. */
 .choice-card{width:100%;max-width:420px;min-width:0;gap:10px}
 .choice-card [data-slot=field]{min-width:0}
+/* Long text never widens the card: a label clamps to three lines and a description to four (one more than their budgets need at 390 px), a long word wraps. */
+.choice-card [data-slot=field-legend]{overflow-wrap:anywhere}
+.choice-card [data-slot=field-content]{min-width:0}
+.choice-card [data-slot=field-content]>[data-slot=field-label],.choice-card [data-slot=field-description]{display:-webkit-box;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere}
+.choice-card [data-slot=field-content]>[data-slot=field-label]{-webkit-line-clamp:3;line-clamp:3}
+.choice-card [data-slot=field-description]{-webkit-line-clamp:4;line-clamp:4}
 .choice-card [data-slot=radio-group]{gap:6px}
 .choice-card-logo{flex:none;width:22px;height:22px;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
 .choice-card-send{align-self:flex-start}
