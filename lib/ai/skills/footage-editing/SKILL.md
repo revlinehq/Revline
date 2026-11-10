@@ -1,6 +1,6 @@
 ---
 name: "footage-editing"
-description: "Edits the user's footage and audio (talking heads, vlogs, podcasts, reels, screen recordings): cuts, speech cleanup, captions, b-roll, layers, transitions and effects. Read before editing footage or audio; small fixes to an existing edit start with writing-scenes page edit-lanes."
+description: "Edits the user's footage and audio (talking heads, vlogs, podcasts, reels, screen recordings): cuts, speech cleanup, captions, b-roll, layers, transitions and effects. Read before editing footage or audio; small fixes to an existing edit start with page edit-lanes."
 ---
 # Editing footage
 
@@ -8,12 +8,12 @@ A good footage edit keeps every retained word intact and in sync, removes only w
 
 ## Workflow
 1. Run inspectTimeline for current clip IDs, layers and approved work. Edit around approved clips.
-2. For a plain talking-head edit in the reel lane, follow the reel skill. For a small fix to an existing edit, follow writing-scenes page `edit-lanes`.
+2. For a plain talking-head edit in the reel lane, follow the reel skill. For a small fix to an existing edit, follow footage-editing page `edit-lanes`.
 3. Read only the evidence the request needs: the saved transcript for speech edits, frames for visual edits (page `speech`).
 4. Make the core edit in as few calls as possible: one retainSourceRanges or cleanSpeech call for speech, exact clipIds batches for identical changes.
 5. Add captions after the final cuts (page `text-styling`).
 6. Add effects only when the user asked for them or authorized creative styling (page `layers-and-effects`).
-7. Check the result with inspectTimeline (duration, gaps, linked audio, caption sync), then run the checks writing-scenes page `edit-lanes` gives for the lane.
+7. Check the result with inspectTimeline (duration, gaps, linked audio, caption sync), then run the checks footage-editing page `edit-lanes` gives for the lane.
 8. Report what changed, including the speechCleanup summary in one short sentence (for example: "Removed 74 pauses and 3 filler words, 12.4 s.").
 
 ## Defaults
@@ -50,6 +50,7 @@ inspectTimeline                         → duration, no gaps, captions in sync
 Reply: "Removed 74 pauses and 3 filler words, 12.4 s, and added captions."
 
 ## Pages
+- edit-lanes: which checks each lane runs for an edit to existing footage or captions, and the smallest read-edit-verify path.
 - speech: transcript reading, speech cuts and cleanup, J/L cuts, and when to look at the picture.
 - text-styling: caption and title defaults, styling tools, placement, and the full text catalog.
 - layers-and-effects: tracks and layers, b-roll, undo and revisions, speed, and effect planning rules. Transitions: the `transitions` skill.

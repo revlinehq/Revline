@@ -22,7 +22,7 @@ import { removeMediaAttachment,removeShareAssets } from './lib/shared_media';
 import { removeOwnedExport } from './renders';
 import { mediaUrl } from './lib/media_storage';
 import { allTabTimelines } from './timelineTabs';
-import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+
 import { removeShareTabs } from './lib/shared_media';
 import { storageObjectKind as kind } from './schema';
 
@@ -76,12 +76,12 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
     const sources=refs.attachments.filter(asset=>asset.projectId===projectId);
     const ids=new Set(sources.map(asset=>String(asset._id)));
     const timelines=await allTabTimelines(ctx,project);
-    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId))||sceneMediaAssetIds(timeline).some(id=>ids.has(id))||normalizationAssetIds(timeline).some(id=>ids.has(id)));
+    let used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&ids.has(clip.assetId))||normalizationAssetIds(timeline).some(id=>ids.has(id)));
     // Extracted audio is retained while a video using that linked source remains in the edit.
     if(!used&&sources.some(asset=>asset.kind==='audio')) {
       const linked=await Promise.all(sources.filter(asset=>asset.kind==='audio').map(asset=>ctx.db.query('assets').withIndex('by_owner_audio',q=>q.eq('ownerId',row.ownerId).eq('audioAssetId',asset._id)).take(201)));
       const videos=new Set(linked.flat().filter(asset=>asset.projectId===projectId).map(asset=>String(asset._id)));
-      used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&videos.has(clip.assetId))||sceneMediaAssetIds(timeline).some(id=>videos.has(id)));
+      used=timelines.some(timeline=>timeline.clips.some(clip=>clip.assetId&&videos.has(clip.assetId)));
     }
     if(used) {result.workspaces.push({id:project._id,title:project.title});result.inUse=true;}
     if((await(reads?reads.run(projectId,row.ownerId):projectRun(ctx,projectId,row.ownerId))).aiRunning)result.protectedReason='AI editing in progress';

@@ -95,6 +95,7 @@ import type * as lib_normalization_validator from "../lib/normalization_validato
 import type * as lib_pacing_validator from "../lib/pacing_validator.js";
 import type * as lib_pixel_track_validator from "../lib/pixel_track_validator.js";
 import type * as lib_processor_backend from "../lib/processor_backend.js";
+import type * as lib_processor_capabilities from "../lib/processor_capabilities.js";
 import type * as lib_project_data from "../lib/project_data.js";
 import type * as lib_publicationReceipt from "../lib/publicationReceipt.js";
 import type * as lib_reference_reads from "../lib/reference_reads.js";
@@ -251,6 +252,7 @@ declare const fullApi: ApiFromModules<{
   "lib/pacing_validator": typeof lib_pacing_validator;
   "lib/pixel_track_validator": typeof lib_pixel_track_validator;
   "lib/processor_backend": typeof lib_processor_backend;
+  "lib/processor_capabilities": typeof lib_processor_capabilities;
   "lib/project_data": typeof lib_project_data;
   "lib/publicationReceipt": typeof lib_publicationReceipt;
   "lib/reference_reads": typeof lib_reference_reads;

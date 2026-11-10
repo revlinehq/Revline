@@ -8,7 +8,6 @@ import { runningMediaTaskCount, initializeMediaCapacity, insertMediaTask, patchM
 import { hasMediaTaskCapacity } from './lib/account_limits';
 import { timelineSourceRanges } from '../lib/editor/preview-segments';
 import { allTabTimelines, activeTabOf, storedTabTimeline } from './timelineTabs';
-import { loadSceneCode } from './lib/scene_code';
 import { renderSnapshot as loadRenderSnapshot } from './lib/render_snapshots';
 import { exportVisualKey } from '../lib/editor/export-reuse';
 import { hydrateAsset,transportAsset } from './lib/asset_analysis';
@@ -26,7 +25,7 @@ import { validateFrameInspectionResult } from '../lib/media-analysis/frame-inspe
 import { validateVideoInspectionResult } from '../lib/media-analysis/video-inspection';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireMediaTask, requireMediaWorker } from './lib/media_task_auth';
-import { mediaTaskCredentials, workItem, taskResult, renderSnapshot, timelineFrames, reviewSnapshot, blueprintWork, type MediaWorkItem } from './lib/media_task_contract';
+import { mediaTaskCredentials, workItem, taskResult, renderSnapshot, timelineFrames, reviewSnapshot, type MediaWorkItem } from './lib/media_task_contract';
 import { mediaWorkflow } from './lib/workflows';
 import { enqueueMediaTask, cancelMediaTask, markTerminal, releaseRenderSeat } from './lib/media_queue';
 import { hasPreview, mediaUrl, previewUrl } from './lib/media_storage';
@@ -42,9 +41,8 @@ import { placeCutout } from './cutouts';
 import { completeDerivation } from './derivations';
 import { hostedRendersEnabled, processorHasRenderRoom, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
-import { brandFileUrl, fontUrl } from './brandKits';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
-import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
 
 const LEASE_MS = MEDIA_TASK_LEASE_MS;
@@ -300,9 +298,9 @@ async function firstClaimable(ctx:MutationCtx|QueryCtx,processorVersion=1,lane?:
   // clears the lane. A local development worker has no Ultra slot and runs every lane.
   const laneOk=(q:import('convex/server').FilterBuilder<import('convex/server').GenericTableInfo>)=>{const base=lane==='any'?versioned(q):q.and(versioned(q),q.eq(q.field('lane'),undefined));return skipRenders?q.and(base,q.neq(q.field('kind'),'render')):base;};
   // Playback unlocks the editor first. Agent frame checks follow, ahead of exports and long analysis.
-  for(const kind of ['preview','read','snapshot','blueprint'] as const){
+  for(const kind of ['preview','read','snapshot'] as const){
     let rows=await ctx.db.query('mediaTasks').withIndex('by_status_claimable_kind_created',q=>q.eq('status','queued').eq('claimable',true).eq('kind',kind)).filter(laneOk).take(FAIR_CLAIM_SCAN);
-    // A frame check an agent waits on goes before scene thumbnails and share covers, which nobody is waiting for.
+    // A frame check an agent waits on goes before share covers, which nobody is waiting for.
     if(kind==='snapshot'){const asked=[];for(const row of rows){const snapshot=row.snapshotId?await ctx.db.get(row.snapshotId):null;if(snapshot&&!snapshot.clipId&&!snapshot.shareId)asked.push(row);}if(asked.length)rows=asked;}
     const quick=await fairest(ctx,rows);if(quick)return quick;
   }
@@ -348,7 +346,8 @@ async function analysisStillActive(ctx:import('./_generated/server').QueryCtx|Mu
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);return !!row&&row.ownerId===task.ownerId&&row.projectId===task.projectId&&row.status==='queued';}
   if(task.readId){const read=await ctx.db.get(task.readId);return !!read&&read.ownerId===task.ownerId&&read.projectId===task.projectId&&read.status==='queued';}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);return !!snapshot&&snapshot.ownerId===task.ownerId&&snapshot.projectId===task.projectId&&snapshot.status==='queued';}
-  if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);return !!check&&check.ownerId===task.ownerId&&check.projectId===task.projectId&&check.status==='queued'&&check.createdAt+180000>Date.now();}
+  // Blueprint checks were removed; a leftover task of that kind is never active.
+  if(task.kind==='blueprint')return false;
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(!review||review.ownerId!==task.ownerId||review.projectId!==task.projectId||review.status!=='queued'||review.createdAt+180000<=Date.now())return false;const run=await projectRun(ctx,task.projectId,task.ownerId);return !!run.aiRunning&&run.aiRunId===review.runId;}
   if(!task.analysisRequestId)return true;
   const request=await ctx.db.get(task.analysisRequestId);
@@ -376,33 +375,23 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     const project=await requireProject(ctx,task.projectId,task.ownerId,false);let timeline=currentTimeline(project);
     // Frames of a tab that is not open come from its stored timeline.
     if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.timelineId&&saved.timelineId!==activeTabOf(project)){const stored=await storedTabTimeline(ctx,project,saved.timelineId);if(!stored)throw new ConvexError('That timeline no longer exists.');timeline=stored;}
-    if(saved.cacheIdentity){const payload=await ctx.db.query('frameSnapshotPayloads').withIndex('by_snapshot',q=>q.eq('snapshotId',saved._id)).unique();if(!payload)throw new ConvexError('The frozen frame request is unavailable.');timeline=await loadSceneCode(ctx,payload.timeline);}
-    else if(saved.sourceTimeline)timeline=await loadSceneCode(ctx,saved.sourceTimeline);
+    if(saved.cacheIdentity){const payload=await ctx.db.query('frameSnapshotPayloads').withIndex('by_snapshot',q=>q.eq('snapshotId',saved._id)).unique();if(!payload)throw new ConvexError('The frozen frame request is unavailable.');timeline=payload.timeline;}
+    else if(saved.sourceTimeline)timeline=saved.sourceTimeline;
     // A turn's staged draft, when the frames were asked for while its changes wait to be saved.
     // An earlier revision of the tab, rebuilt from the revision log (getFrames revision).
-    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.atRevision!==undefined){const past=await timelineAtRevision(ctx,project._id,saved.timelineId??activeTabOf(project),await loadSceneCode(ctx,timeline),saved.atRevision);if(!past)throw new ConvexError('That revision can no longer be rebuilt.');timeline=past;}
-    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=await loadSceneCode(ctx,draft.timeline);}
+    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.atRevision!==undefined){const past=await timelineAtRevision(ctx,project._id,saved.timelineId??activeTabOf(project),timeline,saved.atRevision);if(!past)throw new ConvexError('That revision can no longer be rebuilt.');timeline=past;}
+    if(!saved.sourceTimeline&&!saved.cacheIdentity&&saved.runId){const draft=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();if(!draft||draft.runId!==saved.runId)throw new ConvexError('The draft these frames were for is no longer pending.');timeline=draft.timeline;}
     // A share card: the published timeline, as people who open the link will see it.
     let card:{title:string}|undefined;
-    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=await loadSceneCode(ctx,share.timeline);card={title:share.cardTitle??share.title};}
+    if(saved.shareId){const share=await ctx.db.get(saved.shareId);if(!share?.published)throw new ConvexError('The share is no longer published.');timeline=share.timeline;card={title:share.cardTitle??share.title};}
     // A scene clip's own filmstrip: that clip alone, from its first frame.
     // The visual guard: a proposed change beside the timeline it would replace.
     let baseline:Timeline|undefined;
-    if(saved.guard){timeline=await loadSceneCode(ctx,saved.guard.candidate);baseline=await loadSceneCode(ctx,saved.guard.baseline);}
+    if(saved.guard){timeline=saved.guard.candidate;baseline=saved.guard.baseline;}
     if(saved.clipId){const clip=timeline.clips.find(item=>item.id===saved.clipId);if(!clip)throw new ConvexError('The clip for these frames is gone.');timeline={...timeline,clips:[{...clip,start:0}],markers:[]};}
-    const ids=[...new Set([...timeline.clips,...baseline?.clips??[]].flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(sceneMediaAssetIds(timeline),baseline?sceneMediaAssetIds(baseline):[],timeline.audioNormalization?[timeline.audioNormalization.assetId]:[],baseline?.audioNormalization?[baseline.audioNormalization.assetId]:[]))];
+    const ids=[...new Set([...timeline.clips,...baseline?.clips??[]].flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(timeline.audioNormalization?[timeline.audioNormalization.assetId]:[],baseline?.audioNormalization?[baseline.audioNormalization.assetId]:[]))];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...(saved.clipCheck?await transportAsset(ctx,asset):asset),url:await mediaUrl(ctx,asset,true)};}));
     snapshot={...(saved.resolution?{resolution:saved.resolution}:{}),...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),...(saved.comparison?{comparison:saved.comparison}:{}),...(baseline?{baseline}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.motion?{motion:saved.motion}:{}),...(saved.sound?{sound:saved.sound}:{})};
-  }
-  let blueprint:Infer<typeof blueprintWork>|undefined;
-  if(task.blueprintCheckId){
-    const check=await ctx.db.get(task.blueprintCheckId),kit=check&&await ctx.db.get(check.kitId);
-    if(!check||!kit||check.ownerId!==task.ownerId||kit.ownerId!==task.ownerId)throw new ConvexError('The blueprint check is unavailable.');
-    const screens=(kit.screens??[]).map(screen=>({name:screen.name,url:brandFileUrl(screen.storageId)}));
-    // The same brand snapshot a scene gets: fonts, colors, logo and the kit's screens as media.
-    const brand={kitId:kit._id,name:kit.name,colors:kit.colors,fonts:kit.fonts.map(font=>({family:font.family,weight:font.weight,role:font.role,url:fontUrl(font.storageId)})),...(kit.logo?{logo:kit.logo}:{}),...(screens.length?{screens}:{})};
-    const screenUrl=check.screen?screens.find(screen=>screen.name===check.screen)?.url:undefined;
-    blueprint={mode:check.mode,width:check.width,height:check.height,brand,...(check.code?{code:check.code}:{}),...(screenUrl?{screenUrl}:{}),...(check.points?{points:check.points}:{}),...(check.lines?{lines:check.lines}:{})};
   }
   const readRow=task.readId?await ctx.db.get(task.readId):null;
   if(task.readId&&(!readRow||readRow.ownerId!==task.ownerId||readRow.projectId!==task.projectId))throw new ConvexError('The frame reading is unavailable.');
@@ -430,7 +419,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], ...settings, recordsRenderer: true as const, ...await reusableExportVideo(ctx, job, snapshot, settings) };
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
-  return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(blueprint?{blueprint}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
+  return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };
 }
 /** Recent exports checked for an identical picture; an audio-only change re-exports by remuxing it. */
 const REUSABLE_EXPORTS_CHECKED = 5;
@@ -574,13 +563,7 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     if (evidence.revision !== review.revision || evidence.sampleTimes.length < 1 || evidence.sampleTimes.length > 12 || evidence.sampleTimes.some(time => !Number.isFinite(time) || time < review.start - 1 / review.timeline.fps || time > review.end) || evidence.checks.length !== ids.size || evidence.observations.length !== ids.size || new Set(evidence.checks.map(check => check.planId)).size !== ids.size || new Set(evidence.observations.map(check => check.planId)).size !== ids.size || evidence.checks.some(check => !ids.has(check.planId) || !Number.isFinite(check.peakPixelChange) || check.peakPixelChange < 0 || check.peakPixelChange > 1) || evidence.observations.some(check => !ids.has(check.planId) || check.evidence.length > 2000) || evidence.uncertainty.length > 2000) throw new ConvexError('Review evidence does not match this rendered snapshot.');
     await ctx.db.patch(review._id, { status: 'completed', result: evidence });
   },
-  blueprint: async (ctx, task, result) => {
-    if (!result.blueprint) throw new ConvexError('The blueprint check completed without a result.');
-    if (!task.blueprintCheckId || !await analysisStillActive(ctx, task)) throw new ConvexError('The blueprint check is no longer active.');
-    const images = [result.blueprint.image, result.blueprint.diff].filter(Boolean) as string[];
-    if (images.some(image => !/^[A-Za-z0-9+/]+=*$/.test(image)) || images.reduce((sum, image) => sum + image.length, 0) > 800_000) throw new ConvexError('The blueprint images are too large to return.');
-    await ctx.db.patch(task.blueprintCheckId, { status: 'completed', result: result.blueprint });
-  },
+  blueprint: async () => { throw new ConvexError('Blueprint checks were removed.'); },
   read: async (ctx, task, result) => {
     if (!result.read) throw new ConvexError('The frame reading completed without a result.');
     if (!task.readId || !await analysisStillActive(ctx, task)) throw new ConvexError('The frame reading is no longer active.');
@@ -617,7 +600,6 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times)) : undefined;
     const cached = cacheKey ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',cacheKey)).unique() : null;
     await ctx.db.patch(snapshot._id, { status: 'completed', ...(cached?.ready ? {resultR2Key:cached.r2Key,frames:undefined} : {frames}) });
-    if (snapshot.clipId && snapshot.key) await ctx.scheduler.runAfter(0, internal.sceneThumbs.storeImages, { snapshotId: snapshot._id });
     // A share card goes onto its share; the request itself is not kept.
     if (snapshot.shareId && frames[0]) await ctx.scheduler.runAfter(0, internal.timelineShares.storeCard, { snapshotId: snapshot._id });
   },

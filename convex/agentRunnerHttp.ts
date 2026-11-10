@@ -15,7 +15,6 @@ const TURN_FUNCTIONS = new Set([
   'generatedImages:prepare', 'generatedImages:save', 'generatedImages:cleanup',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
-  'filmDrafts:publish', 'filmDrafts:clear',
   'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportLimitation', 'incidents:reportRunner',
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
   'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',

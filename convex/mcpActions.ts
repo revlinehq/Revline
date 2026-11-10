@@ -10,7 +10,6 @@ import { parseEditorCommand } from '../lib/ai/slash-commands';
 import type { LaneTask } from './lib/run_types';
 import { v } from 'convex/values';
 import { z } from 'zod';
-import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
 import { internal } from './_generated/api';
 import { internalAction, type ActionCtx } from './_generated/server';
 import type { Doc, Id } from './_generated/dataModel';
@@ -21,7 +20,6 @@ import { newMcpTaskId, readRunId } from './lib/run_ids';
 import { CALL_LIMIT_MS } from './lib/mcp_limits';
 import { completeUpload, openUpload, signPartUrl } from './r2';
 import { startLocalUpload, mediaKind } from './mcpUploads';
-import { boardDocument, mcpAppData, type BackgroundRecipe } from '../lib/editor/background-preview';
 
 // The editor's own AI tools, exposed over MCP. planEffects/previewRender keep
 // review plans for the length of one in-app turn, which an MCP call does not have.
@@ -96,7 +94,7 @@ export const listTools = internalAction({ args: {}, returns: v.array(v.object({ 
       if(name!=='startTask'&&inputSchema.properties?.projectId) inputSchema.properties.taskId=toJsonSchema(z.string().min(1).optional().describe('Task ID from startTask; resolves this project’s lane context and pins an omitted timelineId.'));
       return { name, description: description(name,tool.description), inputSchema };
     }),
-    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => { const ui = toolBehavior(name)?.ui; return { name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)), ...(ui ? { _meta: { ui: { resourceUri: ui } } } : {}) }; }),
+    ...Object.entries(tools).filter(([name])=>!(name in PROJECT_TOOLS)&&(LANE_IDS.some(lane=>laneToolAllowed(lane,name))||Object.values(SKILL_TOOLS).some(names=>names.includes(name)))).map(([name, tool]) => ({ name, description: description(name,tool.description ?? name), inputSchema: withProjectId(toJsonSchema(tool.inputSchema)) })),
   ];
 }});
 
@@ -117,9 +115,8 @@ function toolFailureMessage(text: string): string {
   return typeof parsed.data.error === 'string' ? parsed.data.error : parsed.data.error?.message ?? parsed.data.message ?? parsed.data.reason ?? 'Revline tool returned an unsuccessful result';
 }
 
-export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any(), comparisonDeadline: v.optional(v.number()) }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
+export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
-  const comparisonDeadline = args.name === 'compareReference' ? Math.min(args.comparisonDeadline ?? Infinity, Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS) : undefined;
   // The task whose working badge this call raised, and the task this call ends. Settled in finally, so thrown failures count.
   let busyTask: string | undefined, endedTask: string | undefined;
   try {
@@ -193,7 +190,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   try {
     const output = args.name in PROJECT_TOOLS
       ? await callProjectTool(ctx, args.ownerId, args.name as ProjectToolName, input)
-      : await callEditorTool(ctx, args.ownerId, args.name, input, agentName, comparisonDeadline, args.name==='reportIssue'?undefined:session??undefined);
+      : await callEditorTool(ctx, args.ownerId, args.name, input, agentName, args.name==='reportIssue'?undefined:session??undefined);
     if(session&&output.ended)endedTask=session.taskId;
     if(session&&!output.isError&&['createTimeline','openTimeline'].includes(args.name)){
       const opened=JSON.parse(output.text) as {timelineId?:string;opened?:string|boolean};
@@ -318,41 +315,27 @@ function withImages(output: unknown, isError: boolean): CallResult {
   return { ...result({ ...rest, images: images.map(image => image.label) }, isError), images: images.map(image => ({ data: image.data, mimeType: image.mimeType })) };
 }
 
-/**
- * previewBackgrounds over MCP: the text keeps every resolved recipe for clients without MCP Apps; structuredContent
- * feeds the inline view and carries the whole board as one standalone HTML document. Per-candidate html is for the
- * editor chat's choice card, which MCP clients do not have.
- */
-function backgroundPreviewResult(output: unknown, isError: boolean): CallResult {
-  if (isError || !output || typeof output !== 'object' || !Array.isArray((output as { candidates?: unknown }).candidates)) return result(output, isError);
-  const { candidates, next: _next, ...rest } = output as { headline: string; font: { family: string; weight: string }; candidates: (BackgroundRecipe & { html?: string })[]; next?: string };
-  const recipes = candidates.map(({ html: _html, ...recipe }) => recipe);
-  const board = { headline: rest.headline, font: rest.font, recipes };
-  return { ...result({ ...rest, candidates: recipes, next: 'Clients that render MCP Apps show these candidates inline with a "Use this" button that posts the pick as the user\'s message. Otherwise list each label with its line and ask which one. Then save the picked line with updateBrief and build from it.' }), structuredContent: { ...mcpAppData(board), html: boardDocument(board) } };
-}
-
 async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mcpLaneSessions'>) {
   if (!session) return {};
   const task = await ctx.runQuery(internal.lanes.task, { ownerId, projectId: session.projectId, taskId: session.taskId }) as LaneTask | null;
   return { lane: task?.lane ?? session.lane, laneChosen: true, capabilities: task?.capabilities, taskId: session.taskId, finishRequired: task?.required ?? true, checkLevel: taskCheckLevel(task) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>, agentName?: string): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, laneSession?:Doc<'mcpLaneSessions'>, agentName?: string): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, comparisonDeadline, agent: agentName, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, agent: agentName, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
-    if (name === 'previewBackgrounds') return backgroundPreviewResult(output, failed(output));
     return withImages(output, failed(output));
   } catch (error) { return result(message(error), true); }
 }
 
-async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
+async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw: Record<string, unknown>, agentName?: string, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
   // Clients with cached schemas may still send the retired editMode; it is dropped, never validated against a tool.
   const { projectId: rawProjectId, timelineId: rawTimelineId, taskId: _taskId, editMode: _legacyEditMode, ...rawInput } = raw;
   if (typeof rawProjectId !== 'string' || !rawProjectId) return result('projectId is required. Call listProjects to find it.', true);
@@ -364,7 +347,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, comparisonDeadline,laneSession,agentName);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, laneSession,agentName);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };

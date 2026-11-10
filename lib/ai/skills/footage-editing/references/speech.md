@@ -12,7 +12,7 @@ A good speech edit keeps every retained sentence complete and natural, cuts only
    - A whole clip ("remove the ums", "cut the pauses", "clean up the retakes"): call cleanSpeech once.
    - Chosen takes or several cuts in one clip: collect the clean, complete-sentence SOURCE ranges and call retainSourceRanges once with tightenSilence:true.
    - A quick local edit: isolate the affected speech first, so cleanup leaves unrelated speech unchanged.
-3. Join the pieces: closeGaps for footage with no timed overlays; for layered edits, follow writing-scenes page `edit-lanes` to keep overlays in sync.
+3. Join the pieces: closeGaps for footage with no timed overlays; for layered edits, follow footage-editing page `edit-lanes` to keep overlays in sync.
 
 ## Rules
 - Trimming, cutting, choosing takes and removing repeats, fillers or pauses are transcript-and-audio edits: never call inspectVideo or inspectFrames for them.

@@ -1,17 +1,14 @@
 import type { Timeline } from '../../editor/types';
 import type { EditorSkill } from '../skills/types';
-import type { MotionCheck, MotionOff, MotionWindow } from '../motion-coverage';
 import type { EyesPolicy } from '../eyes';
 
 export const LANE_IDS = [
   'edit',
-  'motion',
-  'recreate',
   'clip',
   'reel',
 ] as const;
 // Legacy stored lane values remain readable without becoming selectable.
-export type LaneId = (typeof LANE_IDS)[number] | 'explainer';
+export type LaneId = (typeof LANE_IDS)[number] | 'explainer' | 'motion' | 'recreate';
 export type LaneEvidence = {
   tool: string;
   timelineId: string;
@@ -25,20 +22,6 @@ export type LaneCheckContext = {
   fingerprint: string;
   timelineId: string;
   assets: { _id: string; kind: string; duration?: number }[];
-  referenceMotion?: ReferenceMotionEvidence[];
-};
-export type ReferenceMotionEvidence = {
-  projectId: string;
-  assetId: string;
-  start: number;
-  end: number;
-  offset: number;
-  referenceDuration?: number;
-  revision: number;
-  timelineKey: string;
-  windows: MotionWindow[];
-  checks: MotionCheck[];
-  off: MotionOff[];
 };
 /** `final` is the one automatic step-up, set by the server from the request. Model and effort never change the level. */
 export type CheckLevel = 'standard' | 'final';
@@ -48,11 +31,10 @@ export type CheckRecipe = {
    * changes: getFrames at each change and one frame either side.
    * sample: saved-data checks, plus one getFrames sample of new styling or framing on plain reel timelines.
    * data: saved-data delivery checks (finishClipping).
-   * full: the lane's own full checklist (motion, recreate); no pending frame queue.
    * Every recipe except data and sample also renders each changed range at finish.
    */
-  frames: 'changes' | 'sample' | 'data' | 'full';
-  /** Pacing, sound-sync, motion-map, effect-review and reference-comparison tools, and the scene guard render. */
+  frames: 'changes' | 'sample' | 'data';
+  /** Pacing, sound-sync and effect-review tools. */
   fullTools: boolean;
   /** readFrames stays inside short named source windows: no whole-video sweeps. */
   boundedReads: boolean;
@@ -73,7 +55,6 @@ export type LaneDefinition = {
   /** What this lane's eyes examine (lib/ai/eyes): spots, flags, frame budget, what fails finish. Lanes without one keep their getFrames rules. */
   eyes?: EyesPolicy;
   instructions: string;
-  referenceMotion?: 'required' | 'bound';
 };
 export const currentEvidence = (context: LaneCheckContext, tool: string) =>
   context.evidence.filter(

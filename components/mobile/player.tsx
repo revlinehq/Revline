@@ -5,7 +5,6 @@ import { ConvexProvider, ConvexReactClient, useConvex, useQuery } from 'convex/r
 import { z } from 'zod';
 import { api } from '@/convex/_generated/api';
 import type { Doc } from '@/convex/_generated/dataModel';
-import { useSceneCode } from '@/components/editor/use-scene-code';
 import { Preview, type PreviewHandle } from '@/components/editor/preview';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { createEditorStore } from '@/lib/editor/store';
@@ -89,7 +88,7 @@ function AvailablePlayer({ project, timelineId, controls }: { project:Doc<'proje
   const assets = useQuery(api.assets.list, { projectId, limit: 200 });
   const status = useQuery(api.assistant.status, { projectId });
   const draft = useQuery(api.assistant.livePreview, status?.running ? { projectId } : 'skip');
-  const snapshots = useQuery(api.timelineTabs.snapshots, { projectId, sceneCode: 'refs' });
+  const snapshots = useQuery(api.timelineTabs.snapshots, { projectId });
   const [store] = useState(() => createEditorStore(EMPTY_TIMELINE));
   const [time, setTime] = useState(0);
   const reportedAt = useRef(0);
@@ -103,8 +102,7 @@ function AvailablePlayer({ project, timelineId, controls }: { project:Doc<'proje
   }, []);
   const activeId = project?.activeTimelineId ?? 'main';
   const storedTimeline = timelineId && timelineId !== activeId ? snapshots?.find(item => item.id === timelineId)?.timeline : draft?.timeline ?? project?.timeline;
-  const restore = useSceneCode(projectId, [storedTimeline]);
-  const timeline = storedTimeline && restore ? restore(storedTimeline) : undefined;
+  const timeline = storedTimeline;
   const projectCanvas = dimensions(timeline?.aspectRatio ?? 'vertical');
   const scale = Math.min(container.width / projectCanvas.width, container.height / projectCanvas.height);
   useEffect(() => {

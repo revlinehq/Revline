@@ -1,5 +1,4 @@
 import { clampOrFallback as bounded } from '../math';
-import { SCENE_RUNTIME_BUNDLES } from './scene-modules';
 import { previewSourceAt } from './preview-segments';
 import { pixelTrackingSources } from './pixel-tracking-runtime';
 import { pixelTrackEndpoint } from '../media-analysis/pixel-track-reader';
@@ -24,7 +23,6 @@ import { outlineFilter, validateOutline } from './clip-outline';
 import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { expandBackgroundFills, mirrorBlurSources, mirrorFillOwner } from './mirror-blur-layout';
 import { textLayerSources } from './text-layers';
-import { sceneFonts, sceneLayerSources, sceneMediaAssetIds, sceneRuntimeScript, validateScene } from './scene-layers';
 import { textStyle, textAppearance } from './text-style';
 import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
@@ -44,7 +42,6 @@ export type CompositionOptions = {
   visualEffectsUrl?: string;
   textRuntimeUrl?: string;
   transitionsRuntimeUrl?: string;
-  sceneRuntimeUrl?: string;
   fontUrl?: string;
   fontUrls?: Partial<Record<TextFontId, string>>;
   assetUrls?: Record<string, string>;
@@ -134,13 +131,14 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const clipIndex = new Map(timeline.clips.map((clip, index) => [clip.id, index]));
   const fillOwner = (clip: Clip) => { const owner = mirrorFillOwner(clip.id); return owner !== undefined && clipIndex.has(owner) ? owner : undefined; };
   const nodes = timeline.clips.map((clip, index) => {
+    // Scene and film clips are no longer supported. One left in an old project keeps its time on the timeline and draws nothing.
+    if (clip.kind === 'scene') return '';
     validateClip(clip);
     validateClipEffects(clip);
     validateVisualFade(clip);
     validateVisualEffects(clip);
     validateOutline(clip);
     validatePlaybackRate(clip);
-    validateScene(clip);
     // Silent sound still contributes to the authored duration above, but needs
     // no decoder or time-stretch/mix work in an export. Preview retains the
     // element so live volume controls can unmute it without rebuilding footage.
@@ -151,17 +149,13 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
     const motionAsset = clip.assetId ? assetMap.get(clip.assetId) : undefined;
     const motion = motionAsset ? boundedCameraMotion(clip, motionAsset, timeline.aspectRatio, visibleMotion(clip)) : visibleMotion(clip);
     const motionVars = (key: MotionKeyframe) => ({ x: key.x * width, y: key.y * height, scale: key.scale, rotation: key.rotation, opacity: key.opacity, filter: `brightness(${key.brightness})` });
-    if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic' && clip.kind !== 'solid' && clip.kind !== 'scene') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
+    if (clip.kind !== 'effect' && clip.kind !== 'caption' && clip.kind !== 'graphic' && clip.kind !== 'solid') animateKeys(`#${id}-motion`, clip, motion, motionVars, { time: 0, ...NEUTRAL_MOTION });
     // Adjustment wrappers are always mounted. A timed HyperFrames root would
     // hide all the footage it contains before and after the effect range.
     if (clip.kind === 'effect') return '';
     const trackIndex = compositionTrackIndex(clip);
     const owner = fillOwner(clip);
     const zIndex = owner !== undefined ? layerZIndex(timeline.clips[clipIndex.get(owner)!], clipIndex.get(owner)!) - 1 : layerZIndex(clip, index);
-    // The scene controller below fills this sandboxed frame and seeks its animations.
-    // Untimed composition children are stamped to the whole video, and HyperFrames
-    // would then show every scene on each playback frame.
-    if (clip.kind === 'scene') return `<div id="${id}" data-scene-clip="${escapeHtml(clip.id)}" data-start="${attrTime(start)}" data-duration="${attrTime(clip.duration)}" data-end="${attrTime(end)}" data-track-index="${trackIndex}" class="scene-layer" style="z-index:${zIndex}"></div>`;
     if (clip.kind === 'solid') return `<div id="${id}" data-solid-color-clip="${escapeHtml(clip.id)}" class="solid-color-layer" style="z-index:${zIndex}"><div class="solid-color-rectangle"></div></div>`;
     // HyperFrames activates data-start/data-duration clip roots. Animations target
     // children or crop properties so exact-zero seeks never fight its visibility.
@@ -257,16 +251,6 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
   const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
-  // Scene media resolves like image clips: the export's local copy, else the asset's own URL. A missing file leaves the name unset.
-  const sceneMediaUrls = Object.fromEntries(sceneMediaAssetIds(timeline).flatMap(id => {
-    const exportSource = options.assetUrls?.[id], source = exportSource ?? assetMap.get(id)?.url;
-    if (!source || !['image', 'video', 'model'].includes(assetMap.get(id)?.kind ?? '')) return [];
-    mediaUrl(source, exportSource !== undefined);
-    return [[id, source]];
-  }));
-  const rawFontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? options.fontUrl ?? defaultFontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`, options.gsapUrl).href : `/fonts/${font.fileName}`)]));
-  const sceneRuntimeUrl = options.sceneRuntimeUrl ?? (/^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/vendor/${SCENE_RUNTIME_BUNDLES.gsap.file}`, options.gsapUrl).href : `/vendor/${SCENE_RUNTIME_BUNDLES.gsap.file}`);
-  mediaUrl(sceneRuntimeUrl);
   // Reserve runtime ownership before GSAP becomes discoverable. Otherwise a
   // late runtime leaves HyperFrames controlling its cached direct-GSAP adapter.
   const previewRuntimeBridge=options.preview?'<script>window.__player=window.__player||{};</script>':'';
@@ -283,7 +267,7 @@ window.__hf=window.__hf||{};window.__hf.onSwallowed=event=>reportPreviewError(ev
 ${textFontFaceCss(fontUrls)}
 html,body{margin:0;width:${width}px;height:${height}px;overflow:hidden;background:#000;font-family:'Space Grotesk',Arial,Helvetica,sans-serif}*{box-sizing:border-box}#composition{isolation:isolate;position:relative;width:${width}px;height:${height}px;overflow:hidden;background:#000}.visual-frame{position:absolute;width:${width}px;height:${height}px;overflow:hidden;transform-origin:center}.motion-frame{width:100%;height:100%;transform-origin:center}.text-motion{display:inline-block}.source-window{position:absolute;overflow:hidden}.visual{position:absolute}.overlay{position:absolute;max-width:90%;width:max-content;transform:translate(-50%,-50%);font-weight:700;line-height:1.12;text-align:center;white-space:pre-wrap;overflow-wrap:anywhere}.text-content{display:inline-block;padding:${10 * scale}px ${18 * scale}px;border-radius:${8 * scale}px}.caption{text-shadow:0 2px 12px #0009}audio{position:absolute}
 .adjustment-layer,.solid-color-layer{position:absolute;inset:0;transform-origin:center;pointer-events:none}
-.scene-layer{position:absolute;inset:0;overflow:hidden;pointer-events:none;visibility:hidden}.scene-frame{position:absolute;left:0;top:0;border:0;background:transparent;color-scheme:normal;transform-origin:0 0;pointer-events:none}
+
 [data-revline-effects]{opacity:0!important}${options.preview?'video[data-revline-effects]{opacity:0.001!important}.source-window>[data-start][style*="visibility: hidden"]~.visual-effect-output{visibility:hidden}':''}.visual-effect-output{position:absolute;pointer-events:none}.solid-color-rectangle{position:absolute;z-index:2147483647;pointer-events:none;transform-origin:center}
 .cinematic-bars{position:absolute;inset:0;overflow:hidden;z-index:2147483647;pointer-events:none}.cinematic-bar{position:absolute;left:0;right:0;background:#000}.cinematic-bar.top{top:0;transform:translateY(-100%)}.cinematic-bar.bottom{bottom:0;transform:translateY(100%)}
 </style><meta name="revline-text-runtime" content="${textRuntimeUrl}"><meta name="revline-transitions-runtime" content="${transitionsRuntimeUrl}">${previewRuntimeBridge}${trackedSources.length && trackEndpoint ? `<meta name="revline-pixel-track-endpoint" content="${escapeHtml(trackEndpoint)}">` : ''}<script src="${gsapUrl}"></script><script src="${visualEffectsUrl}"></script>${sceneScripts}</head><body><div id="composition" data-composition-id="revline" data-duration="${safeDuration}" data-width="${width}" data-height="${height}" data-fps="${fps}">${compositionNodes}</div><script>
@@ -297,7 +281,6 @@ window.__revlineVisualEffects.installSolidColorLayers(${JSON.stringify(solidColo
 window.__revlineVisualEffects.installClipMasks(${JSON.stringify(maskSources(timeline.clips)).replace(/</g, '\\u003c')});window.__revlineVisualEffects.installAudioReactive(${JSON.stringify(audioReactiveSources(timeline.clips)).replace(/</g, '\\u003c')});
 if(window.__revlineVisualEffects.installVisualFades)window.__revlineVisualEffects.installVisualFades(${JSON.stringify(timeline.clips.filter(clip=>clip.kind==='video'||clip.kind==='image').map(({id,kind,start,duration,visualFade,visualFadeTiming})=>({id,kind,start,duration,sourceStart:0,visualFade,visualFadeTiming}))).replace(/</g, '\\u003c')},${timeline.fps});${timeline.clips.some(clip=>(clip.visualFade?.fadeIn??0)>0||(clip.visualFade?.fadeOut??0)>0)?"else throw new Error('Visual fade renderer failed to load.');":''}
 if(window.__revlineTextRuntime)window.__revlineTextLayerController=window.__revlineTextRuntime.installTextLayers(${textSources});${hasText?"else throw new Error('Text renderer failed to load.');":''}
-${sceneRuntimeScript(sceneLayerSources(timeline, resolution), sceneFonts(rawFontUrls), sceneRuntimeUrl, sceneMediaUrls, Object.fromEntries(Object.entries(options.assetUrls ?? {}).filter(([key]) => /^https?:/i.test(key))), options.preview === true)}
 ${transitions.length ? `if(window.__revlineTransitions)window.__revlineTransitions.installTransitions(${JSON.stringify(transitions).replace(/</g, '\\u003c')},${timeline.fps});else throw new Error('Transition renderer failed to load.');` : ''}
 ${trackedSources.length ? `window.__revlineVisualEffects.installPixelTracking(${JSON.stringify(trackedSources).replace(/</g, '\\u003c')},${JSON.stringify(trackEndpoint)},${JSON.stringify(options.pixelTrackFiles ?? {})},${fps},${resolution});` : ''}
 document.querySelectorAll('video,audio').forEach(media=>{media.volume=Math.min(1,Number(media.dataset.volume));media.preservesPitch=true;});

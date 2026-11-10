@@ -3,7 +3,6 @@ import { normalizationAssetIds } from '../lib/editor/audio-normalization';
 import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
 import { hydrateAsset,transportAsset,storeAnalysis,compactAnalysis } from './lib/asset_analysis';
-import { readHighlights } from '../lib/media-analysis/highlights';
 import { writeProject,projectIdentity } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
@@ -21,14 +20,13 @@ import { assetWithUrl, assetKind, focusValidator, analysisValidator } from "./sc
 import { MAX_AUDIO_ACTIVITY_QUIET_INTERVALS, MIN_AUDIO_QUIET_SECONDS } from '../lib/media-analysis/audio-activity';
 import { parseShots } from '../lib/media-analysis/shots';
 import { MAX_MUSIC_ENERGY_SECONDS, MUSIC_ENERGY_STEP } from '../lib/media-analysis/beat-map';
-import { validateReference } from '../lib/media-analysis/reference';
 import { validateFocus } from "./lib/timeline";
 import { serializedBytes } from "./lib/timeline_history";
 import { consumeUpload, issueUpload } from "./uploads";
 import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { stockAudio } from '../lib/editor/stock-audio';
-import { signMediaToken } from '../lib/storage/media-tokens';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+import { signMediaToken } from '../lib/storage/media-tokens';
 
 /** Public playback is restricted to immutable CC0 catalog IDs, never arbitrary stored keys. */
 export const catalogAudioUrl = action({ args: { catalogId: v.string() }, returns: v.string(), handler: async (_ctx, args) => {
@@ -135,7 +133,7 @@ export async function removeOwnedAsset(ctx:MutationCtx,ownerId:string,assetId:Id
   if (project.aiRunning) throw new ConvexError("Wait for the current AI edit before deleting media");
   const timelines = await allTabTimelines(ctx,project);
   if(timelines.some(t=>normalizationAssetIds(t).includes(asset._id)))throw new ConvexError('Remove this media from loudness normalization first');
-  if (timelines.some(timeline => timeline.clips.some(clip => clip.assetId === asset._id) || sceneMediaAssetIds(timeline).includes(asset._id))) throw new ConvexError("Remove this media from the timeline first");
+  if (timelines.some(timeline => timeline.clips.some(clip => clip.assetId === asset._id))) throw new ConvexError("Remove this media from the timeline first");
   if(await usedByActiveExport(ctx,ownerId,asset.projectId,new Set([String(asset._id)])))throw new ConvexError('This media is part of an active render');
   await writeProject(ctx,project._id, { history: project.history?.filter(t => !t.clips.some(clip => clip.assetId === asset._id)&&!normalizationAssetIds(t).includes(asset._id)), updatedAt: Date.now() });
   await removeMediaAttachment(ctx, asset); return null;
@@ -197,11 +195,7 @@ export async function saveAssetAnalysis(ctx: MutationCtx, asset: Doc<"assets">, 
     const energy = changes.beats.energy, count = energy.loudness.length;
     if (energy.step !== MUSIC_ENERGY_STEP || count > MAX_MUSIC_ENERGY_SECONDS / MUSIC_ENERGY_STEP + 1 || energy.low.length !== count || energy.onsets.length !== count || (count - 1) * energy.step > duration + .5 || [...energy.loudness, ...energy.low].some(value => !Number.isFinite(value) || value < -120 || value > 20) || energy.onsets.some(value => !Number.isInteger(value) || value < 0 || value > 100)) throw new ConvexError('Invalid music energy');
   }
-  if (changes.reference) {
-    if (asset.kind !== 'video' || !asset.duration) throw new ConvexError('A reference breakdown requires a video with a known duration');
-    try { validateReference(changes.reference, asset.duration); } catch { throw new ConvexError('Invalid reference breakdown'); }
-  }
-  if(changes.highlights){const tracks=readHighlights(changes.highlights);if(!tracks||Math.abs(tracks.duration-duration)>.5)throw new ConvexError('Invalid highlight signal tracks.');}
+  if (changes.reference) throw new ConvexError('Reference breakdowns are no longer supported');
   const analysis = { ...asset.analysis, ...Object.fromEntries((['highlights','facecam','speakers','transcript','audioActivity','speechCleanup','understanding','shots','beats','focus','reference'] as const).flatMap(key=>changes[key]!==undefined?[[key,changes[key]]]:[])) };
   if (serializedBytes(compactAnalysis(analysis)) > 900_000) throw new ConvexError("Media analysis is too large to save");
   const now = Date.now();
