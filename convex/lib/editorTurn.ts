@@ -35,6 +35,7 @@ import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
 import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
+import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
@@ -120,7 +121,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
     const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
-    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
+    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps), ({ steps }) => hasStalledReads(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name==='clip' ? editorCommandInstructions(args.command) : ''}
 The current task lane, skills and tools are provided before each step.
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
@@ -190,7 +191,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
             return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
-            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
+            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
           // Provider usage arrives before potentially slow analysis/tool execution.
@@ -207,6 +208,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const terminalLaneFailure=toolkit.laneFailure();
         if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,JSON.stringify(terminalLaneFailure.failures));
         if(askedUser(steps)){await editSession.savePartial();break;}
+        if (hasStalledReads(steps)) throw new AssistantReadLoopError();
         if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
         // Reuse only server-validated review snapshots of the current visible
         // scope, including those saved before a durable continuation.

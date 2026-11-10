@@ -337,3 +337,30 @@ export class AssistantToolRetryError extends Error {
     this.name = 'AssistantToolRetryError';
   }
 }
+
+/** How many steps in a row may repeat the same read with the same answer before the turn stops. */
+export const STALLED_READ_STEPS = 6;
+
+/** The trailing steps made only the same passive read, with the same input and the same answer, and nothing else.
+ * A read that is still pending (a frame read or an import being polled) is waiting, not stalling. */
+export function hasStalledReads(steps: ToolSteps, limit = STALLED_READ_STEPS) {
+  let signature: string | undefined, run = 0;
+  for (let index = steps.length - 1; index >= 0 && run < limit; index--) {
+    const parts = steps[index].content.map(record), calls = parts.filter(part => part.type === 'tool-call'), results = parts.filter(part => part.type === 'tool-result' && !part.preliminary);
+    if (!calls.length || results.length !== calls.length || parts.some(part => part.type === 'tool-error') || calls.some(call => !isPassiveRead(call.toolName))) break;
+    const outputs = results.map(result => outputValue(result.output));
+    if (outputs.some(output => output.success === false || output.pending === true || output.nextAction !== undefined || ['queued', 'running', 'pending', 'processing', 'retrying'].includes(String(output.status)))) break;
+    const current = stable([calls.map(call => [call.toolName, call.input]), outputs]);
+    if (signature !== undefined && current !== signature) break;
+    signature = current; run++;
+  }
+  return run >= limit;
+}
+
+export class AssistantReadLoopError extends AssistantToolRetryError {
+  constructor() {
+    super();
+    this.message = 'Stopped because the assistant kept re-reading the project without changing anything. Previously saved edits remain; send the request again, or say what to change next.';
+    this.name = 'AssistantReadLoopError';
+  }
+}
