@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { SettingsBody, SettingsCard } from '@/components/dashboard/settings-card';
 import './dev-openai-costs.css';
 
 type Report = OpenAiCostReport | { connected: false };
@@ -45,9 +46,9 @@ export function DevOpenAiCosts({ days, onDaysChange }: { days: 7 | 30; onDaysCha
   }
   const connected = report?.connected ? report : null;
   const maximum = Math.max(...(connected?.daily.map(day => day.usd) ?? []), 0.0001);
-  return <section className="workspace-profile-section ai-cost-section" aria-labelledby="openai-reported-cost-title">
-    <div className="workspace-section-label"><h2 id="openai-reported-cost-title">OpenAI costs</h2><p>Reported spend for your Revline API project.</p></div>
-    <div className="workspace-section-content openai-cost-report" aria-busy={busy}>
+  return <SettingsCard title="OpenAI costs" className="ai-cost-section">
+    <SettingsBody className="openai-cost-report" aria-busy={busy}>
+      <p>Reported spend for your Revline API project.</p>
       {onDaysChange && <Tabs value={String(days)} onValueChange={value => onDaysChange(Number(value) as 7 | 30)}><TabsList aria-label="Cost reporting period">{([7, 30] as const).map(period => <TabsTrigger key={period} value={String(period)}>{period} days</TabsTrigger>)}</TabsList></Tabs>}
       {connected ? <>
         <div className="openai-cost-top"><div><strong>{formatAiCost(connected.totalUsd)}</strong><span>Last {connected.days} days · USD</span></div><button type="button" disabled={busy} onClick={() => void load()}>{busy ? 'Refreshing…' : 'Refresh'}</button></div>
@@ -61,9 +62,9 @@ export function DevOpenAiCosts({ days, onDaysChange }: { days: 7 | 30; onDaysCha
         <p>Connect a Usage read-only Admin API key to show this project’s official costs. The key stays in this computer’s development server.</p>
         <label>API project ID<Input name="projectId" required placeholder="proj_…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
         <label>Usage read-only Admin key<Input type="password" name="adminKey" required placeholder="sk-admin-…" autoComplete="off" spellCheck={false} disabled={busy} /></label>
-        <Button type="submit" variant="outline" size="md" disabled={busy}>{busy ? 'Connecting…' : 'Connect costs'}</Button>
+        <Button type="submit" variant="soft" size="sm" disabled={busy}>{busy ? 'Connecting…' : 'Connect costs'}</Button>
       </form> : busy ? <p className="openai-cost-meta" role="status">Checking costs connection…</p> : null}
-      {error && <div className="openai-cost-error" role="alert"><p>{error}</p>{!connected && <Button type="button" variant="outline" size="md" disabled={busy} onClick={() => void load()}>Retry</Button>}</div>}
-    </div>
-  </section>;
+      {error && <div className="openai-cost-error" role="alert"><p>{error}</p>{!connected && <Button type="button" variant="soft" size="sm" disabled={busy} onClick={() => void load()}>Retry</Button>}</div>}
+    </SettingsBody>
+  </SettingsCard>;
 }

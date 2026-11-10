@@ -283,6 +283,95 @@ export const batchLinks = query({
   },
 });
 
+// ---------------------------------------------------------------- posts as clips (the Posts page and the Post dialog)
+
+const cover = { coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal('video'), v.literal('image'), v.null()) };
+/** An export has no picture of its own, so a clip shows the cover of the project it was exported from. */
+async function projectCover(ctx: QueryCtx, projectId: Id<'projects'>) {
+  const row = await ctx.db.query('projectCatalog').withIndex('by_project', q => q.eq('projectId', projectId)).first();
+  const coverUrl = row ? await mediaUrl(ctx, { storageId: row.coverStorageId, r2Key: row.coverR2Key }) : null;
+  return { title: row?.title, coverUrl, coverKind: !row || !coverUrl ? null : row.coverKind === 'video' && row.coverR2Key ? 'video' as const : 'image' as const };
+}
+
+const clipPost = v.object({
+  id: v.id('postingPosts'), platform: postingPlatform, username: v.string(), avatarUrl: v.union(v.string(), v.null()),
+  /** The account's state now: a failed post can only be retried while its account is `connected`. */
+  accountStatus, status: postStatus, error: v.union(v.string(), v.null()), attempts: v.number(),
+  scheduledAt: v.union(v.number(), v.null()), url: v.union(v.string(), v.null()), publishedAt: v.union(v.number(), v.null()), views: v.union(v.number(), v.null()),
+});
+const POSTS_WINDOW = 200;
+/**
+ * The owner's most recent posts grouped the way they were sent: one entry per clip (one submit of the Post dialog)
+ * with the post to each account inside it, newest first.
+ */
+export const clipPosts = query({
+  args: {},
+  returns: v.array(v.object({ batchId: v.id('postingBatches'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), posts: v.array(clipPost) })),
+  handler: async ctx => {
+    const ownerId = await requireOwner(ctx);
+    // One indexed read, as `posts` does; a clip's posts are created together, so they sit next to each other in it.
+    const rows = await ctx.db.query('postingPosts').withIndex('by_owner_createdAt', q => q.eq('ownerId', ownerId)).order('desc').take(POSTS_WINDOW);
+    const groups = new Map<Id<'postingBatches'>, Doc<'postingPosts'>[]>();
+    for (const row of rows) groups.set(row.batchId, [...groups.get(row.batchId) ?? [], row]);
+    // The oldest clip in a full window may have posts beyond it; it is left out rather than shown with accounts missing.
+    if (rows.length === POSTS_WINDOW) groups.delete(rows[rows.length - 1].batchId);
+    const accountsById = new Map<string, Doc<'postingAccounts'> | null>(), covers = new Map<string, Awaited<ReturnType<typeof projectCover>>>();
+    const clips = [];
+    for (const [batchId, group] of groups) {
+      const batch = await ctx.db.get(batchId);
+      if (!batch) continue;
+      if (!covers.has(batch.projectId)) covers.set(batch.projectId, await projectCover(ctx, batch.projectId));
+      const posts = [];
+      // Back in the order the accounts were picked.
+      for (const row of group.reverse()) {
+        if (!accountsById.has(row.accountId)) accountsById.set(row.accountId, await ctx.db.get(row.accountId));
+        const account = accountsById.get(row.accountId);
+        posts.push({
+          id: row._id, platform: row.platform, username: account?.username ?? 'removed account', avatarUrl: optional(account?.avatarUrl), accountStatus: account?.status ?? 'disconnected' as const,
+          status: row.status, error: optional(row.error), attempts: row.attempts, scheduledAt: optional(row.scheduledAt), url: optional(row.url), publishedAt: optional(row.publishedAt), views: optional(row.views),
+        });
+      }
+      const { coverUrl, coverKind } = covers.get(batch.projectId)!;
+      clips.push({ batchId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, posts });
+    }
+    return clips;
+  },
+});
+
+/** One finished export as the Post dialog shows it, with the campaign its project is attached to. Null when it cannot be posted. */
+export const clip = query({
+  args: { jobId: v.id('renderJobs') },
+  returns: v.union(v.null(), v.object({ jobId: v.id('renderJobs'), label: v.string(), durationSeconds: v.union(v.number(), v.null()), ...cover, campaign: v.union(v.null(), v.object({ id: v.id('campaigns'), name: v.string() })) })),
+  handler: async (ctx, { jobId }) => {
+    const ownerId = await requireOwner(ctx), { job } = await postableExport(ctx, ownerId, jobId);
+    if (!job) return null;
+    const { title, coverUrl, coverKind } = await projectCover(ctx, job.projectId);
+    const timeline = (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
+    const link = await ctx.db.query('projectCampaigns').withIndex('by_project', q => q.eq('projectId', job.projectId)).unique();
+    const campaign = link?.campaignId ? await ctx.db.get(link.campaignId) : null;
+    return {
+      jobId: job._id, label: exportFileName(title ?? (await ctx.db.get(job.projectId))?.title ?? 'Video', job.label).replace(/\.mp4$/, ''),
+      durationSeconds: timeline ? timelineDuration(timeline) : null, coverUrl, coverKind, campaign: campaign ? { id: campaign._id, name: campaign.name } : null,
+    };
+  },
+});
+
+/** The owner's most recent finished exports, for choosing a clip to post from the Posts page. */
+export const finishedClips = query({
+  args: {}, returns: v.array(v.object({ jobId: v.id('renderJobs'), label: v.string(), createdAt: v.number() })),
+  handler: async ctx => {
+    const ownerId = await requireOwner(ctx);
+    const jobs = await ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', 'completed')).order('desc').take(20);
+    const titles = new Map<string, string>(), clips = [];
+    for (const job of jobs) {
+      if (!job.outputR2Key && !job.outputStorageId) continue;
+      if (!titles.has(job.projectId)) titles.set(job.projectId, (await ctx.db.query('projectCatalog').withIndex('by_project', q => q.eq('projectId', job.projectId)).first())?.title ?? (await ctx.db.get(job.projectId))?.title ?? 'Video');
+      clips.push({ jobId: job._id, label: exportFileName(titles.get(job.projectId)!, job.label).replace(/\.mp4$/, ''), createdAt: job.createdAt });
+    }
+    return clips;
+  },
+});
+
 const totals = { posts: v.number(), views: v.number(), likes: v.number(), comments: v.number(), shares: v.number() };
 /**
  * Totals for a Stats page: overall and per account, over the owner's published posts.

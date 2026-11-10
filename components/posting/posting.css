@@ -1,32 +1,124 @@
-/* Plain layout for the posting pages and dialog; colors come from the workspace theme. */
-.posting-notice { margin:0; padding:10px 12px; border:1px solid var(--ws-border); border-radius:8px; font-size:13px; color:var(--ws-text); }
-.posting-list { display:flex; flex-direction:column; margin:0; padding:0; list-style:none; }
-.posting-row { display:flex; align-items:center; gap:12px; min-height:52px; padding:8px 0; border-bottom:1px solid var(--ws-border); }
-.posting-row-text { display:flex; flex-direction:column; flex:1; min-width:0; gap:2px; }
-.posting-row-text strong { font-size:13px; font-weight:500; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.posting-row-text span { font-size:12px; color:var(--ws-muted); overflow-wrap:anywhere; }
-.posting-row-text .posting-error { color:#b5553d; }
-.posting-empty { margin:0 0 12px; font-size:13px; color:var(--ws-muted); }
-.posting-section-action { margin-top:12px; }
-.posting-heading-row { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
-.posting-tabs { margin-bottom:8px; max-width:100%; }
-.posting-tabs [data-slot=tabs-list] { flex-wrap:wrap; height:auto; max-width:100%; }
-.posting-post-row { align-items:flex-start; padding:12px 0; }
-.posting-post-actions { display:flex; gap:8px; flex-shrink:0; }
-.posting-caption { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.posting-dialog[data-slot=dialog-content] { width:560px; max-width:calc(100vw - 32px); max-height:calc(100dvh - 32px); overflow-y:auto; display:flex; flex-direction:column; gap:16px; font-family:var(--font-inter),sans-serif; }
-/* The editor's dialog is portaled outside the editor's theme scope; give it the same neutral greys. */
-.posting-dialog:not(.workspace-dialog)[data-slot=dialog-content] { --popover:#1c1c1c; --card:#1c1c1c; --secondary:#2a2a2a; --muted:#2a2a2a; --accent:#2a2a2a; --border:#303030; --input:#303030; --muted-foreground:#a3a3a3; background:#1c1c1c; border:1px solid #303030; padding:24px; }
-.posting-dialog .posting-field { display:flex; flex-direction:column; gap:6px; }
-.posting-dialog .posting-field>label,.posting-dialog .posting-field>span { font-size:12px; font-weight:500; }
-.posting-dialog .posting-hint { margin:0; font-size:12px; opacity:.65; line-height:1.5; }
-.posting-targets { display:flex; flex-direction:column; gap:8px; max-height:280px; overflow-y:auto; }
-.posting-target { display:flex; flex-direction:column; gap:8px; padding:10px; border:1px solid var(--border); border-radius:8px; }
-.posting-target-head { display:flex; align-items:center; gap:10px; font-size:13px; }
-.posting-target-head label { display:flex; flex:1; min-width:0; align-items:center; gap:10px; cursor:pointer; }
-.posting-target-head small { opacity:.65; }
-.posting-dialog-actions { display:flex; justify-content:flex-end; gap:10px; }
-.posting-links { display:flex; flex-direction:column; gap:8px; margin:0; padding:0; list-style:none; }
-.posting-links li { display:flex; align-items:center; gap:10px; font-size:13px; }
-.posting-links a { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:inherit; }
-@media (max-width:640px) { .posting-post-row,.posting-heading-row { flex-direction:column; align-items:stretch; } }
+/* The Posts page and the Post dialog. Colours come from components/ui/dashboard-tokens.css, which is defined on
+   :root, so the dialog looks the same when the editor opens it outside the dashboard shell. */
+@import '../dashboard/dash-list.css';
+
+/* ---- Posts page: two sections, one row per clip. */
+.posts-page { display: flex; flex-direction: column; gap: 26px; }
+.posts-section { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
+.posts-section-head { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px; }
+.posts-section-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
+.posts-section-head > span { color: var(--dash-muted); font-size: 14px; }
+.posts-section-head [data-slot=button] { margin-left: auto; }
+.posts-empty-action { margin-top: 12px; }
+.posts-list[data-slot=card] { gap: 0; padding: 0; }
+.posts-list ul { margin: 0; padding: 0; list-style: none; }
+/* Every row uses the same fixed tracks, so the columns line up across the Scheduled and Posted cards. */
+.posts-row { display: grid; grid-template-columns: 30px minmax(0, 2.3fr) minmax(104px, .9fr) minmax(128px, 1.05fr) minmax(150px, 1.35fr) minmax(88px, .75fr) 100px; align-items: center; column-gap: 14px; min-height: 72px; padding: 10px 12px 10px 16px; font-size: 14px; }
+.posts-row + .posts-row { border-top: 1px solid var(--dash-divider); }
+.posts-thumb .workspace-chat-cover { display: grid; place-items: center; width: 30px; height: 52px; overflow: hidden; border-radius: 5px; background: var(--dash-pill); color: var(--dash-muted); }
+.posts-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
+.posts-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 15px; }
+.posts-accounts { display: flex; align-items: center; min-width: 0; }
+.posts-accounts .account-avatar + .account-avatar { margin-left: -4px; }
+.posts-accounts .account-avatar [data-slot=avatar] { width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--dash-card); }
+.posts-accounts .account-avatar [data-slot=avatar-fallback] { font-size: 10px; }
+.posts-accounts-more { margin-left: 8px; color: var(--dash-muted); font-size: 13px; }
+.posts-time { color: var(--dash-muted); white-space: nowrap; }
+.posts-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.posts-status > span { display: inline-flex; align-items: center; gap: 7px; color: var(--dash-text); white-space: nowrap; }
+.posts-status svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
+.posts-status small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-muted); font-size: 13px; }
+.posts-views { color: var(--dash-text); white-space: nowrap; }
+.posts-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+/* A narrow list (a phone, or a small window beside the sidebar) stacks each row into three lines. */
+@container (max-width: 860px) {
+  .posts-row { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "thumb caption actions" "thumb accounts time" "thumb status views"; column-gap: 12px; row-gap: 6px; padding: 12px 10px 12px 14px; }
+  .posts-thumb { grid-area: thumb; align-self: start; } .posts-caption { grid-area: caption; } .posts-accounts { grid-area: accounts; } .posts-time { grid-area: time; }
+  .posts-status { grid-area: status; align-self: start; } .posts-views { grid-area: views; } .posts-actions { grid-area: actions; min-height: 32px; }
+  .posts-time, .posts-views { justify-self: end; font-size: 13px; }
+  .posts-status small { white-space: normal; }
+}
+
+/* ---- Post dialog. It carries its own shadcn colour mapping: the editor is not under `dash-theme`. */
+.post-dialog[data-slot=dialog-content] {
+  --popover: var(--dash-card); --popover-foreground: var(--dash-text); --foreground: var(--dash-text); --muted: var(--dash-tile); --muted-foreground: var(--dash-muted);
+  --accent: var(--dash-pill); --accent-foreground: var(--dash-text); --border: #FFFFFF14; --input: #FFFFFF1F;
+  display: flex; flex-direction: column; gap: 0; width: 780px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 0; overflow: hidden;
+  border: 1px solid var(--dash-border); border-radius: 16px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none;
+  font-family: var(--font-inter), sans-serif; font-size: 14px;
+}
+.post-dialog-links[data-slot=dialog-content] { width: 560px; }
+.post-dialog [data-slot=dialog-close] { top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 9999px; color: var(--dash-muted); }
+.post-dialog [data-slot=dialog-close]:hover { background: var(--dash-pill); color: var(--dash-text); }
+.post-dialog-head { display: flex; align-items: center; min-height: 56px; padding: 0 56px 0 20px; border-bottom: 1px solid var(--dash-divider); flex-shrink: 0; }
+.post-dialog-head [data-slot=dialog-title] { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.3; }
+.post-dialog-body { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 24px; min-height: 0; padding: 20px; overflow-y: auto; }
+.post-dialog-side, .post-dialog-main { display: flex; flex-direction: column; gap: 18px; min-width: 0; }
+.post-dialog-foot { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; padding: 14px 20px; border-top: 1px solid var(--dash-divider); flex-shrink: 0; }
+.post-dialog-foot .dash-error { flex: 1; min-width: 160px; }
+.post-dialog-done { display: flex; flex-direction: column; gap: 14px; min-height: 0; padding: 20px; overflow-y: auto; }
+.post-dialog-done h3 { margin: 0; font-size: 15px; font-weight: 500; }
+.post-dialog-done p, .post-dialog-done [data-slot=dialog-description], .post-note { margin: 0; color: var(--dash-muted); font-size: 14px; line-height: 1.5; }
+
+.post-clip[data-slot=card] { flex-direction: row; align-items: center; gap: 12px; padding: 10px; }
+.post-clip-thumb .workspace-chat-cover { display: grid; place-items: center; width: 36px; height: 64px; flex-shrink: 0; overflow: hidden; border-radius: 6px; background: var(--dash-pill); color: var(--dash-muted); }
+.post-clip-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
+.post-clip-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+.post-clip-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; font-weight: 500; }
+.post-clip-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-muted); font-size: 13px; }
+.post-clip-select[data-slot=select-trigger] { width: 100%; height: 28px; padding: 0 6px 0 8px; margin-left: -8px; border: 0; border-radius: 8px; background: transparent; color: var(--dash-text); font-size: 14px; font-weight: 500; }
+.post-clip-select[data-slot=select-trigger]:hover { background: var(--dash-pill); }
+.post-clip-select [data-slot=select-value] { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.post-select[data-slot=select-content] { border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none; font-family: var(--font-inter), sans-serif; }
+
+.post-accounts { display: flex; flex-direction: column; gap: 10px; }
+.post-accounts-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.post-accounts-head h3 { margin: 0; font-size: 14px; font-weight: 500; }
+.post-accounts-head span { color: var(--dash-muted); font-size: 13px; }
+.post-platform { display: flex; flex-direction: column; }
+.post-platform-head { display: flex; align-items: center; gap: 8px; min-height: 28px; color: var(--dash-muted); font-size: 13px; }
+.post-platform-head svg { width: 14px; height: 14px; flex-shrink: 0; }
+.post-platform-head small { margin-left: auto; font-size: 13px; }
+.post-account { display: flex; align-items: center; gap: 10px; min-height: 38px; margin: 0 -8px; padding: 0 8px; border-radius: 8px; cursor: pointer; }
+.post-account:hover { background: var(--dash-tile); }
+.post-account > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-account small { color: var(--dash-muted); font-size: 13px; white-space: nowrap; }
+.post-account[data-disabled] { cursor: default; color: var(--dash-muted); }
+.post-account[data-disabled]:hover { background: transparent; }
+.post-dialog [data-slot=checkbox] { width: 18px; height: 18px; border-radius: 5px; }
+.post-dialog [data-slot=checkbox][data-state=checked] { border-color: var(--dash-text); background: var(--dash-text); color: var(--dash-page); }
+.post-platform .post-note { padding: 4px 0 6px; font-size: 13px; }
+.post-connect { align-self: flex-start; }
+
+.post-field { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.post-field > label, .post-own > label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.post-field > label small { color: var(--dash-muted); font-size: 13px; font-weight: 400; }
+.post-dialog :is([data-slot=textarea], [data-slot=input]) { border: 1px solid var(--dash-border); border-radius: 10px; background: #FFFFFF08; color: var(--dash-text); font-size: 14px; }
+.post-dialog [data-slot=textarea] { min-height: 112px; max-height: 220px; padding: 12px; line-height: 1.5; resize: none; }
+.post-dialog [data-slot=input] { height: 40px; padding: 0 12px; }
+.post-field-note { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; color: var(--dash-muted); font-size: 13px; line-height: 1.5; }
+.post-quiet[data-slot=button] { height: 28px; padding: 0 8px; border-radius: 8px; color: var(--dash-text); font-size: 13px; font-weight: 500; }
+.post-quiet[data-slot=button]:hover, .post-quiet[data-slot=button][aria-expanded=true] { background: var(--dash-pill); color: var(--dash-text); }
+.post-own { display: flex; flex-direction: column; gap: 6px; }
+.post-own > label { color: var(--dash-text-soft); font-size: 13px; font-weight: 400; }
+.post-own > label svg { width: 13px; height: 13px; color: var(--dash-muted); }
+.post-dialog .post-own [data-slot=textarea] { min-height: 64px; }
+/* The date and time field: the whole field opens the browser's picker; an empty one reads as a prompt. */
+.post-when { position: relative; display: flex; align-items: center; }
+.post-when > svg { position: absolute; left: 12px; width: 16px; height: 16px; color: var(--dash-muted); pointer-events: none; }
+.post-when > span { position: absolute; left: 38px; color: var(--dash-muted); pointer-events: none; display: none; }
+.post-dialog .post-when [data-slot=input] { padding-left: 38px; color-scheme: dark; cursor: pointer; }
+.post-when [data-slot=input]::-webkit-calendar-picker-indicator { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; opacity: 0; cursor: pointer; }
+.post-when[data-empty]:not(:focus-within) [data-slot=input] { color: transparent; }
+.post-when[data-empty]:not(:focus-within) > span { display: block; }
+
+.post-links { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.post-links li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+.post-links a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
+.post-links-all { align-self: flex-start; }
+
+@media (max-width: 700px) {
+  .post-dialog-body { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px; }
+  .post-dialog-head { padding-left: 16px; }
+  .post-dialog-foot { padding: 12px 16px; }
+}

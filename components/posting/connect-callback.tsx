@@ -3,13 +3,11 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAction, useConvexAuth } from 'convex/react';
-import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { userError } from '@/lib/user-error';
-import { WorkspaceNav } from '@/components/workspace/workspace-nav';
+import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { Button } from '@/components/ui/button';
-import '@/components/workspace/workspace-pages.css';
-import './posting.css';
+import '@/components/dashboard/dash-list.css';
 
 // A code can be exchanged once; development renders effects twice, so each state is sent a single time.
 const sent = new Set<string>();
@@ -27,10 +25,10 @@ export function ConnectCallback({ code, state, refused }: { code?: string; state
       else setError(result.error ?? 'Could not connect this account.');
     }, reason => setError(userError(reason, 'Could not connect this account.')));
   }, [invalid, isAuthenticated, code, state, finishConnect, router]);
-  return <div className="workspace-page workspace-profile-page">
-    <WorkspaceNav title="Connected accounts" active="accounts" />
-    <main className="workspace-profile-content"><div className="workspace-empty-state" role={error ? 'alert' : 'status'}>
-      {error ? <><h2>This account was not connected</h2><p>{error}</p><Button asChild variant="outline" size="md"><Link href="/accounts">Back to connected accounts</Link></Button></> : <><LoaderCircle size={20} className="animate-spin" /><p>Connecting your account…</p></>}
-    </div></main>
+  return <div className="dash-page">
+    <DashboardNavbar title="Connected accounts" />
+    <main className="dash-content"><div className="dash-column"><div className="dash-empty" role={error ? 'alert' : 'status'}>
+      {error ? <><h2>This account was not connected</h2><p>{error}</p><Button asChild variant="soft" className="mt-3"><Link href="/accounts">Back to connected accounts</Link></Button></> : <p>Connecting your account…</p>}
+    </div></div></main>
   </div>;
 }
