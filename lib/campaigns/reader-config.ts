@@ -20,8 +20,14 @@ export const READ_BATCH = 8;
 export const DRAIN_LEASE_MS = 3 * 60_000;
 /** Tries per page before it waits for the next cycle. */
 export const MAX_PAGE_ATTEMPTS = 3;
-/** Failures in a row (HTTP errors, network errors, unreadable pages) that stop the run. */
+/** Failures in a row (HTTP errors, 429s, network errors, a bad sitemap) that stop the run. */
 export const MAX_CONSECUTIVE_FAILURES = 5;
+/**
+ * Pages that could not be understood or stored, counted up by one for each and down by one for each campaign
+ * read and stored. Reaching this stops the run: it takes most pages failing (a block page, a changed page
+ * format), which gets there within about ten requests. A minority of odd pages among good ones never does.
+ */
+export const MAX_UNREADABLE_PAGES = 10;
 export const HALT_MS = 6 * 3_600_000;
 export const MIN_BACKOFF_MS = 30_000;
 export const MAX_BACKOFF_MS = 30 * 60_000;
