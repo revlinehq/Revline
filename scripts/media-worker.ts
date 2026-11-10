@@ -1,6 +1,7 @@
 import type { Id } from '../convex/_generated/dataModel';
 import { ConvexHttpClient, ConvexClient } from 'convex/browser';
 import { startMediaWorker } from '../lib/server/media-worker-loop';
+import { videoImporter } from '../lib/server/import-video-link';
 import { localWorkerCapabilities } from '../lib/server/local-worker-capabilities';
 
 // Local development worker: the shared media loop with readable log lines.
@@ -32,6 +33,7 @@ const worker = startMediaWorker({
 });
 const paused = process.env.MEDIA_WORKER_PAUSED === 'true' || !capabilities.media;
 console.log(`Revline media worker ready (${slots} slots${paused ? ', paused: no tasks will be claimed' : ''}).`);
+void videoImporter().then(({ version }) => console.log(`Video-link importer: yt-dlp ${version}.`));
 const pausedTimer = paused ? setInterval(() => {}, 60_000) : undefined;
 const lifetime = paused ? new Promise<void>(resolve => { if (shutdown.signal.aborted) resolve(); else shutdown.signal.addEventListener('abort', () => resolve(), { once: true }); }) : worker.done;
 void lifetime.catch(() => { console.error('Media worker stopped unexpectedly.'); process.exitCode = 1; }).finally(() => { clearInterval(pausedTimer); return subscriptions.close(); });

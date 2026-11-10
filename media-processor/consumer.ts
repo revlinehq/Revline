@@ -3,6 +3,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { ConvexClient, ConvexHttpClient } from 'convex/browser';
 import { startMediaWorker, type MediaWorkerOptions } from '../lib/server/media-worker-loop';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { videoImporter } from '../lib/server/import-video-link';
 import { api } from '../convex/_generated/api';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -67,6 +68,8 @@ async function main() {
   try {
     await new Promise<void>((resolve, reject) => { server.once('error', reject); server.listen(port, '0.0.0.0', resolve); });
     console.log(JSON.stringify({ event: 'media-ready', slots: concurrency }));
+    // Link imports depend on a current yt-dlp; show which one this worker runs.
+    if (process.env.YT_DLP_PATH && process.env.MEDIA_RENDERS_ONLY !== 'true') void videoImporter().then(({ version, pythonPath }) => console.log(JSON.stringify({ event: 'video-importer-ready', ytDlp: version, source: pythonPath ? 'updated' : 'image' })));
     await worker.done;
   } finally {
     clearInterval(idleTimer);

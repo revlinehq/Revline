@@ -1,3 +1,8 @@
+/** How long one model call may stay silent before it is ended: no first output, or no further output mid-answer.
+ * Without it a provider stream that died quietly left the turn "running" for as long as the runner's heartbeat lived. */
+export const MODEL_SILENCE_LIMITS = { firstChunkMs: 8 * 60_000, chunkMs: 5 * 60_000 } as const;
+const SILENT_MODEL = /\b(?:First chunk|Chunk) timeout of (\d+)ms exceeded/;
+
 /** Safe recovery text for provider failures, without exposing request bodies or credentials. */
 export function assistantFailureReason(error: unknown, provider: 'anthropic' | 'gateway' | 'openai' = 'anthropic'): string | null {
   const name = provider === 'openai' ? 'OpenAI' : provider === 'gateway' ? 'The AI Gateway' : 'Claude';
@@ -41,6 +46,8 @@ export function providerErrorText(error: unknown, provider: 'anthropic' | 'gatew
     if (!detail && typeof item.message === 'string') detail = item.message;
     inspect(item.lastError, depth + 1); inspect(item.cause, depth + 1);
   })(error, 0);
+  const silent = SILENT_MODEL.exec(detail);
+  if (silent) return `${name} stopped responding for ${Math.round(Number(silent[1]) / 60_000)} minutes, so this step was ended. Your saved edits remain.`;
   detail = (said || detail).replace(/\b(?:AIza[\w-]{20,}|sk-[\w-]{12,}|(?:Bearer|key=)\s*[\w.-]{12,})/g, '[redacted]').replace(/\s+/g, ' ').trim();
   if (!detail) return null;
   const text = detail.length > 300 ? `${detail.slice(0, 300)}…` : detail;

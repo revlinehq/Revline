@@ -206,8 +206,14 @@ export function unresolvedToolFailureIds(steps: ToolSteps) {
   return new Set(unresolvedEdits(steps).flatMap(([, failure]) => failure.ids));
 }
 
+/** A refusal that says it spent no attempt (finish waiting on frames the agent has not viewed yet) asks for another
+ * step first; it is not the same command failing again. Step limits still bound a turn that never does that step. */
+function withoutFreeRefusals(steps: ToolSteps): ToolSteps {
+  return steps.map(step => ({ content: step.content.filter(value => { const part = record(value); return part.type !== 'tool-result' || outputValue(part.output).attemptRecorded !== false; }) }));
+}
+
 export function hasRepeatedToolFailures(steps: ToolSteps) {
-  return [...unresolvedFailures(steps).values()].some(failure => failure.count >= 3);
+  return [...unresolvedFailures(withoutFreeRefusals(steps)).values()].some(failure => failure.count >= 3);
 }
 
 export type RenderReviewRequirements = {
@@ -329,5 +335,32 @@ export class AssistantToolRetryError extends Error {
   constructor() {
     super('Stopped after the same tool command failed three times. Previously saved edits remain; inspect the current timeline before continuing.');
     this.name = 'AssistantToolRetryError';
+  }
+}
+
+/** How many steps in a row may repeat the same read with the same answer before the turn stops. */
+export const STALLED_READ_STEPS = 6;
+
+/** The trailing steps made only the same passive read, with the same input and the same answer, and nothing else.
+ * A read that is still pending (a frame read or an import being polled) is waiting, not stalling. */
+export function hasStalledReads(steps: ToolSteps, limit = STALLED_READ_STEPS) {
+  let signature: string | undefined, run = 0;
+  for (let index = steps.length - 1; index >= 0 && run < limit; index--) {
+    const parts = steps[index].content.map(record), calls = parts.filter(part => part.type === 'tool-call'), results = parts.filter(part => part.type === 'tool-result' && !part.preliminary);
+    if (!calls.length || results.length !== calls.length || parts.some(part => part.type === 'tool-error') || calls.some(call => !isPassiveRead(call.toolName))) break;
+    const outputs = results.map(result => outputValue(result.output));
+    if (outputs.some(output => output.success === false || output.pending === true || output.nextAction !== undefined || ['queued', 'running', 'pending', 'processing', 'retrying'].includes(String(output.status)))) break;
+    const current = stable([calls.map(call => [call.toolName, call.input]), outputs]);
+    if (signature !== undefined && current !== signature) break;
+    signature = current; run++;
+  }
+  return run >= limit;
+}
+
+export class AssistantReadLoopError extends AssistantToolRetryError {
+  constructor() {
+    super();
+    this.message = 'Stopped because the assistant kept re-reading the project without changing anything. Previously saved edits remain; send the request again, or say what to change next.';
+    this.name = 'AssistantReadLoopError';
   }
 }
