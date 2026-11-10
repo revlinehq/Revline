@@ -8,6 +8,7 @@ import { ASPECT_RATIOS, type AspectRatio } from './types';
 const NEXT_BRIEF_KEY = 'revline:next-brief';
 const NEXT_ASPECT_RATIO_KEY = 'revline:next-aspect-ratio';
 const NEXT_CLOUD_FOOTAGE_KEY = 'revline:next-cloud-footage';
+const NEXT_LINK_IMPORTS_KEY = 'revline:next-link-imports';
 /** Points at the IndexedDB record holding footage staged before sign-in. */
 export const FOOTAGE_DRAFT_KEY = 'revline:footage-draft';
 const briefKey = (projectId: string) => `revline:brief:${projectId}`;
@@ -46,8 +47,18 @@ export function newProjectCloudFootage(): Id<'assets'>[] | undefined {
 export function saveNewProjectCloudFootage(ids: readonly string[]) {
   if (ids.length) sessionStorage.setItem(NEXT_CLOUD_FOOTAGE_KEY, JSON.stringify(ids)); else sessionStorage.removeItem(NEXT_CLOUD_FOOTAGE_KEY);
 }
+/** Link-imported footage waits in a holding project until the edit starts: asset id -> that project's id. */
+export function newProjectLinkImports(): Record<string, Id<'projects'>> {
+  const saved: unknown = JSON.parse(sessionStorage.getItem(NEXT_LINK_IMPORTS_KEY) ?? '{}');
+  const valid = (id: unknown) => typeof id === 'string' && /^[a-z0-9]{32}$/.test(id);
+  return saved && typeof saved === 'object' && !Array.isArray(saved) && Object.entries(saved).every(([asset, project]) => valid(asset) && valid(project)) ? saved as Record<string, Id<'projects'>> : {};
+}
+export function saveNewProjectLinkImports(holders: Record<string, string>) {
+  if (Object.keys(holders).length) sessionStorage.setItem(NEXT_LINK_IMPORTS_KEY, JSON.stringify(holders)); else sessionStorage.removeItem(NEXT_LINK_IMPORTS_KEY);
+}
 /** A project took the brief and footage; the chosen format stays for the next one. */
 export function clearNewProjectSources() {
+  sessionStorage.removeItem(NEXT_LINK_IMPORTS_KEY);
   sessionStorage.removeItem(NEXT_BRIEF_KEY);
   sessionStorage.removeItem(NEXT_CLOUD_FOOTAGE_KEY);
 }
