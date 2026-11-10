@@ -1,3 +1,6 @@
+## 2026-11-10
+- Docs: audit of why the in-app editor agent fails where MCP agents succeed (`docs/audits/2026-11-10-platform-agent-failures.md`), with 15 ranked causes, the tool-withholding and draft rules, default recommendations and how the agent should see video. Why: the founder asked what still fails on the platform when MCP is fine.
+
 ## 2026-11-09
 - Editor agent: a length the user asks for ("40-50 seconds", "under 60 s") is stored on the task and `finish` fails with "Requested length 40–50 s; the timeline is 53.1 s" when the cut misses it. Why: the founder asked for 40 to 50 s, got about 53 s, and no check noticed; nothing recorded a requested length before.
 - Editor agent: `finish` stays callable for the whole request and a passed check supersedes earlier failed steps the agent worked around; before, any failed step that was replaced by another tool (a deleted caption, a rebuilt cut) withheld `finish` until the turn died with `AI_NoSuchToolError`. A failed check now says how many remain. Why: prod reports #249 and #248 from the founder's reel session.
