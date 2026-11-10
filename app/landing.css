@@ -34,8 +34,9 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-heading{display:flex;flex-direction:column;align-items:center;gap:14px;max-width:100%;text-align:center}
 .landing-heading h2{font:600 48px/1.1 var(--l-head);letter-spacing:-.035em;color:#fff;text-wrap:balance}
 .landing-heading p{font-size:18px;line-height:1.5;color:var(--l-fg-2);text-wrap:balance}
-.landing-shot{overflow:hidden;border:1px solid var(--l-border);border-radius:16px;background:#151515}
-.landing-shot img{display:block;width:100%;height:auto}
+/* A screenshot sits in a lighter frame so its dark page does not melt into the landing background. */
+.landing-shot{padding:10px;border:1px solid var(--l-border);border-radius:24px;background:var(--l-bg-subtle)}
+.landing-shot img{display:block;width:100%;height:auto;border:1px solid var(--l-border);border-radius:14px}
 
 /* Top bar */
 .landing-nav{position:sticky;top:0;z-index:40;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-inline:max(var(--l-gutter),calc((100% - var(--l-content))/2));border-bottom:1px solid var(--l-border);background:#111;font-family:var(--l-body);color:#fff}
@@ -61,8 +62,10 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-step p{font-size:16px;line-height:1.4;color:var(--l-fg-2)}
 
 /* Product blocks: copy and screenshot side by side, the middle block mirrored. */
-.landing-product{display:flex;flex-direction:column;gap:140px;padding-bottom:140px}
-.landing-product-block{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:60px}
+.landing-product{display:flex;flex-direction:column;gap:24px;padding-bottom:140px}
+/* Each block is a card; its screenshot is the darker card nested inside. */
+.landing-product-block{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:60px;padding:48px;background:var(--l-bg-subtle);border:1px solid var(--l-border);border-radius:28px}
+.landing-product-block .landing-shot{padding:0;border:0;border-radius:14px;background:none}
 .landing-product-block:nth-child(even){grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
 .landing-product-block:nth-child(even) .landing-product-copy{order:2}
 .landing-product-copy{display:flex;flex-direction:column;align-items:flex-start}
@@ -127,7 +130,7 @@ html:has(main.landing){scroll-behavior:auto}
   .landing-hero h1{font-size:72px}
   .landing-product,.landing-how,.landing-pricing,.landing-final{padding-bottom:104px}
   .landing-faq{padding-bottom:112px}
-  .landing-product{gap:88px}
+  .landing-product{gap:20px}
   .landing-product-block,.landing-product-block:nth-child(even){grid-template-columns:minmax(0,1fr);gap:32px}
   .landing-product-block:nth-child(even) .landing-product-copy{order:0}
   .landing-product-copy{max-width:560px}
@@ -143,11 +146,14 @@ html:has(main.landing){scroll-behavior:auto}
   .landing-hero-copy{gap:20px}
   .landing-hero h1{font-size:46px}
   .landing-hero-copy>p{font-size:17px;text-wrap:balance}
-  .landing-shot{border-radius:10px}
+  .landing-shot{padding:6px;border-radius:16px}
+  .landing-shot img{border-radius:10px}
+  .landing-product-block{padding:20px;border-radius:20px}
+  .landing-product-block .landing-shot{border-radius:10px}
   .landing-how{gap:36px}
   .landing-steps{grid-template-columns:minmax(0,1fr)}
   .landing-product,.landing-how,.landing-pricing,.landing-final,.landing-faq{padding-bottom:80px}
-  .landing-product{gap:64px}
+  .landing-product{gap:16px}
   .landing-product-block,.landing-product-block:nth-child(even){gap:24px}
   .landing-product-copy h2{font-size:28px}
   .landing-product-copy p{font-size:16px}
