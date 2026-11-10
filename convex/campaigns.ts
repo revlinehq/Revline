@@ -20,6 +20,13 @@ export const get = query({ args: { campaignId: v.id('campaigns') }, returns: v.u
   return campaign ? viewOf(campaign) : null;
 } });
 
+/** When the reader last stored a campaign page, for "updated 5 min ago". Null when it has never run. */
+export const lastUpdated = query({ args: {}, returns: v.union(v.number(), v.null()), handler: async ctx => {
+  await requireOwner(ctx);
+  const reader = await ctx.db.query('campaignReader').withIndex('by_name', q => q.eq('name', 'reader')).unique();
+  return reader?.lastReadAt ?? null;
+} });
+
 /** The content types, categories and platforms stored campaigns use, for search filters. */
 export const facets = query({ args: {}, returns: v.object({ contentTypes: v.array(v.object({ id: v.string(), name: v.string() })), categories: v.array(v.object({ id: v.string(), name: v.string() })), platforms: v.array(v.string()) }), handler: async ctx => {
   await requireOwner(ctx);

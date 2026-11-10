@@ -36,6 +36,8 @@ body:has([data-slot=sidebar][data-mobile=true]) [data-slot=sheet-overlay] { anim
 
 .dash-navbar { position: sticky; top: 0; z-index: 30; display: flex; align-items: center; gap: 16px; height: var(--dash-navbar-height); padding: 0 var(--dash-gutter); flex-shrink: 0; border-bottom: 1px solid var(--dash-divider); background: var(--dash-page); color: var(--dash-text); }
 .dash-navbar-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; line-height: 1.3; }
+.dash-navbar-back[data-slot=button] { padding: 0 16px 0 12px; background: var(--dash-pill-quiet); }
+.dash-navbar-back[data-slot=button]:hover { background: var(--dash-pill); }
 .dash-navbar-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .dash-navbar-menu[data-slot=sidebar-trigger] { display: none; width: 36px; height: 36px; margin-left: -8px; border-radius: 8px; color: var(--dash-text-soft); }
 .dash-bell[data-slot=button] { width: 36px; height: 36px; border-radius: 8px; color: var(--dash-text-soft); }

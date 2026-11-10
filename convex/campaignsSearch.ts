@@ -55,7 +55,10 @@ export const search = action({ args: { text: v.optional(v.string()), ...campaign
     if (!vector) return { order: 'words', campaigns: await ctx.runQuery(internal.campaigns.keyword, { text: wanted, filters, limit }) };
     // Filters are applied after the vector search (rates and lists are not vector-index filters), so ask for many.
     const hits = await ctx.vectorSearch('campaignEmbeddings', 'by_embedding', { vector, limit: 256 });
-    return { order: 'meaning', campaigns: await ctx.runQuery(internal.campaigns.ranked, { hits: hits.map(hit => ({ id: hit._id, score: hit._score })), filters, limit }) };
+    const ranked = await ctx.runQuery(internal.campaigns.ranked, { hits: hits.map(hit => ({ id: hit._id, score: hit._score })), filters, limit });
+    if (ranked.length) return { order: 'meaning', campaigns: ranked };
+    // Campaigns whose embedding is not stored yet (just read, or stored without a key) are still found by their words.
+    return { order: 'words', campaigns: await ctx.runQuery(internal.campaigns.keyword, { text: wanted, filters, limit }) };
   } });
 
 type Match = { status: 'attached'; campaign: CampaignView } | { status: 'choices'; choices: CampaignView[] } | { status: 'none' };
