@@ -1,5 +1,6 @@
 import { ULTRA_OFFERED } from '../../lib/billing/plan';
-import { editorEffortChoiceAllowed } from '../../lib/ai/claude-model';
+import { editorEffortChoiceAllowed, productionEditorModel } from '../../lib/ai/claude-model';
+import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
 import { components } from '../_generated/api';
 import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server';
@@ -55,6 +56,10 @@ export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: s
   if (!billingConfigured()) return false;
   return (await editorSubscriptions(ctx, ownerId)).some(hasPaidEditorSubscriptionTerm);
 }
+
+/** Production edits on one model with no picker: there a paid account's request, saved choice or queued
+ * pin is ignored. Null on every other deployment, which keeps the pickers. Free accounts keep their own model. */
+export const fixedEditorModel = () => incidentDeployment() === 'prod' ? productionEditorModel() : null;
 
 /** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess first: an Ultra trial is not a paid term. */
 export async function canChooseReasoningEffort(ctx: QueryCtx | MutationCtx, ownerId: string) {
