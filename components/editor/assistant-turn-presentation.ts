@@ -9,7 +9,7 @@ export function assistantErrorDetail(value:string|undefined):string {
   if(!value||/^(?:An error occurred[.!]?|Error|Unknown error|This step could not finish[.!]?)$/i.test(value.trim()))return fallback;
   if(/\bTimelineGestureRejection:\s*Overlaps a clip\b/i.test(value))return 'These clips would overlap. This edit was not saved; previously saved edits remain.';
   if(/timeline changed elsewhere|timeline changed while|revision conflict/i.test(value))return 'Your timeline changed while this edit was being prepared. This change was not saved. Previously saved edits remain.';
-  if(/\[CONVEX|ConvexError:|Request ID:|Server Error|\bUncaught\b/.test(value))return fallback;
+  if(/\[CONVEX|ConvexError:|Request ID:|Server Error|\bUncaught\b|\bAI_\w+Error\b|unavailable tool/.test(value))return fallback;
   return userErrorMessage(new Error(value),fallback);
 }
 

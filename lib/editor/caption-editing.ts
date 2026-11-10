@@ -58,7 +58,9 @@ export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{sta
   if(![requestedStart,requestedEnd].every(Number.isFinite)||requestedStart<0||requestedEnd<0)throw new Error('Caption times must be finite and nonnegative.');
   const start=Math.round(requestedStart*timeline.fps)/timeline.fps,end=Math.round(requestedEnd*timeline.fps)/timeline.fps,duration=end-start;
   if(duration<1/timeline.fps-1e-7)throw new Error('A caption must last at least one frame.');
-  if(timeline.clips.some(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7))throw new Error('The caption range overlaps another clip on its V track.');
+  const blocker=timeline.clips.find(other=>other.id!==clip.id&&other.kind!=='audio'&&other.kind!=='effect'&&trackOf(other)===trackOf(clip)&&other.start<end-1e-7&&start<other.start+other.duration-1e-7);
+  // Name the neighbour and its range: the fix is to retime it first, and the caller cannot guess which clip it is.
+  if(blocker)throw new Error(`The caption range overlaps another clip on its V track. ${blocker.kind==='caption'?'Caption':'Clip'} ${blocker.id}${blocker.text?` ${JSON.stringify(blocker.text.slice(0,60))}`:''} occupies ${blocker.start.toFixed(2)}–${(blocker.start+blocker.duration).toFixed(2)} s. Retime that clip first, or keep this caption outside it.`);
   const next={...clip,...offsetClipMotion(clip,start-clip.start),start,duration};validateClipEffects(next);
   return {...timeline,clips:timeline.clips.map(item=>item.id===clipId?next:item)};
 }
