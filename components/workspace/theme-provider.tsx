@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { isDarkRoute } from '@/lib/workspace-routes';
 
-/** Workspace pages are always dark; the landing page and sign-in keep their own light design. */
+/** Every page is dark except sign-in and sign-up, which keep their own light design. */
 export function WorkspaceThemeProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   useEffect(() => {
