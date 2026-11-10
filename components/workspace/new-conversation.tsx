@@ -42,6 +42,9 @@ import './new-conversation.css';
 
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
+/** Recent projects on the start page, in one page; older ones are under "See all chats". */
+const RECENT_PROJECTS = 20;
+
 export function NewConversation() {
   const router = useRouter();
   const convex = useConvex();
@@ -89,7 +92,7 @@ export function NewConversation() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = startingBlank || sendAfterImport || processing !== null && processing.phase !== 'error';
-  const { chats: workspaceChats, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
+  const { chats: workspaceChats, loading: projectsLoading } = useWorkspaceChats(false, !processing, RECENT_PROJECTS);
   const holderIds: string[] = [...Object.values(linkHolders), ...(linkImport ? [linkImport.projectId] : [])];
   const recentProjects = workspaceChats.filter(project => !holderIds.includes(project.id));
   const showRecentProjects = projectsLoading || recentProjects.length > 0;

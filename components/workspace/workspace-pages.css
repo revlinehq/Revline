@@ -33,6 +33,7 @@ html[data-workspace-theme="dark"] {
 .workspace-nav-save { display:flex; align-items:center; gap:5px; color:var(--ws-muted); font-size:12px; }
 .workspace-menu { width:auto; padding:8px; border:1px solid var(--ws-border); border-radius:14px; background:var(--ws-surface); color:var(--ws-text); box-shadow:0 6px 24px #00000014; }
 .workspace-history-menu { width:min(312px,calc(100vw - 24px)); }
+.workspace-menu-chats { max-height:min(300px,40dvh); overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--ws-border) transparent; }
 .workspace-account-menu { width:min(280px,calc(100vw - 24px)); }
 .workspace-menu-item { display:flex; align-items:center; gap:10px; min-height:40px; padding:0 10px; border-radius:8px; color:var(--ws-text); font-size:13px; cursor:pointer; }
 .workspace-menu-item[data-highlighted],.workspace-menu-chat[data-highlighted] { background:var(--ws-hover); color:var(--ws-text); }
