@@ -48,7 +48,7 @@ function toolChainRows(steps: ChatTool[]): Row[] {
   return rows.map(row => row.count > 1 && !row.args && row.span ? { ...row, args: `${seconds(row.span[0])}–${seconds(row.span[1])}` } : row);
 }
 
-/** What a step rendered (frames, a blueprint render and its diff), small under the step; click for full size. */
+/** What a step rendered (frames), small under the step; click for full size. */
 function StepImages({ images }: { images: { label: string; src: string }[] }) {
   const [open, setOpen] = useState<{ label: string; src: string } | null>(null);
   return <div className="tool-chain-images">

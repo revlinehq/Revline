@@ -1,6 +1,6 @@
 ---
 name: revline
-description: Edit videos with Revline from Claude Code. Use when the user asks to edit, cut, trim, caption, subtitle, reframe (9:16, 1:1, 16:9), clip, add motion graphics or B-roll to, or export a video or recording, or mentions Revline. Covers connecting the Revline MCP server, uploading local footage, running an edit task to completion and handing back the editor link.
+description: Edit videos with Revline from Claude Code. Use when the user asks to edit, cut, trim, caption, subtitle, reframe (9:16, 1:1, 16:9), clip, add titles or B-roll to, or export a video or recording, or mentions Revline. Covers connecting the Revline MCP server, uploading local footage, running an edit task to completion and handing back the editor link.
 ---
 
 # Revline video editing

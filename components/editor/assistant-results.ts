@@ -116,7 +116,7 @@ export function liveActivity(replies: readonly ChatMessage[]): { label: string; 
   return { label: toolBehavior(step.name)?.label?.[0] ?? 'Running a step' };
 }
 
-/** Images a step returned (frames, blueprint renders and diffs), from its raw output or the content sent to the model. */
+/** Images a step returned (frames), from its raw output or the content sent to the model. */
 export function toolImages(step: ChatTool): { label: string; src: string }[] {
   const output = step.output, base64 = (value: unknown): value is string => typeof value === 'string' && value.length > 100 && /^[A-Za-z0-9+/]+=*$/.test(value.slice(0, 200));
   if (!output) return [];

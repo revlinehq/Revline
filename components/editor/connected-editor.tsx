@@ -327,12 +327,10 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
       const files=await takeFiles();
       if(files.length)await handleUpload(files,{requireAll:true});
       await waitForSave();
-      // A reference to recreate stays off the timeline; the brief goes out with it attached.
-      const {prompt,reference}=openingBrief(projectId);
-      const references=reference?(media??[]).filter(asset=>asset.kind==='video'||asset.kind==='image').map(asset=>asset._id as Id<'assets'>):[];
+      const {prompt}=openingBrief(projectId);
       // A project started from a prompt has no footage; its brief goes out as the first request.
       const blank=!files.length&&!(media??[]).length;
-      if(prompt&&(timelineRef.current.clips.length||reference||blank)&&!saves.busy){await sendRequest(prompt,{...openingRequestOptions(projectId,{models:EDITOR_MODELS.map(model=>model.id),efforts:EDITOR_REASONING_EFFORTS}),...(references.length?{attachedAssetIds:references}:{})});clearOpeningBrief(projectId);}
+      if(prompt&&(timelineRef.current.clips.length||blank)&&!saves.busy){await sendRequest(prompt,{...openingRequestOptions(projectId,{models:EDITOR_MODELS.map(model=>model.id),efforts:EDITOR_REASONING_EFFORTS})});clearOpeningBrief(projectId);}
       clearOpeningRequestOptions(projectId);
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);

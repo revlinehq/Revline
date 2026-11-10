@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { blogDate, blogPosts, readingMinutes } from '@/lib/blog';
 
 const title = 'Video editing guides | Revline Blog';
-const description = 'Practical guides to podcast clips, readable captions and reference video recreation, with workflows you can try in Revline.';
+const description = 'Practical guides to podcast clips and readable captions, with workflows you can try in Revline.';
 export const metadata: Metadata = {
   title, description, alternates: { canonical: '/blog', types: { 'application/rss+xml': 'https://tryrevline.com/blog/feed.xml' } },
   openGraph: { title, description, url: '/blog', type: 'website', images: ['/og-revline-v3.png'] },

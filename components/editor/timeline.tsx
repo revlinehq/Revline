@@ -15,7 +15,7 @@ import { AudioWaveform } from './audio-waveform';
 import { useEditorState, useEditorStore, usePausedPlaybackTime } from './editor-state';
 import { setRipplePreference } from '@/lib/editor/store';
 import { paintPlayhead, useTimelinePlayhead, useEdgeAutoScroll } from './use-timeline-playhead';
-import { deriveTrackCounts, dimensions, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, TRANSITION_PRESETS, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
+import { deriveTrackCounts, layerGroup, trackOf, clipColor, timelineDuration, formatTime, maxTrackCount, TRANSITION_PRESETS, type Timeline, type MediaAsset, type Clip, type LayerGroup, type TimelineMarker } from '@/lib/editor/types';
 import { isSectionMarker, moveTimelineMarker, removeTimelineMarker } from '@/lib/editor/timeline-markers';
 import { closeFootageGaps } from '@/lib/editor/close-gaps';
 import { mergeSplitClips } from '@/lib/editor/merge-clips';
