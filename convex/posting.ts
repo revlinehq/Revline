@@ -367,7 +367,12 @@ export const settle = internalMutation({
     else {
       const error = outcome.error.slice(0, ERROR_LIMIT) || 'The platform refused this post.';
       // At most MAX_ATTEMPTS tries, and only for errors the adapter marked retryable.
-      if (outcome.retryable && post.attempts < MAX_ATTEMPTS) await ctx.db.patch(postId, { status: 'scheduled', error, dueAt: now + post.attempts * RETRY_DELAY_MS, platformJobId: undefined, updatedAt: now });
+      if (outcome.retryable && post.attempts < MAX_ATTEMPTS) {
+        const dueAt = now + post.attempts * RETRY_DELAY_MS;
+        await ctx.db.patch(postId, { status: 'scheduled', error, dueAt, platformJobId: undefined, updatedAt: now });
+        // Retry on time rather than at the first tick after it; the tick stays as the safety net.
+        await ctx.scheduler.runAt(dueAt + 1000, internal.postingActions.runPost, { postId });
+      }
       else await ctx.db.patch(postId, { status: 'failed', error, updatedAt: now });
     }
     return null;
