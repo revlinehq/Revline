@@ -20,7 +20,9 @@ import {
 import {
   clipCheckResult,
   checkClipData,
+  retainedFootage,
   timelineFingerprint,
+  type RetainedFootage,
 } from "../lib/media-analysis/clip-check";
 import {
   defaultClipCount,
@@ -360,7 +362,7 @@ export const review = internalMutation({
       const grounded = moments.filter((_, index) => !problems.some(p => p.index === index));
       if (!grounded.length) return { success: false, saved: false, unresolved,
         ...(unavailable ? { geminiUnavailableReason: unavailable } : {}),
-        next: 'No spoken or video-observed moment remains, and stills, cuts or commentary cannot prove action. Register transcript-grounded spoken moments, or record planClips accepted:[] with a shortfallReason naming these unresolved visual moments. Nothing was replaced.' };
+        next: 'No spoken or video-observed moment remains, and stills, cuts or commentary cannot prove action. Register transcript-grounded spoken moments, or stop and tell the user no moment could be grounded, naming these unresolved visual moments; finishClipping cannot pass with zero clips. Nothing was replaced.' };
       const candidates = rankHighlights(
         { ...tracks, judge: "fallback", moments: grounded },
         source.analysis?.transcript,
@@ -387,7 +389,7 @@ export const review = internalMutation({
         candidates: candidates.slice(0, 10),
         geminiUnavailableReason: unavailable,
         ...(unresolved.length ? { unresolved } : {}),
-        next: "This found call replaced the candidate set. Use only these returned IDs and suggested start/end ranges; another found call must include the complete replacement set. Accept or drop each reviewed ID with planClips, then build the accepted tabs and call finishClipping and finish directly. Heavy QA is optional." +
+        next: "This found call replaced the candidate set. Use only these returned IDs and suggested start/end ranges; another found call must include the complete replacement set. Accept or drop each reviewed ID with planClips, then build the accepted tabs and call finishClipping and finish directly. Heavy QA is optional. A requested montage or trailer short is one tab cutting several ranges of one moment to 15-60 s: build it first, then accept its retained source span (first in to last out) bound by timelineId; its hook and payoff must sit in retained footage." +
           (unresolved.length ? " Unresolved visual moments were left out for lack of a video observation; the final message lists them. Never present them as clips." : ""),
       };
     }
@@ -402,13 +404,27 @@ export const review = internalMutation({
       throw new ConvexError(
         "Each accepted clip needs its own distinct tab name.",
       );
+    // A choice bound to a built tab is judged by what that tab keeps: its timeline
+    // duration and, for a montage, the retained source span instead of one window.
+    const tabs = tabsOf(project);
+    const footageOf = new Map(
+      (await Promise.all(args.accepted.map(async (choice) => {
+        const tab = tabs.find((t) =>
+          choice.timelineId ? t.id === choice.timelineId : t.name === choice.name,
+        );
+        const timeline = tab && (await storedTabTimeline(ctx, project, tab.id));
+        return timeline ? [[choice.candidateId, retainedFootage(timeline, String(row.assetId))] as const] : [];
+      }))).flat(),
+    );
     const choiceErrors = args.accepted.flatMap(choice => {
       const candidate = candidates.find((c) => c.id === choice.candidateId);
-      const errors = clipChoiceProblems(choice, candidate);
+      const footage = footageOf.get(choice.candidateId);
+      const errors = clipChoiceProblems(choice, candidate, footage);
       if (ids.has(choice.candidateId)) errors.push('Accept each candidate ID only once.');
       ids.add(choice.candidateId);
       return errors.length ? [{ candidateId: choice.candidateId, errors,
-        ...(candidate ? { suggestedRange: { start: candidate.start, end: candidate.end } } : {}) }] : [];
+        ...(candidate ? { suggestedRange: { start: candidate.start, end: candidate.end } } : {}),
+        ...(footage?.ranges.length ? { tab: { duration: footage.duration, retainedSourceRanges: footage.ranges } } : {}) }] : [];
     });
     if (choiceErrors.length) return { success: false, saved: false, errors: choiceErrors,
       candidates: candidates.slice(0, 10).map(({ id, start, end, qualified }) => ({ id, start, end, qualified })),
@@ -520,6 +536,7 @@ export const review = internalMutation({
       discardedTabs,
       accepted: args.accepted,
       dropped: args.dropped,
+      ...(args.accepted.length ? {} : { warning: "No candidate accepted: finishClipping cannot pass with zero clips. Accept a qualified candidate, or stop and tell the user no moment qualified." }),
       next: "Build exactly these populated tabs, preserving source framing unless reframing was requested. Bind their timelineIds by calling planClips again, or use the exact unique tab names. Build the tabs, then finishClipping and finish directly. Cheap data checks run inline; no normalization or heavy check is required.",
     };
   },
@@ -804,6 +821,12 @@ export const completionState = internalQuery({
         checked:boolean;
       }[] = [];
     if (!row.reviewed) errors.push("Review candidates and call planClips.");
+    // Nothing accepted means nothing delivered: a pass here let agents report
+    // "done" with zero tabs and then fail finish. Stop early instead.
+    else if (!row.accepted.length)
+      errors.push(
+        `No candidate was accepted, so no clip was delivered.${row.shortfallReason ? ` Shortfall recorded: ${row.shortfallReason}` : ""} Accept at least one qualified candidate and build its tab, or stop and tell the user that no moment qualified; finishClipping cannot pass with zero clips.`,
+      );
     const sourceRaw = await ctx.db.get(row.assetId);
     const source = sourceRaw ? await hydrateAsset(ctx, sourceRaw) : null;
     const candidates = candidatesOf(row);
@@ -899,7 +922,7 @@ export const completionState = internalQuery({
     const reused=tabs.length-created-changed;
     const passed = !errors.length;
     const message = passed
-      ? `${tabs.length ? `Delivered ${tabs.length} clips${reused?` (${created} new, ${changed} updated, ${reused} reused)`:""}:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}` : "No clips created."}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : !tabs.length ? " No distinct 15-60s moments passed review and the clean-boundary quality bar." : ""}`
+      ? `Delivered ${tabs.length} clips${reused?` (${created} new, ${changed} updated, ${reused} reused)`:""}:\n${tabs.map((t) => `- ${t.name}: source ${t.start.toFixed(2)}-${t.end.toFixed(2)}s, ${t.duration.toFixed(2)}s.`).join("\n")}${row.dropped.length ? `\nDropped after review: ${row.dropped.map((d) => `${candidates.find((c) => c.id === d.candidateId)?.title ?? d.candidateId}: ${d.reason}`).join("; ")}` : ""}`
       : undefined;
     return {
       required: true,

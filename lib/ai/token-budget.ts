@@ -209,9 +209,11 @@ export class AssistantTokenBudget {
     if (this.input + reservedInput > this.limits.inputTokens || this.rawInput+reservedRaw>EDITOR_RAW_INPUT_LIMIT || this.output + reservedOutput > this.limits.outputTokens) throw new AssistantTokenBudgetError('tokens');
     this.input += reservedInput; this.rawInput+=reservedRaw; this.output += reservedOutput;
     let settled = false;
-    return (usage: LanguageModelV4Usage,metadata?:SharedV4ProviderMetadata) => {
+    // Called without usage when the provider call failed before any tokens were reported: the reservation is returned.
+    return (usage?: LanguageModelV4Usage,metadata?:SharedV4ProviderMetadata) => {
       if (settled) return;
       settled = true;
+      if (!usage) { this.input -= reservedInput; this.rawInput -= reservedRaw; this.output -= reservedOutput; return; }
       const input = usage.inputTokens.total;
       const output = usage.outputTokens.total;
       if (!count(input)||!count(output)) { this.blocked = true; return; }
@@ -253,13 +255,17 @@ export class AssistantTokenBudget {
         this.estimateInput(params);
         const counted=countInput?await countInput(params):undefined;
         const settle = this.reserve(params,counted,model);
-        const result = await doGenerate(); settle(result.usage,result.providerMetadata); return result;
+        let result: Awaited<ReturnType<typeof doGenerate>>;
+        try { result = await doGenerate(); } catch (error) { settle(); throw error; }
+        settle(result.usage,result.providerMetadata); return result;
       },
       wrapStream: async ({ params, model, doStream }) => {
         this.estimateInput(params);
         const counted=countInput?await countInput(params):undefined;
         const settle = this.reserve(params,counted,model);
-        const result = await doStream();
+        let result: Awaited<ReturnType<typeof doStream>>;
+        // A rejected request (overload, rate limit) used no tokens; keeping its reservation made the retry look over budget.
+        try { result = await doStream(); } catch (error) { settle(); throw error; }
         return { ...result, stream: result.stream.pipeThrough(new TransformStream({ transform(part, controller) {
           if (part.type === 'finish') settle(part.usage,part.providerMetadata);
           controller.enqueue(part);

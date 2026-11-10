@@ -79,11 +79,15 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     selectedProvider = selection.provider;
     costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort, selection.speedMode ?? 'standard');
     assertEditorModelConfigured(selection);
-    const { project, assets } = await ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId });
+    // Independent reads: one round trip's wait instead of five before the model starts.
+    const [{ project, assets }, memories, brief, currentPrompt, storedLane] = await Promise.all([
+      ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId }),
+      ctx.runQuery(internal.memories.forRun, run),
+      ctx.runQuery(internal.briefs.forRun, run),
+      ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId }),
+      ctx.runQuery(internal.lanes.forRun, { projectId: args.projectId, ownerId: args.ownerId }),
+    ]);
     if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');
-    const memories = await ctx.runQuery(internal.memories.forRun, run), brief = await ctx.runQuery(internal.briefs.forRun, run);
-    const currentPrompt = await ctx.runQuery(internal.assistant.currentPrompt, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId });
-    const storedLane=await ctx.runQuery(internal.lanes.forRun,{projectId:args.projectId,ownerId:args.ownerId});
     const selectionState=initialLaneSelection(args.command,storedLane?.lane,storedLane?.manual);
     const laneScope={ownerId:args.ownerId,projectId:args.projectId,taskId:args.runId};
     await ctx.runMutation(internal.lanes.begin,{...laneScope,...selectionState,laneChosen:true,required:args.command?.name==='clip',...requestChecks(currentPrompt)});

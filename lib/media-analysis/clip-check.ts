@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { sourceTimeAt, timelineTimeAtSource } from "../editor/playback-rate";
+import { sourceEndOf, sourceTimeAt, timelineTimeAtSource } from "../editor/playback-rate";
 import { timelineNormalizationKey } from "../editor/audio-normalization";
 import {
   dimensions,
@@ -82,6 +82,33 @@ function unionGaps(
   return gaps;
 }
 
+/**
+ * The source footage of one asset a tab keeps: visible video clips merged into
+ * source ranges (a split at a cut point or a stacked synchronized copy stays
+ * one range) plus the delivered timeline duration. One range is a contiguous
+ * short; several ranges are a montage cut from more than one stretch.
+ */
+export function retainedFootage(timeline: Timeline, assetId: string) {
+  const epsilon = 1 / timeline.fps + 0.015;
+  const videos = timeline.clips.filter(
+    (c) =>
+      c.kind === "video" &&
+      c.assetId === assetId &&
+      (c.transform?.opacity ?? 1) > 0,
+  );
+  const ranges: { start: number; end: number }[] = [];
+  for (const range of videos
+    .map((c) => ({ start: c.sourceStart, end: sourceEndOf(c) }))
+    .sort((a, b) => a.start - b.start)) {
+    const last = ranges.at(-1);
+    if (last && range.start <= last.end + epsilon)
+      last.end = Math.max(last.end, range.end);
+    else ranges.push(range);
+  }
+  return { duration: timelineDuration(timeline), epsilon, ranges, videos };
+}
+export type RetainedFootage = ReturnType<typeof retainedFootage>;
+
 /** All checks except source decode health use timeline, word, audio and geometry data. */
 export function checkClipData(
   timeline: Timeline,
@@ -91,8 +118,8 @@ export function checkClipData(
   const transcriptOnly = request.reviewMode === "transcript";
   const quality = request.qualityChecks ?? [];
   const framing = quality.includes('framing');
-  const duration = timelineDuration(timeline),
-    epsilon = 1 / timeline.fps + 0.015,
+  const footage = retainedFootage(timeline, request.assetId),
+    { duration, epsilon, videos } = footage,
     checks: ClipCheckResult["checks"] = [],
     warnings: string[] = [];
   const check = (name: string, reasons: string[]) =>
@@ -100,12 +127,12 @@ export function checkClipData(
   const source = assets.find((a) => a._id === request.assetId),
     words = source?.analysis?.transcript?.words ?? [],
     tracks = readHighlights(source?.analysis?.highlights);
-  const videos = timeline.clips.filter(
-    (c) =>
-      c.kind === "video" &&
-      c.assetId === request.assetId &&
-      (c.transform?.opacity ?? 1) > 0,
-  );
+  // A montage keeps the payoff and reaction inside one of its retained ranges;
+  // for a contiguous short that is the usual "ends after the payoff" rule.
+  const retains = (at: number) =>
+    footage.ranges.some(
+      (r) => r.start <= at + epsilon && r.end >= at - epsilon,
+    );
   check(
     "duration",
     duration >= 15 - epsilon && duration <= 60 + epsilon
@@ -124,12 +151,8 @@ export function checkClipData(
           "No populated source video; empty, title-only and unrelated tabs cannot count as a clip.",
         ],
   );
-  const sourceStart = videos.length
-      ? Math.min(...videos.map((c) => c.sourceStart))
-      : NaN,
-    sourceEnd = videos.length
-      ? Math.max(...videos.map((c) => sourceTimeAt(c, c.start + c.duration)))
-      : NaN;
+  const sourceStart = footage.ranges[0]?.start ?? NaN,
+    sourceEnd = footage.ranges.at(-1)?.end ?? NaN;
   check(
     "accepted-range",
     Math.abs(sourceStart - request.start) <= epsilon &&
@@ -160,6 +183,13 @@ export function checkClipData(
       )
     )
       boundary.push("The out point cuts through a word.");
+    // A montage's inner cuts have no pause rule, but they must not split words.
+    const inner = footage.ranges
+      .flatMap((r) => [r.start, r.end])
+      .filter((at) => at !== sourceStart && at !== sourceEnd);
+    for (const at of inner)
+      if (words.some((w) => w.start < at - 0.025 && w.end > at + 0.025))
+        boundary.push(`The cut at source ${at.toFixed(2)}s splits a word.`);
     const first = words.findIndex(
       (w) => w.end > sourceStart + 0.025 && w.start < sourceEnd,
     );
@@ -182,9 +212,9 @@ export function checkClipData(
     warnings.push(
       "No spoken words; boundaries rely on measured audio and reviewed event context.",
     );
-  if (sourceEnd < request.payoffEnd - epsilon)
+  if (videos.length && !retains(request.payoffEnd))
     boundary.push(`The payoff continues until ${request.payoffEnd}s.`);
-  if (sourceEnd < request.reactionEnd - epsilon)
+  if (videos.length && !retains(request.reactionEnd))
     boundary.push(
       `The observed reaction continues until ${request.reactionEnd}s.`,
     );
