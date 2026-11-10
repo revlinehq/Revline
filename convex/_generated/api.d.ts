@@ -28,6 +28,8 @@ import type * as brandKits from "../brandKits.js";
 import type * as brandScrape from "../brandScrape.js";
 import type * as briefs from "../briefs.js";
 import type * as campaigns from "../campaigns.js";
+import type * as campaignsDiscover from "../campaignsDiscover.js";
+import type * as campaignsDiscoverModel from "../campaignsDiscoverModel.js";
 import type * as campaignsModel from "../campaignsModel.js";
 import type * as campaignsReader from "../campaignsReader.js";
 import type * as campaignsReaderActions from "../campaignsReaderActions.js";
@@ -184,6 +186,8 @@ declare const fullApi: ApiFromModules<{
   brandScrape: typeof brandScrape;
   briefs: typeof briefs;
   campaigns: typeof campaigns;
+  campaignsDiscover: typeof campaignsDiscover;
+  campaignsDiscoverModel: typeof campaignsDiscoverModel;
   campaignsModel: typeof campaignsModel;
   campaignsReader: typeof campaignsReader;
   campaignsReaderActions: typeof campaignsReaderActions;

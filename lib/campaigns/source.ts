@@ -11,8 +11,8 @@ const SOURCE_ID = new RegExp(`^${UUID}$`);
 
 export const isSourceId = (value: string) => SOURCE_ID.test(value);
 export const campaignUrl = (sourceId: string) => `${ORIGIN}/c/campaigns/${sourceId}`;
-/** True only for the sitemap and a public campaign page. */
-export const readableUrl = (url: string) => url === SITEMAP_URL || CAMPAIGN_URL.test(url);
+/** True only for the sitemap, the public Discover page and a public campaign page. */
+export const readableUrl = (url: string) => url === SITEMAP_URL || url === `${ORIGIN}/c/discover` || CAMPAIGN_URL.test(url);
 
 /** Campaign ids listed in the sitemap, in order, without repeats. Other URLs in it are ignored. */
 export function campaignIdsFromSitemap(xml: string): string[] {
@@ -178,7 +178,7 @@ function campaignFrom(data: Json, sourceId: string, resolve: (value: string) => 
 }
 
 /** The page's streamed data: every `self.__next_f.push([1,"…"])` payload, unescaped and joined. */
-function flightText(html: string) {
+export function flightText(html: string) {
   let joined = '';
   for (const match of html.matchAll(/self\.__next_f\.push\(\[1,("(?:[^"\\]|\\.)*")\]\)/g)) {
     try { joined += JSON.parse(match[1]) as string; } catch { /* a payload that is not a string literal holds nothing we read */ }

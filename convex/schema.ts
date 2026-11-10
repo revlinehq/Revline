@@ -16,6 +16,7 @@ import { effectPlanValidator, compositionReviewResult } from './lib/effect_plan'
 import { cutoutEffectValidator } from './lib/cutout_effect_validator';
 import { defineSchema, defineTable } from "convex/server";
 import { campaignTables } from './campaignsModel';
+import { campaignDiscoverTables } from './campaignsDiscoverModel';
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { aiCostRecordFields } from './lib/ai_cost';
@@ -458,5 +459,7 @@ export default defineSchema({
   mcpUsage: defineTable({ ownerId: v.string(), windowStart: v.number(), calls: v.number() }).index("by_owner", ["ownerId"]).index("by_windowStart", ["windowStart"]),
   // Public clipping campaigns, their search data, the reader's queue, and users' saved and attached campaigns (convex/campaignsModel.ts).
   ...campaignTables,
+  // What Content Rewards features on its Discover page: the Campaigns page's sections (convex/campaignsDiscover.ts).
+  ...campaignDiscoverTables,
   ...postingTables,
 });

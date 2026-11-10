@@ -1,12 +1,13 @@
 "use node";
-// The only code that makes requests to Content Rewards. It asks for exactly two kinds of URL, the sitemap and
-// the public campaign pages the sitemap lists (lib/campaigns/source.ts `readableUrl`), never /api/ and never
+// The only code that makes requests to Content Rewards. It asks for exactly three kinds of URL, the sitemap,
+// the public Discover page and the public campaign pages (lib/campaigns/source.ts `readableUrl`), never /api/ and never
 // with a session; one request at a time, at most one per second, under an honest User-Agent.
 // It runs only when CAMPAIGN_READER_ENABLED is set.
 import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { internalAction } from './_generated/server';
 import type { ReadOutcome } from './campaignsModel';
+import { DISCOVER_URL, parseDiscoverPage } from '../lib/campaigns/discover';
 import { SITEMAP_URL, campaignIdsFromSitemap, campaignUrl, parseCampaignPage, readableUrl } from '../lib/campaigns/source';
 import { MAX_PAGE_BYTES, MIN_REQUEST_INTERVAL_MS, READER_OFF, READER_USER_AGENT, READ_BATCH, REQUEST_TIMEOUT_MS, readerEnabled } from '../lib/campaigns/reader-config';
 
@@ -53,6 +54,15 @@ export const drain = internalAction({ args: { token: v.string() }, returns: v.nu
     if (wait > 0) await new Promise(resolve => setTimeout(resolve, wait));
     return last = Date.now();
   };
+  // Once an hour, the Discover page, ahead of this batch. Whatever it returns, the batch goes on as claimed.
+  try {
+    if (await ctx.runMutation(internal.campaignsDiscover.claim, { token })) {
+      const requestedAt = await pace();
+      const fetched = await fetchPublic(DISCOVER_URL);
+      const parsed = fetched.ok ? parseDiscoverPage(fetched.body) : undefined;
+      await ctx.runMutation(internal.campaignsDiscover.record, { requestedAt, reading: parsed?.kind === 'sections' ? parsed : { kind: 'failed', reason: parsed?.reason ?? (fetched.ok ? 'unreadable' : fetched.reason) } });
+    }
+  } catch (error) { console.warn(`[campaigns] Discover read not stored: ${error instanceof Error ? error.message : 'unknown error'}`); }
   if (work.sitemap) {
     const requestedAt = await pace();
     const fetched = await fetchPublic(SITEMAP_URL);

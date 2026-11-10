@@ -12,11 +12,11 @@ import {
   MAX_PAGE_ATTEMPTS, MIN_BACKOFF_MS, READER_OFF, SITEMAP_EVERY_MS, SITEMAP_RETRY_MS, readerEnabled,
 } from '../lib/campaigns/reader-config';
 
-async function readerState(ctx: MutationCtx): Promise<Doc<'campaignReader'>> {
+export async function readerState(ctx: MutationCtx): Promise<Doc<'campaignReader'>> {
   const state = await ctx.db.query('campaignReader').withIndex('by_name', q => q.eq('name', 'reader')).unique();
   return state ?? (await ctx.db.get(await ctx.db.insert('campaignReader', { name: 'reader', consecutiveFailures: 0 })))!;
 }
-async function enqueue(ctx: MutationCtx, sourceId: string, dueAt: number) {
+export async function enqueue(ctx: MutationCtx, sourceId: string, dueAt: number) {
   const row = await ctx.db.query('campaignReadQueue').withIndex('by_source', q => q.eq('sourceId', sourceId)).unique();
   if (!row) await ctx.db.insert('campaignReadQueue', { sourceId, dueAt, attempts: 0 });
   else if (row.dueAt > dueAt) await ctx.db.patch(row._id, { dueAt });

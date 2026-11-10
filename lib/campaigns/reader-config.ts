@@ -9,7 +9,7 @@ export function readerEnabled() {
 export const READER_OFF = `[campaigns] Reader is off (${READER_SWITCH} is not set): nothing fetched, nothing queued.`;
 
 /** Says who is asking and where to reach us. No browser disguise. */
-export const READER_USER_AGENT = 'RevlineCampaignReader/1.0 (+https://tryrevline.com; reads public campaign pages listed in the sitemap, at most one request per second)';
+export const READER_USER_AGENT = 'RevlineCampaignReader/1.0 (+https://tryrevline.com; reads the public Discover page and the campaign pages listed in the sitemap, at most one request per second)';
 /** At most one request per second, with a little slack. */
 export const MIN_REQUEST_INTERVAL_MS = 1100;
 export const REQUEST_TIMEOUT_MS = 20_000;
