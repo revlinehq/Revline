@@ -8,11 +8,18 @@ import { MEDIA_LEASE_LOST } from '../../lib/media-analysis/errors';
  *  (Cloudflare, local dev) and MEDIA_WORKER_SECRET_EXPORTS for dedicated export workers. An export
  *  worker can only claim export tasks, so its key never reaches uploads or analysis. */
 type MediaWorkerRole = 'processor' | 'exports';
+/** Compares every character whatever the first mismatch: these checks sit on public functions anyone can call. */
+function sameSecret(given: string, expected: string | undefined) {
+  if (!given || !expected) return false;
+  let difference = given.length ^ expected.length;
+  for (let i = 0; i < expected.length; i++) difference |= given.charCodeAt(i % given.length) ^ expected.charCodeAt(i);
+  return difference === 0;
+}
 export function requireMediaWorker(secret: string): MediaWorkerRole {
-  if (secret && secret === process.env.RENDER_WORKER_SECRET) return 'processor';
+  if (sameSecret(secret, process.env.RENDER_WORKER_SECRET)) return 'processor';
   // Set only while rotating: running containers keep the key they started with until they restart.
-  if (secret && secret === process.env.RENDER_WORKER_SECRET_PREVIOUS) return 'processor';
-  if (secret && secret === process.env.MEDIA_WORKER_SECRET_EXPORTS) return 'exports';
+  if (sameSecret(secret, process.env.RENDER_WORKER_SECRET_PREVIOUS)) return 'processor';
+  if (sameSecret(secret, process.env.MEDIA_WORKER_SECRET_EXPORTS)) return 'exports';
   throw new ConvexError('Media worker authentication required');
 }
 
