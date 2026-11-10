@@ -29,6 +29,7 @@ The reel lane reads a take as a script before cutting: `readScript` (determinist
 Eyes are one shared layer in `lib/ai/eyes` (measured face signals from the media worker's `looks` read, flags, a per-task frame budget, strips of about 480 px frames) with a per-lane policy on `LaneDefinition.eyes`: which spots, which flags, how many frames, what fails `finish`.
 
 - `reel` (enforced): speech edges plus the first and last frame; `checkSpots` measures, shows 3 frames per flagged spot, one extra round of 5, 27 per request; `finish` fails on an unreviewed flagged first or last frame and reports the rest. B-roll: shots with no face, one frame each, at most 6.
+  When no measurement exists the reel check warns ("cut edges could not be measured on this server; not verified") and `finish` passes: `REEL_LOOKS=off` on the Convex deployment switches the looks read off (default on), and a media processor older than the looks read answers with a frame sheet and no face samples, which counts as unmeasured. Looks results are cached under a key carrying `LOOKS_READ_VERSION`, so an old processor's entries are never read back. B-roll detection then reports itself unavailable and keeps wordless shots between saved scene cuts.
 - `clip` (slot): policy declared (clip edges; no gaze rules), not applied by any tool or by `finish`. Its own detectors (cut mid-action, facecam cropped out, black or blurred frame, UI over the subject) are not built.
 - `edit`, `motion`, `recreate`: no policy; their getFrames rules are unchanged and do not go through the frame budget.
 

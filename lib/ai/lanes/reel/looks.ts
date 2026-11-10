@@ -1,4 +1,4 @@
-import { TRANSIENT_FLAGS, describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
+import { LOOKS_UNMEASURED, TRANSIENT_FLAGS, describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
 import { playbackRateOf, sourceEndOf } from '../../../editor/playback-rate';
 import type { Clip, Timeline } from '../../../editor/types';
 import type { Transcript } from '../../../media-analysis/transcript';
@@ -144,7 +144,7 @@ export type SpotsEvidence = { cutKey: string; spots: SpotRecord[]; accepted: { a
 export function reelLookCheck(timeline: Timeline, policy: EyesPolicy | undefined, evidence: SpotsEvidence | undefined, required: boolean): { failures: string[]; warnings: string[] } {
   if (!policy || policy.status !== 'enforced' || !required) return { failures: [], warnings: [] };
   if (!evidence || evidence.cutKey !== cutKey(timeline)) return { failures: ['The reel’s cut edges were not checked for awkward looks, or the cut changed since they were. Call checkSpots: it measures the first frame, the last frame and every speech edge.'], warnings: [] };
-  if (evidence.unavailable) return { failures: [], warnings: [`Cut edges were not checked for awkward looks: ${evidence.unavailable}`] };
+  if (evidence.unavailable) return { failures: [], warnings: [`Awkward looks: ${LOOKS_UNMEASURED} (${evidence.unavailable})`] };
   const open = evidence.spots.filter(spot => spot.status === 'flagged' || spot.status === 'unverified');
   const say = (spot: SpotRecord) => `${spot.first ? 'First frame' : spot.last ? 'Last frame' : `Cut ${spot.side === 'in' ? 'into' : 'out of'} a line`} at ${spot.timeline.toFixed(2)} s (source ${spot.source.toFixed(2)} s, spot ${spot.id}): ${spot.seen.join(', ') || 'flagged'}`;
   const fails = policy.failsFinish === 'first-and-last-frame' ? open.filter(spot => spot.first || spot.last) : [];

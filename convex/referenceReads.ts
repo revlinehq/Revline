@@ -8,10 +8,13 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
 import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceCropKeyframesValidator, referenceReadMode } from './schema';
 import { READ_TOOL_INPUTS } from './lib/reference_reads';
+import { LOOKS_OFF, looksSwitchedOff } from '../lib/ai/eyes';
 
 // The reference-read rows and their lifecycle. The runners that queue a read and wait for the worker are in lib/reference_reads.
 
 export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), recreation: v.optional(v.boolean()), mode: referenceReadMode, color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, recreation, ...args }) => {
+  // Safety valve: REEL_LOOKS=off stops face measurement on this deployment; the reel lane then warns instead of checking.
+  if (args.mode === 'looks' && looksSwitchedOff()) throw new ConvexError(LOOKS_OFF);
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, projectId, ownerId, false);
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;

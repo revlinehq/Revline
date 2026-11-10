@@ -115,7 +115,7 @@ import { retainSourceRanges, retainedSourceWindows, type RetainedRangeSummary } 
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
-import { FrameBudget, lookBaseline } from '../../lib/ai/eyes';
+import { FrameBudget, LOOKS_UNMEASURED, lookBaseline } from '../../lib/ai/eyes';
 import { brollRuns, cutKey, moveEdge, readSpot, reelSpots, spotTimes, type Range, type SpotRecord, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { BEAT_ROLES, beatsToDrop, keptBroll, lineLabel, lineSpeech, linesToRanges, outlineLines, resolveScriptPlan, scriptOutline, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, refineTranscriptWithAudioActivity } from '../../lib/media-analysis/audio-activity';
@@ -705,7 +705,18 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { budget, save: async () => { framesUsed = budget.used; if (taskId) await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'eyesBudget', timelineId, fingerprint: '', input: {}, output: { used: budget.used } } }); } };
   };
   /** Shots of a talking take with no speaker in frame, from one frame a second and the saved shot cuts. */
-  const findBroll = async (asset: (typeof assets)[number], range: Range): Promise<{ shots: Range[]; note?: string }> => {
+  const findBroll = async (asset: (typeof assets)[number], range: Range): Promise<{ shots: Range[]; note?: string; unavailable?: boolean }> => {
+    try { return await measureBroll(asset, range); }
+    catch (error) {
+      if (abortSignal.aborted) throw error;
+      // No face measurement is "unknown", never "no b-roll": shots that saved scene cuts close off inside a wordless
+      // stretch are kept as footage, and the result says detection was unavailable.
+      const words = asset.analysis?.transcript?.words ?? [], wordless = (shot: Range) => !words.some(word => { const middle = (word.start + word.end) / 2; return middle > shot.start && middle < shot.end; });
+      const cut = (asset.analysis?.shots?.shots ?? []).slice(1, -1).map(shot => ({ start: shot.start, end: shot.end })).filter(shot => shot.start >= range.start && shot.end <= range.end && shot.end - shot.start >= .8 && shot.end - shot.start <= 20 && wordless(shot));
+      return { shots: cut, unavailable: true, note: `B-roll detection unavailable (${error instanceof Error ? error.message : 'faces could not be measured'}). ${cut.length ? 'Shots between saved scene cuts with no words in them are kept as footage.' : 'No shot was ruled out as b-roll: if the take has cutaways, look with readFrames before cutting wordless stretches.'}` };
+    }
+  };
+  const measureBroll = async (asset: (typeof assets)[number], range: Range): Promise<{ shots: Range[]; note?: string }> => {
     const span = range.end - range.start, step = Math.max(1, span / 200), times: number[] = [];
     for (let time = range.start + .4; time < range.end; time += step) times.push(Math.round(time * 100) / 100);
     if (asset.kind !== 'video' || times.length < 3) return { shots: [] };
@@ -1793,7 +1804,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       let shots: Range[] = [], brollNote: string | undefined, images: { label: string; data: string; mimeType: string }[] = [], frames: string | undefined;
       try {
         const found = await findBroll(speech.evidence, source); shots = found.shots; brollNote = found.note;
-        if (shots.length) {
+        if (shots.length && !found.unavailable) {
           const { budget, save } = await frameBudget(policy.frames.total), shown = shots.slice(0, Math.min(policy.frames.broll, budget.left));
           if (shown.length) {
             const strip = (await runLooksRead(ctx, run.ownerId, run.projectId, speech.evidence._id, shown.map(shot => Math.round((shot.start + shot.end) / 2 * 100) / 100), shown.length, abortSignal)).strips[0];
@@ -1801,7 +1812,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           }
           frames = budget.report();
         }
-      } catch (error) { if (abortSignal.aborted) throw error; brollNote = `Shots could not be checked for b-roll (${error instanceof Error ? error.message : 'unavailable'}); treat the take as one talking shot.`; }
+      } catch (error) { if (abortSignal.aborted) throw error; brollNote = `${brollNote ? `${brollNote} ` : ''}The b-roll frames could not be shown (${error instanceof Error ? error.message : 'unavailable'}).`; }
       const broll = shots.map(shot => { const over = outline.lines.filter(item => !item.note && item.end > shot.start && item.start < shot.end).map(item => item.n); return { sourceStart: Math.round((shot.start - speech.offset) * 100) / 100, sourceEnd: Math.round((shot.end - speech.offset) * 100) / 100, ...(over.length ? { overLines: over, use: 'cutaway the user placed over these lines; it stays with them' } : { use: 'shot between lines; kept in place by planScript' }) }; });
       const words = (text: string, tail = false) => { const parts = text.split(/\s+/); return parts.length <= 6 ? text : tail ? parts.slice(-6).join(' ') : parts.slice(0, 6).join(' '); };
       const asked = target ? target.min !== undefined && target.max !== undefined ? `${target.min}-${target.max} s` : target.max !== undefined ? `at most ${target.max} s` : `at least ${target.min} s` : undefined;
@@ -1823,8 +1834,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (problems.length) return { saved: false, problems, next: retry };
       const line = (n: number) => outline.lines[n - 1], toClip = (range: { start: number; end: number }) => ({ start: Math.round((range.start - speech.offset) * 1000) / 1000, end: Math.round((range.end - speech.offset) * 1000) / 1000 });
       // Wordless b-roll between kept lines stays where the user placed it, as its own range.
-      let allShots: Range[] = [];
-      try { allShots = (await findBroll(speech.evidence, { start: spans[0].start, end: spans.at(-1)!.end })).shots.filter(shot => spans.some(span => shot.start >= span.start - .1 && shot.end <= span.end + .1)); } catch (error) { if (abortSignal.aborted) throw error; }
+      let allShots: Range[] = [], brollUnavailable: string | undefined;
+      try { const found = await findBroll(speech.evidence, { start: spans[0].start, end: spans.at(-1)!.end }); if (found.unavailable) brollUnavailable = found.note; allShots = found.shots.filter(shot => spans.some(span => shot.start >= span.start - .1 && shot.end <= span.end + .1)); } catch (error) { if (abortSignal.aborted) throw error; }
       const keptShots = keptBroll(outline, kept, allShots);
       // Each kept shot is its own range, so the line ranges around it are split at its edges.
       const withShots = (list: { start: number; end: number }[], shots: Range[]) => [...list.flatMap(range => { let pieces = [range]; for (const shot of shots) pieces = pieces.flatMap(piece => shot.end <= piece.start || shot.start >= piece.end ? [piece] : [{ start: piece.start, end: shot.start }, { start: shot.end, end: piece.end }]); return pieces; }), ...shots].filter(range => range.end - range.start > .04).sort((a, b) => a.start - b.start);
@@ -1858,7 +1869,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { saved: true, about: input.about, opening: lineLabel(line(first)), closing: lineLabel(line(last)), removedTakesAndChatter: takes, droppedBeats: beats.filter(beat => !beat.kept).map(beat => `${beat.role} ${beat.lines}`), estimatedSeconds: estimate.seconds, estimate: estimate.measured ? 'measured speech cleanup applied' : 'upper bound; pauses not yet measured', ...(target ? { requestedLength: target } : {}),
         ...(overBy > 0 ? { note: `Opening and payoff alone are about ${estimate.seconds.toFixed(1)} s, over the requested ${target!.max} s, and nothing else can be dropped. Make this cut and tell the user the actual length; ask what else may go.` } : {}),
         ...(underBy ? { note: `The whole script is about ${estimate.seconds.toFixed(1)} s, under the requested ${target!.min} s. Keep it whole, never pad, and tell the user the actual length.` } : {}),
-        ...(keptShots.length ? { brollKept: keptShots.map(toClip), brollNote: 'These b-roll shots are in the ranges as footage; the cut leaves them whole.' } : {}),
+        ...(keptShots.length ? { brollKept: keptShots.map(toClip), brollNote: 'These b-roll shots are in the ranges as footage; the cut leaves them whole.' } : {}), ...(brollUnavailable ? { brollDetection: brollUnavailable } : {}),
         ranges, next: `Cut once from the full take: retainSourceRanges ${JSON.stringify({ clipId: input.clipId, ranges, tightenSilence: true })}. Pass these ranges unchanged. Then call checkSpots (it measures the first frame, the last frame and every cut edge for awkward looks), then add captions and call finish.` };
     } }),
     checkSpots: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkSpots, description: "Eyes for the cut, after the speech cut and before captions: measures the speaker at the reel's first frame, last frame and every cut edge (face in frame, head turn, eyes down or closed, eyes off camera, leaning or reaching toward the camera, large movement) on the media worker, with no model service. Clean edges cost nothing. For each flagged edge it returns what was measured with SOURCE times, the nearest clean frame inside the pause the edge sits in (never into a word), and one strip of three frames (before, at the cut, after or the suggested frame) to look at, within the lane's frame budget. Then call it again with decisions: {spot, action:'move'} moves that edge to the suggested clean frame (or `to`, SOURCE seconds) and ripples everything after it; {spot, action:'accept', seen} keeps the edge and records what you saw so it is not flagged again. more:[spot] asks once per spot for five more frames to find a clean one. The reel's ending is extended to a short natural tail on its own when the speaker stays presentable after the last word, and never onto a reach for the camera. When the frame budget runs out, apply the measured suggestions and list the spots you could not look at. finish fails on an unreviewed flagged first or last frame and reports the others.", inputSchema: z.object({ decisions: z.array(z.object({ spot: z.string().min(3).max(140), action: z.enum(['move', 'accept']), to: z.number().min(0).optional().describe('SOURCE seconds to move the edge to; defaults to the suggested clean frame.'), seen: z.string().trim().min(3).max(200).optional().describe('What the frames show, in a few words. Required to accept.') }).strict()).max(40).optional(), more: z.array(z.string().min(3).max(140)).max(6).optional() }).strict(), execute: async (_ctx, input) => {
@@ -1929,7 +1940,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (abortSignal.aborted) throw error;
         const unavailable = error instanceof Error ? error.message : 'The media worker could not measure faces.';
         await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'checkSpots', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { cutKey: cutKey(editSession.timeline), spots: [], accepted, rounds, framesUsed: budget.used, unavailable } satisfies SpotsEvidence } });
-        return { ...result, measured: false, unavailable, next: 'The cut edges could not be measured, so they are unverified. Say so in the reply; continue with captions and finish.' };
+        return { ...result, measured: false, unavailable, warning: `Awkward looks: ${LOOKS_UNMEASURED}.`, next: 'Nothing to decide and nothing to retry: finish does not fail on this. Continue with captions and finish, and say in the reply that the cut edges were not checked for awkward looks.' };
       }
       const isAccepted = (spot: { assetId: string; side: string; source: number }) => accepted.some(item => item.assetId === spot.assetId && item.side === spot.side && Math.abs(item.source - spot.source) < .08);
       const flagged = readings.filter(reading => reading.flagged && !isAccepted(reading.spot)).sort((a, b) => Number(b.spot.first || b.spot.last) - Number(a.spot.first || a.spot.last));
@@ -1951,7 +1962,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       } catch (error) { if (abortSignal.aborted) throw error; flagged.forEach(reading => { if (!images.some(image => image.label.startsWith(`Spot ${reading.spot.id} `))) unverified.add(reading.spot.id); }); }
       await save();
       const records: SpotRecord[] = readings.map(reading => ({ id: reading.spot.id, side: reading.spot.side, assetId: reading.spot.assetId, source: reading.spot.source, timeline: reading.spot.timeline, first: reading.spot.first, last: reading.spot.last,
-        status: reading.unmeasured ? 'unverified' : !reading.flagged ? 'clean' : isAccepted(reading.spot) ? 'accepted' : unverified.has(reading.spot.id) ? 'unverified' : 'flagged', seen: reading.seen, ...(reading.moveTo !== undefined ? { moveTo: reading.moveTo } : {}) }));
+        status: isAccepted(reading.spot) && (reading.flagged || reading.unmeasured) ? 'accepted' : reading.unmeasured ? 'unverified' : !reading.flagged ? 'clean' : unverified.has(reading.spot.id) ? 'unverified' : 'flagged', seen: reading.seen, ...(reading.moveTo !== undefined ? { moveTo: reading.moveTo } : {}) }));
       await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'checkSpots', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { cutKey: cutKey(editSession.timeline), spots: records, accepted, rounds, framesUsed: budget.used } satisfies SpotsEvidence } });
       const open = records.filter(record => record.status === 'flagged' || record.status === 'unverified');
       return { ...result, measured: true, edges: records.length, clean: records.filter(record => record.status === 'clean').length, accepted: records.filter(record => record.status === 'accepted').length, ...(edgeChanges.length ? { edgeChanges } : {}),
