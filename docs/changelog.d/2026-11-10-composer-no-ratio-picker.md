@@ -1,0 +1,1 @@
+- Start page: the aspect ratio picker is gone from the top of the composer; new projects start landscape and the ratio is changed in the editor. Why: the founder asked to remove it from the composer shelf.

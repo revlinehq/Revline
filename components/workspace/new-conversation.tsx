@@ -18,7 +18,7 @@ import { useSourceUpload } from '@/components/editor/use-source-upload';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
-import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
+import { clearNewProjectDraft, clearNewProjectSources, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -29,7 +29,6 @@ import { isVideoLinkOnly } from '@/lib/editor/video-link';
 import { ComposerLinkShelf, type LinkImportProgress } from './composer-link-shelf';
 import { importErrorMessage } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
-import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
 import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
@@ -110,10 +109,6 @@ export function NewConversation() {
     if (!isLoaded) return;
     try { brief.current = newProjectBrief(); } catch { /* Uploads can still start in this page. */ }
     setDraft(brief.current);
-    try {
-      const saved = newProjectAspectRatio();
-      if (saved) setAspectRatio(saved);
-    } catch { /* Format selection also works without draft storage. */ }
     const job = getProjectImportJob(userId ?? undefined);
     if (job) {
       session.current = job.session;
@@ -290,10 +285,6 @@ export function NewConversation() {
     try { clearNewProjectDraft(); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
   }
-  function changeAspectRatio(value: AspectRatio) {
-    setAspectRatio(value);
-    try { saveNewProjectAspectRatio(value); } catch { /* Keep the selection in memory. */ }
-  }
   function changeDraft(value: string) {
     setDraft(value); brief.current = value;
     try { saveNewProjectBrief(value); } catch { /* The draft stays in this page. */ }
@@ -421,7 +412,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));

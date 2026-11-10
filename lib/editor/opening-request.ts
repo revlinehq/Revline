@@ -1,12 +1,10 @@
 import { z } from 'zod';
 import type { Id } from '@/convex/_generated/dataModel';
-import { ASPECT_RATIOS, type AspectRatio } from './types';
 
 // The new-project page hands its brief, format, footage and model choices to the
 // editor through browser storage. Every key that handoff uses is spelled here.
 
 const NEXT_BRIEF_KEY = 'revline:next-brief';
-const NEXT_ASPECT_RATIO_KEY = 'revline:next-aspect-ratio';
 const NEXT_CLOUD_FOOTAGE_KEY = 'revline:next-cloud-footage';
 const NEXT_LINK_IMPORTS_KEY = 'revline:next-link-imports';
 /** Points at the IndexedDB record holding footage staged before sign-in. */
@@ -33,11 +31,6 @@ export const newProjectBrief = () => sessionStorage.getItem(NEXT_BRIEF_KEY) ?? '
 export function saveNewProjectBrief(value: string) {
   if (value) sessionStorage.setItem(NEXT_BRIEF_KEY, value); else sessionStorage.removeItem(NEXT_BRIEF_KEY);
 }
-export function newProjectAspectRatio(): AspectRatio | undefined {
-  const saved = sessionStorage.getItem(NEXT_ASPECT_RATIO_KEY);
-  return ASPECT_RATIOS.find(ratio => ratio === saved);
-}
-export const saveNewProjectAspectRatio = (value: AspectRatio) => sessionStorage.setItem(NEXT_ASPECT_RATIO_KEY, value);
 /** Saved uploads chosen for the next project, or undefined when nothing valid is stored. */
 export function newProjectCloudFootage(): Id<'assets'>[] | undefined {
   const saved: unknown = JSON.parse(sessionStorage.getItem(NEXT_CLOUD_FOOTAGE_KEY) ?? '[]');
@@ -64,7 +57,6 @@ export function clearNewProjectSources() {
 /** Starting over discards the whole new-project draft. */
 export function clearNewProjectDraft() {
   clearNewProjectSources();
-  sessionStorage.removeItem(NEXT_ASPECT_RATIO_KEY);
 }
 
 type OpeningRequestOptions = { modelChoice?: string; reasoningEffort?: string };
