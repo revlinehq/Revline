@@ -369,7 +369,8 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const controller = new AbortController(), deadline = AbortSignal.timeout(CALL_LIMIT_MS);
   const abortSignal = AbortSignal.any([controller.signal, deadline]);
   // Stop in the editor ends the run; abort promptly like an in-app turn.
-  const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => controller.abort()); }, 2000);
+  // A failed status poll is not a Stop: the next poll decides, as in the in-app turn.
+  const watch = setInterval(() => { void ctx.runQuery(internal.assistant.isRunActive, run).then(active => { if (!active) controller.abort(); }).catch(() => {}); }, 2000);
   try {
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const { toolkit, tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, ...await mcpLaneOptions(ctx,ownerId,laneSession) });

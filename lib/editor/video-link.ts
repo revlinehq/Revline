@@ -29,3 +29,17 @@ export function parseVideoLink(value: string): VideoLink {
   }
   return { kind: 'file', url: url.toString() };
 }
+
+/** Loose check for enabling an import button; parseVideoLink gives the real verdict and its message. */
+export function looksLikeLink(value: string) {
+  return /^https?:\/\/[^\s/]+\.\S+$/i.test(value.trim());
+}
+
+/** True when the text is nothing but one video link: a supported site, or a direct media file. */
+export function isVideoLinkOnly(value: string) {
+  if (/\s/.test(value.trim())) return false;
+  try {
+    const link = parseVideoLink(value);
+    return link.kind !== 'file' || /\.(mp4|mov|m4v|webm|mkv)$/i.test(new URL(link.url).pathname);
+  } catch { return false; }
+}
