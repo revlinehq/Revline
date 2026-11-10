@@ -14,9 +14,48 @@ export function finalChecksRequested(request: string): boolean {
   return exportConfirmed(request) || FINAL_INTENT.test(request) && !DECLINED.test(request);
 }
 
+/** A length the user asked the finished video to have, in seconds. */
+export type RequestedLength = { min?: number; max?: number };
+const LENGTH_UNIT = '(s|secs?|seconds?|m|mins?|minutes?)\\b';
+// "and" joins a range only after "between"; bare "10 and 20 seconds" names two moments.
+const LENGTH_RANGE = new RegExp(`(?:(between\\s+)(\\d+(?:\\.\\d+)?)\\s*and|(\\d+(?:\\.\\d+)?)\\s*(?:-|–|—|to))\\s*(\\d+(?:\\.\\d+)?)\\s*-?\\s*${LENGTH_UNIT}`, 'gi');
+// Only wording that bounds the whole video. "shorter than", "over" and the like usually describe clips, pauses or fades.
+const LENGTH_CAP = new RegExp(`\\b(?:under|below|at most|max(?:imum)?(?: of)?|no (?:longer|more) than)\\s+(\\d+(?:\\.\\d+)?)\\s*-?\\s*${LENGTH_UNIT}`, 'i');
+const LENGTH_FLOOR = new RegExp(`\\b(?:at least|min(?:imum)?(?: of)?|no (?:shorter|less) than)\\s+(\\d+(?:\\.\\d+)?)\\s*-?\\s*${LENGTH_UNIT}`, 'i');
+// A range right after these words is a place on the timeline ("remove 40-50s", "from 40 to 50 s"), not a length.
+const POSITION_BEFORE = /\b(?:from|at|after|before|until|till|remove|delete|drop|cut out|trim|mute|speed up|slow down|blur|zoom(?: in| out)?(?: on)?|during|over|first|last|part|section|around the)\s+(?:the\s+)?$/i;
+const LENGTH_CUE = /\b(?:long|length|duration|runtime|total|reel|short|shorts|video|version|cut|edit|clip|tiktok|make it|keep it|get it|bring it)\b/i;
+const lengthSeconds = (value: string, unit: string) => Number(value) * (/^m/i.test(unit) ? 60 : 1);
+// Pause and clip thresholds are a few seconds; a whole video is not.
+const plausibleLength = (value: number | undefined) => value === undefined || value >= 5 && value <= 3600;
+
+/** Only an explicit length for the whole video counts: a range ("40-50 seconds") or a bound ("under 60 s"). */
+export function requestedLength(request: string): RequestedLength | undefined {
+  if (!LENGTH_CUE.test(request)) return;
+  for (const range of request.matchAll(LENGTH_RANGE)) {
+    if (!range[1] && POSITION_BEFORE.test(request.slice(0, range.index))) continue;
+    const min = lengthSeconds(range[2] ?? range[3], range[5]), max = lengthSeconds(range[4], range[5]);
+    if (max > min && plausibleLength(min) && plausibleLength(max)) return { min, max };
+  }
+  const cap = LENGTH_CAP.exec(request), floor = LENGTH_FLOOR.exec(request);
+  const max = cap ? lengthSeconds(cap[1], cap[2]) : undefined, min = floor ? lengthSeconds(floor[1], floor[2]) : undefined;
+  if (max === undefined && min === undefined || !plausibleLength(min) || !plausibleLength(max) || min !== undefined && max !== undefined && min >= max) return;
+  return { ...(min !== undefined ? { min } : {}), ...(max !== undefined ? { max } : {}) };
+}
+
+/** The finish failure for a timeline outside the requested length; one frame of slack. */
+export function requestedLengthFailure(target: RequestedLength | undefined, duration: number, fps: number): string | undefined {
+  if (!target) return;
+  const short = target.min !== undefined && duration < target.min - 1 / fps, long = target.max !== undefined && duration > target.max + 1 / fps;
+  if (!short && !long) return;
+  const asked = target.min !== undefined && target.max !== undefined ? `${target.min}–${target.max} s` : target.max !== undefined ? `at most ${target.max} s` : `at least ${target.min} s`;
+  return `Requested length ${asked}; the timeline is ${duration.toFixed(1)} s. ${long ? `Cut ${(duration - target.max!).toFixed(1)} s or more` : `Keep ${(target.min! - duration).toFixed(1)} s more`}, or if the message cannot fit, stop and tell the user the actual length.`;
+}
+
 /** What lanes.begin stores for a request. The app and MCP both start tasks with it. */
-export function requestChecks(request: string): { exportConfirmed: boolean; checkLevel?: 'final' } {
-  return { exportConfirmed: exportConfirmed(request), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}) };
+export function requestChecks(request: string): { exportConfirmed: boolean; checkLevel?: 'final'; requestedLength?: RequestedLength } {
+  const length = requestedLength(request);
+  return { exportConfirmed: exportConfirmed(request), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}), ...(length ? { requestedLength: length } : {}) };
 }
 
 /** Older task rows have no level; an export they confirmed still runs final checks. */
