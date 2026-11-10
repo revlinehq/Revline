@@ -26,6 +26,8 @@ Agent worktrees start with `npm run dev:isolated` and use `scripts/isolated-mcp.
 
 `npm run dev` runs the frontend and development media worker together. Verify both `[web]` and `[worker]` readiness logs before handing the editor back; keep them running while the user tests media processing. Use the Codex terminal for visible logs when requested.
 
+Public Convex functions called by the iOS app (call sites in `mobile/`, e.g. `projects:list`) keep their arguments and return shape: installed builds cannot be updated by a deploy. Add a new function name for a new shape (`projects:listPage`).
+
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
 The agent that built the change writes its pull request, because it knows what it built:
