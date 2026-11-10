@@ -89,6 +89,8 @@ export interface WorkspaceNavProps {
   onExport?: () => void;
   /** The editor's bar: a back arrow to this page instead of the logo, and a "Saved" mark once changes are stored. */
   backHref?: string;
+  /** Extra actions at the right of the bar, after Export. */
+  actions?: ReactNode;
   exportDisabled?: boolean;
   /** Explains a disabled export or its limit before the dialog opens. */
   exportHint?: string;
@@ -106,7 +108,7 @@ export const WorkspaceNav = memo(function WorkspaceNav(props: WorkspaceNavProps)
   return <WorkspaceTopBar {...props} />;
 });
 
-const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
+const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, actions, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
   const router = useRouter();
   const startingWorkspace = useRef(false);
@@ -172,6 +174,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
       {(onUndo || onRedo) && <div className="workspace-nav-history"><Button variant="ghost" size="icon-sm" aria-label="Undo" disabled={!canUndo} onClick={onUndo}><Undo2 size={15} /></Button><Button variant="ghost" size="icon-sm" aria-label="Redo" disabled={!canRedo} onClick={onRedo}><Redo2 size={15} /></Button></div>}
       {onFootage && <Button variant="outline" size="md" aria-label="Footage" onClick={onFootage}><Film size={14} /><span>Footage</span></Button>}
       {onExport && !demo && <span className="workspace-nav-action-hint"><Button size={backHref ? 'sm' : 'md'} variant={backHref ? 'soft' : 'default'} className="workspace-nav-export" onClick={onExport} disabled={exportDisabled} aria-description={exportHint}>{backHref && <Download size={14} />}Export{!backHref && <Download size={13} />}</Button></span>}
+      {actions}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
       <WorkspaceAccountMenu active={active} error={accountError} />

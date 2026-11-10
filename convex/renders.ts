@@ -21,6 +21,13 @@ import { accountLimit } from './lib/account_limits';
 
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
 const startRenderForArgs = { burnCaptions: v.optional(v.boolean()), projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), timelineId:v.optional(v.string()) };
+/** The account's limit of exports in progress when it is reached, or 0 while another export can start. */
+export async function exportsFull(ctx: MutationCtx, ownerId: string, ultra: boolean) {
+  // With hosted exports, seats bound concurrent renders; beyond them exports wait in a longer queue.
+  const limit = hostedRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
+  const active = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
+  return active.reduce((count, jobs) => count + jobs.length, 0) >= limit ? limit : 0;
+}
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
@@ -37,12 +44,10 @@ export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: Ob
   if(args.burnCaptions === false) snapshot = {...snapshot, clips: snapshot.clips.filter(clip => clip.kind !== 'caption')};
   const timeline = await validateTimeline(ctx, project, snapshot); if (!timeline.clips.length) throw new ConvexError("Add a clip before exporting");
   if (timelineDuration(timeline) > MAX_EXPORT_SECONDS) throw new ConvexError("Exports currently support up to five minutes. Shorten the final edit before exporting; your full arrangement remains saved.");
-  // With hosted exports, seats bound concurrent renders; beyond them exports wait in a longer queue.
-  const limit = hostedRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   // The indexed reads and insert share one transaction, so separate projects
   // cannot race past the account's outstanding-work limit.
-  const accountActive = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));
-  if (accountActive.reduce((count, jobs) => count + jobs.length, 0) >= limit) throw new ConvexError(`You already have ${limit} exports in progress. Wait for one to finish or cancel it before exporting again.`);
+  const full = await exportsFull(ctx, ownerId, ultra);
+  if (full) throw new ConvexError(`You already have ${full} exports in progress. Wait for one to finish or cancel it before exporting again.`);
   const assetIds: Id<"assets">[] = [];
   for (const assetId of [...timeline.clips.flatMap(clip => [...clip.assetId ? [clip.assetId] : [], ...clip.normalizedAudio ? [clip.normalizedAudio.assetId] : []]),...timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]]) { const id = ctx.db.normalizeId("assets", assetId); if (id && !assetIds.includes(id)) assetIds.push(id); }
   const now = Date.now();
@@ -59,6 +64,7 @@ export async function cancelRenderJob(ctx: MutationCtx, job: Doc<'renderJobs'>) 
   if(job.status!=='queued'&&job.status!=='rendering')return false;
   if(job.taskId)await cancelMediaTask(ctx,job.taskId);
   await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  await ctx.scheduler.runAfter(0,internal.postExports.settle,{jobId:job._id});
   return true;
 }
 export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(),handler:async(ctx,args)=>{
@@ -108,6 +114,7 @@ export const failStalled = internalMutation({ args: {}, returns: v.null(), handl
       if (current && (current.status === 'queued' || current.status === 'rendering')) {
         await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render', ...(active ? { attempt: active.attempt, progress: active.progress } : {}) }, projectId: job.projectId, deployment: incidentDeployment() });
         await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
+        await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: job._id });
       }
     }
   }

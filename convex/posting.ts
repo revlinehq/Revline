@@ -178,40 +178,51 @@ export const createBatch = mutation({
     targets: v.array(v.object({ accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()) })),
   },
   returns: v.id('postingBatches'),
-  handler: async (ctx, args) => {
-    const ownerId = await requireOwner(ctx), now = Date.now();
-    if (!args.targets.length) throw new ConvexError('Pick at least one account.');
-    if (args.targets.length > TARGET_LIMIT || new Set(args.targets.map(target => target.accountId)).size !== args.targets.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
-    const text = (value: string | undefined, limit: number, name: string) => {
-      const trimmed = value?.trim();
-      if (trimmed && trimmed.length > limit) throw new ConvexError(`${name} can be up to ${limit} characters.`);
-      return trimmed || undefined;
-    };
-    const caption = text(args.caption, CAPTION_LIMIT, 'A caption') ?? '', title = text(args.title, TITLE_LIMIT, 'A title');
-    if (args.scheduledAt !== undefined && (!Number.isFinite(args.scheduledAt) || args.scheduledAt < now - 60_000 || args.scheduledAt > now + SCHEDULE_HORIZON_MS)) throw new ConvexError('Pick a time in the next 90 days.');
-    if (args.campaignId !== undefined && (!args.campaignId || args.campaignId.length > 200)) throw new ConvexError('Campaign not found');
-    const found = await postableExport(ctx, ownerId, args.jobId);
-    if (!found.job) throw new ConvexError(found.error);
-    const project = await ctx.db.get(found.job.projectId);
-    const scheduledAt = args.scheduledAt !== undefined && args.scheduledAt > now ? args.scheduledAt : undefined, dueAt = scheduledAt ?? now;
-    const batchId = await ctx.db.insert('postingBatches', {
-      ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
-      caption, ...(title ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now,
-    });
-    for (const target of args.targets) {
-      const account = await ownedAccount(ctx, ownerId, target.accountId);
-      if (account.status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
-      const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
-      const postId = await ctx.db.insert('postingPosts', {
-        ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
-        status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
-      });
-      // "Post now" does not wait for the next scheduler tick.
-      if (!scheduledAt) await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
-    }
-    return batchId;
-  },
+  handler: async (ctx, args) => createBatchFor(ctx, await requireOwner(ctx), args),
 });
+export type BatchInput = {
+  jobId: Id<'renderJobs'>; caption: string; title?: string; scheduledAt?: number; campaignId?: string;
+  targets: { accountId: Id<'postingAccounts'>; caption?: string; title?: string }[];
+};
+/** The checks a post's text and time must pass, shared by `createBatch` and a post that waits for its export. */
+const text = (value: string | undefined, limit: number, name: string) => {
+  const trimmed = value?.trim();
+  if (trimmed && trimmed.length > limit) throw new ConvexError(`${name} can be up to ${limit} characters.`);
+  return trimmed || undefined;
+};
+export function batchText(args: Pick<BatchInput, 'caption' | 'title' | 'scheduledAt' | 'campaignId'>, now: number) {
+  const caption = text(args.caption, CAPTION_LIMIT, 'A caption') ?? '', title = text(args.title, TITLE_LIMIT, 'A title');
+  if (args.scheduledAt !== undefined && (!Number.isFinite(args.scheduledAt) || args.scheduledAt < now - 60_000 || args.scheduledAt > now + SCHEDULE_HORIZON_MS)) throw new ConvexError('Pick a time in the next 90 days.');
+  if (args.campaignId !== undefined && (!args.campaignId || args.campaignId.length > 200)) throw new ConvexError('Campaign not found');
+  return { caption, title };
+}
+/** `createBatch` for an owner already identified: also what a post waiting for its export runs when the export completes. */
+export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: BatchInput) {
+  const now = Date.now();
+  if (!args.targets.length) throw new ConvexError('Pick at least one account.');
+  if (args.targets.length > TARGET_LIMIT || new Set(args.targets.map(target => target.accountId)).size !== args.targets.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
+  const { caption, title } = batchText(args, now);
+  const found = await postableExport(ctx, ownerId, args.jobId);
+  if (!found.job) throw new ConvexError(found.error);
+  const project = await ctx.db.get(found.job.projectId);
+  const scheduledAt = args.scheduledAt !== undefined && args.scheduledAt > now ? args.scheduledAt : undefined, dueAt = scheduledAt ?? now;
+  const batchId = await ctx.db.insert('postingBatches', {
+    ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
+    caption, ...(title ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now,
+  });
+  for (const target of args.targets) {
+    const account = await ownedAccount(ctx, ownerId, target.accountId);
+    if (account.status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
+    const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
+    const postId = await ctx.db.insert('postingPosts', {
+      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
+      status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
+    });
+    // "Post now" does not wait for the next scheduler tick.
+    if (!scheduledAt) await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
+  }
+  return batchId;
+}
 
 /** Try a failed post again from a clean attempt count. */
 export const retry = mutation({
@@ -522,6 +533,16 @@ export const tick = internalMutation({
     }
     const lost = await ctx.db.query('postingPosts').withIndex('by_status_dueAt', q => q.eq('status', 'posting').lte('dueAt', now - STALE_POSTING_MS)).take(100);
     for (const post of lost) await ctx.db.patch(post._id, { status: 'failed', error: INTERRUPTED, updatedAt: now });
+    // Posts waiting for an export are settled when it ends; this catches an export that ended without saying so.
+    const waiting = await ctx.db.query('postingPending').withIndex('by_status', q => q.eq('status', 'waiting')).take(100);
+    for (const pending of waiting) {
+      if (!pending.jobId) continue;
+      const job = await ctx.db.get(pending.jobId);
+      if (!job || job.status !== 'queued' && job.status !== 'rendering') await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: pending.jobId });
+    }
+    // Posts queued behind the account's export limit start as exports finish; this catches a missed start.
+    const queued = await ctx.db.query('postingPending').withIndex('by_status', q => q.eq('status', 'queued')).take(100);
+    for (const ownerId of new Set(queued.map(pending => pending.ownerId))) await ctx.scheduler.runAfter(0, internal.postExports.advance, { ownerId });
     const expired = await ctx.db.query('postingOauthStates').withIndex('by_expiresAt', q => q.lte('expiresAt', now)).take(100);
     for (const state of expired) await ctx.db.delete(state._id);
     return null;

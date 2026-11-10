@@ -131,6 +131,7 @@ import type * as memories from "../memories.js";
 import type * as modelDiagnostics from "../modelDiagnostics.js";
 import type * as pixelTracks from "../pixelTracks.js";
 import type * as playback from "../playback.js";
+import type * as postExports from "../postExports.js";
 import type * as posting from "../posting.js";
 import type * as postingActions from "../postingActions.js";
 import type * as postingTables from "../postingTables.js";
@@ -286,6 +287,7 @@ declare const fullApi: ApiFromModules<{
   modelDiagnostics: typeof modelDiagnostics;
   pixelTracks: typeof pixelTracks;
   playback: typeof playback;
+  postExports: typeof postExports;
   posting: typeof posting;
   postingActions: typeof postingActions;
   postingTables: typeof postingTables;

@@ -1,0 +1,49 @@
+/* Post from the editor: its popover and the export/post states. Buttons are the shared primary and soft pills;
+   surfaces and text use the dashboard tokens (components/ui/dashboard-tokens.css). Static, no focus rings. */
+.editor-post-state{display:flex;align-items:center;gap:6px;min-width:0}
+.editor-post-state [data-slot=button],.editor-post-card [data-slot=button]{transition:none}
+.editor-post-state [data-slot=button]:focus-visible,.editor-post-card [data-slot=button]:focus-visible{outline:none;box-shadow:none}
+.editor-post-state [data-slot=button]:disabled,.editor-post-card [data-slot=button]:disabled{opacity:.45}
+.editor-post-open.editor-post-open{padding:0 10px 0 14px;gap:4px}
+.editor-post-status[data-failed] svg{color:#e5484d}
+.editor-post-pill{display:inline-flex;align-items:center;gap:10px;height:32px;padding:0 14px;border-radius:9999px;background:var(--dash-card);color:var(--dash-text);font-size:13px;font-weight:500;white-space:nowrap}
+.editor-post-pill svg{width:14px;height:14px}
+.editor-post-progress[data-slot=progress]{width:56px;height:3px;border-radius:2px;background:#ffffff1f}
+.editor-post-progress [data-slot=progress-indicator]{background:#fff;transition:none}
+.editor-post-cancel.editor-post-cancel{width:20px;height:20px;margin-right:-6px;border-radius:9999px;color:var(--dash-muted)}
+.editor-post-cancel.editor-post-cancel:hover{background:var(--dash-pill);color:var(--dash-text)}
+.editor-post-note{margin-right:4px;color:var(--dash-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.editor-post-state .editor-post-view.editor-post-view{height:32px;padding:0 10px;border-radius:9999px;color:var(--dash-text);font-size:13px;font-weight:500}
+.editor-post-view.editor-post-view:hover{background:var(--dash-pill)}
+
+.editor-post-card[data-slot=popover-content]{width:400px;max-width:calc(100vw - 24px);padding:14px;gap:10px;border:1px solid var(--dash-border);border-radius:14px;background:var(--dash-card);color:var(--dash-text);font-size:13px;box-shadow:0 16px 40px #00000066;animation:none;--tw-ring-shadow:0 0 #0000}
+.editor-post-row{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.editor-post-row label,.editor-post-label{color:var(--dash-muted);font-size:13px}
+.editor-post-label{margin-top:4px}
+.editor-post-caption[data-slot=textarea]{min-height:96px;padding:10px 12px;border:1px solid var(--dash-border);border-radius:10px;background:var(--dash-page);color:var(--dash-text);font-size:13px;line-height:1.5;resize:none;box-shadow:none;transition:none}
+.editor-post-caption[data-slot=textarea]:focus,.editor-post-caption[data-slot=textarea]:focus-visible,.editor-post-when[data-slot=input]:focus,.editor-post-when[data-slot=input]:focus-visible{outline:none;box-shadow:none;border-color:#ffffff26}
+.editor-post-caption[data-slot=textarea]::placeholder{color:var(--dash-muted)}
+.editor-post-accounts{list-style:none;display:flex;flex-direction:column;margin:0;padding:0 0 10px;border-bottom:1px solid var(--dash-divider)}
+.editor-post-accounts li{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:34px}
+.editor-post-accounts label{display:flex;align-items:center;gap:10px;min-width:0;cursor:pointer}
+.editor-post-accounts li[data-disabled] label{cursor:default;color:var(--dash-muted)}
+.editor-post-account{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.editor-post-accounts small{color:var(--dash-muted);font-size:12px}
+.editor-post-accounts em{flex:none;color:var(--dash-muted);font-size:12px;font-style:normal}
+.editor-post-accounts a{flex:none;color:var(--dash-text);font-size:12px;text-decoration:underline;text-underline-offset:3px}
+.editor-post-accounts [data-slot=checkbox]{border-color:#ffffff33;background:none;box-shadow:none;transition:none}
+.editor-post-accounts [data-slot=checkbox]:focus-visible{outline:none;box-shadow:none}
+.editor-post-accounts [data-slot=checkbox][data-state=checked]{border-color:var(--dash-text);background:var(--dash-text);color:var(--dash-page)}
+.editor-post-schedule{display:flex;align-items:center;gap:8px}
+.editor-post-when[data-slot=input]{flex:1;min-width:0;height:32px;padding:0 12px;border:1px solid var(--dash-border);border-radius:9999px;background:var(--dash-page);color:var(--dash-text);font-size:13px;color-scheme:dark;box-shadow:none;transition:none}
+.editor-post-now.editor-post-now{width:100%;justify-content:center}
+.editor-post-hint{margin:0;color:var(--dash-muted);font-size:12px;line-height:1.5}
+.editor-post-hint[data-error]{color:#ff8a8a}
+.editor-post-links-card[data-slot=popover-content]{width:340px;gap:4px}
+.editor-post-links-title{padding-bottom:8px;font-size:13px;font-weight:500}
+.editor-post-links{list-style:none;margin:0;padding:0}
+.editor-post-links li{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;border-top:1px solid var(--dash-divider)}
+.editor-post-links a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dash-text);text-decoration:none}
+.editor-post-links a:hover{text-decoration:underline;text-underline-offset:3px}
+@media(max-width:1150px){.editor-post-note{display:none}}
+@media(max-width:900px){.editor-post-view.editor-post-view,.editor-post-status{display:none}.editor-post-pill{max-width:150px;overflow:hidden}.editor-post-when[data-slot=input],.editor-post-caption[data-slot=textarea]{font-size:16px}}

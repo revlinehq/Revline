@@ -100,7 +100,11 @@ export async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, s
   await releaseRenderSeat(ctx, task);
   if (task.renderJobId) {
     const job = await ctx.db.get(task.renderJobId);
-    if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
+    if (job && job.status !== 'completed' && job.status !== 'cancelled') {
+      await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
+      // A post waiting for this export fails with the reason; nothing is sent.
+      await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: job._id });
+    }
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
