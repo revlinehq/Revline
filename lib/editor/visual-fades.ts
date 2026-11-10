@@ -27,6 +27,16 @@ function visualFadeSettings(clip: Pick<Clip, 'duration' | 'visualFade' | 'visual
   return { fadeIn, fadeOut };
 }
 
+/**
+ * The fade clock visualFadeGain samples: edge seconds on the original duration (scaled to fit it)
+ * and where the retained clip starts in it. gain(elapsed) = in(elapsed + offset) * out(duration - (elapsed + offset)).
+ */
+export function visualFadeClock(clip: Pick<Clip, 'duration' | 'visualFade' | 'visualFadeTiming'>) {
+  const duration = clip.visualFadeTiming?.duration ?? clip.duration;
+  const { fadeIn, fadeOut } = visualFadeSettings({ duration, visualFade: clip.visualFade });
+  return { fadeIn, fadeOut, duration, offset: clip.visualFadeTiming?.offset ?? 0 };
+}
+
 /** Sample the original opacity phase, including retained split/trim offsets. */
 export function visualFadeGain(clip: Pick<Clip, 'duration' | 'visualFade' | 'visualFadeTiming'>, elapsed: number) {
   const duration = clip.visualFadeTiming?.duration ?? clip.duration;
