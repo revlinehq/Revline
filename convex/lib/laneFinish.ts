@@ -14,6 +14,7 @@ import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
@@ -67,6 +68,10 @@ export async function finishLane(
     failures.push(...reelCaptionFailures(timeline, assets));
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
     failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
+    // Eyes: the first and last frame must be clean or looked at; other flagged edges are reported.
+    const looks = reelLookCheck(timeline, LANES.reel.eyes, [...task.evidence].reverse().find(item => item.tool === 'checkSpots' && item.timelineId === timelineId)?.output as SpotsEvidence | undefined, !!task.script);
+    failures.push(...looks.failures);
+    warnings.push(...looks.warnings);
   }
   const motionReports: string[] = [], motionOff: NonNullable<FinishResult['motionOff']> = [];
   let currentRevision: number | undefined;

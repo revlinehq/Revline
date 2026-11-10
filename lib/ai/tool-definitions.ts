@@ -85,6 +85,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   retainSourceRanges: { effect: 'timeline', mcp: 'exclusive' },
   readScript: { effect: 'analysis', mcp: 'exclusive', label: ['Reading your script', 'Read your script'] },
   planScript: { effect: 'analysis', mcp: 'exclusive', label: ['Planning the cut', 'Planned the cut'] },
+  checkSpots: { effect: 'timeline', mcp: 'exclusive', label: ['Checking cut edges', 'Checked cut edges'] },
   cleanSpeech: { effect: 'timeline', mcp: 'exclusive', label: ['Cleaning up speech', 'Cleaned up speech'] },
   setSplitEdits: { effect: 'timeline', mcp: 'exclusive', label: ['Adding J and L cuts', 'Added J and L cuts'] },
   split: { effect: 'timeline', mcp: 'exclusive', label: ['Splitting clips', 'Split clips'] },

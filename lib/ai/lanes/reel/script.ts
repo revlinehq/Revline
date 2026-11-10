@@ -59,6 +59,8 @@ export type SavedScript = {
   target?: RequestedLength;
   estimatedSeconds: number;
   removedTakes: number;
+  /** Shots of the take with no speaker in frame (SOURCE seconds). kept: a wordless shot inside the script that the cut keeps as footage. */
+  broll?: { start: number; end: number; kept: boolean }[];
 };
 
 const FILLERS = new Set(['um', 'uh', 'erm', 'er', 'ah', 'hmm', 'mm', 'uhm']);
@@ -251,5 +253,23 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
     if (!kept(needed[0])) failures.push(`A sentence is cut mid-sentence: the cut keeps ${said(present.slice(0, 5))} (source ${seconds(present[0].start)}) without the start of its line ${quote(line.text)} (source ${seconds(line.start)}). Keep the whole line or drop it.`);
     else if (!kept(needed.at(-1)!)) failures.push(`A sentence is cut mid-sentence: ${quote(line.text)} (source ${seconds(line.start)}) stops at ${quote(present.slice(-4).map(word => word.text).join(' '), 4, true)} (source ${seconds(present.at(-1)!.end)}) before its end. Keep the whole line or drop it.`);
   }
+  for (const shot of script.broll ?? []) {
+    if (!shot.kept) continue;
+    const covered = spans.reduce((sum, span) => sum + Math.max(0, Math.min(span.end, shot.end) - Math.max(span.start, shot.start)), 0);
+    if (covered < (shot.end - shot.start) * .8) failures.push(`The b-roll shot at source ${seconds(shot.start)} to ${seconds(shot.end)} was cut out. It is footage the user placed, not silence: keep it where it is (pass planScript's ranges unchanged).`);
+  }
   return failures.slice(0, 5);
+}
+
+/** B-roll shots with no words inside them that sit between kept lines: the cut keeps them where the user placed them. */
+export function keptBroll(outline: ScriptOutline, kept: number[], shots: { start: number; end: number }[]) {
+  const lines = kept.map(n => outline.lines[n - 1]), first = lines[0], last = lines.at(-1);
+  if (!first || !last) return [];
+  return shots.filter(shot => {
+    const wordless = !outline.words.some(word => { const middle = (word.start + word.end) / 2; return middle > shot.start && middle < shot.end; });
+    if (!wordless || shot.start < first.start || shot.end > last.end) return false;
+    // Kept when the line before it or the line after it stays: a shot between two dropped beats goes with them.
+    const before = [...outline.lines].reverse().find(line => line.end <= shot.start + .3), after = outline.lines.find(line => line.start >= shot.end - .3);
+    return !!before && kept.includes(before.n) || !!after && kept.includes(after.n);
+  });
 }

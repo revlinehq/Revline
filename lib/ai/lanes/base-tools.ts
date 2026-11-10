@@ -122,7 +122,7 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
   // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).
   'music': ['markMusicBeats', 'alignCutsToBeat', 'setAudioReactive'],
-  'reel': ['readScript', 'planScript', 'readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
+  'reel': ['readScript', 'planScript', 'checkSpots', 'readFrames', 'inspectVideo', 'inspectFrames', 'followSubject'],
   // Sound, effect, color and VFX tools for footage edits.
   'footage-editing': [
     'addSoundEffect', 'generateSound', 'editSound', 'matchMusic', 'useStrongestMoment', 'markMusicBeats', 'alignCutsToBeat',

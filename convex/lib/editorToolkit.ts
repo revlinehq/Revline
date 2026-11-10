@@ -112,7 +112,9 @@ import { retainSourceRanges, retainedSourceWindows, type RetainedRangeSummary } 
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
-import { BEAT_ROLES, beatsToDrop, lineLabel, linesToRanges, outlineLines, resolveScriptPlan, scriptOutline, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { FrameBudget, lookBaseline } from '../../lib/ai/eyes';
+import { brollRuns, cutKey, moveEdge, readSpot, reelSpots, spotTimes, type Range, type SpotRecord, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
+import { BEAT_ROLES, beatsToDrop, keptBroll, lineLabel, linesToRanges, outlineLines, resolveScriptPlan, scriptOutline, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, refineTranscriptWithAudioActivity } from '../../lib/media-analysis/audio-activity';
 import { TEXT_TEMPLATE_PRESETS } from '../../lib/editor/text-templates';
 import { DEFAULT_CAPTION_STYLE, resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
@@ -120,7 +122,7 @@ import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { barsForLength, musicStructure, nearestDownbeat } from '../../lib/media-analysis/music-structure';
 import { musicEnergy } from '../../lib/media-analysis/sound';
 import { CLOSE_UP_FRAMES, ReadCoverage } from '../../lib/ai/read-coverage';
-import { runCompare } from './reference_reads';
+import { runCompare, runLooksRead } from './reference_reads';
 import { aspectRatio as aspectRatioValidator } from '../schema';
 import { comparisonCropFields, referenceCropAt, cropBounds, comparisonSamples, referenceComparisonInput, REFERENCE_COMPARISON_BUDGET_MS, type ComparisonCrop, type ComparisonCrops } from '../../lib/ai/reference-comparison';
 import type { MotionMap } from '../../lib/inspo-motion/motion-map';
@@ -653,7 +655,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     // Cuts in this clip's source time, only where the kept ranges are.
     const cuts: CleanupCut[] = cleanup.cuts.filter(cut => kinds.has(cut.kind) && cut.confidence >= minConfidence).map(cut => ({ ...cut, start: cut.start - offset, end: cut.end - offset })).filter(inside);
     const transcript = evidence.analysis!.transcript!, activity = evidence.analysis!.audioActivity;
-    const ranges = chosen.flatMap(range => keptRanges(range.start, range.end, cuts)).map(range => {
+    // A b-roll shot kept by the script plan is footage, not a pause: no cleanup cut and no snapping inside it.
+    const shots = savedScript?.assetId === evidence._id ? (savedScript.broll ?? []).filter(shot => shot.kept) : [];
+    const isShot = (range: { start: number; end: number }) => shots.some(shot => Math.min(range.end + offset, shot.end) - Math.max(range.start + offset, shot.start) >= (shot.end - shot.start) * .9 && range.end - range.start <= (shot.end - shot.start) * 1.1 + .1);
+    const ranges = chosen.flatMap(range => isShot(range) ? [range] : keptRanges(range.start, range.end, cuts)).map(range => {
+      if (isShot(range)) return range;
       const source = { start: range.start + offset, end: range.end + offset };
       const measured = cleanup.edges?.length === transcript.words.length * 2 ? snapToSpeech(source, transcript.words, cleanup.edges) : activity ? refineAudioRangeEdges(source, transcript, activity) : source;
       return { start: Math.max(range.start, measured.start - offset), end: Math.min(range.end, measured.end - offset) };
@@ -677,7 +683,30 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const preview = await applySpeechCut(clipId, speech, ranges, new Set(['pause', 'breath', 'filler']), .6, true) as { keptRanges: { start: number; end: number }[] };
     return { seconds: total(preview.keptRanges), measured: true };
   };
-  let scriptSaved = false;
+  let scriptSaved = false, savedScript: SavedScript | undefined;
+  // Frames shown to the model are counted per task, so every tool call of one request shares the lane's budget.
+  let framesUsed: number | undefined;
+  const frameBudget = async (total: number) => {
+    if (framesUsed === undefined) { const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null; framesUsed = (task?.evidence.find(item => item.tool === 'eyesBudget')?.output as { used?: number } | undefined)?.used ?? 0; }
+    const budget = new FrameBudget(total, framesUsed);
+    return { budget, save: async () => { framesUsed = budget.used; if (taskId) await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'eyesBudget', timelineId, fingerprint: '', input: {}, output: { used: budget.used } } }); } };
+  };
+  /** Shots of a talking take with no speaker in frame, from one frame a second and the saved shot cuts. */
+  const findBroll = async (asset: (typeof assets)[number], range: Range): Promise<{ shots: Range[]; note?: string }> => {
+    const span = range.end - range.start, step = Math.max(1, span / 200), times: number[] = [];
+    for (let time = range.start + .4; time < range.end; time += step) times.push(Math.round(time * 100) / 100);
+    if (asset.kind !== 'video' || times.length < 3) return { shots: [] };
+    let { samples } = await runLooksRead(ctx, run.ownerId, run.projectId, asset._id, times, undefined, abortSignal);
+    const absent = samples.filter(sample => sample.face <= 0).length;
+    if (!absent) return { shots: [] };
+    if (absent > samples.length * .6) return { shots: [], note: 'No speaker is on camera for most of this take, so nothing is treated as b-roll.' };
+    const cuts = (asset.analysis?.shots?.shots ?? []).slice(1).map(shot => shot.start);
+    // Without saved shot cuts, find each shot's edges at a tenth of a second.
+    const ordered = [...samples].sort((a, b) => a.time - b.time), fine: number[] = [];
+    ordered.forEach((sample, index) => { const next = ordered[index + 1]; if (next && (sample.face <= 0) !== (next.face <= 0) && !cuts.some(cut => cut > sample.time && cut <= next.time)) for (let time = sample.time + .1; time < next.time - .01; time += .1) fine.push(Math.round(time * 100) / 100); });
+    if (fine.length) samples = [...samples, ...(await runLooksRead(ctx, run.ownerId, run.projectId, asset._id, fine.slice(0, 240), undefined, abortSignal)).samples];
+    return { shots: brollRuns(samples, cuts) };
+  };
   /** A raw take: one clip still holding most of a spoken source. A piece of an already cut take is not gated. */
   const rawTake = (clipId: unknown) => {
     const clip = typeof clipId === 'string' ? editSession.timeline.clips.find(item => item.id === clipId) : undefined;
@@ -1706,15 +1735,31 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null, target = task?.requestedLength;
       const estimate = await scriptSeconds(input.clipId, speech, linesToRanges(outline, script).map(range => ({ start: range.start - speech.offset, end: range.end - speech.offset })));
       const takes = outline.lines.filter(item => item.note === 'earlier take').length + outline.removable.filter(cut => script.some(n => cut.start >= line(n).start && cut.end <= line(n).end + .01)).length;
+      // B-roll: shots with no speaker in frame are footage, never "silence". One frame of each goes to the model.
+      const policy = LANES.reel.eyes!, source = { start: speech.clip.sourceStart + speech.offset, end: speech.sourceEnd + speech.offset };
+      let shots: Range[] = [], brollNote: string | undefined, images: { label: string; data: string; mimeType: string }[] = [], frames: string | undefined;
+      try {
+        const found = await findBroll(speech.evidence, source); shots = found.shots; brollNote = found.note;
+        if (shots.length) {
+          const { budget, save } = await frameBudget(policy.frames.total), shown = shots.slice(0, Math.min(policy.frames.broll, budget.left));
+          if (shown.length) {
+            const strip = (await runLooksRead(ctx, run.ownerId, run.projectId, speech.evidence._id, shown.map(shot => Math.round((shot.start + shot.end) / 2 * 100) / 100), shown.length, abortSignal)).strips[0];
+            if (strip) { budget.take(shown.length); await save(); images = [{ label: `B-roll shots, one frame each, in order: ${shown.map(shot => `${(shot.start - speech.offset).toFixed(1)}-${(shot.end - speech.offset).toFixed(1)} s`).join(', ')}`, data: strip, mimeType: 'image/jpeg' }]; }
+          }
+          frames = budget.report();
+        }
+      } catch (error) { if (abortSignal.aborted) throw error; brollNote = `Shots could not be checked for b-roll (${error instanceof Error ? error.message : 'unavailable'}); treat the take as one talking shot.`; }
+      const broll = shots.map(shot => { const over = outline.lines.filter(item => !item.note && item.end > shot.start && item.start < shot.end).map(item => item.n); return { sourceStart: Math.round((shot.start - speech.offset) * 100) / 100, sourceEnd: Math.round((shot.end - speech.offset) * 100) / 100, ...(over.length ? { overLines: over, use: 'cutaway the user placed over these lines; it stays with them' } : { use: 'shot between lines; kept in place by planScript' }) }; });
       const words = (text: string, tail = false) => { const parts = text.split(/\s+/); return parts.length <= 6 ? text : tail ? parts.slice(-6).join(' ') : parts.slice(0, 6).join(' '); };
       const asked = target ? target.min !== undefined && target.max !== undefined ? `${target.min}-${target.max} s` : target.max !== undefined ? `at most ${target.max} s` : `at least ${target.min} s` : undefined;
       return { clipId: input.clipId, assetId: speech.evidence._id, lineCount: outline.lines.length, lines: outlineLines(outline),
         suggested: { opening: { line: opening.n, sourceStart: opening.start - speech.offset, text: opening.text }, closing: { line: closing.n, sourceEnd: closing.end - speech.offset, text: closing.text }, earlierTakes: outline.lines.filter(item => item.note === 'earlier take').map(item => ({ line: item.n, keptTake: item.takeOf ?? null })), chatterLines: outline.lines.filter(item => item.note === 'chatter').map(item => item.n), stumblesRemoved: outline.removable.length },
         ...(outline.candidates ? { twoOpenings: outline.candidates.map(n => ({ line: n, text: line(n).text })), ask: 'Two different complete openings were recorded. Unless the request already says which, ask the user with askUser, using these two lines as the options.' } : {}),
+        ...(broll.length ? { broll, brollRule: 'These shots show something other than the speaker. They are footage, not silence or non-speech: never cut them out to tighten. Describe each in one line from its frame when you report.', ...(frames ? { frames } : {}) } : {}), ...(brollNote ? { brollNote } : {}),
         secondsIfWholeScriptKept: estimate.seconds, ...(target ? { requestedLength: target, ...(target.max !== undefined && estimate.seconds > target.max ? { overBy: Math.round((estimate.seconds - target.max) * 10) / 10 } : {}) } : {}),
         restatement: `I'll keep your script from "${words(opening.text)}" to "${words(closing.text, true)}", remove ${takes} false start${takes === 1 ? '' : 's'}${asked ? `, target ${asked}` : ''}.`,
-        next: `Understand the piece, then call planScript with about (one line) and beats covering every script line from L${opening.n} to L${closing.n} in order: role hook, point, tangent, payoff or cta, and priority 1 (must keep) to 3 (first to drop). ${target?.max !== undefined && estimate.seconds > target.max ? `It is ${(estimate.seconds - target.max).toFixed(1)} s over the requested length: mark whole tangents and weaker points keep:false, never the opening or the payoff. ` : 'Keep every beat unless the user asked for a shorter cut. '}In the same step, tell the user the restatement in one line (adjust it if you choose differently). Do not cut before planScript returns its ranges.` };
-    } }),
+        next: `Understand the piece, then call planScript with about (one line) and beats covering every script line from L${opening.n} to L${closing.n} in order: role hook, point, tangent, payoff or cta, and priority 1 (must keep) to 3 (first to drop). ${target?.max !== undefined && estimate.seconds > target.max ? `It is ${(estimate.seconds - target.max).toFixed(1)} s over the requested length: mark whole tangents and weaker points keep:false, never the opening or the payoff. ` : 'Keep every beat unless the user asked for a shorter cut. '}In the same step, tell the user the restatement in one line (adjust it if you choose differently). Do not cut before planScript returns its ranges.`, images };
+    }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     planScript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.planScript, description: "Reel lane, after readScript and before the cut: save your understanding of the take and get the exact ranges to keep. about: what the piece says, one line. beats: the script in order, each {role, from, to, priority} over readScript line numbers; every script line belongs to a beat. Lines marked chatter or earlier take inside a beat are left out automatically (keepLines forces one back, for example to keep an earlier, cleaner take instead of the last). To reach a requested length set keep:false on whole lower-priority beats (tangents, weaker points, redundant takes); never the opening or the payoff, never part of a sentence. The plan must start on the script's opening line and end on its closing line unless the user asked otherwise (openingReason, endingReason quote that request). Returns saved:false with the exact problems, or saved:true with the estimated length and the SOURCE ranges to pass unchanged to retainSourceRanges with tightenSilence:true. finish then checks the cut against this plan: opening line, closing line, whole sentences.", inputSchema: z.object({ clipId: z.string().min(1).max(100), about: z.string().trim().min(3).max(240), beats: z.array(z.object({ role: z.enum(BEAT_ROLES), from: z.number().int().min(1), to: z.number().int().min(1), priority: z.union([z.literal(1), z.literal(2), z.literal(3)]), keep: z.boolean().optional() }).strict()).min(1).max(40), opening: z.number().int().min(1).optional().describe('Line the reel starts on, when it is not the suggested opening: the user-chosen one of two openings.'), openingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to start somewhere other than the script opening: their words.'), endingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to end before the script closing line: their words.'), keepLines: z.array(z.number().int().min(1)).max(40).optional() }).strict(), execute: async (_ctx, input) => {
       if (!taskId) throw new Error('Start a task first with startTask.');
       const speech = await speechEvidence(input.clipId), transcript = speech.evidence.analysis?.transcript;
@@ -1724,7 +1769,14 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const retry = 'Fix these and call planScript again. Nothing was saved and nothing was cut.';
       if (problems.length) return { saved: false, problems, next: retry };
       const line = (n: number) => outline.lines[n - 1], toClip = (range: { start: number; end: number }) => ({ start: Math.round((range.start - speech.offset) * 1000) / 1000, end: Math.round((range.end - speech.offset) * 1000) / 1000 });
-      const ranges = linesToRanges(outline, kept).map(toClip), estimate = await scriptSeconds(input.clipId, speech, ranges);
+      // Wordless b-roll between kept lines stays where the user placed it, as its own range.
+      let allShots: Range[] = [];
+      try { allShots = (await findBroll(speech.evidence, { start: speech.clip.sourceStart + speech.offset, end: speech.sourceEnd + speech.offset })).shots; } catch (error) { if (abortSignal.aborted) throw error; }
+      const keptShots = keptBroll(outline, kept, allShots);
+      const withShots = (list: { start: number; end: number }[], shots: Range[]) => [...list.map(range => shots.reduce((cut, shot) => shot.start < cut.end && shot.end > cut.start && shot.start > cut.start ? { start: cut.start, end: Math.min(cut.end, shot.start) } : cut, range)), ...shots].filter(range => range.end - range.start > .04).sort((a, b) => a.start - b.start);
+      const ranges = withShots(linesToRanges(outline, kept), keptShots).map(toClip);
+      savedScript = { ...(savedScript ?? {}), assetId: speech.evidence._id, broll: allShots.map(shot => ({ ...shot, kept: keptShots.includes(shot) })) } as SavedScript;
+      const estimate = await scriptSeconds(input.clipId, speech, ranges);
       const task = await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null, target = task?.requestedLength;
       const first = kept[0], last = kept.at(-1)!;
       const beats = await Promise.all(input.beats.map(async (beat, index) => {
@@ -1744,13 +1796,109 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const script: SavedScript = { version: 1, assetId: speech.evidence._id, clipId: input.clipId, about: input.about,
         opening: { line: first, start: line(first).start, text: line(first).text }, closing: { line: last, end: line(last).end, text: line(last).text },
         beats: input.beats.map(beat => ({ ...beat, text: line(beat.from).text.split(/\s+/).slice(0, 8).join(' ') })), keepLines: input.keepLines ?? [],
-        ...(input.openingReason ? { openingReason: input.openingReason } : {}), ...(input.endingReason ? { endingReason: input.endingReason } : {}), ...(target ? { target } : {}), estimatedSeconds: estimate.seconds, removedTakes: takes };
+        ...(input.openingReason ? { openingReason: input.openingReason } : {}), ...(input.endingReason ? { endingReason: input.endingReason } : {}), ...(target ? { target } : {}), estimatedSeconds: estimate.seconds, removedTakes: takes, ...(allShots.length ? { broll: allShots.map(shot => ({ ...shot, kept: keptShots.includes(shot) })) } : {}) };
       await laneCtx.runMutation(internal.lanes.saveScript, { ...taskScope, script });
-      scriptSaved = true;
+      scriptSaved = true; savedScript = script;
       return { saved: true, about: input.about, opening: lineLabel(line(first)), closing: lineLabel(line(last)), removedTakesAndChatter: takes, droppedBeats: beats.filter(beat => !beat.kept).map(beat => `${beat.role} ${beat.lines}`), estimatedSeconds: estimate.seconds, estimate: estimate.measured ? 'measured speech cleanup applied' : 'upper bound; pauses not yet measured', ...(target ? { requestedLength: target } : {}),
         ...(underBy ? { note: `The whole script is about ${estimate.seconds.toFixed(1)} s, under the requested ${target!.min} s. Keep it whole, never pad, and tell the user the actual length.` } : {}),
-        ranges, next: `Cut once from the full take: retainSourceRanges ${JSON.stringify({ clipId: input.clipId, ranges, tightenSilence: true })}. Pass these ranges unchanged. Then add captions and call finish.` };
+        ...(keptShots.length ? { brollKept: keptShots.map(toClip), brollNote: 'These b-roll shots are in the ranges as footage; the cut leaves them whole.' } : {}),
+        ranges, next: `Cut once from the full take: retainSourceRanges ${JSON.stringify({ clipId: input.clipId, ranges, tightenSilence: true })}. Pass these ranges unchanged. Then call checkSpots (it measures the first frame, the last frame and every cut edge for awkward looks), then add captions and call finish.` };
     } }),
+    checkSpots: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkSpots, description: "Eyes for the cut, after the speech cut and before captions: measures the speaker at the reel's first frame, last frame and every cut edge (face in frame, head turn, eyes down or closed, eyes off camera, leaning or reaching toward the camera, large movement) on the media worker, with no model service. Clean edges cost nothing. For each flagged edge it returns what was measured with SOURCE times, the nearest clean frame inside the pause the edge sits in (never into a word), and one strip of three frames (before, at the cut, after or the suggested frame) to look at, within the lane's frame budget. Then call it again with decisions: {spot, action:'move'} moves that edge to the suggested clean frame (or `to`, SOURCE seconds) and ripples everything after it; {spot, action:'accept', seen} keeps the edge and records what you saw so it is not flagged again. more:[spot] asks once per spot for five more frames to find a clean one. The reel's ending is extended to a short natural tail on its own when the speaker stays presentable after the last word, and never onto a reach for the camera. When the frame budget runs out, apply the measured suggestions and list the spots you could not look at. finish fails on an unreviewed flagged first or last frame and reports the others.", inputSchema: z.object({ decisions: z.array(z.object({ spot: z.string().min(3).max(140), action: z.enum(['move', 'accept']), to: z.number().min(0).optional().describe('SOURCE seconds to move the edge to; defaults to the suggested clean frame.'), seen: z.string().trim().min(3).max(200).optional().describe('What the frames show, in a few words. Required to accept.') }).strict()).max(40).optional(), more: z.array(z.string().min(3).max(140)).max(6).optional() }).strict(), execute: async (_ctx, input) => {
+      const policy = LANES[lane].eyes;
+      if (!policy || policy.status !== 'enforced') throw new Error(`checkSpots is not part of the ${lane} lane’s checks. It works in the reel lane.`);
+      if (!taskId) throw new Error('Start a task first with startTask.');
+      await editSession.wait();
+      const task = await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null;
+      if (task?.script) savedScript = task.script as SavedScript;
+      const prior = [...task?.evidence ?? []].reverse().find(item => item.tool === 'checkSpots' && item.timelineId === timelineId)?.output as SpotsEvidence | undefined;
+      const sources = [...new Set(editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId).map(clip => clip.assetId!))].slice(0, 6);
+      await Promise.all(sources.map(id => loadAsset(id).catch(() => undefined)));
+      const shotsOf = (): Record<string, Range[]> => savedScript?.broll ? { [savedScript.assetId]: savedScript.broll } : {};
+      const key = (spot: { assetId: string; side: string; source: number }) => `${spot.assetId}:${spot.side}:${spot.source.toFixed(2)}`;
+      const accepted = [...prior?.accepted ?? []], rounds = { ...prior?.rounds ?? {} }, applied: string[] = [];
+      let result: Record<string, unknown> = {};
+      // Decisions first: they refer to the spots of the last reading.
+      const moves = (input.decisions ?? []).filter(item => item.action === 'move'), accepts = (input.decisions ?? []).filter(item => item.action === 'accept');
+      for (const decision of accepts) {
+        const spot = reelSpots(editSession.timeline, assets, shotsOf()).find(item => item.id === decision.spot);
+        if (!spot) throw new Error(`Spot ${decision.spot} is not a cut edge of this timeline. Use the ids from the last checkSpots result.`);
+        if (!decision.seen) throw new Error(`Say what the frames show to accept ${decision.spot} (seen).`);
+        accepted.push({ assetId: spot.assetId, side: spot.side, source: spot.source, seen: decision.seen });
+        applied.push(`${spot.id}: accepted (${decision.seen})`);
+      }
+      if (moves.length) result = await checkpoint(timeline => {
+        let next = timeline;
+        for (const decision of moves) {
+          const spot = reelSpots(next, assets, shotsOf()).find(item => item.id === decision.spot);
+          if (!spot) throw new Error(`Spot ${decision.spot} is not a cut edge of this timeline. Use the ids from the last checkSpots result.`);
+          const to = decision.to ?? prior?.spots.find(item => item.id === decision.spot)?.moveTo;
+          if (to === undefined) throw new Error(`Spot ${decision.spot} has no measured clean frame to move to. Give to (SOURCE seconds inside ${spot.from.toFixed(2)}-${spot.to.toFixed(2)} s), accept it with what you saw, or re-plan with planScript to use another take.`);
+          next = moveEdge(next, spot, to);
+          applied.push(`${spot.id}: moved from source ${spot.source.toFixed(2)} to ${to.toFixed(2)} s`);
+        }
+        return next;
+      });
+      // Measure the cut as it stands now.
+      const { budget, save } = await frameBudget(policy.frames.total), images: { label: string; data: string; mimeType: string }[] = [];
+      const measure = async () => {
+        const spots = reelSpots(editSession.timeline, assets, shotsOf()), readings: ReturnType<typeof readSpot>[] = [];
+        for (const assetId of [...new Set(spots.map(spot => spot.assetId))]) {
+          const own = spots.filter(spot => spot.assetId === assetId), duration = assets.find(asset => asset._id === assetId)?.duration;
+          const times = [...new Set(own.flatMap(spot => spotTimes(spot, duration)))];
+          const { samples } = await runLooksRead(ctx, run.ownerId, run.projectId, assetId, times.slice(0, 480), undefined, abortSignal);
+          // A voice-over or a screen recording has no speaker to judge.
+          if (samples.filter(sample => sample.face > 0).length < samples.length * .4) { readings.push(...own.map(spot => ({ spot, flagged: false, seen: [] }))); continue; }
+          const baseline = lookBaseline(samples);
+          readings.push(...own.map(spot => readSpot(spot, samples, policy, baseline)));
+        }
+        return readings;
+      };
+      let readings: ReturnType<typeof readSpot>[];
+      try {
+        readings = await measure();
+        // The ending gets its short natural tail without a look: every frame up to it measured clean.
+        const ending = readings.find(reading => reading.spot.last && !reading.flagged && reading.moveTo !== undefined);
+        if (ending) {
+          result = await checkpoint(timeline => moveEdge(timeline, ending.spot, ending.moveTo!));
+          applied.push(`${ending.spot.id}: ending extended from source ${ending.spot.source.toFixed(2)} to ${ending.moveTo!.toFixed(2)} s, a natural tail after the last word`);
+          readings = (await measure()).map(reading => reading.spot.last && !reading.flagged ? { ...reading, moveTo: undefined } : reading);
+        }
+      } catch (error) {
+        if (abortSignal.aborted) throw error;
+        const unavailable = error instanceof Error ? error.message : 'The media worker could not measure faces.';
+        await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'checkSpots', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { cutKey: cutKey(editSession.timeline), spots: [], accepted, rounds, framesUsed: budget.used, unavailable } satisfies SpotsEvidence } });
+        return { ...result, measured: false, unavailable, next: 'The cut edges could not be measured, so they are unverified. Say so in the reply; continue with captions and finish.' };
+      }
+      const isAccepted = (spot: { assetId: string; side: string; source: number }) => accepted.some(item => item.assetId === spot.assetId && item.side === spot.side && Math.abs(item.source - spot.source) < .08);
+      const flagged = readings.filter(reading => reading.flagged && !isAccepted(reading.spot)).sort((a, b) => Number(b.spot.first || b.spot.last) - Number(a.spot.first || a.spot.last));
+      const unverified = new Set<string>(), notes: Record<string, string> = {};
+      const clampTime = (time: number, assetId: string) => Math.round(Math.max(0, Math.min((assets.find(asset => asset._id === assetId)?.duration ?? Infinity) - .05, time)) * 100) / 100;
+      // First look: one strip of three frames per flagged spot not yet shown. Extra round: five frames, once per spot.
+      const firstLook = flagged.filter(reading => !rounds[key(reading.spot)]), extra = flagged.filter(reading => input.more?.includes(reading.spot.id));
+      const show = async (group: typeof flagged, frames: number, times: (reading: (typeof flagged)[number]) => number[], round: number) => {
+        const shown = group.filter(reading => { if ((rounds[key(reading.spot)] ?? 0) >= round) { if (round === 2) notes[reading.spot.id] = 'Its extra round is used: move it, accept it, or report it unverified.'; return false; } if (budget.take(frames, frames) < frames) { unverified.add(reading.spot.id); return false; } return true; });
+        for (const assetId of [...new Set(shown.map(reading => reading.spot.assetId))]) {
+          const own = shown.filter(reading => reading.spot.assetId === assetId), listed = own.map(reading => times(reading).map(time => clampTime(time, assetId)));
+          const { strips } = await runLooksRead(ctx, run.ownerId, run.projectId, assetId, listed.flat(), frames, abortSignal);
+          own.forEach((reading, index) => { if (!strips[index]) { unverified.add(reading.spot.id); return; } rounds[key(reading.spot)] = round; images.push({ label: `Spot ${reading.spot.id} (${reading.spot.first ? 'first frame of the reel' : reading.spot.last ? 'last frame of the reel' : `cut ${reading.spot.side === 'in' ? 'into' : 'out of'} a line`}): source ${listed[index].map(time => `${time.toFixed(2)} s`).join(', ')}. The cut is at ${reading.spot.source.toFixed(2)} s${reading.moveTo !== undefined ? `; suggested clean frame ${reading.moveTo.toFixed(2)} s` : '; no clean frame was measured in this pause'}.`, data: strips[index], mimeType: 'image/jpeg' }); });
+        }
+      };
+      try {
+        await show(firstLook, policy.frames.firstLook, reading => { const { source, side } = reading.spot, target = reading.moveTo; return [...new Set(side === 'in' ? [source - .25, source, target !== undefined && target > source ? target : source + .25] : [target !== undefined && target < source ? target : source - .25, source, target !== undefined && target > source ? target : source + .25])].sort((a, b) => a - b); }, 1);
+        await show(extra, policy.frames.extraRound, reading => { const low = Math.max(reading.spot.from, reading.spot.source - .5), high = Math.min(reading.spot.to, reading.spot.source + .5); return Array.from({ length: policy.frames.extraRound }, (_, index) => low + (high - low) * index / (policy.frames.extraRound - 1)); }, 2);
+      } catch (error) { if (abortSignal.aborted) throw error; flagged.forEach(reading => { if (!images.some(image => image.label.startsWith(`Spot ${reading.spot.id} `))) unverified.add(reading.spot.id); }); }
+      await save();
+      const records: SpotRecord[] = readings.map(reading => ({ id: reading.spot.id, side: reading.spot.side, assetId: reading.spot.assetId, source: reading.spot.source, timeline: reading.spot.timeline, first: reading.spot.first, last: reading.spot.last,
+        status: !reading.flagged ? 'clean' : isAccepted(reading.spot) ? 'accepted' : unverified.has(reading.spot.id) ? 'unverified' : 'flagged', seen: reading.seen, ...(reading.moveTo !== undefined ? { moveTo: reading.moveTo } : {}) }));
+      await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'checkSpots', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { cutKey: cutKey(editSession.timeline), spots: records, accepted, rounds, framesUsed: budget.used } satisfies SpotsEvidence } });
+      const open = records.filter(record => record.status === 'flagged' || record.status === 'unverified');
+      return { ...result, measured: true, edges: records.length, clean: records.filter(record => record.status === 'clean').length, accepted: records.filter(record => record.status === 'accepted').length, ...(applied.length ? { applied } : {}),
+        flagged: open.map(record => ({ spot: record.id, where: record.first ? 'first frame of the reel' : record.last ? 'last frame of the reel' : `cut ${record.side === 'in' ? 'into' : 'out of'} a line`, timeline: record.timeline, source: record.source, measured: record.seen, ...(record.moveTo !== undefined ? { suggestedCleanFrame: record.moveTo } : { suggestedCleanFrame: null }), ...(record.status === 'unverified' ? { frames: 'not shown: frame budget used up' } : {}), ...(notes[record.id] ? { note: notes[record.id] } : {}) })),
+        frames: budget.report(), images,
+        next: !open.length ? 'Every cut edge is clean or accepted. Add captions if they are missing, then call finish.'
+          : `Look at each strip, then call checkSpots with one decision per flagged spot: move when the frame at the cut looks awkward and the suggested frame looks fine; accept with what you saw when the cut frame is fine as it is, or when no clean frame exists and the line must stay. ${open.some(record => record.moveTo === undefined) ? 'A spot with no clean frame can also be fixed by re-planning with planScript to keep another take. ' : ''}One extra round per spot is allowed (more:[spot]) when three frames do not settle it.${unverified.size ? ` Not shown (budget): ${[...unverified].join(', ')}. For those, move to the measured clean frame where one exists and name the rest as unverified in your reply.` : ''}` };
+    }, toModelOutput: (ctx, options) => blueprintImages(ctx, options.output) }),
     cleanSpeech: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.cleanSpeech, description: "Remove filler words, breaths, pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map. Each cut sits between words, never inside one; a retake keeps only its final attempt; every edge snaps to measured word sound, to the millisecond. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. To assemble chosen takes prefer retainSourceRanges with tightenSilence:true, which applies the same cleanup inside the kept ranges; keep here does the same. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use for 'remove ums', 'cut the pauses', 'clean up the retakes' on a clip as a whole; report its speechCleanup summary.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional(), keep: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100).optional() }), execute: async (_ctx, input) => {
       if (input.keep?.some((range, index) => range.end <= range.start || (index > 0 && range.start < input.keep![index - 1].end))) throw new Error('keep ranges must be ordered and non-overlapping.');
       const speech = await speechEvidence(input.clipId);
@@ -2649,7 +2797,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         if(task?.result?.exhausted)throw exhaustedLaneError(lane,task.result.failures.join(' '));
-        scriptSaved||=!!task?.script;
+        if(task?.script){scriptSaved=true;savedScript=task.script as SavedScript;}
         if(options.scriptFirst&&lane==='reel'&&!scriptSaved&&['retainSourceRanges','cleanSpeech','split','trim'].includes(name)&&rawTake(input.clipId))throw new Error(`Read the script before cutting this take: call readScript ${JSON.stringify({clipId:input.clipId})}, then planScript, and cut once with the ranges planScript returns.`);
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
