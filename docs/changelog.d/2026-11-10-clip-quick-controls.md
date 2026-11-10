@@ -1,0 +1,1 @@
+- Editor: three one-click controls above the preview (subtitles on/off, blur background or tight crop, a hook line), each saved and undoable like any edit. Why: the founder had to message the agent for each of these simple changes on vertical clips.

@@ -1,0 +1,18 @@
+/* One-click clip controls under the preview bar. Neutral surfaces, hover states only, no motion. */
+.quick-controls{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-height:36px;padding:2px 14px 6px;color:var(--ws-muted,#999);font-size:11px}
+.quick-control{display:flex;align-items:center;gap:8px;min-width:0}
+.quick-control-label{flex:none;color:var(--ws-muted,#999);font-size:11px;font-weight:400}
+.quick-control-hint{color:var(--ws-faint,#6f6f6f);font-size:11px;white-space:nowrap}
+.quick-toggle[data-slot=toggle-group]{flex:none;padding:2px;border-radius:7px;background:var(--ws-hover,#222)}
+.quick-toggle [data-slot=toggle-group-item]{height:24px;min-width:0;padding:0 10px;border-radius:5px!important;background:none;color:var(--ws-muted,#999);font-size:11px;font-weight:400;box-shadow:none;transition:none}
+.quick-toggle [data-slot=toggle-group-item]:hover{background:#2a2a2a;color:#f2f2f2}
+.quick-toggle [data-slot=toggle-group-item][data-state=on]{background:#3a3a3a;color:#f2f2f2}
+.quick-toggle [data-slot=toggle-group-item]:focus-visible{outline:none;border-color:transparent;box-shadow:none}
+html:not([data-workspace-theme=dark]) .quick-toggle [data-slot=toggle-group-item]:hover{background:#e8e8e8;color:#292929}
+html:not([data-workspace-theme=dark]) .quick-toggle [data-slot=toggle-group-item][data-state=on]{background:#fff;color:#292929}
+.quick-control-hook{flex:1 1 200px;max-width:420px}
+.quick-hook-input[data-slot=input]{height:28px;padding:0 9px;border:1px solid var(--ws-artifact-border,#2d2d2d);border-radius:7px;background:var(--ws-hover,#222);color:var(--ws-text,#f2f2f2);font-size:12px;box-shadow:none;transition:none}
+.quick-hook-input[data-slot=input]::placeholder{color:var(--ws-faint,#6f6f6f)}
+.quick-hook-input[data-slot=input]:hover:not(:disabled){border-color:#4a4a4a}
+.quick-hook-input[data-slot=input]:focus,.quick-hook-input[data-slot=input]:focus-visible{outline:none;box-shadow:none}
+@media(max-width:900px){.quick-controls{padding:4px 12px 6px;gap:6px 12px}.quick-control-hook{flex-basis:100%;max-width:none}.quick-hook-input[data-slot=input]{height:32px;font-size:16px}}

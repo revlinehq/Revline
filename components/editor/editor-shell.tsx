@@ -26,6 +26,7 @@ import { Preview, type PreviewHandle } from './preview';
 import { usePlaybackSources } from './use-playback-sources';
 import { PreviewZoomProvider, PreviewViewport, PreviewFrameOverlay } from './preview-zoom';
 import { CanvasSettings } from './canvas-settings';
+import { QuickControls } from './quick-controls';
 import { AspectRatioControl } from './aspect-ratio-control';
 import type { SafeAreaPlatform } from '@/lib/editor/safe-areas';
 import { MediaImportDialog } from './media-import-dialog';
@@ -96,6 +97,8 @@ export type EditorShellProps = {
   onOpened?: () => void;
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
   onShare?: () => void;
+  /** Loads one source with its saved analysis (transcript), for the quick subtitles control. */
+  onLoadAsset?: (assetId:string)=>Promise<MediaAsset>;
 };
 
 const TIMELINE_MIN_HEIGHT = 160;
@@ -519,6 +522,7 @@ export function EditorShell(p: EditorShellProps) {
 
       <ResizablePanel id="workspace" minSize={compact?0:320}><div className="editor-workspace">
         <ResizablePanelGroup orientation="horizontal" className="preview-layout" data-inspector-motion={inspectorMotion || undefined}><ResizablePanel id="canvas" minSize={220}><PreviewZoomProvider canvas={dimensions(timeline.aspectRatio)}><div className="preview-workspace"><CanvasSettings tabs={timelineTabs} onShowChat={!compact && chatCollapsed ? () => chatPanel.current?.expand() : undefined} onHideChat={!compact && !chatCollapsed ? () => { flushSync(() => setChatCollapsed(true)); chatPanel.current?.collapse(); } : undefined}>{!ratioOnFrame && ratioControl}</CanvasSettings>
+        {!p.demo && timeline.clips.some(item => item.kind === 'video') && <QuickControls timeline={timeline} assets={assets} locked={editing} onChange={onChange} onError={onError} onLoadAsset={p.onLoadAsset}/>}
         <div className="editor-stage">
 
           <div className="preview-player"><div className="stage-center" data-ratio-on-frame={ratioOnFrame || undefined} style={{'--preview-ratio': dimensions(timeline.aspectRatio).width / dimensions(timeline.aspectRatio).height} as React.CSSProperties}>{previewTimeline.clips.length ? <><PreviewViewport><Preview controls={collapsed} safeArea={safeArea} onPlaybackAssets={onPlaybackAssets} onSlowLoad={onSlowLoad} onReady={onPlaybackReady} onThumbnail={onLoadingThumbnail} debugId={p.projectId} ref={preview} timeline={previewTimeline} assets={assets} time={time} onTime={setTime} onPlaying={setPlaying} onError={previewError} onRefreshMedia={p.onRefreshMedia} muted={muted} onMutedChange={setMuted} selectedClip={editing ? undefined : clip} cropping={cropping && !editing} onCropCancel={() => setCroppingClip(null)} onCropCommit={(id,crop) => { if (id === croppingClip && id === selected) { changeClip(id,{crop}); setCroppingClip(null); } }} onSelectClip={selectClip} onEditClip={selectClip} onEditText={editText} onClipChange={changeClip} onVisualChange={patch=>{if(clip)changeClip(clip.id,patch);}} /></PreviewViewport><PreviewFrameOverlay above={ratioOnFrame ? ratioControl : undefined}/></> : editing ? <div className="empty-canvas" role="status" aria-live="polite"><div className="scene-placeholder" style={{'--scene-hue': 222} as React.CSSProperties}><i/></div><div className="empty-canvas-copy"><h2>Building your film</h2><p>Each scene appears here as Revline makes it.</p></div></div> : <div className="empty-drop"><div className="empty-drop-copy"><h2>Start with a clip or an idea</h2><Button type="button" className="empty-drop-add" onClick={e => { e.stopPropagation(); browse(); }} disabled={!!p.upload}>{p.upload ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14}/>}Add footage</Button><p>Drop files anywhere in the editor</p>{p.upload && <Progress aria-label="Footage preparation progress" max={100} value={p.upload.percent} />}</div></div>}</div>{cropping ? <div className="preview-playback source-crop-actions" role="group" aria-label="Crop controls"><span className="source-crop-label">Crop</span><Button type="button" variant="ghost" size="sm" onClick={() => preview.current?.resetCrop()}><RotateCcw size={12}/>Reset</Button><Button type="button" variant="ghost" size="sm" onClick={() => { preview.current?.finishCrop(true); setCroppingClip(null); }}>Cancel</Button><Button type="button" size="sm" onClick={() => preview.current?.finishCrop()}>Done</Button></div> : null}</div>
