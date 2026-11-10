@@ -36,7 +36,6 @@ import { applyTimelineEdit } from '@/lib/editor/timeline-sync';
 import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIMELINE_BASE_PX, TIMELINE_MAX_ZOOM } from '@/lib/editor/timeline-zoom';
 import './custom-timeline.css';
-import { TimelineTabs, type TimelineTab, type TimelineTabActions } from './timeline-tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '@/components/ui/dropdown-menu';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuLabel, ContextMenuSeparator } from '@/components/ui/context-menu';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -61,8 +60,6 @@ type Props={
   aiWorking?:boolean;
   /** Shown over the blurred timeline while an agent edits, e.g. "Claude Code is working". */
   workingLabel?:string;
-  /** The MCP app editing (null: Revline's own AI), shown on the tab it edits. */
-  workingAgent?:string|null;
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
   /** A film the editor agent is still writing, shown on its own row above A1; never part of the timeline. */
   filmDraft?:FilmDraftView;
@@ -73,7 +70,6 @@ type Props={
   sceneThumbs?:Record<string,{time:number;image:string}[]>;
   /** Motion clips whose frames are rendering right now; their placeholder shimmers. */
   sceneRendering?:readonly string[];
-  tabs?:TimelineTab[];tabActions?:TimelineTabActions;
 };
 
 function clipIdentity(clip: Clip) {
@@ -735,15 +731,14 @@ export function TimelinePanel(p:Props){
   const scale=useMemo(()=>({px,filmstripPaused}),[px,filmstripPaused]);
 
   return <ContextMenu onOpenChange={open=>{if(!open)setContext(null);}}><ContextMenuTrigger asChild disabled={editingDisabled}><section tabIndex={-1} onContextMenu={openContext} data-read-only={p.readOnly||undefined} data-compact-tracks={dense||undefined} data-tool={blade&&!editingDisabled?'blade':undefined} data-editing-locked={p.editingLocked||undefined} data-ai-working={p.aiWorking||undefined} data-live-edit={!!p.liveEdit||undefined} aria-busy={p.aiWorking||undefined} className={`timeline-panel custom-timeline ${p.playbackControls?'timeline-with-playback':''} ${p.collapsed?'timeline-collapsed':''} ${dense?'tracks-compact':''}`} aria-label={p.readOnly?'Shared video timeline':'Video timeline'}>
-    {!p.readOnly&&p.tabs&&p.tabActions&&<TimelineTabs agentName={p.workingAgent} tabs={p.tabs.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:end}:tab)} working={!!p.aiWorking} locked={!!(p.aiWorking||p.editingLocked)} onError={report} {...p.tabActions}/>}
     <TimelinePlayheadClock playing={p.playing} readTime={p.readPlaybackTime} px={px} duration={end} origin={origin} viewport={scroll} head={head} cap={cap} scrubbing={scrubRef} followPausedUntil={followPausedUntil}/>
-    <div className="timeline-toolbar"><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
+    <div className="timeline-toolbar" onClick={p.collapsed&&p.onToggleCollapse?event=>{if(!(event.target as HTMLElement).closest('button,input'))p.onToggleCollapse?.();}:undefined}><div className="timeline-edit-actions">{!p.playbackControls&&<EditorPlaybackTime className="timeline-playback-time" time={time} duration={end} fps={timeline.fps} playing={p.playing} readTime={p.readPlaybackTime}/>}
       {p.readOnly&&<span>Timeline</span>}
       {!p.readOnly&&<IconButton label={blade?'Blade on · click a clip to cut · A to select':'Blade tool (B)'} aria-pressed={blade} data-active={blade||undefined} disabled={editingDisabled} onClick={()=>store.setState({tool:blade?'select':'blade'})}><Scissors size={14}/></IconButton>}
       {!p.readOnly&&<IconButton label="Delete selected clips" disabled={editingDisabled||!selected} onClick={p.onDelete}><Trash2 size={14}/></IconButton>}
       {!p.readOnly&&p.onUndo&&<IconButton label="Undo (⌘Z)" disabled={!p.canUndo} onClick={p.onUndo}><Undo2 size={14}/></IconButton>}
       {!p.readOnly&&p.onRedo&&<IconButton label="Redo (⇧⌘Z)" disabled={!p.canRedo} onClick={p.onRedo}><Redo2 size={14}/></IconButton>}
-    </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-view-actions">
+    </div>{p.playbackControls&&<div className="timeline-playback-controls">{p.playbackControls}</div>}<div className="timeline-toolbar-end"><div className="timeline-view-actions">
       {!p.readOnly&&<button aria-label="Auto-join when trimming" onClick={()=>{store.setState({ripple:!ripple});setRipplePreference(!ripple);}} aria-pressed={ripple} className={ripple?'snap-active':''}><ChevronsRightLeft size={14}/></button>}
       <button aria-label="Compact track rows" onClick={()=>store.setState({compactTracks:!dense})} aria-pressed={dense} className={dense?'snap-active':''}><Rows3 size={14}/><span>Compact</span></button>
       {!p.readOnly&&<button aria-label="Toggle snapping" onClick={()=>store.setState({snapping:!snap})} aria-pressed={snap} className={snap?'snap-active':''}><Magnet size={14}/></button>}
@@ -756,7 +751,9 @@ export function TimelinePanel(p:Props){
         <DropdownMenuItem onSelect={p.onToggleMute}>{p.muted?<VolumeX/>:<Volume2/>}{p.muted?'Unmute preview':'Mute preview'}</DropdownMenuItem>
         {!p.readOnly&&<><DropdownMenuSeparator/><DropdownMenuSub><DropdownMenuSubTrigger disabled={editingDisabled}>Frame rate · {timeline.fps} fps</DropdownMenuSubTrigger><DropdownMenuSubContent><DropdownMenuRadioGroup value={String(timeline.fps)} onValueChange={value=>{const fps=Number(value);if(fps===24||fps===30||fps===60){if(timeline.clips.some(clip=>clip.duration<1/fps)){report(new Error(`Some clips are shorter than one frame at ${fps} fps. Extend those clips before changing the frame rate.`));return;}onChange({...timeline,fps});}}}>{[24,30,60].map(fps=><DropdownMenuRadioItem key={fps} value={String(fps)}>{fps} fps</DropdownMenuRadioItem>)}</DropdownMenuRadioGroup></DropdownMenuSubContent></DropdownMenuSub></>}
       </DropdownMenuContent></DropdownMenu>
-      <IconButton label={p.collapsed?'Expand timeline':'Collapse timeline'} onClick={p.onToggleCollapse}>{p.collapsed?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</IconButton>
+    </div>
+      {/* Outside the scrolling tools, so it is on screen at every width. */}
+      {p.onToggleCollapse&&<IconButton className="timeline-collapse-toggle" label={p.collapsed?'Expand timeline':'Collapse timeline'} onClick={p.onToggleCollapse}>{p.collapsed?<ChevronUp size={14}/>:<ChevronDown size={14}/>}</IconButton>}
     </div></div>
     <div className="timeline-body" data-working-label={p.aiWorking&&!p.readOnly?(p.workingLabel??'AI is working'):undefined}><div className="track-headers" ref={labels} style={{marginBottom:scrollbarHeight}} onScroll={e=>{const viewport=scroll.current;if(viewport&&viewport.scrollTop!==e.currentTarget.scrollTop)viewport.scrollTop=e.currentTarget.scrollTop;}}><div className="track-ruler-label"/><div className="timeline-top-space" aria-hidden="true" style={{height:TIMELINE_TOP_SPACE}}/>{tracks.map(track=>{
       const clips=(clipsByTrack.get(track.id)??[]);
