@@ -1,0 +1,2 @@
+/* Neutral grey surface in the dark workspace theme, as on the model picker menu. */
+html[data-workspace-theme=dark] .campaign-popover{background:#2a2a2a}
