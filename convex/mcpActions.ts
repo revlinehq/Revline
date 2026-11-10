@@ -154,7 +154,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const timelineId=request.timelineId??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
     const stored=await ctx.runQuery(internal.lanes.forTab,{ownerId:args.ownerId,projectId,timelineId});
     const command=parseEditorCommand(request.request),selection=initialLaneSelection(command,stored?.lane,stored?.manual,request.lane,!command&&reelRequested(request.request,project.timeline)),taskId=newMcpTaskId();
-    const laneChosen=true,checks=requestChecks(request.request),checkLevel=taskCheckLevel(checks);
+    const laneChosen=true,checks=requestChecks(request.request,command),checkLevel=taskCheckLevel(checks);
     await ctx.runMutation(internal.lanes.begin,{ownerId:args.ownerId,projectId,taskId,timelineId,...selection,reason:request.reason??selection.reason,laneChosen,required:command?.name==='clip'||laneChosen&&request.taskType!=='question',...checks});
     // Earlier tasks on this tab that never called finish stop showing as working until they call again.
     await ctx.runMutation(internal.lanes.setMcpSession,{ownerId:args.ownerId,connectionId:args.connectionId??`task:${taskId}`,projectId,taskId,timelineId,lane:selection.lane,laneChosen,supersede:true});

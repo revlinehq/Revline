@@ -192,6 +192,9 @@ export const begin = internalMutation({
     checkLevel: v.optional(v.literal('final')),
     /** From requestChecks: a length the user asked the finished video to have. finish enforces it. */
     requestedLength: v.optional(v.object({ min: v.optional(v.number()), max: v.optional(v.number()) })),
+    /** From requestChecks: the request asks Revline to choose the moments (the /clip command, "find the best moments").
+     * Optional because an agent runner deployed before this field still starts tasks without it. */
+    findMoments: v.optional(v.boolean()),
     required: v.boolean(),
     timelineId: v.optional(v.string()),
   },
@@ -240,6 +243,7 @@ export const begin = internalMutation({
       exportConfirmed: args.exportConfirmed,
       ...(args.checkLevel ? { checkLevel: args.checkLevel } : {}),
       ...(args.requestedLength ? { requestedLength: args.requestedLength } : {}),
+      ...(args.findMoments !== undefined ? { findMoments: args.findMoments } : {}),
       required: args.required,
       initialTabIds: tabsOf(project).map((tab) => tab.id),
       baselines: [
