@@ -6,12 +6,20 @@ import { Input } from '@/components/ui/input';
 import { useVideoLinkImport } from '@/components/editor/video-link-import';
 import { looksLikeLink } from '@/lib/editor/video-link';
 
+export type LinkImportProgress = { label: string; percent?: number };
+
 /** One-row link import for the composer's bottom shelf (`EditComposer` `footer`). */
-export function ComposerLinkShelf({ open, prefill = '', focusKey = 0, disabled = false, onImport, onClose }: {
+export function ComposerLinkShelf({ open, prefill = '', focusKey = 0, disabled = false, progress, onImport, onCancel, onClose }: {
   open: boolean; prefill?: string;
   /** Changes when the shelf is asked for again while already open, to put focus back in the field. */
   focusKey?: number;
-  disabled?: boolean; onImport: (url: string) => Promise<void>; onClose: () => void;
+  disabled?: boolean;
+  /** Shown in place of the Import button while the import runs. */
+  progress?: LinkImportProgress;
+  /** Resolves when the footage is imported; a rejection shows inline and keeps the link for a retry. */
+  onImport: (url: string) => Promise<void>;
+  /** Discards the running import; the shelf then closes. */
+  onCancel: () => void; onClose: () => void;
 }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
@@ -34,8 +42,11 @@ export function ComposerLinkShelf({ open, prefill = '', focusKey = 0, disabled =
         event.preventDefault();
         if (url.trim()) void submit();
       }}/>
-      <Button type="button" variant="ghost" size="sm" className="composer-link-import" disabled={locked || !looksLikeLink(url)} onClick={() => void submit()}>{busy ? <LoaderCircle className="animate-spin" aria-label="Starting import"/> : 'Import'}</Button>
-      <Button type="button" variant="ghost" size="icon-xs" className="composer-link-close" aria-label="Close link import" disabled={busy} onClick={onClose}><X/></Button>
+      {busy
+        ? <span className="composer-link-progress" role="status"><LoaderCircle className="animate-spin" aria-hidden="true"/>{progress?.label ?? 'Starting…'}{progress?.percent !== undefined && ` ${progress.percent}%`}</span>
+        : <Button type="button" variant="default" size="sm" className="revline-primary composer-link-import" disabled={locked || !looksLikeLink(url)} onClick={() => void submit()}>Import</Button>}
+      {/* The import can be discarded once it has started; until then there is nothing to cancel. */}
+      <Button type="button" variant="ghost" size="icon-xs" className="composer-link-close" aria-label={busy ? 'Cancel import' : 'Close link import'} disabled={busy && !progress} onClick={busy ? onCancel : onClose}><X/></Button>
     </div>
     {error && <p id={`${id}-error`} className="composer-link-error" role="alert">{error}</p>}
   </div>;

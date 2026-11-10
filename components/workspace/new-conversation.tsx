@@ -18,7 +18,7 @@ import { useSourceUpload } from '@/components/editor/use-source-upload';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
-import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, rememberOpeningReference, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
+import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningReference, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -26,7 +26,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
 import { isVideoLinkOnly } from '@/lib/editor/video-link';
-import { ComposerLinkShelf } from './composer-link-shelf';
+import { ComposerLinkShelf, type LinkImportProgress } from './composer-link-shelf';
+import { importErrorMessage } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { AspectRatioControl } from '@/components/editor/aspect-ratio-control';
 import { EditComposer } from './edit-composer';
@@ -50,8 +51,19 @@ export function NewConversation() {
   const [linkShelf, setLinkShelf] = useState({ open: false, prefill: '', focusKey: 0 });
   const declinedLink = useRef('');
   const focusLinkAfterMenu = useRef(false);
-  const [importingLink, setImportingLink] = useState(false);
   const importVideo = useMutation(api.mediaTasks.importVideo);
+  const cancelMediaTask = useMutation(api.mediaTasks.cancel);
+  const removeProject = useMutation(api.projects.remove);
+  // A link imports into a holding project of its own. Its video then joins the draft as saved footage
+  // (`cloudIds`), so the edit's project is created on send exactly as for uploads and the holder is removed.
+  const [linkImporting, setLinkImporting] = useState(false);
+  const [linkImport, setLinkImport] = useState<{ projectId: Id<'projects'>; taskId: Id<'mediaTasks'> } | null>(null);
+  const linkTask = useQuery(api.mediaTasks.get, linkImport ? { taskId: linkImport.taskId } : 'skip');
+  const linkSettle = useRef<{ resolve: () => void; reject: (cause: Error) => void } | null>(null);
+  const [linkHolders, setLinkHolders] = useState<Record<string, Id<'projects'>>>({});
+  // Send was pressed while a link was still importing: the edit starts once its footage has arrived.
+  const [sendAfterImport, setSendAfterImport] = useState(false);
+  const sendWaiter = useRef<(() => void) | null>(null);
   const createProject = useMutation(api.projects.create);
   const saveTimeline = useMutation(api.projects.saveTimeline);
   const sourceUpload = useSourceUpload();
@@ -76,8 +88,10 @@ export function NewConversation() {
   const [draft, setDraft] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
-  const busy = startingBlank || importingLink || processing !== null && processing.phase !== 'error';
-  const { chats: recentProjects, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
+  const busy = startingBlank || sendAfterImport || processing !== null && processing.phase !== 'error';
+  const { chats: workspaceChats, loading: projectsLoading } = useWorkspaceChats(false, !processing, 6);
+  const holderIds: string[] = [...Object.values(linkHolders), ...(linkImport ? [linkImport.projectId] : [])];
+  const recentProjects = workspaceChats.filter(project => !holderIds.includes(project.id));
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? newProjectComposerKey(userId) : undefined, disabled: !draftReady || busy || !settings });
@@ -111,6 +125,7 @@ export function NewConversation() {
     try {
       const saved = newProjectCloudFootage();
       if (saved) setCloudIds(saved);
+      setLinkHolders(newProjectLinkImports());
     } catch { /* Saved uploads can be chosen again. */ }
     let active = true;
     const epoch = draftEpoch.current;
@@ -169,6 +184,8 @@ export function NewConversation() {
     const remainingCloud = cloudIds.filter(value => value !== id);
     setFiles(remaining); setCloudIds(remainingCloud); setError('');
     try { saveNewProjectCloudFootage(remainingCloud); } catch { /* The selection stays in memory. */ }
+    // Removing link-imported footage discards the import with its holding project.
+    if (linkHolders[id]) { discardHolders([linkHolders[id]]); keepLinkHolders(Object.fromEntries(Object.entries(linkHolders).filter(([assetId]) => assetId !== id))); }
     void stashFiles(remaining.map(item => item.file));
   }
 
@@ -235,6 +252,8 @@ export function NewConversation() {
         rememberOpeningRequest(projectId, prompt, composerControls.request);
         if (activeJob.input.placeOnTimeline === false) rememberOpeningReference(projectId);
         clearNewProjectSources();
+        // The new project holds its own copy of each imported video.
+        discardHolders(Object.values(linkHolders));
       } catch { if (prompt) throw new Error('Your footage is saved, but this browser could not preserve your request. Open the editor to continue.'); }
       const first = activeJob.input.files[0]?.file;
       rememberOpeningFootage(projectId, first ? posters.current.get(first) ?? (first.type.startsWith('image/') ? first : undefined) : cloudMedia?.[0]?.thumbnailUrl ?? undefined, first?.name ?? cloudMedia?.[0]?.fileName);
@@ -262,6 +281,9 @@ export function NewConversation() {
     session.current = createProjectImportSession();
     draftEpoch.current++;
     setFiles([]); setCloudIds([]); setProcessing(null); setError(''); setStartingBlank(false);
+    if (linkImport) void cancelLinkImport();
+    discardHolders(Object.values(linkHolders)); setLinkHolders({});
+    setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
     brief.current = ''; setDraft(''); setAspectRatio('landscape');
     try { clearNewProjectDraft(); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
@@ -285,27 +307,80 @@ export function NewConversation() {
   /** A lone video link pasted into the empty prompt opens the link shelf with it. */
   function pasteLink(text: string) {
     const link = text.trim();
-    if (draft || !draftReady || busy || !isVideoLinkOnly(link)) return false;
+    if (draft || !draftReady || busy || linkImporting || !isVideoLinkOnly(link)) return false;
     if (link === declinedLink.current) { declinedLink.current = ''; return false; }
     openLinkShelf(link);
     return true;
   }
+  function keepLinkHolders(holders: Record<string, Id<'projects'>>) {
+    setLinkHolders(holders);
+    try { saveNewProjectLinkImports(holders); } catch { /* The holders stay in memory. */ }
+  }
+  function discardHolders(projectIds: Id<'projects'>[]) {
+    for (const projectId of projectIds) void removeProject({ projectId }).catch(() => { /* It stays in the project list as "Video import". */ });
+  }
+  function stopWaitingToSend() {
+    setSendAfterImport(false);
+    sendWaiter.current?.(); sendWaiter.current = null;
+  }
+  /** Runs the whole import in place. Resolves once the video is attached; nothing navigates. */
   async function importLink(url: string) {
-    if (submitting.current) return;
-    // Lock the prompt too, so a second project cannot start while this one is being created.
-    setImportingLink(true);
-    try { await startLinkProject(url); } catch (cause) { setImportingLink(false); throw cause; }
+    setLinkImporting(true);
+    try {
+      setLinkImport(await importVideo({ url, sourcesOnly: true }));
+      await new Promise<void>((resolve, reject) => { linkSettle.current = { resolve, reject }; });
+    } finally { linkSettle.current = null; setLinkImporting(false); }
   }
-  async function startLinkProject(url: string) {
-    const projectId = await createProject({ title: brief.current.trim().replace(/\s+/g, ' ').slice(0, 80) || 'Video import', aspectRatio });
-    await importVideo({ url, projectId });
-    rememberOpeningRequest(projectId, brief.current.trim(), composerControls.request);
-    await stashFiles(files.map(item => item.file));
+  function endLinkImport(failure?: string) {
+    const settle = linkSettle.current;
+    setLinkImport(null);
+    if (failure) { stopWaitingToSend(); settle?.reject(new Error(failure)); } else settle?.resolve();
+  }
+  async function cancelLinkImport() {
+    if (!linkImport) return;
+    const { taskId, projectId } = linkImport;
+    stopWaitingToSend(); endLinkImport();
     setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
-    router.push('/editor/' + projectId);
+    try { await cancelMediaTask({ taskId }); } catch { /* The holder is removed either way. */ }
+    discardHolders([projectId]);
   }
+  useEffect(() => {
+    if (!linkImport || !linkTask || linkTask._id !== linkImport.taskId) return;
+    if (linkTask.status === 'completed' && linkTask.assetId) {
+      const assetId = linkTask.assetId;
+      const attached = cloudIds.includes(assetId) ? cloudIds : [...cloudIds, assetId];
+      setCloudIds(attached);
+      try { saveNewProjectCloudFootage(attached); } catch { /* The selection stays in memory. */ }
+      keepLinkHolders({ ...linkHolders, [assetId]: linkImport.projectId });
+      setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
+      endLinkImport();
+    } else if (linkTask.status === 'failed' || linkTask.status === 'cancelled') {
+      discardHolders([linkImport.projectId]);
+      endLinkImport(linkTask.status === 'failed' ? importErrorMessage(linkTask.error) : 'The import was cancelled.');
+    }
+  }, [linkImport, linkTask?._id, linkTask?.status, linkTask?.assetId]);
+  useEffect(() => {
+    // Wait for the imported video's details as well, so the edit starts with it.
+    if (!sendAfterImport || linkImporting || cloudIds.length && cloudMedia === undefined) return;
+    // The send button stays busy until the edit has started or reported its error.
+    const done = sendWaiter.current; sendWaiter.current = null;
+    setSendAfterImport(false);
+    void send().catch(cause => setError(userError(cause, 'Could not start your edit.'))).finally(() => done?.());
+  }, [sendAfterImport, linkImporting, cloudIds, cloudMedia]);
+  const linkProgress: LinkImportProgress | undefined = !linkImport ? undefined
+    : !linkTask || linkTask.status === 'queued' ? { label: 'Queued…' }
+    : linkTask.status === 'retrying' ? { label: 'Retrying…' }
+    : { label: 'Importing', percent: Math.min(99, Math.round(linkTask.progress)) };
   async function submit() {
     if (!draftReady || !settings || busy || submitting.current) return;
+    if (linkImporting) {
+      setSendAfterImport(true);
+      await new Promise<void>(resolve => { sendWaiter.current = resolve; });
+      return;
+    }
+    await send();
+  }
+  async function send() {
     if (hasMedia) { await processFootage(); return; }
     const prompt = brief.current.trim();
     if (startingBlank || !prompt) return;
@@ -344,7 +419,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} onImport={importLink} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer header={<AspectRatioControl appearance="composer" value={aspectRatio} onChange={changeAspectRatio} disabled={!draftReady || busy}/>} footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={composerControls.actions} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));

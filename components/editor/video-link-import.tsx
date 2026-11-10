@@ -19,6 +19,7 @@ export type VideoImportState = { _id: string; status: string; progress: number; 
 
 /** URL field state and the import call shared by every "import a video link" form. */
 export function useVideoLinkImport(onImport: (url: string) => Promise<void>, disabled = false) {
+  // `onImport` may resolve when the import is accepted or when it finishes; the field stays busy until then.
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -45,7 +46,7 @@ export function VideoLinkImport({ onImport, onUpload, disabled = false }: { onIm
   </form>;
 }
 
-function importErrorMessage(error?: string) {
+export function importErrorMessage(error?: string) {
   const message = error?.replace(/^.*?(?:Uncaught ConvexError:|Server Error)\s*/s, '').split(/\n\s+at /)[0].trim();
   if (!message) return 'The video could not be downloaded. Try uploading the file instead.';
   if (message.includes('Your timeline is full. The imported video is saved in Sources.')) return 'Your video is saved in Sources. Use + beside it to add it to your timeline.';
