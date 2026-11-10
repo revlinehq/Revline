@@ -61,7 +61,7 @@ function AllCampaigns({ now }: { now: number }) {
   const popularCount = campaigns ? Math.min(6, Math.ceil(campaigns.length / 3)) : 0;
   const popular = campaigns?.slice(0, popularCount) ?? [], more = campaigns?.slice(popularCount) ?? [];
   return <main className="dash-content campaigns-content">
-    <h1 className="campaigns-heading">Find a campaign to clip</h1>
+    <h1 className="campaigns-heading">Describe the campaign you want to clip</h1>
     <EditComposer className="campaigns-search" variant="compact" appearance="flat" value={text} onChange={setText} onSubmit={() => run(text.trim())} placeholder="Gaming, podcasts, $2 per 1K views" attachControl={<></>} />
     <p className="campaigns-source">Campaigns from Content Rewards{typeof updatedAt === 'number' && <> · updated {timeAgo(updatedAt, now)}</>}</p>
     {error ? <div className="dash-empty" role="alert"><h2>Could not load campaigns</h2><p>Check your connection and try again.</p><Button variant="soft" onClick={() => void run(wanted)}>Try again</Button></div>

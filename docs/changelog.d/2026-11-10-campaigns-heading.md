@@ -1,0 +1,1 @@
+- Dashboard: the Campaigns heading now reads "Describe the campaign you want to clip". Why: the founder found "Find a campaign to clip" did not say the box takes a description.
