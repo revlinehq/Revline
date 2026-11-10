@@ -1,4 +1,5 @@
 @import '../components/ui/brand-colors.css';
+@import '../components/ui/dashboard-tokens.css';
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@clerk/ui/themes/shadcn.css";
