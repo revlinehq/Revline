@@ -102,10 +102,15 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,composerNote }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,composerNote,results,composerExtra,composerPlaceholder }: {
   externalAgent?: string | null;
   /** A small row shown just above the composer (the project's campaign). */
   composerNote?: ReactNode;
+  /** Shown after the last reply once nothing is running (the finished clips in the chat view). */
+  results?: ReactNode;
+  /** A control placed before the model choice in the composer's bottom row (Results). */
+  composerExtra?: ReactNode;
+  composerPlaceholder?: string;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
   /** Model and effort choices; effortSwitcher (Ultra) picks the effort for each request, effortLocked (other paid plans) shows the levels locked. */
   settings?: ComposerSettings;
@@ -221,7 +226,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     <MessageScroller><MessageScrollerViewport>
       <MessageScrollerContent className="gap-6 pt-0 pb-6">
       {canLoadMore && <Button variant="ghost" size="sm" className="load-more" onClick={() => onLoadMore?.()}>Earlier messages</Button>}
-      {!messages.length && !waiting && !externalAgent && !suggestions?.items.length && <Empty className="assistant-welcome h-full"><EmptyHeader><EmptyTitle>What are we making?</EmptyTitle><EmptyDescription>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</EmptyDescription></EmptyHeader>{!demo&&!configured&&<EmptyContent><p className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</p></EmptyContent>}</Empty>}
+      {!messages.length && !waiting && !externalAgent && !suggestions?.items.length && !results && <Empty className="assistant-welcome h-full"><EmptyHeader><EmptyTitle>What are we making?</EmptyTitle><EmptyDescription>{hasClips ? 'A tighter cut, a stronger opening, subtitles. Tell me what you have in mind.' : 'Bring your footage, and tell me the story you want to make.'}</EmptyDescription></EmptyHeader>{!demo&&!configured&&<EmptyContent><p className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</p></EmptyContent>}</Empty>}
       {groups.map(group => {
         const groupMessages = group.messages;
         const replies = group.replies;
@@ -251,6 +256,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
         </Fragment>;
       })}
       {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
+      {results && !waiting && !externalAgent && <div data-chat-follow className="assistant-chat-results">{results}</div>}
       {externalAgent && <div data-chat-follow data-alone={!groups.length||undefined} className="assistant-agent-notice" role="status"><span>Connected through <McpLogo className="assistant-agent-logo"/> MCP</span><strong><AgentLogo name={externalAgent} className="assistant-agent-logo"/>{externalAgent} is working</strong></div>}
       {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
@@ -261,7 +267,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     <div className="manual-composer-dock">
     {composerNote}
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerExtra ? <>{composerExtra}{composerControls.actions}</> : composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }
