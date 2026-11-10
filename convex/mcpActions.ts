@@ -30,6 +30,8 @@ const projectIdField = z.string().min(1).describe('Revline project ID from listP
 // These shared tools resolve their target from an owner-checked upload/job ID,
 // not a lane task. Their IDs must never be interpreted as lane task IDs.
 const RESOURCE_TOOLS = new Set(['finishUpload', 'getMediaTask', 'getExport', 'cancelExport']);
+/** The agent's own reports: callable with or without a task, in any lane. */
+const REPORT_TOOLS = new Set(['reportIssue', 'reportLimitation']);
 
 const PROJECT_TOOLS = {
   startTask:{description:'Start one task in a timeline. Keep the returned taskId for subsequent calls. A style is optional; shared edits work immediately after startTask. /clip and a user-selected lane take precedence. Call finish before claiming an edit complete.',inputSchema:z.object({projectId:projectIdField,timelineId:z.string().min(1).optional(),request:z.string().trim().min(1).max(8000),lane:z.enum(LANE_IDS).optional(),reason:z.string().trim().min(5).max(300).optional(),taskType:z.enum(['edit','question']).optional()}).refine(value=>!value.lane||!!value.reason,{message:'An explicit lane needs a reason.'})},
@@ -143,7 +145,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   const agentName=(args.agentClientId?args.agentName:session?.agentName??args.agentName)??'MCP client';
   const agentClientId=args.agentClientId??session?.agentClientId;
   const sessionLane=session?.lane??'edit';
-  if(!session&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&args.name!=='reportIssue')return result('Pass the taskId from startTask, or start a task for this target with startTask(projectId, timelineId, request). A style is optional; shared editing tools are available immediately.',true);
+  if(!session&&!MCP_SELECTION_TOOLS.has(args.name)&&!RESOURCE_TOOLS.has(args.name)&&!REPORT_TOOLS.has(args.name))return result('Pass the taskId from startTask, or start a task for this target with startTask(projectId, timelineId, request). A style is optional; shared editing tools are available immediately.',true);
   const task = session ? await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null : null;
   const lane=task?.lane??sessionLane;
   if(!laneToolAllowed(lane,args.name,task?.capabilities))return result(laneToolError(lane,args.name),true);
@@ -180,7 +182,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
     const task=session?await ctx.runQuery(internal.lanes.task,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null:null;
     if(!task?.exportConfirmed)return result('Export needs explicit user confirmation. Start the task with the user’s export request only after they confirm.',true);
   }
-  if((!projectTool||['getFrames','exportVideo','createTimeline'].includes(args.name))&&args.name!=='reportIssue'){
+  if((!projectTool||['getFrames','exportVideo','createTimeline'].includes(args.name))&&!REPORT_TOOLS.has(args.name)){
     if(!input.projectId||!input.timelineId)return result('Pass projectId and timelineId explicitly, or taskId from startTask to pin both.',true);
   }
   if(session&&['createTimeline','renameTimeline','deleteTimeline'].includes(args.name))await ctx.runMutation(internal.lanes.requireFinish,{ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId});
@@ -335,14 +337,14 @@ async function mcpLaneOptions(ctx: ActionCtx, ownerId: string, session?: Doc<'mc
   return { lane: task?.lane ?? session.lane, laneChosen: true, capabilities: task?.capabilities, taskId: session.taskId, finishRequired: task?.required ?? true, checkLevel: taskCheckLevel(task) };
 }
 
-async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>): Promise<CallResult> {
+async function readEditorTool(ctx: ActionCtx, ownerId: string, rawProjectId: string, name: string, input: unknown, timelineId?: string, comparisonDeadline?: number, laneSession?:Doc<'mcpLaneSessions'>, agentName?: string): Promise<CallResult> {
   try {
     const projectId = await ctx.runQuery(internal.mcp.readRun, { ownerId, projectId: rawProjectId });
     // A named tab is read from its stored timeline, on every reload the tool makes; the open tab stays as it is.
     const run = { projectId, ownerId, runId: readRunId(timelineId) };
     const { project, assets } = await ctx.runQuery(internal.assistant.getRun, run);
     const abortSignal = AbortSignal.timeout(CALL_LIMIT_MS);
-    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, comparisonDeadline, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
+    const { tools } = editorTools(ctx, { run, project, assets, recovering: false, initialPlans: [], selectedClipIds: [], abortSignal, planlessEffects: true, comparisonDeadline, agent: agentName, ...await mcpLaneOptions(ctx,ownerId,laneSession) });
     const tool = tools[name];
     const output = await tool.execute.call({ ...tool, ctx }, input, { toolCallId: crypto.randomUUID(), messages: [], abortSignal });
     if (name === 'previewBackgrounds') return backgroundPreviewResult(output, failed(output));
@@ -362,7 +364,7 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
   const parsed = known.inputSchema.safeParse(rawInput);
   if (!parsed.success) return result(`Invalid arguments: ${z.prettifyError(parsed.error)}`, true);
 
-  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, comparisonDeadline,laneSession);
+  if (toolBehavior(name)?.mcp === 'read') return readEditorTool(ctx, ownerId, rawProjectId, name, parsed.data, timelineId, comparisonDeadline,laneSession,agentName);
   // The tab switch and the edit lock happen in one transaction, so no other agent's tab switch can land in between.
   const { projectId, runId } = await ctx.runMutation(internal.mcp.beginRun, { ownerId, projectId: rawProjectId, ...(agentName ? { agentName } : {}), ...(timelineId ? { timelineId } : {}) });
   const run = { projectId, ownerId, runId };

@@ -17,6 +17,7 @@ import { HIGHLIGHT_SIGNALS_ONLY, readHighlights, sourceType, semanticMoment } fr
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { CHOICE_TEXT, fitChoiceText, shortenedNote } from '../../lib/ai/choice-text';
+import { LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../../lib/incidents';
 import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
 import type { CheckLevel } from '../../lib/ai/lanes/types';
 import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
@@ -60,7 +61,8 @@ import { BACKGROUND_ACCENTS, BACKGROUND_STRUCTURES, candidateDocument, kitRoles,
 import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
-import { boundRunTab, isMcpRun } from "./run_ids";
+import { boundRunTab, isMcpRun, READ_ONLY_RUN_PREFIX } from "./run_ids";
+import { PROJECT_BASE_TOOLS } from "../../lib/ai/lanes/base-tools";
 import { MCP_WORKER_WAIT_MS } from "./mcp_limits";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
@@ -167,6 +169,8 @@ type EditorToolkitOptions = {
   finishRequired?:boolean;
   laneChosen?:boolean;
   capabilities?:string[];
+  /** Who is editing, for limitation samples: the model id in the app, the client's name over MCP. */
+  agent?:string;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -1097,6 +1101,38 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       execute: async (_ctx, input) => {
         const incidentId = await ctx.runMutation(internal.incidents.reportAgent, { ...run, ...input });
         return incidentId ? { incidentId } : { incidentId: null, saved: false, next: 'The report limit is reached and this report was not saved. Do not retry; continue safely or explain the limitation.' };
+      },
+    }),
+    reportLimitation: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportLimitation,
+      description: 'Note a product limitation: the tools work as designed but cannot do what the user asked, or you fall back to a workaround that gives a lesser result (no tool for a requested effect, a missing option, a hard limit on duration, tracks or resolution, an unsupported format or font, a check that forbids the requested structure). Call once per distinct limitation, then continue with the best available approach and tell the user plainly. Describe the capability, never the user: no names, quoted text, file names, links or transcript. Not for tool defects (reportIssue), plan or credit limits, things the user did not ask for, or failures a retry fixes.',
+      inputSchema: z.object({
+        // Nothing here fails the call: a missing or mistyped field falls back and unknown keys are dropped. A note about a limitation is never a failed step.
+        request: z.string().catch('').describe('What the user asked for, in one or two general sentences. Longer text is shortened.'),
+        limitation: z.string().catch('').describe('What could not be done and why, stated the same way each time: the missing tool or option, the hard limit and its value, the unsupported format or effect, or the check that forbids it. Longer text is shortened.'),
+        category: z.enum(LIMITATION_CATEGORIES).catch('other'),
+        impact: z.enum(LIMITATION_IMPACTS).catch('degraded').describe('blocked: not delivered. degraded: delivered with a lesser result. slower: delivered in full by a longer route.'),
+        tool: z.string().optional().catch(undefined).describe('The nearest tool or capability, as an exact tool name when there is one.'),
+        workaround: z.string().optional().catch(undefined).describe('What you did instead, or "none; told the user".'),
+        wanted: z.string().optional().catch(undefined).describe('The capability that would have solved it, phrased as a feature.'),
+      }),
+      execute: async (_ctx, input) => {
+        // Over-long text is shortened, never rejected, and a refused or failed note is never a failed step.
+        const fit = (value: string | undefined, budget: number) => fitChoiceText(value ?? '', budget).text || undefined;
+        const next = 'Continue with the best available approach, and tell the user plainly what was not possible and what you did instead.';
+        const limitation = fit(input.limitation, 400);
+        // Models write the same tool as addTransition, functions.addTransition or mcp__Revline__addTransition: one spelling keeps one row and a publishable name.
+        const named = fit(input.tool, 100), bare = named?.split(/[.:/]|__/).at(-1)?.trim().toLowerCase();
+        const tool = [...Object.keys(EDITOR_TOOL_DEFINITIONS), ...PROJECT_BASE_TOOLS].find(name => name.toLowerCase() === bare) ?? named;
+        // A run is the chat turn in the app and the task over MCP. An MCP call without a task has a new run id every time, so the project stands in.
+        const scopeId = taskId ?? (run.runId.startsWith(READ_ONLY_RUN_PREFIX) ? `mcp-project:${run.projectId}` : run.runId);
+        if (!limitation) return { recorded: false, next: `limitation was empty, so nothing was noted. ${next}` };
+        try {
+          const saved = await ctx.runMutation(internal.incidents.reportLimitation, { ...run, scopeId, request: fit(input.request, 300) ?? 'not stated', limitation, category: input.category, impact: input.impact, tool, workaround: fit(input.workaround, 300), wanted: fit(input.wanted, 300), lane, model: fit(options.agent, 100) });
+          return saved.recorded ? { recorded: true, ...(saved.repeat ? { note: 'Already noted in this request; it was not counted again.' } : {}), next } : { recorded: false, next: `${saved.reason === 'run-limit' ? 'This request has noted its limit of limitations' : 'The limitation note limit is reached'}, so this one was not saved. Do not retry. ${next}` };
+        } catch (error) {
+          console.warn(`[ai-limitation] ${JSON.stringify({ projectId: run.projectId, runId: run.runId, saved: false, error: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`);
+          return { recorded: false, next: `The note could not be saved. Do not retry. ${next}` };
+        }
       },
     }),
     listTimelines: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listTimelines, description: "List this project's timeline tabs, each a separate video sharing the project's sources. Editing tools act on the open tab.", inputSchema: z.object({}), execute: async () => ctx.runQuery(internal.assistant.listRunTimelines, run) }),
@@ -2608,7 +2644,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(taskId){
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
-        if(task?.result?.exhausted)throw exhaustedLaneError(lane,task.result.failures.join(' '));
+        // A limitation note still saves after the last finish check: it edits nothing and is never a failed step.
+        if(task?.result?.exhausted&&name!=='reportLimitation')throw exhaustedLaneError(lane,task.result.failures.join(' '));
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
           if(saved!==undefined)fastReview.restore(saved);

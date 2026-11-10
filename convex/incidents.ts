@@ -1,10 +1,10 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
-import { incidentArgs, incidentDeployment, recordIncident } from './lib/incidents';
+import { incidentArgs, incidentDeployment, incidentFingerprint, recordIncident } from './lib/incidents';
 import { z } from 'zod';
 import { requireOwner, requireProject } from './lib/auth';
-import { incidentText } from '../lib/incidents';
+import { incidentText, isAgentFiled, limitationIdentity, LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../lib/incidents';
 
 export const reportIncident = internalMutation({ args: incidentArgs, handler: recordIncident });
 
@@ -17,11 +17,11 @@ const AGENT_REPORT_LIMITS = [
   { scope: 'all', windowMs: 60_000, limit: 60 },
   { scope: 'all', windowMs: DAY, limit: 1000 },
 ] as const;
-async function allowAgentReport(ctx: MutationCtx, ownerId: string) {
+async function allowAgentReport(ctx: MutationCtx, ownerId: string, namespace: 'agent' | 'limitation' = 'agent') {
   const now = Date.now();
   // Check every window before counting, so a refused report consumes no allowance.
   const windows = await Promise.all(AGENT_REPORT_LIMITS.map(async ({ scope, windowMs, limit }) => {
-    const key = `incidents:agent:${windowMs}:${scope === 'owner' ? ownerId : '*'}`;
+    const key = `incidents:${namespace}:${windowMs}:${scope === 'owner' ? ownerId : '*'}`;
     const usage = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();
     const current = usage && now - usage.windowStart < windowMs;
     return { key, usage, current, calls: current ? usage.calls : 0, limit };
@@ -40,6 +40,36 @@ export const reportAgent = internalMutation({ args: { ...runScope, toolName: v.s
   if (!await allowAgentReport(ctx, args.ownerId)) return null;
   return await recordIncident(ctx, { source: 'editing-agent', kind: 'agent-report', message: `${args.toolName}: ${args.happened}`, context: { location: 'editing-agent:reportIssue', toolName: args.toolName, inputSummary: args.inputSummary, happened: args.happened, expected: args.expected }, projectId: args.projectId, runId: args.runId, deployment: incidentDeployment() });
 } });
+
+// A limitation is not a defect: the tools worked as designed but could not do what the user asked. The same
+// limitation from any user is one row with a rising count, so the most frequent gaps are the ones patched first.
+const LIMITATIONS_PER_RUN = 3;
+const literals = <T extends string>(values: readonly [T, T, ...T[]]) => v.union(...values.map(value => v.literal(value)));
+export const reportLimitation = internalMutation({ args: {
+  ...runScope, scopeId: v.string(), request: v.string(), limitation: v.string(), category: literals(LIMITATION_CATEGORIES), impact: literals(LIMITATION_IMPACTS),
+  tool: v.optional(v.string()), workaround: v.optional(v.string()), wanted: v.optional(v.string()), lane: v.optional(v.string()), model: v.optional(v.string()),
+}, handler: async (ctx, args): Promise<{ recorded: boolean; repeat?: true; reason?: 'run-limit' | 'rate-limit' }> => {
+  await requireProject(ctx, args.projectId, args.ownerId);
+  const identity = limitationIdentity(args.category, args.tool, args.limitation);
+  const scopeId = incidentText(args.scopeId, 150);
+  // The same limitation again in one run is already counted: no new occurrence and no allowance used.
+  // The marker is its own row because a busy limitation keeps only its latest four samples.
+  const key = `incidents:limitation:run:${scopeId}`, seenKey = `${key}:${(await incidentFingerprint(identity)).slice(-24)}`, now = Date.now();
+  if (await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', seenKey)).unique()) return { recorded: true, repeat: true };
+  const usage = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();
+  if ((usage?.calls ?? 0) >= LIMITATIONS_PER_RUN) return { recorded: false, reason: 'run-limit' };
+  if (!await allowAgentReport(ctx, args.ownerId, 'limitation')) return { recorded: false, reason: 'rate-limit' };
+  if (usage) await ctx.db.patch(usage._id, { calls: usage.calls + 1 });
+  else await ctx.db.insert('mcpUsage', { ownerId: key, windowStart: now, calls: 1 });
+  await ctx.db.insert('mcpUsage', { ownerId: seenKey, windowStart: now, calls: 1 });
+  await recordIncident(ctx, {
+    source: 'editing-agent', kind: 'agent-limitation', identity, message: `${args.category}: ${args.tool ?? 'no tool'}: ${args.limitation}`,
+    // Absent optional fields are left out; the context filter would otherwise store them as "[omitted]".
+    context: Object.fromEntries(Object.entries({ location: 'editing-agent:reportLimitation', toolName: args.tool, request: args.request, limitation: args.limitation, category: args.category, workaround: args.workaround, impact: args.impact, wanted: args.wanted, lane: args.lane, model: args.model }).filter(([, value]) => value !== undefined)),
+    projectId: args.projectId, runId: scopeId, deployment: incidentDeployment(),
+  });
+  return { recorded: true };
+} });
 export const reportRunner = internalMutation({ args: { ...runScope, message: v.string(), stack: v.optional(v.string()) }, handler: async (ctx, args) => {
   await requireProject(ctx, args.projectId, args.ownerId);
   return await recordIncident(ctx, { source: 'cloudflare-agent-runner', kind: 'runner-error', message: args.message, stack: args.stack, context: { location: 'cloudflare/agent-runner:turn' }, projectId: args.projectId, runId: args.runId, deployment: incidentDeployment() });
@@ -54,8 +84,8 @@ export const reportClient = mutation({
   args: { source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), context: v.any(), projectId: v.optional(v.string()), runId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
-    // Only reportAgent may create agent reports: they are published as public issues.
-    if (JSON.stringify(args).length > 20_000 || incidentText(args.kind, 100) === 'agent-report') return null;
+    // Only reportAgent and reportLimitation may create agent-filed rows: they are published as public issues.
+    if (JSON.stringify(args).length > 20_000 || isAgentFiled(incidentText(args.kind, 100))) return null;
     // Reuse the existing per-owner window store, with an independent namespace.
     const key = `incidents:${owner}`;
     const rate = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();
@@ -84,12 +114,12 @@ const claimed = { ...identity, claimToken: v.string() };
 
 export const undelivered = query({ args: credentials, handler: async (ctx, { secret }) => {
   authorize(secret);
-  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).filter(q => q.or(q.neq(q.field('kind'), 'agent-report'), q.eq(q.field('issueDispatchReady'), true))).order('desc').take(100);
+  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).filter(q => q.and(q.neq(q.field('kind'), 'agent-limitation'), q.or(q.neq(q.field('kind'), 'agent-report'), q.eq(q.field('issueDispatchReady'), true)))).order('desc').take(100);
 } });
 export const claim = mutation({ args: { ...identity, claimToken: v.string() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (!row || (row.kind === 'agent-report' && !row.issueDispatchReady) || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
+  if (!row || row.kind === 'agent-limitation' || (row.kind === 'agent-report' && !row.issueDispatchReady) || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
   await ctx.db.patch(row._id, { delivery: 'claimed', claimToken: args.claimToken, claimedAt: Date.now() });
   return true;
 } });
@@ -134,15 +164,15 @@ export const relatedLogs = query({ args: { ...credentials, id: v.id('incidents')
 } });
 
 // Separate leases on the same durable incident row; old listeners cannot claim these.
-export const issueQueue = query({ args: { ...credentials, paginationOpts: paginationOptsValidator }, handler: async (ctx, args) => {
+export const issueQueue = query({ args: { ...credentials, paginationOpts: paginationOptsValidator, kind: v.optional(v.union(v.literal('agent-report'), v.literal('agent-limitation'))) }, handler: async (ctx, args) => {
   authorize(args.secret);
-  return await ctx.db.query('incidents').withIndex('by_kind', q => q.eq('kind', 'agent-report')).paginate(args.paginationOpts);
+  return await ctx.db.query('incidents').withIndex('by_kind', q => q.eq('kind', args.kind ?? 'agent-report')).paginate(args.paginationOpts);
 } });
 export const claimIssue = mutation({ args: { ...claimed, backfill: v.boolean() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
   const now = Date.now();
-  if (!row || row.kind !== 'agent-report' || row.generation !== args.generation || (row.issueUrl && (row.issueDeliveredCount ?? 0) >= row.count) ||
+  if (!row || !isAgentFiled(row.kind) || row.generation !== args.generation || (row.issueUrl && (row.issueDeliveredCount ?? 0) >= row.count) ||
     (row.issueAttempts === undefined && !args.backfill) || (row.issueAttempts ?? 0) >= 5 || (row.issueNextAttempt ?? 0) > now ||
     (row.issueDelivery === 'claimed' && (row.issueClaimedAt ?? 0) > now - 600_000)) return false;
   await ctx.db.patch(row._id, { issueDelivery: 'claimed', issueClaimToken: args.claimToken, issueClaimedAt: now, issueAttempts: (row.issueAttempts ?? 0) + 1 });
@@ -151,13 +181,14 @@ export const claimIssue = mutation({ args: { ...claimed, backfill: v.boolean() }
 export const finishIssue = mutation({ args: { ...claimed, issueUrl: v.optional(v.string()), count: v.number() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (!row || row.kind !== 'agent-report' || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
+  if (!row || !isAgentFiled(row.kind) || row.generation !== args.generation || row.issueClaimToken !== args.claimToken) throw new ConvexError('Incident claim lost');
   if (args.issueUrl && !/^https:\/\/github\.com\/(?:revlinehq\/Revline|zuraHQ\/(?:Revline|revline-editor))\/issues\/[1-9]\d*$/.test(args.issueUrl)) throw new ConvexError('Invalid incident issue');
   await ctx.db.patch(row._id, args.issueUrl ? { issueUrl: args.issueUrl, issueDeliveredCount: args.count, issueDelivery: 'finished', issueAttempts: 0, issueNextAttempt: undefined } :
     { issueDelivery: 'failed', issueNextAttempt: Date.now() + Math.min(3600_000, 60_000 * 2 ** (row.issueAttempts ?? 1)) });
 } });
 
-// Explicit operator opt-in only. The existing executor owns concurrency and PR recovery.
+// Explicit operator opt-in only, and only for defect reports: a limitation is a feature gap for a person to
+// triage, never a fixer job. The existing executor owns concurrency and PR recovery.
 export const dispatchIssue = mutation({ args: identity, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
