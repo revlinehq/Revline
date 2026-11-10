@@ -238,6 +238,8 @@ export const r2UploadFields = {
     key: v.string(), uploadId: v.string(), fileName: v.string(), contentType: v.string(), kind: assetKind,
     size: v.number(), partSize: v.number(), duration: v.optional(v.number()), width: v.optional(v.number()), height: v.optional(v.number()),
     cleanupScheduled:v.optional(v.boolean()), aborting:v.optional(v.boolean()), expiresAt: v.number(), assetId: v.optional(v.id("assets")), completed: v.optional(v.boolean()),
+    // Part bytes go straight to storage with presigned links; unset uploads go through the media Worker.
+    direct: v.optional(v.boolean()),
 };
 export const r2UploadDocument = v.object({ _id: v.id("r2Uploads"), _creationTime: v.number(), ...r2UploadFields });
 export const userFields = {
@@ -372,7 +374,7 @@ export default defineSchema({
   projectCatalog:defineTable({agentSummary:v.optional(v.union(v.null(),v.object({name:v.string(),until:v.number(),running:v.boolean()}))),projectId:v.id('projects'),ownerId:v.string(),title:v.string(),aspectRatio,createdAt:v.number(),updatedAt:v.number(),clipCount:v.number(),aiRunning:v.boolean(),deleting:v.optional(v.boolean()),coverKind:v.optional(assetKind),coverStorageId:v.optional(v.id('_storage')),coverR2Key:v.optional(v.string())}).index('by_project',['projectId']).index('by_owner_updated',['ownerId','updatedAt']).index('by_owner_deleting_updated',['ownerId','deleting','updatedAt']),
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
   storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), modelBytes:v.optional(v.number()), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
-  cloudMedia: defineTable({ ownerId:v.string(), r2Key:v.string(), uploadId:v.string(), fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), partSize:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()), createdAt:v.number(), expiresAt:v.number(), activeAt:v.optional(v.number()), completed:v.boolean(), aborting:v.optional(v.boolean()) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
+  cloudMedia: defineTable({ ownerId:v.string(), r2Key:v.string(), uploadId:v.string(), fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), partSize:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()), createdAt:v.number(), expiresAt:v.number(), activeAt:v.optional(v.number()), completed:v.boolean(), aborting:v.optional(v.boolean()), direct:v.optional(v.boolean()) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
   storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:storageObjectKind, size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])

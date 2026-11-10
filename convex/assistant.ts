@@ -31,11 +31,11 @@ import { startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { withoutSceneCode } from '../lib/editor/scene-code';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
-import { hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
+import { canChooseReasoningEffort, hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type ObjectType } from "convex/values";
 import { PROJECT_MEDIA_LIMIT } from "../lib/editor/limits";
 import { components, internal } from "./_generated/api";
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
@@ -50,7 +50,7 @@ import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, isRetiredEditorModelChoice, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed } from '../lib/ai/claude-model';
+import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, isRetiredEditorModelChoice, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed, withPlanReasoning, editorEffortSwitcherOffered } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
@@ -81,14 +81,17 @@ const composerSettingsFields = {
   defaultModelChoice: v.optional(claudeModelChoiceValidator),
   defaultReasoningEffort: v.optional(editorReasoningEffortValidator),
   effortSwitcher: v.optional(v.boolean()),
+  /** A paid plan below Ultra: the picker shows the effort levels locked. */
+  effortLocked: v.optional(v.boolean()),
 };
-async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
+async function editorComposerSettings(ctx: QueryCtx, ownerId: string): Promise<ObjectType<typeof composerSettingsFields>> {
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const catalogModels = [...allowedClaudeModelChoices()];
   const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
-  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, effortSwitcher: true, allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
+  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, modelSwitcher: true, allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
   const choices = editorModelChoices();
+  const effortChoice = !!choices && await canChooseReasoningEffort(ctx, ownerId);
   return {
     paidModelAccess,
     catalogModels,
@@ -97,7 +100,7 @@ async function editorComposerSettings(ctx: QueryCtx, ownerId: string) {
     defaultReasoningEffort: defaultEditorReasoningEffort(),
     ...(choices ? { modelSwitcher: true, allowedModels: [...choices] } : {}),
     claudeViaMcp: false,
-    ...(process.env.EDITOR_EFFORT_SWITCHER === 'true' && choices ? { effortSwitcher: true } : {}),
+    ...(effortChoice ? { effortSwitcher: true } : choices && editorEffortSwitcherOffered() ? { effortLocked: true } : {}),
   };
 }
 export const composerSettings = query({
@@ -154,10 +157,12 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if (mobile && (args.modelChoice !== FREE_EDITOR_MODEL_CHOICE || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   // An old client may still send a retired model (Gemini 4 Argon): edit with the default instead.
   const modelChoice = isRetiredEditorModelChoice(args.modelChoice) ? undefined : args.modelChoice;
-  const manualEffort = args.reasoningEffort !== undefined && args.reasoningEffort !== 'auto';
+  // Only Ultra picks an effort. Anyone else's is dropped, so a stale client or saved preference edits at the default instead of failing.
+  const reasoningEffort = paidModelAccess && !mobile && await canChooseReasoningEffort(ctx, ownerId) ? args.reasoningEffort : undefined;
+  const manualEffort = reasoningEffort !== undefined && reasoningEffort !== 'auto';
   if (paidModelAccess && !mobile && (modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(modelChoice)) throw new ConvexError('This AI model is not available.');
   let pinnedModel;
-  try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(modelChoice)), args.reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
+  try { pinnedModel = !paidModelAccess ? freeEditorModel() : mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(modelChoice)), reasoningEffort), args.speedMode); assertEditorModelConfigured(pinnedModel); } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
     for(const id of args.attachedAssetIds){const asset=await ctx.db.get(id);if(!asset||asset.ownerId!==ownerId||asset.projectId!==project._id)throw new ConvexError('Attached media does not belong to this project.');}
@@ -404,7 +409,8 @@ export const modelForRun = internalQuery({
     await requireActiveRun(ctx, args);
     await requireEditorAccess(ctx, args.ownerId);
     if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
-    return validatePinnedClaudeModel(args.pinnedModel ?? resolveClaudeModel());
+    // Only Ultra keeps a chosen effort; this recheck covers queued, retried and recovered turns.
+    return validatePinnedClaudeModel(withPlanReasoning(args.pinnedModel ?? resolveClaudeModel(), await canChooseReasoningEffort(ctx, args.ownerId)));
   },
 });
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: (ctx, args) => runIsActive(ctx, args) });

@@ -15,7 +15,7 @@ type ImportDependencies = {
   stage: (files: File[]) => Promise<void>;
   create: (title: string, assetIds: Id<'assets'>[]) => Promise<Id<'projects'>>;
   project: (projectId: Id<'projects'>) => Promise<{ timeline: Timeline; revision: number }>;
-  upload: (projectId: Id<'projects'>, file: File, progress: (percent: number, phase: SourceUploadPhase) => void) => Promise<Id<'assets'>>;
+  upload: (projectId: Id<'projects'>, file: File, progress: (percent: number, phase: SourceUploadPhase, activity?: string) => void) => Promise<Id<'assets'>>;
   asset: (projectId: Id<'projects'>, assetId: Id<'assets'>) => Promise<MediaAsset>;
   prepare?: (projectId: Id<'projects'>, asset: MediaAsset, onActivity: (activity: EditingPreparationActivity) => void) => Promise<MediaAsset>;
   save: (projectId: Id<'projects'>, timeline: Timeline, revision: number) => Promise<number>;
@@ -73,7 +73,7 @@ export async function importProjectSources(
 
   for (const [index, source] of input.files.entries()) {
     if (session.completed.has(source.id)) continue;
-    const uploadProgress = (percent: number, phase: SourceUploadPhase) => report({ phase, percent: phase === 'reading' ? 0 : transferProgress(percent), index: input.assetIds.length + index + 1, total }, source.id);
+    const uploadProgress = (percent: number, phase: SourceUploadPhase, activity?: string) => report({ phase, ...(activity ? { activity } : {}), percent: phase === 'reading' ? 0 : transferProgress(percent), index: input.assetIds.length + index + 1, total }, source.id);
     let assetId = session.uploaded.get(source.id);
     if (!assetId) {
       const uploadStarted=Date.now();

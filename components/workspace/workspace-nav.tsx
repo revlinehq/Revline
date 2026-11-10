@@ -43,7 +43,7 @@ export function useWorkspaceChats(demo = false, enabled = true, limit = CHAT_PAG
   const { isAuthenticated, isLoading } = useConvexAuth();
   const connected = !!isSignedIn && isAuthenticated && !demo;
   const active = connected && enabled;
-  const { results: projects, status, loadMore } = usePaginatedQuery(api.projects.list, active ? {} : 'skip', { initialNumItems: limit });
+  const { results: projects, status, loadMore } = usePaginatedQuery(api.projects.listPage, active ? {} : 'skip', { initialNumItems: limit });
   const working = useQuery(api.projects.workingAgents, active ? {} : 'skip');
   const chats = useMemo<WorkspaceChat[]>(() => {
     if (!connected) return [];

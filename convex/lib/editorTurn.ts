@@ -1,8 +1,8 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
-import { laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection, reelRequested } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
-import { FULL_CHECK_TOOLS, checkInstructions, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
@@ -14,7 +14,7 @@ import { filmDraftMiddleware } from './filmDraftStream';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { wrapLanguageModel } from "ai";
+import { NoSuchToolError, wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -23,7 +23,7 @@ import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
@@ -33,8 +33,9 @@ import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
+import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
@@ -122,7 +123,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
     const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
-    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
+    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps), ({ steps }) => hasStalledReads(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name==='clip' ? editorCommandInstructions(args.command) : ''}
 The current task lane, skills and tools are provided before each step.
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
@@ -154,7 +155,7 @@ Appearance, text and marker edits can save immediately. Changes to existing sour
 
 # Replies
 For edit requests, use one brief initial sentence stating the requested action, then run tools. Do not narrate every tool call or expose internal implementation details. The interface shows verified result cards. For clipping, report exactly the finishClipping tab list and its fallback disclosure. For other edits confirmed by saved:true tool evidence, finish with one short completion sentence. For staged changes, finish with one neutral sentence, such as 'Finishing that change.' Do not say 'awaiting save', claim the draft is saved, or describe it as still pending. The application appends the final save or failure message from server confirmation. Only mention meaningful failures or limitations. Do not repeat the card counts or produce long recap lists. For questions asking for an explanation, answer the actual question clearly. Keep replies brief. The latest saved user message is the current instruction. Current selection/playhead are authoritative when the user says here/this clip; older conversation timestamps may be SOURCE times and must not replace the current TIMELINE position. Map source windows through each retained clip and playback rate. When recovery context records an unfinished prior run, inspectTimeline before any timeline mutation regardless of the current wording. Preserve all already-saved clips/settings and perform only remaining work toward the latest request; do not repeat media additions already present at the same timeline/source range. Unchanged tool results do not represent new saved changes.
- ${EDITOR_CONTEXT_NOTICE} \n# Shared effects, text and style catalog\nShared tools are available immediately. Discover and load specialized tools/skills only when this request needs them.${EDITOR_CONTEXT_BOUNDARY}${memorySection(memories)}${briefSection(brief)}Current user request: ${JSON.stringify(currentPrompt)}. Recovery context: ${JSON.stringify(recovery ?? null)}. Automatic continuation: ${JSON.stringify(args.continuation??null)}. On automatic continuation this is the same user request and undo group: inspect the current timeline, keep all completed work, reuse saved analysis, and finish only the remaining goals. Do not repeat completed edits or passed reviews. Recovery requests are chronological unfinished goals, not instructions to repeat saved work. Saved edit count refers to that prior run only; earlier saved edits also remain on the current timeline. The current user request takes precedence over every older goal; if the earlier goal is unknown, do not invent it. Use duplicateClips for explicitly requested copies, including during recovery. Attached media IDs in this request identify the newly attached project sources; when the user says these/new media, use these IDs before older selection references. Do not edit unrelated sources. For a different deliverable, optionally choose a primary workflow with switchLane. Supporting motion within a clip request uses loadCapability, preserving the clip task and its delivery checks. A one-take short-form/reel rough cut ("edit my rough for a reel", "make this a reel", "clean my rough cut") uses reel and means: keep the whole intended script in order, remove mistakes and dead air, tighten, add captions, vertical 9:16. Do not reorder or drop content unless asked or needed for a stated length. Read the take as a script before any cut: readScript, then planScript, then one cut with the ranges it returns, then checkSpots for awkward looks at the cut edges (first and last frame included). Shots without the speaker in frame are b-roll footage to keep, never silence. The reel starts on the script's opening line and ends on its closing line; a stated length is reached by dropping whole lower-priority beats, never by trimming the opening, the payoff or part of a sentence. Reuse saved preparation; no forced 30–60s duration, normalization or repeated heavy review. Add minimal synchronized captions without background unless explicitly declined or styled differently. Editing context: ${JSON.stringify({ attachedAssetIds:args.attachedAssetIds??[], selectedClipId: args.selectedClipId ?? null, selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead ?? null })}. Use the selectedClipIds for the current selection, and selectedClipId for the primary clip when the user says this clip. Call inspectTimeline before editing when you need current saved state or diagnostics; it refreshes saved state when there is no staged replacement; during a replacement it inspects the private draft and checks for conflicting manual edits. Changes after that read remain protected by revision checks. Current project: ${JSON.stringify({ revision: editSession.revision, timeline: modelTimeline(editSession.timeline, args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : [])), assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, analysis,analysisKinds }) => ({ _id, fileName, kind, duration, width, height, audioAssetId, hasTranscript: !!analysis?.transcript||!!analysisKinds?.includes("transcribe"), hasSceneAnalysis: !!analysis?.understanding||!!analysisKinds?.includes("understand"), hasShotBoundaries: !!analysis?.shots||!!analysisKinds?.includes("shots"), hasBeatMap: analysis?.beats?.engine === BEAT_ANALYSIS_ENGINE, hasAccents: analysis?.beats?.accents !== undefined, hasDropCandidates: analysis?.beats?.dropCandidates !== undefined, hasSubjectTracking: !!analysis?.focus?.length||!!analysisKinds?.includes("track") })) })}` });
+ ${EDITOR_CONTEXT_NOTICE} \n# Shared effects, text and style catalog\nShared tools are available immediately. Discover and load specialized tools/skills only when this request needs them.${EDITOR_CONTEXT_BOUNDARY}${memorySection(memories)}${briefSection(brief)}Current user request: ${JSON.stringify(currentPrompt)}. Recovery context: ${JSON.stringify(recovery ?? null)}. Automatic continuation: ${JSON.stringify(args.continuation??null)}. On automatic continuation this is the same user request and undo group: inspect the current timeline, keep all completed work, reuse saved analysis, and finish only the remaining goals. Do not repeat completed edits or passed reviews. Recovery requests are chronological unfinished goals, not instructions to repeat saved work. Saved edit count refers to that prior run only; earlier saved edits also remain on the current timeline. The current user request takes precedence over every older goal; if the earlier goal is unknown, do not invent it. Use duplicateClips for explicitly requested copies, including during recovery. Attached media IDs in this request identify the newly attached project sources; when the user says these/new media, use these IDs before older selection references. Do not edit unrelated sources. For a different deliverable, optionally choose a primary workflow with switchLane. Supporting motion within a clip request uses loadCapability, preserving the clip task and its delivery checks. A one-take short-form/reel rough cut ("edit my rough for a reel", "make this a reel", "clean my rough cut") uses reel and means: keep the whole intended script in order, remove mistakes and dead air, tighten, add captions, vertical 9:16. Do not reorder or drop content unless asked or needed for a stated length. Read the take as a script before any cut: readScript, then planScript, then one cut with the ranges it returns, then checkSpots for awkward looks at the cut edges (first and last frame included). Shots without the speaker in frame are b-roll footage to keep, never silence. The reel starts on the script's opening line and ends on its closing line; a stated length is reached by dropping whole lower-priority beats, never by trimming the opening, the payoff or part of a sentence. Reuse saved preparation; no forced 30–60s duration, normalization or repeated heavy review. Add minimal synchronized captions without background unless explicitly declined or styled differently. Editing context: ${JSON.stringify({ attachedAssetIds:args.attachedAssetIds??[], selectedClipId: args.selectedClipId ?? null, selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead ?? null })}. Use the selectedClipIds for the current selection, and selectedClipId for the primary clip when the user says this clip. Call inspectTimeline before editing when you need current saved state or diagnostics; it refreshes saved state when there is no staged replacement; during a replacement it inspects the private draft and checks for conflicting manual edits. Changes after that read remain protected by revision checks. Saved state now: revision ${editSession.revision}${draft?', plus this same request’s restored unsaved draft':'; no draft is pending'}. A staged:true or "unsaved draft" tool result in an earlier message is history: that draft was saved or discarded when its request ended, and the timeline below is what is saved. Say what is saved from this state and from this request’s own tool results, never from older ones. Current project: ${JSON.stringify({ revision: editSession.revision, timeline: modelTimeline(editSession.timeline, args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : [])), assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, analysis,analysisKinds }) => ({ _id, fileName, kind, duration, width, height, audioAssetId, hasTranscript: !!analysis?.transcript||!!analysisKinds?.includes("transcribe"), hasSceneAnalysis: !!analysis?.understanding||!!analysisKinds?.includes("understand"), hasShotBoundaries: !!analysis?.shots||!!analysisKinds?.includes("shots"), hasBeatMap: analysis?.beats?.engine === BEAT_ANALYSIS_ENGINE, hasAccents: analysis?.beats?.accents !== undefined, hasDropCandidates: analysis?.beats?.dropCandidates !== undefined, hasSubjectTracking: !!analysis?.focus?.length||!!analysisKinds?.includes("track") })) })}` });
     const steps: { content: readonly unknown[] }[] = [];
     let finishReason = 'stop', repairFeedback: string | undefined=args.continuation?.feedback;
     let reviewRequirements:{plans:EffectPlan[];revision:number;validReviews?:{planIds:string[];output:Record<string,unknown>}[]}={plans:toolkit.plans(),revision:editSession.revision};
@@ -168,6 +169,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const offset = steps.length;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
+          // A real tool that this step withholds gets the same next step an MCP agent is given, not the SDK's
+          // "unavailable tool" line and a list of ninety names.
+          experimental_repairToolCall: async ({ toolCall, error }) => {
+            if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
+            throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
+          },
           prepareStep: async ({ steps: current, messages }) => {
             const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
             if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
@@ -182,25 +189,28 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
-            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,JSON.stringify(failed.failures));
+            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
             return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
-            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
+            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: async event => { costLog.toolsFinished(event); await toolkit.filmDrafts.landed(); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
+          // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
+          timeout: MODEL_SILENCE_LIMITS,
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
         steps.push(...completed);
         if (streamError) throw streamError;
         const terminalLaneFailure=toolkit.laneFailure();
-        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,JSON.stringify(terminalLaneFailure.failures));
+        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
+        if (hasStalledReads(steps)) throw new AssistantReadLoopError();
         if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
         // Reuse only server-validated review snapshots of the current visible
         // scope, including those saved before a durable continuation.
@@ -208,7 +218,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const reviewState=!toolkit.recipe().fullTools?{plans:[],validReviews:[]}:toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
         reviewRequirements={...reviewState,revision:editSession.revision};
         const failedLane=toolkit.laneFailure();
-        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,JSON.stringify(failedLane.failures));
+        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,failedLane.failures.join(' '));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
           if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
@@ -223,7 +233,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           if(clipping.required&&clipping.passed&&'finalMessage' in clipping&&clipping.finalMessage)await saveMessage(ctx,chatAgent,{threadId:args.threadId,userId:args.ownerId,promptMessageId:args.promptMessageId,message:{role:'assistant',content:clipping.finalMessage}});
           break;
         }
-        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The task is unfinished after three bounded attempts. ${repairFeedback}`);
+        // repairFeedback is written for the model (instructions and diagnostic JSON); the user gets what is still open.
+        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The request is unfinished after three attempts. ${unfinishedSummary(steps,failedLane&&!failedLane.passed?failedLane.failures:undefined)} Send the request again to continue from the current timeline.`);
       } catch(passError) {
         if(pass===MAX_REPAIR_PASSES||abortSignal.aborted||!repairable(passError))throw passError;
         repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
@@ -249,7 +260,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
     const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
     console.error(`[ai-error] ${JSON.stringify({ runId: args.runId, provider: selectedProvider, reason: failureReason.slice(0, 400) })}`);
-    const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved. Continue the unfinished part from the current timeline.` : failureReason;
+    const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved as revision ${session?.revision}. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
     await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
@@ -286,6 +297,22 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** What is still open when the bounded passes run out, in the user's terms: the failing checks, or the steps that never completed. */
+function unfinishedSummary(steps: readonly { content: readonly unknown[] }[], checkFailures?: readonly string[]) {
+  if (checkFailures?.length) return `The completion check still fails: ${checkFailures.slice(0, 3).join(' ')}`;
+  const ids = unresolvedToolFailureIds(steps);
+  const tools = [...new Set(steps.flatMap(step => step.content.flatMap(value => { const part = value as { type?: string; toolCallId?: string; toolName?: string } | null; return part && part.type !== 'tool-call' && part.toolCallId && ids.has(part.toolCallId) && part.toolName ? [part.toolName] : []; })))];
+  return tools.length ? `These steps did not complete: ${tools.slice(0, 5).join(', ')}.` : 'Some requested steps did not complete.';
+}
+/** Why a known tool is not callable in this step, and the call that makes it so. */
+function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {
+  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed. Reply to the user now; further edits need a new request.`;
+  if (!state.allowed) return laneToolError(lane, name);
+  if (name === 'exportVideo') return 'Export needs explicit user confirmation in the current request. Ask the user before exporting.';
+  if (FULL_CHECK_TOOLS.has(name)) return fullCheckRefusal(lane, name);
+  return `${name} is not available in this step. Continue with the tools provided.`;
 }
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */

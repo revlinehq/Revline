@@ -15,13 +15,16 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
 }) {
   const [modelChoice, setModelChoice] = useState<ClaudeModelChoice>();
   const [effortChoice, setEffortChoice] = useState<EditorReasoningEffort>();
-  const { modelSwitcher, effortSwitcher, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels = OPENAI_EDIT_CHOICES } = settings;
+  const { modelSwitcher, effortSwitcher, effortLocked, claudeViaMcp, defaultModelChoice, defaultReasoningEffort, allowedModels = OPENAI_EDIT_CHOICES } = settings;
   const restricted = settings.paidModelAccess !== true;
   const supportedModels = useMemo(() => EDITOR_MODELS.filter(model => allowedModels.includes(model.id)).map(model => model.id), [allowedModels]);
   const availableModels: readonly typeof EDITOR_MODELS[number]['id'][] = supportedModels.length ? supportedModels : OPENAI_EDIT_CHOICES;
   const selectedModelChoice = availableModels.find(choice => choice === modelChoice);
   const effectiveModelChoice = restricted ? FREE_EDITOR_MODEL_CHOICE : selectedModelChoice ?? (availableModels.find(choice => choice === defaultModelChoice) ?? (availableModels.includes(DEFAULT_EDITOR_MODEL) ? DEFAULT_EDITOR_MODEL : availableModels[0] ?? DEFAULT_EDITOR_MODEL));
-  const effectiveEffort = restricted ? 'low' : effortChoice ?? normalizeEditorReasoningEffort(defaultReasoningEffort);
+  // Only Ultra (effortSwitcher) picks an effort; a remembered choice does not apply on another plan.
+  const planEffort = restricted ? 'low' : normalizeEditorReasoningEffort(defaultReasoningEffort);
+  const effortChoosable = !restricted && !!modelSwitcher && !!effortSwitcher;
+  const effectiveEffort = effortChoosable ? effortChoice ?? planEffort : planEffort;
 
   useEffect(() => {
     try {
@@ -41,7 +44,7 @@ export function useAssistantComposerControls({ settings, draftKey, disabled }: {
   }, [draftKey]);
 
   const actions = <div className="assistant-model-controls">
-    {(restricted || modelSwitcher || claudeViaMcp) && <AssistantModelPicker catalogModels={settings.catalogModels} modelAccessNeedsSync={settings.modelAccessNeedsSync} restricted={restricted} claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={restricted || modelSwitcher && effortSwitcher ? { value: effectiveEffort, onChange: chooseEffort } : undefined}/>}
+    {(restricted || modelSwitcher || claudeViaMcp) && <AssistantModelPicker catalogModels={settings.catalogModels} modelAccessNeedsSync={settings.modelAccessNeedsSync} restricted={restricted} claudeViaMcp={claudeViaMcp} allowedModels={modelSwitcher ? availableModels : [effectiveModelChoice]} value={effectiveModelChoice} onChange={chooseModel} disabled={disabled} effort={effortChoosable || restricted || modelSwitcher && effortLocked ? { value: effectiveEffort, onChange: chooseEffort, locked: !effortChoosable } : undefined}/>}
   </div>;
-  return { actions, request: { modelChoice: restricted ? FREE_EDITOR_MODEL_CHOICE : modelSwitcher ? selectedModelChoice : undefined, reasoningEffort: restricted ? 'low' : modelSwitcher && effortSwitcher ? effectiveEffort : undefined } };
+  return { actions, request: { modelChoice: restricted ? FREE_EDITOR_MODEL_CHOICE : modelSwitcher ? selectedModelChoice : undefined, reasoningEffort: restricted ? 'low' : effortChoosable ? effectiveEffort : undefined } };
 }

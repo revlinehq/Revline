@@ -10,7 +10,9 @@ export const MAX_EXPORT_SECONDS = 5 * 60;
 export const MAX_EXPORT_LABEL = `${MAX_EXPORT_SECONDS / 60} minutes`;
 /** Sources have no length or size cap of ours; only the transport's platform limits apply.
  * Parts start at 32 MiB and grow with the file: R2 multipart allows at most 10,000 parts, and
- * each part streams through the media Worker, whose request body limit is 100 MB. */
+ * each part streams through the media Worker, whose request body limit is 100 MB.
+ * 32 MiB is measured, not assumed: a 5 GB upload at 12 parallel parts took 62 s with 16 or
+ * 32 MiB parts and about 100 s with 64 MiB, and smaller parts cost less to resend or resume. */
 const UPLOAD_PART_BYTES = 32 * 1024 * 1024;
 /** The part size for a file, or null when it is beyond those platform limits (about 930 GiB). */
 export function uploadPartSize(size: number) {

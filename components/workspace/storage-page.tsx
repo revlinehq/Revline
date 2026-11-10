@@ -57,7 +57,7 @@ function UnfinishedUploads({reservedBytes}:{reservedBytes:number}){
     {count>0&&<Button variant="outline" size="sm" onClick={()=>{setError('');setNow(Date.now());setOpen(true);}}>Review {count} unfinished {count===1?'upload':'uploads'}</Button>}
     <Dialog open={open} onOpenChange={setOpen}><DialogContent className="workspace-dialog storage-unfinished-dialog">
       <DialogTitle>Unfinished uploads</DialogTitle>
-      <DialogDescription>Uploads that stop sending data are cleared automatically after 2 hours. Cancel them now to free their space. Cancelling an upload still running in another tab stops it.</DialogDescription>
+      <DialogDescription>Uploads that stop sending data are cleared automatically after 2 hours. Choose the same file again before then to continue where it stopped, or cancel them now to free their space. Cancelling an upload still running in another tab stops it.</DialogDescription>
       <ul className="storage-unfinished-list">{uploads?.map(upload=>{const quiet=now-upload.activeAt>=QUIET_MS,busy=cancelling.has(upload.uploadId);return <li key={upload.uploadId}>
         <span className="storage-file-icon"><Upload size={15}/></span>
         <div><strong title={upload.fileName}>{upload.fileName}</strong><small>{formatStorageBytes(upload.size)} · started {formatElapsed(now-upload.createdAt)} ago · {quiet?`no new data for ${formatElapsed(now-upload.activeAt)}`:'uploading'}</small></div>
