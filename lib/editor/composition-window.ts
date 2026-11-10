@@ -4,7 +4,6 @@ import type { AudioReactiveController } from './audio-reactive';
 import type { MaskController } from './masks';
 import type { TextLayerController } from './text-template-runtime';
 import type { TransitionController, TransitionSource } from './transitions-runtime';
-import type { SceneLayerSource } from './scene-layers';
 import type { SolidColorController } from './solid-color-layers';
 import type { TextLayerSource } from './text-layers';
 import type { VisualEffectsController } from './visual-effects-runtime';
@@ -30,7 +29,6 @@ export type CompositionWindow = Window & {
   __revlineAudioReactive?: AudioReactiveController;
   __revlineVisualFadeController?: VisualFadeController;
   __revlineTextLayerController?: TextLayerController;
-  __revlineSceneController?: { setSources(sources: SceneLayerSource[]): void; hasMedia?(assetId: string): boolean };
   /** Optional renderers the preview loads on demand (lib/editor/preview-runtimes.ts). */
   __revlineTextRuntime?: { installTextLayers(sources: TextLayerSource[]): TextLayerController };
   __revlineTransitions?: { installTransitions(initial: TransitionSource[], fps: number): TransitionController };

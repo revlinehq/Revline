@@ -1,7 +1,6 @@
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
 import { LandingFeatures } from '@/components/landing/features';
-import { LandingMotionDesign } from '@/components/landing/motion-design';
 import { LandingClippers } from '@/components/landing/clippers';
 import { LandingMcp } from '@/components/landing/mcp';
 import { LandingPricing } from '@/components/landing/pricing';
@@ -25,7 +24,7 @@ const structuredData = {
       '@type': ['SoftwareApplication', 'Product'], '@id': 'https://tryrevline.com/#application',
       name: 'Revline', url: 'https://tryrevline.com', applicationCategory: 'MultimediaApplication',
       operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v3.png',
-      description: 'An AI video editor for prompt-based cuts, captions, vertical clips, motion design and reference video recreation, with MCP access for AI agents.',
+      description: 'An AI video editor for real footage: prompt-based cuts, captions, vertical clips and short-form edits, with MCP access for AI agents.',
       brand: { '@id': 'https://tryrevline.com/#organization' },
       offers: {
         '@type': 'Offer', url: 'https://tryrevline.com/pricing', price: EDITOR_PLAN.monthlyPrice,
@@ -43,7 +42,6 @@ export default function Home() {
     <LandingNav />
     <LandingHero />
     <LandingClippers />
-    <LandingMotionDesign />
     <LandingFeatures />
     <LandingMcp />
     <LandingPricing />

@@ -1,4 +1,3 @@
-import { comparisonCrop, referenceCropKeyframes } from '../lib/ai/reference-comparison';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -6,13 +5,13 @@ import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity } from './lib/account_limits';
 import { cancelMediaTask, enqueueMediaTask } from './lib/media_queue';
-import { blueprintLineValidator, blueprintPointValidator, referenceBox, referenceCropKeyframesValidator, referenceReadMode } from './schema';
+import { referenceBox } from './schema';
 import { READ_TOOL_INPUTS } from './lib/reference_reads';
 import { LOOKS_OFF, looksSwitchedOff } from '../lib/ai/eyes';
 
 // The reference-read rows and their lifecycle. The runners that queue a read and wait for the worker are in lib/reference_reads.
 
-export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), recreation: v.optional(v.boolean()), mode: referenceReadMode, color: v.optional(v.string()), tolerance: v.optional(v.number()), text: v.optional(v.string()), categories: v.optional(v.array(v.string())), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), snapshotId: v.optional(v.id('frameSnapshots')), compareCrop: v.optional(referenceBox), referenceCropKeyframes: v.optional(referenceCropKeyframesValidator), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox), box: v.optional(referenceBox), frameTime: v.optional(v.number()), backgroundTime: v.optional(v.number()), points: v.optional(v.array(blueprintPointValidator)), lines: v.optional(v.array(blueprintLineValidator)) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, recreation, ...args }) => {
+export const request = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), assetId: v.string(), mode: v.union(v.literal('sheet'), v.literal('looks')), start: v.number(), end: v.number(), times: v.optional(v.array(v.number())), count: v.optional(v.number()), fps: v.optional(v.number()), momentsOnly: v.optional(v.boolean()), stillsOnly: v.optional(v.boolean()), crop: v.optional(referenceBox) }, returns: v.id('referenceReads'), handler: async (ctx, { ownerId, projectId, assetId: rawAssetId, ...args }) => {
   // Safety valve: REEL_LOOKS=off stops face measurement on this deployment; the reel lane then warns instead of checking.
   if (args.mode === 'looks' && looksSwitchedOff()) throw new ConvexError(LOOKS_OFF);
   await requireEditorAccess(ctx, ownerId);
@@ -20,17 +19,15 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   const assetId = ctx.db.normalizeId('assets', rawAssetId), asset = assetId ? await ctx.db.get(assetId) : null;
   if (!asset || asset.ownerId !== ownerId || asset.projectId !== project._id) throw new ConvexError('That media is not in this project. Use an assetId from getProject.');
   const still = asset.kind === 'image';
-  if (asset.kind !== 'video' && !still) throw new ConvexError('Choose a video or image reference from this project.');
-  if (still && !['sheet', 'compare'].includes(args.mode)) throw new ConvexError('Still images support readFrames and compareReference; motion and sound need a video.');
+  if (asset.kind !== 'video' && !still) throw new ConvexError('Choose a video or image from this project.');
+  if (still && args.mode !== 'sheet') throw new ConvexError('Still images support readFrames only.');
   if (still && args.mode === 'sheet' && (args.start !== 0 || args.end !== 0 || args.fps !== undefined || args.momentsOnly || (args.count ?? 1) !== 1)) throw new ConvexError('Read a still image with start: 0, end: 0, count: 1; it has no moving frames.');
   const duration = still ? Infinity : asset.duration ?? Infinity;
   if(args.mode==='sheet'&&args.times&&(args.times.length>30||!args.times.length||args.times.some(time=>!Number.isFinite(time)||time<args.start||time>args.end||time<0||time>duration)))throw new ConvexError('Explicit frame times must be inside the source start/end window (up to 30 stills).');
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);
-  if (args.compareCrop) comparisonCrop.parse(args.compareCrop);
-  if (args.referenceCropKeyframes) referenceCropKeyframes.parse(args.referenceCropKeyframes);
-  if (!recreation) await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, ...(recreation ? { recreation } : {}), status: 'queued', createdAt: Date.now() });
-  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId }, undefined, recreation);
+  await requireMediaTaskCapacity(ctx, ownerId, 1);
+  const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() });
+  const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId });
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.
   await ctx.scheduler.runAfter(10 * 60_000, internal.referenceReads.discard, { readId });

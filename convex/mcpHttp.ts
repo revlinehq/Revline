@@ -1,14 +1,12 @@
 import type { HttpRouter } from 'convex/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { CallToolRequestSchema, InitializeRequestSchema, ListResourcesRequestSchema, ListToolsRequestSchema, ReadResourceRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
+import { CallToolRequestSchema, InitializeRequestSchema, ListToolsRequestSchema, type Tool } from '@modelcontextprotocol/sdk/types.js';
 import { httpAction, type ActionCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { MCP_INSTRUCTIONS } from '../lib/mcp/instructions';
 import { requestMcpOrigin } from './lib/mcp_origin';
-import { MCP_REFERENCE_COMPARISON_BUDGET_MS } from '../lib/ai/reference-comparison';
-import { listMcpResources, readMcpResource } from '../lib/mcp/resources';
 
 // Streamable HTTP MCP server (official MCP SDK, stateless JSON responses) plus
 // the OAuth 2.1 authorization server MCP clients discover from it.
@@ -34,10 +32,8 @@ let toolCatalog: Promise<Tool[]> | undefined;
 const withCors = (response: Response) => { const headers = new Headers(response.headers); for (const [key, value] of Object.entries(cors)) headers.set(key, value); return new Response(response.body, { status: response.status, statusText: response.statusText, headers }); };
 
 /** The official MCP SDK speaks the protocol; Revline supplies auth, the tool list and tool calls. */
-function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, comparisonDeadline: number,connectionId?:string,agentClientId?:Id<'mcpConnections'>) {
-  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {}, resources: {} }, instructions: MCP_INSTRUCTIONS });
-  server.setRequestHandler(ListResourcesRequestSchema, async () => listMcpResources());
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => readMcpResource(request.params.uri));
+function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, connectionId?:string,agentClientId?:Id<'mcpConnections'>) {
+  const server = new Server({ name: 'revline', title: 'Revline', version: '1.0.0' }, { capabilities: { tools: {} }, instructions: MCP_INSTRUCTIONS });
   // One stable catalog for the whole session: clients that never re-fetch tools/list (Codex ignores list_changed) still
   // hold every tool. Lane, capability, owner and task access are enforced on each call instead.
   server.setRequestHandler(ListToolsRequestSchema, async () => {
@@ -45,14 +41,13 @@ function revlineServer(ctx: ActionCtx, ownerId: string, agentName: string, compa
     return {tools:await toolCatalog};
   });
   server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {}, ...(request.params.name === 'compareReference' ? { comparisonDeadline } : {}) });
+    const outcome = await ctx.runAction(internal.mcpActions.callTool, { ownerId, agentName, ...(connectionId ? {connectionId} : {}), ...(agentClientId ? {agentClientId} : {}), name: request.params.name, arguments: request.params.arguments ?? {} });
     return { content: [{ type: 'text' as const, text: outcome.text }, ...(outcome.images ?? []).map(image => ({ type: 'image' as const, data: image.data, mimeType: image.mimeType }))], ...(outcome.structuredContent ? { structuredContent: outcome.structuredContent } : {}), isError: outcome.isError };
   });
   return server;
 }
 
 const mcpHandler = httpAction(async (ctx, request) => {
-  const comparisonDeadline = Date.now() + MCP_REFERENCE_COMPARISON_BUDGET_MS;
   let body: unknown;
   try { body = await request.json(); } catch { return json({ jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } }, 400); }
   // MCP 2025-06-18 removed JSON-RPC batching; one message per request keeps rate limits exact.
@@ -81,7 +76,7 @@ const mcpHandler = httpAction(async (ctx, request) => {
   }
   const identity=connectionId?await ctx.runQuery(internal.mcpConnections.identity,{ownerId:auth.ownerId,connectionId}):null;
   if(identity?.closed)return json({jsonrpc:'2.0',id:null,error:{code:-32000,message:'This MCP session ended. Initialize a new session.'}},404);
-  const server = revlineServer(ctx, auth.ownerId, identity?.agentName??auth.clientName, comparisonDeadline,connectionId,identity?.clientId);
+  const server = revlineServer(ctx, auth.ownerId, identity?.agentName??auth.clientName, connectionId,identity?.clientId);
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: false });
   try {
     await server.connect(transport);

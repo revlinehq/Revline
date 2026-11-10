@@ -18,7 +18,7 @@ import { useSourceUpload } from '@/components/editor/use-source-upload';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
-import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningReference, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
+import { clearNewProjectDraft, clearNewProjectSources, newProjectAspectRatio, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectAspectRatio, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
 import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -224,7 +224,7 @@ export function NewConversation() {
       const prompt = brief.current.trim();
       const sourceName = files[0]?.file.name ?? cloudMedia?.[0]?.fileName ?? 'New video';
       const title = (prompt ? prompt.replace(/\s+/g, ' ') : sourceName.replace(/\.[^.]+$/, '')).slice(0, 80) || 'New video';
-      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, aspectRatio, placeOnTimeline: !/\b(recreat|remake|reference|clone|copy this|like this)/i.test(prompt) });
+      job ??= getOrCreateProjectImportJob(userId, session.current, { title, files, assetIds: cloudIds, aspectRatio });
       session.current = job.session;
       const activeJob = job;
       unsubscribe.current?.();
@@ -253,7 +253,6 @@ export function NewConversation() {
       if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
         rememberOpeningRequest(projectId, prompt, composerControls.request);
-        if (activeJob.input.placeOnTimeline === false) rememberOpeningReference(projectId);
         clearNewProjectSources();
         // The new project holds its own copy of each imported video.
         discardHolders(Object.values(linkHolders));

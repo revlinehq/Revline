@@ -116,10 +116,6 @@ export function patchClip(timeline: Timeline, id: string, patch: Partial<Clip>):
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === id);
   if (!clip) return timeline;
-  if (clip.kind === 'scene' && clip.scene?.film && (patch.duration !== undefined || patch.sourceStart !== undefined)) {
-    const sourceStart = patch.sourceStart ?? clip.sourceStart, duration = patch.duration ?? clip.duration;
-    if (sourceStart + duration > clip.scene.film.duration + 1e-6) throw new TimelineGestureRejection(`This film is ${clip.scene.film.duration}s long. Keep source start plus clip duration within that length. Trimming selects a window of the existing film; it cannot extend the scene code or retime the shared film clock.`);
-  }
   if (isTransitionClip(clip) && patch.duration !== undefined && patch.start === undefined) {
     const pair = transitionPair(timeline.clips, clip.transition!);
     patch = { ...patch, ...boundedTransitionRange(timeline, pair.from, pair.to, patch.duration,clip.id) };
@@ -200,7 +196,7 @@ export function setClipSpeedRamp(timeline: Timeline, id: string, anchors: RampAn
 }
 export function deleteClip(timeline: Timeline, id: string): Timeline { timeline = normalizeTimeline(timeline); const ids = new Set(linkedClipIds(timeline, [id])); return reconcileTransitionEdits(timeline, { ...timeline, clips: timeline.clips.filter(c => !ids.has(c.id)) }); }
 export function addMediaClip(timeline: Timeline, asset: { _id: string; kind: Clip['kind'] | 'model'; duration?: number; audioAssetId?: string; derivation?: string; preparation?: {message:string} }, id: string, at?: number, track = 1): Timeline {
-  if(asset.kind === 'model')throw new Error('Use this model inside a scene with ThreeLayer and Model, attaching it as scene media.');
+  if(asset.kind === 'model')throw new Error('3D model files cannot be placed on the timeline.');
   if(asset.preparation)throw new Error(asset.preparation.message);
   timeline = normalizeTimeline(timeline);
   const group = layerGroup(asset.kind);

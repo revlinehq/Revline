@@ -1,7 +1,6 @@
 import { updateLiveAdjustmentEffects } from './live-adjustment-effects';
 import { updateLiveMediaContent } from './live-media-content';
 import { updateLiveTextEffects } from './live-preview-effects';
-import { updateLiveScenes } from './live-scenes';
 import { updateLiveVisualEffects } from './live-visual-effects';
 import { updateLiveVisualGeometry } from './live-visual-geometry';
 import { expandBackgroundFills } from './mirror-blur-layout';
@@ -11,8 +10,7 @@ type LiveUpdater = (document: Document, previous: Timeline, next: Timeline, asse
 
 /**
  * Every live updater, in the order they run. Media content goes first because it may replace media nodes the
- * others locate; the rest drive separate controllers (adjustment layers, text, WebGL effects, frame geometry,
- * scenes), so their relative order does not change the result.
+ * others locate; the rest drive separate controllers (adjustment layers, text, WebGL effects, frame geometry), so their relative order does not change the result.
  */
 const LIVE_UPDATERS: readonly LiveUpdater[] = [
   updateLiveMediaContent,
@@ -20,7 +18,6 @@ const LIVE_UPDATERS: readonly LiveUpdater[] = [
   updateLiveTextEffects,
   updateLiveVisualEffects,
   updateLiveVisualGeometry,
-  updateLiveScenes,
 ];
 
 /**

@@ -8,7 +8,7 @@ export const EDITOR_PLAN = {
 /** Pro's headline features, shared by the landing pricing card and the in-app paywall. */
 export const PRO_FEATURES = [
   'Edit by prompting: cuts, captions and effects',
-  'Motion design, animated subtitles and effects',
+  'Clips, reels, animated subtitles and effects',
   'Edit from Claude, Codex or Cursor with MCP',
   'Unlimited MCP calls',
   '1080p export in any format, no watermark',

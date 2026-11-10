@@ -25,7 +25,6 @@ Terms: a **beat** is one pulse (0.5 s at 120 BPM); a **bar** is beatsPerBar beat
 | A visual payoff at timeline T (a reveal, a kill, a logo) | The moment minus T, in whole bars, so the moment lands on the payoff: `startMusicAt { sourceTime: moment.time - T }` snaps to the nearest downbeat |
 | A user-named time ("start at the chorus", "at 2:43") | `startMusicAt { sourceTime: 163 }`; it snaps to the nearest downbeat |
 | A target length | The top window for that length: `startMusicAt { sourceTime: window.start, length }` |
-| A recreation with matchMusic | Keep the start matchMusic chose: it follows the reference's energy and downbeats |
 
 - Prefer a moment with a sung line (`sung`) when two moments score within 0.1 of each other: a recognisable hook beats a slightly louder bar.
 - A moment with jumpDb under 3 and lowJumpDb under 6 is not a real arrival; say the song stays level and start on the top window instead.
@@ -34,13 +33,13 @@ Terms: a **beat** is one pulse (0.5 s at 120 BPM); a **bar** is beatsPerBar beat
 ## Cutting
 | Cut on | When | Shot length at 120 BPM |
 | --- | --- | --- |
-| Downbeats (bar lines) | Default for every scene or shot change; section changes always | 1, 2 or 4 bars: 2, 4 or 8 s |
+| Downbeats (bar lines) | Default for every shot change; section changes always | 1, 2 or 4 bars: 2, 4 or 8 s |
 | Beats | Fast montage shots of 1–2 beats, only inside a loud section (peak or drop) | 0.5–1 s |
 | Accents | Not cuts: flashes, zooms or shakes on strong hits (strength 0.8 or more), at most 1 per bar | an instant |
 
 - Change pace at section lines: hold longer shots (2–4 bars) in low and build sections, cut faster (1 bar or beats) in peak and drop sections.
 - The biggest picture change (the reveal, the first action shot) goes on moment 1's downbeat.
-- A cut is on the beat when it sits within 1 frame of it; alignCutsToBeat does this for V1. A film made with addFilm is one clip: move its section() start times to the downbeat times in code instead.
+- A cut is on the beat when it sits within 1 frame of it; alignCutsToBeat does this for V1.
 - Accents for effects come from markMusicBeats { kind: "accents" } or setAudioReactive mode accents, never from every beat.
 
 ## Length and ending

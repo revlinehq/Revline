@@ -57,11 +57,3 @@ If you were told not to push, hand the description and the screenshot folders to
 Production is released with one command on the Mac that holds the production credentials, `npm run release:prod` (`--dry-run` prints the plan anywhere; `npm run release:status` shows what is deployed); the whole flow is in `docs/releases.md`.
 
 After the user approves a merge, deploy every completed Convex change to its intended environment and verify the deployment succeeds. Local development uses the development deployment; the hosted production app uses the production deployment and its own credentials. Identify and announce the target before deploying. Never point production at the development backend. Keep environment files and deployment credentials separate.
-
-## Motion films from a coding session
-
-When building or copying a motion film from here (scene code pushed to a Revline project):
-- Read the editor agent's skills first, the same ones Revline's own agent follows: `launch-films-motions`, `gsap` (its `revline` page first), `writing-scenes` (pages `films` and `edit-lanes`) and, when copying a video, `remaking-videos`. Load them with the `readSkill` tool of the worktree's `revline-local` MCP server (after `startTask` on your dev project), which returns the text with live values filled in (allowed fonts, plugins, limits); the files in `lib/ai/skills/` hold template placeholders for those.
-- Work on the development deployment, and pass the timeline tab explicitly instead of switching the project's open tab; other sessions may be editing another tab of the same project.
-- Measure at full resolution, never from downscaled contact sheets.
-- For device mockups, logos and other reusable assets, check the asset-library skill first and record each asset's license before searching the web.

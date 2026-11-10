@@ -1,13 +1,13 @@
-import { LANES } from './index';
+import { LANES, sharedLane } from './index';
 import { exportConfirmed } from './export-confirmation';
 import type { CheckLevel, CheckRecipe, LaneId } from './types';
 
-/** Whole-video and comparison passes. A lane recipe without fullTools refuses them. */
-export const FULL_CHECK_TOOLS = new Set(['compareReference', 'compareMotion', 'motionMap', 'checkPacing', 'previewRender', 'planEffects', 'checkSound']);
+/** Whole-video passes. A lane recipe without fullTools refuses them. */
+export const FULL_CHECK_TOOLS = new Set(['checkPacing', 'previewRender', 'planEffects', 'checkSound']);
 
 /** The final level is chosen only by intent: an export or publish request, or an explicit full double-check. */
 // "published" describes earlier work, so only present-tense publishing counts.
-const FINAL_INTENT = /\bpublish(?:ing)?\b|\b(?:double[- ]?check|re-?check|check|verify|review)\s+(?:everything|it all|all of it|the whole (?:thing|video|edit|film|cut))\b|\bfull (?:double[- ]?check|check|review|qa)\b/i;
+const FINAL_INTENT = /\bpublish(?:ing)?\b|\b(?:double[- ]?check|re-?check|check|verify|review)\s+(?:everything|it all|all of it|the whole (?:thing|video|edit|cut))\b|\bfull (?:double[- ]?check|check|review|qa)\b/i;
 // A decline must govern the request itself ("don't publish yet", "no need to double-check"), not an unrelated clause before it.
 const DECLINED = /\b(?:never|without|don't|do not|don’t|no need to|not yet|skip)\s+(?:\w+\s+){0,2}(?:publish|double[- ]?check|check everything|full check)/i;
 export function finalChecksRequested(request: string): boolean {
@@ -68,7 +68,7 @@ export const laneChecks = (lane: LaneId, level: CheckLevel): CheckRecipe => LANE
 /** Whether edits queue getFrames times at each change and one frame either side (sample: once for plain reel styling). */
 export const tracksChangedFrames = (recipe: CheckRecipe) => recipe.frames === 'changes' || recipe.frames === 'sample';
 
-const laneName = (lane: LaneId) => lane === 'edit' || lane === 'explainer' ? 'shared editing' : lane;
+const laneName = (lane: LaneId) => sharedLane(lane) ? 'shared editing' : lane;
 
 export function checkInstructions(lane: LaneId, level: CheckLevel) {
   const recipe = laneChecks(lane, level), stepsUp = !equalRecipes(recipe, laneChecks(lane, 'final'));
@@ -80,7 +80,7 @@ ${stepsUp ? 'The server raises this to the lane’s full checks only for a final
 const equalRecipes = (a: CheckRecipe, b: CheckRecipe) => a.frames === b.frames && a.fullTools === b.fullTools && a.boundedReads === b.boundedReads && (a.clipQa ?? []).join() === (b.clipQa ?? []).join();
 
 export function fullCheckRefusal(lane: LaneId, tool: string) {
-  return `${tool} is a full check and is not part of the ${laneName(lane)} lane’s checks for this request. ${laneChecks(lane, 'standard').frames === 'data' ? 'Use finishClipping data checks and short inspectVideo windows for action moments.' : 'Use getFrames at each changed spot and one frame either side.'} Full checks run in the motion and recreate lanes, and in any lane when the user asks for a final export, publishing or a full double-check. If the deliverable changed to a new film, motion scene or recreation, switch the primary workflow first.`;
+  return `${tool} is a full check and is not part of the ${laneName(lane)} lane’s checks for this request. ${laneChecks(lane, 'standard').frames === 'data' ? 'Use finishClipping data checks and short inspectVideo windows for action moments.' : 'Use getFrames at each changed spot and one frame either side.'} Full checks run when the user asks for a final export, publishing or a full double-check.`;
 }
 
 export const BOUNDED_READ_REFUSAL = 'This lane reads a named source window up to three seconds. Reel visual cleanup may use one stillsOnly overview (count up to 12) or batched explicit join frames (up to 30 times), without fps or momentsOnly. Reuse saved frames; no dense full-video sweeps.';

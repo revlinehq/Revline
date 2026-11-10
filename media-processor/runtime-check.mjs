@@ -1,7 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import puppeteer from 'puppeteer';
-import { SCENE_RUNTIME_BUNDLES } from '../lib/editor/scene-modules.ts';
 
 execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });
@@ -18,7 +17,6 @@ execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',`
 const exportsOnly = process.env.REVLINE_RUNTIME_CHECK === 'exports';
 if (!exportsOnly) {
   if (!existsSync('scripts/detect-facecam.py') || !existsSync('public/vendor/face-landmarker.task')) throw new Error('Local clipping vision assets are missing.');
-  if (!existsSync('scripts/track-reference.py')) throw new Error('Reference element tracker entry point is missing.');
   if (!existsSync('scripts/track-pixels.py')) throw new Error('Pixel tracker entry point is missing.');
   if (!existsSync('scripts/source_frames.py')) throw new Error('Shared tracker source-frame reader is missing.');
   execFileSync(process.env.BEAT_TRACK_PYTHON, ['-c', 'import beat_this, torch, numpy, soxr; assert not torch.cuda.is_available()'], { stdio: 'inherit' });
@@ -27,7 +25,7 @@ if (!exportsOnly) {
   if (!existsSync(process.env.BEAT_TRACK_MODEL_PATH)) throw new Error('Pinned beat model is missing.');
 }
 if (!existsSync(await puppeteer.executablePath())) throw new Error('Chromium is missing.');
-for (const path of ['public/vendor/text-runtime.js', 'public/vendor/transitions-runtime.js', 'public/vendor/visual-effects.js', ...Object.values(SCENE_RUNTIME_BUNDLES).map(bundle => `public/vendor/${bundle.file}`), 'public/vendor/lucide-icons.json', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
+for (const path of ['public/vendor/text-runtime.js', 'public/vendor/transitions-runtime.js', 'public/vendor/visual-effects.js', 'public/vendor/blaze-face.tflite', 'public/vendor/mediapipe/vision_wasm_internal.wasm']) {
   if (!existsSync(path)) throw new Error(`Required preview/export asset is missing: ${path}`);
 }
 const browser = await puppeteer.launch({ headless: true, args: ['--no-sandbox', '--disable-dev-shm-usage'] });

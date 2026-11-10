@@ -1,6 +1,6 @@
 ---
 name: "visual-inspection"
-description: "Finds and removes awkward moments the picture shows from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Read before any visually motivated cut; for recreating a reference or measuring motion, read remaking-videos instead."
+description: "Finds and removes awkward moments the picture shows from normal footage (talking heads, vlogs, podcasts): dead air, a frozen face, looking away or at a script, reaching for the camera, fidgeting, jumps and flashes. Read before any visually motivated cut."
 ---
 # Awkward moments in footage
 
@@ -12,7 +12,7 @@ This covers "remove the awkward moments", "cut where I look away", "clean up the
 1. Find candidates and merge them into one list of SOURCE windows (see Find candidates).
 2. Confirm each candidate frame by frame (see Confirm).
 3. Apply all cuts at once on the clip: cleanSpeech with keep (the SOURCE ranges between the cuts), or retainSourceRanges with tightenSilence:true. The transcript-only candidates (pauses, fillers) are handled in the same call. Close gaps if several clips are left.
-4. Verify with the checks writing-scenes page `edit-lanes` sets for the lane. In the reel lane, the source join sequences already read in step 1 count as the join evidence; do not render them again.
+4. Verify with the checks footage-editing page `edit-lanes` sets for the lane. In the reel lane, the source join sequences already read in step 1 count as the join evidence; do not render them again.
 5. Reject any join that lands on a frozen face or a half glance, and fix it.
 6. Tell the user what was removed, by time and what it was ("0:12 looked down at notes, 0:31 reached for the camera, 4.2 s of dead air at the start"), and what was looked at and kept.
 

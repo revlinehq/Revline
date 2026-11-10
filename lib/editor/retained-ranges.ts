@@ -58,7 +58,7 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     const covered = parts.reduce((total, part) => total + Math.max(0, part.end - part.start), 0);
     if (covered < range.end - range.start - joinEpsilon * pieces.length) {
       const removed = windows.slice(1).map((window, at) => ({ start: Math.max(range.start, windows[at].end), end: Math.min(range.end, window.start) })).filter(gap => gap.end - gap.start > joinEpsilon);
-      const restore = 'this tool never brings footage back: restore it first with restoreClip (or restoreSection, or undoLatestEdit for the latest cut), then cut again in one call.';
+      const restore = 'this tool never brings footage back: restore it first with restoreClip (or undoLatestEdit for the latest cut), then cut again in one call.';
       throw new Error(`${name} is outside this clip’s retained source (${allowed}). ${removed.length ? `${removed.map(span).join(', ')} was removed by an earlier cut and ${restore}` : `Footage outside ${windows.length > 1 ? 'those windows' : 'that window'} is not on the timeline and ${restore}`}`);
     }
     let length = 0;

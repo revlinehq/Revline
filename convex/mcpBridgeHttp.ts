@@ -15,7 +15,7 @@ type Call =
   | ({ op: 'initialize'; sessionId: string; clientInfo: Infer<typeof clientInfoValidator> } & Credential)
   | ({ op: 'close'; sessionId: string } & Credential)
   | { op: 'listTools' }
-  | ({ op: 'callTool'; sessionId?: string; name: string; arguments: unknown; comparisonDeadline?: number } & Credential)
+  | ({ op: 'callTool'; sessionId?: string; name: string; arguments: unknown } & Credential)
   | { op: 'createGrant'; approval: string; handle: string; clientId: string; clientName: string }
   | { op: 'touchGrant'; grantKey: string };
 
@@ -73,7 +73,6 @@ async function handle(ctx: ActionCtx, call: Call): Promise<Response> {
         ownerId: auth.ownerId, agentName: identity?.agentName ?? auth.clientName,
         ...(connectionId ? { connectionId } : {}), ...(identity ? { agentClientId: identity.clientId } : {}),
         name: call.name, arguments: call.arguments ?? {},
-        ...(call.name === 'compareReference' && typeof call.comparisonDeadline === 'number' ? { comparisonDeadline: call.comparisonDeadline } : {}),
       });
       return json({ outcome });
     }

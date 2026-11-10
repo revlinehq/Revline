@@ -10,7 +10,7 @@ import { compositionReviewBudget, compositionReviewWindow, countedReviewPlanIds,
 import { effectPlanInput, effectDisabledReference, preservePlanOriginals, mergeEffectPlans, effectReviewBindings, type EffectPlan } from '../lib/ai/edit-plan';
 import { enqueueMediaTask, cancelMediaTask } from './lib/media_queue';
 import type { MutationCtx, QueryCtx } from './_generated/server';
-import type { Id } from './_generated/dataModel';import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+import type { Id } from './_generated/dataModel';
 
 async function active(ctx:MutationCtx|QueryCtx,args:{projectId:Id<'projects'>;ownerId:string;runId:string}) {
   const run=await projectRun(ctx,args.projectId,args.ownerId);
@@ -80,7 +80,6 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   try{({start,end}=compositionReviewWindow(bound,args.timeline.fps,Math.max(...args.timeline.clips.map(clip=>clip.start+clip.duration))));}catch(error){throw new ConvexError(error instanceof Error?error.message:'Rendered review window is unavailable.');}
   const reference=effectDisabledReference(args.timeline,bound,saved.originals);
   const used=new Set([...args.timeline.clips,...reference.clips].filter(clip=>clip.kind!=='audio'&&clip.assetId&&(clip.start<end&&clip.start+clip.duration>start||args.timeline.clips.some(transition=>transition.start<end&&transition.start+transition.duration>start&&(transition.transition?.fromClipId===clip.id||transition.transition?.toClipId===clip.id)))).map(clip=>clip.assetId));
-  for(const id of sceneMediaAssetIds(args.timeline))used.add(id);
   const assetIds=[];
   for(const value of used){const id=ctx.db.normalizeId('assets',value!);const asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Review source media is unavailable.');assetIds.push(asset._id);}
   const reviewId=await ctx.db.insert('compositionReviews',{...runFields(args),revision:args.expectedRevision,timeline:args.timeline,reference,plans:bound,assetIds,start,end,status:'queued',createdAt:Date.now()});

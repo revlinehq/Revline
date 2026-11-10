@@ -25,17 +25,4 @@ export const marketingPages = [
     prompt: 'Caption this video with clean white text and no background. Keep captions clear of the speaker’s face and let me review the wording.',
     note: 'Speech recognition can miss words, especially with background noise or unfamiliar names. Always check the transcript before publishing.',
   },
-  {
-    slug: 'reference-video-recreation', navigationLabel: 'Reference recreation', title: 'Reference video recreation with AI',
-    description: 'Recreate a reference video as editable motion scenes in Revline. Inspect frames, measure movement and compare your rendered edit with the source.',
-    heading: 'Rebuild the motion. Keep the layers editable.',
-    intro: 'Use a reference to explain the timing and visual language you want. Revline can build editable motion scenes and compare the rendered result with that reference.',
-    steps: [
-      { title: 'Inspect the reference', text: 'Read frames around transitions and inspect details at full resolution. Identify typography, composition and the assets needed for the recreation.' },
-      { title: 'Measure and rebuild', text: 'Motion tools estimate camera movement, element paths, timing and easing. Build the result from editable scenes, using your own or licensed assets.' },
-      { title: 'Compare the result', text: 'Compare rendered frames and motion with the source. Refine differences and record what remains approximate or could not be measured.' },
-    ],
-    prompt: 'Recreate this product launch video with editable scenes. Match its composition, transition timing and easing, then compare the render against the reference.',
-    note: 'Recreation is not guaranteed to be pixel-perfect. Tracking can be uncertain with overlapping objects, perspective changes and complex effects. Use references you have permission to reproduce.',
-  },
 ];

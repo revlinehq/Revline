@@ -3,7 +3,6 @@ import { timelineValidator, assetWithUrl, imageGenerationValidator } from './sch
 import { remapTimelineAssets } from '../lib/editor/copy-timeline';
 import { readTranscript } from '../lib/media-analysis/transcript';
 import { storeAnalysis } from './lib/asset_analysis';
-import { storeSceneCode } from './lib/scene_code';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { v } from 'convex/values';
 import { internalMutation } from './_generated/server';
@@ -196,10 +195,7 @@ export const importSnapshot = internalMutation({
         ownerId: args.ownerId,
         projectId,
         timelineId: row.id,
-        timeline: await storeSceneCode(
-          ctx,
-          remapTimelineAssets(row.timeline, copied),
-        ),
+        timeline: (remapTimelineAssets(row.timeline, copied)),
       });
     await writeProject(ctx, projectId, {
       timeline: remapTimelineAssets(args.timeline, copied),

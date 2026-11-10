@@ -1,6 +1,5 @@
-import { loadSceneCode, storeSceneCode } from './lib/scene_code';
 import { remapTimelineAssets } from '../lib/editor/copy-timeline';
-import { sceneMediaAssetIds } from '../lib/editor/scene-layers';
+
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
@@ -44,9 +43,9 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   }));
   const chat=selectedChat===undefined?undefined:await snapshotSharedChat(ctx,project,selectedChat);
   // The link opens on the edit being worked on when it is included.
-  const primary=tabs.find(tab=>tab.id===open)??tabs[0],timeline=await storeSceneCode(ctx,primary.timeline),assets=new Map<string,Doc<'assets'>>();
+  const primary=tabs.find(tab=>tab.id===open)??tabs[0],timeline=primary.timeline,assets=new Map<string,Doc<'assets'>>();
   // Footage and the images or videos that scenes show (screenshots), so the link can play every scene.
-  const ids=[...new Set(tabs.flatMap(tab=>[...tab.timeline.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...sceneMediaAssetIds(tab.timeline),...tab.timeline.audioNormalization?[tab.timeline.audioNormalization.assetId]:[]]))];
+  const ids=[...new Set(tabs.flatMap(tab=>[...tab.timeline.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...tab.timeline.audioNormalization?[tab.timeline.audioNormalization.assetId]:[]]))];
   for(const raw of ids){const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==ownerId||asset.projectId!==projectId)throw new ConvexError('A source could not be shared.');assets.set(asset._id,asset);}
   // Preserve the linked audio source so adding this footage in the copy keeps audio separation.
   for(const asset of Array.from(assets.values()))if(asset.audioAssetId&&!assets.has(asset.audioAssetId)){
@@ -57,7 +56,7 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   const tabCount=tabs.length>1?tabs.length:undefined,openTimelineId=tabCount?primary.id:undefined;
   const shareId=existing?existing._id:await ctx.db.insert('timelineShares',{projectId,ownerId,title:project.title,timeline,...(tabCount?{tabCount,openTimelineId}:{}),...(chat?.length?{chat}:{}),published:true,createdAt:now,updatedAt:now});
   if(existing){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,tabCount,openTimelineId,chat:chat?.length?chat:undefined,published:true,updatedAt:now});}
-  if(tabCount)for(const [position,tab] of tabs.entries())await ctx.db.insert('shareTimelines',{shareId,timelineId:tab.id,name:tab.name,position,timeline:await storeSceneCode(ctx,tab.timeline)});
+  if(tabCount)for(const [position,tab] of tabs.entries())await ctx.db.insert('shareTimelines',{shareId,timelineId:tab.id,name:tab.name,position,timeline:tab.timeline});
   for(const asset of assets.values())await ctx.db.insert('shareAssets',{shareId,ownerId,...sharedAssetFields(asset)});
   // The link's preview card: the timeline's name and a frame of it, rendered in the background.
   await ctx.db.patch(shareId,{cardTitle:primary.name});
@@ -126,14 +125,14 @@ export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',id)).take(200);
   const assets=await Promise.all(pins.map(async pin=>({_id:String(pin.sourceId),fileName:pin.fileName,kind:pin.kind,url:await mediaUrl(ctx,pin),...await previewUrl(ctx,pin),...(pin.previewVersion!==undefined?{previewSize:pin.previewSize,previewWidth:pin.previewWidth,previewHeight:pin.previewHeight,previewFps:pin.previewFps,previewVersion:pin.previewVersion}:{}),...(pin.duration!==undefined?{duration:pin.duration}:{}),...(pin.width!==undefined?{width:pin.width}:{}),...(pin.height!==undefined?{height:pin.height}:{}),...(pin.audioAssetId?{audioAssetId:String(pin.audioAssetId)}:{}),...(pin.audioExtracted!==undefined?{audioExtracted:pin.audioExtracted}:{}),...(pin.waveform?{waveform:pin.waveform}:{}),...(pin.thumbnailStorageId?{thumbnailUrl:await ctx.storage.getUrl(pin.thumbnailStorageId)}:{})})));
   const rows=share.tabCount?await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',id)).take(20):[];
-  const tabs=await Promise.all(rows.map(async row=>({id:row.timelineId,name:row.name,timeline:await loadSceneCode(ctx,row.timeline)})));
-  return {_id:share._id,title:share.title,updatedAt:share.updatedAt,timeline:await loadSceneCode(ctx,share.timeline),...(tabs.length?{tabs,openTimelineId:share.openTimelineId??tabs[0].id}:{}),assets,...(share.chat?.length?{chat:share.chat}:{})};
+  const tabs=await Promise.all(rows.map(async row=>({id:row.timelineId,name:row.name,timeline:row.timeline})));
+  return {_id:share._id,title:share.title,updatedAt:share.updatedAt,timeline:share.timeline,...(tabs.length?{tabs,openTimelineId:share.openTimelineId??tabs[0].id}:{}),assets,...(share.chat?.length?{chat:share.chat}:{})};
 }});
 /** Copy one shared timeline (the tab being viewed, for multi-tab shares) into a new project. */
 export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timelineId:v.optional(v.string())},returns:v.id('projects'),handler:async(ctx,{shareId,timelineId})=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await ctx.db.get(shareId);if(!share?.published)throw new ConvexError('This timeline is no longer shared.');
   const tab=timelineId&&share.tabCount?(await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',shareId)).take(20)).find(row=>row.timelineId===timelineId):undefined;
-  const source=await loadSceneCode(ctx,tab?.timeline??share.timeline),used=new Set([...source.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...sceneMediaAssetIds(source),...source.audioNormalization?[source.audioNormalization.assetId]:[]]);
+  const source=tab?.timeline??share.timeline,used=new Set([...source.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...source.audioNormalization?[source.audioNormalization.assetId]:[]]);
   // A multi-tab share pins every tab's media; the copy keeps only what its timeline uses (and linked audio).
   const all=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',shareId)).take(200),now=Date.now();
   for(const pin of all)if(used.has(pin.sourceId)&&pin.audioAssetId)used.add(pin.audioAssetId);

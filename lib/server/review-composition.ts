@@ -6,19 +6,17 @@ import type { MediaWorkItem,MediaTaskResult } from '../../convex/lib/media_task_
 import type { Clip, MediaAsset } from '../editor/types';
 import { dimensions, renderedFrameTime, timelineDuration } from '../editor/types';
 import { checkPlanTiming, type EffectPlan } from '../ai/edit-plan';
-import { changedShare,compositionSampleTimes,parseCompositionReview,pixelDifference,reviewObservationsJsonSchema } from '../ai/composition-review';
+import { compositionSampleTimes,parseCompositionReview,pixelDifference,reviewObservationsJsonSchema } from '../ai/composition-review';
 import { interaction } from '../media-analysis/gemini';
 import { geminiFrameModel } from '../media-analysis/gemini-model';
 import { interactionText } from '../media-analysis/transcript';
 import { AnalysisError } from '../media-analysis/errors';
-import { sceneMediaAssetIds } from '../editor/scene-layers';
 import { isTransitionClip } from '../editor/clip-transitions';
 
 import { prepareComposition,writeComposition,reviewWindowTimeline,linkCompositionResources } from './prepare-composition';
 import { runCompositionCapture } from './render-worker';
 import { measurePacing } from '../media-analysis/pacing';
 import { visualHits } from '../media-analysis/sound';
-import { mapMotion, motionWindow } from '../inspo-motion/motion-map';
 import { measureTimelineSound } from './sound-check';
 
 /** A frame inside a transition needs both clips around its cut: the outgoing one ends exactly at the cut, so a
@@ -31,7 +29,6 @@ function withTransitions(timeline:{clips:Clip[];fps:number},start:number,end:num
   }
   return {start,end};
 }
-import { cropBounds } from '../ai/reference-comparison';
 export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['review']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['review']>> {
   const key=process.env.GOOGLE_GENERATIVE_AI_API_KEY;if(!key)throw new AnalysisError('Gemini composition review is not configured.',503);
   const edited=reviewWindowTimeline(snapshot.timeline,snapshot.start,snapshot.end),reference=reviewWindowTimeline(snapshot.reference,snapshot.start,snapshot.end);
@@ -64,31 +61,31 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
 export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,cache?:FrameCache,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
-  const sceneMedia=new Set([...sceneMediaAssetIds(timeline),...baseline?sceneMediaAssetIds(baseline):[]]);
-  const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||asset._id===baseline?.audioNormalization?.assetId||sceneMedia.has(asset._id)||[...timeline.clips,...baseline?.clips??[]].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
-  const range=snapshot.pacing??snapshot.sound??snapshot.motion;
+  // Guard renders, motion maps and reference comparisons were removed with the motion lanes.
+  if(baseline||snapshot.motion||snapshot.comparison)throw new AnalysisError('This check is no longer supported.',400);
+  const assets=snapshot.assets.filter(asset=>asset._id===timeline.audioNormalization?.assetId||[...timeline.clips].some(clip=>clip.assetId===asset._id||clip.normalizedAudio?.assetId===asset._id)) as (MediaAsset & {size:number})[];
+  const range=snapshot.pacing??snapshot.sound;
   const windows=contactSheet?[{start:0,end:last+frame}]:range?[withTransitions(timeline,Math.max(0,range.start-.5),Math.min(last+frame,range.end+.5))]:times.map(time=>withTransitions(timeline,Math.max(0,Math.min(time,last)),Math.min(time,last)+frame));
-  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,baseline?[baseline]:[],windows);
+  const {assetUrls,audioSourceOffsets}=await prepareComposition(directory,timeline,assets,convexUrl,signal,[],windows);
   // Listening to a range needs only its decoded audio, not a page.
   if(snapshot.sound&&!snapshot.sound.check){onProgress(40);return {frames:[],sound:await measureTimelineSound(snapshot,directory,assetUrls,audioSourceOffsets,{start:snapshot.sound.start,end:Math.min(snapshot.sound.end,timelineDuration(timeline))},signal)};}
   const path=join(directory,'edited');await mkdir(path);await linkCompositionResources(directory,path,assetUrls);
-  const resolution=snapshot.resolution??(snapshot.comparison&&!snapshot.motion?1080:720),size=dimensions(timeline.aspectRatio,resolution);
+  const resolution=snapshot.resolution??720,size=dimensions(timeline.aspectRatio,resolution);
   await writeComposition(path,timeline,assets,assetUrls,resolution,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
   onProgress(20);
-  if(baseline)return guardFrames(snapshot,baseline,directory,path,assets,assetUrls,audioSourceOffsets,signal,onProgress);
   // One capture session over the whole range at the sampling rate, read back as small grayscale frames.
   const sampled=async(range:{start:number;end:number},fps:number)=>{
     const start=Math.round(Math.min(range.start,last)*timeline.fps)/timeline.fps,end=Math.min(range.end,last);
     const times=Array.from({length:Math.floor((end-start)*fps+1e-6)+1},(_,index)=>Math.round((start+index/fps)*timeline.fps)/timeline.fps);
     if(times.length<3)throw new AnalysisError('Check at least 0.3 s.',400);
-    const crop=snapshot.comparison?.crop,aspect=snapshot.comparison?.aspectRatio??size.width*(crop?.w??1)/(size.height*(crop?.h??1));
+    const aspect=size.width/size.height;
     const width=320,height=Math.max(2,Math.round(width/aspect));
     const frames:Uint8Array[]=[];
     // Bound video extraction and capture to four seconds, preserving every sample and the original film clock.
     const perChunk=Math.max(1,Math.floor(4*fps));
     for(let first=0;first<times.length;first+=perChunk){
       const group=times.slice(first,first+perChunk);
-      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group,start:group[0],end:group[group.length-1]+frame,variants:['edited'],pacing:{width,height,...(snapshot.comparison?.crop?{crop:snapshot.comparison.crop}:{})}},signal);
+      await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group,start:group[0],end:group[group.length-1]+frame,variants:['edited'],pacing:{width,height}},signal);
       const bytes=await readFile(join(directory,'pacing.bin'));
       if(bytes.length!==group.length*width*height)throw new AnalysisError('The picture check returned an incomplete frame buffer.',500);
       frames.push(...group.map((_,index)=>new Uint8Array(bytes.buffer,bytes.byteOffset+index*width*height,width*height)));
@@ -96,10 +93,6 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     }
     return {width,height,start:times[0],frames};
   };
-  if(snapshot.motion){
-    const fps=Math.min(30,timeline.fps),{width,height,start,frames}=await sampled({start:Math.max(0,snapshot.motion.start-.5),end:Math.min(last,snapshot.motion.end+.5)},fps);
-    return {frames:[],motion:motionWindow(mapMotion(frames,width,height,start,fps),snapshot.motion.start,snapshot.motion.end)};
-  }
   if(snapshot.pacing){
     const {width,height,start,frames}=await sampled(snapshot.pacing,snapshot.pacing.fps);
     return {frames:[],pacing:measurePacing(frames,width,height,start,snapshot.pacing.fps)};
@@ -144,13 +137,7 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   for(const [index,time] of at.entries())frames.push({time,image:images[index].toString('base64')});
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Keep the existing tool image budget and encoding; cached PNGs are never replaced by these smaller JPEGs.
-  const pngs=await Promise.all(frames.map(async frame=>{
-    const image=Buffer.from(frame.image,'base64'),crop=snapshot.comparison?.crop;
-    if(!crop)return image;
-    const meta=await sharp(image).metadata();
-    if(!meta.width||!meta.height)throw new AnalysisError('The comparison frame has no dimensions.',500);
-    return sharp(image).extract(cropBounds(crop,meta.width,meta.height)).png().toBuffer();
-  }));
+  const pngs=frames.map(frame=>Buffer.from(frame.image,'base64'));
   if(snapshot.resolution===1080){
     for(const quality of [85,75,65,55,45,35]){
       const images=await Promise.all(pngs.map(png=>sharp(png).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
@@ -158,43 +145,13 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
     }
     throw new AnalysisError('The 1080p frame exceeds the inspection image budget; use a preview or inspect a different time.',400);
   }
-  for(const [size,quality] of (snapshot.comparison?[[1920,85],[1280,85],[1080,80],[768,75],[640,65],[512,55],[384,45]]:[[768,70],[640,60],[512,50],[384,45]])){
+  for(const [size,quality] of [[768,70],[640,60],[512,50],[384,45]]){
     const images=await Promise.all(pngs.map(png=>sharp(png).resize(size,size,{fit:'inside',withoutEnlargement:true}).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
-    if(images.reduce((sum,image)=>sum+image.length,0)<=(snapshot.comparison?600_000:700_000))return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
+    if(images.reduce((sum,image)=>sum+image.length,0)<=700_000)return {frames:frames.map((frame,index)=>({time:frame.time,image:images[index]}))};
   }
   throw new AnalysisError('Rendered frames are too detailed to return. Ask for fewer times.',400);
 }
 
-/** The visual guard: the saved timeline (reference) and a proposed change (edited) captured with the same seeks, one
- * capture session per 3 s span; returns how much of each frame changed, and the most changed moments side by side. */
-async function guardFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,baseline:NonNullable<NonNullable<MediaWorkItem['snapshot']>['baseline']>,directory:string,edited:string,assets:(MediaAsset & {size:number})[],assetUrls:Awaited<ReturnType<typeof prepareComposition>>['assetUrls'],audioSourceOffsets:Awaited<ReturnType<typeof prepareComposition>>['audioSourceOffsets'],signal:AbortSignal,onProgress:(n:number)=>void):Promise<NonNullable<MediaTaskResult['snapshot']>> {
-  const {timeline}=snapshot,frame=1/timeline.fps,last=Math.max(0,Math.min(timelineDuration(timeline),timelineDuration(baseline))-frame),size=dimensions(timeline.aspectRatio,720);
-  const reference=join(directory,'reference');await mkdir(reference);await linkCompositionResources(directory,reference,assetUrls);
-  await writeComposition(reference,baseline,assets,assetUrls,720,timeline.fps as 24|30|60,'./',signal,audioSourceOffsets);
-  const at=snapshot.times.map(time=>Math.round(Math.min(Math.max(0,time),last)*timeline.fps)/timeline.fps);
-  const span=timeline.clips.some(clip=>clip.kind==='video')||baseline.clips.some(clip=>clip.kind==='video')?0:3;
-  const order=at.map((time,index)=>({time,index})).sort((a,b)=>a.time-b.time),pairs=new Array<{before:Buffer;after:Buffer;difference:number}>(at.length);
-  for(let first=0;first<order.length;){
-    let next=first;while(next+1<order.length&&order[next+1].time+frame-order[first].time<=span)next++;
-    const group=order.slice(first,next+1);
-    await runCompositionCapture(directory,{...size,fps:timeline.fps,times:group.map(item=>item.time),start:group[0].time,end:group[group.length-1].time+frame,variants:['edited','reference']},signal);
-    for(const [sample,item] of group.entries()){
-      const [after,before]=await Promise.all([edited,reference].map(dir=>readFile(join(dir,`sample-${sample}.png`))));
-      const [a,b]=await Promise.all([after,before].map(buffer=>sharp(buffer).resize(320,Math.max(2,Math.round(320*size.height/size.width)),{fit:'fill'}).removeAlpha().raw().toBuffer()));
-      pairs[item.index]={before,after,difference:Math.round(changedShare(a,b)*10000)/10000};
-    }
-    first=next+1;onProgress(20+Math.round(75*first/order.length));
-  }
-  // Before on the left, after on the right, for the most changed moments only.
-  const worst=pairs.map((pair,index)=>({...pair,index})).filter(pair=>pair.difference>0).sort((a,b)=>b.difference-a.difference).slice(0,3).sort((a,b)=>a.index-b.index);
-  const width=640,height=Math.round(width*size.height/size.width);
-  const frames=await Promise.all(worst.map(async pair=>{
-    const [left,right]=await Promise.all([pair.before,pair.after].map(png=>sharp(png).resize(width,height,{fit:'fill'}).toBuffer()));
-    const image=await sharp({create:{width:width*2+8,height,channels:3,background:'#2a2a2a'}}).composite([{input:left,left:0,top:0},{input:right,left:width+8,top:0}]).jpeg({quality:70}).toBuffer();
-    return {time:at[pair.index],image:image.toString('base64')};
-  }));
-  return {frames,differences:pairs.map(pair=>pair.difference)};
-}
 
 const escapeXml=(text:string)=>text.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[c]!));
 /** A link preview card, 1200x630: the frame full-bleed, a play button, and a strip with the timeline name and the Revline mark. */
