@@ -63,12 +63,14 @@ function captionLook(sample: Clip): Partial<Clip> {
 export function subtitlesFromTranscripts(timeline: Timeline, sources: readonly MediaAsset[], history: readonly Timeline[], createId: () => string): Timeline {
   const sample = lastCaptions(history)?.captions[0], karaoke = sample?.textTemplate?.preset === 'karaoke' ? sample.textTemplate : undefined;
   const look = sample ? captionLook(sample) : {};
+  // Blurred copies from the old stacked layout repeat their sharp clip's footage; caption the speech once.
+  const copies = stackedMirrorCopyIds(timeline);
   const captions = sources.flatMap(asset => {
     // A loaded asset carries its transcript in transport form (long word lists arrive in chunks).
     const raw = asset.analysis?.transcript && readTranscript(asset.analysis.transcript);
     if (!raw || (!raw.words.length && !raw.segments.length)) return [];
     const transcript = asset.analysis?.audioActivity ? refineTranscriptWithAudioActivity(raw, asset.analysis.audioActivity) : raw;
-    return timeline.clips.filter(clip => clip.assetId === asset._id).flatMap(clip => captionClipsFromTranscript(clip, transcript, timeline.fps, createId, karaoke ? 'clipper' : 'minimal'));
+    return timeline.clips.filter(clip => clip.assetId === asset._id && !copies.has(clip.id)).flatMap(clip => captionClipsFromTranscript(clip, transcript, timeline.fps, createId, karaoke ? 'clipper' : 'minimal'));
   }).map(clip => ({
     ...clip, ...look,
     ...(karaoke && clip.textTemplate ? { textTemplate: { ...clip.textTemplate, highlightColor: karaoke.highlightColor, karaokeStyle: karaoke.karaokeStyle } } : {}),

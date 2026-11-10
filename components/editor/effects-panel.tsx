@@ -2,20 +2,22 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
+import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { applyQuickLayout, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import { userError } from '@/lib/user-error';
 import { useEditorStore, useEditorState } from './editor-state';
-import './quick-controls.css';
+import './effects-panel.css';
 
 const HOOK_TYPING_PAUSE_MS = 400;
 
 /**
- * Subtitles on/off, blur background or tight crop, and a hook line for the open timeline. Each change goes
- * through `onChange`, the editor's normal edit path, so it saves, shows live and undoes like any other edit.
+ * The media panel's Effects tab: one-click changes to the open timeline, top to bottom. Subtitles on/off, blur
+ * background or tight crop, and a hook line. Each change goes through `onChange`, the editor's normal edit path,
+ * so it saves, shows live and undoes like any other edit. A further effect is one more `effect-row` below these.
  */
-export function QuickControls({ timeline, assets, locked, onChange, onError, onLoadAsset }: {
+export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLoadAsset }: {
   timeline: Timeline; assets: MediaAsset[]; locked: boolean;
   onChange: (next: Timeline) => void; onError: (message: string) => void;
   /** Loads one source with its saved analysis; the editor's media list leaves transcripts out. */
@@ -67,29 +69,29 @@ export function QuickControls({ timeline, assets, locked, onChange, onError, onL
     pending.current = setTimeout(() => commitHook(text), HOOK_TYPING_PAUSE_MS);
   };
 
-  return <div className="quick-controls" role="group" aria-label="Quick clip controls">
-    <div className="quick-control">
-      <span className="quick-control-label" id="quick-subtitles-label">Subtitles</span>
-      <ToggleGroup type="single" spacing={0} className="quick-toggle" aria-labelledby="quick-subtitles-label" disabled={locked || captioning || !!subtitles.disabled} value={subtitles.on ? 'on' : 'off'} onValueChange={next => { if (next) void setSubtitles(next === 'on'); }}>
-        <ToggleGroupItem value="on">On</ToggleGroupItem>
-        <ToggleGroupItem value="off">Off</ToggleGroupItem>
-      </ToggleGroup>
-      {subtitles.disabled && <span className="quick-control-hint">{subtitles.disabled}</span>}
-    </div>
-    <div className="quick-control">
-      <span className="quick-control-label" id="quick-layout-label">Layout</span>
-      <ToggleGroup type="single" spacing={0} className="quick-toggle" aria-labelledby="quick-layout-label" disabled={locked || !!layout.disabled} value={layout.value === 'blur' || layout.value === 'crop' ? layout.value : ''} onValueChange={next => { const choice = next || layout.value; if (!locked && (choice === 'blur' || choice === 'crop')) attempt(() => applyQuickLayout(current(), assets, choice), 'Could not change the layout.'); }}>
+  const empty = !timeline.clips.length;
+  return <div className="effects-panel">
+    <section className="effect-row">
+      <div className="effect-row-head">
+        <label className="effect-label" htmlFor="effect-subtitles">Subtitles</label>
+        <Switch id="effect-subtitles" className="effect-switch" checked={subtitles.on} disabled={locked || captioning || !!subtitles.disabled} onCheckedChange={on => void setSubtitles(on)}/>
+      </div>
+      {subtitles.disabled && <p className="effect-hint">{subtitles.disabled}</p>}
+    </section>
+    <section className="effect-row">
+      <span className="effect-label" id="effect-layout-label">Layout</span>
+      <ToggleGroup type="single" spacing={0} className="effect-toggle" aria-labelledby="effect-layout-label" disabled={locked || !!layout.disabled} value={layout.value === 'blur' || layout.value === 'crop' ? layout.value : ''} onValueChange={next => { const choice = next || layout.value; if (!locked && (choice === 'blur' || choice === 'crop')) attempt(() => applyQuickLayout(current(), assets, choice), 'Could not change the layout.'); }}>
         <ToggleGroupItem value="blur">Blur background</ToggleGroupItem>
         <ToggleGroupItem value="crop">Tight crop</ToggleGroupItem>
       </ToggleGroup>
-      {(layout.disabled || layout.value === 'mixed') && <span className="quick-control-hint">{layout.disabled ?? 'Mixed'}</span>}
-    </div>
-    <div className="quick-control quick-control-hook">
-      <label className="quick-control-label" htmlFor="quick-hook">Hook</label>
-      <Input id="quick-hook" className="quick-hook-input" type="text" autoComplete="off" maxLength={HOOK_MAX_LENGTH} placeholder="Type a hook line" disabled={locked} value={draft}
+      {(layout.disabled || layout.value === 'mixed') && <p className="effect-hint">{layout.disabled ?? 'Clips use different layouts'}</p>}
+    </section>
+    <section className="effect-row">
+      <label className="effect-label" htmlFor="effect-hook">Hook</label>
+      <Input id="effect-hook" className="effect-input" type="text" autoComplete="off" maxLength={HOOK_MAX_LENGTH} placeholder="Type a hook" disabled={locked || empty} value={draft}
         onChange={event => typeHook(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') commitHook(draft); }}
         onBlur={() => { commitHook(draft); store.getState().endUndoGroup(); }}/>
-    </div>
+    </section>
   </div>;
 }
