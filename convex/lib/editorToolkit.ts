@@ -1358,8 +1358,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const clip = find(t, input.clipId); if (clip.kind !== "caption" && clip.kind !== "graphic") throw new Error("Choose a caption or text graphic");
       if (clip.kind === 'caption') {
         const words = retainedSpeechWords(t, assets);
-        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false })[0] : undefined;
-        if (mismatch) throw new Error(`${mismatch} Keep that measured phrase, or use setCaptionTiming to realign its boundaries before editing the text.`);
+        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false, checkTiming: false })[0] : undefined;
+        if (mismatch) throw new Error(mismatch);
       }
       return patchClip(t, input.clipId, { text: input.text });
     }) }),
