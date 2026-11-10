@@ -1,4 +1,4 @@
-/** A user's saved brand: what a launch film looks like (colors, fonts, logo) and what it says (context). */
+/** A user's saved brand: its look (colors, fonts, logo) and what it says (context). */
 export type BrandColor = { name: string; value: string };
 export type BrandFontRole = 'heading' | 'body' | 'other';
 export type BrandFontFace = { family: string; weight: string; role: BrandFontRole; url: string };
