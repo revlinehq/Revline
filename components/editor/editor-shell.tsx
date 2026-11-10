@@ -268,17 +268,24 @@ export function EditorShell(p: EditorShellProps) {
     measure(); observer.observe(body);
     return () => observer.disconnect();
   }, [preparing]);
+  const [openingAttempt,setOpeningAttempt]=useState(0);
   useLayoutEffect(() => {
-    const toolbar=bodyRef.current?.querySelector<HTMLElement>('.timeline-toolbar');
-    if(!toolbar)return;
+    const toolbar=bodyRef.current?.querySelector<HTMLElement>('.timeline-toolbar'),panel=toolbar?.parentElement;
+    if(!toolbar||!panel)return;
     // Collapsed, the timeline still shows its tab row above the toolbar; keep both on screen so the
     // expand button stays reachable.
-    const tabs=()=>toolbar.parentElement?.querySelector<HTMLElement>('.timeline-tabs')??null;
+    const tabs=()=>panel.querySelector<HTMLElement>('.timeline-tabs');
     const measure=()=>{const row=tabs(),bottom=toolbar.getBoundingClientRect().bottom,top=row?Math.min(row.getBoundingClientRect().top,toolbar.getBoundingClientRect().top):toolbar.getBoundingClientRect().top;setCollapsedTimelineHeight(Math.max(1,Math.ceil(bottom-top)));};
     const observer=new ResizeObserver(measure);
-    measure();observer.observe(toolbar);const row=tabs();if(row)observer.observe(row);
-    return()=>observer.disconnect();
-  },[preparing]);
+    // The tab row mounts when the tab list loads, which can be after the toolbar: measured without
+    // it, the collapsed panel is one row short and the toolbar, with the expand button, is cut off.
+    let watched:HTMLElement|null=null;
+    const watch=()=>{const row=tabs();if(row!==watched){if(watched)observer.unobserve(watched);if(row)observer.observe(row);watched=row;}measure();};
+    const rows=new MutationObserver(watch);
+    observer.observe(toolbar);watch();rows.observe(panel,{childList:true});
+    // A retry remounts the timeline, and with it the rows to measure.
+    return()=>{observer.disconnect();rows.disconnect();};
+  },[preparing,openingAttempt]);
   useEffect(()=>{
     if(preparing||timelineInitialized.current)return;
     const frame=requestAnimationFrame(()=>{
@@ -309,7 +316,6 @@ export function EditorShell(p: EditorShellProps) {
   const onSlowLoad=useCallback(()=>setPlaybackSlow(true),[]);
   const [thumbnailsReady,setThumbnailsReady]=useState(false);
   const [thumbnailsTimedOut,setThumbnailsTimedOut]=useState(false);
-  const [openingAttempt,setOpeningAttempt]=useState(0);
   const [thumbnailProgress,setThumbnailProgress]=useState({ready:0,total:0});
   const referenceMedia=useCallback((assetId:string)=>assets.find(asset=>asset._id===assetId),[assets]);
   const firstVisualAsset=assets.find(asset=>asset._id===timeline.clips.find(clip=>clip.kind==='video'||clip.kind==='image')?.assetId);
