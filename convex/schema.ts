@@ -1,4 +1,5 @@
 import { clippingManifest,clipCheckRequestValidator } from './lib/clipping_validator';
+import { postingTables } from './postingTables';
 import { laneValidator, laneEvidenceValidator, laneBaselineValidator, laneResultValidator } from './lib/lane_validators';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator, pixelTrackHeaderValidator, pixelTrackSampleValidator, pixelTrackBindingValidator } from './lib/pixel_track_validator';
@@ -472,4 +473,5 @@ export default defineSchema({
   // The project's living brief: the user's lasting direction for this project, one rule each with the words they said it in.
   projectBriefs: defineTable({ projectId: v.id('projects'), ownerId: v.string(), rules: v.array(v.object({ id: v.string(), rule: v.string(), words: v.string(), at: v.number() })), updatedAt: v.number() }).index('by_project', ['projectId']),
   mcpUsage: defineTable({ ownerId: v.string(), windowStart: v.number(), calls: v.number() }).index("by_owner", ["ownerId"]).index("by_windowStart", ["windowStart"]),
+  ...postingTables,
 });

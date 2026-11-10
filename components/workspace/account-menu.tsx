@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
-import { Database, LoaderCircle, LogOut, Palette, UserRound } from 'lucide-react';
+import { Database, LoaderCircle, LogOut, Palette, Send, Share2, UserRound } from 'lucide-react';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,6 +29,8 @@ export function WorkspaceAccountMenu({ active, error }: { active?: string; error
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />Profile</Link></DropdownMenuItem>
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/brand-kits" aria-current={active === 'brand-kits' ? 'page' : undefined}><Palette size={16} />Brand kits</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/accounts" aria-current={active === 'accounts' ? 'page' : undefined}><Share2 size={16} />Connected accounts</Link></DropdownMenuItem>
+      <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/posts" aria-current={active === 'posts' ? 'page' : undefined}><Send size={16} />Posts</Link></DropdownMenuItem>
       <DropdownMenuSeparator className="workspace-menu-divider" />
       {isSignedIn ? <DropdownMenuItem className="workspace-menu-item" disabled={signingOut} onSelect={event => { event.preventDefault(); void signOut(); }}>{signingOut ? <LoaderCircle size={16} className="animate-spin" /> : <LogOut size={16} />}Sign out</DropdownMenuItem> : <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/sign-in"><LogOut size={16} />Sign in</Link></DropdownMenuItem>}
       {(accountError || error) && <p className="workspace-inline-error" role="alert">{accountError || error}</p>}
