@@ -148,7 +148,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
           const cache = { scope: JSON.stringify(['export-segments-v1', new URL(convexUrl).origin, task.projectId]), assets: Object.fromEntries((snapshot.assets as (MediaAsset & { size: number; r2Key?: string; storageId?: string })[]).map(asset => [asset._id, JSON.stringify([asset.r2Key ?? asset.storageId ?? asset._id, asset.size])])) };
           const texts = () => runPhase('Rasterizing static overlays', () => rasterizeOverlays(directory, snapshot.timeline, plan, snapshot.resolution as ExportResolution, signal, { assets: snapshot.assets as MediaAsset[], assetUrls, identities: cache.assets }, cache.scope));
           const result = await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal, texts, cache));
-          if (result.segments) logPhase('FFmpeg segments', 'reused', Date.now(), `${result.segments.reused} of ${result.segments.total} segments from cache · ${result.segments.encodedFrames} of ${plan.frames} frames encoded · ${(result.elapsedMs / 1000).toFixed(1)}s`);
+          if (result.segments) logPhase('FFmpeg segments', 'reused', Date.now(), `${result.segments.reused} of ${result.segments.total} segments from cache · ${result.segments.encodedFrames} of ${plan.frames} frames encoded · ${result.segments.concurrency} at once × ${result.segments.threads} x264 threads · ${(result.elapsedMs / 1000).toFixed(1)}s`);
           rendered = true;
           renderer = `ffmpeg:segments-${SEGMENT_FORMAT}:processor-${MEDIA_PROCESSOR_VERSION}`;
         } catch (error) {
