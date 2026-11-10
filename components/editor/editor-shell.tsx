@@ -30,6 +30,7 @@ import { AspectRatioControl } from './aspect-ratio-control';
 import type { SafeAreaPlatform } from '@/lib/editor/safe-areas';
 import { MediaImportDialog } from './media-import-dialog';
 import { PreviewInspector } from './preview-inspector';
+import { unfinishedUploadHint, useUnfinishedUploads } from './use-unfinished-uploads';
 import { MediaTab } from './media-tab';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
@@ -140,6 +141,7 @@ export function EditorShell(p: EditorShellProps) {
   const dismissError = useCallback(() => onError(''), [onError]);
   const params = useSearchParams();
   const [compact,setCompact]=useState(false);useEffect(()=>{const media=matchMedia('(max-width:900px)');const update=()=>setCompact(media.matches);update();media.addEventListener('change',update);return()=>media.removeEventListener('change',update);},[]);
+  const unfinished=useUnfinishedUploads(p.projectId?`project:${p.projectId}`:undefined);
   const [importOpen,setImportOpen]=useState(false);const [importDestination,setImportDestination]=useState<'timeline'|'sources'|'composer'>('timeline');
   const store=useEditorStore();const selected=useEditorState(s=>s.selectedId);const selectedIds=useEditorState(s=>s.selectedIds??NO_SELECTED_CLIPS);const setSelected=(id:string|null)=>store.setState({selectedId:id,selectedIds:id?[id]:[]});
   const [clipboard, setClipboard] = useState<Clip[]>([]);
@@ -494,7 +496,7 @@ export function EditorShell(p: EditorShellProps) {
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
   const browseComposer=()=>{setImportDestination('composer');setImportOpen(true);};
 
-  const inspector = <PreviewInspector onRemoveAsset={p.onRemoveAsset} onAttachAsset={p.onAttachAsset&&(asset=>p.onAttachAsset!(asset._id))} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset}/>;
+  const inspector = <PreviewInspector resumeHint={unfinishedUploadHint(unfinished)} onRemoveAsset={p.onRemoveAsset} onAttachAsset={p.onAttachAsset&&(asset=>p.onAttachAsset!(asset._id))} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset}/>;
 
   // On desktop the ratio chip sits on the preview frame's top-left corner, as in the design.
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
@@ -526,7 +528,7 @@ export function EditorShell(p: EditorShellProps) {
         </div></ResizablePanel></ResizablePanelGroup>
     </section></>}
     {opening&&<FootagePreparation progressKey={p.projectId?`project:${p.projectId}`:undefined} progress={footageProgress} thumbnail={firstVisualAsset?.thumbnailUrl||(firstVisualAsset?.kind==='image'?firstVisualAsset.url:null)||openingFootage(p.projectId)?.thumbnail||loadingThumbnail} fileName={openingFootage(p.projectId)?.fileName} label={!playbackReady?'Loading footage…':!audioPrepared?'Preparing audio…':initialAnalysis||'Preparing timeline thumbnails…'} detail={playbackSlow&&!playbackReady?'Still loading the video. The editor will open when it is ready.':playbackReady&&audioPrepared&&!initialAnalysis&&thumbnailProgress.total?`${thumbnailProgress.ready} of ${thumbnailProgress.total} visible thumbnails loaded.`:undefined} error={playbackError} onRetry={()=>{setPlaybackError('');setPlaybackSlow(false);onError('');setOpeningAttempt(value=>value+1);preview.current?.retry();}}/>}
-    {preparing&&<ProjectImportStage progressKey={p.projectId?`project:${p.projectId}`:undefined} importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload} onStartFromPrompt={p.demo?undefined:()=>setPromptStart(p.projectId??null)}/>}
+    {preparing&&<ProjectImportStage resumeHint={unfinishedUploadHint(unfinished,'Choose')} progressKey={p.projectId?`project:${p.projectId}`:undefined} importTask={p.videoImports?.find(task=>!['completed','cancelled'].includes(task.status))} upload={p.upload} onBrowse={browse} onUpload={p.onUpload} onStartFromPrompt={p.demo?undefined:()=>setPromptStart(p.projectId??null)}/>}
     {compact && inspectorOpen && <Sheet open={inspectorOpen} onOpenChange={setInspectorOpen}><SheetContent className="preview-inspector-sheet" showCloseButton={false}><div className="mobile-inspector-header"><SheetTitle>My media</SheetTitle><Button type="button" variant="ghost" size="icon" aria-label="Close editing panel" onClick={() => setInspectorOpen(false)}><X size={18}/></Button></div><SheetDescription>Add media to your timeline.</SheetDescription>{inspector}</SheetContent></Sheet>}
     <MediaImportDialog open={importOpen} onOpenChange={setImportOpen} onUpload={files=>{void (importDestination==='composer'?p.onAttachUpload??p.onDropUpload:editLock.current||importDestination==='sources'?p.onDropUpload:p.onUpload)(files);}} onImportVideo={editing?undefined:p.onImportVideo} disabled={!!p.upload} {...(importDestination==='composer'&&p.onAttachAsset?{projectMedia:assets.filter(asset=>asset.url&&!asset.preparation&&!assets.some(video=>video.audioAssetId===asset._id)&&!p.composerAttachments?.some(item=>item.id===asset._id)).sort((a,b)=>Number(a.kind==='audio')-Number(b.kind==='audio')),onPickProjectMedia:(asset:MediaAsset)=>p.onAttachAsset!(asset._id)}:{})}/>
     <ExportDialog ultra={p.ultra} open={exportOpen} onOpenChange={setExportOpen} title={exportClipId?`${p.title} clip`:!onlyOpenTab?`${p.title} · ${exportTabs.length} ${exportTabs.length===1?'video':'videos'}`:p.title} timeline={exportTimeline} clipOnly={!!exportClipId} coverUrl={exportCover} onExport={startExports} onCancel={p.onCancelExport} onDownload={p.onDownloadExport} state={exportState} demo={!!p.demo} videoCount={!onlyOpenTab?Math.max(1,exportTabs.length):1} timelines={multiTab?tabs.map(tab=>({id:tab.id,name:tab.name,aspectRatio:tab.active?timeline.aspectRatio:tab.aspectRatio,duration:tab.active?timelineDuration(timeline):tab.duration,cover:tab.active?exportCover:tab.cover})):[]} selectedTimelines={exportTabs} onSelectTimelines={setExportTabs} exports={(p.exports??[]).map(job=>({id:job.requestId!,status:job.status,progress:job.progress,label:job.label,createdAt:job.createdAt??0,resolution:job.resolution,sourceClipId:job.sourceClipId,aspectRatio:job.sourceTimelineId===activeTabId?timeline.aspectRatio:tabs.find(tab=>tab.id===job.sourceTimelineId)?.aspectRatio}))} />

@@ -1,4 +1,4 @@
-import { attachmentDisposition, safeDownloadFileName, verifyMediaToken } from '../../lib/storage/media-tokens';
+import { attachmentDisposition, safeDownloadFileName, signPartReceipt, verifyMediaToken } from '../../lib/storage/media-tokens';
 import { MAX_UPLOAD_PART_BYTES, MAX_UPLOAD_PARTS } from '../../lib/storage/upload-parts';
 
 function validKey(key: unknown): key is string {
@@ -18,7 +18,7 @@ export default {
     });
     const allowed = env.ALLOWED_ORIGINS.split(',');
     if (origin && !allowed.includes(origin)) { diagnostic('origin-not-allowed', 403); return json({ error: 'Origin is not allowed' }, 403); }
-    const cors = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, HEAD, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Range', 'Access-Control-Expose-Headers': 'ETag, Content-Range, Content-Length, Accept-Ranges, Content-Disposition', ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}) });
+    const cors = new Headers({ 'Vary': 'Origin', 'Access-Control-Allow-Methods': 'GET, HEAD, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, Range', 'Access-Control-Expose-Headers': 'ETag, Content-Range, Content-Length, Accept-Ranges, Content-Disposition, X-Part-Receipt', ...(origin ? { 'Access-Control-Allow-Origin': origin, 'Timing-Allow-Origin': origin } : {}) });
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: cors });
     const url = new URL(request.url);
     const token = url.pathname === '/control' ? request.headers.get('Authorization')?.replace(/^Bearer /, '') : url.searchParams.get('token');
@@ -42,7 +42,10 @@ export default {
         // Upload bodies stream straight to R2; no whole-file buffering in the Worker.
         if (Number(request.headers.get('Content-Length')) !== grant.size || grant.size > MAX_UPLOAD_PART_BYTES) return reply({ error: 'Upload part size does not match' }, 400);
         const upload = env.MEDIA.resumeMultipartUpload(grant.key, grant.uploadId);
-        response = json(await upload.uploadPart(grant.partNumber!, request.body));
+        const part = await upload.uploadPart(grant.partNumber!, request.body);
+        response = json(part);
+        // The receipt travels in a header: clients pass the JSON body on to completion as it is.
+        response.headers.set('X-Part-Receipt', await signPartReceipt(env.MEDIA_SIGNING_SECRET, { key: grant.key, uploadId: grant.uploadId, partNumber: part.partNumber, size: grant.size, etag: part.etag }));
       } else if (url.pathname === '/read' && (request.method === 'GET' || request.method === 'HEAD') && download && grant.storageUrl && !grant.key) {
         // Only a server-signed legacy source can be proxied. Never accept a URL
         // or attachment filename from the request's unsigned query parameters.

@@ -44,3 +44,16 @@ export async function verifyMediaToken(secret: string, token: string): Promise<M
     return Number.isFinite(value.expires) && value.expires > Date.now() ? value : null;
   } catch { return null; }
 }
+
+/** What the media Worker vouches for when it stores one multipart part. */
+export type StoredPartClaim = { key: string; uploadId: string; partNumber: number; size: number; etag: string };
+const receiptText = (part: StoredPartClaim) => encoder.encode(['part-receipt', part.key, part.uploadId, part.partNumber, part.size, part.etag].join('\n'));
+/** The Worker's proof that it stored this part. A resumed upload presents it, so the
+ * server decides which parts already exist instead of trusting the browser's notes. */
+export async function signPartReceipt(secret: string, part: StoredPartClaim) {
+  return encode(new Uint8Array(await crypto.subtle.sign('HMAC', await signingKey(secret), receiptText(part))));
+}
+export async function verifyPartReceipt(secret: string, part: StoredPartClaim, receipt: string) {
+  try { return receipt.length <= 128 && await crypto.subtle.verify('HMAC', await signingKey(secret), decode(receipt), receiptText(part)); }
+  catch { return false; }
+}

@@ -4,6 +4,7 @@ export function localUploadScript(input: { filePath: string; endpoint: string; t
 set -e
 node --input-type=module <<'REVLINE_UPLOAD'
 import { open } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 const input = ${JSON.stringify(input)};
@@ -47,22 +48,27 @@ async function main() {
     const prepared = await fetch(input.endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + input.token }, body: JSON.stringify(metadata) });
     const upload = await prepared.json();
     if (!prepared.ok) throw new Error(upload.error ?? 'Could not prepare the upload.');
-    const parts = [];
-    for (let index = 0; index < upload.urls.length; index++) {
-      const position = index * upload.partSize, length = Math.min(upload.partSize, size - position);
-      const buffer = Buffer.alloc(length);
-      let read = 0;
-      while (read < length) {
-        const { bytesRead } = await file.read(buffer, read, length - read, position + read);
-        if (!bytesRead) throw new Error('The local file changed during upload. Request a new upload.');
-        read += bytesRead;
+    // Four parts travel at once, each streamed from disk, so memory stays flat for any file size.
+    const parts = new Array(upload.urls.length);
+    let next = 0;
+    const sendPart = async index => {
+      const start = index * upload.partSize, length = Math.min(upload.partSize, size - start);
+      for (let attempt = 0; ; attempt++) {
+        const body = createReadStream(input.filePath, { start, end: start + length - 1 });
+        try {
+          const response = await fetch(upload.urls[index], { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream', 'Content-Length': String(length) }, body, duplex: 'half' });
+          if (!response.ok) throw new Error('Upload part ' + (index + 1) + ' failed (HTTP ' + response.status + ').');
+          const part = await response.json();
+          if (part.partNumber !== index + 1 || typeof part.etag !== 'string' || !part.etag) throw new Error('Storage returned an invalid upload part.');
+          parts[index] = { partNumber: part.partNumber, etag: part.etag };
+          return;
+        } catch (error) {
+          if (attempt >= 2) throw new Error(error.message + ' Request a new upload and retry.');
+          await new Promise(resolve => setTimeout(resolve, 1000 * 2 ** attempt));
+        } finally { body.destroy(); }
       }
-      const response = await fetch(upload.urls[index], { method: 'PUT', headers: { 'Content-Type': 'application/octet-stream' }, body: buffer });
-      if (!response.ok) throw new Error('Upload part ' + (index + 1) + ' failed. Request a new upload and retry.');
-      const part = await response.json();
-      if (part.partNumber !== index + 1 || typeof part.etag !== 'string' || !part.etag) throw new Error('Storage returned an invalid upload part.');
-      parts.push({ partNumber: part.partNumber, etag: part.etag });
-    }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, upload.urls.length) }, async () => { while (next < upload.urls.length) await sendPart(next++); }));
     if ((await file.stat()).size !== size) throw new Error('The local file size changed during upload. Request a new upload.');
     console.log(JSON.stringify({ uploadId: upload.uploadId, parts }));
   } finally { await file.close(); }

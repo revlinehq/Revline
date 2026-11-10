@@ -6,6 +6,10 @@ import { api } from '@/convex/_generated/api';
 import { forEachLimited } from './run-limited';
 import { AnalysisError } from '../media-analysis/errors';
 import { retryMediaOperation } from '../media-analysis/network';
+import { partLinkCache } from '../storage/part-links';
+
+/** Parts sent at once. Each is its own connection from Node, and its own file read. */
+const PARALLEL_PARTS = 6;
 
 export type UploadContext = {
   convex: ConvexHttpClient; refreshAuth: () => Promise<void>;
@@ -26,19 +30,21 @@ export async function uploadMediaFile(path: string, metadata: Omit<FunctionArgs<
     const parts: { partNumber: number; etag: string }[] = [];
     // Parts are independent and replacing the same part is idempotent. Retry
     // signing, transfer and response-body failures together with a fresh URL.
-    await forEachLimited(Array.from({ length: upload.partCount }, (_, index) => index + 1), 4, async (partNumber, stop) => {
+    // One request signs a batch of part links; a retry drops its link and signs again.
+    const links = partLinkCache(async (from, count) => { await context.refreshAuth(); return context.convex.action(api.r2.partUrls, { uploadId: upload.uploadId, from, count, ...taskAuth }); }, upload.partCount, undefined, PARALLEL_PARTS * 2);
+    await forEachLimited(Array.from({ length: upload.partCount }, (_, index) => index + 1), PARALLEL_PARTS, async (partNumber, stop) => {
       const partSignal = AbortSignal.any([signal, stop]);
       const start = (partNumber - 1) * upload.partSize, end = Math.min(size, start + upload.partSize) - 1;
       await retryMediaOperation(async () => {
-        partSignal.throwIfAborted(); await context.refreshAuth();
-        const url = await context.convex.action(api.r2.partUrl, { uploadId: upload.uploadId, partNumber, ...taskAuth });
+        partSignal.throwIfAborted();
+        const { url } = await links.get(partNumber);
         const body = createReadStream(path, { start, end });
         try {
           const response = await fetch(url, { method: 'PUT', headers: { 'Content-Length': String(end - start + 1) }, body: body as unknown as BodyInit, signal: partSignal, duplex: 'half' } as RequestInit & { duplex: 'half' });
-          if (!response.ok) { await response.body?.cancel().catch(() => {}); throw new AnalysisError(`Could not store media (HTTP ${response.status}).`, response.status); }
+          if (!response.ok) { links.drop(partNumber); await response.body?.cancel().catch(() => {}); throw new AnalysisError(`Could not store media (HTTP ${response.status}).`, response.status); }
           const part = await response.json() as { partNumber: number; etag: string };
           if (part.partNumber !== partNumber || !part.etag) throw new Error('The media upload returned an invalid part.');
-          parts.push(part);
+          parts.push({ partNumber: part.partNumber, etag: part.etag });
           context.onPart?.(parts.length, upload.partCount);
         } finally { body.destroy(); }
       }, partSignal);
