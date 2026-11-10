@@ -6,8 +6,8 @@ import type { MediaAsset } from '@/lib/editor/types';
 import './preview-inspector.css';
 
 /** The editor's side panel: the project's media library. */
-export function PreviewInspector({ assets, onRemoveAsset, onAttachAsset, usedAssetIds, upload, onUpload, onAdd, videoImports, sourceRequest = 0 }: { assets: MediaAsset[]; onRemoveAsset?: (asset: MediaAsset) => Promise<void>; onAttachAsset?: (asset: MediaAsset) => void; usedAssetIds?: readonly string[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; videoImports?: VideoImportState[]; sourceRequest?: number }) {
+export function PreviewInspector({ assets, onRemoveAsset, onAttachAsset, usedAssetIds, upload, onUpload, onAdd, videoImports, sourceRequest = 0, resumeHint }: { resumeHint?: string; assets: MediaAsset[]; onRemoveAsset?: (asset: MediaAsset) => Promise<void>; onAttachAsset?: (asset: MediaAsset) => void; usedAssetIds?: readonly string[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; videoImports?: VideoImportState[]; sourceRequest?: number }) {
   return <aside className="preview-inspector" aria-label="My media">
-    <div className="inspector-content inspector-media-content"><FootagePanel onRemove={onRemoveAsset} onAttach={onAttachAsset} usedAssetIds={usedAssetIds} key={sourceRequest} videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/></div>
+    <div className="inspector-content inspector-media-content"><FootagePanel resumeHint={resumeHint} onRemove={onRemoveAsset} onAttach={onAttachAsset} usedAssetIds={usedAssetIds} key={sourceRequest} videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/></div>
   </aside>;
 }

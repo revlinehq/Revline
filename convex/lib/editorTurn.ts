@@ -1,8 +1,8 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
-import { laneInstructions, type LaneId } from '../../lib/ai/lanes';
+import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
-import { FULL_CHECK_TOOLS, checkInstructions, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
@@ -14,7 +14,7 @@ import { filmDraftMiddleware } from './filmDraftStream';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { wrapLanguageModel } from "ai";
+import { NoSuchToolError, wrapLanguageModel } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -23,7 +23,7 @@ import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason, providerErrorText } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
@@ -33,8 +33,9 @@ import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
+import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
@@ -120,7 +121,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     console.log(`[ai-budget] ${JSON.stringify({timestamp:new Date().toISOString(),projectId:args.projectId,runId:args.runId,enforced:enforceTokenBudget})}`);
     const model = wrapLanguageModel({ model: provider === 'anthropic' ? anthropic(modelId) : editorOpenAI().responses(modelId), middleware: [filmDraftMiddleware(toolkit.filmDrafts), laneReplyGate(()=>toolkit.laneChosen()&&(!toolkit.requiresFinish()||toolkit.laneFinished()),toolkit.lane,{projectId:args.projectId,runId:args.runId},toolkit.noteToolIntent,toolkit.availableToolNames,toolkit.laneChosen), ...(provider === 'openai' ? [openAIEditorImages] : []), tokenBudget.middleware(args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), editSession.revision,countInput,enforceTokenBudget), ...(provider === 'openai' ? [] : [leadingSystemMessages])] });
     const cacheKey = `revline-thread-${args.threadId}`;
-    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps)], instructions: `${WRITING_STYLE_RULES}
+    const agent = new Agent(chatAgent, { name: "Revline", languageModel: model, tools, contextOptions: { recentMessages: 100, excludeToolMessages: false }, stopWhen: [({steps})=>shouldStopEditingSteps(steps), ({steps})=>askedUser(steps), ({ steps }) => hasRepeatedToolFailures(steps), ({ steps }) => hasStalledReads(steps)], instructions: `${WRITING_STYLE_RULES}
 ${args.command?.name==='clip' ? editorCommandInstructions(args.command) : ''}
 The current task lane, skills and tools are provided before each step.
 ${editorDisclosureRules(process.env.EDITOR_INTERNAL_DETAILS_ENABLED === "true")}
@@ -166,6 +167,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const offset = steps.length;
         const result = await agent.streamText(ctx, { threadId: args.threadId, userId: args.ownerId }, {
           promptMessageId: args.promptMessageId, abortSignal, experimental_transform: mergeToolInputDeltas(), providerOptions: editorProviderOptions(selection, cacheKey), maxOutputTokens: editorMaxOutputTokens(selection),
+          // A real tool that this step withholds gets the same next step an MCP agent is given, not the SDK's
+          // "unavailable tool" line and a list of ninety names.
+          experimental_repairToolCall: async ({ toolCall, error }) => {
+            if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
+            throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
+          },
           prepareStep: async ({ steps: current, messages }) => {
             const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
             if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
@@ -180,25 +187,28 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
-            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,JSON.stringify(failed.failures));
+            if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
             return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
-            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
+            stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
           onStepEnd: async event => { costLog.toolsFinished(event); await toolkit.filmDrafts.landed(); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
           onError: ({ error }) => { streamError = error; },
+          // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
+          timeout: MODEL_SILENCE_LIMITS,
         }, { saveStreamDeltas: { throttleMs: 300 },contextHandler:async(_ctx,{search,recent,inputMessages,inputPrompt,existingResponses})=>{const messages=[...search,...compactEditorHistory(laneHistory(recent,toolkit.lane())),...inputMessages,...inputPrompt,...existingResponses];return repairFeedback?editorRepairContext(messages,repairFeedback):messages;} });
         const [reason, completed] = await Promise.all([result.finishReason, result.steps]);
         finishReason = reason;
         steps.push(...completed);
         if (streamError) throw streamError;
         const terminalLaneFailure=toolkit.laneFailure();
-        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,JSON.stringify(terminalLaneFailure.failures));
+        if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
+        if (hasStalledReads(steps)) throw new AssistantReadLoopError();
         if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
         // Reuse only server-validated review snapshots of the current visible
         // scope, including those saved before a durable continuation.
@@ -206,7 +216,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         const reviewState=!toolkit.recipe().fullTools?{plans:[],validReviews:[]}:toolkit.plans().length?await ctx.runQuery(internal.compositionReview.completionState,{...run,timeline:editSession.timeline,expectedRevision:editSession.revision}):{plans:toolkit.plans(),validReviews:[]};
         reviewRequirements={...reviewState,revision:editSession.revision};
         const failedLane=toolkit.laneFailure();
-        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,JSON.stringify(failedLane.failures));
+        if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,failedLane.failures.join(' '));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
           if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
@@ -221,7 +231,8 @@ For edit requests, use one brief initial sentence stating the requested action, 
           if(clipping.required&&clipping.passed&&'finalMessage' in clipping&&clipping.finalMessage)await saveMessage(ctx,chatAgent,{threadId:args.threadId,userId:args.ownerId,promptMessageId:args.promptMessageId,message:{role:'assistant',content:clipping.finalMessage}});
           break;
         }
-        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The task is unfinished after three bounded attempts. ${repairFeedback}`);
+        // repairFeedback is written for the model (instructions and diagnostic JSON); the user gets what is still open.
+        if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The request is unfinished after three attempts. ${unfinishedSummary(steps,failedLane&&!failedLane.passed?failedLane.failures:undefined)} Send the request again to continue from the current timeline.`);
       } catch(passError) {
         if(pass===MAX_REPAIR_PASSES||abortSignal.aborted||!repairable(passError))throw passError;
         repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
@@ -284,6 +295,22 @@ function memoryLines(lines: string[], budget = 4000) {
   for (const line of lines) { if (used + line.length > budget) break; kept.push(line); used += line.length + 1; }
   if (!lines.length) return '(nothing remembered yet)';
   return kept.join('\n') + (kept.length < lines.length ? `\n(${lines.length - kept.length} less-used memories not shown.)` : '');
+}
+
+/** What is still open when the bounded passes run out, in the user's terms: the failing checks, or the steps that never completed. */
+function unfinishedSummary(steps: readonly { content: readonly unknown[] }[], checkFailures?: readonly string[]) {
+  if (checkFailures?.length) return `The completion check still fails: ${checkFailures.slice(0, 3).join(' ')}`;
+  const ids = unresolvedToolFailureIds(steps);
+  const tools = [...new Set(steps.flatMap(step => step.content.flatMap(value => { const part = value as { type?: string; toolCallId?: string; toolName?: string } | null; return part && part.type !== 'tool-call' && part.toolCallId && ids.has(part.toolCallId) && part.toolName ? [part.toolName] : []; })))];
+  return tools.length ? `These steps did not complete: ${tools.slice(0, 5).join(', ')}.` : 'Some requested steps did not complete.';
+}
+/** Why a known tool is not callable in this step, and the call that makes it so. */
+function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {
+  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed. Reply to the user now; further edits need a new request.`;
+  if (!state.allowed) return laneToolError(lane, name);
+  if (name === 'exportVideo') return 'Export needs explicit user confirmation in the current request. Ask the user before exporting.';
+  if (FULL_CHECK_TOOLS.has(name)) return fullCheckRefusal(lane, name);
+  return `${name} is not available in this step. Continue with the tools provided.`;
 }
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */

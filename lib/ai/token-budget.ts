@@ -13,6 +13,10 @@ export function editorTokenLimits(modelId?: string): TokenLimits {
   return modelId && LONG_CONTEXT_MODELS.has(modelId) ? { ...EDITOR_TOKEN_LIMITS, requestBytes: 2_000_000 } : { ...EDITOR_TOKEN_LIMITS };
 }
 export const EDITOR_RAW_INPUT_LIMIT = 7_000_000;
+/** On when EDITOR_ENFORCE_TOKEN_BUDGET is off (that flag's own ceilings are lower): the model input, cache reads
+ * included, one run of a request may be billed before it is stopped as a runaway loop. A 100-step turn at a
+ * 150k-token context stays under it; a continuation after a runner restart starts its own count. */
+export const EDITOR_RUNAWAY_INPUT_LIMIT = 20_000_000;
 type TokenLimits = { [K in keyof typeof EDITOR_TOKEN_LIMITS]: number };
 type NativeCacheModel = 'anthropic' | 'openai';
 /** Per-request financial ceilings, switched on per deployment. Context
@@ -73,8 +77,10 @@ function weightedInput(usage:LanguageModelV4Usage,model:NativeCacheModel,metadat
 }
 
 export class AssistantTokenBudgetError extends Error {
-  constructor(reason: 'context' | 'tokens' | 'usage') {
-    super(reason === 'context'
+  constructor(reason: 'context' | 'tokens' | 'usage' | 'runaway') {
+    super(reason === 'runaway'
+      ? 'This request used far more model input than an edit needs, so it was stopped. Previously saved edits remain; send the request again from the current timeline.'
+      : reason === 'context'
       ? 'The request context is too large to send safely. Visual evidence was preserved. Previously saved edits remain; use a narrower source window or request.'
       : reason === 'usage' ? 'The editing provider did not report reliable token usage, so further paid requests were stopped. Previously saved edits remain.'
       : 'This request reached its token budget. Previously saved edits remain; continue from the current timeline.');
@@ -167,6 +173,8 @@ export class AssistantTokenBudget {
   private rawInput = 0;
   private output = 0;
   private blocked = false;
+  /** Input the provider reported for this request, counted even when the financial ceilings are off. */
+  private billedInput = 0;
   /** How far this run has had to fit its history; only grows within a run so its prefix stays stable. */
   private fitted: { compact: boolean; thinned: number; dropped: number } = { compact: false, thinned: 0, dropped: 0 };
   constructor(private limits: TokenLimits = EDITOR_TOKEN_LIMITS, private onUsage?: (fraction: number) => void) {}
@@ -248,7 +256,17 @@ export class AssistantTokenBudget {
     };
     // Keep compaction and provider continuation identity even when financial
     // test ceilings are off. Do not call counting endpoints in normal edits.
-    if(!enforce)return projection;
+    const stopRunaway = () => { if (this.billedInput >= EDITOR_RUNAWAY_INPUT_LIMIT) throw new AssistantTokenBudgetError('runaway'); };
+    const bill = (usage?: LanguageModelV4Usage) => { if (count(usage?.inputTokens.total)) this.billedInput += usage.inputTokens.total; };
+    if(!enforce)return {
+      ...projection,
+      wrapGenerate: async ({ doGenerate }) => { stopRunaway(); const result = await doGenerate(); bill(result.usage); return result; },
+      wrapStream: async ({ doStream }) => {
+        stopRunaway();
+        const result = await doStream();
+        return { ...result, stream: result.stream.pipeThrough(new TransformStream({ transform(part, controller) { if (part.type === 'finish') bill(part.usage); controller.enqueue(part); } })) };
+      },
+    };
     return {
       ...projection,
       wrapGenerate: async ({ params, model, doGenerate }) => {

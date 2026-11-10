@@ -305,6 +305,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return { ...summary, images: result.image ? [{ label: name === 'trackReference' ? 'Tracked frames, box drawn' : name === 'traceShape' ? 'Crop beside its trace' : name === 'matchFont' ? 'Crop above each font candidate' : 'Frame sheet', data: result.image, mimeType: 'image/jpeg' }] : [] };
   };
   let inspected = false;
+  /** The last inspectTimeline result of this request: a repeat on an unchanged timeline returns a short pointer to it. */
+  let lastInspection: string | undefined;
+  /** The tool that ran just before the current one, so a repeat is only shortened when the full answer is the previous result. */
+  let previousTool: string | undefined;
   const clippingRun={...run,runId:options.taskId??run.runId};
   const clippingUnavailableReason=async()=>{const state=await ctx.runQuery(internal.clipping.completionState,clippingRun);return 'geminiUnavailableReason' in state?state.geminiUnavailableReason:undefined;};
   let clippingActive=false;
@@ -410,7 +414,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // The override covers the calls running under it; what it let through is reported back on that call.
   const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
-    const result = await editSession.checkpoint(timeline => { if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit.');
+    const result = await editSession.checkpoint(timeline => { if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit: call inspectTimeline once, then repeat this call. One successful inspectTimeline clears this for the rest of the request.');
     const next = edit(timeline), collision = newLayerOverlaps(timeline, next)[0];
     // Refuse before the draft changes; the server repeats this check on every assistant write.
     if (collision) throw new TimelineGestureRejection(`Clips ${collision[0].id} and ${collision[1].id} would overlap on the same layer. Move one to another time or layer first.`, 'overlap');
@@ -1215,7 +1219,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     }}),
     setBlendMode:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setBlendMode,description:"Set the requested supported blend mode on exact footage/text clip IDs, preserving all other controls. Apply both sides of an existing transition atomically when changing their common blend; unequal transition blends are refused. Audio and FX clips cannot receive blend modes.",inputSchema:z.object({clipIds:clipIdsInput,blendMode:z.enum(BLEND_MODES)}),execute:async(_ctx,{clipIds,blendMode})=>checkpoint(t=>setClipBlendMode(t,clipIds,blendMode))}),
     undoLatestEdit:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.undoLatestEdit,description:"Undo the latest actually saved edit first, only before this turn has applied or staged any changes. Uses saved history, never a guessed replacement/source extension. Returns undone:false when there is no saved edit. Refreshes the working timeline; subsequent changes can be saved together as a new undo group. Inspect the restored clips before choosing targets. To go back to a known-good version of one clip (or a whole tab) from further back, use listRevisions and restoreClip (or restoreTimeline), not chains of undo: undo steps also take back later edits you may want to keep. Redo, playback and the clipboard live in the browser; no tool can reach them.",inputSchema:z.object({}),execute:async()=>{
-      if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit.');
+      if (recovering && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit: call inspectTimeline once, then repeat this call. One successful inspectTimeline clears this for the rest of the request.');
       let undone=false;
       const snapshot=await editSession.inspect(async()=>{
         if(editSession.savedEdits||editSession.staged)throw new Error('Undo the latest saved edit before making changes in this turn.');
@@ -1327,7 +1331,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
       }).map(asset=>asset._id);
       const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = boundRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
-      return { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, imageGeneration }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId, ...generatedImageSummary({ imageGeneration }) })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
+      const inspection = { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, imageGeneration }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId, ...generatedImageSummary({ imageGeneration }) })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
+      const inspectionKey = JSON.stringify(inspection);
+      // The same answer again adds nothing but context: a small model that keeps re-reading paid for the whole timeline each time.
+      if (previousTool === 'inspectTimeline' && inspectionKey === lastInspection) return { unchanged: true, revision: snapshot.revision, staged: snapshot.staged, note: 'Nothing changed since the inspectTimeline call just before this one: same timeline, revision, media and brief. Use that result. Make the next edit, call finish, or ask the user; do not call inspectTimeline again until something changes.' };
+      lastInspection = inspectionKey;
+      return inspection;
     } }),
     inspectClip: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.inspectClip, description: "Read one exact current clip including all motion/focus samples and settings omitted from the compact timeline. With no options, returns the full clip as before. For a short scene read, pass section (marker label or id), lines {start,end}, or both; sceneCode.blocks returns exact code and absolute numberedCode, plus the section block index. Line numbers are 1-based and inclusive for this revision; read ranges past either end are clamped and the returned bounds are reported. Scenes without identifiable sections use whole-scene line ranges. A film's section is its section('Name', start, duration, ...) call plus the top-level declarations it uses; the rest of the module is shared. search finds a literal string or per-line JavaScript regex with absolute line and column numbers and bounded previews, without returning the full code. Combine it with section or lines; use search.startLine to continue a page. Scoped reads omit full scene and blueprint code. Uses the working edit session; no edits. Read inspectTimeline first when fresh saved state is needed.", inputSchema: z.object({ clipId: z.string(), section: codeSectionInput.optional(), lines: z.object({ start: z.number().int(), end: z.number().int() }).strict().optional().describe('Inclusive read range; endpoints outside the source are clamped to its first or last line.'), search: z.object({ query: z.string().min(1).max(500), regex: z.boolean().optional(), caseSensitive: z.boolean().optional().describe('Case-insensitive by default; true matches exact case.'), startLine: z.number().int().min(1).optional(), limit: z.number().int().min(1).max(100).optional() }).optional() }), execute: async (_ctx, input) => {
       await editSession.wait();
@@ -2635,7 +2644,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(taskId){
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
-        if(task?.result?.exhausted)throw exhaustedLaneError(lane,task.result.failures.join(' '));
+        // A limitation note still saves after the last finish check: it edits nothing and is never a failed step.
+        if(task?.result?.exhausted&&name!=='reportLimitation')throw exhaustedLaneError(lane,task.result.failures.join(' '));
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
           if(saved!==undefined)fastReview.restore(saved);
@@ -2645,7 +2655,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       noteToolIntent(name);
       if(taskId&&finishRequired&&!requiredPersisted){await laneCtx.runMutation(internal.lanes.requireFinish,taskScope);requiredPersisted=true;}
       const before=await timelineHistoryKey(editSession.timeline);
-      const output=await execute.apply(this??tool,args) as Record<string,unknown>;
+      let output:Record<string,unknown>;
+      try{output=await execute.apply(this??tool,args) as Record<string,unknown>;}finally{previousTool=name;}
       const after=await timelineHistoryKey(editSession.timeline);
       if(before!==after||name==='createTimeline'||name==='openTimeline'||referenceMotionEnabled()&&['motionMap','compareMotion','compareReference'].includes(name))finishResult=undefined;
       if(taskId&&tracksChanges()&&(before!==after||name==='getFrames'||name==='finish'))

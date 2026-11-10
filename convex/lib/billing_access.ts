@@ -1,4 +1,5 @@
 import { ULTRA_OFFERED } from '../../lib/billing/plan';
+import { editorEffortChoiceAllowed } from '../../lib/ai/claude-model';
 import { ConvexError } from 'convex/values';
 import { components } from '../_generated/api';
 import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server';
@@ -53,4 +54,10 @@ export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: s
   if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   if (!billingConfigured()) return false;
   return (await editorSubscriptions(ctx, ownerId)).some(hasPaidEditorSubscriptionTerm);
+}
+
+/** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess first: an Ultra trial is not a paid term. */
+export async function canChooseReasoningEffort(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  const billing = billingEnabled();
+  return editorEffortChoiceAllowed({ billing, ultra: billing && await hasUltraPlan(ctx, ownerId) });
 }
