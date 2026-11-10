@@ -38,7 +38,7 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-shot img{display:block;width:100%;height:auto}
 
 /* Top bar */
-.landing-nav{position:sticky;top:0;z-index:40;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-inline:48px;border-bottom:1px solid var(--l-border);background:#111;font-family:var(--l-body);color:#fff}
+.landing-nav{position:sticky;top:0;z-index:40;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-inline:max(var(--l-gutter),calc((100% - var(--l-content))/2));border-bottom:1px solid var(--l-border);background:#111;font-family:var(--l-body);color:#fff}
 .landing-nav .landing-brand,.landing-footer-brand strong{font:600 18px/1 var(--l-body);letter-spacing:-.02em;color:#fff}
 .landing-nav-right{display:flex;align-items:center;gap:8px}
 .landing-nav-link{padding-inline:14px;font-size:15px;line-height:36px;color:var(--l-fg-2)}
