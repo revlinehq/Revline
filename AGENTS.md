@@ -28,7 +28,7 @@ Agent worktrees start with `npm run dev:isolated` and use `scripts/isolated-mcp.
 
 Public Convex functions called by the iOS app (call sites in `mobile/`, e.g. `projects:list`) keep their arguments and return shape: installed builds cannot be updated by a deploy. Add a new function name for a new shape (`projects:listPage`).
 
-CI enforces this on every pull request with `scripts/compat-check.mjs` (`npm run compat:check`), which also fails a removed or changed table, index or field in `convex/schema.ts` and a new media-processor read mode or task kind that is not listed as gated in `lib/server/processor-capabilities.ts` with its Convex caller guarded by `processorCan`. An intended break needs a reviewed line in `mobile/CONTRACT_CHANGES.md` in the same pull request.
+The `Release gates` workflow enforces this on every pull request with `scripts/compat-check.mjs` (`npm run compat:check`), which also fails a removed or changed table, index or field in `convex/schema.ts` and a new media-processor read mode or task kind that is not listed as gated in `lib/server/processor-capabilities.ts` with its Convex caller guarded by `processorCan`. An intended break needs a reviewed line in `mobile/CONTRACT_CHANGES.md` in the same pull request.
 
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 

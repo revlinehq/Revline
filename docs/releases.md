@@ -22,7 +22,7 @@ flowchart LR
 
 ## What CI checks on every pull request
 
-The `Validate` workflow (GitHub-hosted runner) runs typecheck, the agent-runner and processor-edge typechecks, the build, and two release gates:
+The `Release gates` workflow (`.github/workflows/release-gates.yml`, GitHub-hosted runner, read-only token) runs on every pull request. It is separate from `Validate` (typecheck and build), which is currently disabled in the repository's Actions settings, so the gates run either way:
 
 | Gate | Fails when | Fix |
 | --- | --- | --- |
@@ -87,7 +87,7 @@ Production Railway is staged only with a staging promotion receipt: proof that a
 
 `node scripts/railway-proof.mjs --commit <main sha>` takes the staging manifest of that commit (artifact of its `Railway staging` workflow run), starts the three jobs on staging, waits, finds the Railway deployment that completed each, writes `.data/railway/promotion.json` and verifies it the way production will. `release:prod` calls it when the setup exists and otherwise reports `Railway not promoted: run the one-time staging setup` and continues with the other targets; run it again on the same commit once the setup exists. A staging error that is not a missing setup stops the release. If the range raises the processor contract (`lib/media-analysis/processor-version.ts`) and the production processor is not at the release commit, for any reason, Convex and everything after it are held.
 
-The commit's `Railway staging` run must be green first; it starts on every push to `main`.
+The commit's `Railway staging` run must be green first; it starts on every push to `main` and takes about 30 to 40 minutes.
 
 ### The staging service identity
 
