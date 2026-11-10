@@ -100,6 +100,9 @@ const MIRROR_PLACEHOLDER = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BA
 export function generateComposition(timeline: Timeline, assets: MediaAsset[], options: CompositionOptions = {}) {
   timeline=resolvedAudioTimeline(timeline);
   timeline = normalizeTimeline(timeline);
+  // Transitions are validated on the saved clips: the mirror-blur bands added next share their
+  // sharp clip's track and timing and are drawn beneath the pair, not overlapping clips.
+  const transitions = transitionSources(timeline.clips, timeline.fps);
   // A backgroundFill renders as bands of the clip's own frames, appended after the saved clips.
   timeline = expandBackgroundFills(timeline, assets);
   const trackedSources = pixelTrackingSources(timeline.clips);
@@ -114,7 +117,6 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const assetMap = new Map(assets.map(asset => [asset._id, asset]));
   deriveTrackCounts(timeline);
   validateAudioTimeline(timeline);
-  const transitions = transitionSources(timeline.clips, timeline.fps);
   const scale = resolution / 1080;
   const animation: string[] = [];
   function animateKeys(selector: string, clip: Clip, motion: MotionKeyframe[], vars: (key: MotionKeyframe) => Record<string, string | number>, neutral: MotionKeyframe, ease = 'none') {

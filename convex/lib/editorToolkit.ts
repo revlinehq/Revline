@@ -4,7 +4,7 @@ import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { laneBaseline } from '../../lib/ai/lanes/task';
+import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../../lib/ai/lanes/task';
 import { exhaustedLaneError, finishLane, type FinishResult } from './laneFinish';
 import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
@@ -109,7 +109,7 @@ import { CSS_REACTIVE_TARGETS, MAX_REACTIVE_SAMPLES, REACTIVE_RATE, decodeLevels
 import { HSL_BANDS, LUT_LOOKS, MAX_TIMELINE_LUTS, parseCube, type HslAdjust } from '../../lib/editor/color-finish';
 import { describeColor, matchCurves, type ColorStats } from '../../lib/editor/color-match';
 import { FREEZE_MODES, MAX_FREEZE_SECONDS, MIN_FREEZE_SECONDS, insertFreezeFrame } from '../../lib/editor/freeze-frame';
-import { retainSourceRanges, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
+import { retainSourceRanges, retainedSourceWindows, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
@@ -643,7 +643,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   const applySpeechCut = async (clipId: string, speech: Awaited<ReturnType<typeof speechEvidence>>, chosenRanges: { start: number; end: number }[], kinds: Set<string>, minConfidence: number, preview = false) => {
     const { clip, evidence, offset, sourceEnd } = speech, cleanup = speech.cleanup!;
-    const chosen = chosenRanges.map(range => ({ start: Math.max(clip.sourceStart, range.start), end: Math.min(sourceEnd, range.end) })).filter(range => range.end > range.start);
+    // Ranges may reach the adjacent pieces an earlier cut left of this source; only retained footage is kept.
+    const windows = retainedSourceWindows(editSession.timeline, clipId), own = { start: clip.sourceStart, end: sourceEnd };
+    const chosen = chosenRanges.flatMap(range => (range.start >= own.start && range.end <= own.end || !windows.length ? [own] : windows).map(window => ({ start: Math.max(window.start, range.start), end: Math.min(window.end, range.end) }))).filter(range => range.end > range.start);
     if (!chosen.length) throw new Error('None of the ranges is inside this clip’s retained source.');
     const inside = (cut: { start: number; end: number }) => chosen.some(range => cut.end > range.start && cut.start < range.end);
     // Cuts in this clip's source time, only where the kept ranges are.
@@ -1057,6 +1059,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
+      // An earlier failed step left the draft guarded. Revalidate the last good draft so a passed check can save it.
+      await editSession.confirmRepairs();
       if(lane==='reel'&&editSession.timeline.clips.some(clip=>clip.kind==='caption')){
         const audibleIds=new Set(editSession.timeline.clips.filter(clip=>clip.volume!==0&&(clip.kind==='audio'||clip.kind==='video'&&!clip.audioSeparated)).map(clip=>clip.assetId));
         // Each call starts with metadata rows; saved transcripts live in source analysis.
@@ -1079,7 +1083,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         catch(error){finishResult=await laneCtx.runMutation(internal.lanes.recordFinish,{...taskScope,result:{...finishResult,passed:false,failures:[`The checked draft could not be saved: ${error instanceof Error?error.message:String(error)}`]}});}
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
-      return {...finishResult,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?'Stop. Report these failures honestly; this task is unfinished.':'Repair the listed failures and call finish again.'};
+      return {...finishResult,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?`Stop. This was the last of ${MAX_FINISH_ATTEMPTS} finish checks for this request, so finish and the editing tools are now closed. Report these failures honestly; this task is unfinished.`:`Repair the listed failures and call finish again. ${MAX_FINISH_ATTEMPTS-finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} finish checks remain for this request.`};
     }}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
@@ -1359,8 +1363,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const clip = find(t, input.clipId); if (clip.kind !== "caption" && clip.kind !== "graphic") throw new Error("Choose a caption or text graphic");
       if (clip.kind === 'caption') {
         const words = retainedSpeechWords(t, assets);
-        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false })[0] : undefined;
-        if (mismatch) throw new Error(`${mismatch} Keep that measured phrase, or use setCaptionTiming to realign its boundaries before editing the text.`);
+        const mismatch = words.length ? captionSyncFailures({ ...t, clips: [{ ...clip, text: input.text }] }, words, { checkCoverage: false, checkTiming: false })[0] : undefined;
+        if (mismatch) throw new Error(mismatch);
       }
       return patchClip(t, input.clipId, { text: input.text });
     }) }),
@@ -1642,7 +1646,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { assetId: asset._id, ...read, ...(transcriptNote ? { transcriptNote } : {}) };
     } }),
     closeGaps: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.closeGaps, description: "Join footage after cuts: close every gap between video/image clips on each visual layer in ONE saved change, moving later clips earlier with their linked audio. Retained source ranges, speed and styling are unchanged. Optional clipIds (two or more) limits it to those clips. Use this instead of moving clips one at a time. Captions and overlays on other tracks do not move with it: ripple them with moveClips.", inputSchema: z.object({ clipIds: clipIdsInput.optional() }), execute: async (_ctx, input) => checkpoint(t => closeFootageGaps(t, input.clipIds ?? [])) }),
-    retainSourceRanges: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.retainSourceRanges, description: "Keep ordered SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For any speech cut use tightenSilence:true: the source's measured speech cleanup then runs automatically inside the kept ranges (pauses, breaths and filler words removed between words) and every edge snaps to the measured sound of its words, to the millisecond; report its speechCleanup summary to the user. keepPauses:true keeps natural pauses and fillers (only edges are tightened) when the user asks for that. Without a cleanup map, outer quiet edges are tightened with 80ms padding. Omit tightenSilence for exact user-requested timestamp cuts. Every requested range must fit the current retained source; never restore removed footage. Preserve speed, styling, motion/fade phase and linked audio. Without tightenSilence edges round outward to project frames unless exactEdges:true. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles. Missing source audio energy is backfilled locally without transcribing again.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional(), keepPauses: z.boolean().optional(), exactEdges: z.boolean().optional() }), execute: async (_ctx, input) => {
+    retainSourceRanges: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.retainSourceRanges, description: "Keep ordered SOURCE-time ranges from one existing video/audio clip and compact them at that clip's timeline start in one change. For any speech cut use tightenSilence:true: the source's measured speech cleanup then runs automatically inside the kept ranges (pauses, breaths and filler words removed between words) and every edge snaps to the measured sound of its words, to the millisecond; report its speechCleanup summary to the user. keepPauses:true keeps natural pauses and fillers (only edges are tightened) when the user asks for that. Without a cleanup map, outer quiet edges are tightened with 80ms padding. Omit tightenSilence for exact user-requested timestamp cuts. Every requested range must fit the current retained source: this clip, plus the adjacent pieces an earlier cut left of the same source on its track, so a cut is redone in ONE call on any piece (pieces without a range are removed). It never restores removed footage: a refusal names the range, the retained windows in seconds and what was removed; restoreClip that footage first. Preserve speed, styling, motion/fade phase and linked audio. Without tightenSilence edges round outward to project frames unless exactEdges:true. Other clips/tracks/markers keep their positions; no global ripple. Refuses transition-connected sources. Inspect actual retained ranges before adding subtitles. Missing source audio energy is backfilled locally without transcribing again.", inputSchema: z.object({ clipId: z.string().min(1).max(100), ranges: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100), tightenSilence: z.boolean().optional(), keepPauses: z.boolean().optional(), exactEdges: z.boolean().optional() }), execute: async (_ctx, input) => {
       let evidence: (typeof assets)[number] | undefined;
       if (input.tightenSilence) {
         const speech = await speechEvidence(input.clipId);
