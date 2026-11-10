@@ -112,6 +112,7 @@ import { retainSourceRanges, retainedSourceWindows, type RetainedRangeSummary } 
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
 import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
+import { BEAT_ROLES, beatsToDrop, lineLabel, linesToRanges, outlineLines, resolveScriptPlan, scriptOutline, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, refineTranscriptWithAudioActivity } from '../../lib/media-analysis/audio-activity';
 import { TEXT_TEMPLATE_PRESETS } from '../../lib/editor/text-templates';
 import { DEFAULT_CAPTION_STYLE, resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
@@ -166,6 +167,8 @@ type EditorToolkitOptions = {
   finishRequired?:boolean;
   laneChosen?:boolean;
   capabilities?:string[];
+  /** The app's reel request on a raw take: the first speech cut waits for readScript and planScript. MCP flows stay as they were. */
+  scriptFirst?:boolean;
 };
 
 /** The editor's AI tools bound to one active run: the in-app assistant and MCP share them. */
@@ -199,7 +202,7 @@ const GUARD_LIMIT = .002;
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips and sections are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user. Say in the reply that approved work was changed.';
 /** Tools that never change clips, so they take no approved-work override. */
-const APPROVAL_FREE_TOOLS = new Set(['findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'previewBackgrounds', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['readScript','planScript','findHighlights','planClips','checkClip','finishClipping','generateImage', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'compareMotion', 'motionMap', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'diffScene', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectReference', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'compareReference', 'getFrames', 'askUser', 'askBrandKit', 'previewBackgrounds', 'measureScreen', 'compareScreen', 'readFrames', 'listenReference', 'trackReference', 'measureFrame', 'matchFont', 'traceShape', 'findIcon', 'saveBlueprint', 'listBlueprints', 'getBlueprint', 'readSkill', 'listBrandKits', 'getBrandKit', 'createBrandKit', 'updateBrandKit', 'listVoices', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
 
 /** The timeline windows a scene build covers. A film's beats are cuts of one continuous animation, so it is one window. */
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -667,6 +670,21 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const result = await checkpoint(t => { const retained = retainSourceRanges(t, clipId, ranges, undefined, true); retainedRanges = retained.ranges; return retained.timeline; });
     return { ...result, speechCleanup, retainedRanges };
   };
+  // The length a set of kept ranges will have once the measured cleanup has run inside them, without editing.
+  const scriptSeconds = async (clipId: string, speech: Awaited<ReturnType<typeof speechEvidence>>, ranges: { start: number; end: number }[]) => {
+    const rate = playbackRateOf(speech.clip), total = (list: { start: number; end: number }[]) => Math.round(list.reduce((sum, range) => sum + range.end - range.start, 0) / rate * 10) / 10;
+    if (!speech.cleanup || !ranges.length) return { seconds: total(ranges), measured: false };
+    const preview = await applySpeechCut(clipId, speech, ranges, new Set(['pause', 'breath', 'filler']), .6, true) as { keptRanges: { start: number; end: number }[] };
+    return { seconds: total(preview.keptRanges), measured: true };
+  };
+  let scriptSaved = false;
+  /** A raw take: one clip still holding most of a spoken source. A piece of an already cut take is not gated. */
+  const rawTake = (clipId: unknown) => {
+    const clip = typeof clipId === 'string' ? editSession.timeline.clips.find(item => item.id === clipId) : undefined;
+    if (!clip || clip.kind !== 'video' && clip.kind !== 'audio') return false;
+    const duration = assets.find(asset => asset._id === clip.assetId)?.duration;
+    return !!duration && duration >= 20 && clip.duration * playbackRateOf(clip) >= duration * .85;
+  };
   const transformFields={units:z.enum(VISUAL_INPUT_UNITS).optional(),x:z.number().optional(),y:z.number().optional(),scale:z.number().min(VISUAL_TRANSFORM_LIMITS.scale[0]).max(VISUAL_TRANSFORM_LIMITS.scale[1]).optional(),rotation:z.number().min(-360).max(360).optional(),opacity:z.number().min(0).max(1).optional()};
   // Library and generated sound effects share one A layer above dialogue and music when it is free.
   const isEffectSound = (clip: Timeline['clips'][number]) => clip.kind === 'audio' && assets.some(item => item._id === clip.assetId && (isStockAudioKey(item.r2Key) || item.soundRecipe !== undefined));
@@ -1065,6 +1083,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         // Each call starts with metadata rows; saved transcripts live in source analysis.
         await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
       }
+      if(lane==='reel'){const planned=((await laneCtx.runQuery(internal.lanes.task,taskScope)) as LaneTask|null)?.script as SavedScript|undefined;if(planned&&assets.some(asset=>asset._id===planned.assetId))await loadAsset(planned.assetId);}
       if(lane==='clip')await selectClipQa();
       // Unviewed changed frames keep the task open the same way in the app and over MCP. The refusal spends no finish attempt.
       if(recipe().frames==='changes'&&!clippingActive){const missing=fastReview.feedback();if(missing)return {passed:false,success:false,attemptRecorded:false,pendingFrameTimes:fastReview.times(),next:missing};}
@@ -1676,6 +1695,61 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         ranges = retained.ranges; return retained.timeline;
       });
       return { ...result, retainedRanges: ranges, ...(evidence ? { silenceRefinement: { status: tightened ? 'applied' : evidence.analysis?.audioActivity?.reliable ? 'unchanged' : 'unreliable', evidenceAssetId: evidence._id, paddingSeconds: AUDIO_QUIET_EDGE_PAD } } : {}) };
+    } }),
+    readScript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.readScript, description: "Reel lane, before any cut of a talking take: read the whole take as a script. Returns every spoken line numbered with SOURCE times, marked [chatter] (setup or wrap-up talk around the script) or [earlier take of Ln] (the line is said again later; the last complete take is kept), the suggested opening line (the first intended line, after setup talk and restarted attempts) and closing line (the last intended line, before 'cut' and trailing talk), the length if every script line is kept, and the length the user asked for. The marks are measured suggestions: you decide what the piece is about and its beats, then call planScript. Reads saved transcript data; nothing is edited.", inputSchema: z.object({ clipId: z.string().min(1).max(100) }).strict(), execute: async (_ctx, input) => {
+      const speech = await speechEvidence(input.clipId), transcript = speech.evidence.analysis?.transcript;
+      if (!transcript?.words.length) throw new Error('This clip has no saved transcript with spoken words to read as a script.');
+      const outline = scriptOutline(transcript, { start: speech.clip.sourceStart + speech.offset, end: speech.sourceEnd + speech.offset });
+      if (!outline.lines.length) throw new Error('No spoken words fall inside this clip’s retained source.');
+      const line = (n: number) => outline.lines[n - 1], opening = line(outline.opening), closing = line(outline.closing);
+      const script = outline.lines.filter(item => !item.note).map(item => item.n);
+      const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null, target = task?.requestedLength;
+      const estimate = await scriptSeconds(input.clipId, speech, linesToRanges(outline, script).map(range => ({ start: range.start - speech.offset, end: range.end - speech.offset })));
+      const takes = outline.lines.filter(item => item.note === 'earlier take').length + outline.removable.filter(cut => script.some(n => cut.start >= line(n).start && cut.end <= line(n).end + .01)).length;
+      const words = (text: string, tail = false) => { const parts = text.split(/\s+/); return parts.length <= 6 ? text : tail ? parts.slice(-6).join(' ') : parts.slice(0, 6).join(' '); };
+      const asked = target ? target.min !== undefined && target.max !== undefined ? `${target.min}-${target.max} s` : target.max !== undefined ? `at most ${target.max} s` : `at least ${target.min} s` : undefined;
+      return { clipId: input.clipId, assetId: speech.evidence._id, lineCount: outline.lines.length, lines: outlineLines(outline),
+        suggested: { opening: { line: opening.n, sourceStart: opening.start - speech.offset, text: opening.text }, closing: { line: closing.n, sourceEnd: closing.end - speech.offset, text: closing.text }, earlierTakes: outline.lines.filter(item => item.note === 'earlier take').map(item => ({ line: item.n, keptTake: item.takeOf ?? null })), chatterLines: outline.lines.filter(item => item.note === 'chatter').map(item => item.n), stumblesRemoved: outline.removable.length },
+        ...(outline.candidates ? { twoOpenings: outline.candidates.map(n => ({ line: n, text: line(n).text })), ask: 'Two different complete openings were recorded. Unless the request already says which, ask the user with askUser, using these two lines as the options.' } : {}),
+        secondsIfWholeScriptKept: estimate.seconds, ...(target ? { requestedLength: target, ...(target.max !== undefined && estimate.seconds > target.max ? { overBy: Math.round((estimate.seconds - target.max) * 10) / 10 } : {}) } : {}),
+        restatement: `I'll keep your script from "${words(opening.text)}" to "${words(closing.text, true)}", remove ${takes} false start${takes === 1 ? '' : 's'}${asked ? `, target ${asked}` : ''}.`,
+        next: `Understand the piece, then call planScript with about (one line) and beats covering every script line from L${opening.n} to L${closing.n} in order: role hook, point, tangent, payoff or cta, and priority 1 (must keep) to 3 (first to drop). ${target?.max !== undefined && estimate.seconds > target.max ? `It is ${(estimate.seconds - target.max).toFixed(1)} s over the requested length: mark whole tangents and weaker points keep:false, never the opening or the payoff. ` : 'Keep every beat unless the user asked for a shorter cut. '}In the same step, tell the user the restatement in one line (adjust it if you choose differently). Do not cut before planScript returns its ranges.` };
+    } }),
+    planScript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.planScript, description: "Reel lane, after readScript and before the cut: save your understanding of the take and get the exact ranges to keep. about: what the piece says, one line. beats: the script in order, each {role, from, to, priority} over readScript line numbers; every script line belongs to a beat. Lines marked chatter or earlier take inside a beat are left out automatically (keepLines forces one back, for example to keep an earlier, cleaner take instead of the last). To reach a requested length set keep:false on whole lower-priority beats (tangents, weaker points, redundant takes); never the opening or the payoff, never part of a sentence. The plan must start on the script's opening line and end on its closing line unless the user asked otherwise (openingReason, endingReason quote that request). Returns saved:false with the exact problems, or saved:true with the estimated length and the SOURCE ranges to pass unchanged to retainSourceRanges with tightenSilence:true. finish then checks the cut against this plan: opening line, closing line, whole sentences.", inputSchema: z.object({ clipId: z.string().min(1).max(100), about: z.string().trim().min(3).max(240), beats: z.array(z.object({ role: z.enum(BEAT_ROLES), from: z.number().int().min(1), to: z.number().int().min(1), priority: z.union([z.literal(1), z.literal(2), z.literal(3)]), keep: z.boolean().optional() }).strict()).min(1).max(40), opening: z.number().int().min(1).optional().describe('Line the reel starts on, when it is not the suggested opening: the user-chosen one of two openings.'), openingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to start somewhere other than the script opening: their words.'), endingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to end before the script closing line: their words.'), keepLines: z.array(z.number().int().min(1)).max(40).optional() }).strict(), execute: async (_ctx, input) => {
+      if (!taskId) throw new Error('Start a task first with startTask.');
+      const speech = await speechEvidence(input.clipId), transcript = speech.evidence.analysis?.transcript;
+      if (!transcript?.words.length) throw new Error('This clip has no saved transcript with spoken words to plan from.');
+      const outline = scriptOutline(transcript, { start: speech.clip.sourceStart + speech.offset, end: speech.sourceEnd + speech.offset });
+      const { problems, kept } = resolveScriptPlan(outline, input);
+      const retry = 'Fix these and call planScript again. Nothing was saved and nothing was cut.';
+      if (problems.length) return { saved: false, problems, next: retry };
+      const line = (n: number) => outline.lines[n - 1], toClip = (range: { start: number; end: number }) => ({ start: Math.round((range.start - speech.offset) * 1000) / 1000, end: Math.round((range.end - speech.offset) * 1000) / 1000 });
+      const ranges = linesToRanges(outline, kept).map(toClip), estimate = await scriptSeconds(input.clipId, speech, ranges);
+      const task = await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null, target = task?.requestedLength;
+      const first = kept[0], last = kept.at(-1)!;
+      const beats = await Promise.all(input.beats.map(async (beat, index) => {
+        const lines = kept.filter(n => n >= beat.from && n <= beat.to);
+        const seconds = beat.keep === false || !lines.length ? 0 : (await scriptSeconds(input.clipId, speech, linesToRanges(outline, lines).map(toClip))).seconds;
+        return { index: index + 1, role: beat.role, lines: `L${beat.from}-L${beat.to}`, priority: beat.priority, kept: beat.keep !== false && lines.length > 0, seconds, droppable: beat.keep !== false && lines.length > 0 && !lines.includes(first) && !lines.includes(last) && beat.role !== 'hook' && beat.role !== 'payoff' };
+      }));
+      if (target?.max !== undefined && estimate.seconds > target.max + .5) {
+        const drop = beatsToDrop(beats, estimate.seconds, target);
+        return { saved: false, estimatedSeconds: estimate.seconds, requestedLength: target, beats: beats.map(({ droppable: _droppable, ...beat }) => beat),
+          problems: [`This plan is about ${estimate.seconds.toFixed(1)} s; the user asked for at most ${target.max} s.`],
+          next: drop.length ? `Call planScript again with keep:false on beat${drop.length === 1 ? '' : 's'} ${drop.join(', ')} (lowest priority that fits). Keep the opening, the payoff and whole sentences.` : 'Dropping every droppable beat still does not fit. Drop the lowest-priority beats you can, keep the opening and the payoff, and tell the user the actual length; or ask the user what else may go.' };
+      }
+      const underBy = target?.min !== undefined && estimate.seconds < target.min - .5 ? target.min - estimate.seconds : 0;
+      if (underBy && beats.some(beat => !beat.kept)) return { saved: false, estimatedSeconds: estimate.seconds, requestedLength: target, beats: beats.map(({ droppable: _droppable, ...beat }) => beat), problems: [`This plan is about ${estimate.seconds.toFixed(1)} s; the user asked for at least ${target!.min} s.`], next: 'Call planScript again keeping more beats (remove keep:false from the highest-priority dropped beat). Never pad or repeat lines.' };
+      const takes = outline.lines.filter(item => item.note && !kept.includes(item.n) && item.n > first && item.n < last || item.note === 'earlier take' && item.n < first).length;
+      const script: SavedScript = { version: 1, assetId: speech.evidence._id, clipId: input.clipId, about: input.about,
+        opening: { line: first, start: line(first).start, text: line(first).text }, closing: { line: last, end: line(last).end, text: line(last).text },
+        beats: input.beats.map(beat => ({ ...beat, text: line(beat.from).text.split(/\s+/).slice(0, 8).join(' ') })), keepLines: input.keepLines ?? [],
+        ...(input.openingReason ? { openingReason: input.openingReason } : {}), ...(input.endingReason ? { endingReason: input.endingReason } : {}), ...(target ? { target } : {}), estimatedSeconds: estimate.seconds, removedTakes: takes };
+      await laneCtx.runMutation(internal.lanes.saveScript, { ...taskScope, script });
+      scriptSaved = true;
+      return { saved: true, about: input.about, opening: lineLabel(line(first)), closing: lineLabel(line(last)), removedTakesAndChatter: takes, droppedBeats: beats.filter(beat => !beat.kept).map(beat => `${beat.role} ${beat.lines}`), estimatedSeconds: estimate.seconds, estimate: estimate.measured ? 'measured speech cleanup applied' : 'upper bound; pauses not yet measured', ...(target ? { requestedLength: target } : {}),
+        ...(underBy ? { note: `The whole script is about ${estimate.seconds.toFixed(1)} s, under the requested ${target!.min} s. Keep it whole, never pad, and tell the user the actual length.` } : {}),
+        ranges, next: `Cut once from the full take: retainSourceRanges ${JSON.stringify({ clipId: input.clipId, ranges, tightenSilence: true })}. Pass these ranges unchanged. Then add captions and call finish.` };
     } }),
     cleanSpeech: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.cleanSpeech, description: "Remove filler words, breaths, pauses and abandoned retakes from one existing video/audio clip in ONE change, using the source's measured speech cleanup map. Each cut sits between words, never inside one; a retake keeps only its final attempt; every edge snaps to measured word sound, to the millisecond. Cuts below minConfidence (default 0.6) are kept; kinds limits what is removed (default all). preview:true returns the proposed cuts without editing. To assemble chosen takes prefer retainSourceRanges with tightenSilence:true, which applies the same cleanup inside the kept ranges; keep here does the same. Kept pieces compact at the clip's timeline start with linked audio, speed and styling preserved; other clips keep their positions, so close gaps afterwards when needed. Use for 'remove ums', 'cut the pauses', 'clean up the retakes' on a clip as a whole; report its speechCleanup summary.", inputSchema: z.object({ clipId: z.string().min(1).max(100), minConfidence: z.number().min(0).max(1).optional(), kinds: z.array(z.enum(['pause', 'breath', 'filler', 'restart'])).min(1).max(4).optional(), preview: z.boolean().optional(), keep: z.array(z.object({ start: z.number().min(0), end: z.number().positive() }).strict()).min(1).max(100).optional() }), execute: async (_ctx, input) => {
       if (input.keep?.some((range, index) => range.end <= range.start || (index > 0 && range.start < input.keep![index - 1].end))) throw new Error('keep ranges must be ordered and non-overlapping.');
@@ -2575,6 +2649,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         if(task?.result?.exhausted)throw exhaustedLaneError(lane,task.result.failures.join(' '));
+        scriptSaved||=!!task?.script;
+        if(options.scriptFirst&&lane==='reel'&&!scriptSaved&&['retainSourceRanges','cleanSpeech','split','trim'].includes(name)&&rawTake(input.clipId))throw new Error(`Read the script before cutting this take: call readScript ${JSON.stringify({clipId:input.clipId})}, then planScript, and cut once with the ranges planScript returns.`);
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
           if(saved!==undefined)fastReview.restore(saved);

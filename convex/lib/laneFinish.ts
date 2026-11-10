@@ -13,6 +13,7 @@ import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
+import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
