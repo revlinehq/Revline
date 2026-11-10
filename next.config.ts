@@ -18,6 +18,8 @@ const config: NextConfig = {
       { source: '/projects', destination: '/chats', permanent: false },
       // Inspo Motion (Sharingan) was retired; old share links land on the home page.
       { source: '/sharingan', destination: '/', permanent: false },
+      // Brand kits were removed; old links land on Campaigns.
+      { source: '/brand-kits/:path*', destination: '/campaigns', permanent: false },
     ];
   },
 };

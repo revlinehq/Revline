@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
-import { Database, History, LoaderCircle, LogOut, Palette, Send, Share2, UserRound } from 'lucide-react';
+import { Database, History, LoaderCircle, LogOut, Send, Share2, UserRound } from 'lucide-react';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -29,7 +29,6 @@ export function WorkspaceAccountMenu({ active, error, shell = false }: { active?
       <DropdownMenuSeparator className="workspace-menu-divider" />
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />{shell ? 'Settings' : 'Profile'}</Link></DropdownMenuItem>
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
-      <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/brand-kits" aria-current={active === 'brand-kits' ? 'page' : undefined}><Palette size={16} />Brand kits</Link></DropdownMenuItem>
       {shell && <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={16} />All projects</Link></DropdownMenuItem>}
       {!shell && <>
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/accounts" aria-current={active === 'accounts' ? 'page' : undefined}><Share2 size={16} />Connected accounts</Link></DropdownMenuItem>

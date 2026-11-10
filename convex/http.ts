@@ -101,17 +101,5 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
 } else {
   http.route({ path: "/stripe/webhook", method: "POST", handler: httpAction(async () => new Response("Billing is not active", { status: 503 })) });
 }
-// Brand-kit font and screen files for scenes. The renderer that draws previews and exports runs on its own origin,
-// which storage URLs do not allow, so fonts are served here with an open CORS header. Storage ids are
-// unguessable and the files are public web fonts.
-const brandFile = httpAction(async (ctx, request) => {
-  const id = new URL(request.url).searchParams.get("id") ?? "";
-  const kitFont = await ctx.runQuery(internal.brandKits.isFontFile, { storageId: id });
-  const blob = kitFont ? await ctx.storage.get(kitFont) : null;
-  if (!blob) return new Response("Not found", { status: 404, headers: { "Access-Control-Allow-Origin": "*" } });
-  return new Response(blob, { headers: { "Content-Type": blob.type || "application/octet-stream", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=31536000, immutable" } });
-});
-http.route({ path: "/brand-font", method: "GET", handler: brandFile });
-http.route({ path: "/brand-file", method: "GET", handler: brandFile });
 
 export default http;
