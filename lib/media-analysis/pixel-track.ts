@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import type { PixelTrackReference } from '../editor/types';
 
 const fraction = z.number().min(0).max(1);
 export const trackBox = z.object({ left: fraction, top: fraction, right: fraction, bottom: fraction }).strict().refine(box => box.right > box.left && box.bottom > box.top, 'The box must have positive width and height.');

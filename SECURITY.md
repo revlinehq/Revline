@@ -15,7 +15,7 @@ Security fixes target the current main branch. Older revisions are not maintaine
 - Keep local credentials in ignored environment files and hosted credentials in the deployment's secret store. Only intentionally public configuration may use `NEXT_PUBLIC_`.
 - Use different credentials for development, staging and production. Keep worker, upload and signing credentials scoped to their role.
 - Revoke an exposed credential first. Removing it in a new commit does not remove it from history, forks, caches, logs or artifacts.
-- Repository builds, media workers and scene execution require an appropriate isolated runtime. Do not expose a development server, privileged worker, Docker socket or deployment token to untrusted users.
+- Repository builds, media workers require an appropriate isolated runtime. Do not expose a development server, privileged worker, Docker socket or deployment token to untrusted users.
 
 Automated scans reduce risk but cannot prove that software has no vulnerabilities. Review deployment permissions, authentication, ownership checks and dependency advisories before operating a public instance.
 

@@ -19,7 +19,7 @@ import { validateTimeline } from './lib/timeline';
 import { saveEvidence } from './lib/lane_evidence';
 import { summarizeTimeline } from './lib/inspectTimeline';
 import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../lib/ai/lanes/task';
-import { capabilityExists, type LaneId } from '../lib/ai/lanes';
+import { capabilityExists, isLane, type LaneId } from '../lib/ai/lanes';
 import { FastFrameReview, fastFrameEvidence, readFastFrameTimes } from '../lib/ai/fast-frame-review';
 import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
 import type { Id } from './_generated/dataModel';
@@ -81,7 +81,7 @@ export const current = query({
     return {
       internalDetailsEnabled:
         process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-      lane: row?.lane === 'explainer' ? 'edit' : row?.lane ?? 'edit',
+      lane: row?.lane && isLane(row.lane) ? row.lane : 'edit',
       manual: row?.manual ?? false,
       reason: row?.reason ?? 'General editing default',
       timelineId,
@@ -96,7 +96,7 @@ export const choose = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    if (args.lane === 'explainer') throw new ConvexError('Choose an available workflow.');
+    if (!isLane(args.lane)) throw new ConvexError('Choose an available workflow.');
     const ownerId = await requireOwner(ctx),
       project = await requireProject(ctx, args.projectId, ownerId);
     if (project.aiRunning)
@@ -131,7 +131,7 @@ export const forRun = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane === 'explainer' ? 'edit' : row.lane,
+          lane: isLane(row.lane) ? row.lane : 'edit',
           manual: row.manual,
           reason: row.reason,
           timelineId,
@@ -154,7 +154,7 @@ export const forTab = internalQuery({
       ? {
           internalDetailsEnabled:
             process.env.EDITOR_INTERNAL_DETAILS_ENABLED === 'true',
-          lane: row.lane === 'explainer' ? 'edit' : row.lane,
+          lane: isLane(row.lane) ? row.lane : 'edit',
           manual: row.manual,
           reason: row.reason,
           timelineId: args.timelineId,
@@ -278,7 +278,7 @@ export const switchLane = internalMutation({
       throw new ConvexError('Start a task first.');
     if (row.laneChosen === false && !args.taskType)
       throw new ConvexError('Choose taskType edit or question with the lane.');
-    if (row.lockedLane && args.lane !== row.lockedLane)
+    if (row.lockedLane && isLane(row.lockedLane) && args.lane !== row.lockedLane)
       throw new ConvexError(
         `This task was explicitly selected for the ${row.lockedLane} lane. Start a new user request to change the work; missing tools are not a lane change.`,
       );
@@ -296,7 +296,7 @@ export const switchLane = internalMutation({
       row.manual ?? false,
     );
     // Switching never resets attempts or manufactures completion evidence.
-    await ctx.db.patch(row._id, { lane: args.lane === 'explainer' ? 'edit' : args.lane, laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
+    await ctx.db.patch(row._id, { lane: isLane(args.lane) ? args.lane : 'edit', laneChosen: true, required: row.required || args.taskType === 'edit', result: undefined });
     return null;
   },
 });
@@ -408,7 +408,7 @@ export const recordFinish = internalMutation({
     const attempt = row.attempts + 1,
       result = {
         ...args.result,
-        lane: row.lane === 'explainer' ? 'edit' : row.lane,
+        lane: isLane(row.lane) ? row.lane : 'edit',
         attempt,
         exhausted: !args.result.passed && attempt >= MAX_FINISH_ATTEMPTS,
       };

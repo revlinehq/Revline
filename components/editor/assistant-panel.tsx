@@ -1,7 +1,6 @@
 'use client';
 import { ThinkingBlock, ToolChain } from './tool-chain';
 import { ChoiceCard, choiceOf } from './choice-card';
-import { ReferenceCard, referenceOf, type ReferenceMedia } from './reference-card';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
@@ -103,7 +102,7 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,referenceMedia,composerNote }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,composerNote }: {
   externalAgent?: string | null;
   /** A small row shown just above the composer (the project's campaign). */
   composerNote?: ReactNode;
@@ -115,7 +114,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   onLoadMore?: () => void; canLoadMore?: boolean; onAttach?: () => void;
   attachments?: ComposerAttachment[]; onRemoveAttachment?: (id: string) => void; composerBusy?: boolean; requireMedia?: boolean;
   /** Playback URLs for reference breakdown cards, by asset id. */
-  referenceMedia?: (assetId: string) => ReferenceMedia | undefined;
   conversationStarted?: boolean;queued?:QueuedMessage[];queuePaused?:boolean;onRemoveQueued?:(id:Id<'assistantQueue'>)=>Promise<unknown>;onResumeQueue?:()=>Promise<unknown>;
   activity?: string | null; activitySource?: string | null; activityProgress?:number|null; activityStartedAt?:number|null; draftKey?:string;
   /** Share of this request's token cap used; the working block warns from 70%. */
@@ -240,7 +238,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
               {replies.map(message => <Fragment key={message.id}>
                 {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : block.type === 'thinking' ? <ThinkingBlock key={`thinking-${index}`} text={block.text} active={editing && message.status === 'streaming' && index === message.blocks!.length - 1}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : <>{message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}{!!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</>}
                 {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
-                {(message.steps ?? []).flatMap(step => { const reference = referenceOf(step); return reference ? [<ReferenceCard key={`reference-${step.id ?? reference.assetId}`} view={reference} media={referenceMedia?.(reference.assetId)} onPick={demo ? undefined : token => changePrompt(prompt.trim() ? `${prompt.trimEnd()} ${token}` : token)}/>] : []; })}
                 {(message.steps ?? []).flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={step.id ?? step.name} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
                 {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               </Fragment>)}

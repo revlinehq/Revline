@@ -103,9 +103,8 @@ export async function markTerminal(ctx: MutationCtx, taskId: Id<'mediaTasks'>, s
     if (job && job.status !== 'completed' && job.status !== 'cancelled') await ctx.db.patch(job._id, { status: status==='cancelled'?'cancelled':'failed', error: status==='cancelled'?undefined:error.slice(0, 1000), updatedAt: Date.now() });
   }
   if(task.reviewId){const review=await ctx.db.get(task.reviewId);if(review)await ctx.db.patch(review._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.snapshotId){const thumb=await ctx.db.query('sceneThumbnails').withIndex('by_snapshot',q=>q.eq('snapshotId',task.snapshotId!)).unique();if(thumb&&thumb.status==='queued')await ctx.db.patch(thumb._id,{status:'failed'});const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
+  if(task.snapshotId){const snapshot=await ctx.db.get(task.snapshotId);if(snapshot&&snapshot.status==='queued')await ctx.db.patch(snapshot._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.readId){const read=await ctx.db.get(task.readId);if(read&&read.status==='queued')await ctx.db.patch(read._id,{status:'failed',error:error.slice(0,1000)});}
-  if(task.blueprintCheckId){const check=await ctx.db.get(task.blueprintCheckId);if(check&&check.status==='queued')await ctx.db.patch(check._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.cutoutId){const cutout=await ctx.db.get(task.cutoutId);if(cutout&&cutout.status==='queued')await ctx.db.patch(cutout._id,{status:'failed',error:error.slice(0,1000)});}
   if(task.derivationId){const row=await ctx.db.get(task.derivationId);if(row&&row.status==='queued')await ctx.db.patch(row._id,{status:'failed',error:error.slice(0,1000)});}
   if (task.analysisRequestId) {

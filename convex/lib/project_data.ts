@@ -6,7 +6,6 @@ import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { HISTORY_KEY_VERSION, timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { boundedEntries, HISTORY_LIMIT, serializedBytes } from './timeline_history';
-import { loadSceneCode, storeSceneCode, storedSceneCode } from './scene_code';
 import { recordRevision, type RevisionNote } from './revision_log';
 type Context=MutationCtx|QueryCtx;
 /** A history snapshot; `id` marks a stored row that can be kept as-is. Stored entries come from the
@@ -76,9 +75,8 @@ export async function hydrateProject(ctx:Context,project:Doc<'projects'>,include
   const payload=await runPayload(ctx,projectId);
   const revisions=includeHistory&&project.history===undefined?await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT):[];
   // Legacy fields support rollout and old saved fixtures until their next write.
-  const restore=(timeline:Timeline)=>sceneCode?loadSceneCode(ctx,timeline):timeline;
-  const history=includeHistory?await Promise.all((project.history??revisions.reverse().map(row=>row.timeline)).map(restore)):undefined;
-  return {...project,...aiFields(run??{}),...aiFields(payload??{}),...aiFields(project),timeline:project.timeline&&await restore(project.timeline),history};
+  const history=includeHistory?project.history??revisions.reverse().map(row=>row.timeline):undefined;
+  return {...project,...aiFields(run??{}),...aiFields(payload??{}),...aiFields(project),timeline:project.timeline,history};
 }
 /** Undo snapshots are up to 10 full timelines; this small row lists them (id, fingerprint, size) so
  * writes and the editor's subscription never re-read every snapshot. */
@@ -90,14 +88,14 @@ async function storedHistory(ctx:Context,projectId:Id<'projects'>):Promise<(Inde
   const index=await readHistoryIndex(ctx,projectId);
   if(index)return index.entries.map(entry=>({...entry,key:index.keyVersion===HISTORY_KEY_VERSION?entry.key:''}));
   const rows=(await ctx.db.query('timelineRevisions').withIndex('by_project_sequence',q=>q.eq('projectId',projectId)).order('desc').take(HISTORY_LIMIT+1)).reverse();
-  return Promise.all(rows.map(async row=>({id:row._id,sequence:row.sequence,timeline:await loadSceneCode(ctx,row.timeline),bytes:serializedBytes(row.timeline),key:row.keyVersion===HISTORY_KEY_VERSION&&row.key?row.key:await timelineHistoryKey(await loadSceneCode(ctx,row.timeline))})));
+  return Promise.all(rows.map(async row=>({id:row._id,sequence:row.sequence,timeline:row.timeline,bytes:serializedBytes(row.timeline),key:row.keyVersion===HISTORY_KEY_VERSION&&row.key?row.key:await timelineHistoryKey(row.timeline)})));
 }
 /** Load the snapshots of stored entries that a plan compares by value. */
 export async function historyTimelines(ctx:Context,entries:HistoryEntry[]):Promise<(HistoryEntry&{timeline:Timeline})[]> {
   return Promise.all(entries.map(async entry=>{
     if(entry.timeline)return {...entry,timeline:entry.timeline};
     const row=entry.id&&await ctx.db.get(entry.id);if(!row)throw new ConvexError('Undo history changed. Try again.');
-    return {...entry,timeline:await loadSceneCode(ctx,row.timeline)};
+    return {...entry,timeline:row.timeline};
   }));
 }
 /** Replace history with whole snapshots. One forward scan keeps stored rows
@@ -114,10 +112,10 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
   const previous:HistoryEntry[]=project.history!==undefined?project.history.map(timeline=>({timeline})):rows.slice(-HISTORY_LIMIT).map(row=>({id:row.id,key:row.key||undefined,bytes:row.bytes,...(row.timeline?{timeline:row.timeline}:{})}));
   // Kept rows must stay in sequence order ahead of every inserted snapshot.
   const order=new Map(rows.map((row,index)=>[row.id,index]));let last=-1,fresh=false;
-  const next:HistoryEntry[]=[],known=storedSceneCode(project.timeline);
+  const next:HistoryEntry[]=[];
   // Apply the history budget to the bytes actually stored, not hydrated scene code.
   const planned=await plan(previous);
-  const sized=await Promise.all(planned.map(async entry=>entry.bytes!==undefined||!entry.timeline?entry:{...entry,bytes:serializedBytes(await storeSceneCode(ctx,entry.timeline,known))}));
+  const sized=await Promise.all(planned.map(async entry=>entry.bytes!==undefined||!entry.timeline?entry:{...entry,bytes:serializedBytes(entry.timeline)}));
   for(const entry of boundedEntries(sized)){
     const index=entry.id===undefined?undefined:order.get(entry.id);
     if(!fresh&&index!==undefined&&index>last){last=index;next.push(entry);continue;}
@@ -133,7 +131,7 @@ async function writeHistory(ctx:MutationCtx,project:Doc<'projects'>,plan:History
     const stored=entry.id&&byId.get(entry.id);
     if(stored){entries.push({id:stored.id,sequence:stored.sequence,key:stored.key||await timelineHistoryKey((await historyTimelines(ctx,[entry]))[0].timeline),bytes:stored.bytes});continue;}
     // Fingerprints cover the full timeline, as the editor computes them; the row stores scene code by hash.
-    const key=entry.key??await timelineHistoryKey(entry.timeline!),timeline=await storeSceneCode(ctx,entry.timeline!,known);
+    const key=entry.key??await timelineHistoryKey(entry.timeline!),timeline=entry.timeline!;
     const id=await ctx.db.insert('timelineRevisions',{projectId:project._id,ownerId:project.ownerId,sequence:++sequence,timeline,key,keyVersion:HISTORY_KEY_VERSION});
     entries.push({id,sequence,key,bytes:serializedBytes(timeline)});
   }
@@ -176,7 +174,7 @@ export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patc
   const metadata=await ctx.db.query('projectRunMetadata').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(!metadata)await ctx.db.insert('projectRunMetadata',{projectId,revision:next.revision??0});else if(metadata.revision!==(next.revision??0))await ctx.db.patch(metadata._id,{revision:next.revision??0});
   if(planHistory||Object.hasOwn(patch,'history')||raw.history!==undefined)await writeHistory(ctx,raw,planHistory??replaceHistory(ctx,patch.history??raw.history??[]));
-  const plain={...patch,...(patch.timeline?{timeline:await storeSceneCode(ctx,patch.timeline,storedSceneCode(raw.timeline))}:{}),history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
+  const plain={...patch,...(patch.timeline?{timeline:patch.timeline}:{}),history:undefined,...Object.fromEntries(aiKeys.map(key=>[key,undefined]))};
   // Every write to the project document re-runs each open editor's project queries; skip no-op patches
   // (AI state alone lives on aiRuns) unless legacy fields still need clearing from the document.
   // A new revision of the same tab is an edit; a tab switch (another tab's timeline arriving) is not.

@@ -10,7 +10,6 @@ import {
 } from "./_generated/server";
 import { assistantRunArgs, MAX_REPAIR_PASSES } from "./lib/assistant_run";
 import { projectRun, writeProject } from "./lib/project_data";
-import { loadSceneCode } from "./lib/scene_code";
 import { equalTimelineValue } from "../lib/editor/timeline-equality";
 import { activeTabOf } from "./timelineTabs";
 import { agentRunnerConfigured, startRunnerTurn } from "./lib/runner_turns";
@@ -238,7 +237,7 @@ export const draft = internalQuery({
       .first();
     if (published?.receipt?.status === "saved") return null;
     return {
-      timeline: await loadSceneCode(ctx, preview.timeline),
+      timeline: preview.timeline,
       revision: preview.baseRevision,
     };
   },

@@ -8,16 +8,7 @@ import sharp from 'sharp';
 import { z } from 'zod';
 import type { MediaTaskResult, MediaWorkItem } from '@/convex/lib/media_task_contract';
 import { AnalysisError } from '@/lib/media-analysis/errors';
-import { fitMotion } from '@/lib/media-analysis/fit-motion';
-import { trackReference } from './track-reference';
-import { describeSounds } from '@/lib/media-analysis/gemini';
-import { detectOnsets, SOUND_RATE, visualHits } from '@/lib/media-analysis/sound';
-import { mapMotion, motionWindow } from '@/lib/inspo-motion/motion-map';
-import { cropBounds, referenceCropAt } from '@/lib/ai/reference-comparison';
-import { measure } from './blueprint-check';
 import { forEachLimited } from './run-limited';
-import { traceShape } from './trace-shape';
-import { matchFont, type FontCategory } from './match-font';
 import { MAX_LOOK_SAMPLES, scanSourceLooks } from './source-looks';
 
 type Work = NonNullable<MediaWorkItem['read']>;
@@ -186,132 +177,12 @@ async function findMoments(path: string, start: number, end: number, source: Sou
   return { moments: moments.sort((a, b) => b.peak - a.peak).slice(0, limit).sort((a, b) => a.start - b.start), holds: holds.slice(0, limit), changed: differs(0, total - 1) >= movedFloor };
 }
 
-/** Exact colors at points and color edges along lines, in source pixels of one frame. */
-async function readMeasure(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
-  const [time] = timesIn(work.start, work.start, 1, source);
-  const { data, info } = await sharp(await frameAt(path, directory, time, undefined, 'measure', signal, cache)).removeAlpha().raw().toBuffer({ resolveWithObject: true });
-  const { colors, edges } = measure({ data, width: info.width, height: info.height }, work);
-  return { width: info.width, height: info.height, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], colors, edges: edges?.map(edge => ({ ...edge, changes: strongEdges(edge.changes) })) };
-}
 
-/** The Google Fonts closest to the type in a crop, with the crop above each candidate drawn in the crop's colors. */
-async function readFont(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
-  if (!work.crop || !work.text) throw new AnalysisError('Matching a font needs a crop around the text and the text itself.', 400);
-  const box = clampBox(work.crop, source), [time] = timesIn(work.start, work.start, 1, source);
-  const crop = await frameAt(path, directory, time, box, 'font', signal, cache);
-  const found = await matchFont(crop, work.text, { categories: work.categories as FontCategory[] | undefined, signal, onProgress });
-  const result = await sheet(found.tiles, found.aspect, 1);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], fonts: found.matches, fontColors: { ink: found.inkColor, background: found.background } };
-}
 
-/** One shape in a box traced to SVG paths; the sheet sets the crop beside the trace drawn over the background. */
-async function readTrace(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, cache?: FrameCache): Promise<Result> {
-  if (!work.box) throw new AnalysisError('Tracing needs a box around the shape.', 400);
-  const box = clampBox(work.box, source), [time] = timesIn(work.start, work.start, 1, source);
-  const crop = await frameAt(path, directory, time, box, 'trace', signal, cache);
-  let traced: Awaited<ReturnType<typeof traceShape>>;
-  try { traced = await traceShape(crop, { ...(work.color ? { color: work.color } : {}), ...(work.tolerance ? { tolerance: work.tolerance } : {}) }); }
-  catch (error) { throw new AnalysisError((error as Error).message, 400); }
-  const { width, height, ...trace } = traced;
-  const spine = trace.centerline ? `<path d="${trace.centerline.d}" fill="none" stroke="#ff3b30" stroke-width="${Math.max(2, width / 200)}"/>` : '';
-  const drawn = await sharp(Buffer.from(trace.svg.replace('<svg ', `<svg width="${width}" height="${height}" `).replace('>', `><rect width="${width}" height="${height}" fill="${trace.background}"/>`).replace('</svg>', `${spine}</svg>`))).png().toBuffer();
-  const result = await sheet([{ image: crop, label: `crop ${time.toFixed(2)}s` }, { image: drawn, label: `trace ${trace.paths.length} paths, spine in red` }], width / height, 2);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [{ time }], trace: { box, ...trace } };
-}
 
-/** Footage is textured: every grain of concrete is a small color step. Keep the jumps that stand out along the line, in order. */
-function strongEdges(changes: { at: number; before: string; after: string }[]) {
-  const jump = (change: { before: string; after: string }) => [1, 3, 5].reduce((sum, offset) => sum + Math.abs(parseInt(change.after.slice(offset, offset + 2), 16) - parseInt(change.before.slice(offset, offset + 2), 16)), 0);
-  const strongest = Math.max(0, ...changes.map(jump));
-  const kept = changes.filter(change => jump(change) >= Math.max(48, strongest * .4));
-  return kept.length > 12 ? [...kept].sort((a, b) => jump(b) - jump(a)).slice(0, 12).sort((a, b) => a.at - b.at) : kept;
-}
 
-/** Follow one box from the first frame: position, size, scale and rotation per frame, plus a sheet with the box drawn. */
-async function readTrack(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
-  if (!work.box) throw new AnalysisError('Tracking needs a box around the object in the first frame.', 400);
-  const box = clampBox(work.box, source), start = Math.min(work.start, Math.max(0, source.duration - .05)), end = Math.min(Math.max(work.end, start + .05), source.duration);
-  if (end - start > 12) throw new AnalysisError('Track up to 12 s at a time, including holds before and after the move.', 400);
-  const frameTime = work.frameTime ?? start;
-  if (frameTime < start || frameTime >= end) throw new AnalysisError('frameTime must be inside the tracking window.', 400);
-  if (work.backgroundTime !== undefined && (work.backgroundTime < 0 || work.backgroundTime >= source.duration)) throw new AnalysisError('backgroundTime must be inside the source video.', 400);
-  const track = await trackReference(path, { start, end, box, frameTime, ...(work.backgroundTime !== undefined ? { backgroundTime: work.backgroundTime } : {}) }, signal, onProgress);
-  // The sheet: up to 8 tracked frames in color with the box drawn where it was found.
-  const picks = [...new Set(Array.from({ length: Math.min(8, track.length) }, (_, index) => Math.round(index * (track.length - 1) / Math.max(1, Math.min(8, track.length) - 1))))];
-  const images = await Promise.all(picks.map(index => frameAt(path, directory, track[index].time, undefined, `track-${index}`, signal, cache)));
-  onProgress(90);
-  const tiles = picks.map((index, order) => {
-    const item = track[index];
-    return { image: images[order], label: `${index + 1}  ${item.time.toFixed(2)}s  ${item.rotation}°  ×${item.scale}  conf ${item.confidence}`, overlay: boxOverlay(item, source) };
-  });
-  const result = await sheet(tiles, source.width / source.height);
-  return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: picks.map(index => ({ time: track[index].time })), track, moves: fitMotion(track, source), trackingNotes: ['Geometry is frozen and excluded from fitting when invisible or lost.', 'Sharpness is relative to the seed frame; it is not blur in pixels.', ...(work.backgroundTime === undefined ? ['Opacity unavailable: provide a clean backgroundTime and a fully visible frameTime to calibrate alpha.'] : ['Opacity is a registered background/foreground blend; use only samples with opacityConfidence >= 0.5.'])] };
-}
 
-/** Hear a reference: every sound effect's measured onset, length and level, the picture change it lands on, and what it
- *  sounds like with a prompt to regenerate it (Gemini listens; the timing is measured, never guessed). */
-async function readSounds(path: string, directory: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
-  const from = Math.max(0, Math.min(work.start, source.duration)), to = Math.min(Math.max(work.end, from), source.duration), length = to - from;
-  if (length < .3) throw new AnalysisError('Listen to at least 0.3 s.', 400);
-  if (length > 60) throw new AnalysisError('Listen to at most 60 s at a time.', 400);
-  const window = ['-ss', ffmpegTime(from), '-t', ffmpegTime(length), '-i', path];
-  const audio = await run('ffmpeg', ['-v', 'error', ...window, '-map', '0:a:0', '-ac', '1', '-ar', String(SOUND_RATE), '-f', 'f32le', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 }).catch(() => null);
-  if (!audio?.stdout.length) throw new AnalysisError('This video has no sound to listen to.', 400);
-  const bytes = audio.stdout as Buffer, mono = new Float32Array(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.length - bytes.length % 4));
-  onProgress(25);
-  // Each onset lasts until it falls 24 dB under its peak or the next one starts.
-  const onsets = detectOnsets(mono).slice(0, 40), hop = Math.round(SOUND_RATE / 100);
-  const level = (at: number) => { let peak = 0; for (let i = at; i < Math.min(mono.length, at + hop); i++) peak = Math.max(peak, Math.abs(mono[i])); return peak; };
-  const measured = onsets.map((onset, index) => {
-    const first = Math.round(onset.time * SOUND_RATE), stop = Math.round((onsets[index + 1]?.time ?? length) * SOUND_RATE), floor = 10 ** ((onset.level - 24) / 20);
-    let at = first + hop; while (at < stop && level(at) > floor) at += hop;
-    return { time: onset.time, end: Math.min(at, stop) / SOUND_RATE, level: onset.level };
-  });
-  // The picture changes at 30 fps, as checkSound measures them, so each sound names the hit it lands on.
-  const fps = 30, width = 160, height = Math.max(2, Math.round(width * source.height / source.width) & ~1);
-  const { stdout: pixels } = await run('ffmpeg', ['-v', 'error', ...window, '-map', '0:v:0', '-vf', `fps=${fps},scale=${width}:${height},format=gray`, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 256 * 1024 * 1024 });
-  const size = width * height, frames = Array.from({ length: Math.floor(pixels.length / size) }, (_, index) => new Uint8Array(pixels.buffer, pixels.byteOffset + index * size, size));
-  const hits = visualHits(frames, 0, fps);
-  onProgress(50);
-  // Gemini hears the window as a small clip with its picture, so it can say what each sound accompanies.
-  const clip = join(directory, 'listen.mp4');
-  await run('ffmpeg', ['-v', 'error', '-y', ...window, '-vf', 'scale=-2:360', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '30', '-c:a', 'aac', '-b:a', '128k', clip], { signal, timeout: 180_000 });
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  // The timing stands on its own: when listening fails, the sounds come back measured but undescribed.
-  const heard = key ? await describeSounds(clip, measured.map(sound => sound.time), key, signal).catch(error => { console.warn('[listenReference] describing failed', error instanceof Error ? error.message : error); return undefined; }) : undefined;
-  onProgress(90);
-  const sounds = measured.map(sound => {
-    const hit = hits.reduce<typeof hits[number] | undefined>((best, item) => Math.abs(item.time - sound.time) <= .15 && (!best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time)) ? item : best, undefined);
-    const described = heard?.sounds.reduce<typeof heard.sounds[number] | undefined>((best, item) => !best || Math.abs(item.time - sound.time) < Math.abs(best.time - sound.time) ? item : best, undefined);
-    return { time: roundTo(from + sound.time, 3), end: roundTo(from + sound.end, 3), level: roundTo(sound.level, 1), ...(hit ? { hit: roundTo(from + hit.time, 3) } : {}), ...(described && Math.abs(described.time - sound.time) <= .25 ? { kind: described.kind, description: described.description, prompt: described.prompt, onScreen: described.onScreen } : {}) };
-  });
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [], sounds, ...(heard ? { music: heard.music } : {}), silentHits: hits.filter(hit => !measured.some(sound => Math.abs(sound.time - hit.time) <= .15)).map(hit => roundTo(from + hit.time, 3)) };
-}
 
-/** How a reference moves (motionMap): camera keyframes with eases, transitions, element tweens and content changes,
- *  read from small gray frames at 30 fps. The same reading runs on a rendered timeline range, so the two compare. */
-async function readMotion(path: string, source: Source, work: Work, signal: AbortSignal, onProgress: (percent: number) => void, cache?: FrameCache): Promise<Result> {
-  if (work.end - work.start < .3 || work.end - work.start > 12) throw new AnalysisError('Map 0.3 to 12 s.', 400);
-  const fps = 30, from = Math.floor(Math.max(0, work.start - .5) * fps) / fps, to = Math.min(work.end + .5, source.duration);
-  const region = referenceCropAt(work.start, work.compareCrop, work.referenceCropKeyframes);
-  const crop = region ? cropBounds(region, source.width, source.height) : undefined;
-  const width = 320, height = Math.max(2, Math.round(width * (crop?.height ?? source.height) / (crop?.width ?? source.width)));
-  // Perspective maps a time-varying source rectangle onto a fixed canvas, including width/height changes.
-  // Decode on displayed axes at full resolution; only reduce after selecting the region.
-  const keys = work.referenceCropKeyframes;
-  const coordinate = (field: 'x' | 'y' | 'w' | 'h') => keys![0].crop[field] + keys!.slice(1).map((key, index) => {
-    const a = keys![index];
-    return `+(${key.crop[field] - a.crop[field]})*clip((${from}+on/${fps}-${a.time})/${key.time - a.time},0,1)`;
-  }).join('');
-  const x = keys ? coordinate('x') : '', y = keys ? coordinate('y') : '', w = keys ? coordinate('w') : '', h = keys ? coordinate('h') : '';
-  const selection = keys ? [`perspective=x0='W*(${x})':y0='H*(${y})':x1='W*((${x})+(${w}))':y1='H*(${y})':x2='W*(${x})':y2='H*((${y})+(${h}))':x3='W*((${x})+(${w}))':y3='H*((${y})+(${h}))':sense=source:eval=frame`] : crop ? [`crop=${crop.width}:${crop.height}:${crop.left}:${crop.top}`] : [];
-  const filter = [`fps=${fps}`, ...selection, `scale=${width}:${height}`, 'format=gray'].join(',');
-  const { stdout } = await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(from), '-t', ffmpegTime(to - from), '-i', path, '-map', '0:v:0', '-vf', filter, '-f', 'rawvideo', '-'], { signal, timeout: 120_000, encoding: 'buffer', maxBuffer: 512 * 1024 * 1024 });
-  const size = width * height, frames = Array.from({ length: Math.floor(stdout.length / size) }, (_, index) => new Uint8Array(stdout.buffer, stdout.byteOffset + index * size, size));
-  if (frames.length < 3) throw new AnalysisError('No frames could be read in that window.', 400);
-  onProgress(40);
-  return { width: 0, height: 0, sourceWidth: source.width, sourceHeight: source.height, fps: roundTo(source.fps, 3), frames: [], motion: { ...motionWindow(mapMotion(frames, width, height, from, fps), work.start, Math.min(work.end, source.duration)), sourceFps: roundTo(source.fps, 3) } };
-}
 
 /** A rotated box outline in tile coordinates ({w} and {h} are the tile size). */
 /** The shared "eyes" read. With times alone: measured face signals at those frames (no image, no model service).
@@ -340,10 +211,6 @@ async function readLooks(path: string, directory: string, source: Source, work: 
   return { ...base, width, height, frames: times.map(time => ({ time })), extraImages: strips };
 }
 
-function boxOverlay(item: { x: number; y: number; w: number; h: number; rotation: number }, source: Source) {
-  const cx = item.x + item.w / 2, cy = item.y + item.h / 2;
-  return `<svg viewBox="0 0 ${source.width} ${source.height}" width="{w}" height="{h}" preserveAspectRatio="none"><rect x="${item.x}" y="${item.y}" width="${item.w}" height="${item.h}" transform="rotate(${item.rotation} ${cx} ${cy})" fill="none" stroke="#3dd68c" stroke-width="${Math.max(3, source.width / 300)}"/></svg>`;
-}
 
 /** A still uses its displayed pixels once; it has no artificial source duration or frame rate. */
 export async function imageSource(path: string) {
@@ -356,28 +223,17 @@ export async function readReference(path: string, directory: string, work: Work,
     signal.throwIfAborted();
     const source = await imageSource(path), crop = work.crop ? clampBox(work.crop, source) : undefined;
     const image = crop ? await sharp(source.image).extract({ left: crop.x, top: crop.y, width: crop.w, height: crop.h }).png().toBuffer() : source.image;
-    const result = await sheet([{ image, label: 'Still image reference' }], (crop?.w ?? source.width) / (crop?.h ?? source.height), 1);
+    const result = await sheet([{ image, label: 'Still image' }], (crop?.w ?? source.width) / (crop?.h ?? source.height), 1);
     onProgress(90);
     return { ...result, sourceWidth: source.width, sourceHeight: source.height, fps: 0, frames: [{ time: 0 }] };
   }
   const source = await probe(path, signal, cache);
   if (work.end < work.start) throw new AnalysisError('The window ends before it starts.', 400);
   onProgress(5);
-  if (work.mode === 'measure') return readMeasure(path, directory, source, work, signal, cache);
-  if (work.mode === 'track') return readTrack(path, directory, source, work, signal, onProgress, cache);
-  if (work.mode === 'trace') return readTrace(path, directory, source, work, signal, cache);
-  if (work.mode === 'font') return readFont(path, directory, source, work, signal, onProgress, cache);
-  if (work.mode === 'motion') return readMotion(path, source, work, signal, onProgress, cache);
   if (work.mode === 'looks') return readLooks(path, directory, source, work, signal, onProgress, cache);
-  if (work.mode === 'sounds') return readSounds(path, directory, source, work, signal, onProgress, cache);
+  // Tracking, measuring, tracing, font matching, sound and motion reads were removed with the motion lanes.
+  if (work.mode !== 'sheet') throw new AnalysisError(`The ${work.mode} read is no longer supported.`, 400);
   if (work.momentsOnly) return readMoments(path, source, work, signal, cache);
   return readSheet(path, directory, source, work, signal, onProgress, cache);
 }
 
-/** Every moment across a whole video, for the reference breakdown; regions as 0..1 boxes of the frame. */
-export async function videoMoments(path: string, signal: AbortSignal) {
-  const source = await probe(path, signal);
-  const { moments } = await findMoments(path, 0, source.duration, source, { x: 0, y: 0, w: source.width, h: source.height }, signal, 40);
-  const share = (value: number, total: number) => roundTo(Math.min(1, value / total), 3);
-  return moments.map(({ region, ...moment }) => ({ ...moment, ...(region ? { box: { left: share(region.x, source.width), top: share(region.y, source.height), right: share(region.x + region.w, source.width), bottom: share(region.y + region.h, source.height) } } : {}) }));
-}

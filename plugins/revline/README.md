@@ -1,6 +1,6 @@
 # Revline for Claude Code
 
-Edit videos from Claude Code. This plugin connects [Revline](https://tryrevline.com), an AI video editor, over MCP so Claude can upload footage, cut filler words, add captions, reframe for vertical, build motion graphics and export, all on a real timeline you can open in the browser.
+Edit videos from Claude Code. This plugin connects [Revline](https://tryrevline.com), an AI video editor, over MCP so Claude can upload footage, cut filler words, add captions, reframe for vertical, clip and export, all on a real timeline you can open in the browser.
 
 ## Install
 

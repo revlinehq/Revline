@@ -95,31 +95,6 @@ export const blogPosts = [
       ] },
     ],
   },
-  {
-    slug: 'recreate-reference-video-motion',
-    title: 'How to study a reference video’s timing and easing',
-    description: 'Go beyond matching still frames: inspect transitions, separate camera and object movement, measure easing and compare an editable recreation in Revline.',
-    category: 'Motion design', published: '2026-11-05T12:00:00Z', updated: '2026-11-05T12:00:00Z',
-    image: '/landing/revline-launch-poster.webp', imageAlt: 'A Revline motion film built from editable scene elements', featurePath: '/reference-video-recreation',
-    sections: [
-      { heading: 'Make an inventory of what actually changes', paragraphs: [
-        'A reference recreation starts with observation. Write down the sections of the film, what appears in each one and how each section enters and leaves. Record the source dimensions, frame rate and duration so your build uses the same starting conditions.',
-        'A few screenshots can show composition, but they cannot establish whether a transition is a cut, a short slide or a move with overshoot. Inspect consecutive frames around each change. Use full-resolution frames or crops to read small typography and shape details rather than estimating them from a contact sheet.',
-      ] },
-      { heading: 'Separate camera movement from object movement', paragraphs: [
-        'If a panel grows while the background stays fixed, the panel may be scaling on its own. If everything moves together, a shared camera move is a possibility. A foreground layer or wipe can also dominate the visible motion, so a measured shift does not automatically prove that the whole scene’s camera moved.',
-        'Revline’s motionMap tool reports candidate motion and timing. Use trackReference on background and foreground regions separately when they behave differently. Compare the measurements with the actual frames before applying a global camera transform to every layer.',
-      ] },
-      { heading: 'Measure the arrival as carefully as the start', paragraphs: [
-        'Easing describes how progress changes through a move. Two objects can start and end in the same positions at the same times yet feel different because one accelerates slowly and the other arrives with a bounce. Look for the onset, acceleration, peak movement, overshoot and final settle.',
-        'Use the measured easing as a starting point for an editable scene. Do not replace every move with the same convenient curve. When tracking is uncertain because an object changes shape, turns in perspective or passes behind another object, inspect a shorter window and describe what remains approximate.',
-      ] },
-      { heading: 'Compare the rendered recreation with the source', paragraphs: [
-        'Render the current saved revision and align it with the reference. Compare both still frames and movement. A good still-frame match does not establish that entrances, cuts or caption switches happen at the right times. Check the boundaries between sections after making timing changes.',
-        'In Revline, compareReference helps inspect rendered appearance and compareMotion helps identify motion differences. Refine the mismatch and recheck the changed window. Record substituted assets, fonts and unmeasured intervals honestly. Use your own or licensed assets and references you have permission to reproduce.',
-      ] },
-    ],
-  },
 ] satisfies BlogPost[];
 
 export function readingMinutes(post: BlogPost) {

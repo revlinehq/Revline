@@ -49,7 +49,7 @@ CONVEX_DEPLOYMENT=dev:majestic-alpaca-541 npx convex run databaseIO:initialize '
 CONVEX_DEPLOYMENT=dev:majestic-alpaca-541 npx convex run databaseIO:status '{}'
 ```
 
-Wait for `tasks`, `thumbnails`, and `chats` to report `true`, and for the scheduled
+Wait for `tasks` and `chats` to report `true`, and for the scheduled
 thumbnail file conversions to finish. Each historical page reads one document;
 owner capacity initialization reads only active tasks. Existing task lists and
 chat histories keep their legacy query until their backfill is complete. New

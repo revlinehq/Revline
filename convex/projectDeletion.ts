@@ -1,5 +1,4 @@
 import { removeFrameCacheBatch } from './frameCache';
-import { deleteThumbnail } from './sceneThumbs';
 import { deleteMediaTask } from './lib/media_task_data';
 import { deleteProjectMemories } from './memories';
 import { deleteRenderSnapshot } from './lib/render_snapshots';
@@ -20,8 +19,6 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   const tasks=await ctx.db.query('mediaTasks').withIndex('by_project_createdAt',q=>q.eq('projectId',project._id)).take(50);
   if(tasks.length){for(const task of tasks){await cancelMediaTask(ctx,task._id);await deleteMediaTask(ctx,task._id);}await again();return null;}
   if(await removeFrameCacheBatch(ctx,project._id)){await again();return null;}
-  const thumbs=await ctx.db.query('sceneThumbnails').withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);
-  if(thumbs.length){for(const thumb of thumbs)await deleteThumbnail(ctx,thumb);await again();return null;}
   if(project.threadId){
     const views=await ctx.db.query('assistantMessageViews').withIndex('by_thread_order',q=>q.eq('threadId',project.threadId!)).take(50);
     if(views.length){for(const view of views)await ctx.db.delete(view._id);await again();return null;}
@@ -41,7 +38,7 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   const requests=await ctx.db.query('analysisRequests').withIndex('by_projectId',q=>q.eq('projectId',project._id)).take(50);
   if(requests.length){for(const request of requests)await ctx.db.delete(request._id);await again();return null;}
   await deleteProjectMemories(ctx,args.ownerId,project._id);
-  for(const table of ['projectCampaigns','clippingRuns','editingLaneTabs','editingLaneTasks','mcpLaneSessions','pixelTrackChunks','derivations','cutouts','referenceReads','referenceMotionCoverage','referenceMotionOff','referenceMotionChecks','frameSnapshotPayloads','frameSnapshotControls','frameSnapshots','mcpRunTimeouts','aiBudgets','compositionReviews','assistantPlans','assistantQueue','projectBriefs','assistantTurns','assistantTurnViews','mediaTaskProgress'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows){if('resultStorageId' in row&&row.resultStorageId)await ctx.storage.delete(row.resultStorageId);if('scheduledId' in row){const scheduled=await ctx.db.system.get(row.scheduledId);if(scheduled?.state.kind==='pending')await ctx.scheduler.cancel(row.scheduledId);}await ctx.db.delete(row._id);}await again();return null;}}
+  for(const table of ['projectCampaigns','clippingRuns','editingLaneTabs','editingLaneTasks','mcpLaneSessions','pixelTrackChunks','derivations','cutouts','referenceReads','frameSnapshotPayloads','frameSnapshotControls','frameSnapshots','mcpRunTimeouts','aiBudgets','compositionReviews','assistantPlans','assistantQueue','projectBriefs','assistantTurns','assistantTurnViews','mediaTaskProgress'] as const){const rows=await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(20);if(rows.length){for(const row of rows){if('resultStorageId' in row&&row.resultStorageId)await ctx.storage.delete(row.resultStorageId);if('scheduledId' in row){const scheduled=await ctx.db.system.get(row.scheduledId);if(scheduled?.state.kind==='pending')await ctx.scheduler.cancel(row.scheduledId);}await ctx.db.delete(row._id);}await again();return null;}}
   const completedUploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',true)).take(50);
   if(completedUploads.length){for(const upload of completedUploads)await ctx.db.delete(upload._id);await again();return null;}
   const uploads=await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',project._id).eq('completed',false)).filter(q=>q.neq(q.field('cleanupScheduled'),true)).take(20);
@@ -52,6 +49,6 @@ export const batch=internalMutation({args:{projectId:v.id('projects'),ownerId:v.
   const tabHistories=await ctx.db.query('projectTimelineHistories').withIndex('by_project_timeline',q=>q.eq('projectId',project._id)).take(10);
   if(tabHistories.length){for(const row of tabHistories)await ctx.db.delete(row._id);await again();return null;}
   if(project.threadId)await ctx.runMutation(components.agent.threads.deleteAllForThreadIdAsync,{threadId:project.threadId});
-  for(const table of ['timelineRevisions','timelineHistoryIndex','projectRunMetadata','aiRunPayloads','aiRuns','aiTimelinePreviews','filmDrafts','projectAccess','projectCatalog'] as const){const rows=table==='timelineRevisions'?await ctx.db.query(table).withIndex('by_project_sequence',q=>q.eq('projectId',project._id)).take(HISTORY_LIMIT+1):await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(1);for(const row of rows)await ctx.db.delete(row._id);}
+  for(const table of ['timelineRevisions','timelineHistoryIndex','projectRunMetadata','aiRunPayloads','aiRuns','aiTimelinePreviews','projectAccess','projectCatalog'] as const){const rows=table==='timelineRevisions'?await ctx.db.query(table).withIndex('by_project_sequence',q=>q.eq('projectId',project._id)).take(HISTORY_LIMIT+1):await ctx.db.query(table).withIndex('by_project',q=>q.eq('projectId',project._id)).take(1);for(const row of rows)await ctx.db.delete(row._id);}
   await ctx.db.delete(project._id);return null;
 }});

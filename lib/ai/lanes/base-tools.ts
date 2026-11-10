@@ -1,6 +1,4 @@
-import { tools as motionTools } from './motion/tools';
 import { tools as clipTools } from './clip/tools';
-import { tools as recreateTools } from './recreate/tools';
 
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [
@@ -20,11 +18,9 @@ export const BASE_TOOLS = [
   'setBlendMode',
   'undoLatestEdit',
   'listRevisions',
-  'diffScene',
   'recordFix',
   'restoreClip',
   'restoreTimeline',
-  'restoreSection',
   'readBrief',
   'updateBrief',
   'unlink',
@@ -67,7 +63,10 @@ export const BASE_TOOLS = [
   'startMusicAt',
   'askUser',
   'askBrandKit',
-  'previewBackgrounds',
+  'listBrandKits',
+  'getBrandKit',
+  'createBrandKit',
+  'updateBrandKit',
   'readSkill',
   'addMedia',
   'addMarker',
@@ -113,11 +112,7 @@ export const PROJECT_BASE_TOOLS = [
 
 /** Tools disclosed by reading or loading a supporting skill. */
 export const SKILL_TOOLS: Record<string, readonly string[]> = {
-  'launch-films-motions': motionTools,
-  'writing-scenes': motionTools,
-  'gsap': motionTools,
-  'remaking-videos': recreateTools,
-  // Footage transitions; the footage lanes have addTransition already, film lanes get it only by loading footage support.
+  // Footage transitions; every lane has addTransition already.
   'transitions': ['addTransition'],
   'clipping': clipTools,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
@@ -129,6 +124,7 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
     'addSoundEffect', 'generateSound', 'editSound', 'matchMusic', 'useStrongestMoment', 'markMusicBeats', 'alignCutsToBeat',
     'configureSmoothZoom', 'configureCameraMotion', 'animateEffect', 'setMask', 'setMotionBlur', 'setVisualEffects', 'setSpeedRamp', 'addTransition', 'freezeFrame', 'resetVisualEffect', 'addTimedEffect', 'convertSolidColorToVisual', 'setSolidColor', 'configureTimedEffect', 'applyMotionPreset', 'animateClip', 'setAudioReactive',
     'analyzeColor', 'matchColor', 'setColorCurves', 'setHSL', 'applyLut',
+    'checkPacing', 'checkSound', 'planEffects', 'previewRender',
     'trackPoints', 'getTrack', 'attachToTrack', 'addImpactFrame', 'configureImpactFrame', 'addOverlay', 'configureOverlay', 'freezeFrameParallax', 'configureParallax', 'smoothSlowMotion', 'upscaleClip', 'removeBackground',
   ],
 };

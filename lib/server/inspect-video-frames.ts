@@ -4,8 +4,6 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { selectInspectionFrames, validateFrameInspectionInput, type FrameInspectionInput } from '../media-analysis/frame-inspection';
 import { AnalysisError } from '../media-analysis/errors';
-import type { ReferenceKeyframe } from '../media-analysis/reference';
-import { forEachLimited } from './run-limited';
 
 /** Decode real source frame PTS and indices; no invented evenly-spaced timestamps. */
 export async function extractInspectionFrames(path: string, directory: string, input: FrameInspectionInput, duration: number, signal: AbortSignal) {
@@ -38,14 +36,3 @@ export async function extractInspectionFrames(path: string, directory: string, i
   return { sourceFps, images,geometry };
 }
 
-/** Small labeled stills across each reference shot; one seek per frame keeps every time exact. */
-export async function extractReferenceKeyframes(path: string, directory: string, keyframes: ReferenceKeyframe[], signal: AbortSignal) {
-  const images: (ReferenceKeyframe & { data: string })[] = new Array(keyframes.length);
-  await forEachLimited(keyframes.map((frame, index) => ({ frame, index })), 4, async ({ frame, index }, stop) => {
-    const output = join(directory, `reference-${String(index).padStart(3, '0')}.jpg`);
-    await run('ffmpeg', ['-v', 'error', '-ss', ffmpegTime(frame.time), '-i', path, '-map', '0:v:0', '-frames:v', '1', '-vf', 'scale=640:640:force_original_aspect_ratio=decrease', '-q:v', '5', '-y', output], { signal: AbortSignal.any([signal, stop]), timeout: 30_000, maxBuffer: 1024 * 1024 });
-    images[index] = { ...frame, data: (await readFile(output)).toString('base64') };
-  });
-  if (images.reduce((bytes, image) => bytes + image.data.length, 0) > 14 * 1024 * 1024) throw new AnalysisError('Reference keyframes exceed the request size limit.', 400);
-  return images;
-}

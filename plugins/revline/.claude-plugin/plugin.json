@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "revline",
   "version": "0.1.0",
-  "description": "Edit videos from Claude Code. Connects Revline's video editor over MCP so Claude can upload footage, cut filler, add captions, reframe, build motion graphics and export, all on a real timeline you can open in the browser.",
+  "description": "Edit videos from Claude Code. Connects Revline's video editor over MCP so Claude can upload footage, cut filler, add captions, reframe, clip and export, all on a real timeline you can open in the browser.",
   "author": {
     "name": "Revline",
     "url": "https://tryrevline.com"
@@ -14,5 +14,5 @@
   "documentationUrl": "https://github.com/revlinehq/revline-claude-plugin#readme",
   "repository": "https://github.com/revlinehq/Revline",
   "license": "Apache-2.0",
-  "keywords": ["video", "video-editing", "captions", "motion-graphics", "mcp", "revline"]
+  "keywords": ["video", "video-editing", "captions", "clipping", "mcp", "revline"]
 }
