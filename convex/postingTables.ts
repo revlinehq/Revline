@@ -3,6 +3,8 @@ import { v } from 'convex/values';
 
 export const postingPlatform = v.union(v.literal('instagram'), v.literal('tiktok'), v.literal('youtube'));
 export const postStatus = v.union(v.literal('scheduled'), v.literal('posting'), v.literal('processing'), v.literal('published'), v.literal('failed'));
+/** A post that waits for its export: `waiting` until the export ends, then `created` (its batch exists), `failed` or `cancelled`. */
+export const pendingPostStatus = v.union(v.literal('waiting'), v.literal('created'), v.literal('failed'), v.literal('cancelled'));
 export const accountStatus = v.union(v.literal('connected'), v.literal('needs_reconnect'), v.literal('disconnected'));
 
 /** Tables of the posting base (convex/posting*): connected social accounts and the posts sent to them. */
@@ -39,4 +41,12 @@ export const postingTables = {
     createdAt: v.number(), updatedAt: v.number(),
   }).index('by_owner_createdAt', ['ownerId', 'createdAt']).index('by_owner_status', ['ownerId', 'status', 'publishedAt']).index('by_batch', ['batchId'])
     .index('by_status_dueAt', ['status', 'dueAt']).index('by_status_publishedAt', ['status', 'publishedAt']).index('by_account_status', ['accountId', 'status']),
+  // One press of Post in the editor (convex/postExports.ts). Posting needs a file, so the post is recorded against
+  // an export of the timeline as it was at that moment and becomes a batch when that export completes.
+  postingPending: defineTable({
+    ownerId: v.string(), projectId: v.id('projects'), timelineId: v.string(), jobId: v.id('renderJobs'),
+    caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()), campaignId: v.optional(v.string()),
+    accountIds: v.array(v.id('postingAccounts')), status: pendingPostStatus, error: v.optional(v.string()), batchId: v.optional(v.id('postingBatches')),
+    createdAt: v.number(), updatedAt: v.number(),
+  }).index('by_job', ['jobId']).index('by_owner_project', ['ownerId', 'projectId', 'createdAt']).index('by_status', ['status', 'createdAt']),
 };

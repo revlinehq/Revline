@@ -96,6 +96,8 @@ export type EditorShellProps = {
   onRegisterStockAudio?: (catalogId:string)=>Promise<MediaAsset>;
   /** Shown beside the project name in the top bar (the project's campaign). */
   titleNote?: ReactNode;
+  /** Actions after Export in the top bar (Post). */
+  navActions?: ReactNode;
   /** Loads one source with its saved analysis (transcript), for the quick subtitles control. */
   onLoadAsset?: (assetId:string)=>Promise<MediaAsset>;
 };
@@ -509,7 +511,7 @@ export function EditorShell(p: EditorShellProps) {
   return <main ref={editorRoot} data-playback-opening={opening} tabIndex={-1} {...fileDrop.handlers} className="editor-app conversation-editor dash-theme">
     <TextFontStyles/>
     <MediaFileDropOverlay active={fileDrop.active} busy={!!p.upload}/>
-    <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} backHref={p.demo ? undefined : NEW_PROJECT_PATH} onUndo={p.demo ? undefined : undo} onRedo={p.demo ? undefined : redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={p.titleNote}/>
+    <WorkspaceNav chatId={p.demo ? undefined : p.projectId} title={p.title} onRename={p.onTitle} backHref={p.demo ? undefined : NEW_PROJECT_PATH} onUndo={p.demo ? undefined : undo} onRedo={p.demo ? undefined : redo} canUndo={p.canUndo && !editing} canRedo={p.canRedo && !editing} onExport={() => {setExportClipId(null);setExportOpen(true);}} exportDisabled={!timeline.clips.length} exportHint={!timeline.clips.length?'Add a clip to export':duration>MAX_EXPORT_SECONDS?`Exports support up to ${MAX_EXPORT_LABEL}. Shorten the edit to export.`:`Export an MP4 up to ${MAX_EXPORT_LABEL} long`} saving={p.saving} saveFailed={p.saveFailed} onRetrySave={p.onRetrySave} demo={p.demo} editorControls={p.titleNote} actions={p.navActions}/>
 
     <EditorErrorNotice message={p.error} onDismiss={dismissError} />
     {!preparing&&<>{compact && <div className="mobile-panel-controls">{modeSwitch || <button aria-expanded={mobileChat} onClick={() => setMobileChat(!mobileChat)}><MessageSquare size={14} />{mobileChat ? 'Back to preview' : 'Open conversation'}</button>}<button onClick={() => { setSourceRequest(++inspectorRequest.current); setInspectorOpen(true); }}><Film size={14} />Media</button></div>}

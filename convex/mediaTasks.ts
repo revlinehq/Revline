@@ -598,6 +598,8 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     const job = task.renderJobId ? await ctx.db.get(task.renderJobId) : null;
     if (!job?.outputR2Key) throw new ConvexError('Export has not stored its MP4 yet.');
     await ctx.db.patch(job._id, { status: 'completed', progress: 100, error: undefined, updatedAt: Date.now(), ...(result.renderer ? { renderer: result.renderer.slice(0, 200) } : {}) });
+    // A post made from the editor may be waiting for this file.
+    await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: job._id });
   },
   import: async (ctx, task) => {
     const output = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;

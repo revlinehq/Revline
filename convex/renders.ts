@@ -59,6 +59,7 @@ export async function cancelRenderJob(ctx: MutationCtx, job: Doc<'renderJobs'>) 
   if(job.status!=='queued'&&job.status!=='rendering')return false;
   if(job.taskId)await cancelMediaTask(ctx,job.taskId);
   await ctx.db.patch(job._id,{status:'cancelled',error:undefined,updatedAt:Date.now()});
+  await ctx.scheduler.runAfter(0,internal.postExports.settle,{jobId:job._id});
   return true;
 }
 export const cancel = mutation({ args:{jobId:v.id('renderJobs')},returns:v.null(),handler:async(ctx,args)=>{
@@ -108,6 +109,7 @@ export const failStalled = internalMutation({ args: {}, returns: v.null(), handl
       if (current && (current.status === 'queued' || current.status === 'rendering')) {
         await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render', ...(active ? { attempt: active.attempt, progress: active.progress } : {}) }, projectId: job.projectId, deployment: incidentDeployment() });
         await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
+        await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: job._id });
       }
     }
   }
