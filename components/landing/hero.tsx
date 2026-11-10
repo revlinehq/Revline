@@ -12,7 +12,6 @@ export function LandingHero() {
     </div>
     <figure className="landing-hero-shot">
       <LandingShot name="campaigns" layout="wide" priority alt="The Campaigns page in Revline: a grid of clipping campaigns, each card showing its rate per 1K views and the budget left." />
-      <figcaption>Campaigns from Content Rewards</figcaption>
     </figure>
   </LandingSection>;
 }

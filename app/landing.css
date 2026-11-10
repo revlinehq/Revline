@@ -51,7 +51,6 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-hero-copy>p{width:660px;max-width:100%;font-size:22px;line-height:1.55;color:var(--l-fg-2)}
 .landing-hero-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding-top:12px}
 .landing-hero-actions .landing-button{padding-inline:48px;font-size:15px}
-.landing-hero-shot figcaption{margin-top:24px;text-align:center;font-size:14px;color:var(--l-fg-3)}
 
 /* How it works */
 .landing-how{display:flex;flex-direction:column;gap:56px;padding-bottom:140px}
@@ -144,7 +143,6 @@ html:has(main.landing){scroll-behavior:auto}
   .landing-hero-copy{gap:20px}
   .landing-hero h1{font-size:46px}
   .landing-hero-copy>p{font-size:17px;text-wrap:balance}
-  .landing-hero-shot figcaption{margin-top:16px;font-size:13px}
   .landing-shot{border-radius:10px}
   .landing-how{gap:36px}
   .landing-steps{grid-template-columns:minmax(0,1fr)}
