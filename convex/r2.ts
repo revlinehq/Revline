@@ -9,7 +9,7 @@ import { requireOwner } from './lib/auth';
 import { projectIdentity } from './lib/project_data';
 import { assetKind, r2UploadDocument } from './schema';
 import { storageControl, hasPreview, newProjectMediaKey, PREVIEW_VERSION } from './lib/media_storage';
-import { partsValidator, partsComplete, partLinksValidator, signedPartUrl, signedPartUrls, storedPartsValidator, validPartNumber, verifiedParts } from './lib/upload_limits';
+import { partsValidator, partsComplete, partLinksValidator, signedPartUrl, signedPartUrls, storedPartsValidator, validPartNumber, verifiedParts, openMultipart, abortMultipart, completeMultipart } from './lib/upload_limits';
 import { requireMediaTask } from './lib/media_task_auth';
 import { enqueueMediaTask } from './lib/media_queue';
 import { requireMediaTaskCapacity, uploadPreparationTasks, UPLOAD_RESERVATION_MS } from './lib/account_limits';
@@ -82,7 +82,7 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
   if (!task && !args.jobId) await requireMediaTaskCapacity(ctx, ownerId, uploadPreparationTasks(args.kind));
   return ownerId;
 }});
-export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number() }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
+export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number(), direct: v.optional(v.boolean()) }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
   if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
   const task=args.taskId?await requireMediaTask(ctx,args.taskId,args.leaseToken??''):null;
@@ -116,7 +116,8 @@ export const beginAbort = internalMutation({args:{uploadId:v.id('r2Uploads'),...
   return {...lease,aborting:true};
 }});
 
-const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, ...metadata };
+/** `direct` asks for presigned storage links; only clients that read a part's ETag response header send it. */
+const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, ...metadata, direct: v.optional(v.boolean()) };
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
 export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
@@ -132,13 +133,12 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
   const key = newProjectMediaKey(ownerId, args.projectId);
-  const created = await storageControl({ action: 'create', key, contentType: args.contentType });
-  if (!created.uploadId) throw new ConvexError('Cloudflare did not open the upload');
+  const created = await openMultipart(key, args.contentType, !!args.direct && !args.taskId && !args.jobId && !trustedOwnerId);
   const multipartId = created.uploadId;
   try {
-    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
+    const uploadId = await retryOnWriteConflict(() => ctx.runMutation(internal.r2.createLease, { projectId: args.projectId, ownerId, key, uploadId: multipartId, partSize, ...(created.direct ? { direct: true } : {}), fileName, contentType: args.contentType, kind: args.kind, size: args.size,...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}), ...(args.duration !== undefined ? { duration: args.duration } : {}), ...(args.width !== undefined ? { width: args.width } : {}), ...(args.height !== undefined ? { height: args.height } : {}) }));
     return { uploadId, partSize, partCount };
-  } catch (error) { await storageControl({ action: 'abort', key, uploadId: created.uploadId }); throw error; }
+  } catch (error) { await abortMultipart({ key, ...created }); throw error; }
 }
 export const partUrl = action({ args: { uploadId: v.id('r2Uploads'), partNumber: v.number(), ...taskAuth }, returns: v.string(), handler: async (ctx, args): Promise<string> => {
   const lease = await ctx.runQuery(internal.r2.getLease, { uploadId: args.uploadId, ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}) });
@@ -240,7 +240,7 @@ export async function completeUpload(ctx: ActionCtx, lease: Doc<'r2Uploads'>, pa
   const args = { uploadId: lease._id, parts };
   if (lease.completed) return lease.assetId ?? null;
   if (!partsComplete(args.parts, lease.size, lease.partSize)) throw new ConvexError('Upload parts are incomplete');
-  const file = await storageControl({ action: 'complete', key: lease.key, uploadId: lease.uploadId, parts: args.parts });
+  const file = await completeMultipart(lease, args.parts);
   if (file.size === undefined || !file.contentType) throw new ConvexError('Cloudflare did not return media metadata');
   // The bytes are already assembled in R2; a lost write race must not discard them.
   const size = file.size, contentType = file.contentType;
@@ -248,7 +248,7 @@ export async function completeUpload(ctx: ActionCtx, lease: Doc<'r2Uploads'>, pa
 }
 export const abort = action({ args: { uploadId: v.id('r2Uploads'), ...taskAuth }, returns: v.null(), handler: async (ctx, args): Promise<null> => {
   const lease = await ctx.runMutation(internal.r2.beginAbort, args);
-  if (lease&&!lease.completed) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
+  if (lease&&!lease.completed) { await abortMultipart(lease); await storageControl({ action: 'delete', key: lease.key }); await ctx.runMutation(internal.r2.removeLease, { uploadId: args.uploadId }); }
   return null;
 }});
 export const deleteObject = internalAction({ args: { key: v.string(),attempt:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
@@ -264,7 +264,7 @@ export const cleanupLease = internalAction({ args: { uploadId: v.id('r2Uploads')
   const lease = await ctx.runMutation(internal.r2.beginAbort, {uploadId:args.uploadId,scheduled:true});
   if (!lease) return null;
   try {
-    if (!lease.completed && !isStockAudioKey(lease.key)) { await storageControl({ action: 'abort', key: lease.key, uploadId: lease.uploadId }); await storageControl({ action: 'delete', key: lease.key }); }
+    if (!lease.completed && !isStockAudioKey(lease.key)) { await abortMultipart(lease); await storageControl({ action: 'delete', key: lease.key }); }
     await ctx.runMutation(internal.r2.removeLease, {uploadId:args.uploadId});
   } catch(error) {
     const attempt=args.attempt??0;if(attempt>=8){await ctx.runMutation(internal.incidents.reportIncident,{source:'storage',kind:'upload-failure',message:error instanceof Error?error.message:'Upload cleanup failed',stack:error instanceof Error?error.stack:undefined,context:{location:'convex/r2:cleanupLease',taskKind:'upload-cleanup',attempt},projectId:lease.projectId,deployment:'server'}).catch(()=>{});throw error;}

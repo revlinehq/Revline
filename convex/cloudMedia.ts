@@ -8,7 +8,7 @@ import { requireEditorAccess } from './lib/billing_access';
 import { storageControl } from './lib/media_storage';
 import { cloudMediaKind } from './schema';
 import { forgetStorageObject, recordStorageObject } from './lib/storage_accounting';
-import { partsValidator, partsComplete, partLinksValidator, signedPartUrl, signedPartUrls, storedPartsValidator, validPartNumber, verifiedParts } from './lib/upload_limits';
+import { partsValidator, partsComplete, partLinksValidator, signedPartUrl, signedPartUrls, storedPartsValidator, validPartNumber, verifiedParts, openMultipart, abortMultipart, completeMultipart } from './lib/upload_limits';
 import { uploadPartSize } from '../lib/editor/limits';
 import type { PartLink } from '../lib/storage/part-links';
 
@@ -18,6 +18,7 @@ const uploadArgs = { uploadId:v.id('cloudMedia') };
 const IDLE_MS = 2 * 3600_000;
 const MAX_AGE_MS = 24 * 3600_000;
 const MAX_PENDING = 20;
+const multipart = (row:Doc<'cloudMedia'>) => ({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize,direct:row.direct});
 /** Rows from before activity tracking count from their start. */
 const abandoned = (row:Doc<'cloudMedia'>, now:number) => (row.activeAt ?? row.createdAt) + IDLE_MS <= now;
 async function unfinishedUploads(ctx:QueryCtx|MutationCtx, ownerId:string) {
@@ -27,7 +28,7 @@ async function unfinishedUploads(ctx:QueryCtx|MutationCtx, ownerId:string) {
 export const authorize = internalQuery({args:{},returns:v.string(),handler:async ctx=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);return ownerId;
 }});
-export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2Key:v.string(),uploadId:v.string(),partSize:v.number()},returns:v.id('cloudMedia'),handler:async(ctx,args)=>{
+export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2Key:v.string(),uploadId:v.string(),partSize:v.number(),direct:v.optional(v.boolean())},returns:v.id('cloudMedia'),handler:async(ctx,args)=>{
   await requireEditorAccess(ctx,args.ownerId);
   const now=Date.now();
   // Abandoned uploads stop counting at once; their scheduled cleanup frees the storage.
@@ -38,7 +39,8 @@ export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2
   await ctx.scheduler.runAfter(IDLE_MS,internal.cloudMedia.cleanup,{uploadId:id});
   return id;
 }});
-export const start = action({args:metadata,returns:v.object({uploadId:v.id('cloudMedia'),partSize:v.number()}),handler:async(ctx,args):Promise<{uploadId:Id<'cloudMedia'>;partSize:number}>=>{
+/** `direct` asks for presigned storage links; only clients that read a part's ETag response header send it. */
+export const start = action({args:{...metadata,direct:v.optional(v.boolean())},returns:v.object({uploadId:v.id('cloudMedia'),partSize:v.number()}),handler:async(ctx,args):Promise<{uploadId:Id<'cloudMedia'>;partSize:number}>=>{
   const ownerId=await ctx.runQuery(internal.cloudMedia.authorize,{});
   const fileName=args.fileName.trim();
   if(!fileName||fileName.length>255||args.contentType.length>128||(!args.contentType.startsWith(`${args.kind}/`)&&!(args.kind==='audio'&&/^video\/(mp4|quicktime|webm)$/.test(args.contentType))))throw new ConvexError('Choose a supported video, audio or image file.');
@@ -48,11 +50,10 @@ export const start = action({args:metadata,returns:v.object({uploadId:v.id('clou
   if(args.kind!=='image'&&args.duration===undefined)throw new ConvexError('This media has no readable duration.');
   if(args.kind!=='audio'&&[args.width,args.height].some(value=>!Number.isInteger(value)||!value||value<1||value>16384))throw new ConvexError('This media has no readable dimensions.');
   const r2Key=`media/${ownerId}/library/${crypto.randomUUID()}`;
-  const opened=await storageControl({action:'create',key:r2Key,contentType:args.contentType});
-  if(!opened.uploadId)throw new ConvexError('Could not open cloud storage.');
-  const multipartId=opened.uploadId;
-  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...args,fileName,ownerId,r2Key,uploadId:multipartId,partSize}),partSize};}
-  catch(error){await storageControl({action:'abort',key:r2Key,uploadId:multipartId}).catch(()=>{});throw error;}
+  const {direct:wantsDirect,...file}=args;
+  const opened=await openMultipart(r2Key,args.contentType,!!wantsDirect);
+  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...file,fileName,ownerId,r2Key,uploadId:opened.uploadId,partSize,...(opened.direct?{direct:true}:{})}),partSize};}
+  catch(error){await abortMultipart({key:r2Key,...opened}).catch(()=>{});throw error;}
 }});
 /** The signed-in owner's uploads that never finished, for cancelling from Cloud storage. */
 export const unfinished = query({args:{},returns:v.array(v.object({uploadId:v.id('cloudMedia'),fileName:v.string(),size:v.number(),createdAt:v.number(),activeAt:v.number()})),handler:async ctx=>{
@@ -75,7 +76,7 @@ export const partUrl = action({args:{...uploadArgs,partNumber:v.number()},return
   const row=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
   if(row.completed||!validPartNumber(args.partNumber,row.size,row.partSize))throw new ConvexError('Invalid upload part.');
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
-  return signedPartUrl({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.partNumber);
+  return signedPartUrl(multipart(row),args.partNumber);
 }});
 /** The unfinished upload this owner may continue, or null when it has to start over. */
 export const resumable = internalQuery({args:{...uploadArgs,size:v.number()},handler:async(ctx,args):Promise<Doc<'cloudMedia'>|null>=>{
@@ -87,7 +88,7 @@ export const resumable = internalQuery({args:{...uploadArgs,size:v.number()},han
 /** Links for up to 100 consecutive parts in one round trip. */
 export const partUrls = action({args:{...uploadArgs,from:v.number(),count:v.number()},returns:partLinksValidator,handler:async(ctx,args):Promise<PartLink[]>=>{
   const row:Doc<'cloudMedia'>=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
-  const links=row.completed?null:await signedPartUrls({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.from,args.count);
+  const links=row.completed?null:await signedPartUrls(multipart(row),args.from,args.count);
   if(!links)throw new ConvexError('Invalid upload part.');
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
   return links;
@@ -98,7 +99,7 @@ export const resume = action({args:{...uploadArgs,size:v.number(),parts:storedPa
   const row:Doc<'cloudMedia'>|null=await ctx.runQuery(internal.cloudMedia.resumable,{uploadId:args.uploadId,size:args.size});
   if(!row)return null;
   await ctx.runMutation(internal.cloudMedia.touch,{uploadId:row._id});
-  return {partSize:row.partSize,parts:await verifiedParts({key:row.r2Key,uploadId:row.uploadId,size:row.size,partSize:row.partSize},args.parts)};
+  return {partSize:row.partSize,parts:await verifiedParts(multipart(row),args.parts)};
 }});
 export const finish = internalMutation({args:{...uploadArgs,size:v.number(),contentType:v.string()},returns:v.null(),handler:async(ctx,args)=>{
   const row=await ctx.db.get(args.uploadId);
@@ -112,7 +113,7 @@ export const complete = action({args:{...uploadArgs,parts:partsValidator},return
   const row=await ctx.runQuery(internal.cloudMedia.lease,{uploadId:args.uploadId});
   if(row.completed)return null;
   if(!partsComplete(args.parts,row.size,row.partSize))throw new ConvexError('Upload parts are incomplete.');
-  const file=await storageControl({action:'complete',key:row.r2Key,uploadId:row.uploadId,parts:args.parts});
+  const file=await completeMultipart(multipart(row),args.parts);
   if(file.size===undefined||!file.contentType)throw new ConvexError('Cloud storage did not confirm the file.');
   await ctx.runMutation(internal.cloudMedia.finish,{uploadId:row._id,size:file.size,contentType:file.contentType});
   return null;
@@ -133,7 +134,7 @@ export const cleanup = internalAction({args:{...uploadArgs,force:v.optional(v.bo
   if(!row)return null;
   if('retryAt' in row){await ctx.scheduler.runAt(row.retryAt,internal.cloudMedia.cleanup,{uploadId:args.uploadId});return null;}
   try{
-    await storageControl({action:'abort',key:row.r2Key,uploadId:row.uploadId});
+    await abortMultipart(multipart(row));
     await storageControl({action:'delete',key:row.r2Key});
     await ctx.runMutation(internal.cloudMedia.forget,{uploadId:row._id});
   }catch(error){const attempt=args.attempt??0;if(attempt>=8)throw error;await ctx.scheduler.runAfter(Math.min(3600_000,60_000*2**attempt),internal.cloudMedia.cleanup,{uploadId:row._id,force:true,attempt:attempt+1});}

@@ -7,7 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { inspectMedia } from '@/lib/editor/media';
 import type { UploadActivity } from '@/lib/editor/multipart-upload';
-import { backendLacks, uploadResumable } from '@/lib/editor/upload-resume';
+import { backendLacks, startDirect, uploadResumable } from '@/lib/editor/upload-resume';
 import { uploadActivityLabel } from '@/lib/editor/upload-source';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
@@ -57,7 +57,7 @@ export function CloudUpload({disabled,onUploaded}:{disabled:boolean;onUploaded:(
           // Choosing a file whose upload was interrupted continues it; the transport releases or keeps the unfinished upload.
           await uploadResumable<Id<'cloudMedia'>,null>(file,{
             scope:'library',
-            start:()=>start({...metadata,kind,fileName:file.name,contentType:file.type,size:file.size}),
+            start:()=>startDirect(options=>start({...metadata,kind,fileName:file.name,contentType:file.type,size:file.size,...options})),
             resume:(uploadId,parts)=>resume({uploadId,size:file.size,parts}).catch(error=>{if(!backendLacks(error))throw error;return undefined;}),
             // Each request for links marks the upload active; small batches keep that mark current on slow lines.
             partUrls:(uploadId,from,count)=>partUrls({uploadId,from,count:Math.min(count,8)}).catch(async error=>{if(!backendLacks(error))throw error;return [{partNumber:from,url:await partUrl({uploadId,partNumber:from}),ttlMs:3600_000}];}),

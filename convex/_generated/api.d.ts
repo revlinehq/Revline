@@ -67,6 +67,7 @@ import type * as lib_chat_data from "../lib/chat_data.js";
 import type * as lib_claude_model from "../lib/claude_model.js";
 import type * as lib_clipping_validator from "../lib/clipping_validator.js";
 import type * as lib_cutout_effect_validator from "../lib/cutout_effect_validator.js";
+import type * as lib_direct_upload from "../lib/direct_upload.js";
 import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
 import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
@@ -221,6 +222,7 @@ declare const fullApi: ApiFromModules<{
   "lib/claude_model": typeof lib_claude_model;
   "lib/clipping_validator": typeof lib_clipping_validator;
   "lib/cutout_effect_validator": typeof lib_cutout_effect_validator;
+  "lib/direct_upload": typeof lib_direct_upload;
   "lib/discord_alert": typeof lib_discord_alert;
   "lib/editSession": typeof lib_editSession;
   "lib/editSessionRebase": typeof lib_editSessionRebase;
