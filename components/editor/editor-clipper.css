@@ -22,9 +22,9 @@ html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-export[data-slot=button]:hover:not(:disabled){background:var(--ed-pill-hover)}
 /* The campaign chip beside the project name. */
 .project-campaign-chip{flex:0 1 auto}
-html[data-workspace-theme=dark] .project-campaign-trigger[data-slot=button]{height:28px;max-width:320px;padding:0 10px;gap:6px;border:0;background:#1b1b1b;color:#ededed;font-size:13px;font-weight:400;box-shadow:none;transition:none}
-html[data-workspace-theme=dark] .project-campaign-trigger[data-slot=button]:is(:hover,[data-state=open]){background:#2a2a2a}
-.project-campaign-trigger[data-slot=button] svg{flex:none;width:13px;height:13px;color:#969696}
+html[data-workspace-theme=dark] .project-campaign-trigger.project-campaign-trigger{height:28px;max-width:320px;padding:0 10px;gap:6px;border:0;background:#1b1b1b;color:#ededed;font-size:13px;font-weight:400;box-shadow:none;transition:none}
+html[data-workspace-theme=dark] .project-campaign-trigger.project-campaign-trigger:is(:hover,[data-state=open]){background:#2a2a2a}
+.project-campaign-trigger.project-campaign-trigger svg{flex:none;width:13px;height:13px;color:#969696}
 
 /* Media panel: two tabs as one segmented control, then the tab's content. */
 html[data-workspace-theme=dark] .conversation-editor .preview-inspector .inspector-media-content,html[data-workspace-theme=dark] .preview-inspector-sheet .inspector-media-content{padding:14px 12px}
