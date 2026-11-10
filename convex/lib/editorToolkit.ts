@@ -4,7 +4,7 @@ import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { laneBaseline } from '../../lib/ai/lanes/task';
+import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../../lib/ai/lanes/task';
 import { exhaustedLaneError, finishLane, type FinishResult } from './laneFinish';
 import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
@@ -1056,6 +1056,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. Repair failures; after three failed checks stop and report their output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
+      // An earlier failed step left the draft guarded. Revalidate the last good draft so a passed check can save it.
+      await editSession.confirmRepairs();
       if(lane==='reel'&&editSession.timeline.clips.some(clip=>clip.kind==='caption')){
         const audibleIds=new Set(editSession.timeline.clips.filter(clip=>clip.volume!==0&&(clip.kind==='audio'||clip.kind==='video'&&!clip.audioSeparated)).map(clip=>clip.assetId));
         // Each call starts with metadata rows; saved transcripts live in source analysis.
@@ -1078,7 +1080,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         catch(error){finishResult=await laneCtx.runMutation(internal.lanes.recordFinish,{...taskScope,result:{...finishResult,passed:false,failures:[`The checked draft could not be saved: ${error instanceof Error?error.message:String(error)}`]}});}
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
-      return {...finishResult,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?'Stop. Report these failures honestly; this task is unfinished.':'Repair the listed failures and call finish again.'};
+      return {...finishResult,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?`Stop. This was the last of ${MAX_FINISH_ATTEMPTS} finish checks for this request, so finish and the editing tools are now closed. Report these failures honestly; this task is unfinished.`:`Repair the listed failures and call finish again. ${MAX_FINISH_ATTEMPTS-finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} finish checks remain for this request.`};
     }}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',

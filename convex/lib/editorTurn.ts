@@ -173,14 +173,15 @@ For edit requests, use one brief initial sentence stating the requested action, 
             const completedSteps = [...steps, ...current];
             if (!hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();
             // A failed finish is repaired by finish itself after the edits pass.
-            const openEdits=completedSteps.map(step=>({content:step.content.filter(part=>!part||typeof part!=='object'||!('toolName' in part)||part.toolName!=='finish')}));
+            // A passed finish stays in: it supersedes the failed steps before it.
+            const openEdits=completedSteps.map(step=>({content:step.content.filter(part=>!part||typeof part!=='object'||!('toolName' in part)||part.toolName!=='finish'||passedFinish(part))}));
             const unresolved=hasUnresolvedToolFailures(openEdits);
-            // Closing the lane removes its tools. Resolve earlier failed edits
-            // first, while their correction tools are still available.
-            const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='finish'||!unresolved)&&(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
+            // finish stays callable: a failed step the agent replaced with another tool can never be retried,
+            // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
+            const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw exhaustedLaneError(failed.lane,JSON.stringify(failed.failures));
-            return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nFinish is unavailable until these failed edits are corrected: ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
+            return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current])],
@@ -252,6 +253,11 @@ For edit requests, use one brief initial sentence stating the requested action, 
     await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
   } finally { clearInterval(watch); await costHistory.flush(); }
   return null;
+}
+
+function passedFinish(part: object) {
+  const { type, output } = part as { type?: string; output?: { type?: string; value?: { passed?: unknown }; passed?: unknown } };
+  return type === 'tool-result' && (output?.type === 'json' ? output.value?.passed : output?.passed) === true;
 }
 
 /** A choice card ends the turn: the user's pick arrives as their next message. */
