@@ -20,6 +20,9 @@ export const BASELINE_TASK_KINDS = ['highlights', 'transcribe', 'understand', 's
 /** Added since. A deployed processor may not have these: Convex checks `processorCan` first. */
 export const GATED_READ_MODES = ['looks'] as const;
 export const GATED_TASK_KINDS = [] as const;
+/** Links the first importer did not read (it knew YouTube, Twitch VODs, Kick, X and MP4 files). An older processor
+ *  would download their page as a file and fail, so Convex refuses them with a plain message until one reports these. */
+export const GATED_IMPORT_SOURCES = ['twitch-clips', 'more-sites'] as const;
 
 /** Removed with the motion and recreate lanes. Stored rows may still name them, so the schema keeps them; no processor
  *  runs or reports them, and nothing queues them. */
@@ -28,10 +31,10 @@ export const RETIRED_TASK_KINDS = ['reference', 'blueprint'] as const;
 
 export type ProcessorReadMode = (typeof BASELINE_READ_MODES)[number] | (typeof GATED_READ_MODES)[number] | (typeof RETIRED_READ_MODES)[number];
 export type ProcessorTaskKind = (typeof BASELINE_TASK_KINDS)[number] | (typeof GATED_TASK_KINDS)[number] | (typeof RETIRED_TASK_KINDS)[number];
-export type ProcessorCapability = `read:${ProcessorReadMode}` | `kind:${ProcessorTaskKind}`;
+export type ProcessorCapability = `read:${ProcessorReadMode}` | `kind:${ProcessorTaskKind}` | `import:${(typeof GATED_IMPORT_SOURCES)[number]}`;
 
-const ids = (prefix: 'read' | 'kind', names: readonly string[]) => names.map(name => `${prefix}:${name}`);
+const ids = (prefix: 'read' | 'kind' | 'import', names: readonly string[]) => names.map(name => `${prefix}:${name}`);
 const BASELINE: readonly string[] = [...ids('read', BASELINE_READ_MODES), ...ids('kind', BASELINE_TASK_KINDS)];
 /** Everything this code's processor can do: what it reports at sign-in. */
-export const PROCESSOR_CAPABILITIES = [...BASELINE, ...ids('read', GATED_READ_MODES), ...ids('kind', GATED_TASK_KINDS)] as ProcessorCapability[];
+export const PROCESSOR_CAPABILITIES = [...BASELINE, ...ids('read', GATED_READ_MODES), ...ids('kind', GATED_TASK_KINDS), ...ids('import', GATED_IMPORT_SOURCES)] as ProcessorCapability[];
 export const isBaselineCapability = (capability: string) => BASELINE.includes(capability);
