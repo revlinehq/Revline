@@ -22,6 +22,8 @@ const config: NextConfig = {
       { source: '/dashboard', destination: SIGNED_IN_HOME_PATH, permanent: false },
       // The retired project list now lives with the conversation history.
       { source: '/projects', destination: '/chats', permanent: false },
+      // Cloud storage became the Library.
+      { source: '/storage', destination: '/library', permanent: false },
       // Inspo Motion (Sharingan) was retired; old share links land on the home page.
       { source: '/sharingan', destination: '/', permanent: false },
       // Brand kits and Campaigns were removed; old links land on the home.

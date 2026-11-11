@@ -130,7 +130,7 @@ export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startAr
   if (args.duration !== undefined && (!Number.isFinite(args.duration) || args.duration <= 0)) throw new ConvexError('Invalid media duration');
   if (args.kind !== 'audio' && args.kind !== 'model' && (![args.width, args.height].every(n => Number.isInteger(n) && n! > 0 && n! <= 16384))) throw new ConvexError('This media has no readable dimensions');
   const partSize = uploadPartSize(args.size);
-  if (!partSize) throw new ConvexError('This file is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.');
+  if (!partSize) throw new ConvexError('This file is larger than storage accepts in one upload (about 930 GB). Split it before importing.');
   const partCount = Math.ceil(args.size / partSize);
   const key = newProjectMediaKey(ownerId, args.projectId);
   const created = await openMultipart(key, args.contentType, !!args.direct && !args.taskId && !args.jobId && !trustedOwnerId);

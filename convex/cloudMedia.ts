@@ -36,7 +36,7 @@ export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2
   const now=Date.now();
   // Abandoned uploads stop counting at once; their scheduled cleanup frees the storage.
   const pending=(await unfinishedUploads(ctx,args.ownerId)).filter(row=>!abandoned(row,now));
-  if(pending.length>=MAX_PENDING)throw new ConvexError(`You have ${MAX_PENDING} unfinished cloud uploads. Cancel some in Cloud storage, then try again.`);
+  if(pending.length>=MAX_PENDING)throw new ConvexError(`You have ${MAX_PENDING} unfinished cloud uploads. Cancel some in the Library, then try again.`);
   const id=await ctx.db.insert('cloudMedia',{...args,createdAt:now,activeAt:now,expiresAt:now+IDLE_MS,completed:false});
   await recordStorageObject(ctx,{...args,createdAt:now,pending:true,folderId});
   await ctx.scheduler.runAfter(IDLE_MS,internal.cloudMedia.cleanup,{uploadId:id});
@@ -63,7 +63,7 @@ async function openLibraryUpload(ctx:ActionCtx,args:ObjectType<typeof startArgs>
   try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...file,fileName,ownerId,r2Key,uploadId:opened.uploadId,partSize,...(opened.direct?{direct:true}:{}),...(folderId?{folderId}:{})}),partSize};}
   catch(error){await abortMultipart({key:r2Key,...opened}).catch(()=>{});throw error;}
 }
-/** The signed-in owner's uploads that never finished, for cancelling from Cloud storage. */
+/** The signed-in owner's uploads that never finished, for cancelling from the Library. */
 export const unfinished = query({args:{},returns:v.array(v.object({uploadId:v.id('cloudMedia'),fileName:v.string(),size:v.number(),createdAt:v.number(),activeAt:v.number()})),handler:async ctx=>{
   const rows=await unfinishedUploads(ctx,await requireOwner(ctx));
   return rows.map(row=>({uploadId:row._id,fileName:row.fileName,size:row.size,createdAt:row.createdAt,activeAt:row.activeAt??row.createdAt})).sort((a,b)=>a.activeAt-b.activeAt);
@@ -122,7 +122,7 @@ export const complete = action({args:{...uploadArgs,parts:partsValidator},return
   if(row.completed)return null;
   if(!partsComplete(args.parts,row.size,row.partSize))throw new ConvexError('Upload parts are incomplete.');
   const file=await completeMultipart(multipart(row),args.parts);
-  if(file.size===undefined||!file.contentType)throw new ConvexError('Cloud storage did not confirm the file.');
+  if(file.size===undefined||!file.contentType)throw new ConvexError('Storage did not confirm the file.');
   await ctx.runMutation(internal.cloudMedia.finish,{uploadId:row._id,size:file.size,contentType:file.contentType});
   return null;
 }});
