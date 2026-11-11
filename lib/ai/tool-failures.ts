@@ -1,3 +1,4 @@
+import { plainFailureText } from './failure-text';
 import { isOverlapPlacementRejection } from '../editor/timeline-edit-errors';
 import type { EffectPlan } from './edit-plan';
 import { isPassiveRead } from './read-only-tools';
@@ -113,7 +114,7 @@ function clipPlanStage(input: unknown) { return Array.isArray(record(input).foun
 
 
 function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
-  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; tool?: string; target?: string; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement; clipPlan?: 'found' | 'accepted' }>();
+  const calls = new Map<string, { key: string; input: unknown }>(), pending = new Map<string, { count: number; ids: string[]; tool?: string; reason?: string; target?: string; placement?: string; plan?:string[]; zoom?:string; zoomEvidence?:string; corrected?: boolean; review?:Map<string,string>; reviewed?:Set<string>; reviewEpoch?:number; reviewRevision?:number; captionAssetId?:string; manualCaptions?:boolean; frameRefinement?:FrameRefinement; clipPlan?: 'found' | 'accepted' }>();
   let revision:number|undefined,editEpoch=0;
   const plans=new Map<string,string>();
   for (const step of steps) for (const value of step.content) {
@@ -128,7 +129,7 @@ function unresolvedFailures(steps: ToolSteps, recoverPlacements = false) {
     else if ((part.type === 'tool-error' || (part.type === 'tool-result' && (output.success === false || record(part.output).type === 'error-text'))) && !reviewUnavailable(part)) {
       const failure=part.error??output.error??record(part.output).value;
       const rejectedPlans=record(input).plans;
-      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], tool: part.toolName, target: editTarget(input), ...(part.toolName === 'planClips' ? { clipPlan: clipPlanStage(input) } : {}), ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
+      pending.set(key, { count: (pending.get(key)?.count ?? 0) + 1, ids: [...pending.get(key)?.ids ?? [], id], tool: part.toolName, reason: failureReasonText(failure, output), target: editTarget(input), ...(part.toolName === 'planClips' ? { clipPlan: clipPlanStage(input) } : {}), ...(recoverPlacements&&part.toolName==='inspectFrames'?{frameRefinement:frameRefinement(input,output)}:{}), ...(recoverPlacements && isOverlapPlacementRejection(part.error) ? { placement: placementTarget(part.toolName, input) } : {}),...(recoverPlacements&&part.toolName==='planEffects'&&planPreflightRejection(failure)&&Array.isArray(rejectedPlans)&&rejectedPlans.length&&rejectedPlans.every(item=>typeof record(item).id==='string')?{plan:rejectedPlans.map(item=>record(item).id as string)}:{}),...(recoverPlacements&&zoomMotionRejection(failure)?{zoom:zoomTarget(part.toolName,input)}:{}),...(recoverPlacements&&zoomEvidenceRejection(failure)?{zoomEvidence:zoomEvidenceTarget(part.toolName,input)}:{}),...(recoverPlacements&&part.toolName==='previewRender'&&reviewWindowRejection(failure)?{review:reviewScope(input,plans)}:{}),...(recoverPlacements&&part.toolName==='addSubtitlesFromTranscript'&&typeof record(input).assetId==='string'&&/Clip timing must be finite, nonnegative, and at least one frame long/.test(String(failure))?{captionAssetId:record(input).assetId as string}:{}) });
     } else if (part.type === 'tool-result') {
       if(!pending.get(key)?.review)pending.delete(key);
       // The lane's real checks passed on the current timeline, so earlier failed attempts were worked around
@@ -205,8 +206,38 @@ function withoutFreeRefusals(steps: ToolSteps): ToolSteps {
   return steps.map(step => ({ content: step.content.filter(value => { const part = record(value); return part.type !== 'tool-result' || outputValue(part.output).attemptRecorded !== false; }) }));
 }
 
+/** Why a failed or refused tool result failed, in the tool's own words: its error, its listed failures, or what it asked for next. */
+function failureReasonText(failure: unknown, output: Record<string, unknown>) {
+  const listed = Array.isArray(output.failures) ? output.failures.filter(item => typeof item === 'string').join(' ') : '';
+  const said = failure !== undefined && failure !== null && typeof failure !== 'object' ? failureText(failure) : plainFailureText(failure);
+  return plainFailureText(said || listed || (typeof output.next === 'string' ? output.next : '') || (failure ? failureText(JSON.stringify(failure)) : '')).slice(0, 400);
+}
+
+/** The command that failed the same way three times, and why. A refusal that spends no attempt counts once it comes
+ * back three times with the same answer and no edit in between: repeating it again cannot help. */
+export function repeatedToolFailure(steps: ToolSteps): { tool: string; reason: string } | undefined {
+  for (const failure of unresolvedFailures(withoutFreeRefusals(steps)).values()) if (failure.count >= 3) return { tool: failure.tool ?? 'a tool', reason: failure.reason ?? '' };
+  const inputs = new Map<string, unknown>(), refused = new Map<string, number>();
+  for (const step of steps) for (const value of step.content) {
+    const part = record(value), id = String(part.toolCallId ?? ''), tool = String(part.toolName ?? '');
+    if (part.type === 'tool-call') { inputs.set(id, part.input); continue; }
+    if (part.type !== 'tool-result' || part.preliminary) continue;
+    const output = outputValue(part.output), command = `${tool}:${stable(part.input ?? inputs.get(id))}`;
+    if (output.attemptRecorded !== false) {
+      // Only refusals in a row count: an edit in between, or another answer from the same command, starts over.
+      if (output.saved === true || output.staged === true || output.applied === true) refused.clear();
+      else for (const key of refused.keys()) if (key.startsWith(`${command}=`)) refused.delete(key);
+      continue;
+    }
+    const key = `${command}=${stable(output)}`, count = (refused.get(key) ?? 0) + 1;
+    refused.set(key, count);
+    if (count >= 3) return { tool, reason: failureReasonText(undefined, output) };
+  }
+  return undefined;
+}
+
 export function hasRepeatedToolFailures(steps: ToolSteps) {
-  return [...unresolvedFailures(withoutFreeRefusals(steps)).values()].some(failure => failure.count >= 3);
+  return repeatedToolFailure(steps) !== undefined;
 }
 
 export type RenderReviewRequirements = {
@@ -325,8 +356,11 @@ export class AssistantRenderReviewError extends Error {
 }
 
 export class AssistantToolRetryError extends Error {
-  constructor() {
-    super('Stopped after the same tool command failed three times. Previously saved edits remain; inspect the current timeline before continuing.');
+  constructor(failure?: { tool: string; reason: string }) {
+    // Name the step and its reason: "the same command failed" tells the user nothing they can act on.
+    super(failure
+      ? `Stopped because ${failure.tool} failed the same way three times${failure.reason ? `: ${failure.reason.replace(/[.\s]+$/, '')}` : ''}. Repeating it would not have helped. Edits made before it are kept; send the request again or say what to change.`
+      : 'Stopped after the same tool command failed three times. Previously saved edits remain; inspect the current timeline before continuing.');
     this.name = 'AssistantToolRetryError';
   }
 }

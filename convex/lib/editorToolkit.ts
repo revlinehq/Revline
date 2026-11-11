@@ -337,6 +337,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     beforeChange: beginEditing,
   }, abortSignal);
   if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(tracksChanges())fastReview.changed(before,options.draft);}
+  // Times queued against an earlier, longer draft are moved onto the frames this timeline has.
+  fastReview.fit(editSession.timeline);
   // Approved work (lib/editor/approvals.ts) is refused unless the call passes overrideApproved with the user's reason.
   // The override covers the calls running under it; what it let through is reported back on that call.
   const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
@@ -668,7 +670,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
       if (state.started) started = true;
       if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
-      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), resolution:resolution??720, frames: (await snapshotFrames(state)).map(frame => ({ ...frame })) }; }
+      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), resolution:resolution??720, frames: (await snapshotFrames(state)).map(frame => ({ ...frame, time: Math.round(frame.time * 1000) / 1000 })) }; }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
@@ -720,6 +722,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const trimChangeInput=z.object({clipId:z.string().min(1),duration:z.number().positive(),sourceStart:z.number().min(0).optional()});
   const verifyCurrentTimeline = async () => {
     await editSession.wait();
+    fastReview.fit(editSession.timeline);
     const missingFrames = !clippingActive && tracksChanges() ? fastReview.feedback() : undefined;
     if (missingFrames) throw new Error(missingFrames);
     // Effect plans gate only lanes that run full checks; a lane switch mid-task cannot strand them behind refused review tools.
@@ -902,6 +905,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(lane==='reel'){const planned=((await laneCtx.runQuery(internal.lanes.task,taskScope)) as LaneTask|null)?.script as SavedScript|undefined;if(planned&&assets.some(asset=>asset._id===planned.assetId))await loadAsset(planned.assetId);}
       if(lane==='clip')await selectClipQa();
       // Unviewed changed frames keep the task open the same way in the app and over MCP. The refusal spends no finish attempt.
+      fastReview.fit(editSession.timeline);
       if(recipe().frames==='changes'&&!clippingActive){const missing=fastReview.feedback();if(missing)return {passed:false,success:false,attemptRecorded:false,pendingFrameTimes:fastReview.times(),next:missing};}
       const frameTask=recipe().frames==='sample'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
@@ -919,7 +923,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
       // The state the reply must report: whether this request's edits are saved now, at which revision, and what Undo does.
-      const saveState=editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes or this request ends; a user Stop or a conflicting manual edit discards them.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
+      const saveState=editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes. If this request ends or is stopped first, the last valid draft is normally saved as one undoable revision.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
       return {...finishResult,...saveState,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?`Stop. This was the last of ${MAX_FINISH_ATTEMPTS} finish checks for this request, so finish and the editing tools are now closed. Report these failures honestly; this task is unfinished.`:`Repair the listed failures and call finish again. ${MAX_FINISH_ATTEMPTS-finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} finish checks remain for this request.`};
     }}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
@@ -2239,7 +2243,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if(options.scriptFirst&&lane==='reel'&&!scriptSaved&&!noScript&&['retainSourceRanges','cleanSpeech','split','trim'].includes(name)&&rawTake(input.clipId))throw new Error(`Read the script before cutting this take: call readScript ${JSON.stringify({clipId:input.clipId})}, then planScript, and cut once with the ranges planScript returns.`);
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
-          if(saved!==undefined)fastReview.restore(saved);
+          if(saved!==undefined){fastReview.restore(saved);fastReview.fit(editSession.timeline);}
         }
         await ensureBaseline();
       }
