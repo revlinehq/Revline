@@ -193,7 +193,7 @@ const isHex = (byte: number) => (byte >= 0x30 && byte <= 0x39) || (byte >= 0x61 
  * "<hex id>:T<byte length in hex>,<text>" and has no line end: the next row starts on the byte after the text,
  * so rows cannot be found by looking for line starts. Lengths are UTF-8 bytes, hence the walk over bytes.
  */
-function flightRows(flight: string): FlightRow[] {
+export function flightRows(flight: string): FlightRow[] {
   const bytes = new TextEncoder().encode(flight), decoder = new TextDecoder();
   const rows: FlightRow[] = [];
   const lineEnd = (from: number) => { const end = bytes.indexOf(0x0a, from); return end < 0 ? bytes.length : end; };

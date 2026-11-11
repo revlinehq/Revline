@@ -1,7 +1,7 @@
 // Reading Content Rewards' public Discover page: the featured banner, Trending this week, New campaigns,
 // Most searched and Top clips, in the order their page lists them. Pure text in, typed lists out: nothing here
 // makes a request. A section this parser does not understand is left out, so the stored one stays.
-import { clip, flightText, isSourceId, type ParsedCampaign } from './source';
+import { clip, flightRows, flightText, isSourceId, type ParsedCampaign } from './source';
 
 /** The public Discover page (`/discover` redirects here, and the reader follows no redirects). */
 export const DISCOVER_URL = 'https://contentrewards.com/c/discover';
@@ -31,33 +31,6 @@ type Json = Record<string, unknown>;
 const isObject = (value: unknown): value is Json => !!value && typeof value === 'object' && !Array.isArray(value);
 const compact = <T extends object>(value: T): T => Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as T;
 
-/**
- * The stream's rows by id. A text row ("<id>:T<bytes in hex>,<text>") is kept as its text; any other row runs
- * to the end of its line and is kept raw.
- */
-function flightRows(flight: string) {
-  const bytes = new TextEncoder().encode(flight), decoder = new TextDecoder();
-  const texts = new Map<string, string>(), raw: string[] = [];
-  for (let at = 0; at < bytes.length;) {
-    let colon = at;
-    while (colon < bytes.length && bytes[colon] !== 58 && colon - at < 12) colon++;
-    if (bytes[colon] !== 58) break;
-    const id = decoder.decode(bytes.subarray(at, colon));
-    if (bytes[colon + 1] === 84) {
-      const comma = bytes.indexOf(44, colon);
-      const length = comma < 0 ? NaN : parseInt(decoder.decode(bytes.subarray(colon + 2, comma)), 16);
-      if (!Number.isFinite(length)) break;
-      texts.set(id, decoder.decode(bytes.subarray(comma + 1, comma + 1 + length)));
-      at = comma + 1 + length;
-    } else {
-      const end = bytes.indexOf(10, colon);
-      raw.push(decoder.decode(bytes.subarray(colon + 1, end < 0 ? bytes.length : end)));
-      at = end < 0 ? bytes.length : end + 1;
-    }
-  }
-  return { texts, raw };
-}
-
 /** Every cached query (`{ queryKey: [...], state }`) anywhere in a parsed value. */
 function queriesIn(value: unknown, found: Json[] = [], depth = 0) {
   if (depth > 40 || !value || typeof value !== 'object') return found;
@@ -74,7 +47,8 @@ export function parseDiscoverPage(html: string): DiscoverReading {
   try {
     const flight = flightText(html);
     if (!flight) return { kind: 'parse', reason: 'page carries no embedded data' };
-    const { texts, raw } = flightRows(flight);
+    const rows = flightRows(flight);
+    const texts = new Map(rows.filter(row => row.text).map(row => [row.id, row.body])), raw = rows.filter(row => !row.text).map(row => row.body);
     /** React's flight encoding: "$undefined", a literal leading "$" as "$$", long text as a pointer ("$7b"). */
     const plain = (value: unknown) => {
       if (typeof value !== 'string' || !value.startsWith('$')) return value ?? undefined;
