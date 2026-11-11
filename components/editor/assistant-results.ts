@@ -71,7 +71,12 @@ export function turnPublicationReceipt(messages:readonly ChatMessage[]):Timeline
   });
   return latestPublicationReceipt(receipts);
 }
-const errorMessage = (value: unknown) => typeof value === 'string' ? value : typeof record(value)?.message === 'string' ? String(record(value)!.message) : 'This step could not finish.';
+/** The reason a failed result carries: its message, or the checks it lists as failed. Empty when it gives none. */
+const errorMessage = (value: unknown) => {
+  if (typeof value === 'string') return value;
+  const result = record(value), failures = Array.isArray(result?.failures) ? result.failures.filter(item => typeof item === 'string') : [];
+  return typeof result?.message === 'string' ? result.message : failures.length ? `The final check did not pass: ${failures.join(' ')}` : '';
+};
 function unpack(value: unknown): { output?: Record<string, unknown>; error?: string } {
   // Tools that return images (getFrames) store the model content: a list of text and image parts.
   if (Array.isArray(value)) {
@@ -81,16 +86,18 @@ function unpack(value: unknown): { output?: Record<string, unknown>; error?: str
       if (text?.type !== 'text' || typeof text.text !== 'string') return [];
       try { const parsed = JSON.parse(text.text); return record(parsed) ? [unpack(parsed)] : []; } catch { return []; }
     });
-    return { output: { ...Object.assign({}, ...structured.map(part => part.output)), type: 'content', value }, ...(structured.find(part => part.error)?.error ? { error: structured.find(part => part.error)!.error } : {}) };
+    return { output: { ...Object.assign({}, ...structured.map(part => part.output)), type: 'content', value }, ...(structured.some(part => part.error !== undefined) ? { error: structured.find(part => part.error !== undefined)!.error } : {}) };
   }
   const wrapped = record(value);
   if (wrapped && (wrapped.type === 'error-text' || wrapped.type === 'error-json')) return { error: errorMessage(wrapped.value) };
   if (wrapped && (wrapped.type === 'json' || wrapped.type === 'text')) return unpack(wrapped.value);
   if (wrapped?.type === 'content' && Array.isArray(wrapped.value)) return unpack(wrapped.value);
   if (typeof value === 'string') {
-    try { return unpack(JSON.parse(value)); } catch { return { error: value || 'This step could not finish.' }; }
+    try { return unpack(JSON.parse(value)); } catch { return { error: value }; }
   }
-  if (wrapped?.error || wrapped?.isError === true || wrapped?.success === false) return { output: wrapped, error: errorMessage(wrapped.error ?? wrapped) };
+  // A refusal that spent no attempt (finish asking for frames to be looked at first) is a next step, not a failure.
+  if (wrapped?.attemptRecorded === false && !wrapped.error) return { output: wrapped };
+  if (wrapped?.error || wrapped?.isError === true || wrapped?.success === false) return { output: wrapped, error: errorMessage(wrapped.error ?? wrapped) || errorMessage(wrapped) };
   return { output: wrapped };
 }
 
@@ -99,8 +106,8 @@ function chatToolFromPart(value: unknown): ChatTool | null {
   const part = record(value);
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
-  const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || !!error || (part.state === 'output-available' && !output);
-  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || 'This step could not finish.')))).slice(0, 240) } : {}) };
+  const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || error !== undefined || (part.state === 'output-available' && !output);
+  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || '')))).slice(0, 240) } : {}) };
 }
 
 /** Images a step returned (frames), from its raw output or the content sent to the model. */
