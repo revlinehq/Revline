@@ -1,20 +1,35 @@
 'use client';
 import { userError } from '@/lib/user-error';
 
-import { useRef, useState } from 'react';
+import { Suspense, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
-import { BillingSection, type CheckoutReturn } from './billing-section';
+import { BillingSection } from './billing-section';
 import { DevAiCosts } from './dev-ai-costs';
 import { McpConnectorSection } from './mcp-connector-section';
 import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/settings-card';
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { UserAvatar, useConnectedPicture } from './user-avatar';
 
+/** The Plan and Profile cards, still, until the account is known. */
+export function SettingsSkeleton() {
+  return <div className="contents" role="status" aria-label="Loading your account">{[['Plan', 'Plan', 'Price', 'Status'], ['Profile', 'Photo', 'Name', 'Email']].map(([title, ...rows]) => <SettingsCard key={title} title={title}>
+    {rows.map(label => <SettingsRow key={label} label={label}><Skeleton className={label === 'Photo' ? 'size-10 rounded-full' : 'h-4 w-44 max-w-full'} /></SettingsRow>)}
+  </SettingsCard>)}</div>;
+}
+
+/** The plan card. A return from Stripe (?checkout=) is read from the address in the browser, so the page itself stays static. */
+function BillingFromAddress() {
+  const checkout = useSearchParams().get('checkout');
+  return <BillingSection checkoutReturn={checkout === 'success' || checkout === 'canceled' ? checkout : undefined} />;
+}
+
 /** Settings (/profile): the plan, the profile (where signing out is) and connected AI apps, as one column of cards. */
-export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
+export function ProfilePage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const clerk = useClerk();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -44,8 +59,8 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
   }
   return <main className="dash-content"><div className="dash-column settings-page">
     <h1 className="sr-only">Settings</h1>
-    {!isLoaded ? <div className="dash-empty" role="status"><p>Loading your account…</p></div> : <>
-      <BillingSection checkoutReturn={checkoutReturn} />
+    {!isLoaded ? <SettingsSkeleton /> : <>
+      <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
       <SettingsCard title="Profile" action={<>
         {isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}
         {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}

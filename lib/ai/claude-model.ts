@@ -132,10 +132,37 @@ export function freeEditorModel(env: ClaudeModelEnvironment = process.env): Clau
   return enforceClaudeModelPolicy({ provider: 'openai', modelId: FREE_EDITOR_MODEL_CHOICE, modelChoice: FREE_EDITOR_MODEL_CHOICE, reasoningEffort: 'low' }, env);
 }
 
-/** The one model production edits with, at medium effort: Haiku 5.5. Production offers no picker. */
-export function productionEditorModel(): ClaudeModelSelection & { modelChoice: ClaudeModelChoice; reasoningEffort: EditorReasoningEffort } {
-  const haiku = CLAUDE_EDIT_MODELS.find(model => model.id === 'haiku')!;
-  return { provider: 'anthropic', modelId: haiku.modelId, modelChoice: haiku.id, reasoningEffort: 'medium' };
+/** The models and efforts one account may pick, and what runs when it picks nothing. */
+export type EditorOffer = { models: readonly ClaudeModelChoice[]; efforts: readonly EditorReasoningEffort[]; default: { model: ClaudeModelChoice; effort: EditorReasoningEffort } };
+
+/**
+ * What a paid account may pick in production, per plan. This is the one place that widens or narrows it;
+ * the composer's pickers, `send` and the run itself all read it, so a choice listed here is the one that runs.
+ * `default` runs when nothing is picked and for anything not listed (a stale tab, an old queued turn, iPhone).
+ *
+ * As listed nothing costs more than the default, Haiku 5.5 ($0.10 in / $0.50 out per 1M tokens) at medium:
+ * Ultra can only lower the effort. Widening raises what a turn can cost, per token against Haiku 5.5:
+ * 'sonnet' 20x ($2 / $10), 'opus' 40x ($4 / $20), 'gpt-6.1-terra' 10x, 'gpt-6.1-sol' 20x, 'gpt-6-astra' 100x;
+ * 'high' and 'xhigh' keep the token price and spend more thinking and output tokens per turn.
+ */
+export const PRODUCTION_EDITOR_OFFER = {
+  default: { model: 'haiku', effort: 'medium' },
+  pro: { models: ['haiku'], efforts: ['medium'] },
+  ultra: { models: ['haiku'], efforts: ['low', 'medium'] },
+} as const satisfies { default: EditorOffer['default'] } & Record<'pro' | 'ultra', Omit<EditorOffer, 'default'>>;
+
+/** EDITOR_EFFORT_SWITCHER=false leaves every plan the default effort alone, as it does outside production. */
+export function productionEditorOffer(ultra: boolean, env: ClaudeModelEnvironment = process.env): EditorOffer {
+  const plan = PRODUCTION_EDITOR_OFFER[ultra ? 'ultra' : 'pro'];
+  return { models: plan.models, efforts: editorEffortSwitcherOffered(env) ? plan.efforts : [PRODUCTION_EDITOR_OFFER.default.effort], default: PRODUCTION_EDITOR_OFFER.default };
+}
+
+/** The selection an offer runs for what was asked: a model or effort it does not list becomes its default. */
+export function offeredEditorModel(offer: EditorOffer, asked: { modelChoice?: unknown; reasoningEffort?: unknown } = {}): ClaudeModelSelection & { modelChoice: ClaudeModelChoice; reasoningEffort: EditorReasoningEffort } {
+  const choice = offer.models.find(id => id === asked.modelChoice) ?? offer.default.model;
+  const reasoningEffort = offer.efforts.find(effort => effort === asked.reasoningEffort) ?? offer.default.effort;
+  const model = EDITOR_MODELS.find(item => item.id === choice)!;
+  return { provider: OPENAI_EDIT_MODELS.some(item => item.id === choice) ? 'openai' : 'anthropic', modelId: model.modelId, modelChoice: choice, reasoningEffort };
 }
 
 /** EDITOR_EFFORT_SWITCHER=false turns the effort picker off for everyone; unset leaves it to the plan. */

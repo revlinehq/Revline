@@ -6,7 +6,9 @@ export async function syncTurnView(ctx: MutationCtx, turn: Doc<'assistantTurns'>
   const row = await ctx.db.query('assistantTurnViews').withIndex('by_prompt', q => q.eq('projectId', turn.projectId).eq('promptMessageId', turn.promptMessageId)).unique();
   const value = { projectId: turn.projectId, promptMessageId: turn.promptMessageId, runId: turn.runId, turnId:turn._id,segment:turn.segment,status: turn.status, error: turn.error, resuming: turn.status === 'running' && (turn.pass > 0 || !!turn.args.continuation) };
   if (!row) await ctx.db.insert('assistantTurnViews', value);
-  else if (row.runId !== value.runId || row.segment!==value.segment || row.status !== value.status || row.error !== value.error || row.resuming !== value.resuming) await ctx.db.patch(row._id, value);
+  // A new run of the same request (Retry) has not said what it runs on yet: drop the previous run's model.
+  else if (row.runId !== value.runId) await ctx.db.patch(row._id, { ...value, model: undefined, effort: undefined });
+  else if (row.segment!==value.segment || row.status !== value.status || row.error !== value.error || row.resuming !== value.resuming) await ctx.db.patch(row._id, value);
 }
 export async function patchTurn(ctx: MutationCtx, turn: Doc<'assistantTurns'>, patch: Partial<Omit<Doc<'assistantTurns'>, '_id' | '_creationTime'>>) {
   await ctx.db.patch(turn._id, patch);

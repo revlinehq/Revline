@@ -67,7 +67,9 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   const failure = pending?.status === 'failed' ? pending.error ?? 'This post could not be sent.' : pending?.status === 'created' && !inFlight && pending.failed > 0 ? pending.postError ?? 'A post could not be sent.' : '';
   const recent = !!pending && now - pending.createdAt < RECENT_MS;
 
-  async function submit(schedule: boolean) {
+  /** A picked time makes this a scheduled post; without one it goes out now. */
+  const schedule = !!when;
+  async function submit() {
     if (busy || !picked.length) return;
     const scheduledAt = schedule ? new Date(when).getTime() : undefined;
     if (schedule && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a date and time in the future.'); return; }
@@ -76,13 +78,13 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
       await onBeforePost();
       await start({ projectId, ...(timelineId ? { timelineId } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}) });
       setOpen(false);
-    } catch (reason) { setError(userError(reason, 'Could not start this post.')); }
+    } catch (reason) { setError(userError(reason, schedule ? 'Could not schedule this post.' : 'Could not start this post.')); }
     finally { setBusy(false); }
   }
 
   if (exporting || inFlight) return <div className="editor-post-state" role="status">
     <span className="editor-post-pill">
-      {exporting ? 'Exporting, then posting' : `Posting to ${accountsLabel(total)}`}
+      {exporting ? pending!.scheduledAt ? 'Exporting, then scheduling' : 'Exporting, then posting' : `Posting to ${accountsLabel(total)}`}
       {exporting && <Progress className="editor-post-progress" aria-label="Export progress" max={100} value={pending!.exportStatus === 'rendering' ? pending!.exportProgress : 0} />}
       {exporting && <Button type="button" variant="ghost" size="icon-xs" className="editor-post-cancel" aria-label="Cancel this post" title="Cancel this post. The export keeps going." onClick={() => void cancel({ pendingId: pending!.id }).catch(() => {})}><X /></Button>}
     </span>
@@ -112,12 +114,11 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
           {live.has(platform) ? <Link href="/accounts">Connect</Link> : <em>Coming soon</em>}
         </li>)}</ul>}
         <div className="editor-post-schedule">
-          <Input type="datetime-local" className="editor-post-when" aria-label="Date and time" value={when} onChange={event => setWhen(event.target.value)} />
-          <Button type="button" variant="soft" size="sm" disabled={busy || !picked.length || !when} onClick={() => void submit(true)}>Schedule</Button>
+          <Input type="datetime-local" className="editor-post-when" aria-label="Schedule for a date and time (optional)" value={when} onChange={event => { const next = event.target.value; setWhen(next); setError(next && new Date(next).getTime() <= Date.now() ? 'Pick a date and time in the future.' : ''); }} />
         </div>
-        <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit(false)}>Post now</Button>
+        <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit()}>{schedule ? busy ? 'Scheduling…' : 'Schedule' : busy ? 'Posting…' : 'Post now'}</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">Revline exports this clip first, then posts it.</p>
+        <p className="editor-post-hint">{schedule ? 'Revline exports this clip first, then schedules it.' : 'Revline exports this clip first, then posts it.'}</p>
       </PopoverContent>
     </Popover>
   </div>;

@@ -11,6 +11,7 @@ import { userError } from '@/lib/user-error';
 import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AccountAvatar } from './account-avatar';
 import { PostDialog } from './post-dialog';
@@ -49,6 +50,22 @@ function describe(clip: Clip) {
 }
 type Row = ReturnType<typeof describe>;
 
+/** A section of post rows, still, while the posts load. */
+export function PostsSkeleton() {
+  return <section className="posts-section" role="status" aria-label="Loading your posts">
+    <div className="posts-section-head"><Skeleton className="h-4 w-24" /></div>
+    <Card variant="dash" className="posts-list"><ul>{Array.from({ length: 4 }, (_, index) => <li key={index} className="posts-row">
+      <span className="posts-thumb"><Skeleton className="h-[52px] w-[30px] rounded-[5px]" /></span>
+      <span className="posts-caption"><Skeleton className="h-4 w-4/5" /></span>
+      <span className="posts-accounts"><Skeleton className="size-8 rounded-full" /></span>
+      <span className="posts-time"><Skeleton className="h-4 w-20" /></span>
+      <span className="posts-status"><Skeleton className="h-4 w-24" /></span>
+      <span className="posts-views"><Skeleton className="h-4 w-14" /></span>
+      <span className="posts-actions" />
+    </li>)}</ul></Card>
+  </section>;
+}
+
 /** Every clip Revline is about to post or has posted: one row per clip, however many accounts it went to. */
 export function PostsPage() {
   const { isAuthenticated } = useConvexAuth();
@@ -74,7 +91,7 @@ export function PostsPage() {
     <main className="dash-content posts-page">
       <h1 className="sr-only">Posts</h1>
       {error && <p className="dash-error" role="alert">{error}</p>}
-      {!clips ? <div className="dash-empty" role="status"><p>Loading your posts…</p></div>
+      {!clips ? <PostsSkeleton />
         : !sections.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>
         : sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
           <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && newPost}</div>

@@ -1,7 +1,13 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 
-const clerk = clerkMiddleware();
+// Every page under app/(dashboard). Signed-out visitors are sent to sign-in here, before any page renders, so the
+// pages themselves are static: a click between them needs no server render. /editor/showcase is a public page.
+const SIGNED_IN_PAGES = /^\/(?:accounts|billing|chats|connect|dashboard|editor(?!\/showcase(?:\/|$))|posts|profile|stats|storage)(?:\/|$)/;
+
+const clerk = clerkMiddleware(async (auth, request) => {
+  if (SIGNED_IN_PAGES.test(request.nextUrl.pathname)) await auth.protect();
+});
 
 // Fallback path for the MCP server and its OAuth endpoints: the revline-mcp Worker (cf-workers/mcp) serves them on
 // tryrevline.com through routes, which take precedence over this Worker's custom domain. Without those routes

@@ -10,6 +10,7 @@ import { api } from '@/convex/_generated/api';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { AccountAvatar } from '@/components/posting/account-avatar';
 import './stats.css';
 
@@ -18,7 +19,14 @@ const count = (value: number) => value.toLocaleString('en-US');
 function greeting(hour: number) { return hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'; }
 
 function Tile({ icon: Icon, value, label }: { icon: LucideIcon; value: number | undefined; label: string }) {
-  return <Card variant="tile" className="stats-tile"><span className="stats-tile-icon"><Icon fill="currentColor" aria-hidden="true" /></span><div><strong>{value === undefined ? '–' : count(value)}</strong><span>{label}</span></div></Card>;
+  return <Card variant="tile" className="stats-tile"><span className="stats-tile-icon"><Icon fill="currentColor" aria-hidden="true" /></span><div><strong>{value === undefined ? <Skeleton as="span" className="inline-block h-4 w-8 align-middle" /> : count(value)}</strong><span>{label}</span></div></Card>;
+}
+
+/** Three account rows, still, while the numbers load. */
+export function StatsRowsSkeleton() {
+  return <div role="status" aria-label="Loading your accounts">{Array.from({ length: 3 }, (_, index) => <Card key={index} variant="tile" className="stats-account">
+    <Skeleton className="size-8 rounded-full" /><div className="flex min-w-0 flex-1 flex-col gap-2"><Skeleton className="h-4 w-48 max-w-full" /><Skeleton className="h-3 w-64 max-w-full" /></div>
+  </Card>)}</div>;
 }
 
 export function StatsPage() {
@@ -46,7 +54,7 @@ export function StatsPage() {
       </Card>
       <Card variant="dash" className="stats-card">
         <h2>By account</h2>
-        {!stats ? <p className="stats-loading" role="status">Loading your accounts…</p>
+        {!stats ? <StatsRowsSkeleton />
           : !stats.accounts.length ? <div className="dash-empty stats-empty"><h2>Nothing posted yet</h2><p>Post a clip from the editor and its views, likes and comments show here.</p><Button asChild variant="soft"><Link href="/posts">Go to Posts</Link></Button></div>
           : stats.accounts.map(account => <Card key={account.accountId} variant="tile" className="stats-account">
             <AccountAvatar username={account.username} avatarUrl={avatars.get(account.accountId)} platform={account.platform} />

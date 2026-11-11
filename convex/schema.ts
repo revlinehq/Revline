@@ -303,12 +303,16 @@ export default defineSchema({
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
   }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
-  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean()}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
+  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean(),
+    // Copied from the turn: what its latest run resolved at inference time; absent until that run records it and on older turns.
+    model:v.optional(v.string()),effort:v.optional(v.string())}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   assistantTurns: defineTable({
     projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
     pendingFastFrames:v.array(v.number()),feedback:v.optional(v.string()),
     status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
+    // The API model id and effort the latest run resolved at inference time (assistant.recordEffort); args.pinnedModel is what was asked.
+    model:v.optional(v.string()),effort:v.optional(v.string()),
   }).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   toolWriteReceipts: defineTable({
     projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), writeId: v.string(),
