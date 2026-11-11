@@ -44,7 +44,7 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
       {onImportVideo?<VideoLinkImport disabled={busy} onUpload={()=>input.current?.click()} onImport={async url=>{
         setStarting(true);
         try{await onImportVideo(url);onOpenChange(false);}finally{setStarting(false);}
-      }}/>:<a className="media-import-link" href={NEW_PROJECT_PATH}><Link2 size={16}/>Import from YouTube or MP4</a>}
+      }}/>:<a className="media-import-link" href={NEW_PROJECT_PATH}><Link2 size={16}/>Import from a video link</a>}
     </DialogContent>
   </Dialog>;
 }
