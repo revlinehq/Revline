@@ -7,8 +7,8 @@ const title = 'Video editing guides | Revline Blog';
 const description = 'Practical guides to podcast clips and readable captions, with workflows you can try in Revline.';
 export const metadata: Metadata = {
   title, description, alternates: { canonical: '/blog', types: { 'application/rss+xml': 'https://tryrevline.com/blog/feed.xml' } },
-  openGraph: { title, description, url: '/blog', type: 'website', images: ['/og-revline-v5.png'] },
-  twitter: { card: 'summary_large_image', title, description, images: ['/og-revline-v5.png'] },
+  openGraph: { title, description, url: '/blog', type: 'website', images: ['/og-revline-v6.png'] },
+  twitter: { card: 'summary_large_image', title, description, images: ['/og-revline-v6.png'] },
 };
 export default function Blog() {
   return <>
