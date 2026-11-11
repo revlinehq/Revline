@@ -6,7 +6,7 @@ import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneT
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS, type FinishLookSpot } from '../../lib/ai/lanes/task';
-import { exhaustedLaneError, finishLane, FramesUnavailableError, type FinishResult } from './laneFinish';
+import { exhaustedLaneError, exhaustedNext, finishLane, FramesUnavailableError, type FinishResult } from './laneFinish';
 import { safely } from './safely';
 import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
@@ -208,6 +208,8 @@ const APPROVED_RULE = 'Approved clips are signed off by the user. Every editing 
 const CLIP_EDGE_WAIT_MS = 120_000;
 // What a small model still owes after the cut reads clean; it tends to stop at the first thing that works.
 const REST_OF_EDIT = 'Now do the rest of the request in order: the opening clip if it names one, then every image, b-roll and overlay it names at the timeline times of their words (find the phrase in lines above), then finish. The edit is not done while something the request names is missing.';
+/** Tools a task closed by failed finish checks still answers: its final result, and the agent's own reports. */
+const EXHAUSTED_CALLABLE = new Set(['finish', 'reportLimitation', 'reportIssue']);
 const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'listExports', 'getExport', 'cancelExport', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief', ...POSTING_TOOLS]);
 
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
@@ -257,6 +259,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   let timelineId=boundRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
   const timelineIdForLane=()=>timelineId;
   let finishResult:FinishResult|undefined;
+  /** What a finish reply must report: whether this request's edits are saved now, at which revision, and what Undo does. */
+  const finishSaveState=()=>editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes. If this request ends or is stopped first, the last valid draft is normally saved as one undoable revision.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
   const taskScope={ownerId:run.ownerId,projectId:run.projectId,taskId:taskId??run.runId};
   const ensureBaseline=async()=>{
     if(!taskId)return;
@@ -989,9 +993,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         catch(error){finishResult=await laneCtx.runMutation(internal.lanes.recordFinish,{...taskScope,result:{...finishResult,passed:false,failures:[`The checked draft could not be saved: ${error instanceof Error?error.message:String(error)}`]}});}
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
-      // The state the reply must report: whether this request's edits are saved now, at which revision, and what Undo does.
-      const saveState=editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes. If this request ends or is stopped first, the last valid draft is normally saved as one undoable revision.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
-      return {...finishResult,...saveState,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?`Stop. finish kept failing, so finish and the editing tools are now closed for this request. Report these failures honestly; this task is unfinished.`:`Repair the listed failures${finishResult.fixes?.length?' with the calls in fixes':''} and call finish again. Checking again after a repair is progress; a check that fails the same way with nothing fixed counts toward the stop (${finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} so far), and a request gets at most ${MAX_FINISH_CHECKS} failed checks in all (${finishResult.checks??finishResult.attempt} so far).`};
+      const saveState=finishSaveState();
+      return {...finishResult,...saveState,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?exhaustedNext(isMcpRun(run.runId)):`Repair the listed failures${finishResult.fixes?.length?' with the calls in fixes':''} and call finish again. Checking again after a repair is progress; a check that fails the same way with nothing fixed counts toward the stop (${finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} so far), and a task gets at most ${MAX_FINISH_CHECKS} failed checks between passes (${finishResult.checks??finishResult.attempt} so far).`};
     },toModelOutput:(ctx,options)=>labeledImages(ctx,options.output)}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
       description: 'Report a Revline tool defect: wrong or inconsistent output, unexpected failure, or behavior contrary to its contract. Include a short input summary without user text, media, credentials or tokens, what happened and what you expected. Report once per defect, then continue safely or explain the limitation. Not for ordinary validation errors or unsupported requests.',
@@ -2435,8 +2438,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(taskId){
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
         if(name==='exportVideo'&&isMcpRun(run.runId)&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
-        // A limitation note still saves after the last finish check: it edits nothing and is never a failed step.
-        if(task?.result?.exhausted&&name!=='reportLimitation')throw exhaustedLaneError(lane,task.result.failures.join(' '));
+        // A closed task still answers finish, with its final result and what to do next: every task ends with finish,
+        // and an error there read to an agent as a missing tool (issue #357). A limitation note still saves too.
+        if(task?.result?.exhausted&&name==='finish'){finishResult=task.result;return {...task.result,...finishSaveState(),success:false,next:exhaustedNext(isMcpRun(run.runId))};}
+        if(task?.result?.exhausted&&!EXHAUSTED_CALLABLE.has(name))throw exhaustedLaneError(lane,task.result.failures.join(' '));
         if(task?.script){scriptSaved=true;savedScript=task.script as SavedScript;}
         if(options.scriptFirst&&lane==='reel'&&!scriptSaved&&!noScript&&['retainSourceRanges','cleanSpeech','split','trim'].includes(name)&&rawTake(input.clipId))throw new Error(`Read the script before cutting this take: call readScript ${JSON.stringify({clipId:input.clipId})}, then planScript, and cut once with the ranges planScript returns.`);
         if(tracksChanges()&&task){

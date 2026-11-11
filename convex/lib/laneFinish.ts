@@ -37,6 +37,13 @@ export class FramesUnavailableError extends Error {}
 export function exhaustedLaneError(lane: string, failures: string) {
   return new LaneFinishError(`The ${lane} task stopped because its finish check kept failing with nothing fixed in between: ${failures}`);
 }
+/** What an agent does once its task is closed. An MCP agent's job can outlive one task (many clips), so it names
+ * the call that continues; an in-app request ends and the user sends the next one. */
+export function exhaustedNext(overMcp: boolean) {
+  return overMcp
+    ? 'Stop editing this task: finish and the editing tools are closed for it and it stays unfinished. Report these failures honestly. To continue other work, call startTask for a new task; finish is available on every task.'
+    : 'Stop. finish kept failing, so finish and the editing tools are now closed for this request. Report these failures honestly; this task is unfinished.';
+}
 type Render = (
   times: number[],
   revision?: number,

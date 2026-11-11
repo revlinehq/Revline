@@ -77,6 +77,9 @@ function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorTool
   return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => toolBehavior(name)?.mcp !== 'hidden' && name!=='switchLane')) as unknown as Record<string, EditorTool> };
 }
 
+// The MCP catalog drops hidden tools and switchLane. finish ends every task, so it must never be one of them: checked
+// when the module loads, so such a change fails the deploy (issue #357).
+if (toolBehavior('finish')?.mcp === 'hidden') throw new Error('finish must stay in the MCP tool list: every task ends with it.');
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
   run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'catalog' },
   project: { timeline: { clips: [], fps: 60, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
