@@ -4,7 +4,7 @@ import { LandingSection, LandingShot } from './ui';
 export function LandingHero() {
   return <LandingSection className="landing-hero" headingId="landing-hero-heading">
     <div className="landing-hero-copy">
-      <h1 id="landing-hero-heading">Get paid to clip.</h1>
+      <h1 id="landing-hero-heading">Turn raw footage into paid clips.</h1>
       <p>Revline finds campaigns that pay per view, cuts the clips with AI, and posts them to your accounts.</p>
       <div className="landing-hero-actions">
         <LandingStartButton />

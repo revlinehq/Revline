@@ -129,7 +129,7 @@ export function AuthForm({ mode = 'sign-in' }: { mode?: 'sign-in' | 'sign-up' })
   if (browserUrl && !isSignedIn) return <InstagramBrowserHandoff url={browserUrl} />;
 
   return <AuthFrame><div className="auth-form" data-auth-step={step}>
-    <header className="auth-header"><h1>{step === 'code' ? 'Check your email' : mode === 'sign-up' ? 'Create your account' : 'Sign in to Revline'}</h1><p>{step === 'code' ? <><span>Enter the code sent to</span><strong>{email}</strong></> : 'Get paid to clip.'}</p></header>
+    <header className="auth-header"><h1>{step === 'code' ? 'Check your email' : mode === 'sign-up' ? 'Create your account' : 'Sign in to Revline'}</h1><p>{step === 'code' ? <><span>Enter the code sent to</span><strong>{email}</strong></> : 'Turn raw footage into paid clips.'}</p></header>
     {step === 'email' ? <>
       <Button className="auth-action auth-google" variant="soft" data-auth-action="google" disabled={!isLoaded || pending} onClick={() => void google()}>{phase === 'google' ? <LoaderCircle size={18} className="animate-spin" /> : <GoogleIcon />}Continue with Google</Button>
       <div className="auth-divider"><span />or<span /></div>
