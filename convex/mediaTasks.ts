@@ -41,6 +41,8 @@ import { placeCutout } from './cutouts';
 import { completeDerivation } from './derivations';
 import { hostedRendersEnabled, processorHasRenderRoom, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
+import { legacyRenderTimeline } from '../lib/editor/legacy-render';
+import { processorCan } from './lib/processor_capabilities';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
@@ -414,6 +416,12 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if (assets.some(item => !item?.url)) { throw new ConvexError('Export source media is unavailable.'); }
     const settings = { resolution: job.resolution ?? 1080, fps: job.fps ?? snapshot.fps, quality: job.quality ?? 'high' };
     render = { timeline: snapshot, assets: assets as Infer<typeof assetWithUrl>[], ...settings, recordsRenderer: true as const, ...await reusableExportVideo(ctx, job, snapshot, settings) };
+  }
+  // A processor built before the newer text fonts draws each with the older font it names, instead of failing.
+  if((review||snapshot||render)&&!await processorCan(ctx,'render:fonts-2')){
+    if(review)review={...review,timeline:legacyRenderTimeline(review.timeline),reference:legacyRenderTimeline(review.reference)};
+    if(snapshot)snapshot={...snapshot,timeline:legacyRenderTimeline(snapshot.timeline)};
+    if(render)render={...render,timeline:legacyRenderTimeline(render.timeline)};
   }
   const analysisRun=task.analysisRequestId?await ctx.db.get(task.analysisRequestId):null;
   return { ...(previewRanges?{previewRanges}:{}),...(analysisRun?{aiRunId:analysisRun.aiRunId}:{}),...(read?{read}:{}),...(review?{review}:{}),...(snapshot?{snapshot}:{}),...(cutoutRow?{cutout:{...(cutoutRow.selection?{selection:cutoutRow.selection}:{}),start:cutoutRow.start,end:cutoutRow.end,...(cutoutRow.fps?{fps:cutoutRow.fps}:{}),mode:cutoutRow.mode??'person'}}:{}),...(deriveRow?{derive:{op:deriveRow.op,...(deriveRow.selection?{selection:deriveRow.selection}:{}),...(deriveRow.tracking?{tracking:deriveRow.tracking}:{}),start:deriveRow.start,end:deriveRow.end,...(deriveRow.backgroundPrompt!==undefined?{backgroundPrompt:deriveRow.backgroundPrompt}:{}),...(deriveRow.time!==undefined?{time:deriveRow.time}:{}),...(deriveRow.times?{times:deriveRow.times}:{}),...(deriveRow.factor?{factor:deriveRow.factor}:{}),...(deriveRow.target?{target:deriveRow.target}:{})}}:{}),taskId: task._id, leaseToken: task.leaseToken!, projectId: task.projectId, kind: task.kind, ...(task.sourceUrl ? { sourceUrl: task.sourceUrl } : {}), ...(task.importRange ? { importRange: task.importRange } : {}), ...(task.highlightSkipGemini?{highlightSkipGemini:task.highlightSkipGemini}:{}),...(task.highlightSourceType?{highlightSourceType:task.highlightSourceType}:{}),...(task.speakerRequest?{speakerRequest:task.speakerRequest}:{}), ...(task.frameRequest ? { frameRequest: task.frameRequest } : {}), ...(task.videoRequest ? { videoRequest: task.videoRequest } : {}), ...(asset ? { asset: { ...await transportAsset(ctx,asset), url: await mediaUrl(ctx, asset, true), ...await previewUrl(ctx, asset, true) } } : {}), ...(transcriptionAsset?{transcriptionAsset}:{}), ...(render ? { render, outputStored } : {}), ...(task.renderJobId ? { renderJobId: task.renderJobId } : {}), ...(task.outputAssetId ? { outputAssetId: task.outputAssetId } : {}) };

@@ -1,5 +1,6 @@
 import { DEFAULT_COLOR_GRADE } from './visual-effects';
 import { DEFAULT_OUTLINE } from './clip-outline';
+import { DEFAULT_TEXT_FONT } from './text-fonts';
 import { DEFAULT_SOLID_COLOR } from './clip-effects';
 import { deriveTrackCounts, dimensions, layerGroup, maxTrackCount, normalizeTimeline, trackOf, type Clip, type Timeline } from './types';
 
@@ -52,9 +53,9 @@ export function applyCutoutEffect(input: Timeline, clipId: string, cutoutAssetId
     case 'text-behind': {
       const opened = openLayersAbove(timeline, track, 2);
       const text = effect.text?.trim() || 'BEHIND ME';
-      // One line across ~90% of the frame: bold caps run about 0.62em per character.
-      const fontSize = Math.max(48, Math.min(190, Math.floor(dimensions(timeline.aspectRatio).width * .9 / (.62 * text.length))));
-      const title: Clip = { id: newId(), kind: 'graphic', track: track + 1, ...timing, text, fontSize, color: effect.color ?? '#FFFFFF', background: 'transparent', x: .5, y: .3, animation: 'rise' };
+      // One line across ~90% of the frame: Montserrat Bold caps run about 0.72em per character.
+      const fontSize = Math.max(48, Math.min(190, Math.floor(dimensions(timeline.aspectRatio).width * .9 / (.72 * text.length))));
+      const title: Clip = { id: newId(), kind: 'graphic', track: track + 1, ...timing, text, fontSize, fontFamily: DEFAULT_TEXT_FONT, color: effect.color ?? '#FFFFFF', background: 'transparent', x: .5, y: .3, animation: 'rise' };
       return withClips(opened, clips => [...clips, title, copy(track + 2)]);
     }
     case 'backdrop': {

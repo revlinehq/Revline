@@ -20,6 +20,10 @@ export const BASELINE_TASK_KINDS = ['highlights', 'transcribe', 'understand', 's
 /** Added since. A deployed processor may not have these: Convex checks `processorCan` first. */
 export const GATED_READ_MODES = ['looks'] as const;
 export const GATED_TASK_KINDS = [] as const;
+/** What the renderer draws that an older image cannot. 'fonts-2': the text fonts added with caption presets (Bangers,
+ *  Outfit, Rubik, Figtree, more Poppins weights). Convex sends an older processor each of those as the older font it
+ *  names in lib/editor/text-fonts.ts, since that processor rejects a font it does not know. */
+export const GATED_RENDER_FEATURES = ['fonts-2'] as const;
 
 /** Removed with the motion and recreate lanes. Stored rows may still name them, so the schema keeps them; no processor
  *  runs or reports them, and nothing queues them. */
@@ -28,10 +32,10 @@ export const RETIRED_TASK_KINDS = ['reference', 'blueprint'] as const;
 
 export type ProcessorReadMode = (typeof BASELINE_READ_MODES)[number] | (typeof GATED_READ_MODES)[number] | (typeof RETIRED_READ_MODES)[number];
 export type ProcessorTaskKind = (typeof BASELINE_TASK_KINDS)[number] | (typeof GATED_TASK_KINDS)[number] | (typeof RETIRED_TASK_KINDS)[number];
-export type ProcessorCapability = `read:${ProcessorReadMode}` | `kind:${ProcessorTaskKind}`;
+export type ProcessorCapability = `read:${ProcessorReadMode}` | `kind:${ProcessorTaskKind}` | `render:${(typeof GATED_RENDER_FEATURES)[number]}`;
 
-const ids = (prefix: 'read' | 'kind', names: readonly string[]) => names.map(name => `${prefix}:${name}`);
+const ids = (prefix: 'read' | 'kind' | 'render', names: readonly string[]) => names.map(name => `${prefix}:${name}`);
 const BASELINE: readonly string[] = [...ids('read', BASELINE_READ_MODES), ...ids('kind', BASELINE_TASK_KINDS)];
 /** Everything this code's processor can do: what it reports at sign-in. */
-export const PROCESSOR_CAPABILITIES = [...BASELINE, ...ids('read', GATED_READ_MODES), ...ids('kind', GATED_TASK_KINDS)] as ProcessorCapability[];
+export const PROCESSOR_CAPABILITIES = [...BASELINE, ...ids('read', GATED_READ_MODES), ...ids('kind', GATED_TASK_KINDS), ...ids('render', GATED_RENDER_FEATURES)] as ProcessorCapability[];
 export const isBaselineCapability = (capability: string) => BASELINE.includes(capability);

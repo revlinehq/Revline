@@ -27,3 +27,5 @@ lines stay as the record.
 - `schema:referenceMotionOff`: reference recreation was removed; `convex/referenceMotion.ts` is deleted in the same change.
 - `schema:referenceMotionChecks`: reference recreation was removed; `convex/referenceMotion.ts` is deleted in the same change.
 - `schema:comparisonContinuations`: only `compareReference` used it; the tool is deleted in the same change.
+- `projects:get`: clips may now name four more text fonts (`bangers`, `outfit`, `rubik`, `figtree`); the iOS `TimelineClip` (mobile/Revline/Editor/ProjectDocument.swift) never decodes `fontFamily`, so installed builds ignore it.
+- `timelineTabs:snapshots`: the same four new `fontFamily` values; the iOS `TimelineSnapshot` decodes clips with that same `TimelineClip`, which has no `fontFamily`.

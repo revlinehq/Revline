@@ -4,7 +4,7 @@ import { copyFile, writeFile,link,access,readdir } from 'node:fs/promises';
 import { resolvedAudioTimeline } from '../editor/audio-normalization';
 import { extname, join } from 'node:path';
 import { timelineDuration, type MediaAsset, type Timeline } from '../editor/types';
-import { TEXT_FONTS } from '../editor/text-fonts';
+import { TEXT_FONTS, TEXT_FONT_FILES } from '../editor/text-fonts';
 import { isTransitionClip } from '../editor/clip-transitions';
 import { generateComposition, trimmedFocus, type ExportResolution } from '../editor/composition';
 import { probeMedia } from './analysis-video';
@@ -91,11 +91,11 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
   const allClips=[timeline,...referenceTimelines].flatMap(source=>source.clips);
   if(allClips.some(clip=>clip.kind==='graphic'||clip.kind==='caption'))await copyFile(join(process.cwd(),'public/vendor/text-runtime.js'),join(directory,'text-runtime.js'));
   if(allClips.some(isTransitionClip))await copyFile(join(process.cwd(),'public/vendor/transitions-runtime.js'),join(directory,'transitions-runtime.js'));
-  for(const font of TEXT_FONTS)await copyFile(join(process.cwd(),'public/fonts',font.fileName),join(directory,font.fileName));
+  for(const fileName of TEXT_FONT_FILES)await copyFile(join(process.cwd(),'public/fonts',fileName),join(directory,fileName));
   return {assetUrls,audioSourceOffsets};
 }
 export async function linkCompositionResources(root:string,directory:string,assetUrls:Record<string,string>){
-  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','text-runtime.js','transitions-runtime.js',...TEXT_FONTS.map(font=>font.fileName),...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
+  for(const name of [...Object.values(assetUrls).map(url=>url.slice(2)),'gsap.min.js','visual-effects.js','text-runtime.js','transitions-runtime.js',...TEXT_FONT_FILES,...(await readdir(root)).filter(name=>/^pixel-track-.+\.json$/.test(name))]){
     try{await access(join(root,name));}catch{continue;}
     await link(join(root,name),join(directory,name));
   }
