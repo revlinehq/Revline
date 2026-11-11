@@ -21,6 +21,7 @@ import { openAITokenCounter } from '../../lib/ai/openai-token-count';
 import { AssistantTokenBudget, editorTokenLimits, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../../lib/ai/token-budget";
 import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
+import { StepTimer } from '../../lib/ai/step-timing';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
 import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
@@ -53,6 +54,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     record => ctx.runMutation(internal.aiCosts.record, { projectId: args.projectId, runId: args.runId,threadId:args.threadId,promptMessageId:args.promptMessageId, record:{...record,key:`segment-${segment}:${record.key}`} }),
     failedWrites => console.warn(`[ai-cost] ${JSON.stringify({ event: 'history-write-failed', projectId: args.projectId, runId: args.runId, failedWrites })}`),
   );
+  const timer = new StepTimer();
   const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
     console.log(`[ai-cost] ${JSON.stringify(event)}`);
     if (!costRecordingEnabled()) return;
@@ -196,9 +198,14 @@ For edit requests, use one brief initial sentence stating the requested action, 
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
+          // Where the time goes: each model call and tool call, names and durations only (lib/ai/step-timing.ts).
+          onLanguageModelCallStart: event => timer.modelStart(event.callId),
+          onToolExecutionStart: event => timer.toolStart(event.toolCall.toolCallId, event.toolCall.toolName, event.toolCall.input),
+          onToolExecutionEnd: event => timer.toolEnd(event.toolCall.toolCallId, currentStep, event.toolExecutionMs, event.toolOutput.type === 'tool-error' || (event.toolOutput.type === 'tool-result' && (event.toolOutput.output as { success?: unknown } | null)?.success === false)),
           // Provider usage arrives before potentially slow analysis/tool execution.
-          onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
+          onLanguageModelCallEnd: event => { timer.modelEnd(event.callId, currentStep, event); costLog.modelCall({ ...event, stepNumber: currentStep }, progress()); },
+          // The step's timings ride on its checkpoint: no extra round trip.
+          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); const timed = timer.drain(); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames(),...(timed.length?{timings:{lane:toolkit.lane(),model:selection.modelId,effort:selection.reasoningEffort,steps:timed}}:{})}); },
           onError: ({ error }) => { streamError = error; },
           // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
           timeout: MODEL_SILENCE_LIMITS,
