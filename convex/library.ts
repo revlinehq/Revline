@@ -69,10 +69,11 @@ export const folderTree = query({ args: {}, returns: v.array(v.object(folderSumm
   const all = await ownerFolders(ctx, await requireOwner(ctx));
   return [...all.values()].map(summarize).sort((a, b) => a.name.localeCompare(b.name));
 } });
-/** The breadcrumb for a folder, outermost first. Null when the folder is gone. */
-export const folderPath = query({ args: { folderId }, returns: v.union(v.null(), v.array(v.object({ id: folderId, name: v.string() }))), handler: async (ctx, args) => {
+/** The breadcrumb for a folder, outermost first. Null when the folder is gone or the ID is not a folder's. */
+export const folderPath = query({ args: { folderId: v.string() }, returns: v.union(v.null(), v.array(v.object({ id: folderId, name: v.string() }))), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), path: { id: Id<'storageFolders'>; name: string }[] = [];
-  for (let id: Id<'storageFolders'> | undefined = args.folderId; id && path.length <= MAX_FOLDER_DEPTH + 1;) {
+  // The ID comes from the page address, so anything may arrive here.
+  for (let id: Id<'storageFolders'> | undefined | null = ctx.db.normalizeId('storageFolders', args.folderId); id && path.length <= MAX_FOLDER_DEPTH + 1;) {
     const folder: Folder | null = await ctx.db.get(id);
     if (!folder || folder.ownerId !== ownerId || folder.deleting) return null;
     path.unshift({ id: folder._id, name: folder.name }); id = folder.parentId;
@@ -98,6 +99,13 @@ export const files = query({ args: { paginationOpts: paginationOptsValidator, fo
     }));
     return { ...page, page: args.unused ? rows.filter(row => row.canDelete && !row.inUse) : rows };
   } });
+
+/** A link that plays or shows one stored file in the details panel. Null for kinds with no in-page preview. */
+export const previewUrl = query({ args: { fileId: v.id('storageObjects') }, returns: v.union(v.string(), v.null()), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.fileId);
+  if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary || row.kind === 'model') return null;
+  return mediaUrl(ctx, row);
+} });
 
 // ── Folders ─────────────────────────────────────────────────────────────────────────────────────────────────
 
