@@ -20,6 +20,7 @@ export const laneBaselineValidator = v.object({
       key: v.string(),
       start: v.number(),
       duration: v.number(),
+      sourceStart: v.optional(v.number()),
     }),
   ),
   gaps: v.array(v.object({ start: v.number(), end: v.number() })),

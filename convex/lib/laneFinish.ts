@@ -7,6 +7,7 @@ import { LANES, type LaneId } from '../../lib/ai/lanes';
 import {
   finishFrameBudget,
   finishLookSpots,
+  touchedKinds,
   FINISH_FRAMES_PER_TASK,
   type FinishLookSpot,
   LaneFinishError,
@@ -80,8 +81,12 @@ export async function finishLane(
     fixes: string[] = [];
   let unfixable = 0;
   const seconds = (value: number) => `${Math.round(value * 1000) / 1000}`;
-  if (task.lane === 'reel') {
-    failures.push(...reelCaptionFailures(timeline, assets));
+  // finish scales to the change. A request that only added a header, restyled a text or changed a volume is not
+  // held to the cut's script, its edge looks or its caption sync again: those belong to footage and captions it
+  // never touched. The timeline data checks below (gaps, overlaps, missing media) always run; they cost nothing.
+  const touched = await touchedKinds(timeline, task.baselines.find((item) => item.timelineId === timelineId));
+  if (task.lane === 'reel' && (touched.footage || touched.captions)) failures.push(...reelCaptionFailures(timeline, assets));
+  if (task.lane === 'reel' && touched.footage) {
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
     failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
     // Eyes: the first and last frame must be clean or looked at; other flagged edges are reported.
@@ -250,7 +255,7 @@ export async function finishLane(
     }
     // Captions are checked from data: timing, overlap, reading speed, line length, position and style. Advice only:
     // it comes back with a pass and spends no attempt. (The reel lane's word and sync check above is the blocking one.)
-    if (task.lane !== 'clip') warnings.push(...captionAdvice(tab.timeline).map((line) => prefix + line));
+    if (task.lane !== 'clip' && (tab.timelineId !== timelineId || touched.captions)) warnings.push(...captionAdvice(tab.timeline).map((line) => prefix + line));
     if (task.lane !== 'clip') {
       const context = {
         timeline: tab.timeline,

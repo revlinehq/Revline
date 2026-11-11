@@ -24,6 +24,9 @@ export function evenlySpaced<T>(items: T[], limit: number): T[] {
   return Array.from({ length: limit }, (_, index) => items[Math.round(index * (items.length - 1) / (limit - 1))]);
 }
 export class LaneFinishError extends Error {}
+/** One clip's fingerprint, apart from the rest of its timeline: adding a layer or a marker elsewhere must not make
+ * every clip read as changed. The frame rate and frame shape stay in, since they change how every clip draws. */
+const clipKey = (timeline: Timeline, clip: Timeline['clips'][number]) => timelineHistoryKey({ clips: [clip], fps: timeline.fps, aspectRatio: timeline.aspectRatio });
 export async function laneBaseline(
   timelineId: string,
   timeline: Timeline,
@@ -38,15 +41,32 @@ export async function laneBaseline(
     clips: await Promise.all(
       snapTimelineToFrames(timeline).timeline.clips.map(async (clip) => ({
         id: clip.id,
-        key: await timelineHistoryKey({ ...timeline, clips: [clip] }),
+        key: await clipKey(timeline, clip),
         start: clip.start,
         duration: clip.duration,
+        sourceStart: clip.sourceStart,
       })),
     ),
     gaps,
   };
 }
-export type FinishLookSpot = { time: number; why: 'cut' | 'overlay' | 'captions' | 'first frame' | 'last frame' };
+/**
+ * What a request touched on a timeline, so finish scales to the change: adding one header or changing one
+ * volume must not replay the checks of footage and captions the request never touched. A removed clip counts
+ * as both (its kind is no longer known); without a baseline everything counts.
+ */
+export async function touchedKinds(timeline: Timeline, baseline: { clips: { id: string; key: string; start: number; duration: number; sourceStart?: number }[] } | undefined) {
+  if (!baseline) return { footage: true, captions: true };
+  const grid = snapTimelineToFrames(timeline).timeline, old = new Map(baseline.clips.map((clip) => [clip.id, clip]));
+  const removed = baseline.clips.some((clip) => !grid.clips.some((current) => current.id === clip.id));
+  // Footage is touched when a cut changed: a clip added or removed, or its place, length or in-point moved. A volume,
+  // colour or framing change leaves the cut, its script and its caption sync exactly as they were.
+  const recut = (clip: Timeline['clips'][number]) => { const was = old.get(clip.id); return !was || Math.abs(was.start - clip.start) > 1e-6 || Math.abs(was.duration - clip.duration) > 1e-6 || was.sourceStart !== undefined && Math.abs(was.sourceStart - clip.sourceStart) > 1e-6; };
+  const footage = removed || grid.clips.some((clip) => (clip.kind === 'video' || clip.kind === 'audio' || clip.kind === 'image') && recut(clip));
+  const captions = removed || (await Promise.all(grid.clips.filter((clip) => clip.kind === 'caption').map(async (clip) => old.get(clip.id)?.key !== (await clipKey(grid, clip))))).some(Boolean);
+  return { footage, captions };
+}
+export type FinishLookSpot = { time: number; why: 'cut' | 'overlay' | 'changed clip' | 'captions' | 'first frame' | 'last frame' };
 /**
  * The few frames a finish check draws. Only clips changed since the task began and not yet looked at count:
  *  1. one caption, when any caption is new or restyled: the whole track shares its style, so one proves it draws;
@@ -57,12 +77,14 @@ export type FinishLookSpot = { time: number; why: 'cut' | 'overlay' | 'captions'
  */
 export async function finishLookSpots(
   timeline: Timeline,
-  baseline: { clips: { id: string; key: string }[] } | undefined,
+  baseline: { clips: { id: string; key: string; start?: number; duration?: number }[] } | undefined,
   budget: number,
   seen: ReadonlySet<string> = new Set(),
 ): Promise<{ spots: FinishLookSpot[]; keys: string[] }> {
-  const old = new Map((baseline?.clips ?? []).map((clip) => [clip.id, clip.key]));
-  const keyed = await Promise.all(timeline.clips.map(async (clip) => ({ clip, key: (await timelineHistoryKey({ ...timeline, clips: [clip] })).slice(0, 16) })));
+  const old = new Map((baseline?.clips ?? []).map((clip) => [clip.id, clip.key])), placed = new Map((baseline?.clips ?? []).map((clip) => [clip.id, clip]));
+  // A clip whose place and length are as they were was restyled, not recut: one frame inside it, no cut edges.
+  const recut = (clip: Timeline['clips'][number]) => { const was = placed.get(clip.id); return !was || was.start === undefined || was.duration === undefined || Math.abs(was.start - clip.start) > 1e-6 || Math.abs(was.duration - clip.duration) > 1e-6; };
+  const keyed = await Promise.all(timeline.clips.map(async (clip) => ({ clip, key: (await clipKey(timeline, clip)).slice(0, 16) })));
   const fresh = keyed.filter(({ clip, key }) => clip.kind !== 'audio' && !seen.has(key) && old.get(clip.id)?.slice(0, 16) !== key);
   const keys = fresh.map((item) => item.key);
   const duration = Math.max(0, ...timeline.clips.map((clip) => clip.start + clip.duration)), fps = timeline.fps;
@@ -76,16 +98,17 @@ export async function finishLookSpots(
   const main = [...totals].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
   const changed = fresh.map((item) => item.clip).sort((a, b) => a.start - b.start);
   const captions = changed.filter((clip) => clip.kind === 'caption');
-  const cuts = changed.filter((clip) => footage(clip) && track(clip) === main && clip.start > 0.5 / fps);
-  const overlays = changed.filter((clip) => clip.kind !== 'caption' && !(footage(clip) && track(clip) === main));
+  const onMain = (clip: Timeline['clips'][number]) => footage(clip) && track(clip) === main;
+  const cuts = changed.filter((clip) => onMain(clip) && recut(clip) && clip.start > 0.5 / fps);
+  const overlays = changed.filter((clip) => clip.kind !== 'caption' && !(onMain(clip) && recut(clip)));
   const spots: FinishLookSpot[] = [], taken = new Set<number>();
   const add = (time: number, why: FinishLookSpot['why']) => { const frame = at(time); if (spots.length < budget && !taken.has(frame)) { taken.add(frame); spots.push({ time: frame, why }); } };
   if (captions.length) add(captions[0].start + Math.min(captions[0].duration / 2, 0.2), 'captions');
   // Leave one frame for an overlay when there is one; cuts take the rest.
   const forCuts = Math.max(0, budget - spots.length - (overlays.length ? 1 : 0));
   for (const clip of evenlySpaced(cuts, Math.max(forCuts, cuts.length && budget - spots.length > 0 ? 1 : 0))) add(clip.start, 'cut');
-  for (const clip of evenlySpaced(overlays, Math.max(1, budget - spots.length))) add(clip.start + clip.duration / 2, 'overlay');
-  if (changed.some(footage)) { add(0, 'first frame'); add(duration, 'last frame'); }
+  for (const clip of evenlySpaced(overlays, Math.max(1, budget - spots.length))) add(clip.start + clip.duration / 2, onMain(clip) ? 'changed clip' : 'overlay');
+  if (changed.some((clip) => footage(clip) && recut(clip))) { add(0, 'first frame'); add(duration, 'last frame'); }
   return { spots: spots.sort((a, b) => a.time - b.time), keys };
 }
 /** A provider cannot stream a premature completion claim into chat, even if it ignores toolChoice. */
