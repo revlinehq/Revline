@@ -30,7 +30,7 @@ function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
     router.push(NEW_PROJECT_PATH);
   }
   return <SidebarMenuItem><SidebarMenuButton asChild isActive={active} tooltip={item.label} className="dash-nav-row">
-    <Link href={item.href} aria-current={active ? 'page' : undefined} onClick={event => void open(event)}><Icon aria-hidden="true" /><span>{item.label}</span></Link>
+    <Link href={item.href} data-icon-style={item.strokeIcon ? 'stroke' : undefined} aria-current={active ? 'page' : undefined} onClick={event => void open(event)}><Icon aria-hidden="true" /><span>{item.label}</span></Link>
   </SidebarMenuButton></SidebarMenuItem>;
 }
 
