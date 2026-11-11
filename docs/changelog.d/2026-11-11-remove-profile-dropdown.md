@@ -1,0 +1,1 @@
+- Navbar: the avatar is a plain link to Settings (no account menu); Cloud storage moved to the sidebar's Account group and Sign out to the top of the Settings Profile card. Why: the founder found the profile dropdown redundant next to the sidebar and Settings.
