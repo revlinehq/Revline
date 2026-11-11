@@ -80,7 +80,10 @@
 .post-platform-head small { margin-left: auto; font-size: 13px; }
 .post-account { display: flex; align-items: center; gap: 10px; min-height: 38px; margin: 0 -8px; padding: 0 8px; border-radius: 8px; cursor: pointer; }
 .post-account:hover { background: var(--dash-tile); }
-.post-account > span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-account-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.post-account .account-avatar [data-slot=avatar] { width: 24px; height: 24px; }
+.post-account .account-avatar [data-slot=avatar-fallback] { font-size: 9px; }
+.post-account[data-disabled] .account-avatar { opacity: .5; }
 .post-account small { color: var(--dash-muted); font-size: 13px; white-space: nowrap; }
 .post-account[data-disabled] { cursor: default; color: var(--dash-muted); }
 .post-account[data-disabled]:hover { background: transparent; }

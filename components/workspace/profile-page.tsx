@@ -12,13 +12,15 @@ import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar, useConnectedPicture } from './user-avatar';
 
 /** Settings (/profile): the plan, the profile, connected AI apps and signing out, as one column of cards. */
 export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { user, isLoaded, isSignedIn } = useUser();
   const clerk = useClerk();
   const fileInput = useRef<HTMLInputElement>(null);
+  // A connected account's picture is shown instead of the sign-in photo, so changing that photo would change nothing here.
+  const connectedPicture = useConnectedPicture();
   const [photoBusy, setPhotoBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [photoError, setPhotoError] = useState('');
@@ -45,8 +47,8 @@ export function ProfilePage({ checkoutReturn }: { checkoutReturn?: CheckoutRetur
     <h1 className="sr-only">Settings</h1>
     {!isLoaded ? <div className="dash-empty" role="status"><p>Loading your account…</p></div> : <>
       <BillingSection checkoutReturn={checkoutReturn} />
-      <SettingsCard title="Profile" action={isSignedIn && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}>
-        <SettingsRow label="Photo"><Avatar className="settings-avatar">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="Your profile photo" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></SettingsRow>
+      <SettingsCard title="Profile" action={isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}>
+        <SettingsRow label="Photo"><span className="settings-photo"><UserAvatar className="settings-avatar" alt="Your profile photo" fallback={initial} />{connectedPicture && <small>From your connected account</small>}</span></SettingsRow>
         <SettingsRow label="Name">{name}</SettingsRow>
         <SettingsRow label="Email">{email ?? 'Sign in to see your email'}</SettingsRow>
         {photoError && <SettingsBody><p className="dash-error" role="alert">{photoError}</p></SettingsBody>}

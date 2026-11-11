@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
+import { SIGNED_IN_HOME_PATH } from '@/lib/workspace-routes';
 import { WorkspaceAccountMenu } from '@/components/workspace/account-menu';
 import { LandingStartButton } from './start-button';
 
@@ -12,7 +13,7 @@ export function LandingNavAuth() {
 
   if (isSignedIn) return <div className="landing-nav-account">
     <Button asChild size="md" className="landing-button" data-variant="dark" data-size="sm">
-      <Link href="/chats">Workspace</Link>
+      <Link href={SIGNED_IN_HOME_PATH}>Workspace</Link>
     </Button>
     <WorkspaceAccountMenu />
   </div>;

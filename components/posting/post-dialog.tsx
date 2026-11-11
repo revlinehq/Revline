@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { PlatformIcon } from './account-avatar';
+import { AccountAvatar, PlatformIcon } from './account-avatar';
 import { postTime } from './post-time';
 import './posting.css';
 
@@ -111,7 +111,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
                   const expired = account.status !== 'connected';
                   return <label key={account.id} className="post-account" data-disabled={expired || undefined}>
                     <Checkbox disabled={expired} checked={!expired && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-                    <span>@{account.username}</span>{expired && <small>Sign-in expired</small>}
+                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Sign-in expired</small>}
                   </label>;
                 })}
                 {entry.live && !own.length && <p className="post-note">No accounts connected yet.</p>}
