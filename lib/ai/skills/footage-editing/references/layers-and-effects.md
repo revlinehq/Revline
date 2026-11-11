@@ -10,6 +10,8 @@ A good result changes only the requested clips, keeps linked video and audio tog
 - Batch identical changes across clips with the tool's clipIds selector in one call; run independent calls with known inputs in the same step.
 - Use moveClips and resizeClips for a selected group, reorderLayer for a whole layer, and move or trim for one clip.
 - Montage shot notes take one call each and name the shot by its time: delete {at, ripple:true} removes a shot and closes the gap, swapClips {a, b} trades two slots, resizeClips {at, side, delta, ripple:true} lengthens a shot and pushes later clips, setVolume {at, volume:0} mutes it. Linked audio and mirror-blur backgrounds follow.
+- B-roll, images, overlays and an opening clip go on after the speech cut, never before: every later trim moves them. Anchor each to the word or phrase it belongs to: its SOURCE time from the transcript, mapped through the cut clips to timeline time. An opening clip ends on a finished sentence of its own transcript before the take's first kept line starts: shift the whole take once with moveClips (every clip ID of the take, timeDelta = the opening clip's kept length), then addMedia the opening clip at 0 with that duration.
+- Frames do not find where layered media goes. After placing it, check its framing once; for a cue the transcript cannot time (a gesture), read a window of a second or two around the phrase.
 - Never delete an occupied track's clips just to remove its row.
 - To return to an earlier version: footage-editing page `edit-lanes` (Direction and feedback).
 - Unlink a video/audio pair only when the user wants to keep one side while editing the other.

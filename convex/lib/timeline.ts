@@ -21,6 +21,8 @@ async function historyKeys(ctx: MutationCtx, entries: HistoryEntry[]) {
   const loaded = entries.every(entry => entry.key || entry.timeline) ? entries : await historyTimelines(ctx, entries);
   return Promise.all(loaded.map(entry => entry.key ?? timelineHistoryKey(entry.timeline!)));
 }
+/** The largest timeline a save accepts, in bytes of JSON. Every path that sends a whole timeline uses this one limit. */
+export const TIMELINE_BYTE_LIMIT = 300_000;
 export function currentTimeline(project: Doc<"projects">): Timeline {
   return normalizeTimeline(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio });
 }
@@ -29,7 +31,9 @@ export function validateFocus(focus: { time: number; x: number; y: number }[], d
 }
 export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc<"projects">, timeline: Timeline) {
   // Scene code is stored by hash, so the record limit counts it as one.
-  if (new TextEncoder().encode(JSON.stringify(timeline)).byteLength > 300_000) throw new ConvexError("Timeline is too large. Shorten text or scenes, or reduce subject tracking samples.");
+  const bytes = new TextEncoder().encode(JSON.stringify(timeline)).byteLength;
+  // Say what filled it: captions are the usual cause on a long talk, and "shorten text" alone gave the agent nothing to act on.
+  if (bytes > TIMELINE_BYTE_LIMIT) throw new ConvexError(`Timeline is too large to save: ${Math.round(bytes / 1000)} KB of ${TIMELINE_BYTE_LIMIT / 1000} KB, with ${timeline.clips.length} clips (${timeline.clips.filter(clip => clip.kind === 'caption').length} captions). Use fewer, longer captions, shorten text, or reduce subject tracking samples.`);
   if (![24, 30, 60].includes(timeline.fps)) throw new ConvexError("Choose 24, 30, or 60 fps");
   const markerIds = new Set<string>();
   for (const marker of timeline.markers ?? []) {

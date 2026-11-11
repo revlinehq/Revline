@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { useConvexAuth, usePaginatedQuery, useQuery } from 'convex/react';
-import { Check, ChevronDown, ChevronLeft, CircleAlert, Copy, Download, Film, History, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
+import { Check, ChevronDown, CircleAlert, Copy, Download, Film, History, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Brand } from './brand';
@@ -85,7 +85,7 @@ export interface WorkspaceNavProps {
   onRedo?: () => void;
   onFootage?: () => void;
   onExport?: () => void;
-  /** The editor's bar: a back arrow to this page instead of the logo, and a "Saved" mark once changes are stored. */
+  /** The editor's bar: the logo links back to this page, and a "Saved" mark shows once changes are stored. */
   backHref?: string;
   /** Extra actions at the right of the bar, after Export. */
   actions?: ReactNode;
@@ -122,6 +122,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
   const [copiedId, setCopiedId] = useState(false);
   const [copyError, setCopyError] = useState('');
   const historyTrigger = useRef<HTMLButtonElement>(null);
+  const homeHref = backHref ?? NEW_PROJECT_PATH;
   async function rename() {
     if (!onRename || !newTitle.trim() || newTitle.trim().length > 120 || renameBusy) return;
     setRenameBusy(true); setRenameError('');
@@ -140,8 +141,8 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
     void startNewWorkspace(user?.id).catch(reason => setAccountError(userError(reason, 'Could not open a new workspace.')));
   }
   return <><header className="workspace-nav">
-    {backHref ? <Button asChild variant="ghost" size="icon-sm" className="workspace-nav-back"><Link href={backHref} onClick={backHref === NEW_PROJECT_PATH ? newWorkspace : undefined} aria-label="Back to AI Editor"><ChevronLeft size={18} /></Link></Button> : <><Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
-    <span className="workspace-nav-divider" aria-hidden="true" /></>}
+    <Link href={homeHref} onClick={homeHref === NEW_PROJECT_PATH ? newWorkspace : undefined} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
+    <span className="workspace-nav-divider" aria-hidden="true" />
     {settingsPage ? <Breadcrumb className="workspace-breadcrumb"><BreadcrumbList><BreadcrumbItem><BreadcrumbLink asChild><Link href="/chats">Workspace</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>{title}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb> : <>
     <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><Button ref={historyTrigger} variant="ghost" size="md" className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>

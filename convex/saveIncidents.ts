@@ -14,7 +14,11 @@ function deploymentIdentity() {
   const url = process.env.CONVEX_CLOUD_URL;
   if (url === 'https://majestic-alpaca-541.convex.cloud') return deployments[url];
   if (url === 'https://different-gnu-398.convex.cloud') return deployments[url];
-  throw new ConvexError('Save incidents require a recognized deployment URL.');
+  // Any other backend (an agent's isolated one, a staging copy) is a development deployment under its own name.
+  // Throwing here left its flagged steps unsettled for good and recorded nothing.
+  let deploymentName = 'unknown';
+  try { const host = new URL(url ?? '').hostname; deploymentName = (host.endsWith('.convex.cloud') ? host.split('.')[0] : host) || 'unknown'; } catch { /* keep unknown */ }
+  return { deployment: 'dev' as const, deploymentName };
 }
 
 /** Only small, already scrubbed shapes cross the runner bridge. This never changes editor data. */

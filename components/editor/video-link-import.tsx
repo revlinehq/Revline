@@ -39,8 +39,8 @@ export function VideoLinkImport({ onImport, onUpload, disabled = false }: { onIm
   const { url, busy, error, submit, change } = useVideoLinkImport(onImport, disabled);
   return <form className="video-link-import" onSubmit={event => { event.preventDefault(); void submit(); }}>
     <label htmlFor={id}><Link2 size={13}/>Import a video link</label>
-    <div className="video-link-field"><Input id={id} type="url" required maxLength={2048} placeholder="YouTube or MP4 URL" autoComplete="off" value={url} disabled={disabled || busy} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} aria-invalid={!!error} onChange={event => change(event.target.value)}/><Button type="submit" variant="outline" disabled={disabled || busy || !url.trim()}>{busy ? <LoaderCircle size={14} className="animate-spin" aria-label="Starting import"/> : 'Import'}</Button></div>
-    <small id={`${id}-hint`}>Long recordings and podcasts are supported. If a link cannot be downloaded, upload the file instead.</small>
+    <div className="video-link-field"><Input id={id} type="url" required maxLength={2048} placeholder="YouTube, Twitch or video URL" autoComplete="off" value={url} disabled={disabled || busy} aria-describedby={`${id}-hint${error ? ` ${id}-error` : ''}`} aria-invalid={!!error} onChange={event => change(event.target.value)}/><Button type="submit" variant="outline" disabled={disabled || busy || !url.trim()}>{busy ? <LoaderCircle size={14} className="animate-spin" aria-label="Starting import"/> : 'Import'}</Button></div>
+    <small id={`${id}-hint`}>Recordings and podcasts up to 3 hours import whole; for a longer one, ask the assistant to import the part you need. If a link cannot be downloaded, upload the file instead.</small>
     {error && <p id={`${id}-error`} className="video-link-error" role="alert">{error}</p>}
     {onUpload && <Button type="button" variant="ghost" size="sm" className="video-link-upload" disabled={disabled || busy} onClick={onUpload}><Upload size={14}/>Upload the file instead</Button>}
   </form>;

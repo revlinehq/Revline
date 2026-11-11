@@ -3,7 +3,7 @@ import { internal } from './_generated/api';
 import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import { assistantRunArgs } from './lib/assistant_run';
 import { runArgs, runIsActive } from './lib/active_run';
-import { resumeInterruptedTurn,turnForRun } from './assistantTurnRecovery';
+import { resumeOrFinish,turnForRun } from './assistantTurnRecovery';
 import { RUNNER_REQUEST_WINDOW_MS, runToken, runnerSignature } from './lib/runner_auth';
 import { turnRow, WATCH_INTERVAL_MS } from './lib/runner_turns';
 
@@ -48,7 +48,7 @@ export const claim = internalMutation({ args: { ...runArgs, claimId: v.string() 
   if (!row || !await runIsActive(ctx, args)) return null;
   if(row.claimId===args.claimId)return {attempt:0,maxAttempts:MAX_ATTEMPTS};
   if(row.attempts>0){
-    if(!await resumeInterruptedTurn(ctx,args.runId,INTERRUPTED))await ctx.runMutation(internal.assistant.finish,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId,error:INTERRUPTED});
+    await resumeOrFinish(ctx,{projectId:args.projectId,ownerId:args.ownerId,runId:args.runId},INTERRUPTED,INTERRUPTED);
     return null;
   }
   await ctx.db.patch(row._id, { attempts: row.attempts + 1, claimId: args.claimId, seenAt: Date.now() });
@@ -111,7 +111,7 @@ export const settle = internalMutation({ args: { ...runArgs, error: v.optional(v
   if(args.segment!==undefined&&turn&&turn.segment!==args.segment)return null;
   const row = await turnRow(ctx, args.runId);
   if (row) await ctx.db.delete(row._id);
-  if (await runIsActive(ctx, args)&&!await resumeInterruptedTurn(ctx,args.runId,args.error??INTERRUPTED)) await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, error: args.error ?? INTERRUPTED });
+  if (await runIsActive(ctx, args)) await resumeOrFinish(ctx, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId }, args.error ?? INTERRUPTED, args.error ?? INTERRUPTED);
   return null;
 }});
 
@@ -124,7 +124,7 @@ export const watch = internalMutation({ args: { runId: v.string() }, returns: v.
   if (Date.now() - row.seenAt > HEARTBEAT_STALE_MS) {
     console.error(`[agent-runner] ${JSON.stringify({ event: 'runner-silent', projectId: row.projectId, runId, attempts: row.attempts })}`);
     await ctx.db.delete(row._id);
-    if(!await resumeInterruptedTurn(ctx,runId,INTERRUPTED))await ctx.runMutation(internal.assistant.finish, { ...run, error: INTERRUPTED });
+    await resumeOrFinish(ctx,run,INTERRUPTED,INTERRUPTED);
     return null;
   }
   await ctx.scheduler.runAfter(WATCH_INTERVAL_MS, internal.agentRunner.watch, { runId });

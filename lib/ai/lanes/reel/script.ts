@@ -65,10 +65,10 @@ export type SavedScript = {
   broll?: { start: number; end: number; kept: boolean }[];
 };
 
-const FILLERS = new Set(['um', 'uh', 'erm', 'er', 'ah', 'hmm', 'mm', 'uhm']);
-const token = (text: string) => text.toLowerCase().replace(/[^a-z0-9']/g, '');
+export const FILLERS = new Set(['um', 'uh', 'erm', 'er', 'ah', 'hmm', 'mm', 'uhm']);
+export const token = (text: string) => text.toLowerCase().replace(/[^a-z0-9']/g, '');
 // A doubled function word is a stutter ("the the"); a doubled content word ("very, very") can be meant.
-const STUTTER_WORDS = new Set(['i', 'the', 'a', 'an', 'and', 'so', 'but', 'it', 'we', 'you', 'to', 'of', 'in', 'that', 'this', 'is', "it's", "i'm", 'my', 'our', 'they', 'he', 'she', 'if', 'when', 'because', 'like', 'for', 'on', 'with', 'at', 'what', 'how', 'why', 'or']);
+export const STUTTER_WORDS = new Set(['i', 'the', 'a', 'an', 'and', 'so', 'but', 'it', 'we', 'you', 'to', 'of', 'in', 'that', 'this', 'is', "it's", "i'm", 'my', 'our', 'they', 'he', 'she', 'if', 'when', 'because', 'like', 'for', 'on', 'with', 'at', 'what', 'how', 'why', 'or']);
 // Talk about the recording itself, never part of a script. Matched on short lines only.
 const SETUP = /\b(mic check|testing|test one two|check one two|one two three|is (this|it|that) (thing )?(recording|on|working|rolling)|are we (recording|rolling|live|good)|we('re| are) (recording|rolling)|(recording|rolling) now|can you hear|let me (just )?(start|try|do|fix|check|adjust|see|get|redo|say|go)|let'?s (go|do this|start|try)|here we go|hold on|is the (camera|mic|light)|camera('s| is) (on|rolling)|three two one|3 2 1|and action)\b/;
 const RESTART = /\b((start|go|try|do|say) (it |that |this )?(again|over)|one more (time|take)|take (two|three|four|\d+)|from the top|scratch that|my bad|messed (that |it )?up|where was i|what was i|let me (redo|restart|start|try))\b/;
