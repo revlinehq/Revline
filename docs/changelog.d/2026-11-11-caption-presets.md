@@ -1,0 +1,1 @@
+- Captions: 11 caption presets (Bold Pop to Reels style) with word-by-word pop motion, applied in one call by the assistant and MCP (`applyCaptionStyle preset`, `addSubtitlesFromTranscript preset`) and drawn the same in preview, frames and exports. Why: the founder picked them from the subtitle templates page and asked for TikTok/Instagram-style pop captions.

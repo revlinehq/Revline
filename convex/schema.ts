@@ -20,6 +20,7 @@ import { campaignTables } from './campaignsModel';
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
 import { TEXT_FONTS } from '../lib/editor/text-fonts';
+import { CAPTION_PRESET_IDS, type CaptionPresetId } from '../lib/editor/caption-presets';
 import { aiCostRecordFields } from './lib/ai_cost';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
@@ -128,6 +129,7 @@ export const clipValidator = v.object({
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
   fontFamily:v.optional(textFontValidator),
+  captionPreset:v.optional(v.object({id:v.union(...CAPTION_PRESET_IDS.map(id=>v.literal(id)) as [ReturnType<typeof v.literal<CaptionPresetId>>,ReturnType<typeof v.literal<CaptionPresetId>>]),popScale:v.optional(v.number()),popDuration:v.optional(v.number())})),
   effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'),v.literal('frame-shrink'), v.literal('zoom-blur'), v.literal('impact-frame'), v.literal('texture-overlay'), v.literal('solid-color'),v.literal('crossfade'),v.literal('spin-zoom'),v.literal('blur-dissolve'),v.literal('gradient-wipe'),v.literal('iris-wipe'),v.literal('whip-pan'),v.literal('zoom-through'),v.literal('film-burn'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
   solidColor:v.optional(v.object({color:v.string(),width:v.number(),height:v.number(),x:v.number(),y:v.number(),opacity:v.number()})),

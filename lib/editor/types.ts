@@ -10,6 +10,7 @@ import type { NeonEdges } from './neon-edges';
 import type { TextTemplate } from './text-templates';
 import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
+import type { ClipCaptionPreset } from './caption-presets';
 import type { RampPoint } from './speed-ramp';
 import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finish';
 import type { Transcript } from '../media-analysis/transcript';
@@ -240,6 +241,8 @@ export type Clip = {
   textStyle?: TextAppearance;
   textGradient?: TextGradient;
   fontFamily?: TextFontId;
+  /** A caption preset's word-by-word motion (lib/editor/caption-presets.ts); drawn while textTemplate is karaoke. */
+  captionPreset?: ClipCaptionPreset;
   animation?: 'none' | 'fade' | 'rise';
   textAnimationTiming?: {duration:number;offset:number};
   focus?: {time:number;x:number;y:number}[];
