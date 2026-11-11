@@ -110,18 +110,6 @@ function chatToolFromPart(value: unknown): ChatTool | null {
   return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || '')))).slice(0, 240) } : {}) };
 }
 
-/** What the agent is doing right now, from the newest part of its reply: a running tool (scene code is named while it is
- * being written), thinking, or writing the reply. */
-export function liveActivity(replies: readonly ChatMessage[]): { label: string; detail?: string } {
-  const blocks = replies.at(-1)?.blocks ?? [], last = blocks.at(-1);
-  if (last?.type === 'thinking') return { label: 'Thinking' };
-  if (last?.type === 'text') return { label: 'Writing the reply' };
-  const step = last?.type === 'tools' ? last.steps.at(-1) : undefined;
-  if (!step || step.state !== 'running') return { label: 'Working' };
-  const title = typeof step.input?.title === 'string' ? step.input.title : undefined;
-  return { label: toolBehavior(step.name)?.label?.[0] ?? 'Running a step' };
-}
-
 /** Images a step returned (frames), from its raw output or the content sent to the model. */
 export function toolImages(step: ChatTool): { label: string; src: string }[] {
   const output = step.output, base64 = (value: unknown): value is string => typeof value === 'string' && value.length > 100 && /^[A-Za-z0-9+/]+=*$/.test(value.slice(0, 200));

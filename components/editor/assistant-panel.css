@@ -2,12 +2,8 @@
 .conversation-editor .assistant-content .chat-message p{font-size:13px;line-height:1.55;letter-spacing:0}
 .conversation-editor .assistant-content .chat-author{gap:8px;font-size:12px;font-weight:600;color:var(--foreground);margin-bottom:10px}
 .assistant-content .chat-author .revline-mark{width:20px;height:20px}
-.assistant-reply-header{display:flex;align-items:flex-start;gap:10px;min-width:0;margin-bottom:10px}.assistant-reply-header>.revline-brand{display:flex;align-items:center;justify-content:center;flex:none;width:20px;height:20px;margin:0}.assistant-reply-header.is-processing .revline-mark{width:20px;height:20px}.assistant-reply-header>.processing-status{flex:1;min-width:0;padding:0}.assistant-reply-header>.assistant-activity.processing-status{padding:0}.assistant-reply-header>span:not(.revline-brand){line-height:20px}
 .assistant-content :is(.processing-status-sweep,.processing-status-measured){display:none}
 .conversation-editor .assistant-content .chat-assistant{margin-bottom:8px}
-.assistant-content .assistant-result-cards{gap:2px;margin:8px 0 10px}
-.assistant-content .assistant-result-card{min-height:25px;padding:3px 0;gap:8px;border:0;border-radius:0;background:transparent;font-size:12px}
-.assistant-content .assistant-result-card small{font-size:11px;margin-top:1px}
 
 
 .conversation-editor .assistant-content .manual-editor-composer .composer-edit-fields{display:flex;flex-direction:column;gap:12px;min-width:0}
