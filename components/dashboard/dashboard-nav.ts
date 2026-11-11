@@ -1,7 +1,7 @@
-import { ChartPie, Clapperboard, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
+import { ChartNoAxesColumn, Clapperboard, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
-export type DashboardNavItem = { label: string; href: string; icon: LucideIcon; /** Path prefixes that mark this item active; defaults to its href. */ match?: string[] };
+export type DashboardNavItem = { label: string; href: string; icon: LucideIcon; /** The icon is made of open strokes (bars, lines): the sidebar thickens them instead of filling the shape. */ strokeIcon?: boolean; /** Path prefixes that mark this item active; defaults to its href. */ match?: string[] };
 
 /** The signed-in sidebar: flat groups, in the order the design shows them. */
 export const DASHBOARD_NAV: { label: string; items: DashboardNavItem[] }[] = [
@@ -10,7 +10,7 @@ export const DASHBOARD_NAV: { label: string; items: DashboardNavItem[] }[] = [
   ] },
   { label: 'Publish', items: [
     { label: 'Posts', href: '/posts', icon: Send },
-    { label: 'Stats', href: '/stats', icon: ChartPie },
+    { label: 'Stats', href: '/stats', icon: ChartNoAxesColumn, strokeIcon: true },
   ] },
   { label: 'Account', items: [
     { label: 'Settings', href: '/profile', icon: Settings },
