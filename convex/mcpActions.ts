@@ -1,6 +1,7 @@
 "use node";
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
+import { argumentKey } from '../lib/ai/step-timing';
 import { MAX_SHEET_FRAMES, evenly } from '../lib/ai/frame-sampling';
 import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilities } from '../lib/ai/lanes';
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
@@ -119,7 +120,7 @@ function toolFailureMessage(text: string): string {
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
   // The task whose working badge this call raised, and the task this call ends. Settled in finally, so thrown failures count.
-  let busyTask: string | undefined, endedTask: string | undefined;
+  let busyTask: string | undefined, endedTask: string | undefined, timedTask: string | undefined;
   try {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   const projectTool=args.name in PROJECT_TOOLS;
@@ -135,6 +136,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   }) as Doc<'mcpLaneSessions'>|null;
   // finish always ends the task's live session, passed or not; its result still records the attempt honestly, and any
   // later call on the task reopens it (touchTaskAgent) so the agent can fix the failures and finish again.
+  if(session)timedTask=session.taskId;
   if(session&&args.name==='finish')endedTask=session.taskId;
   if(taskScoped&&input.taskId&&!session)return result('Task not found for this owner and project. Use the taskId and projectId returned by startTask.',true);
   // Only an explicit task ID may supply omitted targets. A connection's last
@@ -217,6 +219,9 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   } catch(error){return result(message(error),true);}
   finally{
+    // Where an MCP task's time went: the tool name and how long the call took, nothing of what was asked (lib/ai/step-timing.ts).
+    timedTask??=busyTask??endedTask;
+    if(timedTask&&/^[A-Za-z]{1,48}$/.test(args.name))await ctx.runMutation(internal.runTimings.record,{runId:timedTask,source:'mcp',steps:[{step:0,kind:'tool',name:args.name,at:startedAt,ms:Date.now()-startedAt,key:argumentKey(args.arguments)}]}).catch(()=>null);
     if(endedTask)await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:endedTask}).catch(()=>null);
     else if(busyTask)await ctx.runMutation(internal.mcpConnections.settleTaskAgent,{ownerId:args.ownerId,taskId:busyTask,startedAt}).catch(()=>null);
   }
