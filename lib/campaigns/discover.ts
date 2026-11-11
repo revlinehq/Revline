@@ -13,6 +13,11 @@ const MAX_CLIPS = 16;
 /** Hosts a clip may link out to: the platforms campaigns pay on. */
 const POST_HOSTS = ['instagram.com', 'tiktok.com', 'youtube.com', 'youtu.be', 'x.com', 'twitter.com', 'facebook.com', 'fb.watch'];
 
+/** True when a link leads to one of those platforms (any subdomain). A link that is not a URL is not one. */
+function postHost(url: string) {
+  try { const host = new URL(url).hostname; return POST_HOSTS.some(known => host === known || host.endsWith(`.${known}`)); } catch { return false; }
+}
+
 export type DiscoverItem = { sourceId: string; category?: string };
 /** One clip as their page lists it. The clipper's name and earnings are not kept. */
 export type DiscoverClip = { sourceId: string; postUrl: string; platform: string; views: number; title?: string; thumbnailUrl?: string };
@@ -137,14 +142,18 @@ export function parseDiscoverPage(html: string): DiscoverReading {
           if (!isObject(value)) return [];
           const postUrl = link(value, 'postUrl'), views = amount(value, 'totalViews'), platform = text(value, 'platform', 40)?.toLowerCase();
           if (!postUrl || views === undefined || !platform) return [];
-          const host = new URL(postUrl).hostname.replace(/^(www|m|vm)\./, '');
-          if (!POST_HOSTS.includes(host)) return [];
+          if (!postHost(postUrl)) return [];
           return [compact({ sourceId: item.sourceId, postUrl, platform, views: Math.round(views), title: text(value, 'title', 200), thumbnailUrl: link(value, 'thumbnailUrl') })];
         })];
       });
-      const clips: DiscoverClip[] = [];
+      const clips: DiscoverClip[] = [], posts = new Set<string>();
       for (let rank = 0; clips.length < MAX_CLIPS && perCampaign.some(list => list.length > rank); rank++) {
-        for (const list of perCampaign) if (list[rank] && clips.length < MAX_CLIPS) clips.push(list[rank]);
+        for (const list of perCampaign) {
+          const entry = list[rank];
+          if (!entry || clips.length >= MAX_CLIPS || posts.has(entry.postUrl)) continue;
+          posts.add(entry.postUrl);
+          clips.push(entry);
+        }
       }
       return clips;
     };

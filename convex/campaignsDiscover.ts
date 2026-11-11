@@ -96,10 +96,11 @@ export const sections = query({ args: {},
     const state = await ctx.db.query('campaignDiscover').withIndex('by_name', q => q.eq('name', 'discover')).unique();
     const cache = new Map<Id<'campaigns'>, Promise<Doc<'campaigns'> | null>>();
     const campaign = (id: Id<'campaigns'>) => cache.get(id) ?? cache.set(id, ctx.db.get(id)).get(id)!;
-    const views = async (list: { campaignId: Id<'campaigns'> }[] | undefined) => (await Promise.all((list ?? []).map(entry => campaign(entry.campaignId)))).flatMap(row => row ? [viewOf(row)] : []);
+    // A campaign that has ended since the page was read is no longer featured.
+    const views = async (list: { campaignId: Id<'campaigns'> }[] | undefined) => (await Promise.all((list ?? []).map(entry => campaign(entry.campaignId)))).flatMap(row => row && !row.ended ? [viewOf(row)] : []);
     return {
       readAt: state?.readAt ?? null,
-      hero: (await Promise.all((state?.hero ?? []).map(async ({ campaignId, category }) => { const row = await campaign(campaignId); return row ? [{ campaign: viewOf(row), ...(category ? { category } : {}) }] : []; }))).flat(),
+      hero: (await Promise.all((state?.hero ?? []).map(async ({ campaignId, category }) => { const row = await campaign(campaignId); return row && !row.ended ? [{ campaign: viewOf(row), ...(category ? { category } : {}) }] : []; }))).flat(),
       trending: await views(state?.trending), fresh: await views(state?.fresh), searched: await views(state?.searched),
       clips: await Promise.all((state?.clips ?? []).map(async ({ campaignId, ...clip }) => { const row = await campaign(campaignId); return { ...clip, ...(row ? { campaign: { _id: row._id, name: row.name } } : {}) }; })),
     };

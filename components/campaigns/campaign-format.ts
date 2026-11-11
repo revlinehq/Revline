@@ -6,6 +6,8 @@ export function money(cents: number, { whole = false }: { whole?: boolean } = {}
   return (cents / 100).toLocaleString('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: whole ? 0 : 2, maximumFractionDigits: whole ? 0 : 2 });
 }
 export const count = (value: number) => value.toLocaleString('en-US');
+/** "2.4M", "85.9K": view counts on a small card. */
+export const compactCount = (value: number) => value.toLocaleString('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
 const MINUTE = 60_000, HOUR = 60 * MINUTE, DAY = 24 * HOUR;
 /** "just now", "5 min ago", "3 hours ago", "3 days ago", "2 months ago". */

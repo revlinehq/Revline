@@ -1,0 +1,1 @@
+- Campaigns: the page now opens with what Content Rewards features on its Discover page: a banner of featured campaigns, Trending this week, New campaigns, Most searched and Top clips, read once an hour. Why: the founder asked for the same sections their Discover page has.
