@@ -3,6 +3,7 @@ import { RunSteps, RunThought } from './run-activity';
 import { turnActivity } from './assistant-run';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { PostConfirmCard, postProposalOf } from './post-confirm-card';
+import { ExportConfirmCard, exportProposalOf } from './export-confirm-card';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
@@ -248,6 +249,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
               {/* Cards that need the user stay open: they are part of the reply, not of the run. */}
               {run.steps.flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={`ask-${step.key}`} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
               {run.steps.flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={`post-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
+              {run.steps.flatMap(step => { const proposalId = exportProposalOf(step); return proposalId ? [<ExportConfirmCard key={`export-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
               {replies.some(message => message.id === demoNoteMessageId) && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
               {requestMessage?.turnModel && <p className="assistant-turn-model text-[11px] text-neutral-500" data-turn-model={requestMessage.turnModel} data-turn-effort={requestMessage.turnEffort}>{editorModelLabel(requestMessage.turnModel)}{requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}</p>}

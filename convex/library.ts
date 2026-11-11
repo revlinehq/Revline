@@ -17,7 +17,7 @@ import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 const folderId = v.id('storageFolders');
 const folderSummary = { id: folderId, name: v.string(), parentId: v.union(folderId, v.null()), fileCount: v.number(), totalBytes: v.number(), createdAt: v.number(), updatedAt: v.number() };
 const summarize = (folder: Folder) => ({ id: folder._id, name: folder.name, parentId: folder.parentId ?? null, fileCount: folder.fileCount, totalBytes: folder.totalBytes, createdAt: folder.createdAt, updatedAt: folder.updatedAt });
-const libraryItem = v.object({ ...storageItem.fields, folderId: v.union(folderId, v.null()), duration: v.union(v.number(), v.null()), waveform: v.union(v.array(v.number()), v.null()) });
+const libraryItem = v.object({ ...storageItem.fields, folderId: v.union(folderId, v.null()), duration: v.union(v.number(), v.null()), width: v.union(v.number(), v.null()), height: v.union(v.number(), v.null()), waveform: v.union(v.array(v.number()), v.null()) });
 const visible = (ownerId: string) => ({ ownerId, auxiliary: false, pending: false }) as const;
 const STARTER_FOLDERS = ['Raw footage', 'Exports', 'Audio', 'Images'];
 const WAVEFORM_BARS = 48;

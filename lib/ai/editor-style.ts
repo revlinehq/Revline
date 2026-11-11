@@ -10,6 +10,19 @@ If asked about internals, give a brief high-level account of what Revline can do
 `;
 }
 
+/** The order a speech-driven edit follows, in the app's base instructions. */
+export const SPEECH_EDIT_ORDER=`When the request is to edit or clean up footage with speech (a talking-head take, rough cut, podcast, reel, UGC), work in this order, whatever order the request lists things in. Do only the steps the request needs; a small named change is just that change.
+1. Read inspectTimeline, then the saved transcript of every clip involved (inspectAssetAnalysis transcriptOnly:true; readScript in the reel lane). No frames yet.
+2. Clean cut from the transcript: start on the speaker's first intended line (drop other speakers and setup talk before it), keep the intended lines in order, remove false starts, repeated words and takes, and dead air (cleanSpeech or retainSourceRanges; planScript first in the reel lane). Then read the cut back with readCutScript: it returns what the timeline now says and flags repeats, false starts, clipped words and half sentences the cut left. Remove the flagged repeats and false starts with readCutScript {remove:[ids]} and fix the rest before adding anything on top.
+3. An opening clip or hook the user supplied: keep it to the transcript end of its sentence and place it first, with the take right after it. Make room with one moveClips over every clip of the take (timeDelta = the kept length), then addMedia at 0 with that duration.
+4. B-roll, images and overlays at the timeline time of the word or phrase they belong to, mapped through the cut clips.
+5. Frames only now, and only for what pixels alone show: an awkward face at a cut edge, a gesture (a window of a second or two around its transcript time, never the whole clip), the framing of added media. Gaps, overlaps and stray clips are read from inspectTimeline and finish, never from rendered frames.
+6. J-cuts last, because they unlink picture from sound: when an opening clip leads into the take, J-cut that join (setSplitEdits {cuts:[{clipId: the opening clip, type:'J'}]}). Cuts inside one camera's take stay straight unless the user asks for J-cuts: the picture would show removed footage under the next line.
+7. Check that every part of the request is on the timeline (each clip, image and overlay it names), then finish once: it checks the timeline data, draws the few frames it needs and lists every problem with its fix. Repair what it lists; a check that fails the same way three times ends the request, so report its exact output.
+Why: transcript and timeline data are exact, cheap and need no rendering; frame reads are slow and confirm, they do not discover; anything layered before the cut is moved by every later trim. When the request names b-roll or images first, still cut first and say so in one line.`;
+/** The same order in one paragraph: the MCP server's instructions and the shared editing lane's per-step reminder. */
+export const SPEECH_EDIT_ORDER_SHORT='Editing or cleaning up footage with speech goes in this order, whatever the request lists first: saved transcripts (inspectAssetAnalysis transcriptOnly, or readScript then planScript in reel), the clean cut, readCutScript to read the cut back and fix the repeats, clipped words and half sentences it flags, a supplied opening clip trimmed to the end of its sentence, b-roll and images at the times of the words they belong to, then frames only for what pixels alone show (an awkward face at a cut edge, a gesture in a narrow window around its transcript time, framing), J-cuts last (setSplitEdits), one finish. Gaps, overlaps and stray clips come from inspectTimeline and finish, never from frames.';
+
 /** Writing rules every reply and on-screen text follows. */
 export const WRITING_STYLE_RULES=`
 # Tool defects

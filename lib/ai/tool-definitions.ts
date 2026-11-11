@@ -20,7 +20,12 @@ export const EDITOR_TOOL_DEFINITIONS = {
   openTimeline: { effect: 'timeline', mcp: 'exclusive' },
   importVideoLink: { effect: 'job', mcp: 'exclusive', writes: ['assistant:importRunVideo'], label: ['Importing media', 'Started media import'] },
   getMediaTask: { effect: 'read', mcp: 'exclusive' },
-  exportVideo: { effect: 'job', mcp: 'exclusive', writes: ['assistant:exportRunVideo'], label: ['Starting export', 'Started export'] },
+  // In the editor it leaves a confirmation card (a saved proposal), like postVideo; over MCP it starts the render.
+  exportVideo: { effect: 'resource', mcp: 'exclusive', writes: ['assistant:exportRunVideo', 'assistant:proposeRunExport'], label: ['Preparing export', 'Prepared export'] },
+  // In-app only: MCP lists its own project-level export tools (convex/mcpActions.ts) over the same functions.
+  listExports: { effect: 'read', mcp: 'hidden', label: ['Checking exports', 'Checked exports'] },
+  getExport: { effect: 'read', mcp: 'hidden', label: ['Checking export', 'Checked export'] },
+  cancelExport: { effect: 'resource', mcp: 'hidden', writes: ['mcp:cancelExport'], label: ['Stopping export', 'Stopped export'] },
   planEffects: { effect: 'analysis', mcp: 'hidden', label: ['Planning effects', 'Planned effects'] },
   previewRender: { effect: 'analysis', mcp: 'hidden', label: ['Reviewing rendered edit', 'Reviewed rendered samples'] },
   duplicateClips: { effect: 'timeline', mcp: 'exclusive', label: ['Duplicating clips', 'Duplicated clips'] },
@@ -78,6 +83,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   closeGaps: { effect: 'timeline', mcp: 'exclusive', label: ['Closing gaps', 'Closed gaps'] },
   retainSourceRanges: { effect: 'timeline', mcp: 'exclusive' },
   readScript: { effect: 'analysis', mcp: 'exclusive', label: ['Reading your script', 'Read your script'] },
+  readCutScript: { effect: 'timeline', mcp: 'exclusive', label: ['Reading the cut', 'Read the cut'] },
   planScript: { effect: 'analysis', mcp: 'exclusive', label: ['Planning the cut', 'Planned the cut'] },
   checkSpots: { effect: 'timeline', mcp: 'exclusive', label: ['Checking cut edges', 'Checked cut edges'] },
   cleanSpeech: { effect: 'timeline', mcp: 'exclusive', label: ['Cleaning up speech', 'Cleaned up speech'] },

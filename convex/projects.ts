@@ -11,7 +11,7 @@ import { internal } from "./_generated/api";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
-import { commitTimeline, currentTimeline, validateTimeline } from "./lib/timeline";
+import { commitTimeline, currentTimeline, validateTimeline, TIMELINE_BYTE_LIMIT } from "./lib/timeline";
 import { HISTORY_LIMIT } from "./lib/timeline_history";
 import { addMediaClip, patchClip } from '../lib/editor/operations';
 import { applyTimelineEdit, TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
@@ -268,12 +268,12 @@ export const saveTimeline = mutation({ args: { projectId: v.id("projects"), time
   let timeline = args.timeline;
   let undoTo = args.undoTo, undoTargetKey = args.undoTargetKey;
   let expectedRevision = args.expectedRevision;
-  if (args.undoTo && new TextEncoder().encode(JSON.stringify(args.undoTo)).byteLength > 150_000) throw new ConvexError('Timeline is too large');
+  if (args.undoTo && new TextEncoder().encode(JSON.stringify(args.undoTo)).byteLength > TIMELINE_BYTE_LIMIT) throw new ConvexError('Timeline is too large');
   if (args.undoHistoryKeys && (!args.undoTo || args.undoHistoryKeys.length > LOCAL_UNDO_LIMIT || args.undoHistoryKeys.some(key => !/^[a-f0-9]{64}$/.test(key)))) throw new ConvexError('Invalid undo history');
   if (undoTargetKey !== undefined && (!undoTo || !/^[a-f0-9]{64}$/.test(undoTargetKey))) throw new ConvexError('Invalid undo target');
   if (args.baseTimeline) {
     timeline = await validateTimeline(ctx, project, timeline);
-    if (new TextEncoder().encode(JSON.stringify(args.baseTimeline)).byteLength > 150_000) throw new ConvexError('Timeline is too large');
+    if (new TextEncoder().encode(JSON.stringify(args.baseTimeline)).byteLength > TIMELINE_BYTE_LIMIT) throw new ConvexError('Timeline is too large');
     if (!Number.isInteger(expectedRevision) || expectedRevision < 0 || expectedRevision > (project.revision ?? 0)) throw new ConvexError('Invalid timeline revision');
     const current = currentTimeline(project);
     timeline = applyTimelineEdit(args.baseTimeline, timeline, current);

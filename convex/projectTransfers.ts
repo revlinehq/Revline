@@ -12,7 +12,7 @@ import { createProject, writeProject } from './lib/project_data';
 import { enqueueMediaTask } from './lib/media_queue';
 import { hasPreview } from './lib/media_storage';
 import { recordAssetStorage } from './lib/storage_accounting';
-import { validateTimeline } from './lib/timeline';
+import { validateTimeline, TIMELINE_BYTE_LIMIT } from './lib/timeline';
 import { HISTORY_BYTES, HISTORY_LIMIT, serializedBytes } from './lib/timeline_history';
 
 const ownerArgs = { ownerId: v.string(), email: v.string() };
@@ -76,7 +76,7 @@ function validateSnapshot(args: Snapshot) {
     if (media.kind !== 'video' || mediaById.get(media.audioSourceId)?.kind !== 'audio') throw new ConvexError('Linked audio must identify an imported audio source for a video');
   }
   for (const timeline of [args.timeline, ...args.history]) {
-    if (new TextEncoder().encode(JSON.stringify(timeline)).byteLength > 150_000) throw new ConvexError('Transferred timeline is too large');
+    if (new TextEncoder().encode(JSON.stringify(timeline)).byteLength > TIMELINE_BYTE_LIMIT) throw new ConvexError('Transferred timeline is too large');
     for (const clip of timeline.clips) if (clip.assetId && !ids.has(clip.assetId)) throw new ConvexError('A timeline references media outside the transfer');
   }
 }

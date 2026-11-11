@@ -22,6 +22,7 @@ import { fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-
 import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { MAX_SHEET_FRAMES } from '../../lib/ai/frame-sampling';
@@ -29,6 +30,9 @@ import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
 export type FinishResult = NonNullable<LaneTask['result']>;
+/** The frames could not be drawn in time (a busy or slow media worker). That says nothing about the edit, so finish
+ * reports it and goes on: it is never a failed check and spends no attempt. */
+export class FramesUnavailableError extends Error {}
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
   return new LaneFinishError(`The ${lane} task stopped because its finish check kept failing with nothing fixed in between: ${failures}`);
@@ -94,6 +98,10 @@ export async function finishLane(
     failures.push(...looks.failures);
     warnings.push(...looks.warnings);
   }
+  // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
+  // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.
+  const cutRead = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId);
+  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys((cutRead.output as { accepted?: Record<string, string> }).accepted ?? {}), !!task.script));
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;
@@ -248,7 +256,10 @@ export async function finishLane(
         await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: { tool: 'finishLook', timelineId: tab.timelineId, fingerprint: '', input: {}, output: { used: used + times.length, seen: [...seen, ...plan.keys].slice(-600) } } });
         if (options.fastFrameTimes !== undefined && tab.timelineId === timelineId) await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, []) });
       } catch (error) {
-        failures.push(
+        // "Could not look" is not "looked and found a problem": only a render that ran and failed is a failed check.
+        // A final check was asked to look, so there it still fails.
+        if (error instanceof FramesUnavailableError && taskCheckLevel(task) !== 'final') warnings.push(`${prefix}The changed frames were not drawn (${error.message}) This check passed on timeline data alone; say the result was not looked at.`);
+        else failures.push(
           `${prefix}Changed ranges did not render: ${error instanceof Error ? error.message : String(error)}`,
         );
       }

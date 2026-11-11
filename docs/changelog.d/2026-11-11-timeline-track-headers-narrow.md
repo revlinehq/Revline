@@ -1,0 +1,1 @@
+- Editor timeline: the track header column (V1, A1, FX1) is 64px wide everywhere instead of 168px on desktop, with compact chips, and mute stays visible on compact rows. Why: the founder wanted the lanes to get the wasted header space.

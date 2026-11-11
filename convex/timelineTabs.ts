@@ -13,12 +13,33 @@ import { TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { aspectRatio, timelineValidator } from './schema';
 
-export const MAX_TIMELINE_TABS = 10;
+/** Tabs per project. A clipping job builds one tab per clip from one source, and a long stream yields dozens
+ * (a 48-clip job hit the old limit of 10, issue #355). The count is bounded because several functions read
+ * every stored tab at once (the editor's tab snapshots, media-in-use checks, finishClipping), and the total
+ * size is bounded separately by MAX_STORED_TAB_BYTES. */
+export const MAX_TIMELINE_TABS = 50;
+/** The most timeline JSON a project's tabs may hold together. Each tab is capped at TIMELINE_BYTE_LIMIT
+ * (300 KB), so 50 full tabs would be 15 MB: close to what one Convex function may read (16 MiB) once the
+ * project document is added. 6 MB is 20 full tabs, or far more clip tabs (a clip tab is a few KB to tens of KB);
+ * before this limit a project held at most 10 tabs, 3 MB, so no existing project is over it. */
+export const MAX_STORED_TAB_BYTES = 6_000_000;
 const STASHED_BYTES = 800_000;
 /** A stored tab carries its own summary, so listing tabs never reads the (large) stored timelines. */
-type Tab = { id: string; name: string; aspectRatio?: Timeline['aspectRatio']; duration?: number; clipCount?: number };
+type Tab = { id: string; name: string; aspectRatio?: Timeline['aspectRatio']; duration?: number; clipCount?: number; bytes?: number };
 const summaryOf = (timeline: Timeline) => ({ aspectRatio: timeline.aspectRatio, duration: timelineDuration(timeline), clipCount: timeline.clips.length });
-const withSummary = (tabs: Tab[], id: string, timeline: Timeline) => tabs.map(tab => tab.id === id ? { ...tab, ...summaryOf(timeline) } : tab);
+/** What a stored tab records: its summary plus its size, which the tab budget adds up without reading timelines. */
+const storedSummaryOf = (timeline: Timeline) => ({ ...summaryOf(timeline), bytes: serializedBytes(timeline) });
+const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
+/** Refuse a new tab with the limit it meets and what to do instead. Stored tabs carry their size; one stored before
+ * sizes were recorded (a project of at most 10 tabs then) is measured from its row. */
+async function requireTabRoom(ctx: QueryCtx, project: Doc<'projects'>, tabs: Tab[], active: Timeline, added: Timeline) {
+  if (tabs.length >= MAX_TIMELINE_TABS) throw new ConvexError(`This project already has ${tabs.length} timelines, the most one project holds (${MAX_TIMELINE_TABS}). Delete a timeline that is no longer needed, or put further clips in another project (copy the footage there with its media).`);
+  const activeId = activeTabOf(project);
+  const sizes = await Promise.all(tabs.map(async tab => tab.id === activeId ? serializedBytes(active) : tab.bytes ?? serializedBytes((await stashedRow(ctx, project._id, tab.id))?.timeline ?? null)));
+  const held = sizes.reduce((sum, bytes) => sum + bytes, 0);
+  if (held + serializedBytes(added) > MAX_STORED_TAB_BYTES) throw new ConvexError(`This project's ${tabs.length} timelines hold ${megabytes(held)} of the ${megabytes(MAX_STORED_TAB_BYTES)} one project stores, so a new timeline does not fit. Delete or shorten a timeline (long captioned timelines are the largest), or put further clips in another project.`);
+}
+const withSummary = (tabs: Tab[], id: string, timeline: Timeline) => tabs.map(tab => tab.id === id ? { ...tab, ...storedSummaryOf(timeline) } : tab);
 
 /** Projects made before tabs have one implicit tab. */
 export const tabsOf = (project: Pick<Doc<'projects'>, 'timelineTabs'>): Tab[] => project.timelineTabs?.length ? project.timelineTabs : [{ id: 'main', name: 'Timeline 1' }];
@@ -120,13 +141,13 @@ export const snapshots = query({ args: { projectId: v.id('projects'), sceneCode:
 export const create = mutation({ args: createArgs, returns: v.string(), handler: async (ctx, args) => createTabFor(ctx, await requireOwner(ctx), args) });
 export async function createTabFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof createArgs>, runId?: string) {
   const project = await openProject(ctx, args.projectId, ownerId, runId), tabs = tabsOf(project);
-  if (tabs.length >= MAX_TIMELINE_TABS) throw new ConvexError(`A project holds up to ${MAX_TIMELINE_TABS} timelines`);
   const current = currentTimeline(project), id = crypto.randomUUID();
   const active = tabs.find(tab => tab.id === activeTabOf(project));
   const names = new Set(tabs.map(tab => tab.name));
   let name = args.name !== undefined ? tabName(args.name) : args.from === 'duplicate' && active ? `${active.name} copy` : `Timeline ${tabs.length + 1}`;
   for (let n = 2; names.has(name); n++) name = `${args.name?.trim() || (args.from === 'duplicate' && active ? `${active.name} copy` : 'Timeline')} ${n}`;
   const timeline: Timeline = args.from === 'duplicate' ? { ...current, ...(args.aspectRatio ? { aspectRatio: args.aspectRatio } : {}) } : { clips: [], fps: 60, aspectRatio: args.aspectRatio ?? current.aspectRatio };
+  await requireTabRoom(ctx, project, tabs, current, timeline);
   const stashed = await stashActive(ctx, project);
   await openTab(ctx, project, withSummary([...tabs, { id, name }], stashed.timelineId, stashed.timeline), id, timeline, []);
   return id;
@@ -183,7 +204,7 @@ export const backfillTabSummaries = internalMutation({ args: { cursor: v.optiona
     const tabs = await Promise.all(project.timelineTabs.map(async tab => {
       if (tab.id === active || tab.duration !== undefined) return tab;
       const row = await stashedRow(ctx, project._id, tab.id);
-      return row ? { ...tab, ...summaryOf(row.timeline) } : tab;
+      return row ? { ...tab, ...storedSummaryOf(row.timeline) } : tab;
     }));
     await writeProject(ctx,project._id, { timelineTabs: tabs });
   }
@@ -209,7 +230,7 @@ export const importTab = internalMutation({ args: { projectId: v.id('projects'),
   const project = await ctx.db.get(args.projectId);
   if (!project) throw new ConvexError('Project not found');
   const tabs = tabsOf(project);
-  if (tabs.length >= MAX_TIMELINE_TABS) throw new ConvexError(`A project holds up to ${MAX_TIMELINE_TABS} timelines`);
+  await requireTabRoom(ctx, project, tabs, currentTimeline(project), args.timeline);
   for (const id of new Set(Object.values(args.assetMap))) {
     const asset = await ctx.db.get(id);
     if (!asset || asset.projectId !== project._id || asset.ownerId !== project.ownerId) throw new ConvexError(`Media ${id} is not in the target project`);
@@ -219,7 +240,7 @@ export const importTab = internalMutation({ args: { projectId: v.id('projects'),
   const timeline = { ...args.timeline, clips: args.timeline.clips.map(clip => clip.assetId ? { ...clip, assetId: args.assetMap[clip.assetId] } : clip) };
   const timelineId = crypto.randomUUID(), name = tabName(args.name);
   await ctx.db.insert('projectTimelines', { projectId: project._id, ownerId: project.ownerId, timelineId, timeline: timeline });
-  await writeProject(ctx, project._id, { timelineTabs: [...tabs, { id: timelineId, name, ...summaryOf(timeline) }], activeTimelineId: activeTabOf(project), updatedAt: Date.now() });
+  await writeProject(ctx, project._id, { timelineTabs: [...tabs, { id: timelineId, name, ...storedSummaryOf(timeline) }], activeTimelineId: activeTabOf(project), updatedAt: Date.now() });
   return timelineId;
 } });
 

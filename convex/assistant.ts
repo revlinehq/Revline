@@ -2,7 +2,9 @@ import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
 import { patchTurn, turnSummaryForRun, settleTurn } from './lib/assistant_turn_data';
-import { recordIncident, incidentDeployment } from './lib/incidents';
+import { recordIncidentSafely, incidentDeployment } from './lib/incidents';
+import { safely } from './lib/safely';
+import { refusalReason } from '../lib/ai/failure-text';
 import { MAX_SPEAKER_WINDOW_SECONDS } from '../lib/media-analysis/clipping';
 import {parseEditorCommand} from '../lib/ai/slash-commands';
 import {editorEditModeValidator} from './lib/edit_mode';
@@ -26,6 +28,7 @@ import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
 import { importVideoFor } from './mediaTasks';
 import { startRenderFor } from './renders';
+import { proposeExportFor } from './assistantExports';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { canChooseReasoningEffort, hasPaidModelAccess, productionDefaultModel, productionOffer, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -447,6 +450,12 @@ export const exportRunVideo = internalMutation({ args: { ...runArgs, timelineId:
   return { jobId };
 }});
 
+/** The in-app assistant's exportVideo: a confirmation card, never a render (convex/assistantExports.ts). */
+export const proposeRunExport = internalMutation({ args: { ...runArgs, timelineId: v.optional(v.string()), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, { runId, ownerId, projectId, ...request }) => {
+  await requireActiveRun(ctx, { projectId, ownerId, runId });
+  return proposeExportFor(ctx, ownerId, { projectId, ...request });
+}});
+
 export const beginEditing = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
@@ -662,8 +671,8 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   }
   const error = committed ? undefined : kept === null ? args.error : `${args.error!.replace(/\s*(?:The pending replacement was not saved\.|No timeline changes were saved\.)/g, '')} ${keptDraftNote(kept)}`.trim();
   if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000)});
-  await finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication && kept !== null ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: kept.revision } : publication);
-  if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncident(ctx, {
+  await safely('finishIncidentRun', () => finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication && kept !== null ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: kept.revision } : publication));
+  if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncidentSafely(ctx, {
     source: 'assistant', kind: 'turn-failure', message: error,
     context: { location: 'convex/assistant:finish', savedEdits: args.savedEdits },
     projectId: args.projectId, runId: args.runId, deployment: incidentDeployment(),
@@ -792,8 +801,10 @@ export const drainQueue=internalMutation({args:{projectId:v.id('projects'),owner
   if(!row)return null;
   try{
     await ctx.runMutation(internal.assistant.startQueued,{...args,id:row._id});
-  }catch{
-    await ctx.db.patch(row._id,{error:'This queued request could not start. Check your access and attached footage, then resume the queue.'});
+  }catch(error){
+    // Keep the reason the start was refused (access, a removed attachment, a model no longer offered).
+    const reason=refusalReason(error).replace(/[.!?]*$/,'');
+    await ctx.db.patch(row._id,{error:reason?`This queued request could not start: ${reason.slice(0,400)}. Fix that, then resume the queue.`:'This queued request could not start. Check your access and attached footage, then resume the queue.'});
     await writeProject(ctx,args.projectId,{aiQueuePaused:true});
   }
   return null;
