@@ -4,6 +4,7 @@ import { ConvexError, v, convexToJson, jsonToConvex, type Infer } from 'convex/v
 import {internal} from './_generated/api';
 import { internalMutation, internalQuery } from './_generated/server';
 import { toolBehavior } from '../lib/ai/tool-definitions';
+import { plainFailureText } from '../lib/ai/failure-text';
 import { savesNothing, toolWriteReceipt } from './lib/tool_write_receipt';
 import { projectIdentity } from './lib/project_data';
 import { saveEvidence } from './lib/lane_evidence';
@@ -62,7 +63,10 @@ export const run = internalMutation({
     }
     catch (error) {
       // A sub-transaction failure rolls back its writes; callers may safely report this as a failed write.
-      throw new ConvexError({ kind: 'tool-write-failed', message: (error instanceof Error ? error.message : String(error)).slice(0, 1000) });
+      // The reason as the mutation wrote it; the raw text (transport prefixes, stack frame) is logged, not handed to the model or the chat.
+      const raw = error instanceof Error ? error.message : String(error);
+      console.warn(`[tool-write-failed] ${JSON.stringify({ runId: args.runId, tool: args.toolName, function: args.functionName, error: raw.slice(0, 600) })}`);
+      throw new ConvexError({ kind: 'tool-write-failed', message: (plainFailureText(error instanceof ConvexError && typeof error.data === 'string' ? error.data : raw) || raw).slice(0, 1000) });
     }
     const afterProject=await ctx.db.get(args.projectId),after=afterProject?.revision??before;
     const declared = definition.writes?.includes(args.functionName);

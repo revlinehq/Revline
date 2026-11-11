@@ -56,7 +56,7 @@ export const batch = internalMutation({ args: { ownerId: v.string() }, returns: 
         await ctx.db.patch(render._id, { status: 'cancelled', updatedAt: Date.now() });
       }
       if (activeExports.some(rows => rows.length)) { await again(); return null; }
-      await stopOwnedProject(ctx, project);
+      await stopOwnedProject(ctx, project, false);
       await beginProjectDeletion(ctx, ownerId, { ...project, aiRunning: false });
       await again(2000); return null;
     }
