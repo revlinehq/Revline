@@ -279,14 +279,14 @@ export async function publishPost(ctx: ActionCtx, accountId: Id<'postingAccounts
 }
 
 /** Poll a post Post Bridge is still publishing. Throws PostingError when the poll itself could not run. */
-export async function checkPost(ctx: ActionCtx, accountId: Id<'postingAccounts'>, platform: PostingPlatform, postId: string): Promise<PublishCheck & { providerResultId?: string }> {
+export async function checkPost(ctx: ActionCtx, accountId: Id<'postingAccounts'>, platform: PostingPlatform, job: string): Promise<PublishCheck & { providerResultId?: string }> {
   const key = postBridgeKey();
   if (!key) throw new PostingError(UNAVAILABLE, true);
+  // The post was already handed over, and its job says which Post Bridge account it went to: its outcome is still
+  // read when the account was disconnected or reconnected since. The row only names the account for a missing link.
   const row = await ctx.runQuery(internal.postingBridge.account, { accountId });
-  // The post was already handed over, so its outcome is still read for an account disconnected since; only its id is needed.
-  if (!row || row.providerAccountId === null) return { status: 'failed', error: 'This account was disconnected while the post was going out. Check the account to see whether the video is there.', retryable: false };
   // A poll that could not run, or that Post Bridge refused, says nothing about the post: it is asked again later.
-  try { return await checkPublish(key, postId, { socialAccountId: row.providerAccountId, platform, username: row.username }); }
+  try { return await checkPublish(key, job, { platform, username: row?.username ?? '' }); }
   catch (error) { throw new PostingError(failure(error, 'The post’s outcome could not be read.'), true); }
 }
 
