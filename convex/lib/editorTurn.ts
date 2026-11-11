@@ -26,7 +26,7 @@ import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTE
 import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
-import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
+import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, editorToolChoice, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { type ObjectType } from "convex/values";
 import { internal } from "../_generated/api";
@@ -190,7 +190,10 @@ For edit requests, use one brief initial sentence stating the requested action, 
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
-            return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
+            const mustCallTool=toolkit.requiresFinish()&&!toolkit.laneFinished();
+            // Claude is never forced to call a tool: Sonnet 5.5 and Opus 5.5 answer a forced tool_choice with a 400, and Haiku 5.5
+            // accepts it but skips thinking on that step. The reply gate withholds early text and the repair pass asks for finish.
+            return {activeTools,toolChoice:editorToolChoice(provider,mustCallTool),messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${mustCallTool&&provider==='anthropic'?'\nThis request has edits that finish has not passed yet. Call a tool in this step: continue the edit, or call finish. A text reply is withheld until finish passes.':''}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],

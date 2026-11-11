@@ -228,6 +228,13 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
   return { openai };
 }
 
+/** Whether a step may force a tool call. Only OpenAI models take `required`. On Claude it becomes
+ * `tool_choice: any`, which Sonnet 5.5 and Opus 5.5 reject with a 400 and which makes Haiku 5.5 skip thinking;
+ * Claude steps always use `auto` and are steered from the prompt. */
+export function editorToolChoice(provider: ClaudeModelSelection['provider'], mustCallTool: boolean): 'auto' | 'required' {
+  return mustCallTool && provider === 'openai' ? 'required' : 'auto';
+}
+
 /** Higher effort shares its output allowance with hidden reasoning tokens. */
 export function editorMaxOutputTokens(selection: ClaudeModelSelection) {
   // Claude gets its model maximum: thinking and the scene share this allowance, and a lower cap cut runs off
