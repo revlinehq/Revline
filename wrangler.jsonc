@@ -45,9 +45,9 @@
     "NEXT_PUBLIC_CONVEX_SITE_URL": "https://different-gnu-398.convex.site",
     "NEXT_PUBLIC_CONVEX_URL": "https://different-gnu-398.convex.cloud",
     "MEDIA_WORKER_URL": "https://revline-editor-media-production.makaradze98-s.workers.dev",
-    "NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL": "/campaigns",
+    "NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL": "/dashboard/new-project",
     "NEXT_PUBLIC_CLERK_SIGN_IN_URL": "/sign-in",
-    "NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL": "/campaigns",
+    "NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL": "/dashboard/new-project",
     "NEXT_PUBLIC_CLERK_SIGN_UP_URL": "/sign-up"
   }
 }

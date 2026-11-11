@@ -2,7 +2,7 @@
    own palette variables point at them, and buttons use the shared soft and primary variants. Static: no transitions. */
 html[data-workspace-theme=dark] .editor-app{--ed-bg:var(--dash-page);--ed-panel:var(--dash-page);--ed-surface:var(--dash-card);--ed-surface-2:var(--dash-tile);--ed-border:var(--dash-border);--revline-accent:var(--dash-accent);--revline-primary-background:var(--dash-accent)}
 
-/* Top bar: back arrow, project name, campaign chip, saved mark; quiet actions at the right. */
+/* Top bar: back arrow, project name, saved mark; quiet actions at the right. */
 html[data-workspace-theme=dark] .editor-app header.workspace-nav{height:48px;gap:6px;padding:0 12px 0 10px}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav [data-slot=button]{transition:none}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav :is([data-slot=button],a):focus-visible{outline:none;box-shadow:none}
@@ -18,10 +18,6 @@ html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history{margin-right:8px;padding-right:10px;border-right:1px solid var(--dash-divider)}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]{border-radius:9999px}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-history [data-slot=button]:hover:not(:disabled){background:var(--dash-pill);color:var(--dash-text)}
-/* The campaign chip beside the project name: the shared soft pill, sized to its name. */
-.project-campaign-chip{flex:0 1 auto}
-.project-campaign-trigger.project-campaign-trigger{max-width:320px;font-weight:400}
-.project-campaign-trigger.project-campaign-trigger svg{flex:none;width:13px;height:13px;color:var(--dash-muted)}
 
 /* Media panel: the tab's content, and Add files as a soft pill. */
 html[data-workspace-theme=dark] .conversation-editor .preview-inspector .inspector-media-content,html[data-workspace-theme=dark] .preview-inspector-sheet .inspector-media-content{padding:14px 12px}
@@ -34,7 +30,5 @@ html[data-workspace-theme=dark] .preview-inspector-sheet .preview-inspector>.ins
 /* Timeline: a white playhead, as in the design; clips keep their own colours. */
 html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .playhead{background:#fff}
 html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .timeline-playhead-cap{color:#fff}
-/* On a phone the chip is its icon alone, so the project name keeps its room. */
-@media(max-width:900px){.project-campaign-trigger.project-campaign-trigger{padding:0 9px}.project-campaign-trigger.project-campaign-trigger :is(span,svg:last-child){display:none}}
 /* On a phone, Export is its icon and the actions take only the room they need, so the name, Export and Post all fit. */
 @media(max-width:900px){html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-actions{flex:none}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger[data-slot=button]{flex:1 1 0;min-width:0;justify-content:flex-start}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-export[data-slot=button]{width:32px;padding:0;gap:0;font-size:0}}

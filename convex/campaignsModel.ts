@@ -1,5 +1,5 @@
 // Campaign data: the tables and validators. Campaigns are shared and read-only to users; only the reader
-// writes them, through convex/campaignsStore.ts.
+// wrote them, and it has been removed: nothing reads Content Rewards any more. The stored data stays.
 import { defineTable } from 'convex/server';
 import { v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
@@ -90,7 +90,7 @@ export const campaignTables = {
     drainToken: v.optional(v.string()), drainUntil: v.optional(v.number()),
     lastRequestAt: v.optional(v.number()),
     consecutiveFailures: v.number(), backoffUntil: v.optional(v.number()),
-    /** Pages the parser could not understand, less the pages read well since (reader-config MAX_UNREADABLE_PAGES). */
+    /** Pages the removed reader's parser could not understand, less the pages it read well since. */
     unreadablePages: v.optional(v.number()),
     haltedUntil: v.optional(v.number()), haltReason: v.optional(v.string()),
     lastReadAt: v.optional(v.number()),
