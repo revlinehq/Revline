@@ -1,0 +1,1 @@
+- Assistant: every run records where its time went (each model call and tool call: name, start, duration, token counts; no user content), and `npm run incidents:speed` prints the slowest tools, repeated calls and median run time per lane for a deployment and date range. Why: speed could only be measured by hand on single runs.

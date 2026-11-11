@@ -1,5 +1,6 @@
 import { clippingManifest,clipCheckRequestValidator } from './lib/clipping_validator';
 import { postingTables } from './postingTables';
+import { stepTimingValidator } from './lib/step_timing_validator';
 import { laneValidator, laneEvidenceValidator, laneBaselineValidator, laneResultValidator } from './lib/lane_validators';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator, pixelTrackHeaderValidator, pixelTrackSampleValidator, pixelTrackBindingValidator } from './lib/pixel_track_validator';
@@ -306,6 +307,9 @@ export default defineSchema({
   assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean(),
     // Copied from the turn: what its latest run resolved at inference time; absent until that run records it and on older turns.
     model:v.optional(v.string()),effort:v.optional(v.string())}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
+  // Where each run's time went (lib/ai/step-timing.ts): names, times and token counts only, no user content, no owner.
+  // Rows expire after 30 days; `npm run incidents:speed` reads them.
+  assistantRunTimings: defineTable({ runId: v.string(), source: v.union(v.literal('editor'), v.literal('mcp')), lane: v.optional(v.string()), model: v.optional(v.string()), effort: v.optional(v.string()), startedAt: v.number(), updatedAt: v.number(), expiresAt: v.number(), steps: v.array(stepTimingValidator) }).index('by_run', ['runId']).index('by_started', ['startedAt']).index('by_expires', ['expiresAt']),
   assistantTurns: defineTable({
     projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
