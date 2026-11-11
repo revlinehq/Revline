@@ -1,4 +1,4 @@
-import { DEFAULT_CAPTION_STYLE } from './text-style';
+import { DEFAULT_CAPTION_STYLE, DEFAULT_GRAPHIC_STYLE } from './text-style';
 import { DEFAULT_PARALLAX } from './montage-vfx';
 import { DEFAULT_SOLID_COLOR, EFFECT_CATALOG, isSolidColorClip, motionPreset, offsetClipMotion, ownClockTimingPatch, resizeEffectMotion,validateClipEffects } from './clip-effects';
 import { TimelineGestureRejection } from './timeline-edit-errors';
@@ -228,7 +228,7 @@ export function separateVideoClips(timeline: Timeline, asset: { _id: string; aud
 }
 export function addTextClip(timeline: Timeline, id: string, kind: 'caption' | 'graphic', at: number): Timeline {
   timeline = normalizeTimeline(timeline);
-  return placeOnFreeLayer(timeline, { id, kind, start: at, duration: Math.min(3, Math.max(1, timelineDuration(timeline) - at)), sourceStart: 0, text: kind === 'caption' ? 'Your words here.' : 'MAKE ROOM FOR YOUR NEXT IDEA.', fontSize: kind === 'caption' ? 52 : 92, color: '#F4F4F0', background: 'transparent', x: 0.5, y: kind === 'caption' ? 0.78 : 0.55, animation: 'none', ...(kind === 'caption' ? DEFAULT_CAPTION_STYLE : {}) });
+  return placeOnFreeLayer(timeline, { id, kind, start: at, duration: Math.min(3, Math.max(1, timelineDuration(timeline) - at)), sourceStart: 0, text: kind === 'caption' ? 'Your words here.' : 'MAKE ROOM FOR YOUR NEXT IDEA.', fontSize: kind === 'caption' ? 52 : 92, color: '#F4F4F0', background: 'transparent', x: 0.5, y: kind === 'caption' ? 0.78 : 0.55, animation: 'none', fontFamily: DEFAULT_GRAPHIC_STYLE.fontFamily, ...(kind === 'caption' ? DEFAULT_CAPTION_STYLE : {}) });
 }
 /** An FX clip affects the visual composition only during its own range. */
 export function addEffectClip(timeline: Timeline, id: string, preset: EffectPreset, at: number, options: { duration?: number; aboveClipId?: string; track?: number; direction?: TransitionDirection; visualTrack?: number } = {}): Timeline {

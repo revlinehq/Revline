@@ -19,6 +19,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { campaignTables } from './campaignsModel';
 import { v } from "convex/values";
 import { BEAT_ANALYSIS_ENGINE } from '../lib/media-analysis/beat-map';
+import { TEXT_FONTS } from '../lib/editor/text-fonts';
 import { aiCostRecordFields } from './lib/ai_cost';
 import { pacingRequestValidator, pacingResultValidator } from './lib/pacing_validator';
 import { soundRequestValidator, soundResultValidator } from './lib/sound_validator';
@@ -63,6 +64,9 @@ export const zoomBlurValidator = v.object({ enabled: v.boolean(), amount: v.numb
 export const invertValidator = v.object({ enabled: v.boolean(), amount: v.number() });
 export const ditherValidator = v.object({ enabled: v.boolean(), amount: v.number(), levels: v.number(), size: v.number(), shadowColor: v.optional(v.string()), highlightColor: v.optional(v.string()) });
 export const glitchValidator = v.object({ enabled: v.boolean(), intensity: v.number(), blockSize: v.number(), rgbSplit: v.number() });
+/** Text fonts come from the one registry (lib/editor/text-fonts.ts); a font added there is accepted here. */
+const [firstFont, secondFont, ...otherFonts] = TEXT_FONTS.map(font => v.literal(font.id));
+export const textFontValidator = v.union(firstFont, secondFont, ...otherFonts);
 export const textTemplateValidator = v.object({ preset: v.union(v.literal('word-reveal'), v.literal('word-pop'), v.literal('slide-title'), v.literal('karaoke'), v.literal('neon-echo'), v.literal('lyric-slam'), v.literal('kinetic-stack'), v.literal('rgb-split'), v.literal('type-trails'), v.literal('blur-focus'), v.literal('character-scramble'), v.literal('spotlight-sweep'), v.literal('ink-write'), v.literal('tunnel-zoom')), highlightColor: v.optional(v.string()), strength:v.optional(v.number()), revealDuration:v.optional(v.number()), stagger:v.optional(v.number()), duration: v.optional(v.number()), offset: v.optional(v.number()), wordTimings:v.optional(v.array(v.object({start:v.number(),end:v.number()}))), karaokeStyle:v.optional(v.union(v.literal('box'),v.literal('pop'))) });
 export const textGradientValidator = v.object({colors:v.array(v.string()),angle:v.number(),animation:v.optional(v.object({duration:v.number(),direction:v.union(v.literal('forward'),v.literal('reverse')),loop:v.boolean()})),offset:v.optional(v.number())});
 export const textStyleValidator = v.object({strokeWidth:v.number(),strokeColor:v.string(),shadowBlur:v.number(),shadowX:v.number(),shadowY:v.number(),shadowColor:v.string(),glowBlur:v.number(),glowColor:v.string(),fontWeight:v.optional(v.number()),italic:v.optional(v.boolean()),letterSpacing:v.optional(v.number()),lineHeight:v.optional(v.number()),textAlign:v.optional(v.union(v.literal('left'),v.literal('center'),v.literal('right'))),paddingX:v.optional(v.number()),paddingY:v.optional(v.number()),borderRadius:v.optional(v.number())});
@@ -123,7 +127,7 @@ export const clipValidator = v.object({
   scene: v.optional(v.object({ title: v.string(), code: v.string(), codeRef: v.optional(v.string()), brand: v.optional(sceneBrandValidator), media: v.optional(v.array(v.object({ name: v.string(), assetId: v.string() }))), blueprints: v.optional(v.array(v.object({ name: v.string(), code: v.string(), codeRef: v.optional(v.string()) }))), film: v.optional(v.object({ duration: v.number(), builtThrough: v.optional(v.number()), referenceAssetId: v.optional(v.string()), referenceStart: v.optional(v.number()) })) })),
   textTemplate: v.optional(textTemplateValidator),
   textStyle:v.optional(textStyleValidator), textGradient:v.optional(textGradientValidator),
-  fontFamily:v.optional(v.union(v.literal('space-grotesk'),v.literal('anton'),v.literal('dm-serif'),v.literal('geist-mono'),v.literal('inter'),v.literal('dm-sans'),v.literal('montserrat'),v.literal('poppins'),v.literal('oswald'),v.literal('bebas-neue'),v.literal('playfair-display'),v.literal('caveat'),v.literal('tiktok-sans'),v.literal('barlow-condensed'),v.literal('ibm-plex-mono'),v.literal('lora'),v.literal('archivo-black'),v.literal('fraunces'))),
+  fontFamily:v.optional(textFontValidator),
   effectPreset: v.optional(v.union(v.literal('none'), v.literal('fade'), v.literal('punch'), v.literal('shake'), v.literal('flash'), v.literal('pop'), v.literal('cinematic-bars'), v.literal('quick-zoom-in'), v.literal('quick-zoom-out'),v.literal('frame-shrink'), v.literal('zoom-blur'), v.literal('impact-frame'), v.literal('texture-overlay'), v.literal('solid-color'),v.literal('crossfade'),v.literal('spin-zoom'),v.literal('blur-dissolve'),v.literal('gradient-wipe'),v.literal('iris-wipe'),v.literal('whip-pan'),v.literal('zoom-through'),v.literal('film-burn'))),
   cinematicBars: v.optional(v.object({ size: v.number(), speed: v.number() })),
   solidColor:v.optional(v.object({color:v.string(),width:v.number(),height:v.number(),x:v.number(),y:v.number(),opacity:v.number()})),

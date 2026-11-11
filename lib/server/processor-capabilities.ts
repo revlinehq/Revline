@@ -24,8 +24,11 @@ export const GATED_TASK_KINDS = [] as const;
  *  would download their page as a file and fail, so Convex refuses them with a plain message until one reports these. */
 export const GATED_IMPORT_SOURCES = ['twitch-clips', 'more-sites'] as const;
 /** What the renderer draws that an older image cannot. 'emoji': colour emoji in text (the image has no emoji font, and
- *  the bundled one arrived later), so frames and exports from an older processor show a "NO GLYPH" box instead. */
-export const GATED_RENDER_FEATURES = ['emoji'] as const;
+ *  the bundled one arrived later), so frames and exports from an older processor show a "NO GLYPH" box instead.
+ *  'fonts-2': the text fonts added with caption presets (Bangers, Outfit, Rubik, Figtree, more Poppins weights); Convex
+ *  sends an older processor each of those as the older font it names in lib/editor/text-fonts.ts, since that processor
+ *  rejects a font it does not know. */
+export const GATED_RENDER_FEATURES = ['emoji', 'fonts-2'] as const;
 
 /** Removed with the motion and recreate lanes. Stored rows may still name them, so the schema keeps them; no processor
  *  runs or reports them, and nothing queues them. */

@@ -3,6 +3,7 @@ import { applyMirrorBlurLayout, foldMirrorBlurStacks, stackedMirrorCopies, stack
 import { patchClip, placeOnFreeLayer } from './operations';
 import { playbackRateOf } from './playback-rate';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
+import { DEFAULT_TEXT_FONT } from './text-fonts';
 import { captionSpeech, sourceCaptions } from './transcript-captions';
 import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 
@@ -123,7 +124,7 @@ export const HOOK_CLIP_ID = 'hook-title';
 export const HOOK_SECONDS = 4;
 export const HOOK_MAX_LENGTH = 120;
 const HOOK_STYLE = {
-  fontSize: 76, color: '#FFFFFF', background: 'transparent', x: .5, y: .17, animation: 'none',
+  fontSize: 76, fontFamily: DEFAULT_TEXT_FONT, color: '#FFFFFF', background: 'transparent', x: .5, y: .17, animation: 'none',
   textStyle: { ...DEFAULT_TEXT_APPEARANCE, fontWeight: 700, strokeWidth: 10, shadowBlur: 6, shadowY: 3, shadowColor: '#00000099' },
 } as const;
 const hookClip = (timeline: Timeline) => timeline.clips.find(clip => clip.id === HOOK_CLIP_ID && clip.kind === 'graphic');
