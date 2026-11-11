@@ -20,6 +20,7 @@ import type * as appleBillingHttp from "../appleBillingHttp.js";
 import type * as assets from "../assets.js";
 import type * as assistant from "../assistant.js";
 import type * as assistantActions from "../assistantActions.js";
+import type * as assistantExports from "../assistantExports.js";
 import type * as assistantMessages from "../assistantMessages.js";
 import type * as assistantPosting from "../assistantPosting.js";
 import type * as assistantTurnRecovery from "../assistantTurnRecovery.js";
@@ -178,6 +179,7 @@ declare const fullApi: ApiFromModules<{
   assets: typeof assets;
   assistant: typeof assistant;
   assistantActions: typeof assistantActions;
+  assistantExports: typeof assistantExports;
   assistantMessages: typeof assistantMessages;
   assistantPosting: typeof assistantPosting;
   assistantTurnRecovery: typeof assistantTurnRecovery;

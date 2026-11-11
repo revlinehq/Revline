@@ -1,0 +1,1 @@
+- Library: the details preview shows each file at its own shape (16:9, 9:16, rotated phone video, square, tall screenshot) and lists its dimensions and ratio. Why: the founder saw every file forced into a 16:9 box.

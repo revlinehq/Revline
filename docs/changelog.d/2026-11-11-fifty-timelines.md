@@ -1,0 +1,1 @@
+- Timelines: a project holds up to 50 timeline tabs (was 10), within 6 MB of timelines in all, and a full project says which limit it met and to continue in another project. Why: a clipping job making 48 clips from one stream stopped at 10 tabs (issue #355).
