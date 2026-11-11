@@ -9,13 +9,12 @@ import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { BillingSection } from './billing-section';
 import { DevAiCosts } from './dev-ai-costs';
 import { McpConnectorSection } from './mcp-connector-section';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/settings-card';
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Skeleton } from '@/components/ui/skeleton';
+import { UserAvatar, useConnectedPicture } from './user-avatar';
 
 /** The Plan and Profile cards, still, until the account is known. */
 export function SettingsSkeleton() {
@@ -35,6 +34,8 @@ export function ProfilePage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const clerk = useClerk();
   const fileInput = useRef<HTMLInputElement>(null);
+  // A connected account's picture is shown instead of the sign-in photo, so changing that photo would change nothing here.
+  const connectedPicture = useConnectedPicture();
   const [photoBusy, setPhotoBusy] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [photoError, setPhotoError] = useState('');
@@ -57,26 +58,23 @@ export function ProfilePage() {
     try { await signOutToSignIn(clerk); }
     catch { setError('Could not sign out. Please try again.'); setSigningOut(false); }
   }
-  return <div className="dash-page">
-    <DashboardNavbar title="Settings" />
-    <main className="dash-content"><div className="dash-column settings-page">
-      <h1 className="sr-only">Settings</h1>
-      {!isLoaded ? <SettingsSkeleton /> : <>
-        <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
-        <SettingsCard title="Profile" action={isSignedIn && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}>
-          <SettingsRow label="Photo"><Avatar className="settings-avatar">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="Your profile photo" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></SettingsRow>
-          <SettingsRow label="Name">{name}</SettingsRow>
-          <SettingsRow label="Email">{email ?? 'Sign in to see your email'}</SettingsRow>
-          {photoError && <SettingsBody><p className="dash-error" role="alert">{photoError}</p></SettingsBody>}
-          <input hidden type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} />
-        </SettingsCard>
-        <McpConnectorSection />
-        <DevAiCosts />
-        <Card variant="dash" className="dash-list"><div className="dash-list-row">
-          <span className="dash-list-row-name dash-list-note">{email ? `Signed in as ${email}` : 'You are not signed in'}</span>
-          {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}
-        </div></Card>
-      </>}{error && <p className="dash-error" role="alert">{error}</p>}
-    </div></main>
-  </div>;
+  return <main className="dash-content"><div className="dash-column settings-page">
+    <h1 className="sr-only">Settings</h1>
+    {!isLoaded ? <SettingsSkeleton /> : <>
+      <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
+      <SettingsCard title="Profile" action={isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}>
+        <SettingsRow label="Photo"><span className="settings-photo"><UserAvatar className="settings-avatar" alt="Your profile photo" fallback={initial} />{connectedPicture && <small>From your connected account</small>}</span></SettingsRow>
+        <SettingsRow label="Name">{name}</SettingsRow>
+        <SettingsRow label="Email">{email ?? 'Sign in to see your email'}</SettingsRow>
+        {photoError && <SettingsBody><p className="dash-error" role="alert">{photoError}</p></SettingsBody>}
+        <input hidden type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} />
+      </SettingsCard>
+      <McpConnectorSection />
+      <DevAiCosts />
+      <Card variant="dash" className="dash-list"><div className="dash-list-row">
+        <span className="dash-list-row-name dash-list-note">{email ? `Signed in as ${email}` : 'You are not signed in'}</span>
+        {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}
+      </div></Card>
+    </>}{error && <p className="dash-error" role="alert">{error}</p>}
+  </div></main>;
 }

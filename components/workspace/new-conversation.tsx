@@ -18,8 +18,8 @@ import { useSourceUpload } from '@/components/editor/use-source-upload';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
-import { clearNewProjectDraft, clearNewProjectSources, newProjectBrief, newProjectCloudFootage, newProjectComposerKey, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
-import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
+import { clearNewProjectDraft, clearNewProjectSources, newProjectBrief, newProjectCloudFootage, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
+import { assistantRequest } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -30,8 +30,6 @@ import { ComposerLinkShelf, type LinkImportProgress } from './composer-link-shel
 import { importErrorMessage } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EditComposer } from './edit-composer';
-import { ResultsControl, useResultsView } from '@/components/editor/results-control';
-import { projectPath } from '@/lib/editor/results-view';
 import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
 import { WorkspaceNav, chatRecency, useWorkspaceChats } from './workspace-nav';
@@ -101,9 +99,7 @@ export function NewConversation() {
   const recentProjects = workspaceChats.filter(project => !holderIds.includes(project.id));
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
-  // After a message: the conversation view, or straight to the full editor, as the user last chose.
-  const [resultsView, setResultsView] = useResultsView();
-  const composerControls = useAssistantComposerControls({ settings: settings ?? {}, draftKey: userId ? newProjectComposerKey(userId) : undefined, disabled: !draftReady || busy || !settings });
+  const request = assistantRequest(settings ?? {});
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
   useEffect(() => {
@@ -254,7 +250,7 @@ export function NewConversation() {
       });
       if (!mounted.current || draftEpoch.current !== epoch) return;
       try {
-        rememberOpeningRequest(projectId, prompt, composerControls.request);
+        rememberOpeningRequest(projectId, prompt, request);
         clearNewProjectSources();
         // The new project holds its own copy of each imported video.
         discardHolders(Object.values(linkHolders));
@@ -262,7 +258,8 @@ export function NewConversation() {
       const first = activeJob.input.files[0]?.file;
       rememberOpeningFootage(projectId, first ? posters.current.get(first) ?? (first.type.startsWith('image/') ? first : undefined) : cloudMedia?.[0]?.thumbnailUrl ?? undefined, first?.name ?? cloudMedia?.[0]?.fileName);
       clearProjectImportJob(activeJob);
-      router.push(projectPath(projectId, resultsView));
+      // A new project opens in the timeline editor, with the assistant in its side panel.
+      router.push('/editor/' + projectId);
     } catch (cause) {
       if (mounted.current && draftEpoch.current === epoch) {
         setError(userError(cause, 'Could not prepare your footage. Retry to continue from where it stopped.'));
@@ -387,9 +384,9 @@ export function NewConversation() {
     setStartingBlank(true); setError('');
     try {
       const projectId = await createProject({ title: (prompt.replace(/\s+/g, ' ').slice(0, 80)) || 'New video', aspectRatio });
-      rememberOpeningRequest(projectId, prompt, composerControls.request);
+      rememberOpeningRequest(projectId, prompt, request);
       saveNewProjectBrief('');
-      router.push(projectPath(projectId, resultsView));
+      router.push('/editor/' + projectId);
     } catch (cause) { setError(userError(cause, 'Could not create the project.')); setStartingBlank(false); }
   }
   async function openPartialProject() {
@@ -419,7 +416,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} actions={<><ResultsControl value={resultsView} onChange={setResultsView} disabled={!draftReady || busy} />{composerControls.actions}</>} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));

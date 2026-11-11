@@ -36,6 +36,12 @@ async function ownedPost(ctx: QueryCtx | MutationCtx, ownerId: string, postId: I
   return post;
 }
 const optional = <T,>(value: T | undefined) => value ?? null;
+/** Accounts without a saved picture are asked for one again this often, when their tokens are renewed. */
+const AVATAR_RECHECK_MS = 7 * 86400_000;
+/** An account's picture: Revline's saved copy, or the platform's own URL (which can expire) for an account connected before pictures were saved. */
+async function accountPicture(ctx: QueryCtx, account: Doc<'postingAccounts'> | null | undefined) {
+  return (account?.avatarStorageId ? await ctx.storage.getUrl(account.avatarStorageId) : null) ?? account?.avatarUrl ?? null;
+}
 
 // ---------------------------------------------------------------- platforms and accounts
 
@@ -58,10 +64,26 @@ export const accounts = query({
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
     const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
-    return rows.filter(row => row.status !== 'disconnected').map(row => ({
-      id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: optional(row.avatarUrl),
+    return Promise.all(rows.filter(row => row.status !== 'disconnected').map(async row => ({
+      id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row),
       status: row.status, error: optional(row.error), connectedAt: row.createdAt,
-    }));
+    })));
+  },
+});
+/**
+ * The picture Revline shows for the signed-in person: the saved picture of their earliest connected account that
+ * has one, or null (the app then shows their sign-in photo or initials).
+ */
+export const profilePicture = query({
+  args: {}, returns: v.union(v.string(), v.null()),
+  handler: async ctx => {
+    const ownerId = await requireOwner(ctx);
+    const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
+    for (const row of rows.filter(row => row.status !== 'disconnected' && row.avatarStorageId).sort((a, b) => a.createdAt - b.createdAt)) {
+      const url = await ctx.storage.getUrl(row.avatarStorageId!);
+      if (url) return url;
+    }
+    return null;
   },
 });
 
@@ -70,7 +92,8 @@ export const disconnect = mutation({
   args: { accountId: v.id('postingAccounts') }, returns: v.null(),
   handler: async (ctx, { accountId }) => {
     const ownerId = await requireOwner(ctx), account = await ownedAccount(ctx, ownerId, accountId), now = Date.now();
-    await ctx.db.patch(account._id, { status: 'disconnected', tokenCipher: undefined, tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, updatedAt: now });
+    if (account.avatarStorageId) await ctx.storage.delete(account.avatarStorageId);
+    await ctx.db.patch(account._id, { status: 'disconnected', tokenCipher: undefined, tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, avatarStorageId: undefined, avatarCheckedAt: undefined, updatedAt: now });
     const waiting = await ctx.db.query('postingPosts').withIndex('by_account_status', q => q.eq('accountId', account._id).eq('status', 'scheduled')).collect();
     for (const post of waiting) await ctx.db.patch(post._id, { status: 'failed', error: 'This account was disconnected before the post went out.', updatedAt: now });
     return null;
@@ -106,14 +129,16 @@ export const consumeOauthState = internalMutation({
 export const saveAccount = internalMutation({
   args: {
     ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), username: v.string(), displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()),
-    tokenCipher: v.string(), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
+    avatarStorageId: v.optional(v.id('_storage')), tokenCipher: v.string(), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, { ownerId, platform, platformAccountId, ...fields }) => {
     const now = Date.now(), current = await ctx.db.query('postingAccounts').withIndex('by_owner_platform_account', q => q.eq('ownerId', ownerId).eq('platform', platform).eq('platformAccountId', platformAccountId)).unique();
     const values = { ...fields, status: 'connected' as const, error: undefined, refreshLeaseUntil: undefined, updatedAt: now };
+    // A new picture replaces the saved one; a reconnect whose picture could not be downloaded keeps the one it had.
+    if (current?.avatarStorageId && fields.avatarStorageId) await ctx.storage.delete(current.avatarStorageId);
     // Reconnecting keeps the row, so the account's post history and stats stay attached.
-    if (current) await ctx.db.replace(current._id, { ownerId, platform, platformAccountId, createdAt: current.createdAt, ...values });
+    if (current) await ctx.db.replace(current._id, { ownerId, platform, platformAccountId, createdAt: current.createdAt, ...values, avatarStorageId: fields.avatarStorageId ?? current.avatarStorageId });
     else await ctx.db.insert('postingAccounts', { ownerId, platform, platformAccountId, createdAt: now, ...values });
     return null;
   },
@@ -144,7 +169,26 @@ export const saveTokens = internalMutation({
   handler: async (ctx, { accountId, ...tokens }) => {
     const account = await ctx.db.get(accountId);
     // A disconnect during the refresh wins: the new tokens are dropped.
-    if (account?.status === 'connected') await ctx.db.patch(accountId, { ...tokens, tokenExpiresAt: tokens.tokenExpiresAt, refreshLeaseUntil: undefined, updatedAt: Date.now() });
+    if (account?.status !== 'connected') return null;
+    const now = Date.now();
+    // An account with no saved picture (connected before pictures were saved, or its download failed) gets one now that its tokens work.
+    const fill = !account.avatarStorageId && (account.avatarCheckedAt ?? 0) < now - AVATAR_RECHECK_MS;
+    await ctx.db.patch(accountId, { ...tokens, tokenExpiresAt: tokens.tokenExpiresAt, refreshLeaseUntil: undefined, ...(fill ? { avatarCheckedAt: now } : {}), updatedAt: now });
+    if (fill) await ctx.scheduler.runAfter(0, internal.postingActions.fillAvatar, { accountId, platform: account.platform });
+    return null;
+  },
+});
+/**
+ * Store a picture downloaded for an account that had none, with the name read in the same profile call.
+ * A disconnect meanwhile wins: the file is dropped.
+ */
+export const saveAvatar = internalMutation({
+  args: { accountId: v.id('postingAccounts'), username: v.string(), avatarUrl: v.string(), avatarStorageId: v.id('_storage') }, returns: v.null(),
+  handler: async (ctx, { accountId, username, avatarUrl, avatarStorageId }) => {
+    const account = await ctx.db.get(accountId);
+    if (!account || account.status === 'disconnected') { await ctx.storage.delete(avatarStorageId); return null; }
+    if (account.avatarStorageId) await ctx.storage.delete(account.avatarStorageId);
+    await ctx.db.patch(accountId, { username, avatarUrl, avatarStorageId, avatarCheckedAt: Date.now() });
     return null;
   },
 });
@@ -326,7 +370,7 @@ export const clipPosts = query({
     for (const row of rows) groups.set(row.batchId, [...groups.get(row.batchId) ?? [], row]);
     // The oldest clip in a full window may have posts beyond it; it is left out rather than shown with accounts missing.
     if (rows.length === POSTS_WINDOW) groups.delete(rows[rows.length - 1].batchId);
-    const accountsById = new Map<string, Doc<'postingAccounts'> | null>(), covers = new Map<string, Awaited<ReturnType<typeof projectCover>>>();
+    const accountsById = new Map<string, Doc<'postingAccounts'> | null>(), pictures = new Map<string, string | null>(), covers = new Map<string, Awaited<ReturnType<typeof projectCover>>>();
     const clips = [];
     for (const [batchId, group] of groups) {
       const batch = await ctx.db.get(batchId);
@@ -337,8 +381,9 @@ export const clipPosts = query({
       for (const row of group.reverse()) {
         if (!accountsById.has(row.accountId)) accountsById.set(row.accountId, await ctx.db.get(row.accountId));
         const account = accountsById.get(row.accountId);
+        if (!pictures.has(row.accountId)) pictures.set(row.accountId, await accountPicture(ctx, account));
         posts.push({
-          id: row._id, platform: row.platform, username: account?.username ?? 'removed account', avatarUrl: optional(account?.avatarUrl), accountStatus: account?.status ?? 'disconnected' as const,
+          id: row._id, platform: row.platform, username: account?.username ?? 'removed account', avatarUrl: pictures.get(row.accountId)!, accountStatus: account?.status ?? 'disconnected' as const,
           status: row.status, error: optional(row.error), attempts: row.attempts, scheduledAt: optional(row.scheduledAt), url: optional(row.url), publishedAt: optional(row.publishedAt), views: optional(row.views),
         });
       }

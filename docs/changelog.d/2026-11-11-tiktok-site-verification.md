@@ -1,0 +1,1 @@
+- Site: `tryrevline.com/tiktok8NDmlijnlrnPsTCWUHXkCcYGuh8yI532.txt` serves the TikTok site-verification file to signed-out requests. Why: the TikTok developer console must verify the domain before the Revline app can be submitted for review.

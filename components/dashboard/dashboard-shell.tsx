@@ -7,8 +7,9 @@ import type { PrefetchKind } from 'next/dist/client/components/router-reducer/ro
 import { useUser } from '@clerk/nextjs';
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
-import { NEW_PROJECT_PATH, sidebarCookieCollapsed } from '@/lib/workspace-routes';
+import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH, sidebarCookieCollapsed } from '@/lib/workspace-routes';
 import { DashboardShellContext } from './shell-context';
+import { DashboardNavbar } from './dashboard-navbar';
 import { DASHBOARD_NAV, activeDashboardItem, type DashboardNavItem } from './dashboard-nav';
 import './dashboard.css';
 
@@ -60,7 +61,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   return <DashboardShellContext.Provider value={true}>
     <SidebarProvider open={open} onOpenChange={setChosen} className="dash-shell dash-theme" style={{ '--sidebar-width': 'var(--dash-sidebar-width)' } as React.CSSProperties}>
       <Sidebar collapsible="icon" className="dash-sidebar">
-        <SidebarHeader className="dash-sidebar-header"><Link href="/campaigns" prefetch className="dash-wordmark">Revline</Link><SidebarTrigger className="dash-sidebar-toggle" aria-label="Collapse or expand the sidebar" /></SidebarHeader>
+        <SidebarHeader className="dash-sidebar-header"><Link href={SIGNED_IN_HOME_PATH} prefetch className="dash-wordmark">Revline</Link><SidebarTrigger className="dash-sidebar-toggle" aria-label="Collapse or expand the sidebar" /></SidebarHeader>
         <SidebarContent className="dash-sidebar-content">
           {DASHBOARD_NAV.map(group => <SidebarGroup key={group.label} className="dash-nav-group">
             <SidebarGroupLabel className="dash-nav-label">{group.label}</SidebarGroupLabel>
@@ -68,7 +69,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </SidebarGroup>)}
         </SidebarContent>
       </Sidebar>
-      <SidebarInset className="dash-main">{children}</SidebarInset>
+      <SidebarInset className="dash-main">
+        <DashboardNavbar />
+        {children}
+      </SidebarInset>
     </SidebarProvider>
   </DashboardShellContext.Provider>;
 }

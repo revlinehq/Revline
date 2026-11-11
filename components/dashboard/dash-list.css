@@ -1,5 +1,5 @@
-/* The centred column and list cards of Connected accounts and Settings. Colours come from components/ui/dashboard-tokens.css. */
-.dash-column { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 760px; margin: 0 auto; }
+/* The column and list cards of Connected accounts and Settings. Colours come from components/ui/dashboard-tokens.css. */
+.dash-column { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .dash-column-note { margin: 0 0 4px; color: var(--dash-muted); font-size: 14px; line-height: 1.5; }
 .dash-error { margin: 0; color: #d98a76; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 
@@ -30,11 +30,21 @@
 .settings-avatar[data-slot=avatar] { width: 40px; height: 40px; }
 .settings-avatar[data-slot=avatar]::after { border: 0; }
 .settings-avatar [data-slot=avatar-fallback] { background: var(--dash-pill); color: var(--dash-text); }
+.settings-photo { display: inline-flex; align-items: center; gap: 12px; }
+.settings-photo small { color: var(--dash-muted); font-size: 13px; }
 .settings-page { --ws-border: var(--dash-divider); --ws-input: var(--dash-tile); --ws-muted: var(--dash-muted); --ws-faint: var(--dash-muted); --ws-text: var(--dash-text); }
-.settings-page .mcp-connections li:first-child { border-top: 1px solid var(--dash-divider); }
+/* Settings keeps one hairline per card, under its head. The card's surface marks its edge, and spacing separates rows. */
+.settings-page [data-slot=card][data-variant=dash] { border-color: transparent; }
+.settings-page :is(.dash-list-row, .dash-list-body) { border-top-color: transparent; }
+.settings-page .dash-list-head + :is(.dash-list-row, .dash-list-body) { border-top-color: var(--dash-divider); }
+.settings-page .mcp-connections li { border-top: 0; }
+.settings-page .mcp-copy-field > code { border-color: transparent; }
 
 /* The quiet "more" button and its menu. */
 .dash-more[data-slot=button] { width: 32px; height: 32px; flex-shrink: 0; border-radius: 9999px; color: var(--dash-muted); }
+/* The quiet Reconnect on a working account; a broken one gets the primary pill. */
+.dash-reconnect[data-slot=button][data-variant=ghost] { height: 32px; padding: 0 14px; flex-shrink: 0; border-radius: 9999px; color: var(--dash-muted); font-size: 13px; }
+.dash-reconnect[data-slot=button][data-variant=ghost]:hover { background: var(--dash-pill-quiet); color: var(--dash-text); }
 .dash-more[data-slot=button]:hover, .dash-more[data-slot=button][data-state=open] { background: var(--dash-pill-quiet); color: var(--dash-text); }
 .dash-menu[data-slot=dropdown-menu-content] { width: auto; min-width: 176px; max-width: min(320px, calc(100vw - 24px)); padding: 6px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none; font-family: var(--font-inter), sans-serif; }
 .dash-menu [data-slot=dropdown-menu-item] { min-height: 34px; padding: 0 10px; border-radius: 8px; font-size: 14px; cursor: pointer; }

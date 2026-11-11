@@ -1,7 +1,6 @@
 'use client';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { EditorPost } from '@/components/posting/editor-post';
-import { EditorChat, type EditorChatProps } from './editor-chat';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import Link from 'next/link';
@@ -13,8 +12,6 @@ import { createEditorStore } from '@/lib/editor/store';
 import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
 import { EditorStateProvider } from './editor-state';
 import { useConvex, useConvexAuth, useMutation, useQueries, useQuery, useAction } from 'convex/react';
-import { ProjectCampaign } from '@/components/campaigns/project-campaign';
-import { useCampaignMatcher } from '@/components/campaigns/campaign-match';
 import { aggregateFootageProgress, preparedFootageProgress, transferProgress } from '@/lib/editor/footage-progress';
 import { beginFootageOpening, rememberFootageProgress } from '@/lib/editor/footage-progress-store';
 import { openingFootage } from '@/lib/editor/footage-opening';
@@ -22,7 +19,7 @@ import { clearOpeningBrief, clearOpeningRequestOptions, editorDraftKey, openingB
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS } from '@/lib/ai/claude-model';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
-import { EditorChatSkeleton, EditorSkeleton } from './editor-skeleton';
+import { EditorSkeleton } from './editor-skeleton';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
@@ -44,26 +41,22 @@ import { useSourceUpload } from './use-source-upload';
 import { composerMedia } from '@/lib/editor/composer-media';
 import type { UploadProgress } from './footage-panel';
 const EMPTY_MESSAGES:ChatMessage[]=[];
-/** The full editor does not use the other tabs' timelines; the conversation view does. */
-function EditorShellWithTabs({tabTimelines:_tabTimelines,...props}:EditorChatProps){return <EditorShell {...props}/>;}
 /** The editor while its project loads: its frame as still placeholders. A project opened straight from an upload keeps that footage's progress on screen instead. */
 function editorLoading(projectId: string) {
   const hint = openingFootage(projectId);
   if (!hint) return <EditorSkeleton />;
   return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={NEW_WORKSPACE_LABEL} backHref={NEW_PROJECT_PATH}/><FootagePreparation progressKey={`project:${projectId}`} thumbnail={hint.thumbnail} fileName={hint.fileName}/></div>;
 }
-/** The project's editor, or with `view="chat"` its conversation view: the same project, conversation and agent run in a different frame. */
-/** The conversation view while its project loads: the shell's bar and the column's placeholders. */
-function chatLoading() { return <div className="workspace-page editor-chat"><WorkspaceNav title="AI Editor"/><EditorChatSkeleton /></div>; }
-export function ConnectedEditor({projectId,view}: {projectId:string;view?:'chat'}) {
+/** The project's editor: timeline, preview and the assistant panel. */
+export function ConnectedEditor({projectId}: {projectId:string}) {
   useState(() => { beginFootageOpening(projectId); return projectId; });
   const {isAuthenticated}=useConvexAuth();
   const project=useQuery(api.projects.get,isAuthenticated?{projectId,includeHistory:false}:'skip');
   if(project===null)return <div className="editor-boot"><h1>This project is no longer available.</h1><p>It may have been deleted. You can open another project from your library.</p><Button asChild variant="outline"><Link href="/chats">Your projects</Link></Button></div>;
-  if(!project)return view==='chat'?chatLoading():editorLoading(projectId);
-  return <LoadedEditor key={projectId} projectId={projectId} project={project} view={view}/>;
+  if(!project)return editorLoading(projectId);
+  return <LoadedEditor key={projectId} projectId={projectId} project={project}/>;
 }
-function LoadedEditor({projectId,project,view}:{projectId:string;project:Doc<'projects'>;view?:'chat'}) {
+function LoadedEditor({projectId,project}:{projectId:string;project:Doc<'projects'>}) {
   // Undo history is up to 10 full timelines. Subscribe to its small index and read each stored snapshot once:
   // snapshots never change, so their queries stay cached while they remain in history.
   const historyIds=useQuery(api.projects.historyIndex,{projectId});
@@ -75,11 +68,11 @@ function LoadedEditor({projectId,project,view}:{projectId:string;project:Doc<'pr
   const [shown,setShown]=useState<Doc<'projects'>|null>(null);
   if(loaded&&loaded!==shown)setShown(loaded);
   const current=loaded??(shown?._id===projectId?shown:null);
-  const loading=view==='chat'?chatLoading():editorLoading(projectId);
+  const loading=editorLoading(projectId);
   if(!current)return loading;
-  return <EditorAccessGate loading={loading}><ProjectEditor key={projectId} project={current} view={view} storedTimeline={project?._id===current._id?project.timeline:undefined}/></EditorAccessGate>;
+  return <EditorAccessGate loading={loading}><ProjectEditor key={projectId} project={current} storedTimeline={project?._id===current._id?project.timeline:undefined}/></EditorAccessGate>;
 }
-function ProjectEditor({project,storedTimeline,view}: {project:Doc<'projects'>;storedTimeline?:Timeline;view?:'chat'}) {
+function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;storedTimeline?:Timeline}) {
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
   const livePreview=useQuery(api.assistant.livePreview,ai?.running?{projectId}:'skip');
   const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
@@ -245,14 +238,11 @@ function ProjectEditor({project,storedTimeline,view}: {project:Doc<'projects'>;s
   const waitForSave=()=>saves.wait();
   // The turn works on the tab on screen, even if another agent opens a different tab meanwhile.
   const shownTab=watchedTab??pendingTab?.id??project.activeTimelineId;
-  // What the user sends is also checked, in the background, against stored campaigns; it never holds up the edit.
-  const matchCampaign=useCampaignMatcher(projectId);
   const sendRequest=async(prompt:string,context:Omit<Parameters<typeof send>[0],'projectId'|'prompt'>&{retryPromptMessageId?:string}={})=>{
     aiStarting.current=true;
     const {retryPromptMessageId,...requestContext}=context;
     if(retryPromptMessageId){try{await waitForSave();await retryTurn({projectId,promptMessageId:retryPromptMessageId});}finally{aiStarting.current=false;}return;}
     const attached=[...composerAssetIds];
-    matchCampaign(prompt);
     try{if(!ai?.running&&!isCasualChat(prompt)){await preparingAudio.current;await waitForSave();}await send({projectId,prompt,...requestContext,...(shownTab?{timelineId:shownTab}:{}),...(attached.length?{attachedAssetIds:attached as Id<'assets'>[]}: {})});setComposerAssetIds(previous=>previous.filter(id=>!attached.includes(id)));}
     finally{aiStarting.current=false;}
   };
@@ -349,11 +339,9 @@ function ProjectEditor({project,storedTimeline,view}: {project:Doc<'projects'>;s
       clearOpeningRequestOptions(projectId);
     })().catch(e=>setError(userError(e, 'Could not start this edit.')));
   },[media,projectId,send]);
-  const chat=view==='chat';
-  if(media===undefined)return chat?chatLoading():editorLoading(projectId);
+  if(media===undefined)return editorLoading(projectId);
   const pendingPlayback=playbackOpeningGate(activePreview?.timeline??timeline,assets);
-  // The conversation view plays a clip only when asked, so it does not wait for playback to be prepared.
-  if(pendingPlayback.length&&!chat){
+  if(pendingPlayback.length){
     const tasks=pendingPlayback.map(asset=>mediaTasks?.find(task=>task.kind==='preview'&&task.assetId===asset._id));
     const failed=tasks.some(task=>task?.status==='failed'||task?.status==='cancelled');
     const task=tasks.find(task=>task?.status==='running')??tasks[0];
@@ -361,8 +349,5 @@ function ProjectEditor({project,storedTimeline,view}: {project:Doc<'projects'>;s
     const error=previewPreparationError||(failed?'Could not prepare this footage for editing. Your original footage and saved edit are intact.':'');
     return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={title} backHref={NEW_PROJECT_PATH}/><FootagePreparation thumbnail={preparingAsset.thumbnailUrl??openingFootage(projectId)?.thumbnail} fileName={preparingAsset.fileName} progressKey={`project:${projectId}`} progress={footageProgress} label={task?.status==='retrying'?'Retrying playback preparation…':'Preparing playback…'} activity={task?.status==='queued'?'Queued for playback preparation…':task?.activity==='downloading'?'Loading your footage…':task?.progress===100?'Saving your editing preview…':'Optimizing footage for smooth editing…'} detail="Your footage is saved. The editor opens when the footage on your timeline is ready." error={error} onRetry={error?()=>{setPreviewPreparationError('');void preparePlayback({projectId,assetIds:pendingPlayback.map(asset=>asset._id as Id<'assets'>)}).catch(()=>setPreviewPreparationError('Could not prepare this footage for editing. Your original footage and saved edit are intact.'));}:undefined}/></div>;
   }
-  // Every tab with something on it is a clip the chat can post.
-  const clipTabIds=(timelineTabs??[]).filter(tab=>tab.active?timeline.clips.length>0:tab.clipCount>0).map(tab=>tab.id);
-  const Shell=chat?EditorChat:EditorShellWithTabs;
-  return <EditorStateProvider store={store}><Shell tabTimelines={tabSnapshots} onLoadAsset={assetId=>convex.query(api.assets.get,{projectId,assetId:assetId as Id<'assets'>})} composerNote={<ProjectCampaign projectId={projectId}/>} titleNote={<ProjectCampaign projectId={projectId} placement="header"/>} navActions={<EditorPost projectId={projectId} timelineId={viewedTimeline?watchedTab??undefined:timelineTabs?.find(tab=>tab.active)?.id} timelineIds={chat?clipTabIds:undefined} disabled={(chat?!clipTabIds.length:!(viewedTimeline??timeline).clips.length)||!!ai?.running||!!externalAgent||!!pendingTab} onBeforePost={waitForSave}/>} footageProgress={footageProgress} onOpened={handleEditorOpened} ultra={plan==='ultra'} onRegisterStockAudio={async catalogId=>{await waitForSave();const asset=await registerStockAudio({projectId,catalogId});setOptimisticAssets(previous=>[...previous.filter(item=>item._id!==asset._id),asset]);return asset;}} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={editorDraftKey(projectId)} title={title} onTitle={titleChange} timeline={viewedTimeline??pendingTimeline??activePreview?.timeline??timeline} switchingTimeline={!!pendingTab||!!viewedTimeline} liveEdit={viewedTimeline?undefined:activePreview??undefined} assets={assets} composerAttachments={[...composerMedia(assets,composerAssetIds),...(uploadToComposer?upload?.queue??[]:[]).map(item=>({id:`upload:${item.id}`,name:item.name,kind:item.kind,progress:item.percent,error:item.error,activity:item.activity}))]} composerBusy={!!upload&&uploadToComposer} onRemoveComposerAttachment={id=>setComposerAssetIds(previous=>previous.filter(value=>value!==id))} onAttachAsset={id=>setComposerAssetIds(previous=>[...new Set([...previous,id])])} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});setComposerAssetIds(previous=>previous.filter(id=>id!==asset._id));store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} saveFailed={saveFailed&&!saving} onRetrySave={()=>saves.retry()} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} canResumeEdit={!!project.aiRecovery?.requests.length} messages={EMPTY_MESSAGES} conversation={project.threadId?{projectId,threadId:project.threadId}:undefined} aiRunning={ai?.running??false} externalAgent={externalAgent} aiEditing={ai?.editing??false} aiWorkflowActive={ai?.workflowActive} aiConfigured={ai?.configured??false} assistantSettings={{catalogModels:ai?.catalogModels,modelAccessNeedsSync:ai?.modelAccessNeedsSync,paidModelAccess:ai?.paidModelAccess,modelSwitcher:ai?.modelSwitcher??false,effortSwitcher:ai?.effortSwitcher??false,allowedModels:ai?.allowedModels,claudeViaMcp:ai?.claudeViaMcp,defaultModelChoice:ai?.defaultModelChoice,defaultReasoningEffort:ai?.defaultReasoningEffort}} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} onDownloadExport={async jobId=>{window.location.assign(await downloadExport({jobId:jobId as Id<'renderJobs'>}));}} onCancelExport={jobId=>renderCancel({jobId:jobId as Id<'renderJobs'>}).then(()=>{})} exportState={exportState} exports={exportList} timelineTabs={viewedTimeline?timelineTabs?.map(tab=>({...tab,active:tab.id===watchedTab,editing:tab.active,cover:tabCovers.get(tab.id)})):pendingTab?timelineTabs?.map(tab=>({...tab,active:tab.id===pendingTab.id})):timelineTabs?.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:timelineDuration(timeline),clipCount:timeline.clips.length}:{...tab,cover:tabCovers.get(tab.id)})} timelineTabActions={tabActions} mcpConnection={mcpConnection} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onAttachUpload={files=>handleUpload(files,{addToTimeline:!timelineRef.current.clips.length,attach:true})} onImportVideo={async url=>{await waitForSave();const imported=await importVideo({projectId,url});setComposerImportIds(previous=>[...previous,imported.taskId]);}} videoImports={videoImports} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} analysisStartedAt={ai?.activityStartedAt} assistantBudgetUsed={ai?.budgetUsed} preparationActivity={!ai?.running?assets.find(asset=>asset.preparation?.status==='processing'&&timeline.clips.some(clip=>clip.assetId===asset._id))?.preparation?.message:undefined}/></EditorStateProvider>;
+  return <EditorStateProvider store={store}><EditorShell onLoadAsset={assetId=>convex.query(api.assets.get,{projectId,assetId:assetId as Id<'assets'>})} navActions={<EditorPost projectId={projectId} timelineId={viewedTimeline?watchedTab??undefined:timelineTabs?.find(tab=>tab.active)?.id} disabled={!(viewedTimeline??timeline).clips.length||!!ai?.running||!!externalAgent||!!pendingTab} onBeforePost={waitForSave}/>} footageProgress={footageProgress} onOpened={handleEditorOpened} ultra={plan==='ultra'} onRegisterStockAudio={async catalogId=>{await waitForSave();const asset=await registerStockAudio({projectId,catalogId});setOptimisticAssets(previous=>[...previous.filter(item=>item._id!==asset._id),asset]);return asset;}} onSaveThumbnail={persistThumbnail} projectId={projectId} draftKey={editorDraftKey(projectId)} title={title} onTitle={titleChange} timeline={viewedTimeline??pendingTimeline??activePreview?.timeline??timeline} switchingTimeline={!!pendingTab||!!viewedTimeline} liveEdit={viewedTimeline?undefined:activePreview??undefined} assets={assets} composerAttachments={[...composerMedia(assets,composerAssetIds),...(uploadToComposer?upload?.queue??[]:[]).map(item=>({id:`upload:${item.id}`,name:item.name,kind:item.kind,progress:item.percent,error:item.error,activity:item.activity}))]} composerBusy={!!upload&&uploadToComposer} onRemoveComposerAttachment={id=>setComposerAssetIds(previous=>previous.filter(value=>value!==id))} onAttachAsset={id=>setComposerAssetIds(previous=>[...new Set([...previous,id])])} onRemoveAsset={async asset=>{await waitForSave();await removeAsset({assetId:asset._id as Id<'assets'>});setComposerAssetIds(previous=>previous.filter(id=>id!==asset._id));store.setState(state=>({history:state.history.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id)),future:state.future.filter(edit=>!edit.clips.some(clip=>clip.assetId===asset._id))}));setOptimisticAssets(previous=>previous.filter(item=>item._id!==asset._id));}} onRefreshMedia={handleRefreshMedia} onChange={change} saving={saving} saveFailed={saveFailed&&!saving} onRetrySave={()=>saves.retry()} upload={upload} error={error} onError={setError} onUndo={undo} onRedo={redo} canUndo={!!history.length} canRedo={!!future.length} assistantEditSnapshot={assistantEditSnapshot} canResumeEdit={!!project.aiRecovery?.requests.length} messages={EMPTY_MESSAGES} conversation={project.threadId?{projectId,threadId:project.threadId}:undefined} aiRunning={ai?.running??false} externalAgent={externalAgent} aiEditing={ai?.editing??false} aiWorkflowActive={ai?.workflowActive} aiConfigured={ai?.configured??false} assistantSettings={{catalogModels:ai?.catalogModels,modelAccessNeedsSync:ai?.modelAccessNeedsSync,paidModelAccess:ai?.paidModelAccess,modelSwitcher:ai?.modelSwitcher??false,effortSwitcher:ai?.effortSwitcher??false,allowedModels:ai?.allowedModels,claudeViaMcp:ai?.claudeViaMcp,defaultModelChoice:ai?.defaultModelChoice,defaultReasoningEffort:ai?.defaultReasoningEffort}} aiError={ai?.error} onStop={async()=>{await stop({projectId});}} onSend={sendRequest} onExport={exportVideo} onDownloadExport={async jobId=>{window.location.assign(await downloadExport({jobId:jobId as Id<'renderJobs'>}));}} onCancelExport={jobId=>renderCancel({jobId:jobId as Id<'renderJobs'>}).then(()=>{})} exportState={exportState} exports={exportList} timelineTabs={viewedTimeline?timelineTabs?.map(tab=>({...tab,active:tab.id===watchedTab,editing:tab.active,cover:tabCovers.get(tab.id)})):pendingTab?timelineTabs?.map(tab=>({...tab,active:tab.id===pendingTab.id})):timelineTabs?.map(tab=>tab.active?{...tab,aspectRatio:timeline.aspectRatio,duration:timelineDuration(timeline),clipCount:timeline.clips.length}:{...tab,cover:tabCovers.get(tab.id)})} timelineTabActions={tabActions} mcpConnection={mcpConnection} onUpload={handleUpload} onDropUpload={files=>handleUpload(files,{addToTimeline:false})} onAttachUpload={files=>handleUpload(files,{addToTimeline:!timelineRef.current.clips.length,attach:true})} onImportVideo={async url=>{await waitForSave();const imported=await importVideo({projectId,url});setComposerImportIds(previous=>[...previous,imported.taskId]);}} videoImports={videoImports} analysisBusy={ai?.activity} analysisSource={ai?.activitySource} analysisProgress={ai?.activityProgress} analysisStartedAt={ai?.activityStartedAt} assistantBudgetUsed={ai?.budgetUsed} preparationActivity={!ai?.running?assets.find(asset=>asset.preparation?.status==='processing'&&timeline.clips.some(clip=>clip.assetId===asset._id))?.preparation?.message:undefined}/></EditorStateProvider>;
 }

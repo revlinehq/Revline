@@ -17,6 +17,9 @@ export const postingTables = {
   postingAccounts: defineTable({
     ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), username: v.string(),
     displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()), status: accountStatus, error: v.optional(v.string()),
+    // Revline's own copy of the picture at `avatarUrl` (the platform's URL, which can expire), removed on disconnect.
+    // `avatarCheckedAt`: when a token renewal last looked for a missing picture, so an account without one is asked weekly, not on every renewal.
+    avatarStorageId: v.optional(v.id('_storage')), avatarCheckedAt: v.optional(v.number()),
     tokenCipher: v.optional(v.string()), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
     // Held while one action refreshes the tokens, so two posts never spend the same refresh token.
     refreshLeaseUntil: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),

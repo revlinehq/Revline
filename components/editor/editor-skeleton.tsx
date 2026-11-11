@@ -1,5 +1,4 @@
 import { Skeleton } from '@/components/ui/skeleton';
-import './editor-chat.css';
 import './editor-skeleton.css';
 
 /**
@@ -26,15 +25,5 @@ export function EditorSkeleton() {
         <div className="editor-skeleton-timeline"><Skeleton className="size-6" /><Skeleton className="h-3 w-20" /><Skeleton className="ml-auto size-6" /></div>
       </div>
     </div>
-  </div>;
-}
-
-/** The inside of the conversation view's column while its project loads: a clip, its name and actions, then the composer. */
-export function EditorChatSkeleton() {
-  return <div className="editor-chat-column editor-chat-skeleton" role="status" aria-label="Loading conversation">
-    <Skeleton className="h-[146px] w-[260px] max-w-full rounded-xl" />
-    <Skeleton className="h-3 w-24" />
-    <div className="flex gap-2"><Skeleton className="h-9 w-36 rounded-full" /><Skeleton className="h-9 w-24 rounded-full" /><Skeleton className="h-9 w-20 rounded-full" /></div>
-    <Skeleton className="h-[100px] w-full rounded-xl" />
   </div>;
 }

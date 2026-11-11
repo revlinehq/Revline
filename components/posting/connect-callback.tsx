@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useAction, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { userError } from '@/lib/user-error';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { Button } from '@/components/ui/button';
 import '@/components/dashboard/dash-list.css';
 
@@ -25,10 +24,7 @@ export function ConnectCallback({ code, state, refused }: { code?: string; state
       else setError(result.error ?? 'Could not connect this account.');
     }, reason => setError(userError(reason, 'Could not connect this account.')));
   }, [invalid, isAuthenticated, code, state, finishConnect, router]);
-  return <div className="dash-page">
-    <DashboardNavbar title="Connected accounts" />
-    <main className="dash-content"><div className="dash-column"><div className="dash-empty" role={error ? 'alert' : 'status'}>
-      {error ? <><h2>This account was not connected</h2><p>{error}</p><Button asChild variant="soft" className="mt-3"><Link href="/accounts">Back to connected accounts</Link></Button></> : <p>Connecting your account…</p>}
-    </div></div></main>
-  </div>;
+  return <main className="dash-content"><div className="dash-column"><div className="dash-empty" role={error ? 'alert' : 'status'}>
+    {error ? <><h2>This account was not connected</h2><p>{error}</p><Button asChild variant="soft" className="mt-3"><Link href="/accounts">Back to connected accounts</Link></Button></> : <p>Connecting your account…</p>}
+  </div></div></main>;
 }

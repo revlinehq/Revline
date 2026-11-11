@@ -39,11 +39,5 @@
 .editor-post-now.editor-post-now{width:100%;justify-content:center}
 .editor-post-hint{margin:0;color:var(--dash-muted);font-size:12px;line-height:1.5}
 .editor-post-hint[data-error]{color:#ff8a8a}
-.editor-post-links-card[data-slot=popover-content]{width:340px;gap:4px}
-.editor-post-links-title{padding-bottom:8px;font-size:13px;font-weight:500}
-.editor-post-links{list-style:none;margin:0;padding:0}
-.editor-post-links li{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;border-top:1px solid var(--dash-divider)}
-.editor-post-links a{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dash-text);text-decoration:none}
-.editor-post-links a:hover{text-decoration:underline;text-underline-offset:3px}
 @media(max-width:1150px){.editor-post-note{display:none}}
 @media(max-width:900px){.editor-post-view.editor-post-view,.editor-post-status{display:none}.editor-post-pill{max-width:150px;overflow:hidden}.editor-post-when[data-slot=input],.editor-post-caption[data-slot=textarea]{font-size:16px}}

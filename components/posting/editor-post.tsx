@@ -2,7 +2,7 @@
 // Post from the editor. Posting needs a file, so one press exports the open timeline (or reuses a finished export
 // of the unchanged timeline) and then posts it: convex/postExports.ts. This is the button, its popover, and the
 // states that replace it while the export and the posts run.
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { CalendarClock, Check, ChevronDown, CircleAlert, CircleCheck, Copy, X } from 'lucide-react';
@@ -34,24 +34,10 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   return <Button type="button" data-slot="button" variant="soft" size="sm" disabled={!text} onClick={() => void copyText(text).then(setCopied)}>{copied ? <Check /> : <Copy />}{copied ? 'Copied' : label}</Button>;
 }
 
-/** The live links of the batch, to paste into Content Rewards (it has no API to submit them). */
-function LinksCard({ batchId, total }: { batchId: Id<'postingBatches'>; total: number }) {
-  const batch = useQuery(api.posting.batchLinks, { batchId });
-  return <>
-    <strong className="editor-post-links-title">Paste these links into Content Rewards</strong>
-    {!batch ? <p className="editor-post-hint" role="status">Loading links…</p> : !batch.links.length ? <p className="editor-post-hint">Links appear here as each post goes live.</p> : <ul className="editor-post-links">
-      {batch.links.map(link => <li key={link.postId}><a href={link.url} target="_blank" rel="noopener noreferrer" title={`${PLATFORM_NAMES[link.platform]} · @${link.username}`}>{link.url.replace(/^https?:\/\/(www\.)?/, '')}</a><CopyButton text={link.url} /></li>)}
-    </ul>}
-    {batch && batch.links.length > 0 && batch.links.length < total && <p className="editor-post-hint">{batch.links.length} of {total} live so far.</p>}
-  </>;
-}
-
-export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBeforePost }: {
+export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   projectId: Id<'projects'>;
   /** The timeline tab on screen, so the post is of the clip the user is looking at. */
   timelineId?: string;
-  /** In the chat: every finished clip. Each is exported and posted on its own. */
-  timelineIds?: string[];
   /** Nothing to post yet, or an edit is running. */
   disabled?: boolean;
   /** Waits for the editor's pending saves, so the export is the version on screen. */
@@ -60,9 +46,8 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
   const pending = useQuery(api.postExports.latest, { projectId });
   const accounts = useQuery(api.posting.accounts, {});
   const platforms = useQuery(api.posting.platforms, {});
-  const campaignLink = useQuery(api.campaigns.forProject, { projectId }), campaign = campaignLink?.campaign;
   const start = useMutation(api.postExports.start), cancel = useMutation(api.postExports.cancel);
-  const [open, setOpen] = useState(false), [linksOpen, setLinksOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState(''), [when, setWhen] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(() => new Set());
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
@@ -81,23 +66,15 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
   const scheduled = pending?.status === 'created' && !inFlight && pending.scheduled > 0;
   const failure = pending?.status === 'failed' ? pending.error ?? 'This post could not be sent.' : pending?.status === 'created' && !inFlight && pending.failed > 0 ? pending.postError ?? 'A post could not be sent.' : '';
   const recent = !!pending && now - pending.createdAt < RECENT_MS;
-  // The links card opens by itself once, when the posts of a campaign project go live while this editor is open.
-  const wasPosted = useRef<boolean | null>(null);
-  useEffect(() => {
-    if (pending === undefined) return;
-    if (wasPosted.current === false && posted && pending?.campaignId) setLinksOpen(true);
-    wasPosted.current = !!posted;
-  }, [pending, posted]);
 
   async function submit(schedule: boolean) {
-    // The campaign must be known before the post is made, or its links would never be offered.
-    if (busy || !picked.length || campaignLink === undefined) return;
+    if (busy || !picked.length) return;
     const scheduledAt = schedule ? new Date(when).getTime() : undefined;
     if (schedule && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a date and time in the future.'); return; }
     setBusy(true); setError('');
     try {
       await onBeforePost();
-      for (const id of timelineIds?.length ? timelineIds : [timelineId]) await start({ projectId, ...(id ? { timelineId: id } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}), ...(campaign ? { campaignId: campaign._id } : {}) });
+      await start({ projectId, ...(timelineId ? { timelineId } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}) });
       setOpen(false);
     } catch (reason) { setError(userError(reason, 'Could not start this post.')); }
     finally { setBusy(false); }
@@ -112,10 +89,7 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
     <span className="editor-post-note">{pending!.scheduledAt ? `Posts ${day(pending!.scheduledAt)}. ` : ''}Posting the version from {clock(pending!.createdAt)}.</span>
   </div>;
 
-  const status = !recent ? null : posted ? <Popover open={linksOpen} onOpenChange={setLinksOpen}>
-    <PopoverTrigger asChild disabled={!pending!.campaignId || !pending!.batchId}><Button type="button" data-slot="button" variant="soft" size="sm" className="editor-post-status"><CircleCheck />{failure ? `Posted to ${pending!.published} of ${accountsLabel(total)}` : `Posted to ${accountsLabel(pending!.published)}`}</Button></PopoverTrigger>
-    {pending!.campaignId && pending!.batchId && <PopoverContent align="end" sideOffset={10} className="editor-post-card editor-post-links-card"><LinksCard batchId={pending!.batchId} total={total} /></PopoverContent>}
-  </Popover> : scheduled ? <span className="editor-post-pill editor-post-status"><CalendarClock />Scheduled for {day(pending!.scheduledAt ?? pending!.createdAt)}</span>
+  const status = !recent ? null : posted ? <span className="editor-post-pill editor-post-status"><CircleCheck />{failure ? `Posted to ${pending!.published} of ${accountsLabel(total)}` : `Posted to ${accountsLabel(pending!.published)}`}</span> : scheduled ? <span className="editor-post-pill editor-post-status"><CalendarClock />Scheduled for {day(pending!.scheduledAt ?? pending!.createdAt)}</span>
     : failure ? <Popover><PopoverTrigger asChild><Button type="button" data-slot="button" variant="soft" size="sm" className="editor-post-status" data-failed><CircleAlert />Post failed</Button></PopoverTrigger><PopoverContent align="end" sideOffset={10} className="editor-post-card"><p className="editor-post-hint" role="alert">{failure}</p></PopoverContent></Popover> : null;
 
   return <div className="editor-post-state">
@@ -143,7 +117,7 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
         </div>
         <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit(false)}>Post now</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">{timelineIds && timelineIds.length > 1 ? `Revline exports these ${timelineIds.length} clips first, then posts them.` : 'Revline exports this clip first, then posts it.'}</p>
+        <p className="editor-post-hint">Revline exports this clip first, then posts it.</p>
       </PopoverContent>
     </Popover>
   </div>;

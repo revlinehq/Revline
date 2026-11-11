@@ -7,7 +7,7 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
+import { assistantRequest, type ComposerSettings } from './assistant-composer-controls';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import type { ComposerAttachment } from '@/lib/editor/composer-media';
@@ -102,17 +102,13 @@ function AssistantResponseText({ text, streaming }: { text: string; streaming: b
   return <ChatProse text={text} animate={receivedLive || streaming} />;
 }
 
-function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,composerNote,results,composerExtra,composerPlaceholder }: {
+function AssistantPanelBody({ messages, running, configured, error, onSend, onRetry, onStop, hasClips, demo, onLoadMore, canLoadMore, onAttach, activity, activityStartedAt, budgetUsed, draftKey, suggestions, onSuggestion, editSnapshot, canResumeEdit=false, settings, attachments, onRemoveAttachment, composerBusy = false, requireMedia = false, conversationStarted = false, queued=[],queuePaused=false,onRemoveQueued,onResumeQueue,externalAgent,results,composerPlaceholder }: {
   externalAgent?: string | null;
-  /** A small row shown just above the composer (the project's campaign). */
-  composerNote?: ReactNode;
-  /** Shown after the last reply once nothing is running (the finished clips in the chat view). */
+  /** Shown after the last reply once nothing is running. */
   results?: ReactNode;
-  /** A control placed before the model choice in the composer's bottom row (Results). */
-  composerExtra?: ReactNode;
   composerPlaceholder?: string;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
-  /** Model and effort choices; effortSwitcher (Ultra) picks the effort for each request, effortLocked (other paid plans) shows the levels locked. */
+  /** The user's plan as the server reports it; it decides what a message asks for (assistant-composer-controls.tsx). */
   settings?: ComposerSettings;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (promptMessageId:string) => Promise<void>;
@@ -139,7 +135,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
-  const composerControls = useAssistantComposerControls({ settings: settings ?? NO_SETTINGS, draftKey, disabled: answering });
+  const ask = assistantRequest(settings ?? NO_SETTINGS);
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
@@ -200,7 +196,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     const key=draftKey;sendInFlight.current=true;
     changePrompt('');
     setStopState(null); setSending(true); if(!running&&!queued.length)setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: draft.trim(), previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSend(draft.trim(), composerControls.request.modelChoice, composerControls.request.reasoningEffort); }
+    try { await onSend(draft.trim(), ask.modelChoice, ask.reasoningEffort); }
     catch (e) { if(currentDraftKey.current===key){changePrompt(draft);setPendingReply(null);setLocalError(userError(e, 'Could not send message'));} }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -217,7 +213,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     if (!suggestions || !onSuggestion || sendInFlight.current || sending || running || pendingReply || !configured) return;
     const request = `${suggestion.prompt}\n\nUse the selected clip from “${suggestions.sourceName}”, source ${suggestion.start.toFixed(2)}–${suggestion.end.toFixed(2)} seconds.`;
     sendInFlight.current=true;setStopState(null); setSending(true); setPendingReply({ id: `pending-${crypto.randomUUID()}`, text: request, previousUserId: latestUser?.id, previousError: error }); setLocalError('');
-    try { await onSuggestion(request, suggestions.clipId, composerControls.request.modelChoice, composerControls.request.reasoningEffort); }
+    try { await onSuggestion(request, suggestions.clipId, ask.modelChoice, ask.reasoningEffort); }
     catch (e) { setPendingReply(null); setLocalError(userError(e, 'Could not start this edit.')); }
     finally { sendInFlight.current=false;setSending(false); }
   }
@@ -265,9 +261,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       </MessageScrollerContent>
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
-    {composerNote}
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerExtra ? <>{composerExtra}{composerControls.actions}</> : composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }

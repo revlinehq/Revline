@@ -16,14 +16,18 @@ const config: NextConfig = {
     return [
       { source: '/chat', destination: NEW_PROJECT_PATH, permanent: false },
       { source: '/dashboard/chat', destination: NEW_PROJECT_PATH, permanent: false },
-      // There is no /dashboard page; the signed-in home is Campaigns.
+      // The conversation view of a project was removed; its links open the project in the editor.
+      { source: '/chat/:projectId', destination: '/editor/:projectId', permanent: false },
+      // There is no /dashboard page; the signed-in home is the AI Editor's start page.
       { source: '/dashboard', destination: SIGNED_IN_HOME_PATH, permanent: false },
       // The retired project list now lives with the conversation history.
       { source: '/projects', destination: '/chats', permanent: false },
       // Inspo Motion (Sharingan) was retired; old share links land on the home page.
       { source: '/sharingan', destination: '/', permanent: false },
-      // Brand kits were removed; old links land on Campaigns.
-      { source: '/brand-kits/:path*', destination: '/campaigns', permanent: false },
+      // Brand kits and Campaigns were removed; old links land on the home.
+      { source: '/brand-kits/:path*', destination: SIGNED_IN_HOME_PATH, permanent: false },
+      { source: '/campaigns', destination: SIGNED_IN_HOME_PATH, permanent: false },
+      { source: '/campaigns/:path*', destination: SIGNED_IN_HOME_PATH, permanent: false },
     ];
   },
 };

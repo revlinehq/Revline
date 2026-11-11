@@ -1,0 +1,1 @@
+- Landing: the public page is the Revline AI video editor landing again (hero film, clipping, effects, MCP, pricing, FAQ, purple buttons); the paid-clipping page, its campaign screenshots and share image are gone. Films play on click and the clipping montage is a still. Why: the founder preferred Revline's landing, positioning and buttons, and wants campaigns off the page.

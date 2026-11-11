@@ -3,7 +3,7 @@ import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server
 
 // Every page under app/(dashboard). Signed-out visitors are sent to sign-in here, before any page renders, so the
 // pages themselves are static: a click between them needs no server render. /editor/showcase is a public page.
-const SIGNED_IN_PAGES = /^\/(?:accounts|billing|campaigns|chat|chats|connect|dashboard|editor(?!\/showcase(?:\/|$))|posts|profile|stats|storage)(?:\/|$)/;
+const SIGNED_IN_PAGES = /^\/(?:accounts|billing|chats|connect|dashboard|editor(?!\/showcase(?:\/|$))|posts|profile|stats|storage)(?:\/|$)/;
 
 const clerk = clerkMiddleware(async (auth, request) => {
   if (SIGNED_IN_PAGES.test(request.nextUrl.pathname)) await auth.protect();
@@ -42,6 +42,8 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
     destination.port = '';
     return NextResponse.redirect(destination, 308);
   }
+  // Site-ownership files (public/tiktok*.txt) are fetched by a crawler; serve the file itself with no auth handshake.
+  if (/^\/tiktok[A-Za-z0-9]+\.txt$/.test(url.pathname)) return NextResponse.next();
   // This public renderer shell authenticates project reads with the native Convex JWT.
   // A web-session handshake would navigate WKWebView outside its pinned player URL.
   if (/^\/mobile\/player\/[^/]+\/?$/.test(request.nextUrl.pathname)) return NextResponse.next();

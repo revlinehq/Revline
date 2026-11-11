@@ -1,0 +1,1 @@
+- Landing: the slogan is "Turn raw footage into paid clips." on the hero, the sign-in and sign-up pages, the share titles and a new share card (og-revline-v5.png). Why: the founder rejected "Get paid to clip."
