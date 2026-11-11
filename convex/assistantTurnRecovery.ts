@@ -1,5 +1,5 @@
-import { canChooseReasoningEffort, fixedEditorModel, hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
-import { freeEditorModel, withPlanReasoning } from '../lib/ai/claude-model';
+import { canChooseReasoningEffort, hasPaidModelAccess, productionOffer, requireEditorAccess } from './lib/billing_access';
+import { freeEditorModel, offeredEditorModel, withPlanReasoning } from '../lib/ai/claude-model';
 import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
@@ -60,12 +60,12 @@ export async function dispatchTurn(
   args: ObjectType<typeof assistantRunArgs>,
 ): Promise<void> {
   await requireEditorAccess(ctx, args.ownerId);
-  const fixed = fixedEditorModel();
-  if (!await hasPaidModelAccess(ctx, args.ownerId)) {
+  const offer = await hasPaidModelAccess(ctx, args.ownerId) ? await productionOffer(ctx, args.ownerId) : 'free';
+  if (offer === 'free') {
     args = { ...args, pinnedModel: freeEditorModel() };
-  } else if (fixed) {
-    // Production: every new, queued, retried or recovered paid turn runs on the one fixed model.
-    args = { ...args, pinnedModel: fixed };
+  } else if (offer) {
+    // Production: every new, queued, retried or recovered paid turn runs what the plan's offer allows of its pin.
+    args = { ...args, pinnedModel: offeredEditorModel(offer, args.pinnedModel) };
   } else if (args.pinnedModel) {
     // Every new, queued, retried or recovered turn starts here: a chosen effort holds only while the owner is on Ultra.
     args = { ...args, pinnedModel: withPlanReasoning(args.pinnedModel, await canChooseReasoningEffort(ctx, args.ownerId)) };

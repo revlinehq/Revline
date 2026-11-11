@@ -38,6 +38,10 @@ Each worktree has a private agent runner built from its branch, with its `CONVEX
 
 The local media worker and log tail connect to the selected backend. Hosted processor wakeups are disabled, so an agent's frontend and worker must keep running during media processing. Billing and Discord alerts are disabled; live Stripe/webhook credentials are omitted. Runner, media-signing and queue secrets are unique per backend.
 
+## Production's model and effort offer
+
+Production limits paid accounts to `PRODUCTION_EDITOR_OFFER` (`lib/ai/claude-model.ts`). To see and test that list on an isolated backend, set `EDITOR_PRODUCTION_OFFER=true` there (`npx convex env set EDITOR_PRODUCTION_OFFER true`); remove it to get the development switches back. A backend without billing gives every account the Ultra list.
+
 ## GPU export rendering
 
 Browser exports draw frames in chrome-headless-shell with SwiftShader (CPU WebGL) by default, as on the hosted media processor. A development worker on a machine with a real GPU can draw them on the GPU instead:
