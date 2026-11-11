@@ -47,7 +47,6 @@
   border: 1px solid var(--dash-border); border-radius: 16px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none;
   font-family: var(--font-inter), sans-serif; font-size: 14px;
 }
-.post-dialog-links[data-slot=dialog-content] { width: 560px; }
 .post-dialog [data-slot=dialog-close] { top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 9999px; color: var(--dash-muted); }
 .post-dialog [data-slot=dialog-close]:hover { background: var(--dash-pill); color: var(--dash-text); }
 .post-dialog-head { display: flex; align-items: center; min-height: 56px; padding: 0 56px 0 20px; border-bottom: 1px solid var(--dash-divider); flex-shrink: 0; }
@@ -112,10 +111,6 @@
 .post-when[data-empty]:not(:focus-within) [data-slot=input] { color: transparent; }
 .post-when[data-empty]:not(:focus-within) > span { display: block; }
 
-.post-links { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
-.post-links li { display: flex; align-items: center; gap: 10px; font-size: 14px; }
-.post-links a { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: inherit; }
-.post-links-all { align-self: flex-start; }
 
 @media (max-width: 700px) {
   .post-dialog-body { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px; }

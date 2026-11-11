@@ -45,7 +45,6 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 @media(max-width:600px){
   .new-conversation-empty .new-conversation-intro h1{font-size:clamp(20px,6.4vw,28px)}
   .new-conversation-empty .edit-composer-actions{gap:4px}
-  .new-conversation-empty .assistant-model-picker .inspector-select-trigger{padding-inline:4px}
 }
 
 .new-conversation-actions-title{margin:0;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:500;line-height:18px;color:#aaa}

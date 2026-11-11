@@ -2,6 +2,7 @@
 
 import { useUser } from '@clerk/nextjs';
 import { WorkspaceAccountMenu } from '@/components/workspace/account-menu';
+import { SIGNED_IN_HOME_PATH } from '@/lib/workspace-routes';
 import { LandingStartButton } from './start-button';
 import { LandingButton } from './ui';
 
@@ -10,7 +11,7 @@ export function LandingNavAuth() {
   const { isSignedIn } = useUser();
 
   if (isSignedIn) return <>
-    <LandingButton href="/chats" variant="soft" size="sm">Workspace</LandingButton>
+    <LandingButton href={SIGNED_IN_HOME_PATH} variant="soft" size="sm">Workspace</LandingButton>
     <WorkspaceAccountMenu />
   </>;
 

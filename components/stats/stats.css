@@ -1,0 +1,26 @@
+/* Stats. Colours and sizes: components/ui/dashboard-tokens.css. */
+.stats-content { display: flex; flex-direction: column; gap: 16px; }
+.stats-greeting h1 { margin: 0; font-size: 24px; font-weight: 600; letter-spacing: -.01em; line-height: 1.3; }
+.stats-greeting p { margin: 6px 0 0; color: var(--dash-muted); font-size: 14px; }
+.stats-card[data-slot=card] { padding: 16px; gap: 0; }
+.stats-card h2 { margin: 0; font-size: 15px; font-weight: 500; }
+.stats-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 16px; }
+.stats-tile[data-slot=card] { flex-direction: row; align-items: center; gap: 12px; padding: 10px; }
+.stats-tile-icon { display: grid; place-items: center; flex: 0 0 44px; height: 44px; border-radius: 8px; background: var(--dash-pill); }
+.stats-tile-icon svg { width: 18px; height: 18px; }
+.stats-tile-icon svg.lucide-eye circle { fill: var(--dash-pill); stroke: var(--dash-pill); }
+.stats-tile div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.stats-tile strong { font-size: 16px; font-weight: 500; line-height: 1.3; }
+.stats-tile div span { color: var(--dash-muted); font-size: 13px; }
+.stats-loading { margin: 40px 0; text-align: center; color: var(--dash-muted); font-size: 14px; }
+.stats-account[data-slot=card] { flex-direction: row; align-items: center; gap: 12px; margin-top: 10px; padding: 10px 16px 10px 10px; }
+.stats-account-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.stats-account-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; font-weight: 500; }
+.stats-account-text > span { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; color: var(--dash-muted); font-size: 13px; }
+.stats-account-text > span > span { white-space: nowrap; }
+.stats-account-text b { color: var(--dash-text); font-weight: 500; }
+.stats-account-text i { margin: 0 2px; font-style: normal; }
+.stats-empty { min-height: 200px; }
+.stats-empty [data-slot=button] { margin-top: 10px; }
+[data-slot=button]:is([data-variant=soft], [data-variant=primary]) svg { width: 15px; height: 15px; }
+@media (max-width: 767px) { .stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

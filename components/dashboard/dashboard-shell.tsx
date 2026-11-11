@@ -1,13 +1,13 @@
 'use client';
 
-import { useRef, useState, type MouseEvent, type ReactNode } from 'react';
+import { useRef, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
-import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
-import { DashboardNavbarContext, DashboardShellContext } from './shell-context';
+import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH } from '@/lib/workspace-routes';
+import { DashboardShellContext } from './shell-context';
 import { DashboardNavbar } from './dashboard-navbar';
 import { DASHBOARD_NAV, activeDashboardItem, type DashboardNavItem } from './dashboard-nav';
 import './dashboard.css';
@@ -36,12 +36,10 @@ function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
 
 export function DashboardShell({ children, defaultOpen = true }: { children: ReactNode; defaultOpen?: boolean }) {
   const active = activeDashboardItem(usePathname());
-  // The one navbar. A page that adds controls to it (the Campaigns switch) reaches this element through context.
-  const [navbarItems, setNavbarItems] = useState<HTMLElement | null>(null);
-  return <DashboardShellContext.Provider value={true}><DashboardNavbarContext.Provider value={navbarItems}>
+  return <DashboardShellContext.Provider value={true}>
     <SidebarProvider defaultOpen={defaultOpen} className="dash-shell dash-theme" style={{ '--sidebar-width': 'var(--dash-sidebar-width)' } as React.CSSProperties}>
       <Sidebar collapsible="icon" className="dash-sidebar">
-        <SidebarHeader className="dash-sidebar-header"><Link href="/campaigns" className="dash-wordmark">Revline</Link><SidebarTrigger className="dash-sidebar-toggle" aria-label="Collapse or expand the sidebar" /></SidebarHeader>
+        <SidebarHeader className="dash-sidebar-header"><Link href={SIGNED_IN_HOME_PATH} className="dash-wordmark">Revline</Link><SidebarTrigger className="dash-sidebar-toggle" aria-label="Collapse or expand the sidebar" /></SidebarHeader>
         <SidebarContent className="dash-sidebar-content">
           {DASHBOARD_NAV.map(group => <SidebarGroup key={group.label} className="dash-nav-group">
             <SidebarGroupLabel className="dash-nav-label">{group.label}</SidebarGroupLabel>
@@ -50,9 +48,9 @@ export function DashboardShell({ children, defaultOpen = true }: { children: Rea
         </SidebarContent>
       </Sidebar>
       <SidebarInset className="dash-main">
-        <DashboardNavbar itemsRef={setNavbarItems} />
+        <DashboardNavbar />
         {children}
       </SidebarInset>
     </SidebarProvider>
-  </DashboardNavbarContext.Provider></DashboardShellContext.Provider>;
+  </DashboardShellContext.Provider>;
 }

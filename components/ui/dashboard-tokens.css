@@ -1,5 +1,5 @@
 /* Dashboard design tokens (signed-in app redesign). Defined once on :root so every surface can use them:
-   the shell, Campaigns, Stats, Posts, the editor and the landing page. Neutral greys only; one accent. */
+   the shell, Stats, Posts, the editor and the landing page. Neutral greys only; one accent. */
 :root {
   --dash-page: #111111;
   --dash-sidebar: #141414;
