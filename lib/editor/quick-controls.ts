@@ -6,6 +6,7 @@ import { DEFAULT_TEXT_APPEARANCE } from './text-style';
 import { DEFAULT_TEXT_FONT } from './text-fonts';
 import { captionSpeech, sourceCaptions } from './transcript-captions';
 import { applyCaptionPreset } from './caption-editing';
+export { captionTimingSources } from './caption-editing';
 import type { CaptionPresetId } from './caption-presets';
 import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 
@@ -153,8 +154,6 @@ export function appliedCaptionPreset(timeline: Timeline, targetIds: readonly str
   const ids = new Set(targetIds.map(id => { const clip = timeline.clips.find(item => item.id === id); return clip?.textTemplate?.preset === 'karaoke' ? clip.captionPreset?.id : undefined; }));
   return ids.size === 1 ? [...ids][0] : undefined;
 }
-/** Whether any target still needs its word timings read from a transcript. */
-export const captionsNeedTimings = (timeline: Timeline, targetIds: readonly string[]) => timeline.clips.some(clip => targetIds.includes(clip.id) && !(clip.textTemplate?.preset === 'karaoke' && clip.textTemplate.wordTimings));
 /** Apply a preset; `sources` are spoken assets with their analysis loaded, read for captions without word timings. */
 export function applyQuickCaptionPreset(timeline: Timeline, id: CaptionPresetId, targetIds: string[], sources: readonly MediaAsset[] = []): Timeline {
   const speech = new Map<string, NonNullable<ReturnType<typeof captionSpeech>>>();

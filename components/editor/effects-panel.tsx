@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { appliedCaptionPreset, applyQuickCaptionPreset, applyQuickLayout, captionPresetTargets, captionsNeedTimings, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
+import { appliedCaptionPreset, applyQuickCaptionPreset, applyQuickLayout, captionPresetTargets, captionTimingSources, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import { userError } from '@/lib/user-error';
 import type { CaptionPresetId } from '@/lib/editor/caption-presets';
@@ -56,7 +56,8 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
     if (locked || styling || !presetTargets.length) return;
     setStyling(true);
     try {
-      const needed = captionsNeedTimings(current(), presetTargets), ids = needed ? spokenAssetIds(current(), assets) : [];
+      // Only footage under captions without word timings, and only sources with a transcript.
+      const spoken = new Set(spokenAssetIds(current(), assets)), ids = captionTimingSources(current(), presetTargets).filter(id => spoken.has(id));
       const sources = onLoadAsset ? await Promise.all(ids.map(onLoadAsset)) : assets.filter(asset => ids.includes(asset._id));
       const targets = presetTargets.filter(target => current().clips.some(clip => clip.id === target));
       if (targets.length) onChange(applyQuickCaptionPreset(current(), id, targets, sources));
