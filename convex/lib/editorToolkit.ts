@@ -1047,6 +1047,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
     } }),
     exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Export a timeline to MP4 when the user asks. In the editor it shows a card and nothing renders until the user presses Export on it; an unchanged timeline is never rendered twice. Leave out resolution, fps and quality to use the user's usual settings (those of their last export); pass one only when this message asks for a different value. timelineId selects a tab from listTimelines; omit for the open tab. Finish all requested edits first.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), ...EXPORT_SETTINGS_INPUT }), execute: async (_ctx, input) => {
+      // The card ends the turn, so this request's edits must pass their checks before it is shown.
+      if (!isMcpRun(run.runId) && finishRequired && !finishResult?.passed) throw new Error('This request changed the timeline and finish has not passed yet. Call finish; once it passes, call exportVideo.');
       await verifyCurrentTimeline();
       await editSession.publish();
       // Over MCP the task already carries the user's confirmation, so the render starts (convex/mcpActions.ts).

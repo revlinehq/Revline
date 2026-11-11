@@ -1,7 +1,7 @@
 import { laneHistory } from '../../lib/ai/lanes/history';
 import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection, reelRequested } from '../../lib/ai/lanes/selection';
-import { EXPORT_TOOLS, POST_SENDING_TOOLS } from '../../lib/ai/lanes/base-tools';
+import { AFTER_FINISH_TOOLS, CONFIRMATION_CARD_TOOLS } from '../../lib/ai/lanes/base-tools';
 import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
@@ -199,7 +199,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
             // Export stays open after a passed finish: "edit it, then export it" exports the checked edit. exportVideo only
             // leaves a card in the editor; the user's press on it is the confirmation (convex/assistantExports.ts).
-            const activeTools=toolkit.laneFinished()?toolkit.availableToolNames().filter(name=>EXPORT_TOOLS.has(name)):toolkit.availableToolNames().filter(name=>toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name));
+            const activeTools=toolkit.laneFinished()?toolkit.availableToolNames().filter(name=>AFTER_FINISH_TOOLS.has(name)):toolkit.availableToolNames().filter(name=>toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
             const mustCallTool=toolkit.requiresFinish()&&!toolkit.laneFinished();
@@ -303,7 +303,7 @@ function askedUser(steps: readonly { content: readonly unknown[] }[]) {
   return !!steps.at(-1)?.content.some(part => {
     const call = part as { type?: string; toolName?: string; output?: { type?: string; value?: { awaitingConfirmation?: unknown }; awaitingConfirmation?: unknown } };
     if (call.type === 'tool-call') return call.toolName === 'askUser';
-    return call.type === 'tool-result' && (POST_SENDING_TOOLS.includes(call.toolName ?? '') || call.toolName === 'exportVideo') && (call.output?.type === 'json' ? call.output.value?.awaitingConfirmation : call.output?.awaitingConfirmation) === true;
+    return call.type === 'tool-result' && CONFIRMATION_CARD_TOOLS.includes(call.toolName ?? '') && (call.output?.type === 'json' ? call.output.value?.awaitingConfirmation : call.output?.awaitingConfirmation) === true;
   });
 }
 

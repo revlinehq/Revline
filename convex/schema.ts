@@ -435,6 +435,8 @@ export default defineSchema({
   // presses Export on the card; `jobId` is the export that press started (or the finished one it reused).
   exportProposals: defineTable({
     ownerId: v.string(), projectId: v.id('projects'), timelineId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(),
+    // The timeline as the card shows it, saved with the card so an open chat never re-reads whole timelines.
+    timelineName: v.string(), duration: v.number(), aspectRatio: v.string(),
     /** The settings the user asked for in chat that differ from their existing ones; never stored as a default. */
     changed: v.array(v.string()),
     status: v.union(v.literal('proposed'), v.literal('confirmed'), v.literal('cancelled')), jobId: v.optional(v.id('renderJobs')),

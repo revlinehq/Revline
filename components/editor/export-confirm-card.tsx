@@ -20,7 +20,7 @@ export function exportProposalOf(step: ChatTool): Id<'exportProposals'> | null {
 }
 
 type Proposal = {
-  status: 'proposed' | 'confirmed' | 'cancelled' | 'expired'; expiresAt: number; timeline: string; duration: number | null; aspectRatio: AspectRatio | null;
+  status: 'proposed' | 'confirmed' | 'cancelled' | 'expired'; expiresAt: number; timeline: string; duration: number; aspectRatio: AspectRatio;
   settings: { resolution: number; fps: number; quality: string }; changed: string[];
   job: { jobId: Id<'renderJobs'>; status: 'queued' | 'rendering' | 'completed' | 'failed' | 'cancelled'; progress: number; error: string | null; ready: boolean } | null;
 };
@@ -36,11 +36,12 @@ const reasonOf = (error: unknown, fallback: string) => { reportClientFailure(err
  */
 export function ExportConfirmCard({ proposalId, disabled }: { proposalId: Id<'exportProposals'>; disabled: boolean }) {
   const proposal = useQuery(api.assistantExports.proposal, { proposalId }) as Proposal | null | undefined;
-  const confirm = useMutation(api.assistantExports.confirmProposal), cancel = useMutation(api.assistantExports.cancelProposal), download = useAction(api.renders.download);
+  const confirm = useMutation(api.assistantExports.confirmProposal), cancel = useMutation(api.assistantExports.cancelProposal), stop = useMutation(api.renders.cancel), download = useAction(api.renders.download);
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   // The query does not re-run as time passes, so the card reads the clock itself to stop offering an expired press.
   const [now, setNow] = useState(() => Date.now());
-  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  const waiting = proposal?.status === 'proposed';
+  useEffect(() => { if (!waiting) return; const timer = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(timer); }, [waiting]);
   if (!proposal) return null;
   const status = proposal.status === 'proposed' && proposal.expiresAt <= now ? 'expired' : proposal.status, { settings, job } = proposal;
   const changed = new Set(proposal.changed);
@@ -54,7 +55,7 @@ export function ExportConfirmCard({ proposalId, disabled }: { proposalId: Id<'ex
   return <FieldSet className="post-confirm-card" data-status={status} data-job={job?.status}>
     <FieldLegend variant="label">{status === 'proposed' ? `Export ${proposal.timeline}?` : `Export of ${proposal.timeline}`}</FieldLegend>
     <dl>
-      <div><dt>Timeline</dt><dd><span>{proposal.timeline}{proposal.duration !== null ? ` · ${formatTime(proposal.duration)}` : ''}{proposal.aspectRatio ? ` · ${aspectRatioLabel(proposal.aspectRatio)}` : ''}</span></dd></div>
+      <div><dt>Timeline</dt><dd><span>{proposal.timeline} · {formatTime(proposal.duration)} · {aspectRatioLabel(proposal.aspectRatio)}</span></dd></div>
       <div><dt>Resolution</dt><dd><span>{RESOLUTION_NAMES[settings.resolution] ?? `${settings.resolution}p`}{mark('resolution')}</span></dd></div>
       <div><dt>Frame rate</dt><dd><span>{settings.fps} fps{mark('fps')}</span></dd></div>
       <div><dt>Quality</dt><dd><span>{QUALITY_NAMES[settings.quality] ?? settings.quality}{mark('quality')}</span></dd></div>
@@ -67,8 +68,11 @@ export function ExportConfirmCard({ proposalId, disabled }: { proposalId: Id<'ex
       </div>
     </> : status === 'cancelled' ? <FieldDescription role="status">Cancelled. Nothing was exported.</FieldDescription>
       : status === 'expired' ? <FieldDescription role="status">This confirmation expired. Nothing was exported; ask again to export it.</FieldDescription>
-      : !job ? null
-      : rendering ? <FieldDescription role="status">{job.status === 'queued' ? 'Waiting for a renderer…' : `Exporting… ${Math.round(job.progress)}%`}</FieldDescription>
+      : !job ? <FieldDescription role="status">This export is no longer available.</FieldDescription>
+      : rendering ? <>
+        <FieldDescription role="status">{job.status === 'queued' ? 'Waiting for a renderer…' : `Exporting… ${Math.round(job.progress)}%`}</FieldDescription>
+        <div className="post-confirm-actions"><Button type="button" variant="ghost" size="sm" disabled={busy} onClick={() => void run(() => stop({ jobId: job.jobId }), 'Could not stop this export.')}>Stop export</Button></div>
+      </>
       : job.ready ? <div className="post-confirm-actions">
         <Button type="button" variant="primary" size="sm" disabled={busy} onClick={() => void run(async () => { window.location.assign(await download({ jobId: job.jobId })); }, 'Could not download this export.')}><Download aria-hidden="true"/>Download</Button>
       </div>

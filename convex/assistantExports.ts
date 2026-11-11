@@ -1,6 +1,6 @@
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
-import { mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
+import { mutation, query, type MutationCtx } from './_generated/server';
 import { requireOwner, requireProject } from './lib/auth';
 import { exportPlan, type ExportSettings } from './postExports';
 import { startRenderFor } from './renders';
@@ -32,7 +32,7 @@ export async function proposeExportFor(ctx: MutationCtx, ownerId: string, args: 
   // An unchanged timeline is never rendered twice: a finished or running export with these settings is reused.
   const reuse = plan.ready ?? plan.running, now = Date.now();
   const proposalId = await ctx.db.insert('exportProposals', {
-    ownerId, projectId: project._id, timelineId, ...plan.settings, changed, createdAt: now, expiresAt: now + PROPOSAL_MS,
+    ownerId, projectId: project._id, timelineId, timelineName: tab.name, duration, aspectRatio: timeline.aspectRatio, ...plan.settings, changed, createdAt: now, expiresAt: now + PROPOSAL_MS,
     ...(reuse ? { status: 'confirmed' as const, jobId: reuse._id } : { status: 'proposed' as const }),
   });
   const settings = { ...plan.settings, ...(changed.length ? { changedForThisExport: changed.map(key => SETTING_NAMES[key]) } : {}) };
@@ -44,12 +44,12 @@ export async function proposeExportFor(ctx: MutationCtx, ownerId: string, args: 
   };
   return {
     awaitingConfirmation: true, proposalId, timeline: tab.name, duration, settings,
-    next: 'Nothing has been exported. A card with the timeline and these settings is now in the chat; only the user pressing Export on it starts the render, and it then shows progress and the download. End your turn with one short sentence asking them to confirm on the card. Never say it is exporting or exported.',
+    next: 'Nothing has been exported. A card with the timeline and these settings is now in the chat; only the user pressing Export on it starts the render, and it then shows progress and the download. Your turn ends with the card. Never say it is exporting or exported.',
   };
 }
 
 const proposalState = (row: Doc<'exportProposals'>, now: number) => row.status === 'proposed' && row.expiresAt <= now ? 'expired' as const : row.status;
-async function ownedProposal(ctx: QueryCtx | MutationCtx, proposalId: Id<'exportProposals'>) {
+async function ownedProposal(ctx: MutationCtx, proposalId: Id<'exportProposals'>) {
   const ownerId = await requireOwner(ctx), row = await ctx.db.get(proposalId);
   if (!row || row.ownerId !== ownerId) throw new ConvexError('Export not found');
   return { ownerId, row };
@@ -59,14 +59,13 @@ async function ownedProposal(ctx: QueryCtx | MutationCtx, proposalId: Id<'export
 export const proposal = query({
   args: { proposalId: v.id('exportProposals') }, returns: v.any(),
   handler: async (ctx, { proposalId }) => {
-    const { ownerId, row } = await ownedProposal(ctx, proposalId);
-    const project = await ctx.db.get(row.projectId);
-    if (!project || project.ownerId !== ownerId) return null;
-    const tab = tabsOf(project).find(item => item.id === row.timelineId), timeline = tab ? await storedTabTimeline(ctx, project, row.timelineId) : null;
+    // Another account's card, or one cleaned up, shows nothing instead of failing the chat.
+    const ownerId = await requireOwner(ctx), row = await ctx.db.get(proposalId);
+    if (!row || row.ownerId !== ownerId) return null;
     const job = row.jobId ? await ctx.db.get(row.jobId) : null;
     return {
       status: proposalState(row, Date.now()), expiresAt: row.expiresAt,
-      timeline: tab?.name ?? 'Removed timeline', duration: timeline ? timelineDuration(timeline) : null, aspectRatio: timeline?.aspectRatio ?? null,
+      timeline: row.timelineName, duration: row.duration, aspectRatio: row.aspectRatio,
       settings: { resolution: row.resolution, fps: row.fps, quality: row.quality }, changed: row.changed,
       job: job && job.ownerId === ownerId ? { jobId: job._id, status: job.status, progress: job.progress ?? 0, error: job.error ?? null, ready: job.status === 'completed' && !!(job.outputR2Key || job.outputStorageId) } : null,
     };
