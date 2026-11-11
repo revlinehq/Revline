@@ -70,7 +70,7 @@ function wordStyle(preset: CaptionPreset, props: TemplateTextProps, motion: Retu
     return { ...base, opacity: clamp01((t - start) / .18), transform: `scale(${scale})`, ...popRoom(scale, word.text), ...wordBox(preset, props, a), ...wordColor(preset, props, a) };
   }
   const scale = popScale(t, start, next, motion.popDuration, motion.popScale, 1);
-  const style: CSSProperties = { ...base, transform: `scale(${scale})`, ...(preset.grow ? {} : popRoom(scale, word.text)), ...wordColor(preset, props, a), ...wordBox(preset, props, a) };
+  const style: CSSProperties = { ...base, transform: `scale(${scale})`, ...popRoom(scale, word.text), ...wordColor(preset, props, a), ...wordBox(preset, props, a) };
   if (preset.mode === 'fill') style.opacity = said ? (preset.dim ?? .4) + (1 - (preset.dim ?? .4)) * ease(clamp01((t - start) / motion.colorDuration)) : preset.dim ?? .4;
   if (preset.grow) Object.assign(style, { fontSize: `${1 + (preset.grow - 1) * a}em`, lineHeight: a > 0 ? 1 : undefined, letterSpacing: a > .5 ? 0 : undefined });
   if (props.textGradient && a < .5) Object.assign(style, textGradientFill(props.textGradient, props.gradientTime ?? t, props.textStyle ? textAppearance({ textStyle: props.textStyle }, props.resolution).textShadow : undefined));
