@@ -16,7 +16,8 @@ import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { CHOICE_TEXT, fitChoiceText, shortenedNote } from '../../lib/ai/choice-text';
 import { LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../../lib/incidents';
-import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
+import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, changedFrameLimit, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
+import { MAX_SHEET_FRAMES, MAX_ZOOM_FRAMES, sampleFrameTimes } from '../../lib/ai/frame-sampling';
 import type { CheckLevel } from '../../lib/ai/lanes/types';
 import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
 import { FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence } from '../../lib/ai/fast-frame-review';
@@ -257,7 +258,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const checkLevel: CheckLevel = options.checkLevel ?? 'standard';
   const recipe = () => laneChecks(lane, checkLevel);
   const tracksChanges = () => tracksChangedFrames(recipe());
-  const fastReview = new FastFrameReview(options.pendingFastFrames);
+  const fastReview = new FastFrameReview(options.pendingFastFrames, () => changedFrameLimit(recipe()));
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
     if ('status' in result) {
@@ -657,10 +658,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return (await mediaUrl(ctx, { r2Key: key }))!;
   };
   // Render frames of the saved (or this turn's staged) timeline as base64 JPEGs, as export draws them.
-  const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string, resolution?:720|1080) => {
+  // `sheet` asks for several frames as one small labeled contact sheet (the model's look); without it each frame is its own image.
+  const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string, resolution?:720|1080, sheet = false) => {
     await editSession.wait();
     const timelineId = targetTimelineId??boundRunTab(run.runId);
-    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(resolution?{resolution}:{}), ...(revision !== undefined ? { revision } : {}) });
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(resolution?{resolution}:{}), ...(sheet ? { sheet: true } : {}), ...(revision !== undefined ? { revision } : {}) });
     const deadline = Date.now() + 280_000;
     let started = false;
     while (Date.now() < deadline) {
@@ -674,6 +676,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
     // Say which wait it was: frames that never started were queued behind other renders, not too many.
     throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
+  };
+  // Several frames as one labeled contact sheet. A media processor from before sheets answers with separate frames, which pass through.
+  const renderSheet = async (times: number[], revision?: number, targetTimelineId?: string) => {
+    const result = await renderFrames(times, revision, targetTimelineId, undefined, times.length > 1);
+    return times.length > 1 && result.frames.length === 1 ? { ...result, sheet: result.frames[0].image, frames: times.map(time => ({ time, image: '' })) } : result;
   };
   // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
   const checkPacing = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }) => {
@@ -909,7 +916,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         // A busy media queue must not hold finish: past the wait the edges are reported unmeasured and finish goes on.
         const edges=await checkClipEdges(tabs,(assetId,times)=>{let timer:ReturnType<typeof setTimeout>|undefined;return Promise.race([runLooksRead(ctx,run.ownerId,run.projectId,assetId,times,undefined,abortSignal).then(read=>read.samples),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('the media worker took longer than two minutes')),CLIP_EDGE_WAIT_MS);})]).finally(()=>clearTimeout(timer));});
         abortSignal.throwIfAborted();return edges;
-      },render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);return result;},staged:editSession.staged});
+      },render:async(times,revision,target)=>{const result=await renderSheet(times,revision,target);if((!target||target===timelineId)&&revision===undefined)fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);return result;},staged:editSession.staged});
       finishResult=await check();
       if(finishResult.passed){
         try{
@@ -1754,15 +1761,18 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (footage, text, effects), and see them as images. For existing edits follow footage-editing page edit-lanes for sampling; use it to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreClip.", inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing for precise layout inspection.'), times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision, resolution }) => {
+    getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: `Look at your work: frames of the saved timeline at timeline seconds, composited exactly as the export draws them (footage, text, effects). Several frames come back as ONE small contact sheet with the time under each tile, up to ${MAX_SHEET_FRAMES} per call. Scan sparse first, then zoom: times for the spots that matter (the changed spots finish names, a cut edge being the frame before it and the frame after); range to scan a stretch at about one frame a second; around for a few consecutive frames at one moment (a cut edge, a gesture). Never read consecutive frames to watch a clip: the transcript and saved analysis say where to look. One time alone returns a larger preview frame, and resolution 1080 one full-size frame, for detail such as small text. Use it to check that text is readable, nothing overflows or clips, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreClip.`, inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: small tiles on a sheet, or a preview for one frame. 1080 returns one full-size composition frame without resizing for precise layout inspection.'), times: z.array(z.number().min(0)).min(1).max(120).optional().describe(`Timeline seconds, inside the timeline. More than ${MAX_SHEET_FRAMES} are thinned to ${MAX_SHEET_FRAMES} evenly spaced ones and the result says so.`), range: z.object({ start: z.number().min(0), end: z.number().min(0), step: z.number().positive().optional().describe('Seconds between frames, default 1.') }).optional().describe(`Scan a stretch: evenly spaced frames from start to end, at most ${MAX_SHEET_FRAMES}.`), around: z.object({ time: z.number().min(0), frames: z.number().int().min(1).max(MAX_ZOOM_FRAMES).optional().describe('Consecutive frames, default 5.') }).optional().describe('Zoom in: consecutive frames centered on one timeline second.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, range, around, revision, resolution }) => {
       await editSession.wait();
       const snapshot = editSession.timeline;
-      const result = await renderFrames(times, revision, undefined, resolution);
+      // An earlier revision may be longer than the current timeline, so its times are only snapped to frames here.
+      const look = sampleFrameTimes({ ...(times ? { times } : {}), ...(range ? { range } : {}), ...(around ? { around } : {}) }, revision === undefined ? timelineDuration(snapshot) : Number.MAX_SAFE_INTEGER, snapshot.fps);
+      if (resolution === 1080 && look.times.length !== 1) throw new Error('1080 returns one full-size frame: pass a single time.');
+      const result = resolution === 1080 ? await renderFrames(look.times, revision, undefined, resolution) : await renderSheet(look.times, revision);
       if (revision === undefined && snapshot === editSession.timeline && result.revision === editSession.revision) fastReview.reviewed(result.frames.map(frame => frame.time), snapshot);
-      return result;
-    }, toModelOutput: async (ctx, options) => { const output = options.output as { revision: number; atRevision?: number; resolution?:number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
-      { type: 'text' as const, text: `${output.resolution===1080?'1080p':'Preview'} frames of the ${output.atRevision !== undefined ? `timeline as it was at revision ${output.atRevision}` : `saved timeline (revision ${output.revision})`} at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },
-      ...await Promise.all(output.frames.map(frame => imagePart(ctx, frame.image, 'image/jpeg'))),
+      return { ...result, ...(look.note ? { note: look.note } : {}) };
+    }, toModelOutput: async (ctx, options) => { const output = options.output as { revision: number; atRevision?: number; resolution?:number; note?: string; sheet?: string; frames: { time: number; image: string }[] }; const of = output.atRevision !== undefined ? `timeline as it was at revision ${output.atRevision}` : `saved timeline (revision ${output.revision})`, at = output.frames.map(frame => `${frame.time.toFixed(3)}s`).join(', '); return { type: 'content' as const, value: [
+      { type: 'text' as const, text: `${output.sheet ? `One contact sheet of ${output.frames.length} frames of the ${of}, left to right, top to bottom, each labeled with its time: ${at}.` : `${output.resolution===1080?'1080p':'Preview'} frames of the ${of} at ${at}, in that order.`}${output.note ? ` ${output.note}` : ''}` },
+      ...(output.sheet ? [await imagePart(ctx, output.sheet, 'image/jpeg')] : await Promise.all(output.frames.map(frame => imagePart(ctx, frame.image, 'image/jpeg')))),
     ] }; } }),
     checkPacing: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkPacing, description: "Check how the motion reads over time, which still frames cannot show: renders the timeline range at 10 samples a second (fps) and measures how much of the frame changes each second, how long each new picture holds before the next change, how zooms and pans speed up and slow down, and where cuts and single-frame flashes land. Returns the change per second and flagged moments with reasons: a visible change (a new headline, a panel filling in) followed by under about 1 s of hold, 3 or more changes within 1 s, changes landing in 3 or more different places within 1.5 s, a zoom or pan that starts or stops at full speed or is cut off mid-move, a camera move too fast to follow, a one-sample jump, a flash, or a still hold of 3 s or more. Run it on the changed range after building or changing motion, alongside getFrames, and fix what it flags. Long ranges run in chunks. Follow every nextAction until completed is true. Pending chunks keep running and are retrieved by checkId.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(2).max(30).optional().describe('Samples a second (default 10).') }).strict(), execute: async (_ctx, input) => checkPacing(input) }),
     getSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getSound, description: "Hear a timeline range, which frames cannot show: decodes the range's mix exactly as export mixes it and reports every clip that sounds there (sound effects, voice, music, footage audio) with its time and gain, the moments sounds start (onsets) with their level and which clip made them, momentary loudness (LUFS) and peak each 0.1 s with integrated loudness, silent stretches, and the spoken words with their timeline times. Use it to check what plays where before or after placing sound, music or narration.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).') }).strict(), execute: async (_ctx, input) => listen(input, false) }),
@@ -2092,7 +2102,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const moments = recipe().frames === 'sample' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
           fastReview.changed(before, editSession.timeline, moments);
-          return { ...output, pendingFrameTimes: fastReview.times() };
+          return { ...output, pendingFrameTimes: fastReview.sample() };
         }
         return output;
       } finally {

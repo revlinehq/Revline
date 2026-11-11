@@ -21,7 +21,8 @@ export function referenceResultDescriptor(work: Record<string, unknown>) {
   const fields = ['mode', 'comparisonIdentity', 'start', 'end', 'times', 'compareCrop', 'referenceCropKeyframes', 'count', 'fps', 'momentsOnly', 'stillsOnly', 'crop', 'box', 'frameTime', 'backgroundTime', 'points', 'lines', 'color', 'tolerance', 'text', 'categories'];
   return { kind: 'reference-result', ...(work.mode === 'looks' ? { looksVersion: LOOKS_READ_VERSION } : {}), ...Object.fromEntries(fields.filter(key => work[key] !== undefined && !(key === 'momentsOnly' && work[key] === false)).map(key => [key, work[key]])) };
 }
-export const snapshotResultDescriptor = (identity: string, times: number[]) => ({ kind: 'snapshot-result', identity, times });
+/** `sheet` results (one contact sheet of the times) are cached apart from the separate frames of the same times. */
+export const snapshotResultDescriptor = (identity: string, times: number[], sheet?: boolean) => ({ kind: 'snapshot-result', identity, times, ...(sheet ? { sheet: true } : {}) });
 export function referenceCacheScope(ownerId: string, projectId: string, asset: { _id: string; r2Key?: string; storageId?: string; size: number; width?: number; height?: number; duration?: number; contentType: string }): CacheScope {
   return { ownerId, projectId, assetId: asset._id, source: [asset.r2Key ?? asset.storageId ?? asset._id, asset.size, asset.width, asset.height, asset.duration, asset.contentType] };
 }

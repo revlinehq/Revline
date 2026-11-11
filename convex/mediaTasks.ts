@@ -388,7 +388,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(saved.guard||saved.motion||saved.comparison||saved.clipId)throw new ConvexError('This check is no longer supported.');
     const ids=[...new Set(timeline.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]))];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...(saved.clipCheck?await transportAsset(ctx,asset):asset),url:await mediaUrl(ctx,asset,true)};}));
-    snapshot={...(saved.resolution?{resolution:saved.resolution}:{}),...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.sound?{sound:saved.sound}:{})};
+    snapshot={...(saved.sheet?{sheet:true}:{}),...(saved.resolution?{resolution:saved.resolution}:{}),...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.sound?{sound:saved.sound}:{})};
   }
   const readRow=task.readId?await ctx.db.get(task.readId):null;
   if(task.readId&&(!readRow||readRow.ownerId!==task.ownerId||readRow.projectId!==task.projectId))throw new ConvexError('The frame reading is unavailable.');
@@ -587,8 +587,10 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     }
     if (snapshot.sound) { if (!result.snapshot.sound) throw new ConvexError('The sound check completed without measurements.'); await ctx.db.patch(snapshot._id, { status: 'completed', soundResult: result.snapshot.sound }); return; }
     if (snapshot.pacing) { if (!result.snapshot.pacing) throw new ConvexError('The pacing check completed without measurements.'); await ctx.db.patch(snapshot._id, { status: 'completed', pacingResult: result.snapshot.pacing }); return; }
-    if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
-    const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times)) : undefined;
+    // A sheet request is answered with one image of all its times; a processor from before sheets answers with a frame per time.
+    const sheet = !!snapshot.sheet && snapshot.times.length > 1 && frames.length === 1;
+    if ((!sheet && frames.length !== snapshot.times.length) || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
+    const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times,snapshot.sheet)) : undefined;
     const cached = cacheKey ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',cacheKey)).unique() : null;
     await ctx.db.patch(snapshot._id, { status: 'completed', ...(cached?.ready ? {resultR2Key:cached.r2Key,frames:undefined} : {frames}) });
     // A share card goes onto its share; the request itself is not kept.

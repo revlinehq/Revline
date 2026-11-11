@@ -2,6 +2,7 @@ import type { FrameCache } from './frame-cache';
 import { mkdir,readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import sharp from 'sharp';
+import { sheet } from './read-reference';
 import type { MediaWorkItem,MediaTaskResult } from '../../convex/lib/media_task_contract';
 import type { Clip, MediaAsset } from '../editor/types';
 import { dimensions, renderedFrameTime, timelineDuration } from '../editor/types';
@@ -63,6 +64,8 @@ export async function reviewComposition(snapshot:NonNullable<MediaWorkItem['revi
 }
 
 /** Frames of the saved timeline exactly as export draws them, for an MCP client to look at. */
+/** Long edge of one tile on a timeline contact sheet: enough to see who is in frame, the crop, a cut edge and whether text is there. */
+const SHEET_TILE=384;
 export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['snapshot']>,directory:string,convexUrl:string,signal:AbortSignal,onProgress:(n:number)=>void,cache?:FrameCache,contactSheet=false):Promise<NonNullable<MediaTaskResult['snapshot']>> {
   const {timeline,times,baseline}=snapshot,frame=1/timeline.fps,last=Math.max(0,timelineDuration(timeline)-frame);
   // Guard renders, motion maps and reference comparisons were removed with the motion lanes.
@@ -170,6 +173,14 @@ export async function captureTimelineFrames(snapshot:NonNullable<MediaWorkItem['
   if(snapshot.card)return {frames:[{time:frames[0].time,image:(await shareCard(Buffer.from(frames[0].image,'base64'),snapshot.card.title)).toString('base64')}]};
   // Keep the existing tool image budget and encoding; cached PNGs are never replaced by these smaller JPEGs.
   const pngs=frames.map(frame=>Buffer.from(frame.image,'base64'));
+  // Several frames for a model to look at: one sheet of small tiles, each with its time under it, instead of an image per frame.
+  if(snapshot.sheet&&frames.length>1&&snapshot.resolution!==1080){
+    const aspect=size.width/size.height,tile=aspect>=1?SHEET_TILE:Math.round(SHEET_TILE*aspect),across=aspect>=1?4:6;
+    // Two asked times inside one frame are the same picture: one tile.
+    const tiles=frames.map((frame,index)=>({image:pngs[index],label:`${frame.time.toFixed(3)}s`})).filter((tile,index,all)=>all.findIndex(other=>other.label===tile.label)===index);
+    const made=await sheet(tiles,aspect,Math.min(across,tiles.length),700_000,8+Math.min(across,tiles.length)*(tile+8));
+    return {frames:[{time:frames[0].time,image:made.image,width:made.width,height:made.height}]};
+  }
   if(snapshot.resolution===1080){
     for(const quality of [85,75,65,55,45,35]){
       const images=await Promise.all(pngs.map(png=>sharp(png).jpeg({quality}).toBuffer().then(buffer=>buffer.toString('base64'))));
