@@ -25,6 +25,41 @@ function primaryTrack(timeline: Timeline, copies: ReadonlySet<string>) {
   return [...totals].sort((a, b) => b[1] - a[1] || a[0] - b[0])[0]?.[0];
 }
 
+/** The V layer the edit is cut on: the one holding the most footage time. Undefined on a timeline without footage. */
+export function mainFootageTrack(input: Timeline) { const timeline = normalizeTimeline(input); return primaryTrack(timeline, stackedMirrorCopyIds(timeline)); }
+
+/** Whether a clip is footage on the layer the edit is cut on: where a trim or delete closes up by default. */
+export function onMainFootageTrack(input: Timeline, clipId: string) {
+  const timeline = normalizeTimeline(input), copies = stackedMirrorCopyIds(timeline);
+  const clip = timeline.clips.find(item => item.id === clipId), video = clip?.kind === 'audio' && clip.linkedClipId ? timeline.clips.find(item => item.id === clip.linkedClipId) : clip;
+  return !!video && footage(video) && trackOf(video) === primaryTrack(timeline, copies);
+}
+
+/**
+ * Close up after a clip got shorter: clips that started at or after its old end on its layer move earlier by
+ * `seconds`, with their linked partners. Other layers (music, captions, overlays) keep their times. Returns
+ * undefined when the moved clips would collide, so the caller keeps the plain trim.
+ */
+export function rippleAfter(input: Timeline, clipId: string, oldEnd: number, seconds: number): { timeline: Timeline; shifted: number } | undefined {
+  const timeline = normalizeTimeline(input), clip = timeline.clips.find(item => item.id === clipId);
+  if (!clip || seconds <= EPSILON) return undefined;
+  const byId = new Map(timeline.clips.map(item => [item.id, item])), own = new Set(linkedClipIds(timeline, [clipId]));
+  const shifts = new Set<string>();
+  for (const other of timeline.clips) {
+    if (own.has(other.id) || isTransitionClip(other) || lane(other) !== lane(clip) || other.start < oldEnd - EPSILON) continue;
+    shifts.add(other.id);
+    const partner = other.linkedClipId ? byId.get(other.linkedClipId) : undefined;
+    if (partner && partner.linkedClipId === other.id) shifts.add(partner.id);
+  }
+  if (!shifts.size) return undefined;
+  const moved = { ...timeline, clips: timeline.clips.map(item => shifts.has(item.id) ? { ...item, start: Math.max(0, item.start - seconds) } : item) };
+  const collides = moved.clips.some(item => shifts.has(item.id) && moved.clips.some(other => other.id !== item.id && !isTransitionClip(other) && lane(other) === lane(item)
+    && other.start < item.start + item.duration - EPSILON && item.start < other.start + other.duration - EPSILON));
+  if (collides) return undefined;
+  const result = reconcileTransitionEdits(timeline, moved);
+  return { timeline: { ...result, tracks: deriveTrackCounts(result) }, shifted: shifts.size };
+}
+
 /**
  * The shot playing at a timeline second: the footage clip showing at that time (a clip owns its start,
  * not its end). With several stacked footage clips, the one on `track`, else on the main footage layer,

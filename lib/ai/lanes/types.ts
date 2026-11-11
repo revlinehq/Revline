@@ -28,8 +28,8 @@ export type CheckLevel = 'standard' | 'final';
 /** What a lane checks while editing and at finish. */
 export type CheckRecipe = {
   /**
-   * changes: getFrames at each changed spot; a cut edge is the frame before it and the frame after.
-   * sample: saved-data checks, plus one getFrames sample of new styling or framing on plain reel timelines.
+   * changes: finish draws a few frames of what changed (cuts, overlays, one caption sample), on a hard budget.
+   * sample: saved-data checks; finish draws at most three frames on a plain reel timeline.
    * data: saved-data delivery checks (finishClipping).
    * Every recipe except data and sample also renders each changed range at finish.
    */
