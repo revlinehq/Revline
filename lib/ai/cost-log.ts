@@ -1,7 +1,7 @@
 import { isUsageCount as count } from './usage-counts';
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS,EDITOR_PROGRESS_WINDOW,editStepStopReason,hasRecentEditProgress} from './edit-progress';
 import type { LanguageModelUsage, ProviderMetadata } from 'ai';
-import { OPENAI_EDIT_MODELS, type EditorReasoningEffort, type EditorSpeedMode } from './claude-model';
+import { CLAUDE_EDIT_MODELS, OPENAI_EDIT_MODELS, type EditorReasoningEffort, type EditorSpeedMode } from './claude-model';
 import { hasRepeatedToolFailures } from './tool-failures';
 
 const record = (value: unknown): Record<string, unknown> => value !== null && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -18,18 +18,23 @@ function estimateEditorCallCost(model: string, provider: string, usage?: Languag
     outputTokens: count(usage?.outputTokens) ? usage.outputTokens : null,
     reasoningTokens: count(usage?.outputTokenDetails?.reasoningTokens) ? usage.outputTokenDetails.reasoningTokens : null,
   };
-  const tariff = provider === 'openai.responses' && OPENAI_EDIT_MODELS.find(entry => entry.modelId === model);
-  const serviceTier = record(metadata?.openai).serviceTier;
+  // Each model is priced at its own tariff (lib/ai/claude-model.ts). Claude requests are always Standard:
+  // the editor never sends them `speed`, and these models have no Priority Tier.
+  const openai = provider === 'openai.responses';
+  const tariff = openai ? OPENAI_EDIT_MODELS.find(entry => entry.modelId === model) : provider === 'anthropic.messages' ? CLAUDE_EDIT_MODELS.find(entry => entry.modelId === model) : undefined;
+  const serviceTier = openai ? record(metadata?.openai).serviceTier : undefined;
   const speedMultiplier = serviceTier === 'fast' ? 2 : 1;
   let unknownReason: string | null = null;
   if (!tariff) unknownReason = 'unreviewed_model_or_provider';
-  else if (serviceTier !== 'default' && serviceTier !== 'fast') unknownReason = 'unconfirmed_standard_tariff';
-  else if (Object.values(counts).some(value => value === null)) unknownReason = 'missing_usage';
+  else if (openai && serviceTier !== 'default' && serviceTier !== 'fast') unknownReason = 'unconfirmed_standard_tariff';
+  // Claude leaves the reasoning count out of a step that did not think; output already includes it, so the price needs no split.
+  else if (Object.entries(counts).some(([name, value]) => value === null && (openai || name !== 'reasoningTokens'))) unknownReason = 'missing_usage';
   else if (counts.uncachedInputTokens! + counts.cacheReadTokens! + counts.cacheWriteTokens! !== counts.inputTokens || counts.reasoningTokens! > counts.outputTokens!) unknownReason = 'inconsistent_usage';
-  // Standard tariffs verified 2026-10-17. Output includes reasoning; never add it twice.
-  // https://developers.openai.com/api/docs/pricing
-  const longContext = counts.inputTokens !== null && counts.inputTokens > 272_000;
-  const inputMultiplier = longContext ? 2 : 1, outputMultiplier = longContext ? 1.5 : 1;
+  // OpenAI Standard tariffs verified 2026-10-17: above 272K input tokens the request bills 2x input and 1.5x output.
+  // Output includes reasoning; never add it twice. https://developers.openai.com/api/docs/pricing
+  const longPrompt = openai ? { above: 272_000, input: 2, output: 1.5 } : tariff && 'longPrompt' in tariff ? tariff.longPrompt : undefined;
+  const longContext = !!longPrompt && counts.inputTokens !== null && counts.inputTokens > longPrompt.above;
+  const inputMultiplier = longContext ? longPrompt.input : 1, outputMultiplier = longContext ? longPrompt.output : 1;
   const estimatedUsd = unknownReason || !tariff ? null : rounded(speedMultiplier * (counts.uncachedInputTokens! * tariff.pricing.input * inputMultiplier + counts.cacheReadTokens! * tariff.pricing.cacheRead * inputMultiplier + counts.cacheWriteTokens! * tariff.pricing.cacheWrite * inputMultiplier + counts.outputTokens! * tariff.pricing.output * outputMultiplier) / 1_000_000);
   return { ...counts, estimatedUsd, unknownReason, longContext, ...(typeof serviceTier === 'string' ? { serviceTier } : {}) };
 }
