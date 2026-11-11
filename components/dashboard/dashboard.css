@@ -16,6 +16,8 @@
 /* Filled icons keep their inner detail: the gear's hub is cut out in the row colour. */
 .dash-nav-row svg.lucide-settings circle { fill: var(--dash-sidebar); stroke: var(--dash-sidebar); }
 .dash-nav-row:is(:hover, [data-active=true]) svg.lucide-settings circle { fill: var(--dash-row-active); stroke: var(--dash-row-active); }
+/* The pie's slice stays an outline: filled, it merges with the body into one blob. */
+.dash-nav-row[data-slot=sidebar-menu-button] svg.lucide-chart-pie path:first-child { fill: none; }
 .dash-nav-row[data-slot=sidebar-menu-button]:hover { background: var(--dash-row-active); color: var(--dash-text); }
 .dash-nav-row[data-slot=sidebar-menu-button][data-active=true] { background: var(--dash-row-active); color: var(--dash-text); font-weight: 500; }
 .dash-nav-row[data-slot=sidebar-menu-button][data-active=true] svg { color: var(--dash-text); }
