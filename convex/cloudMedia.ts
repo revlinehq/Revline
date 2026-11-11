@@ -2,7 +2,9 @@ import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery, query } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
-import type { MutationCtx, QueryCtx } from './_generated/server';
+import type { ActionCtx, MutationCtx, QueryCtx } from './_generated/server';
+import type { ObjectType } from 'convex/values';
+import { ownedFolder } from './lib/storage_folders';
 import { requireOwner } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { storageControl } from './lib/media_storage';
@@ -28,19 +30,25 @@ async function unfinishedUploads(ctx:QueryCtx|MutationCtx, ownerId:string) {
 export const authorize = internalQuery({args:{},returns:v.string(),handler:async ctx=>{
   const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);return ownerId;
 }});
-export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2Key:v.string(),uploadId:v.string(),partSize:v.number(),direct:v.optional(v.boolean())},returns:v.id('cloudMedia'),handler:async(ctx,args)=>{
+export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2Key:v.string(),uploadId:v.string(),partSize:v.number(),direct:v.optional(v.boolean()),folderId:v.optional(v.id('storageFolders'))},returns:v.id('cloudMedia'),handler:async(ctx,{folderId,...args})=>{
   await requireEditorAccess(ctx,args.ownerId);
+  if(folderId)await ownedFolder(ctx,args.ownerId,folderId);
   const now=Date.now();
   // Abandoned uploads stop counting at once; their scheduled cleanup frees the storage.
   const pending=(await unfinishedUploads(ctx,args.ownerId)).filter(row=>!abandoned(row,now));
   if(pending.length>=MAX_PENDING)throw new ConvexError(`You have ${MAX_PENDING} unfinished cloud uploads. Cancel some in Cloud storage, then try again.`);
   const id=await ctx.db.insert('cloudMedia',{...args,createdAt:now,activeAt:now,expiresAt:now+IDLE_MS,completed:false});
-  await recordStorageObject(ctx,{...args,createdAt:now,pending:true});
+  await recordStorageObject(ctx,{...args,createdAt:now,pending:true,folderId});
   await ctx.scheduler.runAfter(IDLE_MS,internal.cloudMedia.cleanup,{uploadId:id});
   return id;
 }});
 /** `direct` asks for presigned storage links; only clients that read a part's ETag response header send it. */
-export const start = action({args:{...metadata,direct:v.optional(v.boolean())},returns:v.object({uploadId:v.id('cloudMedia'),partSize:v.number()}),handler:async(ctx,args):Promise<{uploadId:Id<'cloudMedia'>;partSize:number}>=>{
+const startArgs = {...metadata,direct:v.optional(v.boolean())};
+const started = v.object({uploadId:v.id('cloudMedia'),partSize:v.number()});
+export const start = action({args:startArgs,returns:started,handler:(ctx,args)=>openLibraryUpload(ctx,args)});
+/** `start`, with the file landing in a Library folder. The rest of the upload uses the same functions. */
+export const startInFolder = action({args:{...startArgs,folderId:v.id('storageFolders')},returns:started,handler:(ctx,{folderId,...args})=>openLibraryUpload(ctx,args,folderId)});
+async function openLibraryUpload(ctx:ActionCtx,args:ObjectType<typeof startArgs>,folderId?:Id<'storageFolders'>):Promise<{uploadId:Id<'cloudMedia'>;partSize:number}> {
   const ownerId=await ctx.runQuery(internal.cloudMedia.authorize,{});
   const fileName=args.fileName.trim();
   if(!fileName||fileName.length>255||args.contentType.length>128||(!args.contentType.startsWith(`${args.kind}/`)&&!(args.kind==='audio'&&/^video\/(mp4|quicktime|webm)$/.test(args.contentType))))throw new ConvexError('Choose a supported video, audio or image file.');
@@ -52,9 +60,9 @@ export const start = action({args:{...metadata,direct:v.optional(v.boolean())},r
   const r2Key=`media/${ownerId}/library/${crypto.randomUUID()}`;
   const {direct:wantsDirect,...file}=args;
   const opened=await openMultipart(r2Key,args.contentType,!!wantsDirect);
-  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...file,fileName,ownerId,r2Key,uploadId:opened.uploadId,partSize,...(opened.direct?{direct:true}:{})}),partSize};}
+  try{return {uploadId:await ctx.runMutation(internal.cloudMedia.reserve,{...file,fileName,ownerId,r2Key,uploadId:opened.uploadId,partSize,...(opened.direct?{direct:true}:{}),...(folderId?{folderId}:{})}),partSize};}
   catch(error){await abortMultipart({key:r2Key,...opened}).catch(()=>{});throw error;}
-}});
+}
 /** The signed-in owner's uploads that never finished, for cancelling from Cloud storage. */
 export const unfinished = query({args:{},returns:v.array(v.object({uploadId:v.id('cloudMedia'),fileName:v.string(),size:v.number(),createdAt:v.number(),activeAt:v.number()})),handler:async ctx=>{
   const rows=await unfinishedUploads(ctx,await requireOwner(ctx));

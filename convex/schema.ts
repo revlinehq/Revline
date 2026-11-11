@@ -375,10 +375,17 @@ export default defineSchema({
   projectDataMigration:defineTable({key:v.string(),cursor:v.union(v.string(),v.null()),completed:v.boolean()}).index('by_key',['key']),
   storageAccounts: defineTable({ ownerId:v.string(), usedBytes:v.number(), reservedBytes:v.number(), videoBytes:v.number(), audioBytes:v.number(), imageBytes:v.number(), modelBytes:v.optional(v.number()), exportBytes:v.number(), fileCount:v.number() }).index('by_owner',['ownerId']),
   cloudMedia: defineTable({ ownerId:v.string(), r2Key:v.string(), uploadId:v.string(), fileName:v.string(), contentType:v.string(), kind:cloudMediaKind, size:v.number(), partSize:v.number(), duration:v.optional(v.number()), width:v.optional(v.number()), height:v.optional(v.number()), createdAt:v.number(), expiresAt:v.number(), activeAt:v.optional(v.number()), completed:v.boolean(), aborting:v.optional(v.boolean()), direct:v.optional(v.boolean()) }).index('by_owner_completed',['ownerId','completed']).index('by_r2Key',['r2Key']),
-  storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:storageObjectKind, size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')) })
+  storageObjects: defineTable({ ownerId:v.string(), objectKey:v.string(), r2Key:v.optional(v.string()), storageId:v.optional(v.id('_storage')), fileName:v.string(), kind:storageObjectKind, size:v.number(), createdAt:v.number(), auxiliary:v.boolean(), pending:v.boolean(), jobId:v.optional(v.id('renderJobs')),
+    /** The Library folder holding this file; absent at the root. */
+    folderId:v.optional(v.id('storageFolders')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
+    .index('by_owner_folder_created',['ownerId','auxiliary','pending','folderId','createdAt']).index('by_owner_folder_size',['ownerId','auxiliary','pending','folderId','size'])
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
+  /** Library folders. `fileCount` and `totalBytes` cover the whole subtree (finished, visible files only) and are
+   * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
+  storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()) })
+    .index('by_owner_parent',['ownerId','parentId']),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
   appleBillingAccounts: defineTable({ ownerId: v.string(), appAccountToken: v.string(), createdAt: v.number() }).index('by_owner', ['ownerId']).index('by_token', ['appAccountToken']),

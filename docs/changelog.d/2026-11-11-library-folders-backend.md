@@ -1,0 +1,1 @@
+- Storage (Convex): folders for stored files (`storageFolders`, an optional `folderId` on files), with per-folder listing, move, rename, download links and adding a stored file to an existing project, all under `library:*`. Existing files stay at the root and nothing is moved. Why: the founder's new Library design needs folders, and the old backend had one flat list.

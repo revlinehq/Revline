@@ -4,9 +4,10 @@ import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
+import { adjustFolderTotals, liveFolderId } from './storage_folders';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
-type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:Doc<'storageObjects'>['kind']; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'> };
+type ObjectDetails = StoredObject & { ownerId:string; fileName:string; kind:Doc<'storageObjects'>['kind']; size:number; createdAt:number; auxiliary?:boolean; pending?:boolean; jobId?:Id<'renderJobs'>; folderId?:Id<'storageFolders'> };
 type Context = MutationCtx | QueryCtx;
 export function objectKey(source:StoredObject) { return source.r2Key ? `r2:${source.r2Key}` : source.storageId ? `convex:${source.storageId}` : null; }
 export const emptyStorage = { usedBytes:0,reservedBytes:0,videoBytes:0,audioBytes:0,imageBytes:0,modelBytes:0,exportBytes:0,fileCount:0 };
@@ -34,14 +35,17 @@ export async function recordStorageObject(ctx:MutationCtx,source:ObjectDetails) 
   const pending=source.pending??false, auxiliary=source.auxiliary??false;
   if(existing&&!existing.pending)return;
   if(existing)await adjust(ctx,source.ownerId,existing,-1);
-  const next={ownerId:source.ownerId,fileName:source.fileName,kind:source.kind,size:source.size,createdAt:source.createdAt,objectKey:key,pending,auxiliary,...(source.r2Key?{r2Key:source.r2Key}:{}),...(source.storageId?{storageId:source.storageId}:{}),...(source.jobId?{jobId:source.jobId}:{})};
+  // An upload keeps the Library folder it was started in; a folder deleted meanwhile hands it to its parent.
+  const folderId=auxiliary?undefined:await liveFolderId(ctx,source.ownerId,existing?existing.folderId:source.folderId);
+  const next={ownerId:source.ownerId,fileName:source.fileName,kind:source.kind,size:source.size,createdAt:source.createdAt,objectKey:key,pending,auxiliary,...(source.r2Key?{r2Key:source.r2Key}:{}),...(source.storageId?{storageId:source.storageId}:{}),...(source.jobId?{jobId:source.jobId}:{}),...(folderId?{folderId}:{})};
   if(existing)await ctx.db.replace(existing._id,next);else await ctx.db.insert('storageObjects',next);
   await adjust(ctx,source.ownerId,next,1);
+  if(!pending)await adjustFolderTotals(ctx,folderId,1,next.size);
 }
 export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:StoredObject) {
   const key=objectKey(source);if(!key)return;
   const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
-  if(row){await adjust(ctx,ownerId,row,-1);await ctx.db.delete(row._id);}
+  if(row){await adjust(ctx,ownerId,row,-1);if(!row.pending&&!row.auxiliary)await adjustFolderTotals(ctx,row.folderId,-1,-row.size);await ctx.db.delete(row._id);}
 }
 export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>) {
   await recordStorageObject(ctx,asset);

@@ -27,7 +27,7 @@ import { removeShareTabs } from './lib/shared_media';
 import { storageObjectKind as kind } from './schema';
 
 const workspace=v.object({id:v.id('projects'),title:v.string()});
-const item=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null()),canCreateEdit:v.boolean(),cloudOnly:v.boolean()});
+export const storageItem=v.object({id:v.id('storageObjects'),fileName:v.string(),kind,size:v.number(),createdAt:v.number(),workspaces:v.array(workspace),inUse:v.boolean(),canDelete:v.boolean(),protectedReason:v.union(v.string(),v.null()),thumbnailUrl:v.union(v.string(),v.null()),canCreateEdit:v.boolean(),cloudOnly:v.boolean()});
 export const summary=query({args:{},returns:v.object({usedBytes:v.number(),reservedBytes:v.number(),videoBytes:v.number(),audioBytes:v.number(),imageBytes:v.number(),modelBytes:v.number(),exportBytes:v.number(),fileCount:v.number(),ready:v.boolean()}),handler:async ctx=>{
   const ownerId=await requireOwner(ctx),[account,ready]=await Promise.all([storageAccount(ctx,ownerId),accountingReady(ctx)]);
   const values=Object.fromEntries(Object.keys(emptyStorage).map(key=>[key,account?.[key as keyof typeof emptyStorage]??0])) as typeof emptyStorage;
@@ -42,7 +42,7 @@ function cached<K,V>(cache:Map<K,Promise<V>>,key:K,load:()=>Promise<V>) {
   let pending=cache.get(key);if(!pending){pending=load();cache.set(key,pending);}return pending;
 }
 /** Reuse promises across concurrent rows in this query's immutable snapshot only. */
-function listingReads(ctx:QueryCtx):DescriptionReads {
+export function listingReads(ctx:QueryCtx):DescriptionReads {
   const projects=new Map<Id<'projects'>,Promise<Doc<'projects'>|null>>();
   const runs=new Map<string,ReturnType<typeof projectRun>>();
   const exports=new Map<string,ReturnType<typeof activeExportGroups>>();
@@ -53,8 +53,9 @@ function listingReads(ctx:QueryCtx):DescriptionReads {
     activeExport:async(ownerId,id,assetIds)=>usedByActiveExport(ctx,ownerId,id,assetIds,await cached(exports,key(ownerId,id),()=>activeExportGroups(ctx,ownerId,id))),
   };
 }
-async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
-  const result={canCreateEdit:false,cloudOnly:false,id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
+/** `duration` and `peaks` are for the Library listing; `files` returns the rest. */
+export async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
+  const result={duration:null as number|null,peaks:null as Doc<'assets'>['waveform']|null,canCreateEdit:false,cloudOnly:false,id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
@@ -64,6 +65,8 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
   const refs=await ownedObjectReferences(ctx,row.ownerId,row);
   result.canCreateEdit=row.kind!=='model'&&(!!refs.library?.completed||refs.attachments.some(asset=>asset.kind!=='model'));
   result.cloudOnly=!!refs.library?.completed&&!refs.attachments.length;
+  result.duration=refs.library?.duration??refs.attachments.find(asset=>asset.duration)?.duration??null;
+  if(row.kind==='audio')result.peaks=refs.attachments.find(asset=>asset.waveform)?.waveform??null;
   // Listing previews reuse the editor's small JPEG thumbnail; an image falls back to itself.
   const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
   result.thumbnailUrl=thumbnail?await ctx.storage.getUrl(thumbnail):row.kind==='image'?await mediaUrl(ctx,row):null;
@@ -89,7 +92,7 @@ async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads
   }
   result.canDelete=(refs.attachments.length>0||!!refs.library?.completed)&&!result.protectedReason;return result;
 }
-export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.optional(kind),search:v.optional(v.string()),unused:v.optional(v.boolean()),sort:v.union(v.literal('largest'),v.literal('newest'))},returns:v.object({page:v.array(item),isDone:v.boolean(),continueCursor:v.string(),splitCursor:v.optional(v.union(v.string(),v.null())),pageStatus:v.optional(v.union(v.literal("SplitRecommended"),v.literal("SplitRequired"),v.null()))}),handler:async(ctx,args)=>{
+export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.optional(kind),search:v.optional(v.string()),unused:v.optional(v.boolean()),sort:v.union(v.literal('largest'),v.literal('newest'))},returns:v.object({page:v.array(storageItem),isDone:v.boolean(),continueCursor:v.string(),splitCursor:v.optional(v.union(v.string(),v.null())),pageStatus:v.optional(v.union(v.literal("SplitRecommended"),v.literal("SplitRequired"),v.null()))}),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx);if(args.paginationOpts.numItems<1||args.paginationOpts.numItems>40)throw new ConvexError('Load up to 40 files');
   const search=args.search?.trim()??'';if(search.length>120)throw new ConvexError('Search is too long');
   const base=ctx.db.query('storageObjects');
@@ -98,7 +101,8 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
     : base.withIndex(args.sort==='largest'?'by_owner_visible_size':'by_owner_visible_created',q=>q.eq('ownerId',ownerId).eq('auxiliary',false).eq('pending',false)).order('desc');
   const page=await listing.paginate(args.paginationOpts);
   const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
-  return {...page,page:args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows};
+  const visible=(args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows).map(({duration:_duration,peaks:_peaks,...file})=>file);
+  return {...page,page:visible};
 }});
 /** The projects a deletion takes with it: those whose edit uses a selected file, and those the selection would leave
  * with no media and no clips. A project emptied this way is otherwise kept as an empty card in every project list.
@@ -165,6 +169,16 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects')),conf
   return [...projects];
 }});
 
+/** Makes a finished Library upload a project's media and queues its preparation. The caller records its storage. */
+export async function attachLibraryUpload(ctx:MutationCtx,ownerId:string,projectId:Id<'projects'>,library:Doc<'cloudMedia'>,fileName:string) {
+  const {r2Key,contentType,kind,size,duration,width,height}=library;
+  const assetId=await ctx.db.insert('assets',{ownerId,projectId,r2Key,fileName,contentType,kind,size,duration,width,height,createdAt:Date.now()});
+  if(kind!=='image'){
+    await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'extract':'waveform'});
+    await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
+  }
+  return ctx.db.get(assetId);
+}
 export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.id('projects'),handler:async(ctx,{fileIds})=>{
   const ownerId=await requireOwner(ctx);
   const ids=[...new Set(fileIds)];
@@ -190,15 +204,8 @@ export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))}
   let timeline=normalizeTimeline({clips:[],fps:60,aspectRatio});
   for(const source of sources){
     let asset:Doc<'assets'>|null;
-    if(source.library){
-      const {r2Key,fileName,contentType,kind,size,duration,width,height}=source.library;
-      const assetId=await ctx.db.insert('assets',{ownerId,projectId,r2Key,fileName,contentType,kind,size,duration,width,height,createdAt:Date.now()});
-      asset=await ctx.db.get(assetId);
-      if(kind!=='image'){
-        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'extract':'waveform'});
-        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
-      }
-    }else{
+    if(source.library)asset=await attachLibraryUpload(ctx,ownerId,projectId,source.library,source.row.fileName);
+    else{
       const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(PROJECT_MEDIA_LIMIT);
       asset=candidates.find(asset=>(source.row.r2Key&&asset.r2Key===source.row.r2Key)||(source.row.storageId&&asset.storageId===source.row.storageId))??null;
     }
