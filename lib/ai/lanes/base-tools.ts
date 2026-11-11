@@ -51,6 +51,7 @@ export const BASE_TOOLS = [
   'addSubtitlesFromTranscript',
   'retainSourceRanges',
   'cleanSpeech',
+  'readCutScript',
   'setSplitEdits',
   'split',
   'trim',

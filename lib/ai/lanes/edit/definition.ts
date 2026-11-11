@@ -2,6 +2,7 @@ import type { LaneDefinition } from '../types';
 import { skills } from './skills';
 import { tools } from './tools';
 import { check } from './check';
+import { SPEECH_EDIT_ORDER_SHORT } from '../../editor-style';
 export const definition: LaneDefinition = {
   id: 'edit',
   description: 'Timeline edits, trims, captions, sound and color.',
@@ -23,5 +24,5 @@ export const definition: LaneDefinition = {
     },
   },
   instructions:
-    'Read footage-editing for source edits. finish checks timeline data and draws the few frames it needs itself; never fetch a frame per change or per caption. Use transcript and saved source analysis for speech decisions.',
+    `Read footage-editing for source edits. ${SPEECH_EDIT_ORDER_SHORT} finish checks timeline data and draws the few frames it needs itself; never fetch a frame per change or per caption. Use transcript and saved source analysis for speech decisions.`,
 };

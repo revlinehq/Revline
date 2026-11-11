@@ -90,7 +90,7 @@ export class EditorTurn extends Agent<Env> {
       // The turn reports its own failures; this is the bridge or the runner itself failing.
       console.error(`[agent-runner] ${JSON.stringify({ event: 'turn-failed', projectId: run.projectId, runId: run.runId, error: error instanceof Error ? error.message.slice(0, 500) : 'unknown' })}`);
       await ctx.runMutation(internal.incidents.reportRunner, { ...run, message: error instanceof Error ? error.message : 'Runner failed', stack: error instanceof Error ? error.stack : undefined }).catch(() => {});
-      await ctx.runMutation(internal.agentRunner.settle, run).catch(() => {});
+      await ctx.runMutation(internal.agentRunner.settle, run).catch(failure => console.error(`[agent-runner] ${JSON.stringify({ event: 'settle-failed', projectId: run.projectId, runId: run.runId, error: failure instanceof Error ? failure.message.slice(0, 300) : 'unknown' })}`));
     }
   }
 }

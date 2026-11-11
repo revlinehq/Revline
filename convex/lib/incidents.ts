@@ -51,3 +51,13 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   if (opens && !agentFiled && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
   return id;
 }
+
+/** Filing an incident from a path that ends or cleans up something else (a turn finishing, a stalled export being
+ * failed): the report is best effort and never throws, so a recording problem cannot stop that work. */
+export async function recordIncidentSafely(ctx: MutationCtx, input: Infer<typeof incidentInput>) {
+  try { return await recordIncident(ctx, input); }
+  catch (error) {
+    console.error(`[incidents] ${JSON.stringify({ event: 'record-failed', kind: input.kind, source: input.source, error: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`);
+    return null;
+  }
+}

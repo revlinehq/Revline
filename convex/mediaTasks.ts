@@ -30,7 +30,8 @@ import { mediaWorkflow } from './lib/workflows';
 import { enqueueMediaTask, cancelMediaTask, markTerminal, releaseRenderSeat } from './lib/media_queue';
 import { hasPreview, mediaUrl, previewUrl } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
-import { parseVideoLink } from '../lib/editor/video-link';
+import { processorCan } from './lib/processor_capabilities';
+import { importLimitText, parseVideoLink, MAX_IMPORT_SECONDS, type VideoLink } from '../lib/editor/video-link';
 import { addMediaClip } from '../lib/editor/operations';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { timelineAtRevision } from './lib/revision_log';
@@ -42,7 +43,6 @@ import { completeDerivation } from './derivations';
 import { hostedRendersEnabled, processorHasRenderRoom, seatedRenders } from './lib/render_seats';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { legacyRenderTimeline } from '../lib/editor/legacy-render';
-import { processorCan } from './lib/processor_capabilities';
 import { isMediaDiskFull, MEDIA_TASK_LEASE_MS, MAX_MEDIA_TASK_ATTEMPTS } from '../lib/media-analysis/errors';
 import { consumeVideoImport, requireMediaTaskCapacity } from './lib/account_limits';
 
@@ -179,13 +179,19 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
 const importVideoForArgs = { sourcesOnly: v.optional(v.boolean()), projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
 export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
   await requireEditorAccess(ctx, ownerId);
-  let sourceUrl: string;
-  try { sourceUrl = parseVideoLink(args.url).url; } catch (error) { throw new ConvexError((error as Error).message); }
+  let link: VideoLink;
+  try { link = parseVideoLink(args.url); } catch (error) { throw new ConvexError((error as Error).message); }
+  const sourceUrl = link.url;
+  // The processor is released separately: one from before these links would fetch the page as a file and fail.
+  if (link.needs && !await processorCan(ctx, `import:${link.needs}`)) throw new ConvexError(link.needs === 'twitch-clips'
+    ? 'Twitch clip links need a media processor update that is not live on this server yet. Import the same moment from its VOD instead (twitch.tv/videos/<id> with start and end), or upload the clip file.'
+    : 'Links from this site need a media processor update that is not live on this server yet. Upload the video file instead.');
   let importRange: { start: number; end: number } | undefined;
   if (args.start !== undefined || args.end !== undefined) {
     const start = args.start ?? 0, end = args.end;
     if (end === undefined) throw new ConvexError('Give both start and end to import part of a video.');
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw new ConvexError('The import range needs 0 <= start < end, in source seconds.');
+    if (end - start > MAX_IMPORT_SECONDS) throw new ConvexError(`${importLimitText} This range is ${Math.round((end - start) / 60)} minutes: import it as several shorter ranges, each becomes its own source.`);
     importRange = { start, end };
   }
   // A new edit and its durable import are created atomically.

@@ -10,7 +10,7 @@ import type { ToolSaveReceipt } from '../../lib/ai/save-confirmation';
 import type { EditorRun } from './run_types';
 import { savesNothing } from './tool_write_receipt';
 
-type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; writeFailed?: string; interrupted?: string; responseLost?: boolean };
+type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; recovered?: number; writeFailed?: string; interrupted?: string; responseLost?: boolean };
 class RecoveredWrite extends Error {}
 const object = z.record(z.string(), z.unknown());
 const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string() });
@@ -63,7 +63,15 @@ export class ToolSaveReceipts {
 
   /** Final publication runs after the tools; retain its originating tool and recover a lost acknowledgement. */
   async commit(write: () => Promise<number>): Promise<number> {
-    if (this.active.getStore()) return write();
+    const active = this.active.getStore();
+    if (active) {
+      // A check tool publishing its checked draft has no result stamping to recover a lost response for it:
+      // take the committed revision from the receipt, as the end-of-request publication below does.
+      if (!savesNothing(active.behavior.effect)) return write();
+      active.recovered = undefined;
+      try { return await write(); }
+      catch (error) { if (active.recovered !== undefined) return active.recovered; throw error; }
+    }
     const name = this.stagedBy, behavior = name ? toolBehavior(name) : undefined;
     if (!name || !behavior) throw new Error('A timeline publication must have an originating tool.');
     const execution: Execution = { name, behavior,callId:'publication',writes:new Map() };
@@ -85,8 +93,11 @@ export class ToolSaveReceipts {
   context(ctx: ActionCtx): ActionCtx {
     const runMutation: ActionCtx['runMutation'] = async (ref, ...args) => {
       const execution = this.active.getStore();
-      if (!execution || savesNothing(execution.behavior.effect)) return ctx.runMutation(ref, ...args);
       const input=args[0]??{},functionName=getFunctionName(ref);
+      // A check tool (finish, checkClip) saves nothing itself, but it publishes the staged draft once its checks pass.
+      // That save takes the receipt path like any other, so a lost response is recovered instead of read as "not saved".
+      const publication=functionName==='assistant:apply'&&'stagedPublication' in input&&input.stagedPublication===true;
+      if (!execution || savesNothing(execution.behavior.effect)&&!publication) return ctx.runMutation(ref, ...args);
       const ordinal=execution.writes.get(functionName)??0;
       execution.writes.set(functionName,ordinal+1);
       const writeId = `${this.run.runId}:${execution.callId}:${functionName}:${execution.callId==='publication'&&'expectedRevision' in input?String(input.expectedRevision):ordinal}`;
@@ -94,7 +105,7 @@ export class ToolSaveReceipts {
         const result = await ctx.runMutation(internal.toolWrites.run, { ...this.run, writeId, toolName: execution.name, functionName, input,segment:this.segment });
         if (result.receipt) this.record(result.receipt);
         if(result.replayed&&attempt===0&&result.receipt?.kind==='timeline'){
-          execution.responseLost=true;
+          execution.responseLost=true;execution.recovered=result.receipt.revision;
           throw new RecoveredWrite('This edit already committed. Inspect the saved state and continue only unfinished work.');
         }
         // The nested mutation validates this value against the original function's return validator.
@@ -108,7 +119,7 @@ export class ToolSaveReceipts {
           // identity and return the original transaction's result without another write.
           if(attempt<2){await new Promise(resolve=>setTimeout(resolve,250*(attempt+1)));continue;}
           const receipt = await ctx.runQuery(internal.toolWrites.receipt, { ...this.run, writeId }).catch(() => null);
-          if (receipt) { this.record(receipt); execution.responseLost = true; }
+          if (receipt) { this.record(receipt); execution.responseLost = true; if (receipt.kind === 'timeline') execution.recovered = receipt.revision; }
           else execution.interrupted = message(error);
         }
         throw error;

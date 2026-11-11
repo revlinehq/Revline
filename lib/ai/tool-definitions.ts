@@ -78,6 +78,7 @@ export const EDITOR_TOOL_DEFINITIONS = {
   closeGaps: { effect: 'timeline', mcp: 'exclusive', label: ['Closing gaps', 'Closed gaps'] },
   retainSourceRanges: { effect: 'timeline', mcp: 'exclusive' },
   readScript: { effect: 'analysis', mcp: 'exclusive', label: ['Reading your script', 'Read your script'] },
+  readCutScript: { effect: 'timeline', mcp: 'exclusive', label: ['Reading the cut', 'Read the cut'] },
   planScript: { effect: 'analysis', mcp: 'exclusive', label: ['Planning the cut', 'Planned the cut'] },
   checkSpots: { effect: 'timeline', mcp: 'exclusive', label: ['Checking cut edges', 'Checked cut edges'] },
   cleanSpeech: { effect: 'timeline', mcp: 'exclusive', label: ['Cleaning up speech', 'Cleaned up speech'] },

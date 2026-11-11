@@ -1,6 +1,9 @@
 import { canChooseReasoningEffort, hasPaidModelAccess, productionOffer, requireEditorAccess } from './lib/billing_access';
 import { freeEditorModel, offeredEditorModel, withPlanReasoning } from '../lib/ai/claude-model';
 import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
+import { refusalReason } from '../lib/ai/failure-text';
+import { stepTimingValidator } from './lib/step_timing_validator';
+import { appendRunTimings } from './runTimings';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -55,21 +58,26 @@ export async function rememberTurn(
   await syncTurnView(ctx,(await ctx.db.get(id))!);
 }
 
-export async function dispatchTurn(
+/** What a turn may run on now, checked before anything is written: throws a ConvexError when the owner can no
+ * longer edit (a lapsed trial or subscription). */
+async function entitledTurn(
+  ctx: MutationCtx,
+  args: ObjectType<typeof assistantRunArgs>,
+): Promise<ObjectType<typeof assistantRunArgs>> {
+  await requireEditorAccess(ctx, args.ownerId);
+  const offer = await hasPaidModelAccess(ctx, args.ownerId) ? await productionOffer(ctx, args.ownerId) : 'free';
+  if (offer === 'free') return { ...args, pinnedModel: freeEditorModel() };
+  // Production: every new, queued, retried or recovered paid turn runs what the plan's offer allows of its pin.
+  if (offer) return { ...args, pinnedModel: offeredEditorModel(offer, args.pinnedModel) };
+  // Every new, queued, retried or recovered turn starts here: a chosen effort holds only while the owner is on Ultra.
+  if (args.pinnedModel) return { ...args, pinnedModel: withPlanReasoning(args.pinnedModel, await canChooseReasoningEffort(ctx, args.ownerId)) };
+  return args;
+}
+
+async function startTurn(
   ctx: MutationCtx,
   args: ObjectType<typeof assistantRunArgs>,
 ): Promise<void> {
-  await requireEditorAccess(ctx, args.ownerId);
-  const offer = await hasPaidModelAccess(ctx, args.ownerId) ? await productionOffer(ctx, args.ownerId) : 'free';
-  if (offer === 'free') {
-    args = { ...args, pinnedModel: freeEditorModel() };
-  } else if (offer) {
-    // Production: every new, queued, retried or recovered paid turn runs what the plan's offer allows of its pin.
-    args = { ...args, pinnedModel: offeredEditorModel(offer, args.pinnedModel) };
-  } else if (args.pinnedModel) {
-    // Every new, queued, retried or recovered turn starts here: a chosen effort holds only while the owner is on Ultra.
-    args = { ...args, pinnedModel: withPlanReasoning(args.pinnedModel, await canChooseReasoningEffort(ctx, args.ownerId)) };
-  }
   if (agentRunnerConfigured()) {
     await startRunnerTurn(ctx, args);
     return;
@@ -89,6 +97,13 @@ export async function dispatchTurn(
     },
   );
   await writeProject(ctx, args.projectId, { aiWorkflowId: workflowId });
+}
+
+export async function dispatchTurn(
+  ctx: MutationCtx,
+  args: ObjectType<typeof assistantRunArgs>,
+): Promise<void> {
+  await startTurn(ctx, await entitledTurn(ctx, args));
 }
 
 /** A server restart enters the next pass of the same bounded repair loop. */
@@ -113,6 +128,8 @@ export async function resumeInterruptedTurn(
     pendingFastFrames: turn.pendingFastFrames,
     feedback,
   };
+  // Entitlement is settled before anything is written: a refusal throws here and leaves the turn exactly as it was.
+  const entitled = await entitledTurn(ctx, { ...turn.args, continuation });
   const streams = await listStreams(ctx, components.agent, {
     threadId: turn.threadId,
     includeStatuses: ["streaming"],
@@ -128,11 +145,32 @@ export async function resumeInterruptedTurn(
     feedback,
     updatedAt: Date.now(),
   });
-  await dispatchTurn(ctx, { ...turn.args, continuation });
+  await startTurn(ctx, entitled);
   console.info(
     `[ai-repair] ${JSON.stringify({ event: "scheduled-continuation", projectId: turn.projectId, runId, pass, segment })}`,
   );
   return true;
+}
+
+/** Resume an interrupted turn, or end it. Every watcher of a run goes through here: a resumption that throws
+ * (access lapsed since the turn began) used to escape the watcher and leave the run marked running for good. */
+export async function resumeOrFinish(
+  ctx: MutationCtx,
+  run: { projectId: Doc<"projects">["_id"]; ownerId: string; runId: string },
+  feedback: string,
+  error: string,
+): Promise<void> {
+  let reason = error;
+  try {
+    if (await resumeInterruptedTurn(ctx, run.runId, feedback)) return;
+  } catch (failure) {
+    // Only a refusal ends the run here (nothing was written before it). Any other error rolls this mutation back as before.
+    const refused = refusalReason(failure);
+    if (!refused) throw failure;
+    reason = refused;
+    console.error(`[ai-repair] ${JSON.stringify({ event: "resume-refused", projectId: run.projectId, runId: run.runId, reason: reason.slice(0, 300) })}`);
+  }
+  await ctx.runMutation(internal.assistant.finish, { ...run, error: reason });
 }
 
 export const advance = internalMutation({
@@ -172,11 +210,15 @@ export const interrupted = internalMutation({
     await projectRun(ctx, args.projectId, args.ownerId);
     const turn=await turnForRun(ctx,args.runId);
     if(turn&&turn.segment!==args.segment)return false;
-    return resumeInterruptedTurn(
-      ctx,
-      args.runId,
-      args.feedback.slice(0, 14000),
-    );
+    // A refused resumption wrote nothing, so the turn goes on to report its own failure on this segment.
+    try {
+      return await resumeInterruptedTurn(ctx, args.runId, args.feedback.slice(0, 14000));
+    } catch (error) {
+      const refused = refusalReason(error);
+      if (!refused) throw error;
+      console.error(`[ai-repair] ${JSON.stringify({ event: "resume-refused", projectId: args.projectId, runId: args.runId, reason: refused.slice(0, 300) })}`);
+      return false;
+    }
   },
 });
 
@@ -186,10 +228,17 @@ export const checkpoint = internalMutation({
     segment: v.number(),
     savedEdits: v.number(),
     pendingFastFrames: v.array(v.number()),
+    // This step's model and tool timings, saved in the same round trip (lib/ai/step-timing.ts).
+    timings: v.optional(v.object({ lane: v.optional(v.string()), model: v.optional(v.string()), effort: v.optional(v.string()), steps: v.array(stepTimingValidator) })),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const turn = await turnForRun(ctx, args.runId);
+    if (args.timings && turn && turn.projectId === args.projectId && turn.args.ownerId === args.ownerId) {
+      const { steps, ...facts } = args.timings;
+      // A timing row is never worth losing the step's checkpoint for.
+      try { await appendRunTimings(ctx, { runId: args.runId, source: 'editor', ...facts }, steps); } catch { /* The report misses this step. */ }
+    }
     if (
       turn &&
       turn.projectId === args.projectId &&
