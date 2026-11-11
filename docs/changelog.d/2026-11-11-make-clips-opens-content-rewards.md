@@ -1,0 +1,1 @@
+- Campaigns: Make clips opens the campaign's page on Content Rewards in a new tab instead of creating a project and opening the editor. Why: the founder expected the button to take them to Content Rewards to join the campaign.
