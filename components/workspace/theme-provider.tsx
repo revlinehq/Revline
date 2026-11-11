@@ -1,18 +1,13 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { isDarkRoute } from '@/lib/workspace-routes';
 
-/** Every page is dark except sign-in and sign-up, which keep their own light design. */
+/** Every page is dark; this keeps the document flags set after hydration. */
 export function WorkspaceThemeProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   useEffect(() => {
-    const internal = isDarkRoute(pathname);
-    const applied = internal ? 'dark' : 'light';
-    document.documentElement.dataset.workspaceTheme = applied;
-    document.documentElement.classList.toggle('dark', internal);
-    document.documentElement.style.colorScheme = applied;
-  }, [pathname]);
+    document.documentElement.dataset.workspaceTheme = 'dark';
+    document.documentElement.classList.add('dark');
+    document.documentElement.style.colorScheme = 'dark';
+  }, []);
   return children;
 }
