@@ -72,7 +72,7 @@ import { TEXT_EFFECT_PRESETS, TEXT_ANIMATION_PRESETS,TEXT_ANIMATION_LABELS,textA
 import { TEXT_LOOKS,textLookPatch } from '../../lib/editor/text-looks';
 import { TEXT_FONTS } from '../../lib/editor/text-fonts';
 import { applyCaptionStyle,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../../lib/editor/caption-editing';
-import { captionClipsFromTranscript, captionsCoverTranscript } from '../../lib/editor/transcript-captions';
+import { captionSpeech, captionsCoverTranscript, sourceCaptions } from '../../lib/editor/transcript-captions';
 import { AUDIO_LIMITS,audioSettings,audioSettingsPatch,configureAudio } from '../../lib/editor/audio-settings';
 import { STOCK_AUDIO_IDS,isStockAudioKey,stockAudio } from '../../lib/editor/stock-audio';
 import { generateSoundEffect, soundEffectInput, type SoundEffectRequest } from '../../lib/audio/sound-effect';
@@ -104,7 +104,7 @@ import type { CleanupCut } from '../../lib/speech-cleanup/types';
 import { FrameBudget, LOOKS_UNMEASURED, lookBaseline } from '../../lib/ai/eyes';
 import { brollRuns, cutKey, moveEdge, readSpot, reelSpots, spotTimes, type Range, type SpotRecord, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { BEAT_ROLES, beatsToDrop, keptBroll, lineLabel, lineSpeech, linesToRanges, outlineLines, resolveScriptPlan, scriptOutline, type SavedScript } from '../../lib/ai/lanes/reel/script';
-import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges, refineTranscriptWithAudioActivity } from '../../lib/media-analysis/audio-activity';
+import { AUDIO_ACTIVITY_VERSION, AUDIO_QUIET_EDGE_PAD, refineAudioRangeEdges } from '../../lib/media-analysis/audio-activity';
 import { TEXT_TEMPLATE_PRESETS } from '../../lib/editor/text-templates';
 import { DEFAULT_CAPTION_STYLE, resolvedTextAppearance, TEXT_APPEARANCE_LIMITS, TEXT_TYPOGRAPHY_LIMITS } from '../../lib/editor/text-style';
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
@@ -1148,10 +1148,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       });
       inspected = true;
       const captionedAssetIds=assets.filter(asset=>{
-        const raw=asset.analysis?.transcript;
-        if(!raw)return false;
-        const transcript=asset.analysis?.audioActivity?refineTranscriptWithAudioActivity(raw,asset.analysis.audioActivity):raw;
-        return captionsCoverTranscript(snapshot.timeline,asset._id,transcript);
+        const speech=captionSpeech(asset.analysis);
+        return !!speech&&captionsCoverTranscript(snapshot.timeline,asset._id,speech.transcript,speech.edges);
       }).map(asset=>asset._id);
       const tabs = await ctx.runQuery(internal.assistant.listRunTimelines, run), requestedTab = boundRunTab(run.runId), openTab = tabs.find(tab => requestedTab ? tab.id === requestedTab : tab.active) ?? tabs[0];
       const inspection = { ...snapshot, openTimeline: { timelineId: openTab.id, name: openTab.name, otherTimelines: tabs.filter(tab => tab !== openTab).map(tab => tab.name) }, captionedAssetIds, assets: assets.map(({ _id, fileName, kind, duration, width, height, audioAssetId, imageGeneration }) => ({ assetId: _id, fileName, kind, duration, width, height, audioAssetId })), timeline: modelTimeline(snapshot.timeline, selectedClipIds), layers: deriveTracks(snapshot.timeline), summary: summarizeTimeline(snapshot.timeline, assets), ...approvedNote(snapshot.timeline), brief: await ctx.runQuery(internal.briefs.forRun, run) };
@@ -1286,11 +1284,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const ids = input.at !== undefined ? [shotAt(t, input.at, input.track).id] : input.clipIds ?? [input.clipId!]; changed = audioTargets(t, ids, clip => { if (clip.kind !== "video" && clip.kind !== "audio") throw new Error("choose a video or audio clip"); }).length;
       return ids.reduce((next, id) => patchClip(next, id, { volume: input.volume }), t);
     }); return { ...result, changed }; } }),
-    addSubtitlesFromTranscript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addSubtitlesFromTranscript, description: "Add readable captions from this asset's saved transcript to each retained source occurrence. Creates minimal static phrases of at most six words with NO background, synchronized to retained speech. In the clip lane the default style is clipper instead: uppercase Montserrat Black, white with a black outline and no background, 1–3 words per caption, each word popping in as spoken with the active word in green; it needs saved word timings, and sentence-only transcripts get minimal captions. Pass style to override the lane default only when the user asks for the other look. Source trims and playback speed map their exact timings. Discarded words never reappear. Respect explicit no-captions or requested styling, changing only newly returned caption IDs. Without word evidence, only fully retained sentence segments can be captioned; partial segment text is never guessed. Never invent spoken text. Caption timing uses a conservative copy of the retained word timings; the saved provider timings never change.", inputSchema: z.object({ assetId: z.string(), style: z.enum(['minimal', 'clipper']).optional() }), execute: async (_ctx, input) => savedCheckpoint(input.assetId,t => {
+    addSubtitlesFromTranscript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addSubtitlesFromTranscript, description: "Add readable captions from this asset's saved transcript to each retained source occurrence. Creates minimal static phrases of at most six words (up to eight where a cut would leave a word alone on screen) with NO background, synchronized to retained speech. In the clip lane the default style is clipper instead: uppercase Montserrat Black, white with a black outline and no background, 1–3 words per caption, each word popping in as spoken with the active word in green; it needs saved word timings, and sentence-only transcripts get minimal captions. Pass style to override the lane default only when the user asks for the other look. Source trims and playback speed map their exact timings. Discarded words never reappear. Respect explicit no-captions or requested styling, changing only newly returned caption IDs. Without word evidence, only fully retained sentence segments can be captioned; partial segment text is never guessed. Never invent spoken text. Caption timing uses a conservative copy of the retained word timings; the saved provider timings never change.", inputSchema: z.object({ assetId: z.string(), style: z.enum(['minimal', 'clipper']).optional() }), execute: async (_ctx, input) => savedCheckpoint(input.assetId,t => {
       const asset = assets.find(a => a._id === input.assetId); const rawTranscript = asset?.analysis?.transcript;
       if (!rawTranscript || (!rawTranscript.words.length && !rawTranscript.segments.length)) throw new Error("Run Auto subtitles on this source first; no transcript is saved");
-      const transcript = asset.analysis?.audioActivity ? refineTranscriptWithAudioActivity(rawTranscript, asset.analysis.audioActivity) : rawTranscript;
-      const captions = t.clips.filter(clip => clip.assetId === input.assetId).flatMap(clip => captionClipsFromTranscript(clip, transcript, t.fps, () => crypto.randomUUID(), input.style ?? (lane === 'clip' ? 'clipper' : 'minimal')));
+      const captions = sourceCaptions(t.clips.filter(clip => clip.assetId === input.assetId), captionSpeech(asset.analysis)!, t.fps, () => crypto.randomUUID(), input.style ?? (lane === 'clip' ? 'clipper' : 'minimal'));
       if (!captions.length) throw new Error("Add a source clip that overlaps its transcript before adding subtitles");
       return captions.reduce((timeline, clip) => placeOnFreeLayer(timeline, clip), t);
     }) }),
