@@ -1,6 +1,9 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Copy, Download, Pencil, Plus, Trash2 } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, List, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -21,6 +24,11 @@ export type TimelineTabActions = {
   onExport?: (id: string) => void;
 };
 
+/** Above this many timelines the list menu gets a search field. */
+const SEARCH_FROM = 10;
+const isMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
+/** Ctrl/Cmd+Alt+[ and ] switch timelines; no editor shortcut uses Alt with brackets. */
+const shortcut = (key: '[' | ']') => isMac() ? `⌘⌥${key}` : `Ctrl+Alt+${key}`;
 
 /** Spreadsheet-style tabs in the bar above the preview: each is its own video in this project. */
 export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
@@ -55,11 +63,60 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
   }, []);
-  useEffect(() => { if (shown) strip.current?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(shown)}"]`)?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }, [shown, tabs.length]);
+  // ‹ and › show only while the row overflows, each disabled at its end.
+  const [edges, setEdges] = useState({ overflow: false, start: true, end: true });
+  const measure = useCallback(() => {
+    const element = strip.current; if (!element) return;
+    const overflow = element.scrollWidth > element.clientWidth + 1;
+    const next = { overflow, start: element.scrollLeft <= 1, end: element.scrollLeft + element.clientWidth >= element.scrollWidth - 1 };
+    setEdges(current => current.overflow === next.overflow && current.start === next.start && current.end === next.end ? current : next);
+  }, []);
+  // Scrolls the row just enough to show the active tab, without moving anything around it.
+  const reveal = useCallback((id: string | undefined) => {
+    const element = strip.current, tab = id && element?.querySelector<HTMLElement>(`[data-tab-id="${CSS.escape(id)}"]`);
+    if (!element || !tab) return;
+    const row = element.getBoundingClientRect(), box = tab.getBoundingClientRect(), margin = 24;
+    if (box.left < row.left) element.scrollLeft -= row.left - box.left + margin;
+    else if (box.right > row.right) element.scrollLeft += box.right - row.right + margin;
+  }, []);
+  const shownRef = useRef(shown); shownRef.current = shown;
+  useEffect(() => {
+    const element = strip.current; if (!element) return;
+    let first = true;
+    const observer = new ResizeObserver(() => { if (first) { first = false; reveal(shownRef.current); } measure(); });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [measure, reveal]);
+  // Only a new active tab or a new count moves the row; renames and edits just re-measure it.
+  useLayoutEffect(() => { reveal(shown); measure(); }, [shown, tabs.length, reveal, measure]);
+  const widths = tabs.map(tab => `${tab.name}\u0000${minutesSeconds(tab.duration)}\u0000${tab.agents?.length ?? 0}`).join('\u0001');
+  useLayoutEffect(measure, [widths, measure]);
+  const page = (direction: -1 | 1) => { const element = strip.current; if (element) element.scrollLeft += direction * Math.max(element.clientWidth - 48, 80); };
+  const open = (id: string) => { if (id === shown || busy) return; setOpening(id); void run(() => actions.onOpen(id)).finally(() => setOpening(null)); };
+  const openRef = useRef(open); openRef.current = open;
+  const [listOpen, setListOpen] = useState(false);
+  const tabsRef = useRef(tabs); tabsRef.current = tabs;
+  // Ctrl/Cmd+Alt+[ and ] open the previous and next timeline.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !event.altKey || !(event.ctrlKey || event.metaKey) || event.shiftKey) return;
+      if (event.code !== 'BracketLeft' && event.code !== 'BracketRight') return;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (target?.isContentEditable || target?.closest('input,textarea,select,[role="dialog"]')) return;
+      event.preventDefault();
+      const list = tabsRef.current, index = list.findIndex(tab => tab.id === shownRef.current);
+      const next = list[index + (event.code === 'BracketLeft' ? -1 : 1)];
+      if (next) openRef.current(next.id);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   // Tabs scroll inside their own slot; the add button sits outside it, so it is always on screen.
-  return <div className="timeline-tabs"><div ref={strip} className="timeline-tabs-scroll" role="tablist" aria-label="Timelines">
+  return <div className="timeline-tabs">
+    {edges.overflow && <Tooltip><TooltipTrigger asChild><button type="button" className="timeline-tab-step" aria-label="Scroll timelines left" disabled={edges.start} onClick={() => page(-1)}><ChevronLeft size={14}/></button></TooltipTrigger><TooltipContent>Scroll left · previous timeline {shortcut('[')}</TooltipContent></Tooltip>}
+    <div ref={strip} className="timeline-tabs-scroll" role="tablist" aria-label="Timelines" onScroll={measure}>
     {tabs.map(tab => { const isShown = tab.id === shown; return <div key={tab.id} className="timeline-tab" data-tab-id={tab.id} role="tab" aria-selected={isShown} data-active={isShown || undefined} data-working={!!tab.agents?.length || tab.id === workingId || undefined} data-done={tab.id === doneId && tab.id !== workingId || undefined}>
-      <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active && !busy) { setOpening(tab.id); void run(() => actions.onOpen(tab.id)).finally(() => setOpening(null)); } }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
+      <button type="button" className="timeline-tab-main" disabled={!tab.active && busy} title={!tab.active && locked ? `View ${tab.name} while the AI edits; it opens for editing when the edit finishes` : tab.name} onClick={() => { if (!tab.active) open(tab.id); }} onDoubleClick={() => { if (tab.active && !locked) setDialog({ mode: 'rename', id: tab.id, name: tab.name }); }}>
         {tab.agents?.length ? <WorkingAgents agents={tab.agents}/> : tab.id === workingId ? <span className="timeline-tab-agent" aria-hidden="true"><AgentLogo name={agentName} /></span> : null}
         <span className="timeline-tab-name">{tab.name}</span>
         <span className="timeline-tab-length">{minutesSeconds(tab.duration)}</span>
@@ -73,6 +130,16 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
       </DropdownMenuContent></DropdownMenu>}
     </div>; })}
     </div>
+    {edges.overflow && <Tooltip><TooltipTrigger asChild><button type="button" className="timeline-tab-step" aria-label="Scroll timelines right" disabled={edges.end} onClick={() => page(1)}><ChevronRight size={14}/></button></TooltipTrigger><TooltipContent>Scroll right · next timeline {shortcut(']')}</TooltipContent></Tooltip>}
+    {edges.overflow && <Popover open={listOpen} onOpenChange={setListOpen}><Tooltip><TooltipTrigger asChild><PopoverTrigger className="timeline-tab-step" aria-label={`All ${tabs.length} timelines`}><List size={14}/></PopoverTrigger></TooltipTrigger><TooltipContent>All {tabs.length} timelines · {shortcut('[')} {shortcut(']')} to step</TooltipContent></Tooltip>
+      <PopoverContent align="end" className="timeline-tab-list"><Command loop defaultValue={shown} filter={(_value, search, keywords) => keywords?.some(name => name.toLowerCase().includes(search.trim().toLowerCase())) ? 1 : 0}>
+        {tabs.length > SEARCH_FROM && <CommandInput placeholder="Find a timeline" aria-label="Find a timeline"/>}
+        <CommandList><CommandEmpty>No timeline matches</CommandEmpty>
+          {tabs.map(tab => <CommandItem key={tab.id} value={tab.id} keywords={[tab.name]} data-checked={tab.id === shown} disabled={busy && tab.id !== shown} onSelect={() => { setListOpen(false); open(tab.id); }}>
+            <span className="timeline-tab-list-name">{tab.name}</span><span className="timeline-tab-length">{minutesSeconds(tab.duration)}</span>
+          </CommandItem>)}
+        </CommandList>
+      </Command></PopoverContent></Popover>}
     <button type="button" className="timeline-tab-add" aria-label="New blank timeline" title="New blank timeline" disabled={blocked} onClick={() => void run(() => actions.onCreate('blank'))}><Plus size={14}/></button>
     <Dialog open={!!dialog} onOpenChange={open => { if (!open) setDialog(null); }}><DialogContent>
       {dialog?.mode === 'remove' ? <>
