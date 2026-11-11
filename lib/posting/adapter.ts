@@ -1,10 +1,16 @@
 // The contract between the posting base (convex/posting) and each platform adapter (lib/posting/platforms/<platform>).
 // Adapters are plain fetch-based modules with no Node-only imports, so Convex actions can run them.
+import type { TikTokPostSettings } from './platforms/tiktok/settings';
+import type { YouTubePublishOptions } from './platforms/youtube/metadata';
+
 export type PostingPlatform = 'instagram' | 'tiktok' | 'youtube';
 export type PlatformCredentials = { clientId: string; clientSecret: string; redirectUri: string };
 export type AccountTokens = { accessToken: string; refreshToken?: string; expiresAt?: number; scopes: string[] };
 export type AccountProfile = { platformAccountId: string; username: string; displayName?: string; avatarUrl?: string };
-export type PublishInput = { videoUrl: string; videoBytes: number; durationSeconds: number; width: number; height: number; title?: string; caption: string };
+export type PublishInput = { videoUrl: string; videoBytes: number; durationSeconds: number; width: number; height: number; title?: string; caption: string;
+  /** What the user chose for this post on that platform (who can view it, and TikTok's interaction and disclosure settings). Instagram has no per-post privacy. */
+  youtube?: YouTubePublishOptions; tiktok?: TikTokPostSettings;
+};
 export type PublishResult =
   | { status: 'published'; platformPostId: string; url: string }
   | { status: 'processing'; platformJobId: string };
@@ -28,4 +34,9 @@ export interface PlatformAdapter {
   /** For platforms that process uploads asynchronously: poll a job started by publish. */
   checkPublish(tokens: AccountTokens, platformJobId: string): Promise<PublishCheck>;
   postStats(tokens: AccountTokens, platformPostId: string): Promise<PostStats>;
+  /**
+   * Ends Revline's access at the platform when the user disconnects the account. Resolves once the platform holds no
+   * access for these tokens, or when it offers no way to end it; throws PostingError when the request did not go through.
+   */
+  revoke(credentials: PlatformCredentials, tokens: AccountTokens): Promise<void>;
 }

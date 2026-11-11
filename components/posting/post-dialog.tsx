@@ -1,12 +1,13 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { useConvexAuth, useMutation, useQuery } from 'convex/react';
+import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { CalendarDays, Pencil, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CAPTION_LIMIT, TITLE_LIMIT } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
+import { YOUTUBE_VISIBILITIES, YOUTUBE_VISIBILITY_NAMES, type YouTubeVisibility } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { ProjectCover } from '@/components/workspace/project-cover';
@@ -19,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { AccountAvatar, PlatformIcon } from './account-avatar';
 import { postTime } from './post-time';
+import { NO_TIKTOK_CHOICE, TikTokConsent, TikTokPostSettings, tiktokProblem, tiktokTarget, type TikTokChoice, type TikTokCreator } from './tiktok-post-settings';
 import './posting.css';
 
 /** `datetime-local` wants local time without a zone. */
@@ -50,27 +52,55 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const clip = useQuery(api.posting.clip, isAuthenticated && current ? { jobId: current } : 'skip');
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
-  const createBatch = useMutation(api.posting.createBatch);
+  const createBatch = useMutation(api.posting.createBatch), readCreator = useAction(api.postingActions.tiktokCreator);
+  // YouTube starts from the visibility this owner used last ("Public" the first time). TikTok never starts from one.
+  const lastVisibility = useQuery(api.posting.lastVisibility, isAuthenticated ? {} : 'skip');
+  const [youtubeChoice, setYoutubeChoice] = useState<YouTubeVisibility | null>(null);
+  const [creators, setCreators] = useState<Record<string, TikTokCreator>>({}), [tiktok, setTiktok] = useState<Record<string, TikTokChoice>>({});
+  /** The latest creator-info request per picked TikTok account: an answer to an older one is dropped. */
+  const asked = useRef(new Map<string, number>());
   const [caption, setCaption] = useState(''), [title, setTitle] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [perAccount, setPerAccount] = useState(false);
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [sent, setSent] = useState<{ count: number; scheduledAt?: number } | null>(null);
+  const [sent, setSent] = useState<{ count: number; scheduledAt?: number; tiktok: boolean } | null>(null);
   const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));
   // Only accounts that can post right now can be picked, so the buttons never promise more posts than they send.
   const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
+  const youtube = youtubeChoice ?? lastVisibility?.youtube;
+  const onTikTok = picked.filter(account => account.platform === 'tiktok'), tiktokIds = onTikTok.map(account => account.id).join(' ');
+  /** TikTok's rules: the account's current settings are read each time the dialog shows it, not kept from before. */
+  function loadCreator(accountId: Id<'postingAccounts'>) {
+    const request = (asked.current.get(accountId) ?? 0) + 1;
+    asked.current.set(accountId, request);
+    setCreators(({ [accountId]: _, ...rest }) => rest);
+    void readCreator({ accountId }).catch(reason => ({ ok: false as const, error: userError(reason, 'TikTok’s settings for this account could not be loaded.') }))
+      .then(creator => { if (asked.current.get(accountId) === request) setCreators(previous => ({ ...previous, [accountId]: creator })); });
+  }
+  useEffect(() => {
+    const shown = new Set(onTikTok.map(account => account.id));
+    // An account that was unticked is read again when it is ticked again.
+    for (const accountId of [...asked.current.keys()]) if (!shown.has(accountId as Id<'postingAccounts'>)) asked.current.delete(accountId);
+    for (const account of onTikTok) if (!asked.current.has(account.id)) loadCreator(account.id);
+  }, [tiktokIds]);
+  // The first thing still missing for a TikTok account; the post buttons stay off until there is none.
+  const blocked = onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '';
   async function submit(schedule: boolean) {
-    if (busy || !picked.length || !clip) return;
+    if (busy || !picked.length || !clip || blocked) return;
     const scheduledAt = schedule ? new Date(when).getTime() : undefined;
     if (schedule && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a time in the future.'); return; }
     setBusy(true); setError('');
     try {
-      const targets = picked.map(account => ({ accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}) }));
+      const targets = picked.map(account => ({
+        accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}),
+        ...(account.platform === 'youtube' && youtube ? { visibility: youtube } : {}),
+        ...(account.platform === 'tiktok' ? tiktokTarget(creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE) : {}),
+      }));
       await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), targets });
       if (onPostsPage) onClose();
-      else setSent({ count: targets.length, scheduledAt });
+      else setSent({ count: targets.length, scheduledAt, tiktok: onTikTok.length > 0 });
     } catch (reason) { setError(userError(reason, 'Could not post this clip.')); }
     finally { setBusy(false); }
   }
@@ -83,6 +113,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
     {sent ? <>
       <div className="post-dialog-done">
         <p>{sent.scheduledAt ? `${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
+        {sent.tiktok && <p>TikTok can take a few minutes to process a video before it shows on the profile.</p>}
       </div>
       <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
     </> : missing ? <>
@@ -137,6 +168,15 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
             <label htmlFor="post-title">Title <small>YouTube</small></label>
             <Input id="post-title" maxLength={TITLE_LIMIT} value={title} onChange={event => setTitle(event.target.value)} />
           </div>}
+          {titled && <div className="post-field">
+            <label htmlFor="post-visibility">Visibility <small>YouTube</small></label>
+            <Select value={youtube ?? ''} onValueChange={value => setYoutubeChoice(value as YouTubeVisibility)}>
+              <SelectTrigger id="post-visibility" className="post-select-trigger"><SelectValue /></SelectTrigger>
+              <SelectContent className="post-select">{YOUTUBE_VISIBILITIES.map(value => <SelectItem key={value} value={value}>{YOUTUBE_VISIBILITY_NAMES[value]}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>}
+          {onTikTok.map(account => <TikTokPostSettings key={account.id} username={account.username} creator={creators[account.id]} choice={tiktok[account.id] ?? NO_TIKTOK_CHOICE} durationSeconds={clip?.durationSeconds ?? null}
+            onChange={next => setTiktok(previous => ({ ...previous, [account.id]: next }))} onRetry={() => loadCreator(account.id)} />)}
           <div className="post-field">
             <label htmlFor="post-when">Schedule <small>Optional</small></label>
             <div className="post-when" data-empty={!when || undefined}>
@@ -148,9 +188,13 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
         </div>
       </div>
       <div className="post-dialog-foot">
-        {error && <p className="dash-error" role="alert">{error}</p>}
-        <Button variant="soft" disabled={busy || !picked.length || !clip || !when} onClick={() => void submit(true)}>Schedule</Button>
-        <Button variant="primary" disabled={busy || !picked.length || !clip} onClick={() => void submit(false)}>Post now</Button>
+        {onTikTok.length > 0 && <TikTokConsent branded={onTikTok.some(account => tiktok[account.id]?.disclose && tiktok[account.id]?.branded)} />}
+        {error ? <p className="dash-error" role="alert">{error}</p> : blocked && <p className="post-note post-blocked" role="status">{blocked}</p>}
+        {/* A disabled button shows no hint of its own, so the reason sits on the wrapper as well as in the line beside it. */}
+        <span className="post-dialog-actions" title={blocked || undefined}>
+          <Button variant="soft" disabled={busy || !picked.length || !clip || !when || !!blocked} onClick={() => void submit(true)}>Schedule</Button>
+          <Button variant="primary" disabled={busy || !picked.length || !clip || !!blocked} onClick={() => void submit(false)}>Post now</Button>
+        </span>
       </div>
     </>}
   </DialogContent></Dialog>;
