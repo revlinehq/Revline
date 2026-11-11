@@ -5,7 +5,7 @@ type NoExtra<Shape, Value> = Value & { [Key in Exclude<keyof Value, keyof Shape>
 
 /** A row for `ctx.db.insert` built from a wider object (function arguments, another document). TypeScript accepts
  * an object with extra fields wherever a narrower one is expected, so `{ ...args }` compiles and then fails the
- * table's validator at run time. Through this, an extra field is a compile error.
+ * table's validator at run time. Through this, an extra top-level field is a compile error. Nested objects and `any` values are not checked.
  * `ctx.db.insert('assistantQueue', tableRow<'assistantQueue'>()({ ...context, createdAt }))` */
 export const tableRow = <Table extends TableNames>() =>
   <Value extends WithoutSystemFields<Doc<Table>>>(value: NoExtra<WithoutSystemFields<Doc<Table>>, Value>): WithoutSystemFields<Doc<Table>> => value;
