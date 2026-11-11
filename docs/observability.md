@@ -94,7 +94,7 @@ References: [Sentry Next.js setup](https://docs.sentry.io/platforms/javascript/g
 
 ## Where assistant runs spend their time
 
-Every in-app turn and every MCP task records one row in `assistantRunTimings` (`convex/runTimings.ts`): for each model call and tool call, its name, start, duration, token counts and whether it failed. A tool call also stores a short hash of its arguments so an identical repeat can be counted. No prompt, argument, result or owner is stored, and rows expire after 30 days.
+Every in-app turn and every MCP task records one row in `assistantRunTimings` (`convex/runTimings.ts`): for each model call and tool call, its name, start, duration and token counts, and for an in-app tool call whether it failed (MCP rows carry no failure flag). A tool call also stores a short hash of its arguments so an identical repeat can be counted. No prompt, argument, result or owner is stored, and rows expire after 30 days.
 
 ```sh
 npm run incidents:speed -- --env prod --from 2026-11-01 --to 2026-11-11   # slowest tools, repeated calls, median run per lane

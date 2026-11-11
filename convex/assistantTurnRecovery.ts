@@ -196,7 +196,8 @@ export const checkpoint = internalMutation({
     const turn = await turnForRun(ctx, args.runId);
     if (args.timings && turn && turn.projectId === args.projectId && turn.args.ownerId === args.ownerId) {
       const { steps, ...facts } = args.timings;
-      await appendRunTimings(ctx, { runId: args.runId, source: 'editor', ...facts }, steps);
+      // A timing row is never worth losing the step's checkpoint for.
+      try { await appendRunTimings(ctx, { runId: args.runId, source: 'editor', ...facts }, steps); } catch { /* The report misses this step. */ }
     }
     if (
       turn &&

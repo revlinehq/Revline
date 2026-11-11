@@ -52,7 +52,7 @@ for (let cursor = null; ;) {
   if (!(cursor = page.cursor)) break;
 }
 
-// Kept in step with RENDERING_TOOLS in lib/ai/step-timing.ts.
+// Tools that draw frames or decode media on the media worker: the expensive kind of look.
 const RENDERING = new Set(['getFrames', 'readFrames', 'inspectFrames', 'inspectVideo', 'checkSpots', 'checkPacing', 'checkSound', 'getSound', 'checkClip', 'previewRender', 'finish', 'readScript', 'detectFacecam', 'followSubject', 'normalizeAudio', 'exportVideo']);
 const median = list => { if (!list.length) return 0; const sorted = [...list].sort((a, b) => a - b), middle = sorted.length >> 1; return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2; };
 const seconds = ms => (ms / 1000).toFixed(1), share = (part, whole) => whole ? `${Math.round(100 * part / whole)}%` : '0%';

@@ -19,9 +19,6 @@ export type StepTiming = {
   key?: string;
 };
 
-/** Tools that draw frames or decode media on the media worker: the expensive kind of look. */
-export const RENDERING_TOOLS = new Set(['getFrames', 'readFrames', 'inspectFrames', 'inspectVideo', 'checkSpots', 'checkPacing', 'checkSound', 'getSound', 'checkClip', 'previewRender', 'finish', 'readScript', 'detectFacecam', 'followSubject', 'normalizeAudio', 'exportVideo']);
-
 const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : undefined;
 
 /** FNV-1a over the JSON of the arguments: enough to tell "the same call again" apart, and not reversible. */

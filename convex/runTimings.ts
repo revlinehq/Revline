@@ -9,7 +9,7 @@ const KEEP_MS = 30 * 24 * 60 * 60_000, MAX_STEPS = 600;
 /** Add a run's new timings to its row. Timing is never worth failing a step for, so callers ignore a rejection. */
 export async function appendRunTimings(ctx: MutationCtx, run: { runId: string; source: 'editor' | 'mcp'; lane?: string; model?: string; effort?: string }, steps: StepTiming[]) {
   if (!steps.length) return;
-  const now = Date.now(), row = await ctx.db.query('assistantRunTimings').withIndex('by_run', q => q.eq('runId', run.runId)).unique();
+  const now = Date.now(), row = await ctx.db.query('assistantRunTimings').withIndex('by_run', q => q.eq('runId', run.runId)).first();
   const facts = { ...(run.lane ? { lane: run.lane } : {}), ...(run.model ? { model: run.model } : {}), ...(run.effort ? { effort: run.effort } : {}) };
   if (!row) await ctx.db.insert('assistantRunTimings', { runId: run.runId, source: run.source, ...facts, startedAt: Math.min(now, ...steps.map(step => step.at)), updatedAt: now, expiresAt: now + KEEP_MS, steps: steps.slice(0, MAX_STEPS) });
   else if (row.steps.length < MAX_STEPS) await ctx.db.patch(row._id, { ...facts, updatedAt: now, steps: [...row.steps, ...steps].slice(0, MAX_STEPS) });
