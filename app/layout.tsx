@@ -11,18 +11,18 @@ import '@/components/workspace/workspace-pages.css';
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space-grotesk" });
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
-// The blog and use-case heading font lives here so its variable exists after any client navigation.
+// Landing fonts live here so their variables exist after any client navigation (sign-out lands on /).
 const outfit = Outfit({ subsets: ["latin"], variable: "--landing-font-head" });
 
-const shareTitle = "Revline: turn raw footage into paid clips";
-const shareDescription = "Revline finds campaigns that pay per view, cuts the clips with AI, and posts them to your accounts.";
+const shareTitle = "Revline: the AI video editor that actually does the editing";
+const shareDescription = "From podcasts and YouTube videos to product demos, ads, and social clips. Revline cuts, captions, reframes, and polishes every video for you.";
 export const metadata: Metadata = {
   metadataBase: new URL("https://tryrevline.com"),
-  title: "Revline: the AI video editor for clippers",
-  description: shareDescription,
+  title: "Revline AI video editor",
+  description: "Edit your videos in conversation. Make every cut your own.",
   // Version the image URL when changing the artwork so preview caches fetch the new card.
-  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v5.png", width: 1200, height: 630, alt: "Revline: turn raw footage into paid clips" }] },
-  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v5.png"] },
+  openGraph: { type: "website", url: "/", siteName: "Revline", title: shareTitle, description: shareDescription, images: [{ url: "/og-revline-v6.png", width: 1200, height: 630, alt: "Revline AI video editor" }] },
+  twitter: { card: "summary_large_image", title: shareTitle, description: shareDescription, images: ["/og-revline-v6.png"] },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

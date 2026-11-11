@@ -1,7 +1,8 @@
 import { LandingNav } from '@/components/landing/nav';
 import { LandingHero } from '@/components/landing/hero';
-import { LandingHowItWorks } from '@/components/landing/how-it-works';
-import { LandingProduct } from '@/components/landing/product';
+import { LandingFeatures } from '@/components/landing/features';
+import { LandingClippers } from '@/components/landing/clippers';
+import { LandingMcp } from '@/components/landing/mcp';
 import { LandingPricing } from '@/components/landing/pricing';
 import { LandingFaq } from '@/components/landing/faq';
 import { LandingFinalCta } from '@/components/landing/final-cta';
@@ -22,8 +23,8 @@ const structuredData = {
     {
       '@type': ['SoftwareApplication', 'Product'], '@id': 'https://tryrevline.com/#application',
       name: 'Revline', url: 'https://tryrevline.com', applicationCategory: 'MultimediaApplication',
-      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v5.png',
-      description: 'An AI video editor for people who clip for money: find a campaign that pays per view, let AI cut the clips, and post them to TikTok, Instagram and YouTube.',
+      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v6.png',
+      description: 'An AI video editor for real footage: prompt-based cuts, captions, vertical clips and short-form edits, with MCP access for AI agents.',
       brand: { '@id': 'https://tryrevline.com/#organization' },
       offers: {
         '@type': 'Offer', url: 'https://tryrevline.com/pricing', price: EDITOR_PLAN.monthlyPrice,
@@ -40,8 +41,9 @@ export default function Home() {
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, '\\u003c') }} />
     <LandingNav />
     <LandingHero />
-    <LandingHowItWorks />
-    <LandingProduct />
+    <LandingClippers />
+    <LandingFeatures />
+    <LandingMcp />
     <LandingPricing />
     <LandingFaq />
     <LandingFinalCta />

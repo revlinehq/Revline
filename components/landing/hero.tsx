@@ -1,17 +1,17 @@
+import { LandingHeroVideo } from './hero-video';
 import { LandingStartButton } from './start-button';
-import { LandingSection, LandingShot } from './ui';
+import { LandingAgentButton } from './agent-button';
+import { LandingReveal, LandingSection } from './ui';
 
 export function LandingHero() {
   return <LandingSection className="landing-hero" headingId="landing-hero-heading">
     <div className="landing-hero-copy">
-      <h1 id="landing-hero-heading">Turn raw footage into paid clips.</h1>
-      <p>Revline finds campaigns that pay per view, cuts the clips with AI, and posts them to your accounts.</p>
+      <LandingReveal as="h1" id="landing-hero-heading">The AI-native video editor</LandingReveal>
+      <LandingReveal as="p" order={1}>Drop in your clips and say what you want.{' '}<br />Cuts, captions, effects and sound, done for you.</LandingReveal>
       <div className="landing-hero-actions">
-        <LandingStartButton />
+        <LandingReveal order={2} className="landing-hero-buttons"><LandingStartButton /><LandingAgentButton /></LandingReveal>
       </div>
     </div>
-    <figure className="landing-hero-shot">
-      <LandingShot name="campaigns" layout="wide" priority alt="The Campaigns page in Revline: a grid of clipping campaigns, each card showing its rate per 1K views and the budget left." />
-    </figure>
+    <div className="landing-product-frame"><LandingHeroVideo /></div>
   </LandingSection>;
 }

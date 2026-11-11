@@ -70,7 +70,7 @@ const directions = {
       <div class="grain"></div>
       <div class="brand" style="left:64px;top:56px">${mark(36)}<span>revline</span></div>
       <h1 style="left:62px;top:170px;font-size:72px;line-height:1.04;letter-spacing:-2.4px">The AI-native<br>video editor.</h1>
-      <p style="left:64px;top:348px;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, motion<br>and sound. Done for you.</p>
+      <p style="left:64px;top:348px;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, effects<br>and sound. Done for you.</p>
       <div class="domain" style="left:64px;bottom:52px">tryrevline.com</div>
       <img class="shot" src="${shot}" style="left:600px;top:-1px;width:540px;height:auto;border-top:0;border-radius:0 0 16px 16px">`,
   },
@@ -83,7 +83,7 @@ const directions = {
       <div class="brand" style="left:40px;top:34px;font-size:30px">${mark(32)}<span>revline</span></div>
       <div class="domain" style="right:40px;top:40px;font-size:24px">tryrevline.com</div>
       <h1 style="left:0;right:0;top:92px;text-align:center;font-size:70px;line-height:1.06;letter-spacing:-2.2px">The AI-native video editor.</h1>
-      <p style="left:0;right:0;top:184px;text-align:center;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, motion and sound. Done for you.</p>
+      <p style="left:0;right:0;top:184px;text-align:center;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, effects and sound. Done for you.</p>
       <img class="shot" src="${shot}" style="left:${(1200 - 1120) / 2}px;top:270px;width:1120px;height:auto">`,
   },
   // C: an editorial headline with the real prompt box as the single product object.
@@ -95,12 +95,12 @@ const directions = {
       <div class="brand" style="left:64px;top:56px">${mark(36)}<span>revline</span></div>
       <div class="domain" style="right:64px;top:62px">tryrevline.com</div>
       <h1 style="left:62px;top:150px;font-size:84px;line-height:1.02;letter-spacing:-3px">The AI-native<br>video editor.</h1>
-      <p style="left:64px;top:356px;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, motion<br>and sound. Done for you.</p>
+      <p style="left:64px;top:356px;font-size:30px;line-height:1.36;letter-spacing:-.4px">Cuts, captions, effects<br>and sound. Done for you.</p>
       <img class="shot" src="${shot}" style="left:520px;top:352px;width:640px;height:auto;border-radius:20px">`,
   },
 };
 // The direction that ships as the live link card; the others are kept for comparison.
-const shipped = { 'og-revline-v3-hero': 'og-revline-v3' };
+const shipped = { 'og-revline-v3-hero': 'og-revline-v6' };
 
 const darkCards = [
   {
