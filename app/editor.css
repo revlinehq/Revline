@@ -176,6 +176,7 @@ html[data-workspace-theme=dark] .conversation-editor .workspace-nav-actions{gap:
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav-history{margin-right:6px}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]{background:#7c3aed;color:#fff}
 html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:hover:not(:disabled){background:#8b4cf0}
+html[data-workspace-theme=dark] .conversation-editor .workspace-nav .revline-primary[data-slot=button]:active:not(:disabled){background:#6d31d4}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch{gap:4px;padding:0;border-color:var(--ed-border);border-radius:6px;background:transparent}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab]{min-height:28px;border-radius:6px;color:var(--ed-text-3);font-size:12px}
 html[data-workspace-theme=dark] .conversation-editor .editor-mode-switch>[role=tab][aria-selected=true]{background:var(--ed-surface-2);box-shadow:none;color:var(--ed-text)}

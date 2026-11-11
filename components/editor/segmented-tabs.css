@@ -1,6 +1,6 @@
 .segmented-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:3px;border:1px solid var(--ws-artifact-border,var(--ws-border));border-radius:8px;background:var(--ws-input);flex-shrink:0}
 .segmented-tabs>[role=tab]{display:flex;align-items:center;justify-content:center;gap:7px;min-width:0;min-height:28px;padding:5px 8px;border:0;border-radius:5px;background:transparent;color:var(--ws-muted);font:inherit;font-size:11px;cursor:pointer}
-.segmented-tabs>[role=tab][aria-selected=true]{background:var(--ws-hover);color:var(--ws-text);box-shadow:0 0 0 1px var(--ws-artifact-border,var(--ws-border))}
+.segmented-tabs>[role=tab][aria-selected=true]{background:var(--ws-hover);color:var(--ws-text)}
 .segmented-tabs>[role=tab]>svg{flex-shrink:0;color:currentColor}
 .segmented-tabs>[role=tab]:hover{color:var(--ws-text)}
 .segmented-tabs>[role=tab]:focus-visible{outline:none;outline-offset:2px}

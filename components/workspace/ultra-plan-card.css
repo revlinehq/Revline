@@ -18,5 +18,5 @@
 .ultra-plan-card li svg{flex-shrink:0;margin-top:2px;color:var(--revline-accent)}
 .ultra-plan-card .ultra-plan-lead{color:var(--ws-muted)}
 .ultra-plan-action{display:flex;flex-direction:column;gap:10px;margin-top:auto}
-.ultra-plan-action .revline-primary[data-slot=button]{width:100%;justify-content:center;background:linear-gradient(315deg,#7c3aed,#a876ff);box-shadow:none}
+.ultra-plan-action .revline-primary[data-slot=button]{width:100%;justify-content:center}
 .ultra-plan-action small{display:block;text-align:center;color:var(--ws-text);font-size:11px;line-height:1.5}
