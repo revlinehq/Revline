@@ -12,7 +12,6 @@
 .campaigns-search .composer-submit:disabled { opacity: 1; }
 .campaigns-search .composer-upload-swap { display: none; }
 .campaigns-source { margin: 16px 0 0; text-align: center; color: var(--dash-muted); font-size: 13px; }
-.campaigns-loading { margin: 40px 0; text-align: center; color: var(--dash-muted); font-size: 14px; }
 .campaigns-section { margin-top: 18px; min-width: 0; }
 .campaigns-section.campaigns-mine { margin-top: 0; }
 .campaigns-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; margin-bottom: 12px; }

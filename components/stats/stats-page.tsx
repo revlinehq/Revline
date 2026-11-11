@@ -10,6 +10,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { CampaignImage } from '@/components/campaigns/campaign-card';
 import { count, money } from '@/components/campaigns/campaign-format';
@@ -20,7 +21,14 @@ import '@/components/campaigns/campaigns.css';
 function greeting(hour: number) { return hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening'; }
 
 function Tile({ icon: Icon, value, label }: { icon: LucideIcon; value: number | undefined; label: string }) {
-  return <Card variant="tile" className="stats-tile"><span className="stats-tile-icon"><Icon fill="currentColor" aria-hidden="true" /></span><div><strong>{value === undefined ? '–' : count(value)}</strong><span>{label}</span></div></Card>;
+  return <Card variant="tile" className="stats-tile"><span className="stats-tile-icon"><Icon fill="currentColor" aria-hidden="true" /></span><div><strong>{value === undefined ? <Skeleton as="span" className="inline-block h-4 w-8 align-middle" /> : count(value)}</strong><span>{label}</span></div></Card>;
+}
+
+/** Three campaign rows, still, while the user's campaigns load. */
+export function StatsRowsSkeleton() {
+  return <div role="status" aria-label="Loading your campaigns">{Array.from({ length: 3 }, (_, index) => <Card key={index} variant="tile" className="stats-campaign-row">
+    <Skeleton className="stats-campaign-thumb" /><div className="flex min-w-0 flex-1 flex-col gap-2"><Skeleton className="h-4 w-48 max-w-full" /><Skeleton className="h-3 w-64 max-w-full" /></div>
+  </Card>)}</div>;
 }
 
 export function StatsPage() {
@@ -45,7 +53,7 @@ export function StatsPage() {
       <div className="stats-greeting"><h1>{hour === null ? 'Hello' : greeting(hour)}{user?.firstName ? `, ${user.firstName}` : ''}</h1><p>Here is how your clips are doing.</p></div>
       <Card variant="dash" className="stats-earnings">
         <h2>Estimated earnings</h2>
-        <p className="stats-earnings-amount">{earnings ? money(earnings.estimatedCents, { whole: true }) : '–'}</p>
+        <p className="stats-earnings-amount">{earnings ? money(earnings.estimatedCents, { whole: true }) : <Skeleton as="span" className="inline-block h-8 w-28 align-middle" />}</p>
         <p className="stats-earnings-note">Estimate: your views × the campaign&apos;s rate. Content Rewards sets the real payout.</p>
         <div className="stats-tiles">
           <Tile icon={Eye} value={stats?.overall.views} label="Views" />
@@ -57,7 +65,7 @@ export function StatsPage() {
       <Card variant="dash" className="stats-campaigns">
         <div className="stats-campaigns-head"><h2>Your campaigns</h2>{!!rows?.length && <Button asChild variant="ghost" size="sm" className="campaigns-see-all"><Link href="/campaigns?view=mine">See all</Link></Button>}</div>
         {clipsError && <p className="campaign-error" role="alert">{clipsError}</p>}
-        {!rows ? <p className="campaigns-loading" role="status">Loading your campaigns…</p>
+        {!rows ? <StatsRowsSkeleton />
           : !rows.length ? <div className="dash-empty stats-empty"><h2>Nothing saved yet</h2><p>Save a campaign, or make clips for one, and its views and estimate show here.</p><Button asChild variant="soft"><Link href="/campaigns">Find a campaign</Link></Button></div>
           : rows.map(row => {
             const totals = perCampaign.get(row.id);

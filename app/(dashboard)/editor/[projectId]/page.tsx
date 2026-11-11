@@ -1,4 +1,8 @@
-import { auth } from '@clerk/nextjs/server';
-import { ConnectedEditor } from '@/components/editor/connected-editor';
+import { EditorRoute } from '@/components/editor/editor-route';
 import '@/app/editor.css';
-export default async function EditorPage({params}: {params:Promise<{projectId:string}>}) { await auth.protect(); const {projectId}=await params; return <ConnectedEditor key={projectId} projectId={projectId} />; }
+
+/** proxy.ts sends signed-out visitors to sign-in; the project itself is owner-checked by every Convex read. */
+export default async function EditorPage({ params }: { params: Promise<{ projectId: string }> }) {
+  const { projectId } = await params;
+  return <EditorRoute projectId={projectId} />;
+}

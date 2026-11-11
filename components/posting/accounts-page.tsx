@@ -1,5 +1,6 @@
 'use client';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
@@ -10,12 +11,27 @@ import { userError } from '@/lib/user-error';
 import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AccountAvatar, PlatformIcon } from './account-avatar';
 import '@/components/dashboard/dash-list.css';
 
+/** A card per platform, still, while the platforms and accounts load. */
+export function AccountsSkeleton() {
+  return <div className="contents" role="status" aria-label="Loading your accounts">{Array.from({ length: 3 }, (_, index) => <Card key={index} variant="dash" className="dash-list">
+    <div className="dash-list-head"><Skeleton className="size-[18px]" /><Skeleton className="h-4 w-24" /><div className="dash-list-actions"><Skeleton className="h-8 w-[84px] rounded-full" /></div></div>
+    <div className="dash-list-row"><Skeleton className="h-4 w-44" /></div>
+  </Card>)}</div>;
+}
+
 /** Connected social accounts, a card per platform: connect, reconnect, disconnect, and "Coming soon" for platforms that are not live. */
-export function AccountsPage({ connected }: { connected?: string }) {
+/** "Your TikTok account is connected", after the platform sends the user back with ?connected=. Read from the address in the browser, so the page itself stays static. */
+function ConnectedNote() {
+  const connected = useSearchParams().get('connected');
+  return connected && connected in PLATFORM_NAMES ? <p className="dash-column-note" role="status">Your {PLATFORM_NAMES[connected as PostingPlatform]} account is connected.</p> : null;
+}
+
+export function AccountsPage() {
   const { isAuthenticated } = useConvexAuth();
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
@@ -36,15 +52,14 @@ export function AccountsPage({ connected }: { connected?: string }) {
     catch (reason) { setError(userError(reason, 'Could not disconnect this account.')); }
     finally { setBusy(null); }
   }
-  const connectedName = connected && connected in PLATFORM_NAMES ? PLATFORM_NAMES[connected as PostingPlatform] : null;
   return <div className="dash-page">
     <DashboardNavbar title="Connected accounts" />
     <main className="dash-content"><div className="dash-column">
       <h1 className="sr-only">Connected accounts</h1>
       <p className="dash-column-note">Revline posts your clips to the accounts you connect here.</p>
-      {connectedName && !error && <p className="dash-column-note" role="status">Your {connectedName} account is connected.</p>}
+      {!error && <Suspense fallback={null}><ConnectedNote /></Suspense>}
       {error && <p className="dash-error" role="alert">{error}</p>}
-      {!platforms || !accounts ? <div className="dash-empty" role="status"><p>Loading your accounts…</p></div> : platforms.map(({ platform, live }) => {
+      {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
         const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
         return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">
           <div className="dash-list-head">

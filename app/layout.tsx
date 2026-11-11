@@ -3,7 +3,7 @@ import { ClerkProvider } from "@clerk/nextjs";
 import { shadcn } from "@clerk/ui/themes";
 import { Geist, Inter, Outfit, Space_Grotesk } from "next/font/google";
 import { Providers } from "@/components/providers";
-import { DARK_PRE_PAINT_SCRIPT, SIGNED_IN_HOME_PATH } from '@/lib/workspace-routes';
+import { DARK_PRE_PAINT_SCRIPT, SIDEBAR_PRE_PAINT_SCRIPT, SIGNED_IN_HOME_PATH } from '@/lib/workspace-routes';
 import "./globals.css";
 import '@/components/workspace/shared.css';
 import '@/components/workspace/workspace-pages.css';
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning className={`${spaceGrotesk.variable} ${inter.variable} ${geist.variable} ${outfit.variable}`}>
       <body className="antialiased" suppressHydrationWarning>
-        <script dangerouslySetInnerHTML={{ __html: DARK_PRE_PAINT_SCRIPT }} />
+        <script dangerouslySetInnerHTML={{ __html: DARK_PRE_PAINT_SCRIPT + ';' + SIDEBAR_PRE_PAINT_SCRIPT }} />
         <ClerkProvider signInUrl="/sign-in" signUpUrl="/sign-up" signInFallbackRedirectUrl={SIGNED_IN_HOME_PATH} signUpFallbackRedirectUrl={SIGNED_IN_HOME_PATH} appearance={{ theme: shadcn, captcha: { theme: 'dark', size: 'flexible' } }}>
           <Providers>{children}</Providers>
         </ClerkProvider>

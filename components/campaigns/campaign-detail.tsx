@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
+import { Skeleton } from '@/components/ui/skeleton';
 import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { userError } from '@/lib/user-error';
 import { CampaignImage } from './campaign-card';
@@ -88,13 +89,27 @@ function Campaign({ campaign, saved }: { campaign: CampaignView; saved: boolean 
   </main>;
 }
 
+/** The campaign page's hero, chips, actions and fact cards, still, while the campaign loads. */
+export function CampaignDetailSkeleton() {
+  return <main className="dash-content campaign-detail" role="status" aria-label="Loading the campaign">
+    <div className="campaign-hero"><div className="campaign-hero-text"><Skeleton className="h-7 w-32" /><Skeleton className="h-7 w-80 max-w-full" /></div></div>
+    <div className="campaign-actions-row">
+      <div className="campaign-chips">{['w-36', 'w-[30px]', 'w-[30px]', 'w-28'].map((width, index) => <Skeleton key={index} className={`h-[30px] rounded-full ${width}`} />)}</div>
+      <div className="campaign-actions"><Skeleton className="h-9 w-24 rounded-full" /><Skeleton className="h-9 w-28 rounded-full" /></div>
+    </div>
+    <div className="campaign-facts">{Array.from({ length: 2 }, (_, index) => <Card key={index} variant="dash" className="campaign-fact-card">
+      <h2><Skeleton className="size-4" /><Skeleton className="h-4 w-24" /></h2><div className="flex gap-6 px-4 pb-4"><Skeleton className="h-9 w-20" /><Skeleton className="h-9 w-20" /><Skeleton className="h-9 w-20" /></div>
+    </Card>)}</div>
+  </main>;
+}
+
 export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { isAuthenticated } = useConvexAuth();
   const campaign = useQuery(api.campaigns.get, isAuthenticated ? { campaignId: campaignId as Id<'campaigns'> } : 'skip');
   const mine = useQuery(api.campaigns.mine, isAuthenticated ? {} : 'skip');
   return <div className="dash-page">
     <DashboardNavbar back={{ href: '/campaigns' }} />
-    {campaign === undefined ? <main className="dash-content"><p className="campaigns-loading" role="status">Loading the campaign…</p></main>
+    {campaign === undefined ? <CampaignDetailSkeleton />
       : campaign === null ? <main className="dash-content"><div className="dash-empty"><h2>Campaign not found</h2><p>It may have been removed. Go back to see the campaigns you can clip for.</p></div></main>
       : <Campaign campaign={campaign} saved={mine?.some(entry => entry.saved && entry.campaign._id === campaign._id)} />}
   </div>;

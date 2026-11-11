@@ -5,7 +5,7 @@ import { userError } from '@/lib/user-error';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { memo, useEffect, useMemo, useRef, useState, type ReactNode, type MouseEvent } from 'react';
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { useConvexAuth, usePaginatedQuery, useQuery } from 'convex/react';
 import { Check, ChevronDown, ChevronLeft, CircleAlert, Copy, Download, Film, History, LoaderCircle, PanelsTopLeft, Pencil, Plus, Redo2, Undo2 } from 'lucide-react';
@@ -110,15 +110,12 @@ export const WorkspaceNav = memo(function WorkspaceNav(props: WorkspaceNavProps)
 
 const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LABEL, editorHref, active = 'chat', demo = false, saving, saveFailed, onRetrySave, canUndo, canRedo, onUndo, onRedo, onFootage, onExport, backHref, actions, exportDisabled, exportHint, onRename, chatId, editorControls }: WorkspaceNavProps) {
   const pathname = usePathname();
-  const router = useRouter();
-  const startingWorkspace = useRef(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const { chats, loading } = useWorkspaceChats(demo, historyOpen, RECENT_CHATS);
   // Ticks while the menu is open so an agent's working state ends on time.
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (!historyOpen) return; setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 5000); return () => clearInterval(timer); }, [historyOpen]);
   const { user } = useUser();
-  const [accountError, setAccountError] = useState('');
   const [renameOpen, setRenameOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
   // Account pages sit under the workspace; they show where you are, not the chat menu.
@@ -140,14 +137,10 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
     try { await navigator.clipboard.writeText(chatId); setCopiedId(true); setCopyError(''); }
     catch { setCopyError('Could not copy the chat ID.'); }
   }
-  async function newWorkspace(event: MouseEvent<HTMLAnchorElement>) {
+  // The link opens the start page at once. The previous import is dropped in memory first; its stored copy is cleared behind the navigation.
+  function newWorkspace(event: MouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    event.preventDefault();
-    if (startingWorkspace.current) return;
-    startingWorkspace.current = true;
-    try { await startNewWorkspace(user?.id); router.push(NEW_PROJECT_PATH); }
-    catch (reason) { setAccountError(userError(reason, 'Could not open a new workspace.')); }
-    finally { startingWorkspace.current = false; }
+    void startNewWorkspace(user?.id).catch(() => { /* The start page still opens with the previous draft. */ });
   }
   return <><header className="workspace-nav">
     {backHref ? <Button asChild variant="ghost" size="icon-sm" className="workspace-nav-back"><Link href={backHref} onClick={backHref === NEW_PROJECT_PATH ? newWorkspace : undefined} aria-label="Back to AI Editor"><ChevronLeft size={18} /></Link></Button> : <><Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
@@ -177,7 +170,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
       {actions}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
-      <WorkspaceAccountMenu active={active} error={accountError} />
+      <WorkspaceAccountMenu active={active} />
     </div>
   </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
 });

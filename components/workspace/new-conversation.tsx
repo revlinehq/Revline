@@ -38,6 +38,7 @@ import { WorkspaceNav, chatRecency, useWorkspaceChats } from './workspace-nav';
 import { ProjectCover } from './project-cover';
 import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from '@/lib/editor/project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
+import { preloadEditor } from '@/components/editor/editor-route';
 import './shared.css';
 import './new-conversation.css';
 
@@ -51,6 +52,8 @@ export function NewConversation() {
   const convex = useConvex();
   const { isLoaded, isSignedIn, userId } = useAuth();
   const { isAuthenticated, isLoading: authLoading } = useConvexAuth();
+  // Sending or picking a recent project opens the editor, so its code is fetched while this page is read.
+  useEffect(preloadEditor, []);
   const picker=useRef<HTMLInputElement>(null);
   const [linkShelf, setLinkShelf] = useState({ open: false, prefill: '', focusKey: 0 });
   const declinedLink = useRef('');

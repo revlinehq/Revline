@@ -22,6 +22,7 @@ import { clearOpeningBrief, clearOpeningRequestOptions, editorDraftKey, openingB
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS } from '@/lib/ai/claude-model';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
+import { EditorChatSkeleton, EditorSkeleton } from './editor-skeleton';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
@@ -45,13 +46,15 @@ import type { UploadProgress } from './footage-panel';
 const EMPTY_MESSAGES:ChatMessage[]=[];
 /** The full editor does not use the other tabs' timelines; the conversation view does. */
 function EditorShellWithTabs({tabTimelines:_tabTimelines,...props}:EditorChatProps){return <EditorShell {...props}/>;}
+/** The editor while its project loads: its frame as still placeholders. A project opened straight from an upload keeps that footage's progress on screen instead. */
 function editorLoading(projectId: string) {
   const hint = openingFootage(projectId);
-  return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={NEW_WORKSPACE_LABEL} backHref={NEW_PROJECT_PATH}/><FootagePreparation progressKey={`project:${projectId}`} thumbnail={hint?.thumbnail} fileName={hint?.fileName}/></div>;
+  if (!hint) return <EditorSkeleton />;
+  return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={NEW_WORKSPACE_LABEL} backHref={NEW_PROJECT_PATH}/><FootagePreparation progressKey={`project:${projectId}`} thumbnail={hint.thumbnail} fileName={hint.fileName}/></div>;
 }
 /** The project's editor, or with `view="chat"` its conversation view: the same project, conversation and agent run in a different frame. */
-/** The conversation view while its project loads: the shell's bar and an empty column. */
-function chatLoading() { return <div className="workspace-page editor-chat"><WorkspaceNav title="AI Editor"/><div className="editor-chat-column" role="status" aria-label="Loading conversation"/></div>; }
+/** The conversation view while its project loads: the shell's bar and the column's placeholders. */
+function chatLoading() { return <div className="workspace-page editor-chat"><WorkspaceNav title="AI Editor"/><EditorChatSkeleton /></div>; }
 export function ConnectedEditor({projectId,view}: {projectId:string;view?:'chat'}) {
   useState(() => { beginFootageOpening(projectId); return projectId; });
   const {isAuthenticated}=useConvexAuth();
