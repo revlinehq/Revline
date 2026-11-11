@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 import { withSentryConfig } from '@sentry/nextjs/config';
-import { NEW_PROJECT_PATH } from './lib/workspace-routes';
+import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH } from './lib/workspace-routes';
 const config: NextConfig = {
   distDir: process.env.REVLINE_DIST_DIR || ".next",
   turbopack: { root: process.cwd() },
@@ -14,6 +14,8 @@ const config: NextConfig = {
     return [
       { source: '/chat', destination: NEW_PROJECT_PATH, permanent: false },
       { source: '/dashboard/chat', destination: NEW_PROJECT_PATH, permanent: false },
+      // There is no /dashboard page; the signed-in home is Campaigns.
+      { source: '/dashboard', destination: SIGNED_IN_HOME_PATH, permanent: false },
       // The retired project list now lives with the conversation history.
       { source: '/projects', destination: '/chats', permanent: false },
       // Inspo Motion (Sharingan) was retired; old share links land on the home page.
