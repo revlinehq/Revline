@@ -180,7 +180,8 @@ export async function finishLane(
     // Clip-lane checks never render frames.
     if (!cheapClip && !failures.length && summary.clipCount && summary.duration > 0) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
-      const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
+      // A plain reel's queue is settled by the same small proof: once its evenly spaced frames draw, the queue clears.
+      const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes, () => FINISH_PROOF_FRAMES);
       // Every sample is a frame this tab can draw: a time queued against a longer, discarded draft would be refused forever.
       const drawable = (time: number) => renderedFrameTime(time, summary.duration, tab.timeline!.fps);
       const times = [...new Set((fastTimes ?? (baseline
@@ -195,12 +196,13 @@ export async function finishLane(
           ),
         );
       try {
-        // This render only proves the changed timeline draws; nobody looks at it. In a standard check the model has
-        // already looked at a sheet of the changed spots (finish refuses until it has), so four evenly spaced frames
-        // are the proof. A final check (export, publish, double-check) draws every changed frame. Gaps, overlaps and
-        // missing media are measured from saved data above either way.
-        const standard = !pendingReview && changedFrameLimit(laneChecks(task.lane, taskCheckLevel(task))) !== undefined;
-        const drawn = standard ? evenly(times, FINISH_PROOF_FRAMES) : times;
+        // This render only proves the changed timeline draws; nobody looks at it. In a standard check four evenly
+        // spaced frames are the proof: on the edit lane the model has already looked at a sheet of the changed spots
+        // (finish refuses until it has), and a plain reel's cut is checked from its script, captions and checkSpots.
+        // A final check (export, publish, double-check) draws every changed frame. Gaps, overlaps and missing media
+        // are measured from saved data above either way.
+        const standard = changedFrameLimit(laneChecks(task.lane, taskCheckLevel(task))) !== undefined;
+        const drawn = standard ? pendingReview?.sample() ?? evenly(times, FINISH_PROOF_FRAMES) : times;
         for (let index = 0; index < drawn.length; index += MAX_SHEET_FRAMES) {
           const batch = drawn.slice(index, index + MAX_SHEET_FRAMES),
             rendered = await options.render(batch, undefined, tab.timelineId);
