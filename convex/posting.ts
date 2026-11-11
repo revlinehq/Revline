@@ -7,10 +7,11 @@ import { mediaUrl } from './lib/media_storage';
 import { exportFileName } from './renders';
 import { accountStatus, postingPlatform, postStatus, postVisibility, tiktokChoices, tiktokVisibility, youtubeVisibility } from './postingTables';
 import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types';
-import { POSTING_PLATFORMS } from '../lib/posting/platform-names';
+import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, TITLE_LIMIT } from '../lib/posting/limits';
-import { livePlatform } from '../lib/posting/server';
-import { YOUTUBE_FIRST_VISIBILITY, isTikTokVisibility, isYouTubeVisibility, type YouTubeVisibility } from '../lib/posting/visibility';
+import { accountProvider, platformLive, postingProvider, visibilityOptions } from '../lib/posting/server';
+import { accountCap, holdsSlot, ownerRef } from './postingBridge';
+import { TIKTOK_VISIBILITY_NAMES, YOUTUBE_FIRST_VISIBILITY, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility, type YouTubeVisibility } from '../lib/posting/visibility';
 
 // The posting base: connected social accounts, posts to them, and the scheduler state machine.
 // Network work (OAuth, publishing, stats) lives in postingActions.ts; every state change is a mutation here,
@@ -46,6 +47,16 @@ async function ownedPost(ctx: QueryCtx | MutationCtx, ownerId: string, postId: I
   return post;
 }
 const optional = <T,>(value: T | undefined) => value ?? null;
+const MOVED = 'Revline connects accounts a new way now. Reconnect this account to keep posting; its post history stays.';
+/**
+ * An account's state as the app and the scheduler see it. An account connected through the provider that is not in
+ * use (lib/posting/server.ts `postingProvider`) cannot be posted to: it reads as needing a reconnect, with its history kept.
+ */
+export function accountState(account: Doc<'postingAccounts'>): { status: Doc<'postingAccounts'>['status']; error?: string } {
+  if (account.status === 'connected' && accountProvider(account) !== postingProvider()) return { status: 'needs_reconnect', error: MOVED };
+  return { status: account.status, ...(account.error ? { error: account.error } : {}) };
+}
+const names = (values: readonly string[]) => values.length > 1 ? `${values.slice(0, -1).join(', ')} or ${values[values.length - 1]}` : values[0] ?? '';
 /** Accounts without a saved picture are asked for one again this often, when their tokens are renewed. */
 const AVATAR_RECHECK_MS = 7 * 86400_000;
 /** An account's picture: Revline's saved copy, or the platform's own URL (which can expire) for an account connected before pictures were saved. */
@@ -60,7 +71,7 @@ export const platforms = query({
   args: {}, returns: v.array(v.object({ platform: postingPlatform, live: v.boolean() })),
   handler: async ctx => {
     await requireOwner(ctx);
-    return POSTING_PLATFORMS.map(platform => ({ platform, live: !!livePlatform(platform) }));
+    return POSTING_PLATFORMS.map(platform => ({ platform, live: platformLive(platform) }));
   },
 });
 
@@ -74,10 +85,24 @@ export const accounts = query({
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
     const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
-    return Promise.all(rows.filter(row => row.status !== 'disconnected').map(async row => ({
-      id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row),
-      status: row.status, error: optional(row.error), connectedAt: row.createdAt,
-    })));
+    return Promise.all(rows.filter(row => row.status !== 'disconnected').map(async row => {
+      const state = accountState(row);
+      return { id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row), status: state.status, error: optional(state.error), connectedAt: row.createdAt };
+    }));
+  },
+});
+/**
+ * What the provider in use allows, for the pages that offer it: how many accounts this owner may connect per
+ * platform and which platforms are full (null: no cap), and the YouTube visibilities a post can be given (one
+ * value: there is nothing to choose).
+ */
+export const options = query({
+  args: {}, returns: v.object({ accountCap: v.union(v.null(), v.object({ perPlatform: v.number(), full: v.array(postingPlatform) })), youtubeVisibilities: v.array(youtubeVisibility) }),
+  handler: async ctx => {
+    const ownerId = await requireOwner(ctx), youtubeVisibilities = [...visibilityOptions().youtube];
+    if (postingProvider() !== 'postbridge') return { accountCap: null, youtubeVisibilities };
+    const perPlatform = await accountCap(ctx, ownerId), rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
+    return { accountCap: { perPlatform, full: POSTING_PLATFORMS.filter(platform => rows.filter(row => row.platform === platform && holdsSlot(row)).length >= perPlatform) }, youtubeVisibilities };
   },
 });
 /**
@@ -125,7 +150,8 @@ export const purgeTokens = internalMutation({
   args: { accountId: v.id('postingAccounts') }, returns: v.null(),
   handler: async (ctx, { accountId }) => {
     const account = await ctx.db.get(accountId);
-    if (account?.status === 'disconnected' && account.tokenCipher !== undefined) await ctx.db.patch(accountId, { tokenCipher: undefined, updatedAt: Date.now() });
+    // Also an account that moved to Post Bridge, which holds its tokens from then on.
+    if (account && (account.status === 'disconnected' || account.provider === 'postbridge') && account.tokenCipher !== undefined) await ctx.db.patch(accountId, { tokenCipher: undefined, tokenExpiresAt: undefined });
     return null;
   },
 });
@@ -133,7 +159,7 @@ export const purgeTokens = internalMutation({
 export const disconnectOwner = internalMutation({
   args: { ownerId: v.string() }, returns: v.array(v.id('postingAccounts')),
   handler: async (ctx, { ownerId }) => {
-    const now = Date.now(), accounts = (await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect()).filter(account => account.tokenCipher !== undefined);
+    const now = Date.now(), accounts = (await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect()).filter(account => account.tokenCipher !== undefined || account.providerAccountId !== undefined);
     // No fallback purge here: the rows themselves are removed with the account.
     for (const account of accounts) if (account.status !== 'disconnected') await markDisconnected(ctx, account, now);
     return accounts.map(account => account._id);
@@ -141,11 +167,11 @@ export const disconnectOwner = internalMutation({
 });
 /** A connected TikTok account of the signed-in owner, checked before its posting settings are read for the Post dialog. */
 export const ownedTikTok = internalQuery({
-  args: { accountId: v.id('postingAccounts') }, returns: v.null(),
+  args: { accountId: v.id('postingAccounts') }, returns: v.object({ username: v.string(), bridged: v.boolean() }),
   handler: async (ctx, { accountId }) => {
     const account = await ownedAccount(ctx, await requireOwner(ctx), accountId);
-    if (account.platform !== 'tiktok' || account.status !== 'connected') throw new ConvexError('Account not found');
-    return null;
+    if (account.platform !== 'tiktok' || accountState(account).status !== 'connected') throw new ConvexError('Account not found');
+    return { username: account.username, bridged: account.provider === 'postbridge' };
   },
 });
 
@@ -155,7 +181,7 @@ export const createOauthState = internalMutation({
   args: { platform: postingPlatform }, returns: v.string(),
   handler: async (ctx, { platform }) => {
     const ownerId = await requireOwner(ctx);
-    if (!livePlatform(platform)) throw new ConvexError('This platform is coming soon.');
+    if (postingProvider() !== 'native' || !platformLive(platform)) throw new ConvexError('This platform is coming soon.');
     const nonce = crypto.randomUUID().replaceAll('-', '');
     await ctx.db.insert('postingOauthStates', { nonce, ownerId, platform, expiresAt: Date.now() + 15 * 60_000 });
     return nonce;
@@ -182,7 +208,11 @@ export const saveAccount = internalMutation({
   },
   returns: v.null(),
   handler: async (ctx, { ownerId, platform, platformAccountId, ...fields }) => {
-    const now = Date.now(), current = await ctx.db.query('postingAccounts').withIndex('by_owner_platform_account', q => q.eq('ownerId', ownerId).eq('platform', platform).eq('platformAccountId', platformAccountId)).unique();
+    const now = Date.now(), byId = await ctx.db.query('postingAccounts').withIndex('by_owner_platform_account', q => q.eq('ownerId', ownerId).eq('platform', platform).eq('platformAccountId', platformAccountId)).unique();
+    // The same handle connected through Post Bridge before has no platform id to match: it is found by its handle, so its history stays on one row.
+    const current = byId ?? (await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect()).find(row => row.platform === platform && row.provider === 'postbridge' && row.username.toLowerCase() === fields.username.toLowerCase()) ?? null;
+    // This row stops pointing at its Post Bridge account, which is removed there: nothing else would ever free its slot.
+    if (current?.providerAccountId !== undefined) await ctx.scheduler.runAfter(0, internal.postingActions.removeProviderAccount, { accountId: current._id, providerAccountId: current.providerAccountId, ref: await ownerRef(ctx, ownerId) ?? undefined, attempt: 0 });
     const values = { ...fields, status: 'connected' as const, error: undefined, refreshLeaseUntil: undefined, connectedAt: now, updatedAt: now };
     // A new picture replaces the saved one; a reconnect whose picture could not be downloaded keeps the one it had.
     if (current?.avatarStorageId && fields.avatarStorageId) await ctx.storage.delete(current.avatarStorageId);
@@ -197,10 +227,11 @@ export const saveAccount = internalMutation({
 
 export const accountSecret = internalQuery({
   args: { accountId: v.id('postingAccounts') },
-  returns: v.union(v.object({ platform: postingPlatform, status: accountStatus, tokenCipher: v.union(v.string(), v.null()), refreshing: v.boolean() }), v.null()),
+  returns: v.union(v.object({ platform: postingPlatform, status: accountStatus, tokenCipher: v.union(v.string(), v.null()), refreshing: v.boolean(), moved: v.boolean() }), v.null()),
   handler: async (ctx, { accountId }) => {
     const account = await ctx.db.get(accountId);
-    return account ? { platform: account.platform, status: account.status, tokenCipher: optional(account.tokenCipher), refreshing: (account.refreshLeaseUntil ?? 0) > Date.now() } : null;
+    /** `moved`: connected through Post Bridge now, so tokens still stored here are left over from Revline's own app. */
+    return account ? { platform: account.platform, status: account.status, tokenCipher: optional(account.tokenCipher), refreshing: (account.refreshLeaseUntil ?? 0) > Date.now(), moved: account.provider === 'postbridge' } : null;
   },
 });
 /** True when the caller may refresh this account's tokens now; false while another action is doing it. */
@@ -285,6 +316,9 @@ export type BatchInput = {
 };
 /** The visibility of the owner's most recent YouTube post that carries one: the Post dialog's last-used value. "Public" before any. */
 export async function lastYouTubeVisibility(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<YouTubeVisibility> {
+  const offered = visibilityOptions().youtube;
+  // Nothing to choose: the provider in use posts with one visibility only.
+  if (offered.length === 1) return offered[0];
   // Every YouTube post made since the choice exists carries one, so the newest row answers; older rows are skipped.
   const recent = await ctx.db.query('postingPosts').withIndex('by_owner_platform', q => q.eq('ownerId', ownerId).eq('platform', 'youtube')).order('desc').take(20);
   const last = recent.find(post => post.visibility !== undefined)?.visibility;
@@ -301,12 +335,16 @@ export const lastVisibility = query({
  * interactions off. Instagram has no per-post privacy, so nothing is stored for it.
  */
 export async function postChoices(platform: Doc<'postingPosts'>['platform'], target: BatchInput['targets'][number], lastYouTube: () => Promise<YouTubeVisibility>): Promise<Pick<Doc<'postingPosts'>, 'visibility' | 'tiktok'>> {
+  const offered = visibilityOptions();
   if (platform === 'youtube') {
     if (target.visibility !== undefined && !isYouTubeVisibility(target.visibility)) throw new ConvexError('Pick Public, Unlisted or Private for YouTube.');
+    // A visibility that cannot be set is refused, never swapped for another one behind the user's back.
+    if (target.visibility !== undefined && !offered.youtube.includes(target.visibility)) throw new ConvexError(`YouTube videos are posted as ${names(offered.youtube.map(value => YOUTUBE_VISIBILITY_NAMES[value]))} from Revline right now. ${YOUTUBE_VISIBILITY_NAMES[target.visibility]} is not available.`);
     return { visibility: target.visibility ?? await lastYouTube() };
   }
   if (platform !== 'tiktok') return {};
   if (target.visibility !== undefined && !isTikTokVisibility(target.visibility)) throw new ConvexError('Pick who can view the TikTok post.');
+  if (target.visibility !== undefined && !offered.tiktok.includes(target.visibility)) throw new ConvexError(`TikTok posts can be set to ${names(offered.tiktok.map(value => TIKTOK_VISIBILITY_NAMES[value]))} from Revline right now.`);
   // Without a choice the adapter posts as "Only me", so branded content needs a wider one stated.
   if (target.tiktok?.brandedContent && (target.visibility ?? 'SELF_ONLY') === 'SELF_ONLY') throw new ConvexError('Branded content cannot be posted as "Only me" on TikTok.');
   // Only what was switched on is stored: absent means off.
@@ -344,7 +382,7 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   const lastYouTube = async () => remembered ??= await lastYouTubeVisibility(ctx, ownerId);
   for (const target of args.targets) {
     const account = await ownedAccount(ctx, ownerId, target.accountId);
-    if (account.status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
+    if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
     const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
     const postId = await ctx.db.insert('postingPosts', {
       ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
@@ -363,7 +401,7 @@ export const retry = mutation({
     const ownerId = await requireOwner(ctx), post = await ownedPost(ctx, ownerId, postId), now = Date.now();
     if (post.status !== 'failed') throw new ConvexError('Only a failed post can be retried.');
     const account = await ctx.db.get(post.accountId);
-    if (!account || account.status !== 'connected') throw new ConvexError('Reconnect this account before retrying.');
+    if (!account || accountState(account).status !== 'connected') throw new ConvexError('Reconnect this account before retrying.');
     await ctx.db.patch(postId, { status: 'scheduled', attempts: 0, error: undefined, dueAt: now, claimedAt: undefined, platformJobId: undefined, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
     return null;
@@ -486,7 +524,7 @@ export const clipPosts = query({
         const account = accountsById.get(row.accountId);
         if (!pictures.has(row.accountId)) pictures.set(row.accountId, await accountPicture(ctx, account));
         posts.push({
-          id: row._id, platform: row.platform, username: account?.username ?? 'removed account', avatarUrl: pictures.get(row.accountId)!, accountStatus: account?.status ?? 'disconnected' as const,
+          id: row._id, platform: row.platform, username: account?.username ?? 'removed account', avatarUrl: pictures.get(row.accountId)!, accountStatus: account ? accountState(account).status : 'disconnected' as const,
           status: row.status, error: optional(row.error), attempts: row.attempts, scheduledAt: optional(row.scheduledAt), url: optional(row.url), publishedAt: optional(row.publishedAt), views: optional(row.views),
         });
       }
@@ -599,6 +637,8 @@ export const claim = internalMutation({
   args: { postId: v.id('postingPosts') },
   returns: v.union(v.null(), v.object({
     accountId: v.id('postingAccounts'), platform: postingPlatform,
+    /** Sent through Post Bridge (the account was connected through it) instead of the platform's own adapter. */
+    bridged: v.boolean(),
     input: v.object({ videoUrl: v.string(), videoBytes: v.number(), durationSeconds: v.number(), width: v.number(), height: v.number(), title: v.optional(v.string()), caption: v.string(),
       youtube: v.optional(v.object({ privacyStatus: youtubeVisibility })),
       tiktok: v.optional(v.object({ privacyLevel: v.optional(tiktokVisibility), ...tiktokChoices.fields })),
@@ -610,7 +650,10 @@ export const claim = internalMutation({
     const fail = async (error: string) => { await ctx.db.patch(postId, { status: 'failed', error, updatedAt: now }); return null; };
     const account = await ctx.db.get(post.accountId);
     if (!account || account.status === 'disconnected') return fail('This account was disconnected before the post went out.');
-    if (account.status !== 'connected') return fail(`Reconnect @${account.username}, then retry.`);
+    if (accountState(account).status !== 'connected') return fail(`Reconnect @${account.username}, then retry.`);
+    // A post made while another visibility could be set (before the provider changed) is not sent with a different one.
+    const offered = visibilityOptions(), allowed: readonly string[] = post.platform === 'youtube' ? offered.youtube : offered.tiktok;
+    if (post.platform !== 'instagram' && post.visibility !== undefined && !allowed.includes(post.visibility)) return fail(`This post was set to a visibility ${PLATFORM_NAMES[post.platform]} posts from Revline cannot have right now. Post the clip again.`);
     const found = await postableExport(ctx, post.ownerId, post.jobId);
     if (!found.job) return fail(found.error);
     const { job } = found;
@@ -623,16 +666,16 @@ export const claim = internalMutation({
     // The stored choice in the shape each adapter reads. Without one the adapter's own default applies.
     const choices = post.platform === 'youtube' ? isYouTubeVisibility(post.visibility) ? { youtube: { privacyStatus: post.visibility } } : {}
       : post.platform === 'tiktok' && (post.visibility || post.tiktok) ? { tiktok: { ...(isTikTokVisibility(post.visibility) ? { privacyLevel: post.visibility } : {}), ...post.tiktok } } : {};
-    await ctx.db.patch(postId, { status: 'posting', attempts: post.attempts + 1, claimedAt: now, dueAt: now, error: undefined, updatedAt: now });
+    await ctx.db.patch(postId, { status: 'posting', attempts: post.attempts + 1, claimedAt: now, dueAt: now, error: undefined, provider: account.provider, updatedAt: now });
     return {
-      accountId: post.accountId, platform: post.platform,
+      accountId: post.accountId, platform: post.platform, bridged: account.provider === 'postbridge',
       input: { videoUrl, videoBytes: size, durationSeconds: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, job.resolution ?? 1080), ...(post.title ? { title: post.title } : {}), caption: post.caption, ...choices },
     };
   },
 });
 
 const outcome = v.union(
-  v.object({ status: v.literal('published'), platformPostId: v.string(), url: v.string() }),
+  v.object({ status: v.literal('published'), platformPostId: v.string(), url: v.string(), providerResultId: v.optional(v.string()) }),
   v.object({ status: v.literal('processing'), platformJobId: v.string() }),
   v.object({ status: v.literal('failed'), error: v.string(), retryable: v.boolean() }),
 );
@@ -645,7 +688,7 @@ export const settle = internalMutation({
   handler: async (ctx, { postId, from, outcome }) => {
     const post = await ctx.db.get(postId), now = Date.now();
     if (!post || post.status !== from) return null;
-    if (outcome.status === 'published') await ctx.db.patch(postId, { status: 'published', platformPostId: outcome.platformPostId, url: outcome.url, publishedAt: now, error: undefined, updatedAt: now });
+    if (outcome.status === 'published') await ctx.db.patch(postId, { status: 'published', platformPostId: outcome.platformPostId, url: outcome.url, ...(outcome.providerResultId ? { providerResultId: outcome.providerResultId } : {}), publishedAt: now, error: undefined, updatedAt: now });
     else if (outcome.status === 'processing') {
       if (from === 'posting') {
         // The tick stays away while the quick checks run, then polls as before.
@@ -700,10 +743,12 @@ export const afterQuickCheck = internalMutation({
 /** A `processing` post's account and platform job, for a checkPublish poll. */
 export const processingPost = internalQuery({
   args: { postId: v.id('postingPosts') },
-  returns: v.union(v.null(), v.object({ accountId: v.id('postingAccounts'), platform: postingPlatform, platformJobId: v.string() })),
+  returns: v.union(v.null(), v.object({ accountId: v.id('postingAccounts'), platform: postingPlatform, platformJobId: v.string(), bridged: v.boolean() })),
   handler: async (ctx, { postId }) => {
     const post = await ctx.db.get(postId);
-    return post?.status === 'processing' && post.platformJobId ? { accountId: post.accountId, platform: post.platform, platformJobId: post.platformJobId } : null;
+    if (post?.status !== 'processing' || !post.platformJobId) return null;
+    // The job belongs to the provider the post was handed to, recorded when it was claimed.
+    return { accountId: post.accountId, platform: post.platform, platformJobId: post.platformJobId, bridged: post.provider === 'postbridge' };
   },
 });
 
@@ -747,10 +792,17 @@ export const tick = internalMutation({
 export const statsPage = internalQuery({
   // `since` is fixed by the caller for a whole run, so every page of it reads the same range.
   args: { cursor: v.union(v.string(), v.null()), since: v.number() },
-  returns: v.object({ posts: v.array(v.object({ postId: v.id('postingPosts'), accountId: v.id('postingAccounts'), platform: postingPlatform, platformPostId: v.string() })), cursor: v.string(), done: v.boolean() }),
+  returns: v.object({ posts: v.array(v.object({
+    postId: v.id('postingPosts'), accountId: v.id('postingAccounts'), platform: postingPlatform, platformPostId: v.string(), publishedAt: v.number(),
+    /** Set on a post sent through Post Bridge: its stats are read from there (convex/postingBridge.ts), by this id. */
+    providerResultId: v.optional(v.string()), statsFetchedAt: v.optional(v.number()),
+  })), cursor: v.string(), done: v.boolean() }),
   handler: async (ctx, { cursor, since }) => {
     const page = await ctx.db.query('postingPosts').withIndex('by_status_publishedAt', q => q.eq('status', 'published').gte('publishedAt', since)).paginate({ cursor, numItems: 25 });
-    return { posts: page.page.flatMap(post => post.platformPostId ? [{ postId: post._id, accountId: post.accountId, platform: post.platform, platformPostId: post.platformPostId }] : []), cursor: page.continueCursor, done: page.isDone };
+    return { posts: page.page.flatMap(post => post.platformPostId ? [{
+      postId: post._id, accountId: post.accountId, platform: post.platform, platformPostId: post.platformPostId, publishedAt: post.publishedAt ?? post.updatedAt,
+      ...(post.providerResultId ? { providerResultId: post.providerResultId } : {}), ...(post.statsFetchedAt ? { statsFetchedAt: post.statsFetchedAt } : {}),
+    }] : []), cursor: page.continueCursor, done: page.isDone };
   },
 });
 export const saveStats = internalMutation({

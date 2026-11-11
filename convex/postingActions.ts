@@ -3,13 +3,15 @@ import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { action, internalAction, type ActionCtx } from './_generated/server';
 import { postingPlatform, tiktokCreator as tiktokCreatorResult, tiktokVisibility } from './postingTables';
-import { PostingError, type AccountTokens, type PostingPlatform } from '../lib/posting/adapter';
+import { PostingError, type AccountTokens, type PostingPlatform, type PublishCheck } from '../lib/posting/adapter';
 import { downloadAvatar } from '../lib/posting/avatar';
 import { decryptTokens, encryptTokens, signState, verifyState } from '../lib/posting/crypto';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
 import { creatorInfo } from '../lib/posting/platforms/tiktok';
-import { livePlatform, tokenSecret } from '../lib/posting/server';
+import { livePlatform, postingProvider, tokenSecret, visibilityOptions } from '../lib/posting/server';
+import { VIDEO_LIMITS } from '../lib/posting/platforms/tiktok/settings';
 import { STATS_WINDOW_MS } from './posting';
+import * as bridge from './postingBridge';
 
 // Everything that talks to a platform. Adapters are fetch-based, so this runs in the default Convex runtime.
 // Tokens exist decrypted only inside these functions: they are never returned, stored in the clear, or logged.
@@ -21,15 +23,34 @@ const REVOKE_TIMEOUT_MS = 15_000;
 const failure = (error: unknown, fallback: string) => error instanceof PostingError ? error.message : fallback;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/** Begin connecting an account: the platform's consent URL, carrying a signed, single-use `state`. */
+/**
+ * Begin connecting an account: the address of the platform's consent screen. Through Post Bridge it is one of its
+ * connect links, tagged with the signed-in owner's reference; `accountId` names an account of theirs being reconnected.
+ * Through Revline's own apps it is the platform's consent URL, carrying a signed, single-use `state`.
+ */
 export const startConnect = action({
-  args: { platform: postingPlatform }, returns: v.string(),
-  handler: async (ctx, { platform }): Promise<string> => {
+  args: { platform: postingPlatform, accountId: v.optional(v.id('postingAccounts')) }, returns: v.string(),
+  handler: async (ctx, { platform, accountId }): Promise<string> => {
+    if (postingProvider() === 'postbridge') return bridge.connectLink(ctx, platform, accountId);
     // Checks the signed-in owner and stores the nonce.
     const nonce: string = await ctx.runMutation(internal.posting.createOauthState, { platform });
     const live = livePlatform(platform);
     if (!live) throw new ConvexError('This platform is coming soon.');
     return live.adapter.authUrl(live.credentials, await signState(tokenSecret(), nonce));
+  },
+});
+
+/**
+ * Read the signed-in owner's accounts from Post Bridge into Revline: called when they return from a connect link and
+ * when Connected accounts opens. `connected` are the handles this read connected or renewed, `overLimit` how many
+ * were refused because the owner is at `cap` accounts for that platform. Does nothing while Revline's own apps are
+ * the provider, or when the accounts were read moments ago.
+ */
+export const syncAccounts = action({
+  args: { afterLink: v.optional(v.boolean()) }, returns: v.object({ connected: v.array(v.string()), overLimit: v.number(), cap: v.number() }),
+  handler: async (ctx, { afterLink }) => {
+    try { return await bridge.syncAccounts(ctx, afterLink === true); }
+    catch (error) { throw new ConvexError(failure(error, error instanceof ConvexError && typeof error.data === 'string' ? error.data : 'Your accounts could not be refreshed. Please try again.')); }
   },
 });
 
@@ -108,8 +129,9 @@ async function revokeThenPurge(ctx: ActionCtx, accountId: Id<'postingAccounts'>)
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const account = await ctx.runQuery(internal.posting.accountSecret, { accountId });
-    // Connected again in the meantime: these are the new connection's tokens.
-    if (!account || account.status !== 'disconnected' || !account.tokenCipher) return;
+    // Connected again in the meantime: these are the new connection's tokens. An account that moved to Post Bridge
+    // is still connected, and the tokens Revline's own app stored for it are the ones that end here.
+    if (!account || account.status !== 'disconnected' && !account.moved || !account.tokenCipher) return;
     const live = livePlatform(account.platform);
     if (!live) throw new PostingError(`${PLATFORM_NAMES[account.platform]} is not set up on this server.`, false, 'unavailable');
     const tokens = await decryptTokens(tokenSecret(), account.tokenCipher).catch(() => { throw new PostingError('The saved connection could not be read.', false, 'unreadable'); });
@@ -124,17 +146,22 @@ async function revokeThenPurge(ctx: ActionCtx, accountId: Id<'postingAccounts'>)
     await ctx.runMutation(internal.posting.purgeTokens, { accountId });
   }
 }
-/** Scheduled by `posting.disconnect`. */
+/** Scheduled by `posting.disconnect`. An account connected through Post Bridge is removed there; one connected through Revline's own app is revoked at its platform. */
 export const revokeAccount = internalAction({
   args: { accountId: v.id('postingAccounts') }, returns: v.null(),
-  handler: async (ctx, { accountId }) => { await revokeThenPurge(ctx, accountId); return null; },
+  handler: async (ctx, { accountId }) => { await bridge.removeAtProvider(ctx, { accountId }, 0); await revokeThenPurge(ctx, accountId); return null; },
+});
+/** Remove an account at Post Bridge: one its row stopped pointing at, or a removal that did not go through and is tried again. */
+export const removeProviderAccount = internalAction({
+  args: { accountId: v.id('postingAccounts'), providerAccountId: v.optional(v.number()), ref: v.optional(v.string()), attempt: v.number() }, returns: v.null(),
+  handler: async (ctx, { attempt, ...removal }) => { await bridge.removeAtProvider(ctx, removal, attempt); return null; },
 });
 /** Deleting a Revline account: disconnect every account it connected and revoke each at its platform, before its rows are removed. */
 export const revokeOwner = internalAction({
   args: { ownerId: v.string() }, returns: v.null(),
   handler: async (ctx, { ownerId }) => {
     const accountIds: Id<'postingAccounts'>[] = await ctx.runMutation(internal.posting.disconnectOwner, { ownerId });
-    await Promise.allSettled(accountIds.map(accountId => revokeThenPurge(ctx, accountId)));
+    await Promise.allSettled(accountIds.map(async accountId => { await bridge.removeAtProvider(ctx, { accountId }, 0); await revokeThenPurge(ctx, accountId); }));
     return null;
   },
 });
@@ -175,7 +202,9 @@ export const tiktokCreator = action({
   ),
   handler: async (ctx, { accountId }) => {
     // Throws unless this is the signed-in owner's connected TikTok account.
-    await ctx.runQuery(internal.posting.ownedTikTok, { accountId });
+    const owned: { username: string; bridged: boolean } = await ctx.runQuery(internal.posting.ownedTikTok, { accountId });
+    // Post Bridge does not pass on TikTok's per-account settings: what it can post is the same for every account.
+    if (owned.bridged) return { ok: true as const, nickname: '', username: owned.username, privacyLevels: [...visibilityOptions().tiktok], commentDisabled: false, duetDisabled: false, stitchDisabled: false, maxDurationSeconds: VIDEO_LIMITS.maxDurationSeconds };
     try {
       const creator = await creatorInfo(await accountTokens(ctx, accountId));
       // Nothing to choose from would leave the dialog asking for a choice that cannot be made.
@@ -198,9 +227,10 @@ export const tiktokCreatorFor = internalAction({
   handler: async (ctx, { ownerId, accountId }) => {
     try {
       // Throws unless this is one of the owner's accounts.
-      const [account] = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ownerId, accountIds: [accountId] }) as { platform: PostingPlatform; connected: boolean }[];
+      const [account] = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ownerId, accountIds: [accountId] }) as { platform: PostingPlatform; connected: boolean; bridged: boolean }[];
       if (account.platform !== 'tiktok') return { accountId, error: 'This is not a TikTok account.' };
       if (!account.connected) return { accountId, error: 'This TikTok account needs reconnecting before it can be posted to. The user reconnects it on the Accounts page (/accounts).' };
+      if (account.bridged) return { accountId, privacyLevels: [...visibilityOptions().tiktok], maxDurationSeconds: VIDEO_LIMITS.maxDurationSeconds };
       const creator = await creatorInfo(await accountTokens(ctx, accountId));
       if (!creator.privacyLevelOptions.length) return { accountId, error: 'TikTok did not say who can view posts from this account. Try again in a moment.' };
       return { accountId, privacyLevels: creator.privacyLevelOptions, maxDurationSeconds: creator.maxVideoDurationSeconds };
@@ -216,6 +246,7 @@ export const runPost = internalAction({
     if (!claimed) return null;
     const settle = (outcome: { status: 'published'; platformPostId: string; url: string } | { status: 'processing'; platformJobId: string } | { status: 'failed'; error: string; retryable: boolean }) =>
       ctx.runMutation(internal.posting.settle, { postId, from: 'posting', outcome });
+    if (claimed.bridged) { await settle(await bridge.publishPost(ctx, claimed.accountId, claimed.platform, claimed.input)); return null; }
     let tokens: AccountTokens;
     // Nothing has been sent yet, so an unknown failure here is safe to retry.
     try { tokens = await accountTokens(ctx, claimed.accountId); }
@@ -239,14 +270,14 @@ export const checkPost = internalAction({
   handler: async (ctx, { postId, quickStep }) => {
     const post = await ctx.runQuery(internal.posting.processingPost, { postId });
     if (!post) return null;
-    const live = livePlatform(post.platform);
-    if (!live) return null;
+    const live = post.bridged ? null : livePlatform(post.platform);
+    if (!post.bridged && !live) return null;
     let settled = false;
     try {
-      const check = await live.adapter.checkPublish(await accountTokens(ctx, post.accountId), post.platformJobId);
+      const check: PublishCheck & { providerResultId?: string } = live ? await live.adapter.checkPublish(await accountTokens(ctx, post.accountId), post.platformJobId) : await bridge.checkPost(ctx, post.accountId, post.platform, post.platformJobId);
       // Still processing: the next check polls again, with the job id the platform is on now.
       if (check.status === 'processing') { if (check.platformJobId !== post.platformJobId) await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check }); }
-      else { settled = true; await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check.status === 'published' ? { status: 'published', platformPostId: check.platformPostId, url: check.url } : { status: 'failed', error: check.error, retryable: check.retryable } }); }
+      else { settled = true; await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check.status === 'published' ? { status: 'published', platformPostId: check.platformPostId, url: check.url, ...(check.providerResultId ? { providerResultId: check.providerResultId } : {}) } : { status: 'failed', error: check.error, retryable: check.retryable } }); }
     } catch (error) {
       // A poll that could not run says nothing about the post, unless the account can no longer be used at all.
       if (error instanceof PostingError && !error.retryable) { settled = true; await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: { status: 'failed', error: error.message, retryable: false } }); }
@@ -256,13 +287,17 @@ export const checkPost = internalAction({
   },
 });
 
-/** Cron, hourly: refresh views, likes and comments for posts published in the last 30 days, a page at a time. */
+/**
+ * Cron, hourly: refresh views, likes and comments for posts published in the last 30 days, a page at a time.
+ * Posts sent through Post Bridge are read there in batches, on their own slower schedule (`refreshBridgedStats`).
+ */
 export const refreshStats = internalAction({
   args: { cursor: v.optional(v.string()), since: v.optional(v.number()) }, returns: v.null(),
   handler: async (ctx, { cursor, since = Date.now() - STATS_WINDOW_MS }) => {
+    if (cursor === undefined && postingProvider() === 'postbridge') await ctx.scheduler.runAfter(0, internal.postingActions.refreshBridgedStats, { since });
     const page = await ctx.runQuery(internal.posting.statsPage, { cursor: cursor ?? null, since });
     for (const post of page.posts) {
-      const live = livePlatform(post.platform);
+      const live = post.providerResultId ? null : livePlatform(post.platform);
       if (!live) continue;
       try {
         const stats = await live.adapter.postStats(await accountTokens(ctx, post.accountId), post.platformPostId);
@@ -272,4 +307,9 @@ export const refreshStats = internalAction({
     if (!page.done) await ctx.scheduler.runAfter(0, internal.postingActions.refreshStats, { cursor: page.cursor, since });
     return null;
   },
+});
+/** Scheduled by the hourly `refreshStats`: stats of posts sent through Post Bridge, hourly for two days after a post goes out, then daily, ending after 30 days. */
+export const refreshBridgedStats = internalAction({
+  args: { since: v.number() }, returns: v.null(),
+  handler: async (ctx, { since }) => { await bridge.refreshStats(ctx, since); return null; },
 });
