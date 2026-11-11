@@ -1,5 +1,10 @@
 import { tools as clipTools } from './clip/tools';
 
+/** Post and schedule tools: optional, so an editing session never loads them. */
+export const POSTING_TOOLS = ['listConnectedAccounts', 'postVideo', 'schedulePost', 'listPosts', 'getPost', 'cancelScheduledPost', 'reschedulePost'] as const;
+/** The two that send something outside Revline: each needs the user's confirmation. */
+export const POST_SENDING_TOOLS: readonly string[] = ['postVideo', 'schedulePost'];
+
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [
   'reportIssue',
@@ -110,6 +115,8 @@ export const SKILL_TOOLS: Record<string, readonly string[]> = {
   // Footage transitions; every lane has addTransition already.
   'transitions': ['addTransition'],
   'clipping': clipTools,
+  // Posting to the user's connected social accounts. Loaded only when the user asks to post, schedule or check a post.
+  'posting': POSTING_TOOLS,
   'visual-inspection': ['readFrames', 'inspectVideo', 'inspectFrames'],
   // Measured beat tools a music edit uses after analyzeMusic and startMusicAt (both shared).
   'music': ['markMusicBeats', 'alignCutsToBeat', 'setAudioReactive'],

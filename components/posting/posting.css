@@ -18,6 +18,10 @@
 .posts-thumb .workspace-chat-cover { display: grid; place-items: center; width: 30px; height: 52px; overflow: hidden; border-radius: 5px; background: var(--dash-pill); color: var(--dash-muted); }
 .posts-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
 .posts-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 15px; }
+/* The caption shortens; the tag saying the assistant made the post always stays whole. */
+.posts-caption:has(.posts-by) { display: flex; align-items: center; gap: 8px; }
+.posts-caption:has(.posts-by) > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.posts-by { flex-shrink: 0; }
 .posts-accounts { display: flex; align-items: center; min-width: 0; }
 .posts-accounts .account-avatar + .account-avatar { margin-left: -4px; }
 .posts-accounts .account-avatar [data-slot=avatar] { width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--dash-card); }

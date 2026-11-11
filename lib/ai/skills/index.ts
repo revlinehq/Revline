@@ -4,6 +4,7 @@ import { footageEditing } from './footage-editing';
 import { clipping } from './clipping';
 import { music } from './music';
 import { transitions } from './transitions';
+import { posting } from './posting';
 import type { EditorSkill } from './types';
 
-export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, music, talkingHeadGraphics, transitions, visualInspection];
+export const editorSkills = ():EditorSkill[] => [footageEditing, clipping, music, talkingHeadGraphics, transitions, visualInspection, posting];

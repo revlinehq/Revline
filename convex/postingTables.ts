@@ -17,6 +17,12 @@ export const tiktokChoices = v.object({
   allowComment: v.optional(v.boolean()), allowDuet: v.optional(v.boolean()), allowStitch: v.optional(v.boolean()),
   yourBrand: v.optional(v.boolean()), brandedContent: v.optional(v.boolean()),
 });
+/** What one account's post takes when it differs from the shared text: its own caption or title, who can view it, TikTok's per-post settings. */
+export const postTarget = v.object({ accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()), visibility: v.optional(postVisibility), tiktok: v.optional(tiktokChoices) });
+/** Set on what the assistant or an MCP agent created, so the Posts page can say so. Absent on posts the user made by hand. */
+export const postAuthor = { createdBy: v.optional(v.literal('assistant')), agentName: v.optional(v.string()) };
+/** What TikTok said one account may do when it was asked (postingActions.tiktokCreatorFor). */
+export const tiktokCreator = v.object({ accountId: v.id('postingAccounts'), error: v.optional(v.string()), privacyLevels: v.optional(v.array(tiktokVisibility)), maxDurationSeconds: v.optional(v.number()) });
 export const accountStatus = v.union(v.literal('connected'), v.literal('needs_reconnect'), v.literal('disconnected'));
 /** A platform's data deletion request: `received` when the connection is deleted, `completed` once its posts carry nothing from the platform. */
 export const deletionRequestStatus = v.union(v.literal('received'), v.literal('completed'));
@@ -54,7 +60,7 @@ export const postingTables = {
     ownerId: v.string(), jobId: v.id('renderJobs'), projectId: v.id('projects'), exportLabel: v.string(),
     caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()),
     // Typed once convex/campaigns exists.
-    campaignId: v.optional(v.string()), createdAt: v.number(),
+    campaignId: v.optional(v.string()), createdAt: v.number(), ...postAuthor,
   }).index('by_owner', ['ownerId', 'createdAt']),
   // One post to one account. `caption` is the text this account posts (the batch default or its override).
   // `dueAt` is when the scheduler acts next: the scheduled time, a retry time, or the next processing check.
@@ -81,5 +87,19 @@ export const postingTables = {
     caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()), campaignId: v.optional(v.string()),
     accountIds: v.array(v.id('postingAccounts')), status: pendingPostStatus, error: v.optional(v.string()), batchId: v.optional(v.id('postingBatches')),
     createdAt: v.number(), updatedAt: v.number(),
-  }).index('by_job', ['jobId']).index('by_owner_project', ['ownerId', 'projectId', 'createdAt']).index('by_status', ['status', 'createdAt']),
+    // Posts the assistant made (convex/assistantPosting.ts): each account's own choices, who made it, and the key
+    // that makes a repeated tool call return this post instead of creating a second one.
+    targets: v.optional(v.array(postTarget)), ...postAuthor, idempotencyKey: v.optional(v.string()),
+  }).index('by_job', ['jobId']).index('by_owner_project', ['ownerId', 'projectId', 'createdAt']).index('by_status', ['status', 'createdAt'])
+    .index('by_owner_key', ['ownerId', 'idempotencyKey']).index('by_owner_createdAt', ['ownerId', 'createdAt']),
+  // What the in-app assistant asked to post, shown as a card in the chat. Nothing is exported or sent until the
+  // signed-in user presses the card; `pendingIds` are the posts that press created.
+  postingProposals: defineTable({
+    ownerId: v.string(), projectId: v.id('projects'), timelineIds: v.array(v.string()), targets: v.array(postTarget),
+    caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()),
+    status: v.union(v.literal('proposed'), v.literal('confirmed'), v.literal('cancelled')), pendingIds: v.optional(v.array(v.id('postingPending'))),
+    // What TikTok allowed each chosen TikTok account when the card was made, so the press checks the clip against it again.
+    tiktokCreators: v.optional(v.array(tiktokCreator)),
+    createdAt: v.number(), expiresAt: v.number(),
+  }).index('by_owner', ['ownerId', 'createdAt']).index('by_expiresAt', ['expiresAt']),
 };

@@ -3,12 +3,13 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { CircleAlert, CircleCheck, Clock, Ellipsis, Plus, Send } from 'lucide-react';
+import { CircleAlert, CircleCheck, Clock, Ellipsis, Loader, Plus, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
 import { ProjectCover } from '@/components/workspace/project-cover';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -20,6 +21,7 @@ import './posting.css';
 
 type Clip = FunctionReturnType<typeof api.posting.clipPosts>[number];
 type ClipPost = Clip['posts'][number];
+type Exporting = FunctionReturnType<typeof api.postExports.exporting>[number];
 const SHOWN_ACCOUNTS = 4;
 
 /** Still waiting for a time the user picked that has not come yet; nothing has been sent. */
@@ -70,7 +72,8 @@ export function PostsSkeleton() {
 export function PostsPage() {
   const { isAuthenticated } = useConvexAuth();
   const clips = useQuery(api.posting.clipPosts, isAuthenticated ? {} : 'skip');
-  const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel);
+  const exporting = useQuery(api.postExports.exporting, isAuthenticated ? {} : 'skip');
+  const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel), cancelExporting = useMutation(api.postExports.cancel);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   const [composing, setComposing] = useState(false);
   async function run(row: Row, posts: ClipPost[], action: typeof retry, fallback: string) {
@@ -92,12 +95,16 @@ export function PostsPage() {
       <h1 className="sr-only">Posts</h1>
       {error && <p className="dash-error" role="alert">{error}</p>}
       {!clips ? <PostsSkeleton />
-        : !sections.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>
-        : sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
-          <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && newPost}</div>
+        : !sections.length && !exporting?.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>
+        : <>{!!exporting?.length && <section className="posts-section" aria-label="Exporting">
+          <div className="posts-section-head"><h2>Exporting</h2><span>{exporting.length}</span>{newPost}</div>
+          <Card variant="dash" className="posts-list"><ul>{exporting.map(clip => <ExportingRow key={clip.id} clip={clip} busy={!!busy}
+            onCancel={() => { setError(''); void cancelExporting({ pendingId: clip.id }).catch(reason => setError(userError(reason, 'Could not cancel this post.'))); }} />)}</ul></Card>
+        </section>}{sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
+          <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && !exporting?.length && newPost}</div>
           <Card variant="dash" className="posts-list"><ul>{section.rows.map(row => <PostRow key={row.clip.batchId} row={row} busy={!!busy}
             onRetry={() => void run(row, row.retryable, retry, 'Could not retry this post.')} onCancel={() => void run(row, row.cancellable, cancel, 'Could not cancel this post.')} />)}</ul></Card>
-        </section>)}
+        </section>)}</>}
     </main>
     {composing && <PostDialog onPostsPage onClose={() => setComposing(false)} />}
   </>;
@@ -109,7 +116,7 @@ function PostRow({ row, busy, onRetry, onCancel }: { row: Row; busy: boolean; on
   const menu = row.cancellable.length > 0 || live.length > 0 || row.reconnect;
   return <li className="posts-row">
     <span className="posts-thumb"><ProjectCover url={clip.coverUrl} kind={clip.coverKind} /></span>
-    <span className="posts-caption" title={text}>{text}</span>
+    <span className="posts-caption" title={text}><span>{text}</span>{clip.byAssistant && <Badge variant="chip" className="posts-by">Assistant</Badge>}</span>
     <span className="posts-accounts" role="img" aria-label={clip.posts.map(post => `@${post.username} on ${PLATFORM_NAMES[post.platform]}`).join(', ')}>
       {clip.posts.slice(0, SHOWN_ACCOUNTS).map(post => <AccountAvatar key={post.id} username={post.username} avatarUrl={post.avatarUrl} platform={post.platform} />)}
       {extra > 0 && <span className="posts-accounts-more">+{extra}</span>}
@@ -128,5 +135,24 @@ function PostRow({ row, busy, onRetry, onCancel }: { row: Row; busy: boolean; on
         </DropdownMenuContent>
       </DropdownMenu>}
     </span>
+  </li>;
+}
+
+/** A clip whose export is still running (or failed): its posts do not exist yet, so the row says what it is waiting for. */
+function ExportingRow({ clip, busy, onCancel }: { clip: Exporting; busy: boolean; onCancel: () => void }) {
+  const text = clip.caption || clip.label, failed = clip.status === 'failed', Icon = failed ? CircleAlert : Loader;
+  const extra = clip.accounts.length - SHOWN_ACCOUNTS;
+  return <li className="posts-row">
+    <span className="posts-thumb"><ProjectCover url={clip.coverUrl} kind={clip.coverKind} /></span>
+    <span className="posts-caption" title={text}><span>{text}</span>{clip.byAssistant && <Badge variant="chip" className="posts-by">Assistant</Badge>}</span>
+    <span className="posts-accounts" role="img" aria-label={clip.accounts.map(account => `@${account.username} on ${PLATFORM_NAMES[account.platform]}`).join(', ')}>
+      {clip.accounts.slice(0, SHOWN_ACCOUNTS).map(account => <AccountAvatar key={account.id} username={account.username} avatarUrl={account.avatarUrl} platform={account.platform} />)}
+      {extra > 0 && <span className="posts-accounts-more">+{extra}</span>}
+    </span>
+    <span className="posts-time">{postTime(clip.scheduledAt ?? clip.createdAt)}</span>
+    <span className="posts-status"><span><Icon aria-hidden="true" />{failed ? 'Export failed' : clip.progress ? `Exporting ${Math.round(clip.progress)}%` : 'Exporting'}</span>
+      <small title={clip.error ?? undefined}>{failed ? clip.error ?? 'Nothing was posted.' : clip.scheduledAt ? 'Posts at the scheduled time' : 'Posts when the export finishes'}</small></span>
+    <span className="posts-views" />
+    <span className="posts-actions">{!failed && <Button variant="soft" size="sm" disabled={busy} onClick={onCancel}>Cancel</Button>}</span>
   </li>;
 }

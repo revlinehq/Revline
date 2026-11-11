@@ -1,5 +1,5 @@
 import { LANES, sharedLane } from './index';
-import { exportConfirmed } from './export-confirmation';
+import { exportConfirmed, postRequested } from './export-confirmation';
 import type { CheckLevel, CheckRecipe, LaneId } from './types';
 
 /** Whole-video passes. A lane recipe without fullTools refuses them. */
@@ -85,9 +85,9 @@ export function momentsRequested(request: string, command?: { name: string }): b
 }
 
 /** What lanes.begin stores for a request. The app and MCP both start tasks with it. */
-export function requestChecks(request: string, command?: { name: string }): { exportConfirmed: boolean; findMoments: boolean; checkLevel?: 'final'; requestedLength?: RequestedLength } {
+export function requestChecks(request: string, command?: { name: string }): { exportConfirmed: boolean; findMoments: boolean; checkLevel?: 'final'; requestedLength?: RequestedLength; postRequested?: true } {
   const length = requestedLength(request);
-  return { exportConfirmed: exportConfirmed(request), findMoments: momentsRequested(request, command), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}), ...(length ? { requestedLength: length } : {}) };
+  return { exportConfirmed: exportConfirmed(request), findMoments: momentsRequested(request, command), ...(finalChecksRequested(request) ? { checkLevel: 'final' as const } : {}), ...(length ? { requestedLength: length } : {}), ...(!command && postRequested(request) ? { postRequested: true as const } : {}) };
 }
 
 /** Older task rows have no level; an export they confirmed still runs final checks. */

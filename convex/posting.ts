@@ -17,7 +17,7 @@ import { YOUTUBE_FIRST_VISIBILITY, isTikTokVisibility, isYouTubeVisibility, type
 // so a post moves `scheduled -> posting -> processing? -> published | failed` in single transactions.
 
 const TARGET_LIMIT = 50, ERROR_LIMIT = 500;
-const SCHEDULE_HORIZON_MS = 90 * 86400_000;
+export const SCHEDULE_HORIZON_MS = 90 * 86400_000;
 /** A post still `posting` after this long lost its action; it is failed rather than re-sent, which could post twice. */
 const STALE_POSTING_MS = 20 * 60_000;
 const PROCESSING_LIMIT_MS = 24 * 3600_000, PROCESSING_POLL_MS = 4 * 60_000;
@@ -49,7 +49,7 @@ const optional = <T,>(value: T | undefined) => value ?? null;
 /** Accounts without a saved picture are asked for one again this often, when their tokens are renewed. */
 const AVATAR_RECHECK_MS = 7 * 86400_000;
 /** An account's picture: Revline's saved copy, or the platform's own URL (which can expire) for an account connected before pictures were saved. */
-async function accountPicture(ctx: QueryCtx, account: Doc<'postingAccounts'> | null | undefined) {
+export async function accountPicture(ctx: QueryCtx, account: Doc<'postingAccounts'> | null | undefined) {
   return (account?.avatarStorageId ? await ctx.storage.getUrl(account.avatarStorageId) : null) ?? account?.avatarUrl ?? null;
 }
 
@@ -280,9 +280,11 @@ export const createBatch = mutation({
 export type BatchInput = {
   jobId: Id<'renderJobs'>; caption: string; title?: string; scheduledAt?: number; campaignId?: string;
   targets: { accountId: Id<'postingAccounts'>; caption?: string; title?: string; visibility?: Doc<'postingPosts'>['visibility']; tiktok?: Doc<'postingPosts'>['tiktok'] }[];
+  /** Set when the assistant or an MCP agent made this post, so the Posts page can say so. */
+  createdBy?: 'assistant'; agentName?: string;
 };
 /** The visibility of the owner's most recent YouTube post that carries one: the Post dialog's last-used value. "Public" before any. */
-async function lastYouTubeVisibility(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<YouTubeVisibility> {
+export async function lastYouTubeVisibility(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<YouTubeVisibility> {
   // Every YouTube post made since the choice exists carries one, so the newest row answers; older rows are skipped.
   const recent = await ctx.db.query('postingPosts').withIndex('by_owner_platform', q => q.eq('ownerId', ownerId).eq('platform', 'youtube')).order('desc').take(20);
   const last = recent.find(post => post.visibility !== undefined)?.visibility;
@@ -298,7 +300,7 @@ export const lastVisibility = query({
  * from the editor) uses the owner's last one. A TikTok post without one is sent by the adapter as "Only me" with
  * interactions off. Instagram has no per-post privacy, so nothing is stored for it.
  */
-async function postChoices(platform: Doc<'postingPosts'>['platform'], target: BatchInput['targets'][number], lastYouTube: () => Promise<YouTubeVisibility>): Promise<Pick<Doc<'postingPosts'>, 'visibility' | 'tiktok'>> {
+export async function postChoices(platform: Doc<'postingPosts'>['platform'], target: BatchInput['targets'][number], lastYouTube: () => Promise<YouTubeVisibility>): Promise<Pick<Doc<'postingPosts'>, 'visibility' | 'tiktok'>> {
   if (platform === 'youtube') {
     if (target.visibility !== undefined && !isYouTubeVisibility(target.visibility)) throw new ConvexError('Pick Public, Unlisted or Private for YouTube.');
     return { visibility: target.visibility ?? await lastYouTube() };
@@ -336,6 +338,7 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   const batchId = await ctx.db.insert('postingBatches', {
     ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
     caption, ...(title ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now,
+    ...(args.createdBy ? { createdBy: args.createdBy } : {}), ...(args.agentName ? { agentName: args.agentName } : {}),
   });
   let remembered: YouTubeVisibility | undefined;
   const lastYouTube = async () => remembered ??= await lastYouTubeVisibility(ctx, ownerId);
@@ -366,16 +369,31 @@ export const retry = mutation({
     return null;
   },
 });
+/** True while nothing of this post has been sent: it still waits for its time (or for the scheduler to pick it up). */
+export const notSent = (post: Doc<'postingPosts'>) => post.status === 'scheduled' && post.attempts === 0;
+/** `cancel` for an owner already identified. */
+export async function cancelPostFor(ctx: MutationCtx, ownerId: string, postId: Id<'postingPosts'>) {
+  const post = await ownedPost(ctx, ownerId, postId);
+  if (post.status !== 'scheduled') throw new ConvexError('This post has already started.');
+  await ctx.db.delete(postId);
+}
 /** Remove a post that has not started. */
 export const cancel = mutation({
   args: { postId: v.id('postingPosts') }, returns: v.null(),
-  handler: async (ctx, { postId }) => {
-    const ownerId = await requireOwner(ctx), post = await ownedPost(ctx, ownerId, postId);
-    if (post.status !== 'scheduled') throw new ConvexError('This post has already started.');
-    await ctx.db.delete(postId);
-    return null;
-  },
+  handler: async (ctx, { postId }) => { await cancelPostFor(ctx, await requireOwner(ctx), postId); return null; },
 });
+/** Move a post that has not been sent to another time. The scheduler tick sends it once that time has come. */
+export async function reschedulePostFor(ctx: MutationCtx, ownerId: string, postId: Id<'postingPosts'>, scheduledAt: number) {
+  const post = await ownedPost(ctx, ownerId, postId), now = Date.now();
+  if (!notSent(post)) throw new ConvexError(post.status === 'scheduled' ? 'This post is already being retried; it can no longer be moved.' : 'This post has already started.');
+  scheduleTime(scheduledAt, now);
+  await ctx.db.patch(postId, { scheduledAt, dueAt: scheduledAt, updatedAt: now });
+}
+/** A time a post can be scheduled for: after now and within the horizon. */
+export function scheduleTime(scheduledAt: number, now: number) {
+  if (!Number.isFinite(scheduledAt) || scheduledAt <= now) throw new ConvexError('Pick a time in the future.');
+  if (scheduledAt > now + SCHEDULE_HORIZON_MS) throw new ConvexError('Pick a time in the next 90 days.');
+}
 
 // ---------------------------------------------------------------- reading posts
 
@@ -427,7 +445,7 @@ export const batchLinks = query({
 
 const cover = { coverUrl: v.union(v.string(), v.null()), coverKind: v.union(v.literal('video'), v.literal('image'), v.null()) };
 /** An export has no picture of its own, so a clip shows the cover of the project it was exported from. */
-async function projectCover(ctx: QueryCtx, projectId: Id<'projects'>) {
+export async function projectCover(ctx: QueryCtx, projectId: Id<'projects'>) {
   const row = await ctx.db.query('projectCatalog').withIndex('by_project', q => q.eq('projectId', projectId)).first();
   const coverUrl = row ? await mediaUrl(ctx, { storageId: row.coverStorageId, r2Key: row.coverR2Key }) : null;
   return { title: row?.title, coverUrl, coverKind: !row || !coverUrl ? null : row.coverKind === 'video' && row.coverR2Key ? 'video' as const : 'image' as const };
@@ -446,7 +464,7 @@ const POSTS_WINDOW = 200;
  */
 export const clipPosts = query({
   args: {},
-  returns: v.array(v.object({ batchId: v.id('postingBatches'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), posts: v.array(clipPost) })),
+  returns: v.array(v.object({ batchId: v.id('postingBatches'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), byAssistant: v.boolean(), posts: v.array(clipPost) })),
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
     // One indexed read, as `posts` does; a clip's posts are created together, so they sit next to each other in it.
@@ -473,7 +491,7 @@ export const clipPosts = query({
         });
       }
       const { coverUrl, coverKind } = covers.get(batch.projectId)!;
-      clips.push({ batchId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, posts });
+      clips.push({ batchId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, byAssistant: batch.createdBy === 'assistant', posts });
     }
     return clips;
   },
@@ -716,6 +734,9 @@ export const tick = internalMutation({
     for (const ownerId of new Set(queued.map(pending => pending.ownerId))) await ctx.scheduler.runAfter(0, internal.postExports.advance, { ownerId });
     const expired = await ctx.db.query('postingOauthStates').withIndex('by_expiresAt', q => q.lte('expiresAt', now)).take(100);
     for (const state of expired) await ctx.db.delete(state._id);
+    // Confirmation cards of the assistant that nobody pressed, a week after they expired.
+    const stale = await ctx.db.query('postingProposals').withIndex('by_expiresAt', q => q.lte('expiresAt', now - 7 * 86400_000)).take(100);
+    for (const proposal of stale) await ctx.db.delete(proposal._id);
     return null;
   },
 });

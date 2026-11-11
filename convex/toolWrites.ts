@@ -22,6 +22,7 @@ const mutations = new Set([
   'compositionReview:savePlan', 'compositionReview:request', 'compositionReview:cancel',
   'cutouts:startFromRun', 'derivations:startFromRun',
   'mcp:requestFrames', 'mcp:requestGuard', 'mcp:discardFrames', 'mcp:takeFrames',
+  'assistantPosting:propose', 'assistantPosting:send', 'assistantPosting:cancel', 'assistantPosting:reschedule',
   'briefs:update', 'memories:remember', 'memories:forget',
   'referenceReads:request', 'referenceReads:take', 'referenceReads:discard',
 ]);

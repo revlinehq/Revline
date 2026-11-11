@@ -58,7 +58,9 @@ import { ToolSaveReceipts } from './toolSaveReceipts';
 import { needsSaveConfirmation, hasSaveEvidence, toolSaveReceipt } from '../../lib/ai/save-confirmation';
 import { incidentShape } from './save_incidents';
 import { boundRunTab, isMcpRun, READ_ONLY_RUN_PREFIX } from "./run_ids";
-import { PROJECT_BASE_TOOLS } from "../../lib/ai/lanes/base-tools";
+import { POSTING_TOOLS, PROJECT_BASE_TOOLS } from "../../lib/ai/lanes/base-tools";
+import { CAPTION_LIMIT, TITLE_LIMIT } from "../../lib/posting/limits";
+import { TIKTOK_VISIBILITIES, YOUTUBE_VISIBILITIES } from "../../lib/posting/visibility";
 import { MCP_WORKER_WAIT_MS } from "./mcp_limits";
 import type { PacingResult } from "../../lib/media-analysis/pacing";
 import type { SoundResult } from "../../lib/media-analysis/sound";
@@ -174,12 +176,30 @@ async function labeledImages(ctx: unknown, output: unknown) {
 }
 
 
+/** Opens the description of both tools that send something outside Revline. */
+const POST_RULE = 'Outward-facing and not undoable on TikTok or Instagram. Call only when the user asked to post or schedule in this conversation, for the clips and accounts they named; never on your own initiative and never to approve finished work on their behalf.';
+const POST_FLOW = 'Posting includes exporting: a clip with no finished export of its current version is exported first with the project’s existing export settings, then posted, so never call exportVideo first or ask again about exporting. In the Revline editor this call only shows a confirmation card (accounts, captions, visibility, time); nothing is exported or sent until the user presses it, so end your turn after it. Over MCP there is no card: without confirm it returns a preview and creates nothing; pass confirm: true only after the user agreed to that preview. The call returns at once; getPost reports exporting, posting, published or failed.';
+const POST_INPUT = {
+  timelineIds: z.array(z.string().min(1)).min(1).max(10).optional().describe('The clips to post: timeline tab IDs from listTimelines, one post per clip per account. Omit for the current timeline.'),
+  accounts: z.array(z.object({
+    accountId: z.string().min(1).describe('From listConnectedAccounts.'),
+    caption: z.string().max(CAPTION_LIMIT).optional().describe('This account’s own caption, when it differs from the shared one.'),
+    title: z.string().max(TITLE_LIMIT).optional().describe('This account’s own title (YouTube).'),
+    visibility: z.enum([...YOUTUBE_VISIBILITIES, ...TIKTOK_VISIBILITIES]).optional().describe('Who can view the post. YouTube: public, unlisted or private (the user’s last choice when omitted). TikTok: required, one of the levels the account allows (PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR, SELF_ONLY); the user chooses, there is no default. Instagram: none.'),
+    tiktok: z.object({ allowComment: z.boolean().optional(), allowDuet: z.boolean().optional(), allowStitch: z.boolean().optional(), yourBrand: z.boolean().optional().describe('The video promotes the user’s own business.'), brandedContent: z.boolean().optional().describe('A paid partnership. Not with SELF_ONLY.') }).strict().optional().describe('TikTok only. Each is off unless the user asks for it.'),
+  }).strict()).min(1).max(20).describe('The connected accounts to post to.'),
+  caption: z.string().max(CAPTION_LIMIT).describe(`The caption every account uses unless it has its own, up to ${CAPTION_LIMIT} characters (YouTube: the description).`),
+  title: z.string().max(TITLE_LIMIT).optional().describe(`Title for YouTube, up to ${TITLE_LIMIT} characters. Without one, the caption’s first line.`),
+  confirm: z.boolean().optional().describe('MCP clients only: true sends the posts, after the user agreed to the preview this call returns without it. The Revline editor ignores it and shows a confirmation card.'),
+  idempotencyKey: z.string().min(8).max(200).optional().describe('MCP clients only: any unique string for this one request. A retried call with the same key returns the same posts instead of posting twice. Without one, an identical request made the same day counts as a retry.'),
+};
+
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user. Say in the reply that approved work was changed.';
 /** Tools that never change clips, so they take no approved-work override. */
 /** How long finish waits for the cut-edge frames of a range-cut clip before reporting them unmeasured. */
 const CLIP_EDGE_WAIT_MS = 120_000;
-const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief']);
+const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief', ...POSTING_TOOLS]);
 
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
 function soundReport(result: SoundResult, check: boolean) {
@@ -744,6 +764,39 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     const rate = clip && !clip.speedRamp?.length ? playbackRateOf(clip) : 1;
     return { clip, asset, map, words, structure: musicStructure({ ...map, energy: map.energy }, asset.duration ?? map.energy.loudness.length * map.energy.step, words, input.lengths?.map(length => length * rate)) };
   };
+  // postVideo and schedulePost share one path. In the editor the checked request becomes a confirmation card and only
+  // the user's press sends it; over MCP, where there is no card, the call previews unless confirm is true.
+  // A refusal reads as its reason alone: Convex wraps it in "Uncaught ConvexError: … at handler (…)".
+  const postRefusal = (error: unknown) => {
+    const data = (error as { data?: unknown })?.data, text = typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : error instanceof Error ? error.message : String(error);
+    return new Error(text.replace(/^(?:\[[^\]]*\]\s*)*(?:Uncaught )?(?:ConvexError|Error): /, '').split('\n    at ')[0].trim());
+  };
+  const posting = async <T,>(work: () => Promise<T>) => { try { return await work(); } catch (error) { throw postRefusal(error); } };
+  const sendPosts = (input: z.infer<z.ZodObject<typeof POST_INPUT>>, scheduledAt: number | undefined) => posting(async () => {
+    const overMcp = isMcpRun(run.runId), schedule = scheduledAt !== undefined, owner = { ownerId: run.ownerId };
+    const platforms = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ...owner, accountIds: input.accounts.map(account => account.accountId) }) as { accountId: Id<'postingAccounts'>; platform: string }[];
+    // TikTok's rules: what an account allows is read from TikTok before every post.
+    const tiktokCreators = await Promise.all(platforms.filter(account => account.platform === 'tiktok').map(account => ctx.runAction(internal.postingActions.tiktokCreatorFor, { ...owner, accountId: account.accountId })));
+    const request = {
+      projectId: run.projectId, timelineIds: input.timelineIds ?? [timelineId], caption: input.caption, ...(input.title ? { title: input.title } : {}), ...(schedule ? { scheduledAt } : {}), tiktokCreators,
+      targets: input.accounts.map((account, index) => ({ ...account, accountId: platforms[index].accountId })),
+    };
+    if (!overMcp) {
+      // The card posts the saved timeline, so this request's edits are checked and saved first, as before an export.
+      await verifyCurrentTimeline();
+      await editSession.publish();
+    }
+    // Every check runs here first, so a refusal is reported before anything is written.
+    const preview = await ctx.runQuery(internal.assistantPosting.preview, { ...owner, schedule, ...request });
+    if (!overMcp) return ctx.runMutation(internal.assistantPosting.propose, { ...run, schedule, ...request });
+    if (!input.confirm) return {
+      confirmed: false, preview,
+      next: `Nothing was exported or ${schedule ? 'scheduled' : 'posted'}. This is exactly what would be sent. Show it to the user (clips, accounts, captions, visibility, time) and call ${schedule ? 'schedulePost' : 'postVideo'} again with the same arguments and confirm: true only after they agree to it.`,
+    };
+    const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null;
+    if (!task?.postRequested) throw new Error('Posting needs the user’s own request. confirm: true only counts in a task that was started with the user asking to post, publish or schedule: call startTask with their request in their words (for example "post this clip to my TikTok"), loadCapability posting, then call this again. Never post on your own initiative.');
+    return ctx.runMutation(internal.assistantPosting.send, { ...run, schedule, ...(options.agent ? { agentName: options.agent } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}), ...request });
+  });
   const tools = {
     findHighlights:createTool({metadata:EDITOR_TOOL_DEFINITIONS.findHighlights,
       description:'Only when Revline must choose the moments ("find the best moments", /clip). Skip it for cuts at source ranges you were given: build those tabs and call finish, which needs no analysis or plan. Reads saved transcript and lightweight helpers to propose 15-60s candidates without whole-source video judging. On the visual path it first measures missing scene cuts and audio peaks for the source (no Gemini), and says so when they are still running instead of returning an empty set. For requested dialogue pass speechLed:true; podcast/talk defaults to that. Commentary over gaming/action does not prove visuals irrelevant. Use short explicit inspectVideo windows to establish visual events; silent content uses bounded adaptive video discovery. Register grounded planClips found moments, then accept/drop and build. Preserve original framing/audio. Finish uses inline data checks, without normalization or heavy checkClip unless requested. Returns recommendedCount and a quality bar of 65/100; only candidates at or above the bar qualify.',
@@ -926,6 +979,27 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await verifyCurrentTimeline();
       await editSession.publish();
       return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
+    } }),
+
+    // Posting to the user's connected social accounts (convex/assistantPosting.ts). Loaded with the posting capability.
+    listConnectedAccounts: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listConnectedAccounts, description: "The user's connected social accounts (YouTube, TikTok, Instagram): accountId, platform, handle, status and whether one needs reconnecting. Call before postVideo or schedulePost to find the accountIds the user means. The user connects and reconnects accounts on the Accounts page (/accounts); no tool does that.", inputSchema: z.object({}), execute: async () => {
+      const accounts = await ctx.runQuery(internal.assistantPosting.accounts, { ownerId: run.ownerId }) as unknown[];
+      return { accounts, ...(accounts.length ? {} : { next: 'No account is connected. The user connects one on the Accounts page (/accounts); then posting is possible.' }) };
+    } }),
+    postVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.postVideo, description: `${POST_RULE} Post one or more clips (timeline tabs of this project) to one or more of the user's connected accounts now: one post per clip per account. ${POST_FLOW}`, inputSchema: z.object(POST_INPUT).strict(), execute: async (_ctx, input) => sendPosts(input, undefined) }),
+    schedulePost: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.schedulePost, description: `${POST_RULE} Schedule one or more clips (timeline tabs of this project) to one or more of the user's connected accounts at a later time: one post per clip per account, shown on the Posts page. Each clip is exported right away so the file is ready, and sent at the time. If the clip is edited afterwards the scheduled post still sends the confirmed version (getPost marks it outdated). ${POST_FLOW}`, inputSchema: z.object({ ...POST_INPUT, scheduledAt: z.string().describe('When to post: ISO 8601 with a UTC offset, e.g. 2026-11-14T18:00:00-05:00. In the future, within 90 days.') }).strict(), execute: async (_ctx, { scheduledAt, ...input }) => {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAt) || !Number.isFinite(Date.parse(scheduledAt))) throw new Error('scheduledAt must be an ISO 8601 time with a UTC offset, such as 2026-11-14T18:00:00-05:00 or 2026-11-14T23:00:00Z.');
+      return sendPosts(input, Date.parse(scheduledAt));
+    } }),
+    listPosts: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listPosts, description: "The user's recent posts, newest first, each with a postId: exporting (with progress), scheduled, posting, published (with the platform link and stats once reported) or failed (with the reason). allProjects: true lists posts of every project, otherwise this project's. Read-only.", inputSchema: z.object({ status: z.enum(['exporting', 'scheduled', 'posting', 'published', 'failed']).optional(), allProjects: z.boolean().optional(), limit: z.number().int().min(1).max(50).optional() }).strict(), execute: async (_ctx, input) => {
+      const posts = await ctx.runQuery(internal.assistantPosting.list, { ownerId: run.ownerId, ...(input.allProjects ? {} : { projectId: run.projectId }), ...(input.status ? { status: input.status } : {}), limit: input.limit ?? 20 }) as unknown[];
+      return { posts, ...(posts.length ? {} : { note: 'No posts match.' }) };
+    } }),
+    getPost: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getPost, description: "One post by its postId (from postVideo, schedulePost or listPosts): whether it is exporting (with progress), scheduled, posting, published (with the link and stats) or failed (with the reason). Use it to answer whether something is posted yet. Read-only.", inputSchema: z.object({ postId: z.string().min(1) }).strict(), execute: async (_ctx, { postId }) => ctx.runQuery(internal.assistantPosting.get, { ownerId: run.ownerId, postId }) }),
+    cancelScheduledPost: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.cancelScheduledPost, description: "Cancel a post that has not been sent, when the user asks: a scheduled post, or a clip still exporting for a post. A post that already started or was published cannot be cancelled or deleted from Revline.", inputSchema: z.object({ postId: z.string().min(1) }).strict(), execute: async (_ctx, { postId }) => posting(() => ctx.runMutation(internal.assistantPosting.cancel, { ...run, postId })) }),
+    reschedulePost: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reschedulePost, description: "Move a post that has not been sent to another time, when the user asks. The accounts, caption and clip version stay as confirmed.", inputSchema: z.object({ postId: z.string().min(1), scheduledAt: z.string().describe('The new time: ISO 8601 with a UTC offset, e.g. 2026-11-14T18:00:00-05:00. In the future, within 90 days.') }).strict(), execute: async (_ctx, { postId, scheduledAt }) => {
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})$/.test(scheduledAt) || !Number.isFinite(Date.parse(scheduledAt))) throw new Error('scheduledAt must be an ISO 8601 time with a UTC offset, such as 2026-11-14T18:00:00-05:00 or 2026-11-14T23:00:00Z.');
+      return posting(() => ctx.runMutation(internal.assistantPosting.reschedule, { ...run, postId, scheduledAt: Date.parse(scheduledAt) }));
     } }),
 
     planEffects:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.planEffects,description:"Not for simple edits whose result is known from their settings: fades, crossfades or dissolves built from existing footage, opacity, volume, cuts, trims, moves, crops, layout and split screens. Apply those directly; never plan or previewRender them. Before an authorized effect or creative styling edit whose look must be judged (zoom punches, footage or texture effects, text looks), record one to eight concrete expectations: purpose, actual supported strength, timeline window/peak and anchor. Derive acceptance criteria from the current user request and decoded evidence; do not add new creative requirements. Subject readability means the requested object remains recognizable, not that fine print becomes legible unless the user explicitly asks for that. Describe the observed action literally: a hand-held object moving through the air is not evidence of unsupported free flight. If the requested opening is ambiguous, inspect it before claiming a hover or release. For observed action, use an evidenceId returned by this run's inspectVideo mapped match; never invent an impact. Markers and cuts must still exist. Requested-time anchors are for explicit requested timing. Include targetClipId for existing footage/text. No timeline edits, no approval question. Long looks can be reviewed in a short sample window. Calls add or update plans by ID and retain other plans and their output links, up to eight per run. Use a separate timed plan for each FX pulse with its actual start and full duration. Reviewed expectations stay fixed; other plans can still be corrected. To attach an output for review, pass previewRender bindings instead of rewriting the plan.",inputSchema:z.object({plans:z.array(effectPlanInput).min(1).max(8)}),execute:async(_ctx,{plans})=>{
