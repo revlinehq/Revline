@@ -31,7 +31,12 @@
 .settings-avatar[data-slot=avatar]::after { border: 0; }
 .settings-avatar [data-slot=avatar-fallback] { background: var(--dash-pill); color: var(--dash-text); }
 .settings-page { --ws-border: var(--dash-divider); --ws-input: var(--dash-tile); --ws-muted: var(--dash-muted); --ws-faint: var(--dash-muted); --ws-text: var(--dash-text); }
-.settings-page .mcp-connections li:first-child { border-top: 1px solid var(--dash-divider); }
+/* Settings keeps one hairline per card, under its head. The card's surface marks its edge, and spacing separates rows. */
+.settings-page [data-slot=card][data-variant=dash] { border-color: transparent; }
+.settings-page :is(.dash-list-row, .dash-list-body) { border-top-color: transparent; }
+.settings-page .dash-list-head + :is(.dash-list-row, .dash-list-body) { border-top-color: var(--dash-divider); }
+.settings-page .mcp-connections li { border-top: 0; }
+.settings-page .mcp-copy-field > code { border-color: transparent; }
 
 /* The quiet "more" button and its menu. */
 .dash-more[data-slot=button] { width: 32px; height: 32px; flex-shrink: 0; border-radius: 9999px; color: var(--dash-muted); }
