@@ -1,7 +1,7 @@
 @import '../ui/brand-colors.css';
 .revline-brand{display:inline-flex;align-items:center;gap:9px;font-family:var(--font-inter),Inter,sans-serif;font-size:17px;font-weight:600;line-height:1.4;color:var(--ws-text,#292929)}
 .revline-mark{width:26px;height:26px;flex-shrink:0;color:var(--ws-logo,#0c1424)}
-.revline-primary[data-slot=button]{--primary:var(--revline-primary-background);--primary-foreground:#fff}
+.revline-primary[data-slot=button]{--primary:var(--revline-primary-background);--primary-foreground:#fff;box-shadow:var(--dash-accent-inset)}
 .revline-primary .filled-play-icon{width:14px;height:14px}
 .edit-composer{position:relative;width:100%;display:flex;flex-direction:column;gap:6px}
 .edit-composer[data-appearance=raised] .composer-input-group,

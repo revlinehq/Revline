@@ -12,8 +12,9 @@
   --dash-pill-hover: #333333;
   --dash-pill-quiet: #1E1E1E;
   --dash-row-active: #1F1F1F;
-  --dash-accent: #3960E8;
-  --dash-accent-highlight: rgb(110, 150, 255);
+  --dash-accent: #7C3AED;
+  /* The white edge drawn inside a filled accent button: a bright line along the top and a faint ring. */
+  --dash-accent-inset: inset 0 1px 0 #FFFFFF66, inset 0 0 0 1px #FFFFFF1F;
   --dash-green: #22C55E;
   --dash-text: #F5F5F5;
   --dash-text-soft: #D6D6D6;
@@ -59,11 +60,11 @@
 }
 :root:has(.dash-theme) body { background: var(--dash-page); font-family: var(--font-inter), sans-serif; }
 
-/* Primary button: <Button variant="primary">. A 36px full pill, accent fill with a soft highlight on the top edge. */
+/* Primary button: <Button variant="primary">. A 36px full pill, purple fill with a white inner edge. */
 [data-slot=button][data-variant=primary] {
   height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: 9999px;
   color: #fff; font-size: 14px; font-weight: 500;
-  background: radial-gradient(ellipse 50% 64% at 50% 0%, var(--dash-accent-highlight), transparent), var(--dash-accent);
+  background: var(--dash-accent); box-shadow: var(--dash-accent-inset);
 }
 [data-slot=button][data-variant=primary]:hover { filter: brightness(1.08); }
 [data-slot=button][data-variant=primary][data-size^=icon] { width: 36px; padding: 0; }
