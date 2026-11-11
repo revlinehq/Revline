@@ -1,6 +1,7 @@
 import { createStore } from 'zustand/vanilla';
 import { normalizeTimeline, type Timeline } from './types';
 import { reconcileTransitionEdits } from './clip-transitions';
+import { snapTimelineToFrames } from './frame-grid';
 import { equalTimelineValue } from './timeline-equality';
 import { LOCAL_UNDO_LIMIT } from './timeline-history-key';
 import { readStoredPreference, writeStoredPreference } from '@/lib/stored-preference';
@@ -38,7 +39,8 @@ export function createEditorStore(timeline: Timeline, history: Timeline[] = []) 
     timeline, history: history.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline), future: [], selectedId: null, selectedIds:[], playhead: 0, playing: false, muted: false, zoom: 1, snapping: true, ripple: savedRipple(), tool:'select', compactTracks:'auto',timelineCollapsed:true,scrubbing:false,
     beginUndoGroup: key => { if (undoGroup?.key !== key) undoGroup = { key, recorded: false }; },
     endUndoGroup: () => { undoGroup = null; },
-    edit: input => { const next=reconcileTransitionEdits(get().timeline,normalizeTimeline(input)); const grouped=undoGroup?.recorded; if(undoGroup)undoGroup.recorded=true; set(s => ({ timeline: next, history: grouped ? s.history : [...s.history.slice(1-LOCAL_UNDO_LIMIT), s.timeline], future: [],...selectionFor(next,s) })); },
+    // A gesture writes the timeline: its cuts land on the frame grid here (lib/editor/frame-grid.ts).
+    edit: input => { const next=snapTimelineToFrames(reconcileTransitionEdits(get().timeline,normalizeTimeline(input)),undefined,get().timeline).timeline; const grouped=undoGroup?.recorded; if(undoGroup)undoGroup.recorded=true; set(s => ({ timeline: next, history: grouped ? s.history : [...s.history.slice(1-LOCAL_UNDO_LIMIT), s.timeline], future: [],...selectionFor(next,s) })); },
     // Remote snapshots carry the server's undo groups, rather than one entry per streamed tool call.
     replace: (input, remember = false) => { const current=get().timeline, normalized=normalizeTimeline(input), next=equalTimelineValue(current,normalized)?current:normalized; set(s => ({ timeline: next,...selectionFor(next,s), ...(Array.isArray(remember) ? {history:remember.slice(-LOCAL_UNDO_LIMIT).map(normalizeTimeline),future:[]} : remember && next!==current ? { history: [...s.history.slice(1-LOCAL_UNDO_LIMIT), s.timeline], future: [] } : {}) })); },
     recover: input => { undoGroup=null;const next=normalizeTimeline(input); set({ timeline: next, history: [], future: [], selectedId: null, selectedIds:[] }); },

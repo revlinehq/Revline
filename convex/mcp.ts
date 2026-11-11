@@ -12,6 +12,7 @@ import { requireEditorAccess } from './lib/billing_access';
 import { syncProjectAgent, projectIdentity, projectRunContext, writeRunState, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
 import { renderedFrameTime, timelineDuration, type Timeline } from '../lib/editor/types';
+import { MAX_SHEET_FRAMES } from '../lib/ai/frame-sampling';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { aspectRatio, frameResolution } from './schema';
 import { beginProjectDeletion, copyMediaFor, createProjectFor, duplicateProjectFor, listProjectsFor, renameProjectFor } from './projects';
@@ -224,7 +225,7 @@ export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.s
 /** Render up to six timeline frames as export would; the worker answers within seconds. With pacing, it instead
  * samples the range at pacing.fps and returns measurements of its motion (checkPacing), not images; with sound, it
  * decodes the range's mix (getSound) and, for a check, matches its sound effects to picture changes (checkSound). */
-export const requestFrames = internalMutation({ args: { resolution:v.optional(frameResolution), ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
+export const requestFrames = internalMutation({ args: { sheet: v.optional(v.boolean()), resolution:v.optional(frameResolution), ownerId: v.string(), projectId: v.string(), times: v.array(v.number()), clipCheck:v.optional(clipCheckRequestValidator), normalization:v.optional(normalizationRequestValidator), sourceSnapshotId: v.optional(v.id('frameSnapshots')), timelineId: v.optional(v.string()), runId: v.optional(v.string()), pacing: v.optional(pacingRequestValidator), sound: v.optional(soundRequestValidator), revision: v.optional(v.number()) }, returns: v.id('frameSnapshots'), handler: async (ctx, args) => {
   await requireEditorAccess(ctx, args.ownerId);
   if(args.resolution===1080&&(args.times.length!==1||args.clipCheck||args.normalization||args.sourceSnapshotId||args.pacing||args.sound))throw new ConvexError('1080p inspection accepts one composited frame per call.');
   const project = await requireProject(ctx, projectIdOf(ctx, args.projectId), args.ownerId, false);
@@ -259,17 +260,19 @@ export const requestFrames = internalMutation({ args: { resolution:v.optional(fr
     const late = args.times.find(time => Number.isFinite(time) && time > duration);
     // Say which time is wrong and what the last frame is, so the caller can correct the request instead of repeating it.
     if (late !== undefined) throw new ConvexError(`Frame time ${round(late)} s is past the end of this timeline: it is ${round(duration)} s long and its last frame is at ${round(last)} s. Ask for times from 0 to ${round(last)} s.`);
-    if (!args.times.length || args.times.length > 6 || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError(`Choose 1 to 6 times between 0 and ${round(last)} seconds.`);
+    if (!args.times.length || args.times.length > (args.sheet ? MAX_SHEET_FRAMES : 6) || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError(`Choose 1 to ${args.sheet ? MAX_SHEET_FRAMES : 6} times between 0 and ${round(last)} seconds.`);
   }
   const frozen = timeline;
+  // One contact sheet instead of a frame per time: only for plain multi-frame looks.
+  const sheet = !!args.sheet && args.times.length > 1 && !args.resolution && !args.clipCheck && !normalization && !pacing && !sound;
   const snapshotRevision = source?.atRevision ?? source?.revision ?? (pacing || sound ? revision : undefined) ?? project.revision ?? 0;
   const tab = source?.timelineId ?? other ?? activeTabOf(project);
   const cacheIdentity = !normalization && !pacing && !sound ? await cacheHash({ timelineId: tab, revision: source?.atRevision ?? source?.revision ?? revision ?? snapshotRevision, timeline: frozen, resolution: args.resolution ?? 720, format: 'jpeg', quality: 'bounded-frame-budget' }) : undefined;
-  const key = cacheIdentity && !args.clipCheck ? await frameCacheKey({ownerId:args.ownerId,projectId:project._id},snapshotResultDescriptor(cacheIdentity,args.times)) : undefined;
+  const key = cacheIdentity && !args.clipCheck ? await frameCacheKey({ownerId:args.ownerId,projectId:project._id},snapshotResultDescriptor(cacheIdentity,args.times,sheet)) : undefined;
   const cached = key ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',key)).unique() : null;
   const hit = cached?.ready && (cached.expiresAt ?? 0) > Date.now() ? cached : null;
   if (!hit) await requireMediaTaskCapacity(ctx, args.ownerId, 1);
-  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
+  const snapshotId = await ctx.db.insert('frameSnapshots', { ...(sheet?{sheet:true}:{}), ...(args.resolution?{resolution:args.resolution}:{}), ...(cacheIdentity ? {cacheIdentity,...(args.clipCheck?{sourceTimeline:frozen}:{})} : {sourceTimeline:frozen}), ...(hit ? {resultR2Key:hit.r2Key} : {}), projectId: project._id, ownerId: args.ownerId, revision: snapshotRevision, times: args.clipCheck || normalization || pacing || sound ? [] : args.times, status: hit ? 'completed' : 'queued', createdAt: Date.now(), timelineId: tab, ...(drafted && !past && !source ? { runId: args.runId } : {}), ...(pacing ? { pacing } : {}), ...(sound ? { sound } : {}), ...(normalization ? {normalization} : {}), ...(args.clipCheck?{clipCheck:args.clipCheck}:{}), ...(past ? { atRevision: revision } : {}) });
   if (cacheIdentity) await ctx.db.insert('frameSnapshotPayloads',{snapshotId,projectId:project._id,timeline:frozen});
   const taskId = hit ? undefined : await enqueueMediaTask(ctx, { ownerId: args.ownerId, projectId: project._id, kind: 'snapshot', snapshotId });
   if (taskId) await ctx.db.patch(snapshotId, { taskId });

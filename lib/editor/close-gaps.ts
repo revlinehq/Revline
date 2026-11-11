@@ -4,13 +4,15 @@ import { reconcileTransitionEdits } from './clip-transitions';
 const media = (clip: Clip) => clip.kind === 'video' || clip.kind === 'image';
 const overlaps = (a: Clip, b: Clip) => a.start < b.start + b.duration - 1e-6 && b.start < a.start + a.duration - 1e-6;
 
-/** Close footage gaps without changing retained source ranges or linked audio sync. */
-export function closeFootageGaps(timeline: Timeline, selectedIds: readonly string[] = []): Timeline {
+/** Close footage gaps without changing retained source ranges or linked audio sync: every gap on every
+ * visual layer in one change (also gaps shorter than a frame), or only between the selected clips. */
+export function closeFootageGaps(timeline: Timeline, selectedIds: readonly string[] = [], onlyTracks?: readonly number[]): Timeline {
   const selected = new Set(selectedIds);
   for (const clip of timeline.clips) if (clip.kind === 'audio' && selected.has(clip.id) && clip.linkedClipId) selected.add(clip.linkedClipId);
   const selectedMedia = timeline.clips.filter(clip => media(clip) && selected.has(clip.id));
   const selectionOnly = selectedMedia.length > 1;
-  const tracks = new Set(timeline.clips.filter(clip => media(clip) && (!selectionOnly || selected.has(clip.id))).map(trackOf));
+  // `onlyTracks` keeps the join to the named layers: sparse overlay layers are placed by time and must not be packed.
+  const tracks = new Set(timeline.clips.filter(clip => media(clip) && (!selectionOnly || selected.has(clip.id))).map(trackOf).filter(track => selectionOnly || !onlyTracks || onlyTracks.includes(track)));
   const offsets = new Map<string, number>();
   const byId = new Map(timeline.clips.map(clip => [clip.id, clip]));
   for (const track of tracks) {

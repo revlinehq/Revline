@@ -5,30 +5,39 @@ import { internal } from '../_generated/api';
 import type { Doc } from '../_generated/dataModel';
 import { LANES, type LaneId } from '../../lib/ai/lanes';
 import {
-  changedFrameTimes,
+  finishFrameBudget,
+  finishLookSpots,
+  touchedKinds,
+  FINISH_FRAMES_PER_TASK,
+  type FinishLookSpot,
   LaneFinishError,
   MAX_FINISH_ATTEMPTS,
 } from '../../lib/ai/lanes/task';
+import { footageGaps } from '../../lib/editor/frame-grid';
+import { mainFootageTrack } from '../../lib/editor/shot-edits';
+import { layerGroup, trackOf } from '../../lib/editor/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { renderedFrameTime, type Timeline } from '../../lib/editor/types';
-import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
+import type { Timeline } from '../../lib/editor/types';
+import { fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
+import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { MAX_SHEET_FRAMES } from '../../lib/ai/frame-sampling';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
 export type FinishResult = NonNullable<LaneTask['result']>;
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
-  return new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${failures}`);
+  return new LaneFinishError(`The ${lane} task stopped because its finish check kept failing with nothing fixed in between: ${failures}`);
 }
 type Render = (
   times: number[],
   revision?: number,
   timelineId?: string,
-) => Promise<{ revision: number; frames: { time: number; image: string }[] }>;
+) => Promise<{ revision: number; sheet?: string; frames: { time: number; image: string }[] }>;
 
 /** Executes real checks; finish takes no model-provided scores, counts or acceptance flags. */
 export async function finishLane(
@@ -43,6 +52,10 @@ export async function finishLane(
     staged: boolean;
     /** The reel lane's pending sampled frames, passed only for its standard (sample) recipe. */
     fastFrameTimes?: number[];
+    /** Told which frames finish drew for the current tab, and why, so the caller can hand them back as its look. */
+    looked?: (spots: FinishLookSpot[]) => void;
+    /** What the frame grid closed just before this check (sub-frame gaps and overlaps): reported, never a failure. */
+    healed?: string[];
     clipping?: () => Promise<{
       required: boolean;
       passed: boolean;
@@ -63,9 +76,17 @@ export async function finishLane(
   if (task.attempts >= MAX_FINISH_ATTEMPTS && task.result) return task.result;
   const fingerprint = await timelineHistoryKey(timeline),
     failures: string[] = [],
-    warnings: string[] = [];
-  if (task.lane === 'reel') {
-    failures.push(...reelCaptionFailures(timeline, assets));
+    warnings: string[] = [],
+    // The one call that repairs a whole class of failure, and whether every failure has one.
+    fixes: string[] = [];
+  let unfixable = 0;
+  const seconds = (value: number) => `${Math.round(value * 1000) / 1000}`;
+  // finish scales to the change. A request that only added a header, restyled a text or changed a volume is not
+  // held to the cut's script, its edge looks or its caption sync again: those belong to footage and captions it
+  // never touched. The timeline data checks below (gaps, overlaps, missing media) always run; they cost nothing.
+  const touched = await touchedKinds(timeline, task.baselines.find((item) => item.timelineId === timelineId));
+  if (task.lane === 'reel' && (touched.footage || touched.captions)) failures.push(...reelCaptionFailures(timeline, assets));
+  if (task.lane === 'reel' && touched.footage) {
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
     failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
     // Eyes: the first and last frame must be clean or looked at; other flagged edges are reported.
@@ -139,10 +160,15 @@ export async function finishLane(
       failures.push(
         `${prefix}Missing source media: ${summary.missingAssetRefs.map((item) => item.clipId).join(', ')}.`,
       );
-    if (summary.overlapCount)
+    if (summary.overlapCount) {
+      // Every collision in one result, with the clips and times: timeline data proves it, no frames needed.
+      const label = (group: string, track: number) => `${group === 'effects' ? 'FX' : group === 'audio' ? 'A' : 'V'}${track}`;
       failures.push(
-        `${prefix}Resolve ${summary.overlapCount} same-layer collisions.`,
+        `${prefix}Resolve ${summary.overlapCount} same-layer collision${summary.overlapCount === 1 ? '' : 's'}: ${summary.overlaps.slice(0, 40).map((item) => `${item.clipIds.join(' and ')} on ${label(item.group, item.track)} at ${seconds(item.start)}–${seconds(item.end)} s`).join('; ')}${summary.overlapsTruncated || summary.overlaps.length > 40 ? '; and more' : ''}.`,
       );
+      fixes.push(`${prefix}For each colliding pair move one clip to a free layer or time (moveClips takes several clips in one call), or trim the earlier clip to end where the later one starts.`);
+      unfixable++;
+    }
     // The length the user asked for is part of the request; a /clip batch has its own per-clip length rules.
     const lengthFailure = tab.timelineId === timelineId && task.lane !== 'clip' ? requestedLengthFailure(task.requestedLength, summary.duration, tab.timeline.fps) : undefined;
     if (lengthFailure) failures.push(lengthFailure);
@@ -154,10 +180,32 @@ export async function finishLane(
             gap.end <= old.end + 1 / tab.timeline!.fps,
         ),
     );
-    if (newGaps.length)
-      failures.push(
-        `${prefix}New uncovered visual ranges: ${newGaps.map((gap) => `${gap.start.toFixed(2)}–${gap.end.toFixed(2)}s`).join(', ')}.`,
-      );
+    // A gap shorter than a frame is a rounding artefact between frames: it never fails a check. It closes with the
+    // next edit of this timeline, which puts every cut on the frame grid.
+    const artefacts = newGaps.filter((gap) => gap.end - gap.start < 1 / tab.timeline!.fps - 1e-6);
+    if (artefacts.length) { warnings.push(`${prefix}${artefacts.length} gap${artefacts.length === 1 ? '' : 's'} shorter than a frame at ${artefacts.map((gap) => `${seconds(gap.start)} s`).join(', ')}: rounding artefacts, not failures; the next edit closes them.`); newGaps.splice(0, newGaps.length, ...newGaps.filter((gap) => !artefacts.includes(gap))); }
+    if (newGaps.length) {
+      // All of them at once, with exact times and the clips either side, and the one call that closes them.
+      const fps = tab.timeline.fps, between = footageGaps(tab.timeline), mainTrack = mainFootageTrack(tab.timeline);
+      const footage = tab.timeline.clips.filter((clip) => layerGroup(clip.kind) === 'visual');
+      const described = newGaps.map((gap) => {
+        // The layer whose own hole this is: the tightest footage gap around it, the main footage layer first.
+        const cut = between.filter((item) => item.start <= gap.start + 1e-6 && item.end >= gap.end - 1e-6).sort((a, b) => (a.end - a.start) - (b.end - b.start) || (a.track === mainTrack ? -1 : b.track === mainTrack ? 1 : 0))[0];
+        const frames = Math.round((gap.end - gap.start) * fps);
+        return { cut, text: `${seconds(gap.start)}–${seconds(gap.end)} s (${frames} frame${frames === 1 ? '' : 's'}${cut ? `, ${cut.afterClipId ? `after ${cut.afterClipId} ` : ''}before ${cut.beforeClipId} on V${cut.track}` : ''})` };
+      });
+      failures.push(`${prefix}${newGaps.length} new uncovered visual range${newGaps.length === 1 ? '' : 's'}: ${described.map((item) => item.text).join(', ')}.`);
+      // closeGaps joins the main footage layer. A hole in front of an overlay on another layer is closed by moving
+      // or removing that overlay, never by packing its layer.
+      const closable = described.filter((item) => item.cut?.track === mainTrack).length, rest = described.length - closable;
+      if (closable) fixes.push(`${prefix}closeGaps with no arguments closes ${closable === 1 ? 'this gap' : `all ${closable} of these gaps`} on V${mainTrack} in ONE call (later footage on that layer moves earlier with its linked audio; overlays stay put). Do not close them one at a time.`);
+      if (rest) {
+        // Nothing follows on a footage layer: the picture ends while other clips run on.
+        const last = Math.max(0, ...footage.filter((clip) => ['video', 'image', 'solid'].includes(clip.kind) && (mainTrack === undefined || trackOf(clip) === mainTrack)).map((clip) => clip.start + clip.duration));
+        const beyond = tab.timeline.clips.filter((clip) => clip.start + clip.duration > last + 1e-6).slice(0, 12).map((clip) => `${clip.id} (${clip.kind}, ${layerGroup(clip.kind) === 'audio' ? 'A' : layerGroup(clip.kind) === 'effects' ? 'FX' : 'V'}${trackOf(clip)}, ends ${seconds(clip.start + clip.duration)} s)`);
+        fixes.push(`${prefix}The main footage${mainTrack === undefined ? '' : ` (V${mainTrack})`} ends at ${seconds(last)} s. ${beyond.length ? `These clips run past it: ${beyond.join(', ')}. In ONE call move them earlier with moveClips (an overlay left behind by a ripple moves by the same time the footage moved), trim them with trim edits, or delete them` : 'Extend the footage or shorten what runs past it'}.`);
+      }
+    }
     try {
       await ctx.runMutation(internal.lanes.validate, {
         ownerId: run.ownerId,
@@ -174,43 +222,40 @@ export async function finishLane(
       if (newClipTab) failures.push(`${prefix}This clip is ${summary.duration.toFixed(2)}s; a clip must be 15–60 s. Lengthen or shorten its source range, or tell the user the range they gave is outside the clip length.`);
       else warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
     }
-    // Clip-lane checks never render frames.
+    // Clip-lane checks never render frames. Other lanes render a few, on a hard budget (lib/ai/lanes/task.ts): the
+    // frames only confirm that what this request changed draws. Gaps, overlaps, slivers, lengths, linked audio and
+    // every caption check are read from the timeline data, never from pixels, and nothing is asked of the caller.
     if (!cheapClip && !failures.length && summary.clipCount && summary.duration > 0) {
-      const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
-      const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
-      // Every sample is a frame this tab can draw: a time queued against a longer, discarded draft would be refused forever.
-      const drawable = (time: number) => renderedFrameTime(time, summary.duration, tab.timeline!.fps);
-      const times = [...new Set((fastTimes ?? (baseline
-        ? await changedFrameTimes(tab.timeline, baseline)
-        : [0, summary.duration / 2])).map(drawable))];
-      // A plain reel at the standard level reuses its pending queue; other paths retain the rendered finish check.
-      if (!times.length && fastTimes === undefined)
-        times.push(
-          Math.min(
-            summary.duration / 2,
-            Math.max(0, summary.duration - 1 / tab.timeline.fps),
-          ),
-        );
-      try {
-        for (let index = 0; index < times.length; index += 4) {
-          const batch = times.slice(index, index + 4),
+      const looked = [...task.evidence].reverse().find((item) => item.tool === 'finishLook' && item.timelineId === tab.timelineId)?.output as { used?: number; seen?: string[] } | undefined;
+      const used = looked?.used ?? 0, seen = looked?.seen ?? [];
+      const budget = Math.max(0, Math.min(finishFrameBudget(task.lane, taskCheckLevel(task)), FINISH_FRAMES_PER_TASK - used));
+      const plan = await finishLookSpots(tab.timeline, baseline, budget, new Set(seen));
+      const times = plan.spots.map((spot) => spot.time);
+      if (!times.length && plan.keys.length === 0 && used >= FINISH_FRAMES_PER_TASK) warnings.push(`${prefix}This request has used its ${FINISH_FRAMES_PER_TASK} finish frames; this check passed on timeline data alone.`);
+      if (times.length) try {
+        // One call, one contact sheet: the budget never exceeds a sheet.
+        for (let index = 0; index < times.length; index += MAX_SHEET_FRAMES) {
+          const batch = times.slice(index, index + MAX_SHEET_FRAMES),
             rendered = await options.render(batch, undefined, tab.timelineId);
           if (
             rendered.frames.length !== batch.length ||
-            rendered.frames.some((frame) => !frame.image)
+            (!rendered.sheet && rendered.frames.some((frame) => !frame.image))
           )
             throw new Error('Changed-range rendering returned missing frames.');
-          if (pendingReview) {
-            pendingReview.reviewed(rendered.frames.map(frame => frame.time), tab.timeline);
-            await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, pendingReview.times()) });
-          }
         }
+        if (tab.timelineId === timelineId) options.looked?.(plan.spots);
+        // What was looked at is recorded, so a later finish of this request draws only what changed after it.
+        await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: { tool: 'finishLook', timelineId: tab.timelineId, fingerprint: '', input: {}, output: { used: used + times.length, seen: [...seen, ...plan.keys].slice(-600) } } });
+        if (options.fastFrameTimes !== undefined && tab.timelineId === timelineId) await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, []) });
       } catch (error) {
         failures.push(
           `${prefix}Changed ranges did not render: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
     }
+    // Captions are checked from data: timing, overlap, reading speed, line length, position and style. Advice only:
+    // it comes back with a pass and spends no attempt. (The reel lane's word and sync check above is the blocking one.)
+    if (task.lane !== 'clip' && (tab.timelineId !== timelineId || touched.captions)) warnings.push(...captionAdvice(tab.timeline).map((line) => prefix + line));
     if (task.lane !== 'clip') {
       const context = {
         timeline: tab.timeline,
@@ -259,6 +304,9 @@ export async function finishLane(
     timelineId,
     ...(finalCheckKey ? { checkKey: finalCheckKey } : {}),
     ...(warnings.length ? { warnings: [...new Set(warnings)] } : {}),
+    ...(options.healed?.length ? { healed: options.healed } : {}),
+    // A failed check the caller can act on in one step: the single call per problem, and what to expect after it.
+    ...(failures.length && fixes.length ? { fixes: [...new Set(fixes)], rerun: fixes.length >= new Set(failures).size && !unfixable ? 'After these calls finish is expected to pass.' : 'These calls repair the listed timeline problems; the other failures need their own repair before finish passes.' } : {}),
   };
   return ctx.runMutation(internal.lanes.recordFinish, { ...scope, result });
 }

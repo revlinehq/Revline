@@ -10,7 +10,7 @@ A good result keeps the face clear, shows one title at a time in step with the w
 1. Check what overrides the house defaults (see Rules) before choosing colors and fonts.
 2. Key each title to its word in the transcript (inspectAssetAnalysis) and add it with addGraphic; style it with applyTextLook, setTextStyle or applyTextTemplate.
 3. Place titles in the lower third or in the free half of a split screen (applyLayout), never over the face.
-4. Verify the rendered result with getFrames.
+4. Call finish and look at the frames it returns; use getFrames only for a spot that looks wrong.
 
 ## Defaults
 

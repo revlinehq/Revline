@@ -1,10 +1,9 @@
-import { refineTranscriptWithAudioActivity } from '../media-analysis/audio-activity';
 import { readTranscript } from '../media-analysis/transcript';
 import { applyMirrorBlurLayout, foldMirrorBlurStacks, stackedMirrorCopies, stackedMirrorCopyIds } from './mirror-blur-layout';
 import { patchClip, placeOnFreeLayer } from './operations';
 import { playbackRateOf } from './playback-rate';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
-import { captionClipsFromTranscript } from './transcript-captions';
+import { captionSpeech, sourceCaptions } from './transcript-captions';
 import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 
 /**
@@ -69,8 +68,7 @@ export function subtitlesFromTranscripts(timeline: Timeline, sources: readonly M
     // A loaded asset carries its transcript in transport form (long word lists arrive in chunks).
     const raw = asset.analysis?.transcript && readTranscript(asset.analysis.transcript);
     if (!raw || (!raw.words.length && !raw.segments.length)) return [];
-    const transcript = asset.analysis?.audioActivity ? refineTranscriptWithAudioActivity(raw, asset.analysis.audioActivity) : raw;
-    return timeline.clips.filter(clip => clip.assetId === asset._id && !copies.has(clip.id)).flatMap(clip => captionClipsFromTranscript(clip, transcript, timeline.fps, createId, karaoke ? 'clipper' : 'minimal'));
+    return sourceCaptions(timeline.clips.filter(clip => clip.assetId === asset._id && !copies.has(clip.id)), captionSpeech({ ...asset.analysis, transcript: raw })!, timeline.fps, createId, karaoke ? 'clipper' : 'minimal');
   }).map(clip => ({
     ...clip, ...look,
     ...(karaoke && clip.textTemplate ? { textTemplate: { ...clip.textTemplate, highlightColor: karaoke.highlightColor, karaokeStyle: karaoke.karaokeStyle } } : {}),
