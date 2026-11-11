@@ -1,0 +1,2 @@
+- Landing: the hero has one wider start button and no repeated credit line, the navbar lines up with the 1200px page column, and FAQ answers start closed. Why: the founder asked for each; the hero had two actions.
+- Landing: screenshots and product blocks sit in card frames, and the editor shot shows real gameplay. Why: the founder said the dark screenshots melted into the page.
