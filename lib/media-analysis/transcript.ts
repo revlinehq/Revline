@@ -20,10 +20,12 @@ export function readTranscript(transcript: Transcript): Transcript {
 export function materializeTranscript<T extends {analysis?:{transcript?:Transcript}}>(asset:T):T {
   return asset.analysis?.transcript?{...asset,analysis:{...asset.analysis,transcript:readTranscript(asset.analysis.transcript)}}:asset;
 }
-/** 3: Deepgram Nova-3 on the whole file, with tight word times and filler words.
+/** 4: Deepgram Nova-3 on the whole file, with tight word times and filler words, read as
+ * English when language detection picked another language with less confidence.
+ * 3 trusted the detected language, so noisy English came back as foreign words or none.
  * Whisper transcripts (1, 2) stretched word times over fillers and pauses, so cuts
- * landed mid-word; those transcripts are redone. */
-export const TRANSCRIPT_VERSION = 3;
+ * landed mid-word. Older transcripts are redone the next time the source is read. */
+export const TRANSCRIPT_VERSION = 4;
 export const currentTranscript = (transcript?: { version?: number } | null) => transcript?.version === TRANSCRIPT_VERSION;
 const contentSchema = z.object({ text: z.string().optional(), annotations: z.array(z.unknown()).optional() });
 const interactionSchema = z.object({ output_text: z.string().optional(), outputs: z.array(contentSchema).optional(), steps: z.array(z.object({ type: z.string().optional(), content: z.array(contentSchema).optional() })).optional() });

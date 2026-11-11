@@ -21,19 +21,20 @@ import { openAITokenCounter } from '../../lib/ai/openai-token-count';
 import { AssistantTokenBudget, editorTokenLimits, AssistantTokenBudgetError, editorTokenBudgetEnabled } from "../../lib/ai/token-budget";
 import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
+import { StepTimer } from '../../lib/ai/step-timing';
 import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
 import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
-import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, type ClaudeModelSelection } from "../../lib/ai/claude-model";
+import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, editorToolChoice, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
 import { type ObjectType } from "convex/values";
 import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, repeatedToolFailure, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
@@ -53,6 +54,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     record => ctx.runMutation(internal.aiCosts.record, { projectId: args.projectId, runId: args.runId,threadId:args.threadId,promptMessageId:args.promptMessageId, record:{...record,key:`segment-${segment}:${record.key}`} }),
     failedWrites => console.warn(`[ai-cost] ${JSON.stringify({ event: 'history-write-failed', projectId: args.projectId, runId: args.runId, failedWrites })}`),
   );
+  const timer = new StepTimer();
   const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
     console.log(`[ai-cost] ${JSON.stringify(event)}`);
     if (!costRecordingEnabled()) return;
@@ -103,7 +105,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const recovering = recovery !== undefined || !!args.continuation;
     void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort, model: selection }).catch(() => {});
     const draft=args.continuation?await ctx.runQuery(internal.assistantTurnRecovery.draft,run):null;
-    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, segment,lane:initialLane,scriptFirst:reelRequest,taskId:args.runId,agent:selection.modelId,finishRequired:laneTask.required,laneChosen:true,capabilities:laneTask.capabilities,draft:draft?.timeline, checkLevel, pendingFastFrames: args.continuation?.pendingFastFrames, initialPlans: args.continuation && laneChecks(initialLane, checkLevel).fullTools ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
+    const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, inspectFirst: recovery !== undefined, segment,lane:initialLane,scriptFirst:reelRequest,taskId:args.runId,agent:selection.modelId,finishRequired:laneTask.required,laneChosen:true,capabilities:laneTask.capabilities,draft:draft?.timeline, checkLevel, pendingFastFrames: args.continuation?.pendingFastFrames, initialPlans: args.continuation && laneChecks(initialLane, checkLevel).fullTools ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
     session = editSession;
     const { provider, modelId } = selection;
@@ -192,15 +194,23 @@ For edit requests, use one brief initial sentence stating the requested action, 
             const activeTools=toolkit.laneFinished()?[]:toolkit.availableToolNames().filter(name=>(name!=='exportVideo'||!args.command&&exportConfirmed(currentPrompt))&&(toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name)));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
-            return {activeTools,toolChoice:toolkit.requiresFinish()&&!toolkit.laneFinished()?'required' as const:'auto' as const,messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
+            const mustCallTool=toolkit.requiresFinish()&&!toolkit.laneFinished();
+            // Claude is never forced to call a tool: Sonnet 5.5 and Opus 5.5 answer a forced tool_choice with a 400, and Haiku 5.5
+            // accepts it but skips thinking on that step. The reply gate withholds early text and the repair pass asks for finish.
+            return {activeTools,toolChoice:editorToolChoice(provider,mustCallTool),messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${mustCallTool&&provider==='anthropic'?'\nThis request has edits that finish has not passed yet. Call a tool in this step: continue the edit, or call finish. A text reply is withheld until finish passes.':''}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
           },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
           } : {}),
           onStepStart: event => { currentStep = offset + event.stepNumber; },
+          // Where the time goes: each model call and tool call, names and durations only (lib/ai/step-timing.ts).
+          onLanguageModelCallStart: event => timer.modelStart(event.callId),
+          onToolExecutionStart: event => timer.toolStart(event.toolCall.toolCallId, event.toolCall.toolName, event.toolCall.input),
+          onToolExecutionEnd: event => timer.toolEnd(event.toolCall.toolCallId, currentStep, event.toolExecutionMs, event.toolOutput.type === 'tool-error' || (event.toolOutput.type === 'tool-result' && (event.toolOutput.output as { success?: unknown } | null)?.success === false)),
           // Provider usage arrives before potentially slow analysis/tool execution.
-          onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
+          onLanguageModelCallEnd: event => { timer.modelEnd(event.callId, currentStep, event); costLog.modelCall({ ...event, stepNumber: currentStep }, progress()); },
+          // The step's timings ride on its checkpoint: no extra round trip.
+          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); const timed = timer.drain(); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames(),...(timed.length?{timings:{lane:toolkit.lane(),model:selection.modelId,effort:selection.reasoningEffort,steps:timed}}:{})}); },
           onError: ({ error }) => { streamError = error; },
           // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
           timeout: MODEL_SILENCE_LIMITS,
@@ -213,7 +223,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
         if (hasStalledReads(steps)) throw new AssistantReadLoopError();
-        if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+        { const repeated = repeatedToolFailure(steps); if (repeated) throw new AssistantToolRetryError(repeated); }
         // Reuse only server-validated review snapshots of the current visible
         // scope, including those saved before a durable continuation.
         // Plans recorded under full checks do not gate a lane that has since switched to lighter checks.
@@ -223,7 +233,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,failedLane.failures.join(' '));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
-          if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+          { const repeated = repeatedToolFailure(steps); if (repeated) throw new AssistantToolRetryError(repeated); }
           if (streamError) throw streamError;
           if (hasFailedRenderChecks(steps, reviewRequirements)) throw new AssistantRenderReviewError();
           const missingFastReview = toolkit.fastReviewFeedback();

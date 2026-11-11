@@ -80,7 +80,8 @@ export function frameSeekTime(time: number, fps: number, duration: number) {
   const frame = Math.min(lastFrame, Math.round(Math.max(0, Math.min(time, duration)) * fps));
   return frame / fps;
 }
-export function splitClip(timeline: Timeline, clipId: string, time: number, newId: string): Timeline {
+/** `minFrames` is the shortest piece a split may leave: one frame for the blade, MIN_CUT_FRAMES for the assistant's tools. */
+export function splitClip(timeline: Timeline, clipId: string, time: number, newId: string, minFrames = 1): Timeline {
   timeline = normalizeTimeline(timeline);
   const clip = timeline.clips.find(c => c.id === clipId);
   if (clip && isTransitionClip(clip)) throw new TimelineGestureRejection('Transitions connect two clips and cannot be split.');
@@ -88,13 +89,18 @@ export function splitClip(timeline: Timeline, clipId: string, time: number, newI
   if (!clip || ![time, timeline.fps, clip.start, clip.duration, clip.sourceStart, clip.start + clip.duration].every(Number.isFinite)
     || timeline.fps <= 0 || clip.start < 0 || clip.sourceStart < 0 || time <= clip.start || time >= clip.start + clip.duration) return reject();
   const frame = 1 / timeline.fps;
-  let offset = snapTime(time - clip.start, timeline.fps);
+  // The cut lands on the timeline's frame grid, also inside a clip that starts between frames.
+  let offset = Math.abs(snapTime(clip.start, timeline.fps) - clip.start) <= 1e-6 ? snapTime(time - clip.start, timeline.fps) : snapTime(time, timeline.fps) - clip.start;
   let tail = clip.duration - offset;
   // Absorb subtraction round-off at one frame, while rejecting genuinely shorter fragments.
   const roundoff = Number.EPSILON * Math.max(1, Math.abs(clip.duration), Math.abs(offset)) * 8;
   if (offset < frame - roundoff || tail < frame - roundoff) return reject();
   if (Math.abs(tail - frame) <= roundoff) { tail = frame; offset = clip.duration - tail; }
   if (Math.abs(offset - frame) <= roundoff) offset = frame;
+  if (minFrames > 1 && (offset < minFrames * frame - roundoff || tail < minFrames * frame - roundoff)) {
+    const head = offset < tail, sliver = Math.round((head ? offset : tail) * timeline.fps), edge = Math.round((head ? clip.start : clip.start + clip.duration) * 1000) / 1000;
+    throw new TimelineGestureRejection(`Nothing was split: a cut at ${Math.round(time * 1000) / 1000} s would leave a ${sliver}-frame sliver at the clip's ${head ? 'start' : 'end'} (${edge} s). A cut never leaves a piece shorter than ${minFrames} frames. Use the clip's own edge: trim or delete the clip instead.`);
+  }
   const pair = timeline.clips.find(c => c.id === clip.linkedClipId && c.linkedClipId === clip.id);
   const pairId = `${newId}-audio`;
   const next = { ...timeline, clips: timeline.clips.flatMap(c => c.id !== clipId && c.id !== pair?.id ? [c] : [

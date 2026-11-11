@@ -21,7 +21,8 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   const still = asset.kind === 'image';
   if (asset.kind !== 'video' && !still) throw new ConvexError('Choose a video or image from this project.');
   if (still && args.mode !== 'sheet') throw new ConvexError('Still images support readFrames only.');
-  if (still && args.mode === 'sheet' && (args.start !== 0 || args.end !== 0 || args.fps !== undefined || args.momentsOnly || (args.count ?? 1) !== 1)) throw new ConvexError('Read a still image with start: 0, end: 0, count: 1; it has no moving frames.');
+  // A still has one frame, whatever window, count or rate the caller named: read it instead of refusing the call.
+  if (still) args = { mode: args.mode, start: 0, end: 0, count: 1, ...(args.crop ? { crop: args.crop } : {}) };
   const duration = still ? Infinity : asset.duration ?? Infinity;
   if(args.mode==='sheet'&&args.times&&(args.times.length>30||!args.times.length||args.times.some(time=>!Number.isFinite(time)||time<args.start||time>args.end||time<0||time>duration)))throw new ConvexError('Explicit frame times must be inside the source start/end window (up to 30 stills).');
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);

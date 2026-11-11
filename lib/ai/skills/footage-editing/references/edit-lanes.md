@@ -31,16 +31,17 @@ A good edit changes only the requested range, keeps everything around it in sync
 - Story restructuring checks every changed spot. An explicit whole-video review is a full double-check.
 
 ### Local and full checks
-- **Local checks:** getFrames at each changed moment and one frame either side (`t - 1/fps`, `t`, `t + 1/fps`, within the timeline).
+- **Local checks:** call finish. It verifies gaps, overlaps, lengths, linked audio and captions from timeline data, draws the few frames it needs itself (new cuts, new overlays, one caption sample) and returns them. Use getFrames only for a spot that looks wrong; never a frame per change or per caption.
+- When a spot does need a closer look with getFrames, scan sparse, then zoom: `range` samples about one frame a second, `around` shows a few consecutive frames at one moment. Never read consecutive frames to watch a clip; the transcript and saved analysis say where to look.
 - Local checks skip full sweeps, repeated finishing passes and checkPacing.
-- **Full checks:** getFrames across every changed range, plus checkPacing or checkSound where motion, timing or sound changed.
-- Rendered checks are required for visual changes in every lane, except the plain reel cleanup above.
+- **Full checks:** finish draws up to 8 frames of what changed; add checkPacing or checkSound where motion, timing or sound changed.
+- The frames finish returns are the rendered check for visual changes in every lane.
 - Reuse loaded skills and project context.
 
 ### Footage and captions
 - Transcript reads and speech cuts follow footage-editing page `speech`.
 - Montage shot notes are one call each, by time, with no ID lookups or per-clip moves: remove a shot with delete {at, ripple:true}, swap two with swapClips {a, b}, lengthen with resizeClips {at, side:'right', delta, ripple:true}, mute with setVolume {at, volume:0}. Music and other layers keep their times; check once with inspectTimeline afterwards.
-- For other cuts, ripple the actually removed timeline intervals across affected tracks so captions, b-roll and linked audio stay in sync: trim or delete intersecting material, then batch moveClips by the shared time delta.
+- For other cuts: a trim that shortens footage on the main footage layer, and a delete of footage there, already close up (ripple is their default; the result's rippled field says what moved, ripple:false leaves the hole). Never move that layer's later clips again. Captions, b-roll and overlays on other layers keep their times: move those by the same delta in one moveClips call so they stay in sync. An edit that does leave a hole says so in gapWarning.
 - Verify with inspectTimeline: the new duration meets the target, with no gaps or orphaned captions. Gaps, overlaps and stray clips are timeline data: read them there and from finish, never by rendering frames. Frames are for what only pixels show: an awkward face at a cut, a gesture, framing.
 
 ### Reporting

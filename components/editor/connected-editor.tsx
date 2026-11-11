@@ -6,7 +6,7 @@ import { userError } from '@/lib/user-error';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
-import { startTransition, useEffect, useRef, useState, useCallback, useMemo } from 'react';
+import { startTransition, useEffect, useLayoutEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useStore } from 'zustand';
 import { createEditorStore } from '@/lib/editor/store';
 import { createTimelineSaveQueue } from '@/lib/editor/timeline-sync';
@@ -70,12 +70,21 @@ function LoadedEditor({projectId,project}:{projectId:string;project:Doc<'project
   const current=loaded??(shown?._id===projectId?shown:null);
   const loading=editorLoading(projectId);
   if(!current)return loading;
-  return <EditorAccessGate loading={loading}><ProjectEditor key={projectId} project={current} storedTimeline={project?._id===current._id?project.timeline:undefined}/></EditorAccessGate>;
+  return <EditorAccessGate loading={loading}><ProjectEditor key={projectId} project={current} storedTimeline={project?._id===current._id?project.timeline:undefined} latestRevision={project?._id===current._id?project.revision??0:undefined}/></EditorAccessGate>;
 }
-function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;storedTimeline?:Timeline}) {
+function ProjectEditor({project,storedTimeline,latestRevision}: {project:Doc<'projects'>;storedTimeline?:Timeline;/** The project's newest saved revision; `project` trails it while that revision's undo snapshot loads. */latestRevision?:number}) {
   const projectId=project._id;const convex=useConvex();const media=useQuery(api.assets.list,{projectId,limit:200});const plan=useQuery(api.billing.status,{})?.plan;const ai=useQuery(api.assistant.status,{projectId});
   const livePreview=useQuery(api.assistant.livePreview,ai?.running?{projectId}:'skip');
-  const activePreview=ai?.running&&livePreview?.runId===project.aiRunId&&livePreview?.baseRevision===(project.revision??0)?livePreview:null;
+  // `project` trails the server by one load whenever a revision is saved (LoadedEditor waits for its undo snapshot).
+  // The assistant's preview is already on the newer revision then, and when a run ends its preview is cleared in the
+  // same save. Dropping the preview in either gap showed the timeline as it was before the edit for a moment, then
+  // the new one: tracks jumped back and forth. So a preview at or ahead of the shown revision counts, and the last
+  // one stays up until the shown project has caught up.
+  const behind=latestRevision!==undefined&&latestRevision>(project.revision??0);
+  const currentPreview=ai?.running&&livePreview&&livePreview.runId===project.aiRunId&&livePreview.baseRevision>=(project.revision??0)?livePreview:null;
+  const heldPreview=useRef(currentPreview);
+  useLayoutEffect(()=>{if(currentPreview)heldPreview.current=currentPreview;else if(!behind)heldPreview.current=null;},[currentPreview,behind]);
+  const activePreview=currentPreview??(behind?heldPreview.current:null);
   const save=useMutation(api.projects.saveTimeline);const update=useMutation(api.projects.update);const send=useMutation(api.assistant.send);const retryTurn=useMutation(api.assistant.retry);const stop=useMutation(api.assistant.stop);const renderStart=useMutation(api.renders.start);const renderCancel=useMutation(api.renders.cancel);const downloadExport=useAction(api.renders.download);
   const importVideo=useMutation(api.mediaTasks.importVideo);
   const removeAsset=useMutation(api.assets.remove);
@@ -146,7 +155,8 @@ function ProjectEditor({project,storedTimeline}: {project:Doc<'projects'>;stored
   },[mediaTasks,composerImportIds]);
   const [upload,setUpload]=useState<UploadProgress>(null);const [uploadToComposer,setUploadToComposer]=useState(false);const [optimisticAssets,setOptimisticAssets]=useState<MediaAsset[]>([]);
   useEffect(()=>{if(ai?.workflowActive===false)saves.retry();},[ai?.workflowActive,saves]);
-  useEffect(()=>{saves.receive({timeline:project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},revision:project.revision??0,history:project.history??[]});},[project,saves]);
+  // Before paint: the frame that drops the assistant's preview must already show the saved timeline it became.
+  useLayoutEffect(()=>{saves.receive({timeline:project.timeline??{...EMPTY_TIMELINE,aspectRatio:project.aspectRatio},revision:project.revision??0,history:project.history??[]});},[project,saves]);
   // The switched project has arrived (and was received above): the real timeline takes over.
   useEffect(()=>{if(pendingTab&&(project.activeTimelineId??'main')===pendingTab.id)setPendingTab(null);},[project.activeTimelineId,pendingTab]);
   const assets=useMemo<MediaAsset[]>(()=>[...(media??[]),...optimisticAssets.filter(asset=>!media?.some(a=>a._id===asset._id))].map((asset:MediaAsset)=>{

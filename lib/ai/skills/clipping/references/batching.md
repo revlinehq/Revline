@@ -8,7 +8,7 @@ One source, one project, shared assets and saved analysis; one titled tab per ac
 
 ## Workflow
 1. Find the project. Reuse the current project when it contains the source; on MCP call getProject and listTimelines first, and createProject only if a project is needed.
-2. Bring a missing source in once: uploadMedia/finishUpload, or importVideoLink for YouTube, Twitch VOD, Kick recording or public MP4 links.
+2. Bring a missing source in once: uploadMedia/finishUpload, or importVideoLink for YouTube, Twitch VOD or clip, Kick recording, other supported video-site or direct video-file links. One import brings in at most 3 hours: a longer stream VOD comes in as start/end ranges, each its own source.
 3. Persist the accepted list with planClips: candidate ID, title, source range and, once known, the resulting timelineId. Skip this step when the user gave the source ranges: there are no candidates to register.
 4. For each accepted candidate or given range, createTimeline from blank with the short's title as its name, using the aspect ratio findHighlights returned.
 5. Add the chosen range with addMedia from the shared asset at start 0, then inspect the new clip IDs before any reframing or polish.
@@ -18,7 +18,7 @@ One source, one project, shared assets and saved analysis; one titled tab per ac
 ## Rules
 Sources:
 - Never create a project, upload or transcribe the same source once per short.
-- If a provider blocks a recording, ask for an upload or a direct MP4 link.
+- If a provider blocks a recording, ask for an upload or a direct video-file link.
 - Never claim an unsupported or live stream was imported.
 
 Tabs:

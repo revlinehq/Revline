@@ -1,10 +1,12 @@
 import type { AnthropicProviderOptions } from '@ai-sdk/anthropic';
 import type { OpenAIResponsesProviderOptions } from '@ai-sdk/openai';
 
+// Anthropic first-party Standard rates, USD / 1M tokens, verified 2026-11-11 (5-minute cache writes are 1.25x input).
+// Haiku 5.5 has a second rate card: a prompt above 100K tokens bills the whole request at $0.50 in / $2.50 out.
 export const CLAUDE_EDIT_MODELS = [
-  { id: 'haiku', label: 'Haiku 5.5', modelId: 'claude-haiku-5-5' },
-  { id: 'sonnet', label: 'Sonnet 5.5', modelId: 'claude-sonnet-5-5' },
-  { id: 'opus', label: 'Opus 5.5', modelId: 'claude-opus-5-5' },
+  { id: 'haiku', label: 'Haiku 5.5', modelId: 'claude-haiku-5-5', pricing: { input: .10, cacheRead: .01, cacheWrite: .125, output: .50 }, longPrompt: { above: 100_000, input: 5, output: 5 } },
+  { id: 'sonnet', label: 'Sonnet 5.5', modelId: 'claude-sonnet-5-5', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
+  { id: 'opus', label: 'Opus 5.5', modelId: 'claude-opus-5-5', pricing: { input: 4, cacheRead: .20, cacheWrite: 5, output: 20 } },
 ] as const;
 // Native OpenAI Standard rates, USD / 1M tokens, verified 2026-10-15.
 // https://developers.openai.com/api/docs/models/gpt-6.1-sol
@@ -135,26 +137,35 @@ export function freeEditorModel(env: ClaudeModelEnvironment = process.env): Clau
 /** The models and efforts one account may pick, and what runs when it picks nothing. */
 export type EditorOffer = { models: readonly ClaudeModelChoice[]; efforts: readonly EditorReasoningEffort[]; default: { model: ClaudeModelChoice; effort: EditorReasoningEffort } };
 
+/** The backend key a model's provider needs; a model whose key is missing is not offered and cannot run. */
+export const editorModelProviderKey = (choice: ClaudeModelChoice) => OPENAI_EDIT_MODELS.some(model => model.id === choice) ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
+
+/** Every model the picker had before production was pinned, cheapest first per provider, at every effort they take. */
+const ALL_EDITOR_CHOICES = { models: ['haiku', 'sonnet', 'opus', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra'], efforts: EDITOR_REASONING_EFFORTS } as const;
+
 /**
  * What a paid account may pick in production, per plan. This is the one place that widens or narrows it;
  * the composer's pickers, `send` and the run itself all read it, so a choice listed here is the one that runs.
- * `default` runs when nothing is picked and for anything not listed (a stale tab, an old queued turn, iPhone).
+ * `default` runs when nothing is picked and for anything not listed (a stale tab, an old queued turn, iPhone),
+ * so no account's cost changes until it picks something else. To give Pro the same list: `pro: ALL_EDITOR_CHOICES`.
  *
- * As listed nothing costs more than the default, Haiku 5.5 ($0.10 in / $0.50 out per 1M tokens) at medium:
- * Ultra can only lower the effort. Widening raises what a turn can cost, per token against Haiku 5.5:
- * 'sonnet' 20x ($2 / $10), 'opus' 40x ($4 / $20), 'gpt-6.1-terra' 10x, 'gpt-6.1-sol' 20x, 'gpt-6-astra' 100x;
- * 'high' and 'xhigh' keep the token price and spend more thinking and output tokens per turn.
+ * What a turn can cost, per token against the default, Haiku 5.5 ($0.10 in / $0.50 out per 1M tokens):
+ * 'gpt-6.1-terra' 10x ($1 / $5), 'sonnet' and 'gpt-6.1-sol' 20x ($2 / $10), 'opus' 40x ($4 / $20),
+ * 'gpt-6-astra' 100x ($10 / $50). 'high' and 'xhigh' keep the token price and spend more thinking and
+ * output tokens per turn. Haiku 5.5 itself bills 5x ($0.50 / $2.50) on a prompt above 100K tokens, where these
+ * ratios shrink fivefold. The per-request token ceilings (lib/ai/token-budget.ts) count tokens, not dollars.
  */
 export const PRODUCTION_EDITOR_OFFER = {
   default: { model: 'haiku', effort: 'medium' },
   pro: { models: ['haiku'], efforts: ['medium'] },
-  ultra: { models: ['haiku'], efforts: ['low', 'medium'] },
+  ultra: ALL_EDITOR_CHOICES,
 } as const satisfies { default: EditorOffer['default'] } & Record<'pro' | 'ultra', Omit<EditorOffer, 'default'>>;
 
-/** EDITOR_EFFORT_SWITCHER=false leaves every plan the default effort alone, as it does outside production. */
+/** The plan's list, less every model whose provider key this deployment lacks (the default stays: it is what runs).
+ * EDITOR_EFFORT_SWITCHER=false leaves every plan the default effort alone, as it does outside production. */
 export function productionEditorOffer(ultra: boolean, env: ClaudeModelEnvironment = process.env): EditorOffer {
-  const plan = PRODUCTION_EDITOR_OFFER[ultra ? 'ultra' : 'pro'];
-  return { models: plan.models, efforts: editorEffortSwitcherOffered(env) ? plan.efforts : [PRODUCTION_EDITOR_OFFER.default.effort], default: PRODUCTION_EDITOR_OFFER.default };
+  const plan: Omit<EditorOffer, 'default'> = PRODUCTION_EDITOR_OFFER[ultra ? 'ultra' : 'pro'], fallback = PRODUCTION_EDITOR_OFFER.default;
+  return { models: plan.models.filter(id => id === fallback.model || !!env[editorModelProviderKey(id)]?.trim()), efforts: editorEffortSwitcherOffered(env) ? plan.efforts : [fallback.effort], default: fallback };
 }
 
 /** The selection an offer runs for what was asked: a model or effort it does not list becomes its default. */
@@ -226,6 +237,13 @@ export function editorProviderOptions(selection: ClaudeModelSelection, cacheKey?
     ...(cacheKey ? { promptCacheKey: cacheKey } : {}),
   } satisfies OpenAIResponsesProviderOptions;
   return { openai };
+}
+
+/** Whether a step may force a tool call. Only OpenAI models take `required`. On Claude it becomes
+ * `tool_choice: any`, which Sonnet 5.5 and Opus 5.5 reject with a 400 and which makes Haiku 5.5 skip thinking;
+ * Claude steps always use `auto` and are steered from the prompt. */
+export function editorToolChoice(provider: ClaudeModelSelection['provider'], mustCallTool: boolean): 'auto' | 'required' {
+  return mustCallTool && provider === 'openai' ? 'required' : 'auto';
 }
 
 /** Higher effort shares its output allowance with hidden reasoning tokens. */

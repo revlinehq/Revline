@@ -14,6 +14,7 @@
 .thinking-latest{margin:4px 0 0;padding-left:24px;white-space:pre-line;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .thinking-text{margin:6px 0 0;padding-left:24px;max-height:260px;overflow-y:auto;scrollbar-width:none;white-space:pre-wrap;font-size:12px;line-height:1.55;color:var(--ws-muted,#9a9a9a)}.thinking-text::-webkit-scrollbar{display:none}
 /* Images a step returned (frames), indented under the step's title. */
+.tool-chain-reason{margin:-4px 0 0;padding-left:24px;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a);overflow-wrap:anywhere}
 .tool-chain-images{display:flex;flex-wrap:wrap;gap:6px;padding-left:24px}
 .tool-chain-image{display:flex;flex-direction:column;gap:3px;width:150px;padding:0;border:0;background:none;color:var(--ws-muted,#9a9a9a);font-size:11px;text-align:left;cursor:zoom-in}
 .tool-chain-image img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;box-shadow:inset 0 0 0 1px #ffffff14;background:#0006}

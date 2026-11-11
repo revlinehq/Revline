@@ -2,6 +2,7 @@ import { offsetClipMotion } from './clip-effects';
 import { isTransitionClip } from './clip-transitions';
 import { playbackRateOf, sourceEndOf, sourceSpanOf, timelineSpanOf } from './playback-rate';
 import type { Clip, Timeline } from './types';
+import { gridTime, MIN_CUT_FRAMES, onFrameGrid } from './frame-grid';
 
 export type RetainedSourceRange = { start: number; end: number };
 export type RetainedRangeSummary = { clipId: string; linkedClipId?: string; sourceStart: number; sourceEnd: number; start: number; duration: number };
@@ -32,14 +33,16 @@ export function retainedSourceWindows(timeline: Timeline, clipId: string): Retai
 /** Compact this clip's retained source, keeping linked sound and authored phase. The retained source is
  * the clip plus the adjacent pieces an earlier cut left of the same source, so a cut can be redone in
  * one call on any piece; footage already removed is never brought back. By default edges round outward
- * to frames; `exact` keeps measured edges to the millisecond, as speech cleanup needs: export trims audio
- * by sample and each video frame shows whichever piece covers that instant. */
-export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: RetainedSourceRange[], newId: () => string = () => crypto.randomUUID(), exact = false) {
+ * to frames; `exact` takes measured edges to the millisecond, as speech cleanup needs. Either way the kept
+ * pieces are laid out on the timeline's frame grid (lib/editor/frame-grid.ts): each boundary is rounded once
+ * to the nearest frame from the running exact position, so rounding never accumulates and a measured edge
+ * moves by at most half a frame. A piece shorter than MIN_CUT_FRAMES is dropped and reported in `dropped`. */
+export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: RetainedSourceRange[], newId: () => string = () => crypto.randomUUID(), exact = false, minFrames = MIN_CUT_FRAMES) {
   const clip = timeline.clips.find(member => member.id === clipId);
   if (!clip || (clip.kind !== 'video' && clip.kind !== 'audio')) throw new Error('Choose an existing video or audio clip.');
   if (!Number.isFinite(timeline.fps) || timeline.fps <= 0) throw new Error('The timeline frame rate is invalid.');
   if (!ranges.length || ranges.length > 100) throw new Error('Choose between 1 and 100 retained source ranges.');
-  const frame = 1 / timeline.fps, own = { start: clip.sourceStart, end: sourceEndOf(clip) };
+  const frame = 1 / timeline.fps, minimum = minFrames * frame, dropped: RetainedSourceRange[] = [], own = { start: clip.sourceStart, end: sourceEndOf(clip) };
   const fits = (range: RetainedSourceRange, window: RetainedSourceRange) => range.start >= window.start - epsilon && range.end <= window.end + epsilon;
   // A request inside the named clip cuts only that clip; its neighbours join in when a range reaches them.
   const pieces = ranges.every(range => fits(range, own)) || !clip.assetId ? [clip] : retainedPieces(timeline, clip);
@@ -64,10 +67,11 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     let length = 0;
     parts.forEach((part, at) => {
       const piece = pieces[at], local = timelineSpanOf(piece, part.end - piece.sourceStart) - timelineSpanOf(piece, part.start - piece.sourceStart);
-      // A sliver left where a range crosses into the next piece is dropped, not kept as a sub-frame clip.
-      if (local >= frame - epsilon) { kept[at].push(part); length += local; }
+      // A sliver (a range's remainder in the next piece, or a range of a frame or so) is dropped, never kept as a clip.
+      if (local >= minimum - epsilon) { kept[at].push(part); length += local; }
+      else if (part.end > part.start) dropped.push({ start: part.start, end: part.end });
     });
-    if (!length) throw new Error(`${name} is shorter than one timeline frame (${seconds(frame)} s).`);
+    if (!length && ranges.length === 1) throw new Error(`${name} is shorter than ${minFrames} timeline frame${minFrames === 1 ? '' : 's'} (${seconds(minimum)} s): a cut never leaves a piece that short.`);
   });
   const selected = new Set<string>(), pairs = new Map<string, Clip>();
   // Every piece is checked, also one that keeps nothing: it is removed with its linked sound.
@@ -97,24 +101,32 @@ export function retainSourceRanges(timeline: Timeline, clipId: string, ranges: R
     }
     return local;
   });
-  if (pieces.length === 1 && offsets[0].length === 1 && offsets[0][0].start === 0 && offsets[0][0].end === clip.duration) return { timeline, ranges: [{ clipId: clip.id, ...(clip.linkedClipId ? { linkedClipId: clip.linkedClipId } : {}), sourceStart: clip.sourceStart, sourceEnd: own.end, start: clip.start, duration: clip.duration }] };
+  if (!kept.some(parts => parts.length)) throw new Error(`Every range is shorter than ${minFrames} timeline frame${minFrames === 1 ? '' : 's'} (${seconds(minimum)} s): a cut never leaves a piece that short.`);
+  if (pieces.length === 1 && offsets[0].length === 1 && offsets[0][0].start === 0 && offsets[0][0].end === clip.duration) return { timeline, dropped, ranges: [{ clipId: clip.id, ...(clip.linkedClipId ? { linkedClipId: clip.linkedClipId } : {}), sourceStart: clip.sourceStart, sourceEnd: own.end, start: clip.start, duration: clip.duration }] };
   const ids = new Set(timeline.clips.map(member => member.id));
   const freshId = () => { const id = newId(); if (!id || ids.has(id)) throw new Error('Retained clips need unique IDs.'); ids.add(id); return id; };
   const cut = new Map<string, Clip[]>(), retained: RetainedRangeSummary[] = [];
-  let cursor = pieces[0].start;
+  // `running` goes along the unrounded layout; `cursor` is the same boundary on the frame grid. Each piece starts
+  // on the grid and its in-point moves with it, so the picture never slides against the exact layout.
+  let running = pieces[0].start, cursor = onFrameGrid(running, timeline.fps) ? running : gridTime(running, timeline.fps);
   pieces.forEach((piece, at) => {
     const pair = pairs.get(piece.id), clips: Clip[] = [], linked: Clip[] = [];
     offsets[at].forEach((range, index) => {
       const id = index ? freshId() : piece.id, pairId = pair ? index ? freshId() : pair.id : undefined;
-      const duration = range.end - range.start;
-      const next = { ...piece, ...offsetClipMotion(piece, range.start), id, ...(pair ? { linkedClipId: pairId } : {}), start: cursor, sourceStart: piece.sourceStart + sourceSpanOf(piece, range.start), duration };
+      const exactEnd = running + range.end - range.start, from = Math.min(Math.max(0, range.start + cursor - running), Math.max(0, piece.duration - frame));
+      let to = onFrameGrid(exactEnd, timeline.fps) ? exactEnd : gridTime(exactEnd, timeline.fps);
+      if (to < cursor + frame - epsilon) to = cursor + frame;
+      // A rounded-up end never reaches past the piece's own footage.
+      if (from + to - cursor > piece.duration + epsilon && to - frame >= cursor + frame - epsilon) to -= frame;
+      const duration = to - cursor;
+      const next = { ...piece, ...offsetClipMotion(piece, from), id, ...(pair ? { linkedClipId: pairId } : {}), start: cursor, sourceStart: piece.sourceStart + sourceSpanOf(piece, from), duration };
       clips.push(next);
-      if (pair) linked.push({ ...pair, ...offsetClipMotion(pair, range.start), id: pairId!, linkedClipId: id, start: cursor, sourceStart: pair.sourceStart + sourceSpanOf(pair, range.start), duration });
+      if (pair) linked.push({ ...pair, ...offsetClipMotion(pair, from), id: pairId!, linkedClipId: id, start: cursor, sourceStart: pair.sourceStart + sourceSpanOf(pair, from), duration });
       retained.push({ clipId: id, ...(pairId ? { linkedClipId: pairId } : {}), sourceStart: next.sourceStart, sourceEnd: sourceEndOf(next), start: cursor, duration });
-      cursor += duration;
+      running = exactEnd; cursor = to;
     });
     cut.set(piece.id, clips);
     if (piece.linkedClipId) cut.set(piece.linkedClipId, linked);
   });
-  return { timeline: { ...timeline, clips: timeline.clips.flatMap(member => cut.get(member.id) ?? [member]) }, ranges: retained };
+  return { timeline: { ...timeline, clips: timeline.clips.flatMap(member => cut.get(member.id) ?? [member]) }, ranges: retained, dropped };
 }

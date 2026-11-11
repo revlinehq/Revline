@@ -10,8 +10,8 @@ The app exposes shared tools plus primary and loaded supporting tools on each st
 
 Each lane's `definition.ts` owns its check recipe. The lane is the only thing that changes which checks or tools run; model and reasoning effort stay user choices and never change them. The app and MCP read the same recipe from the task row.
 
-- `edit`: getFrames at each change ±1 frame; no whole-video sweeps.
-- `reel`: saved-data checks (retained ranges, linked audio, caption timing) plus one getFrames sample of new styling or framing; no per-cut frames.
+- `edit`: timeline-data checks; `finish` draws at most 4 frames of what changed (new cuts, new overlays, one caption sample) and returns them. No frame per change, no whole-video sweeps.
+- `reel`: saved-data checks (retained ranges, linked audio, caption words, timing and layout); `finish` draws at most 3 frames itself; no per-cut or per-caption frames.
 - `clip`: two paths, told apart by `cutsGiven` (`clip/check.ts`). Moments Revline chose (the task ran `findHighlights`/`planClips`, or its request asked for them: `findMoments` on the task row, set by `lanes.begin` from the `/clip` command or wording such as "find the best moments"): finishClipping data checks against the registered plan; visual confirmation only for action moments. Cuts at source ranges the request named (neither signal): `finish` needs no plan and no whole-source analysis and runs the cheap checks only: timeline data, 15–60 s per new tab, populated source footage and the frames at every cut edge.
 
 One automatic step-up, the `final` level, runs the lane's full checks (clip: checkClip decode-health on every accepted tab; clip finish never requires rendered frames). The server sets it in `lanes.begin` from the request: a final export or publish request, or an explicit request to double-check everything. The agent never chooses it. Stored `editMode` values on older queue rows, turns, runner checkpoints and browser storage still validate and are ignored.
@@ -31,7 +31,7 @@ Eyes are one shared layer in `lib/ai/eyes` (measured face signals from the media
 - `reel` (enforced): speech edges plus the first and last frame; `checkSpots` measures, shows 3 frames per flagged spot, one extra round of 5, 27 per request; `finish` fails on an unreviewed flagged first or last frame and reports the rest. B-roll: shots with no face, one frame each, at most 6.
   When no measurement exists the reel check warns ("cut edges could not be measured on this server; not verified") and `finish` passes: `REEL_LOOKS=off` on the Convex deployment switches the looks read off (default on), and a media processor older than the looks read answers with a frame sheet and no face samples, which counts as unmeasured. Looks results are cached under a key carrying `LOOKS_READ_VERSION`, so an old processor's entries are never read back. B-roll detection then reports itself unavailable and keeps wordless shots between saved scene cuts.
 - `clip` (slot): policy declared (clip edges; no gaze rules), not applied by any tool or by `finish`. Separately from the policy, `finish` on a range-cut clip reads five frames at each cut edge with the same `looks` read (`clip/edges.ts`) and fails on one to three stray frames of a neighbouring shot; when the read is unavailable it warns and passes, as the reel check does. Its own detectors (cut mid-action, facecam cropped out, black or blurred frame, UI over the subject) are not built.
-- `edit`: no policy; its getFrames rules are unchanged and do not go through the frame budget.
+- `edit`: no eyes policy; `finish` draws its own frames on the budget in `task.ts` (`finishFrameBudget`).
 
 ## Branch integrations
 

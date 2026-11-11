@@ -1,9 +1,8 @@
 import type { LaneCheckContext, LaneEvidence } from '../types';
 import type { Timeline } from '../../../editor/types';
-import type { Transcript } from '../../../media-analysis/transcript';
 import { sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
 import { trackOf } from '../../../editor/types';
-import { refineTranscriptWithAudioActivity, type AudioActivity } from '../../../media-analysis/audio-activity';
+import { captionSpeech, wordInSource, type SpeechAnalysis } from '../../../editor/transcript-captions';
 export function check(_context: LaneCheckContext): string[] {
   return [];
 }
@@ -11,21 +10,26 @@ export function check(_context: LaneCheckContext): string[] {
 /** A retained spoken word on the timeline. `heldEnd` is the provider's unshortened end, which may run on through trailing silence. */
 export type SpokenWord = { text: string; start: number; end: number; heldEnd?: number };
 
-/** Retained words with the same timing copy addSubtitlesFromTranscript captions from: provider words whose ends are
- * pulled back to measured quiet. Measuring captions against the provider's longer ends failed the tool's own captions. */
-export function retainedSpeechWords(timeline: Timeline, assets: { _id: string; kind?: string; duration?: number; audioAssetId?: string; analysis?: { transcript?: Transcript; audioActivity?: AudioActivity } }[]): SpokenWord[] {
+/** Retained words as addSubtitlesFromTranscript captions them: the same timing copy (provider words whose ends are
+ * pulled back to measured quiet) and the same rule for which piece a word at a cut belongs to. Measuring captions
+ * against the provider's longer ends failed the tool's own captions. */
+export function retainedSpeechWords(timeline: Timeline, assets: { _id: string; kind?: string; duration?: number; audioAssetId?: string; analysis?: SpeechAnalysis }[]): SpokenWord[] {
+  // One timing copy per source, however many pieces a cut left of it.
+  const copies = new Map<SpeechAnalysis, ReturnType<typeof captionSpeech>>();
+  const speechOf = (analysis: SpeechAnalysis) => { if (!copies.has(analysis)) copies.set(analysis, captionSpeech(analysis)); return copies.get(analysis); };
   const speech = timeline.clips.flatMap(clip => {
     if (clip.volume === 0 || !(clip.kind === 'audio' || clip.kind === 'video' && !clip.audioSeparated)) return [];
     const analysis = assets.find(asset => asset._id === clip.assetId)?.analysis?.transcript ? assets.find(asset => asset._id === clip.assetId)?.analysis
       : assets.find(asset => asset.audioAssetId === clip.assetId)?.analysis;
-    const provider = analysis?.transcript;
-    if (!provider) return [];
-    const measured = analysis.audioActivity ? refineTranscriptWithAudioActivity(provider, analysis.audioActivity) : provider;
-    const aligned = measured.words.length === provider.words.length;
-    return measured.words.flatMap((word, index) => {
-      if (word.start < clip.sourceStart - .001 || word.end > sourceEndOf(clip) + .001) return [];
-      const held = aligned ? Math.min(provider.words[index].end, sourceEndOf(clip)) : word.end;
-      return [{ text: word.text, start: timelineTimeAtSource(clip, word.start), end: timelineTimeAtSource(clip, word.end), ...(held > word.end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}) }];
+    const provider = analysis?.transcript, measured = analysis && speechOf(analysis);
+    if (!provider || !measured) return [];
+    const { transcript, edges } = measured, aligned = transcript.words.length === provider.words.length, sourceEnd = sourceEndOf(clip);
+    return transcript.words.flatMap((word, index) => {
+      if (!wordInSource(word, clip.sourceStart, sourceEnd, edges && { start: edges[index * 2], end: edges[index * 2 + 1] })) return [];
+      // A word reaching past the cut is shown only while its clip plays.
+      const start = Math.max(word.start, clip.sourceStart), end = Math.max(start, Math.min(word.end, sourceEnd));
+      const held = aligned ? Math.min(provider.words[index].end, sourceEnd) : end;
+      return [{ text: word.text, start: timelineTimeAtSource(clip, start), end: timelineTimeAtSource(clip, end), ...(held > end ? { heldEnd: timelineTimeAtSource(clip, held) } : {}) }];
     });
   });
   return [...new Map(speech.map(word => [`${word.start.toFixed(3)}:${word.end.toFixed(3)}:${word.text}`, word])).values()]
@@ -47,7 +51,7 @@ export async function reelFinishKey(input: {
   assets: Parameters<typeof retainedSpeechWords>[1];
 }) {
   const bytes = new TextEncoder().encode(JSON.stringify({ ...input, assets: input.assets.map(asset => ({
-    id: asset._id, kind: asset.kind, duration: asset.duration, audioAssetId: asset.audioAssetId, transcript: asset.analysis?.transcript,
+    id: asset._id, kind: asset.kind, duration: asset.duration, audioAssetId: asset.audioAssetId, transcript: asset.analysis?.transcript, edges: asset.analysis?.speechCleanup?.edges,
   })) }));
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');

@@ -30,7 +30,8 @@ import { mediaWorkflow } from './lib/workflows';
 import { enqueueMediaTask, cancelMediaTask, markTerminal, releaseRenderSeat } from './lib/media_queue';
 import { hasPreview, mediaUrl, previewUrl } from './lib/media_storage';
 import { saveAssetAnalysis, validateWaveform } from './assets';
-import { parseVideoLink } from '../lib/editor/video-link';
+import { processorCan } from './lib/processor_capabilities';
+import { importLimitText, parseVideoLink, MAX_IMPORT_SECONDS, type VideoLink } from '../lib/editor/video-link';
 import { addMediaClip } from '../lib/editor/operations';
 import { timelineDuration, type Timeline } from '../lib/editor/types';
 import { timelineAtRevision } from './lib/revision_log';
@@ -177,13 +178,19 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
 const importVideoForArgs = { sourcesOnly: v.optional(v.boolean()), projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
 export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
   await requireEditorAccess(ctx, ownerId);
-  let sourceUrl: string;
-  try { sourceUrl = parseVideoLink(args.url).url; } catch (error) { throw new ConvexError((error as Error).message); }
+  let link: VideoLink;
+  try { link = parseVideoLink(args.url); } catch (error) { throw new ConvexError((error as Error).message); }
+  const sourceUrl = link.url;
+  // The processor is released separately: one from before these links would fetch the page as a file and fail.
+  if (link.needs && !await processorCan(ctx, `import:${link.needs}`)) throw new ConvexError(link.needs === 'twitch-clips'
+    ? 'Twitch clip links need a media processor update that is not live on this server yet. Import the same moment from its VOD instead (twitch.tv/videos/<id> with start and end), or upload the clip file.'
+    : 'Links from this site need a media processor update that is not live on this server yet. Upload the video file instead.');
   let importRange: { start: number; end: number } | undefined;
   if (args.start !== undefined || args.end !== undefined) {
     const start = args.start ?? 0, end = args.end;
     if (end === undefined) throw new ConvexError('Give both start and end to import part of a video.');
     if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0 || end <= start) throw new ConvexError('The import range needs 0 <= start < end, in source seconds.');
+    if (end - start > MAX_IMPORT_SECONDS) throw new ConvexError(`${importLimitText} This range is ${Math.round((end - start) / 60)} minutes: import it as several shorter ranges, each becomes its own source.`);
     importRange = { start, end };
   }
   // A new edit and its durable import are created atomically.
@@ -388,7 +395,7 @@ async function loadWork(ctx:import('./_generated/server').QueryCtx|MutationCtx,t
     if(saved.guard||saved.motion||saved.comparison||saved.clipId)throw new ConvexError('This check is no longer supported.');
     const ids=[...new Set(timeline.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]).concat(timeline.audioNormalization?[timeline.audioNormalization.assetId]:[]))];
     const assets=await Promise.all(ids.map(async raw=>{const id=ctx.db.normalizeId('assets',raw),asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==task.ownerId||asset.projectId!==task.projectId)throw new ConvexError('Frame source media is unavailable.');return {...(saved.clipCheck?await transportAsset(ctx,asset):asset),url:await mediaUrl(ctx,asset,true)};}));
-    snapshot={...(saved.resolution?{resolution:saved.resolution}:{}),...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.sound?{sound:saved.sound}:{})};
+    snapshot={...(saved.sheet?{sheet:true}:{}),...(saved.resolution?{resolution:saved.resolution}:{}),...(saved.cacheIdentity?{cacheIdentity:saved.cacheIdentity}:{}),timeline,...(saved.clipCheck?{clipCheck:saved.clipCheck}:{}),...(saved.normalization?{normalization:saved.normalization}:{}),assets,times:saved.times,...(card?{card}:{}),...(saved.pacing?{pacing:saved.pacing}:{}),...(saved.sound?{sound:saved.sound}:{})};
   }
   const readRow=task.readId?await ctx.db.get(task.readId):null;
   if(task.readId&&(!readRow||readRow.ownerId!==task.ownerId||readRow.projectId!==task.projectId))throw new ConvexError('The frame reading is unavailable.');
@@ -587,8 +594,10 @@ const RESULT_HANDLERS: Record<Doc<'mediaTasks'>['kind'], ResultHandler> = {
     }
     if (snapshot.sound) { if (!result.snapshot.sound) throw new ConvexError('The sound check completed without measurements.'); await ctx.db.patch(snapshot._id, { status: 'completed', soundResult: result.snapshot.sound }); return; }
     if (snapshot.pacing) { if (!result.snapshot.pacing) throw new ConvexError('The pacing check completed without measurements.'); await ctx.db.patch(snapshot._id, { status: 'completed', pacingResult: result.snapshot.pacing }); return; }
-    if (frames.length !== snapshot.times.length || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
-    const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times)) : undefined;
+    // A sheet request is answered with one image of all its times; a processor from before sheets answers with a frame per time.
+    const sheet = !!snapshot.sheet && snapshot.times.length > 1 && frames.length === 1;
+    if ((!sheet && frames.length !== snapshot.times.length) || frames.some((frame, index) => !Number.isFinite(frame.time) || Math.abs(frame.time - snapshot.times[index]) > 1 || !/^[A-Za-z0-9+/]+=*$/.test(frame.image)) || frames.reduce((sum, frame) => sum + frame.image.length, 0) > 900_000) throw new ConvexError('Rendered frames do not match the request.');
+    const cacheKey = snapshot.cacheIdentity ? await frameCacheKey({ownerId:task.ownerId,projectId:task.projectId},snapshotResultDescriptor(snapshot.cacheIdentity,snapshot.times,snapshot.sheet)) : undefined;
     const cached = cacheKey ? await ctx.db.query('mediaFrameCache').withIndex('by_key',q=>q.eq('key',cacheKey)).unique() : null;
     await ctx.db.patch(snapshot._id, { status: 'completed', ...(cached?.ready ? {resultR2Key:cached.r2Key,frames:undefined} : {frames}) });
     // A share card goes onto its share; the request itself is not kept.

@@ -190,7 +190,7 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if(!task.snapshot)throw new AnalysisError('The frame request is unavailable.',400);
       const snapshot=task.snapshot,cache=snapshot.cacheIdentity?new FrameCache(convex,credentials,signal):undefined;
       const produce=()=>captureTimelineFrames(snapshot,directory,convexUrl,signal,onProgress,cache);
-      return {snapshot:cache?await cache.json(snapshotResultDescriptor(snapshot.cacheIdentity!,snapshot.times),produce):await produce()};
+      return {snapshot:cache?await cache.json(snapshotResultDescriptor(snapshot.cacheIdentity!,snapshot.times,snapshot.sheet),produce):await produce()};
     }
     const asset = task.asset;
     if (!asset?.url) throw new AnalysisError('The source media is unavailable.', 400);
