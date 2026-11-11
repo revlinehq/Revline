@@ -53,6 +53,15 @@ function namesAfter(source, anchor, end) {
   return new Set([...list.matchAll(/['"]([\w/]+:\w+)['"]/g)].map(match => match[1]));
 }
 
+/** The index just past the bracket that closes the one opening at `open`. */
+function closing(source, open) {
+  let depth = 0;
+  for (let index = open; index < source.length; index++) {
+    if ('({['.includes(source[index])) depth++;
+    else if (')}]'.includes(source[index]) && !--depth) return index + 1;
+  }
+  return source.length;
+}
 const lineOf = (source, index) => source.slice(0, index).split('\n').length;
 const problems = [];
 const files = closure();
@@ -75,15 +84,25 @@ for (const file of files) {
   // 2. Forced tool choice: every toolChoice a step sets comes from editorToolChoice.
   if (file !== 'lib/ai/claude-model.ts') for (const match of source.matchAll(/\btoolChoice\b\s*(?::\s*(?!editorToolChoice\()|,|\})/g))
     problems.push({ rule: 'forced-tool-choice', file, line: lineOf(source, match.index), detail: 'A step sets toolChoice itself. Claude Sonnet 5.5 and Opus 5.5 reject a forced tool call with a 400 and Haiku 5.5 skips thinking. Write toolChoice: editorToolChoice(provider, mustCallTool) from lib/ai/claude-model.ts.' });
-  // 3. Convex calls awaited in finally without safely().
+  cleanupRule(file, source);
+}
+
+/** 3. Convex calls awaited in finally without safely(). */
+function cleanupRule(file, source) {
   for (const match of source.matchAll(/\bfinally\s*\{/g)) {
     let depth = 1, index = match.index + match[0].length;
     for (; index < source.length && depth; index++) depth += source[index] === '{' ? 1 : source[index] === '}' ? -1 : 0;
     const body = source.slice(match.index + match[0].length, index - 1);
-    for (const call of body.matchAll(/await\s+(?!safely\()[^;]*?\.run(?:Query|Mutation|Action)\(/g))
+    for (const call of body.matchAll(/await\s+(?!safely\()[^;]*?\.run(?:Query|Mutation|Action)\(/g)) {
+      // A call with its own .catch() cannot throw out of the block.
+      const statement = body.slice(call.index, closing(body, call.index + call[0].length - 1) + 12);
+      if (/\)\s*\.catch\(/.test(statement)) continue;
       problems.push({ rule: 'cleanup-can-throw', file, line: lineOf(source, match.index + match[0].length + call.index), detail: 'A finally block awaits a Convex call directly. If it throws it replaces the result or the error of the work before it. Wrap it: await safely(label, () => ctx.run…(…)).' });
+    }
   }
 }
+// The MCP action runs the same toolkit inside Convex and releases the project lock in a finally block.
+cleanupRule('convex/mcpActions.ts', read('convex/mcpActions.ts'));
 
 // 4. Rows built by spreading a variable. It fails in the modules a run writes through (every module on the two lists,
 // plus the helpers they write with); elsewhere it is counted, so the number is visible and can only be driven down.
@@ -93,15 +112,6 @@ const RUN_HELPERS = /^convex\/lib\/(?:assistant_\w+|save_incidents|incidents|lan
 const runModule = file => listed.has(file) || RUN_HELPERS.test(file) || /^convex\/(?:assistant\w*|agentRunner\w*|toolWrites|saveIncidents|incidents)\.ts$/.test(file);
 let wideElsewhere = 0;
 const convexFiles = dir => readdirSync(join(root, dir), { withFileTypes: true }).flatMap(entry => entry.isDirectory() ? (entry.name === '_generated' ? [] : convexFiles(join(dir, entry.name))) : entry.name.endsWith('.ts') ? [join(dir, entry.name)] : []);
-/** The index just past the bracket that closes the one opening at `open`. */
-function closing(source, open) {
-  let depth = 0;
-  for (let index = open; index < source.length; index++) {
-    if ('({['.includes(source[index])) depth++;
-    else if (')}]'.includes(source[index]) && !--depth) return index + 1;
-  }
-  return source.length;
-}
 for (const file of convexFiles('convex')) {
   const source = read(file);
   for (const match of source.matchAll(/\bdb\.(?:insert|patch|replace)\(/g)) {
