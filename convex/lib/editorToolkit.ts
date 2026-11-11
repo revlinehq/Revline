@@ -5,7 +5,8 @@ import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneT
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS, type FinishLookSpot } from '../../lib/ai/lanes/task';
-import { exhaustedLaneError, finishLane, type FinishResult } from './laneFinish';
+import { exhaustedLaneError, finishLane, FramesUnavailableError, type FinishResult } from './laneFinish';
+import { safely } from './safely';
 import type { EditorRun, LaneTask } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
@@ -428,7 +429,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (Math.min(request.expiresAt, waitDeadline) <= Date.now()) throw new AnalysisStepError("Media analysis is taking longer than this edit request allows. Its background job will save results; try the edit again once processing finishes.");
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
-    } finally { await ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId }); }
+    } finally { await safely('clearAnalysis', () => ctx.runMutation(internal.assistant.clearAnalysis, { ...run, requestId })); }
   };
   const loadAsset=async(assetId:string)=>{const asset=materializeTranscript(await ctx.runQuery(internal.assistant.getRunAsset,{...run,assetId}));const index=assets.findIndex(item=>item._id===asset._id);if(index<0)throw new Error('Choose media from this project');assets[index]=asset;return asset;};
   const savedCheckpoint=async(assetId:string,edit:(timeline:Timeline)=>Timeline)=>{await loadAsset(assetId);return checkpoint(edit);};
@@ -706,23 +707,28 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     }
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
     // Say which wait it was: frames that never started were queued behind other renders, not too many.
-    throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
+    throw new FramesUnavailableError(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
   };
   // Several frames as one labeled contact sheet. A media processor from before sheets answers with separate frames, which pass through.
   const renderSheet = async (times: number[], revision?: number, targetTimelineId?: string) => {
     const result = await renderFrames(times, revision, targetTimelineId, undefined, times.length > 1);
     return times.length > 1 && result.frames.length === 1 ? { ...result, sheet: result.frames[0].image, frames: times.map(time => ({ time, image: '' })) } : result;
   };
+  // The server clamps a check's end to the timeline's length. A fresh request is clamped the same way here, so a range
+  // that runs past the end completes instead of handing back a next step the server can only refuse. A resumed or
+  // continued check, or one on an earlier revision, keeps the end it was started with.
+  const askedRangeEnd = (input: { end?: number; checkId?: string; sourceCheckId?: string; revision?: number }, duration: number) =>
+    input.end === undefined || input.checkId || input.sourceCheckId || input.revision !== undefined ? input.end : Math.min(input.end, duration);
   // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
   const checkPacing = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }) => {
     await editSession.wait();
-    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = boundRunTab(run.runId);
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, asked = askedRangeEnd(input, duration), end = asked ?? duration, timelineId = boundRunTab(run.runId);
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : undefined;
     const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'pacing',...(timelineId?{timelineId}:{})}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], pacing: { start, end:end-start<=9?end:start+8, fps: input.fps ?? 10 } });
     const deadline = Date.now() + 45_000;
     for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
       const checkedRevision = (state.atRevision ?? state.revision) as number, checkedTimelineId = state.timelineId ?? timelineId;
-      const requestedEnd = input.end ?? (input.checkId ? state.requestedRange?.end ?? end : end);
+      const requestedEnd = asked ?? (input.checkId ? state.requestedRange?.end ?? end : end);
       if (abortSignal.aborted) throw new Error('Stopped.');
       if (state.status === 'failed') throw new Error(`Saved pacing check ${snapshotId} at revision ${checkedRevision} could not render the range: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') {
@@ -738,13 +744,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Listening decodes the range's mix on the media worker (and for a check also samples its picture), so it may take minutes.
   const listen = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }, check: boolean) => {
     await editSession.wait();
-    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, end = input.end ?? duration, timelineId = boundRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
+    const duration = timelineDuration(editSession.timeline), start = input.start ?? 0, asked = askedRangeEnd(input, duration), end = asked ?? duration, timelineId = boundRunTab(run.runId), name = check ? 'checkSound' : 'getSound';
     const sourceSnapshotId = input.sourceCheckId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.sourceCheckId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : undefined;
     const snapshotId = input.checkId ? await ctx.runQuery(internal.mcp.normalizeSnapshotId,{snapshotId:input.checkId,ownerId:run.ownerId,projectId:run.projectId,kind:'sound',...(timelineId?{timelineId}:{}),check}) : await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), ...(input.revision!==undefined?{revision:input.revision}:{}), ...(sourceSnapshotId ? { sourceSnapshotId } : {}), times: [], sound: { start, end:end-start<=9?end:start+8, check, ...(input.fps ? { fps: input.fps } : {}) } });
     const deadline = Date.now() + 45_000;
     for (let state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId }); ; state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId })) {
       const checkedRevision = (state.atRevision ?? state.revision) as number, checkedTimelineId = state.timelineId ?? timelineId;
-      const requestedEnd = input.end ?? (input.checkId ? state.requestedRange?.end ?? end : end);
+      const requestedEnd = asked ?? (input.checkId ? state.requestedRange?.end ?? end : end);
       if (abortSignal.aborted) throw new Error('Stopped.');
       if (state.status === 'failed') throw new Error(`Saved ${name} check ${snapshotId} at revision ${checkedRevision} could not decode the range: ${state.error ?? 'unknown error'}`);
       if (state.status === 'completed') {
@@ -902,7 +908,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
               if(checked.status==='completed'){if(!checked.clipCheck)throw new Error('Clip check completed without data.');const result=clipCheckResult.parse(JSON.parse(checked.clipCheck));results.push({timelineId,...result});if(checked.frames?.[0])images.push({label:`${timelineId}: sampled framing only`,data:checked.frames[0].image,mimeType:'image/jpeg'});break;}
               await new Promise(resolve=>setTimeout(resolve,1000));
             }
-          }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
+          }finally{await safely('discardFrames',()=>ctx.runMutation(internal.mcp.discardFrames,{snapshotId}));}
         });
         results.sort((a,b)=>ids.indexOf((a as {timelineId:string}).timelineId)-ids.indexOf((b as {timelineId:string}).timelineId));
         const failedTimelineIds=results.filter(result=>!(result as {passed:boolean}).passed).map(result=>(result as {timelineId:string}).timelineId);
@@ -1080,7 +1086,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if(Date.now()>deadline)throw new AnalysisStepError('Rendered review exceeded its three-minute limit. Saved edits remain.');
           await new Promise(resolve=>setTimeout(resolve,1000));
         }
-      }finally{if(reviewId)await ctx.runMutation(internal.compositionReview.cancel,{...run,reviewId});}
+      }finally{if(reviewId)await safely('cancelReview',()=>ctx.runMutation(internal.compositionReview.cancel,{...run,reviewId:reviewId!}));}
     })}),
     duplicateClips:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.duplicateClips,description:"Copy explicitly identified existing clips to requested timeline seconds, or duplicate immediately after the latest selected end when at is omitted. Preserve source ranges, relative timing, appearance, audio settings and linked pairs. A linked video copy returns both new video and audio IDs. For a visual overlay, keep its video and mute its copied audio with setVolume volume:0; unlink first when removing only one member. Copy both neighboring sources together with a selected transition to remap its pair correctly. Uses the same free-layer placement as the editor; never reads the browser clipboard or invents media.",inputSchema:z.object({clipIds:clipIdsInput,at:z.number().min(0).optional()}),execute:async(_ctx,{clipIds,at})=>{
       let newClipIds:string[]=[];
@@ -1323,7 +1329,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if(Date.now()>deadline)throw new AnalysisStepError('Loudness normalization is still processing. Try again when the worker finishes.');
           await new Promise(resolve=>setTimeout(resolve,1000));
         }
-      }finally{await ctx.runMutation(internal.mcp.discardFrames,{snapshotId});}
+      }finally{await safely('discardFrames',()=>ctx.runMutation(internal.mcp.discardFrames,{snapshotId}));}
     }}),
     configureAudio:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.configureAudio,description:"Configure explicitly requested audio fades/role or lower music under voice clips. Pass clipIds to apply the same change to several clips in ONE call and one saved revision; prefer it over repeated calls, with no inspectTimeline needed between them. Every id is checked first; one bad id fails the whole call unchanged. A linked video targets its separate audio. role original/voice/music is a user label, never inferred speech detection. Only music with ducking.enabled is attenuated during audible voice-labeled clip coverage; amount 0..1 is attenuation, attack/release seconds shape entry/recovery. Fades are timeline seconds at clip edges; preserve source/playback rate/timing/volume and omitted controls. No analysis is needed.",inputSchema:z.object({clipId:z.string().min(1).optional(),clipIds:batchAudioIdsInput.optional(),role:z.enum(AUDIO_ROLES).optional(),fadeIn:z.number().min(0).max(AUDIO_LIMITS.fadeIn[1]).optional(),fadeOut:z.number().min(0).max(AUDIO_LIMITS.fadeOut[1]).optional(),ducking:z.object({enabled:z.boolean().optional(),amount:z.number().min(0).max(1).optional(),attack:z.number().min(0).max(AUDIO_LIMITS.attack[1]).optional(),release:z.number().min(0).max(AUDIO_LIMITS.release[1]).optional()}).refine(input=>Object.values(input).some(value=>value!==undefined),{message:'Specify a music ducking control.'}).optional()}).refine(oneClipTarget,{message:'Choose clipId or clipIds, never both.'}).refine(input=>Object.entries(input).some(([key,value])=>key!=='clipId'&&key!=='clipIds'&&value!==undefined),{message:'Specify an audio control.'}),execute:async(_ctx,{clipId,clipIds,...changes})=>{let changed=0;const result=await checkpoint(t=>{const targets=audioTargets(t,clipIds??[clipId!],(_clip,target)=>{if(!target)throw new Error('it has no linked sound');audioSettingsPatch(target,changes)});changed=targets.length;return targets.reduce((next,target)=>configureAudio(next,target,changes),t)});return {...result,changed}}}),
     setVolume: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setVolume, description: "Set volume from 0 (muted) through 1 (100%, original volume) to 2 (200%, boosted). A linked video controls its separate audio clip. Pass clipId; clipIds to set the same volume on several clips (e.g. mute 6 shots) in ONE call and one saved revision; or at: a timeline second to set the shot showing there ('mute 25 s' is setVolume {at:25, volume:0}). Prefer one call over repeated calls, with no inspectTimeline needed between them. Every id is checked first; one bad id fails the whole call unchanged.", inputSchema: z.object({ clipId: z.string().min(1).optional(), clipIds: batchAudioIdsInput.optional(), at: shotTimeInput.optional(), track: shotTrackInput, volume: z.number().min(0).max(2) }).refine(input => [input.clipId, input.clipIds, input.at].filter(value => value !== undefined).length === 1, { message: 'Choose exactly one of clipId, clipIds or at.' }), execute: async (_ctx, input) => { let changed = 0; const result = await checkpoint(t => {
@@ -2363,7 +2369,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const after=await timelineHistoryKey(editSession.timeline);
       if(before!==after||name==='createTimeline'||name==='openTimeline')finishResult=undefined;
       if(taskId&&tracksChanges()&&(before!==after||name==='getFrames'||name==='finish'))
-        await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:fastFrameEvidence(timelineId,after,fastReview.times())});
+        await safely('frameEvidence',()=>laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:fastFrameEvidence(timelineId,after,fastReview.times())}));
       if(taskId&&['checkPacing','checkSound'].includes(name)&&output?.success!==false&&before===after){
         const {images:_images,...evidence}=output;
         await laneCtx.runMutation(internal.lanes.evidence,{...taskScope,evidence:{tool:name,timelineId,fingerprint:after,input,output:evidence}});

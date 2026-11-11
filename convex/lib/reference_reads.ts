@@ -1,3 +1,4 @@
+import { safely } from './safely';
 import { ConvexError, type Infer } from 'convex/values';
 import { z } from 'zod';
 import { parse } from 'convex-helpers/validators';
@@ -107,7 +108,7 @@ export async function runLooksRead(ctx: ActionCtx, ownerId: string, projectId: I
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     throw new Error('Measuring the frames took too long.');
-  } finally { await ctx.runMutation(internal.referenceReads.discard, { readId }); }
+  } finally { await safely('discardRead', () => ctx.runMutation(internal.referenceReads.discard, { readId })); }
 }
 
 /** What the model reads besides the image: the numbers, without the image data. */
