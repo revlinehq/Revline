@@ -66,3 +66,10 @@ export function ChatsPageSkeleton() {
     <ChatRowsSkeleton />
   </main></div>;
 }
+
+/** The AI Editor's start page: its heading and composer, as placeholders. */
+export function NewProjectPageSkeleton() {
+  return <Page title="AI Editor"><main className="dash-content flex flex-col items-center" aria-busy="true">
+    <Skeleton className="mt-[84px] h-10 w-[420px] max-w-full" /><Skeleton className="mt-6 h-[108px] w-full max-w-[656px] rounded-xl" />
+  </main></Page>;
+}
