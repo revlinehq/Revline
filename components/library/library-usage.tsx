@@ -23,7 +23,7 @@ function elapsed(ms: number) { const minutes = Math.floor(ms / 60_000); if (minu
  * splits by kind, never a share of an allowance. */
 export function LibraryUsage({ summary }: { summary?: Summary }) {
   const [review, setReview] = useState(false);
-  if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="animate-none h-1 w-[84px]" /><Skeleton className="animate-none h-3 w-20" /></div>;
+  if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="h-1 w-[84px]" /><Skeleton className="h-3 w-20" /></div>;
   return <>
     <Popover>
       <PopoverTrigger asChild><Button variant="ghost" className="library-usage" aria-label={`${formatBytes(summary.usedBytes)} used. Show storage by kind`}>
