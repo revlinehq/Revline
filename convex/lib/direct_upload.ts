@@ -37,7 +37,7 @@ const tag = (xml: string, name: string) => xml.match(new RegExp(`<${name}>([^<]*
 async function failed(action: string, response: Response): Promise<never> {
   // Storage error bodies name the bucket and key; keep only the code.
   const code = tag(await response.text().catch(() => ''), 'Code');
-  throw new Error(`Cloud storage could not ${action} (${response.status}${code ? ` ${code}` : ''}). Please retry.`);
+  throw new Error(`Storage could not ${action} (${response.status}${code ? ` ${code}` : ''}). Please retry.`);
 }
 
 /** Opens a multipart upload on the S3 API and returns its upload id. */
@@ -46,7 +46,7 @@ export async function createDirectUpload(key: string, contentType: string) {
   const response = await client.fetch(objectUrl(base, { key }, '?uploads'), { method: 'POST', headers: { 'Content-Type': contentType } });
   if (!response.ok) return failed('open the upload', response);
   const uploadId = tag(await response.text(), 'UploadId');
-  if (!uploadId) throw new Error('Cloud storage did not open the upload');
+  if (!uploadId) throw new Error('Storage did not open the upload');
   return uploadId;
 }
 
@@ -97,7 +97,7 @@ export async function completeDirectUpload(upload: DirectUpload, parts: { partNu
   if (!response.ok) return failed('finish the upload', response);
   // S3 can report a failed completion inside a 200 response.
   const xml = await response.text();
-  if (/<Error>/.test(xml)) throw new Error(`Cloud storage could not finish the upload (${tag(xml, 'Code') ?? 'error'}). Please retry.`);
+  if (/<Error>/.test(xml)) throw new Error(`Storage could not finish the upload (${tag(xml, 'Code') ?? 'error'}). Please retry.`);
 }
 
 /** Releases an unfinished upload's parts. An upload that is already gone counts as released. */

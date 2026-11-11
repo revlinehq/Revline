@@ -58,7 +58,7 @@ export function uploadPart(url: string, partNumber: number, blob: Blob, onProgre
         // The media Worker answers with JSON; storage itself answers with an empty body and the part's ETag header.
         const empty = !request.responseText.trim(), direct = empty ? header('etag')?.replace(/"/g, '') : null;
         // Sending the part again cannot help when storage took it but its ETag cannot be read.
-        if (empty && !direct) { reject(new PartFailure('Cloud storage accepted this part but did not let the page read its confirmation. Please contact support.', 'never')); return; }
+        if (empty && !direct) { reject(new PartFailure('Storage accepted this part but did not let the page read its confirmation. Please contact support.', 'never')); return; }
         const result = direct ? { partNumber, etag: direct } : JSON.parse(request.responseText) as UploadedPart;
         if (!result.etag || !Number.isInteger(result.partNumber)) throw new Error();
         const receipt = header('x-part-receipt');
@@ -202,12 +202,12 @@ export async function uploadMultipart(file: Blob, partSize: number, options: Mul
         links.drop(partNumber);
         // A new link is tried once for free. A second refusal is not about expiry; the stored parts stay for a later resume.
         const refused = error instanceof PartFailure && error.retry === 'new-link';
-        if (refused && relinked) throw new UploadInterruptedError(`Cloud storage refused this upload. Add the file again to continue from ${announce()}%.`);
+        if (refused && relinked) throw new UploadInterruptedError(`Storage refused this upload. Add the file again to continue from ${announce()}%.`);
         const expired = refused; relinked ||= refused;
         if (!expired) pace.failed();
         const wait = expired ? 0 : Math.min(30_000, 1000 * 2 ** Math.min(attempt, 5)) + Math.random() * 500;
         outage += Math.min(Date.now() - began, 60_000) + wait;
-        if (outage > GIVE_UP_MS) throw new UploadInterruptedError(`The connection to cloud storage was lost for ${GIVE_UP_MS / 60_000} minutes. Add this file again to continue from ${announce()}%.`);
+        if (outage > GIVE_UP_MS) throw new UploadInterruptedError(`The connection to storage was lost for ${GIVE_UP_MS / 60_000} minutes. Add this file again to continue from ${announce()}%.`);
         console.warn(`[upload] ${new Date().toISOString()} Retrying part ${partNumber}/${partCount} in ${(wait / 1000).toFixed(1)}s.`);
         if (wait) await pause(wait);
       }

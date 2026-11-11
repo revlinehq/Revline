@@ -1,6 +1,6 @@
 # Uploads
 
-How source footage and Cloud storage files reach R2. Code: `lib/editor/multipart-upload.ts` (browser engine), `lib/editor/upload-resume.ts` (resume), `lib/storage/part-links.ts` (link cache), `convex/r2.ts` and `convex/cloudMedia.ts` (leases, links, completion), `cf-workers/media/worker.ts` (`/part`).
+How source footage and Library files reach R2. Code: `lib/editor/multipart-upload.ts` (browser engine), `lib/editor/upload-resume.ts` (resume), `lib/storage/part-links.ts` (link cache), `convex/r2.ts` and `convex/cloudMedia.ts` (leases, links, completion), `cf-workers/media/worker.ts` (`/part`).
 
 ## Transfer
 
@@ -15,7 +15,7 @@ Measured on a ~500 Mbps+ uplink in headless Chrome (November 9, 2026): 32 MiB pa
 - Offline or failing requests: each part waits for `online` and retries with backoff (1 s to 30 s). The upload stops only after a part has failed for 15 minutes, with a message that says to add the file again.
 - Closed tab, reload, crash, or that 15-minute stop: the browser keeps a note per file in IndexedDB (`revline-uploads`): upload id, part size, and each stored part's etag with the Worker's receipt. Adding the same file again (same name, size, modified time, and a SHA-256 of its first and last 2 MiB) calls `resume`, which checks the lease (same owner, same project, not finished, not expired) and each receipt's HMAC, and returns the parts that count. Only the rest are sent.
 - The receipt is an HMAC by the media Worker over key, upload id, part number, size and etag, returned in the `X-Part-Receipt` header. R2's Worker binding cannot list the parts of a multipart upload, so this is how the server knows a part exists without trusting the browser.
-- Limits: a project upload lease lasts 24 hours from its start; a Cloud storage upload is cleared after 2 idle hours. After that the file starts over. Resume is per browser profile. Cancelling releases the upload at once.
+- Limits: a project upload lease lasts 24 hours from its start; a Library upload is cleared after 2 idle hours. After that the file starts over. Resume is per browser profile. Cancelling releases the upload at once.
 
 ## Direct-to-storage parts (off until configured)
 

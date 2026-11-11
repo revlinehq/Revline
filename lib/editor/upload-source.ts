@@ -29,7 +29,7 @@ export async function uploadSourceFile(
   signal?: AbortSignal,
 ): Promise<Id<'assets'>> {
   // Match the cloud transport's limits before reading or transferring any bytes.
-  if (!uploadPartSize(file.size)) throw new Error(`“${file.name}” is larger than cloud storage accepts in one upload (about 930 GB). Split it before importing.`);
+  if (!uploadPartSize(file.size)) throw new Error(`“${file.name}” is larger than storage accepts in one upload (about 930 GB). Split it before importing.`);
   let thumbnail:Blob|undefined;
   let savedAssetId:Id<'assets'>|undefined;
   const started=Date.now();
@@ -51,7 +51,7 @@ export async function uploadSourceFile(
       { ...transport, start: () => transport.start(metadata) },
       (percent, activity) => onProgress(percent, 'uploading', uploadActivityLabel(activity)),
       signal,
-      () => { onProgress(100, 'saving'); log('Transfer finished; finalizing cloud storage'); },
+      () => { onProgress(100, 'saving'); log('Transfer finished; finalizing storage'); },
     );
     if (!assetId) throw new Error('The upload did not return media.');
     // The source is already durable. A slow or blocked optional image request must

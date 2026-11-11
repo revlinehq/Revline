@@ -1,0 +1,1 @@
+- Dashboard: Cloud storage is now the Library (sidebar under AI Editor, `/library`; `/storage` redirects): folders, grid and list views, drag to move, drop to upload, multi-select with Move to, Add to project, Download and Delete, a details panel with rename. Why: the founder asked for the new storage design under a new name.

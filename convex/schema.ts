@@ -48,7 +48,7 @@ export const brandScreenValidator = v.object({ name: v.string(), storageId: v.id
 
 export const aspectRatio = v.union(v.literal("vertical"), v.literal("square"), v.literal("landscape"), v.literal("portrait-feed"), v.literal("classic"));
 export const assetKind = v.union(v.literal("video"), v.literal("audio"), v.literal("image"), v.literal("model"));
-/** What a cloud storage upload may hold. */
+/** What a Library upload may hold. */
 export const cloudMediaKind = v.union(v.literal('video'), v.literal('audio'), v.literal('image'));
 /** A stored file's kind: any media asset, or an export. */
 export const storageObjectKind = v.union(assetKind, v.literal('export'));

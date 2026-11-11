@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, Clapperboard, Cloud, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
+import { ChartNoAxesColumn, Clapperboard, Folder, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 export type DashboardNavItem = { label: string; href: string; icon: LucideIcon; /** The icon is made of open strokes (bars, lines): the sidebar thickens them instead of filling the shape. */ strokeIcon?: boolean; /** Path prefixes that mark this item active; defaults to its href. */ match?: string[] };
@@ -7,6 +7,7 @@ export type DashboardNavItem = { label: string; href: string; icon: LucideIcon; 
 export const DASHBOARD_NAV: { label: string; items: DashboardNavItem[] }[] = [
   { label: 'Create', items: [
     { label: 'AI Editor', href: NEW_PROJECT_PATH, icon: Clapperboard, match: [NEW_PROJECT_PATH, '/chats'] },
+    { label: 'Library', href: '/library', icon: Folder },
   ] },
   { label: 'Publish', items: [
     { label: 'Posts', href: '/posts', icon: Send },
@@ -15,7 +16,6 @@ export const DASHBOARD_NAV: { label: string; items: DashboardNavItem[] }[] = [
   { label: 'Account', items: [
     { label: 'Settings', href: '/profile', icon: Settings },
     { label: 'Connected accounts', href: '/accounts', icon: Plug },
-    { label: 'Cloud storage', href: '/storage', icon: Cloud },
   ] },
 ];
 
