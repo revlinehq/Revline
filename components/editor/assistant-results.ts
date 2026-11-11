@@ -46,7 +46,7 @@ function latestPublicationReceipt(receipts: readonly TimelinePublicationReceipt[
 }
 
 /** Preserve the SDK's raw prompt identity alongside its stable streamed React key. */
-export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;turnState?:ChatMessage['turnState'];turnError?:string;turnResuming?:boolean;parts:readonly unknown[]}):ChatMessage {
+export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;turnState?:ChatMessage['turnState'];turnError?:string;turnResuming?:boolean;turnModel?:string;turnEffort?:string;parts:readonly unknown[]}):ChatMessage {
   const publicationReceipt=latestPublicationReceipt(message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}));
   // Text and tool calls in the order the model produced them; adjacent tool calls form one group.
   const blocks:ChatBlock[]=[];
@@ -59,7 +59,7 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
     if(!text.trim())continue;
     if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
   }
-  return {turnError:message.turnError,turnResuming:message.turnResuming,turnState:message.turnState,id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+  return {turnModel:message.turnModel,turnEffort:message.turnEffort,turnError:message.turnError,turnResuming:message.turnResuming,turnState:message.turnState,id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 
 /** The receipt stays with its original request, including a paginated partial turn. */

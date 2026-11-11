@@ -19,7 +19,7 @@ import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
 import { useMediaFileDrop } from '@/components/editor/media-file-drop';
 import { rememberOpeningFootage } from '@/lib/editor/footage-opening';
 import { clearNewProjectDraft, clearNewProjectSources, newProjectBrief, newProjectCloudFootage, newProjectLinkImports, saveNewProjectLinkImports, rememberOpeningRequest, saveNewProjectBrief, saveNewProjectCloudFootage } from '@/lib/editor/opening-request';
-import { assistantRequest } from '@/components/editor/assistant-composer-controls';
+import { useAssistantComposerControls, type ComposerSettings } from '@/components/editor/assistant-composer-controls';
 import { Plus, Upload, Link2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -44,6 +44,7 @@ type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcess
 
 /** Recent projects on the start page; the rest are under "View all". */
 const RECENT_PROJECTS = 4;
+const NO_SETTINGS: ComposerSettings = {};
 
 export function NewConversation() {
   const router = useRouter();
@@ -103,7 +104,8 @@ export function NewConversation() {
   const recentProjects = ownProjects.slice(0, RECENT_PROJECTS);
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
-  const request = assistantRequest(settings ?? {});
+  const composerControls = useAssistantComposerControls({ settings: settings ?? NO_SETTINGS, disabled: !draftReady || busy });
+  const request = composerControls.request;
 
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; unsubscribe.current?.(); }; }, []);
   useEffect(() => {
@@ -420,7 +422,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} actions={composerControls.actions} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));
