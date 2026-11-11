@@ -124,3 +124,18 @@ export async function callToken(form: Record<string, string>, what: string): Pro
   if (!response.ok || code || !text(json.access_token)) throw tiktokError(what, response.status, code, text(json.error_description), text(json.log_id));
   return json;
 }
+
+/**
+ * Calls /v2/oauth/revoke/ (form-encoded) with the account's access token. TikTok answers an empty object on success
+ * and `{ error, error_description, log_id }` otherwise. https://developers.tiktok.com/doc/oauth-revoke-a-user-access-token
+ */
+export async function callRevoke(form: Record<string, string>, what: string): Promise<void> {
+  const response = await send(`${API_ORIGIN}/v2/oauth/revoke/`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Cache-Control': 'no-cache' },
+    body: new URLSearchParams(form).toString(),
+  }, what);
+  const { json } = response;
+  const code = text(json.error);
+  if (!response.ok || code) throw tiktokError(what, response.status, code, text(json.error_description), text(json.log_id));
+}

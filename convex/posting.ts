@@ -5,11 +5,12 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import { requireOwner } from './lib/auth';
 import { mediaUrl } from './lib/media_storage';
 import { exportFileName } from './renders';
-import { accountStatus, postingPlatform, postStatus } from './postingTables';
+import { accountStatus, postingPlatform, postStatus, postVisibility, tiktokChoices, tiktokVisibility, youtubeVisibility } from './postingTables';
 import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types';
 import { POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, TITLE_LIMIT } from '../lib/posting/limits';
 import { livePlatform } from '../lib/posting/server';
+import { YOUTUBE_FIRST_VISIBILITY, isTikTokVisibility, isYouTubeVisibility, type YouTubeVisibility } from '../lib/posting/visibility';
 
 // The posting base: connected social accounts, posts to them, and the scheduler state machine.
 // Network work (OAuth, publishing, stats) lives in postingActions.ts; every state change is a mutation here,
@@ -21,6 +22,15 @@ const SCHEDULE_HORIZON_MS = 90 * 86400_000;
 const STALE_POSTING_MS = 20 * 60_000;
 const PROCESSING_LIMIT_MS = 24 * 3600_000, PROCESSING_POLL_MS = 4 * 60_000;
 const RETRY_DELAY_MS = 5 * 60_000;
+/**
+ * Waits between the quick checks of a post the platform just accepted: about 15 s, 45 s, 2 min and 4 min after it.
+ * Most uploads finish processing within these, so "Posting" does not sit until the next tick; after them the tick polls.
+ */
+const QUICK_CHECK_DELAYS_MS = [15_000, 30_000, 75_000, 120_000];
+/** How long the tick leaves a post alone once a quick check starts: longer than the longest check (a YouTube upload that resumes inside it), so the two never poll the same post at once. */
+const QUICK_CHECK_LEASE_MS = 8 * 60_000;
+/** A disconnect removes the tokens once the platform was asked to revoke them; this removes them if that never ran. */
+const PURGE_FALLBACK_MS = 2 * 60_000;
 export const STATS_WINDOW_MS = 30 * 86400_000;
 
 const INTERRUPTED = 'Posting was interrupted before the platform confirmed it. Check the account first, then retry if the video is not there.';
@@ -65,14 +75,53 @@ export const accounts = query({
   },
 });
 
-/** Remove an account's tokens. Its published posts stay in the history; posts still waiting for it fail. */
+/** Stop using an account: it reads as disconnected at once and posts still waiting for it fail. Its tokens are removed by `purgeTokens`. */
+async function markDisconnected(ctx: MutationCtx, account: Doc<'postingAccounts'>, now: number) {
+  await ctx.db.patch(account._id, { status: 'disconnected', tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, updatedAt: now });
+  const waiting = await ctx.db.query('postingPosts').withIndex('by_account_status', q => q.eq('accountId', account._id).eq('status', 'scheduled')).collect();
+  for (const post of waiting) await ctx.db.patch(post._id, { status: 'failed', error: 'This account was disconnected before the post went out.', updatedAt: now });
+}
+/**
+ * Disconnect an account: Revline's access is revoked at the platform, then its tokens are deleted here. The account
+ * is gone for the user at once; a platform that fails or does not answer never keeps the tokens from being deleted.
+ * Its published posts stay in the history; posts still waiting for it fail.
+ */
 export const disconnect = mutation({
   args: { accountId: v.id('postingAccounts') }, returns: v.null(),
   handler: async (ctx, { accountId }) => {
-    const ownerId = await requireOwner(ctx), account = await ownedAccount(ctx, ownerId, accountId), now = Date.now();
-    await ctx.db.patch(account._id, { status: 'disconnected', tokenCipher: undefined, tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, updatedAt: now });
-    const waiting = await ctx.db.query('postingPosts').withIndex('by_account_status', q => q.eq('accountId', account._id).eq('status', 'scheduled')).collect();
-    for (const post of waiting) await ctx.db.patch(post._id, { status: 'failed', error: 'This account was disconnected before the post went out.', updatedAt: now });
+    const ownerId = await requireOwner(ctx), account = await ownedAccount(ctx, ownerId, accountId);
+    await markDisconnected(ctx, account, Date.now());
+    await ctx.scheduler.runAfter(0, internal.postingActions.revokeAccount, { accountId });
+    // The action deletes the tokens when it ends. Should it never run, they are deleted here all the same.
+    await ctx.scheduler.runAfter(PURGE_FALLBACK_MS, internal.posting.purgeTokens, { accountId });
+    return null;
+  },
+});
+/** Delete a disconnected account's tokens. A reconnect in the meantime stored new ones, which stay. */
+export const purgeTokens = internalMutation({
+  args: { accountId: v.id('postingAccounts') }, returns: v.null(),
+  handler: async (ctx, { accountId }) => {
+    const account = await ctx.db.get(accountId);
+    if (account?.status === 'disconnected' && account.tokenCipher !== undefined) await ctx.db.patch(accountId, { tokenCipher: undefined, updatedAt: Date.now() });
+    return null;
+  },
+});
+/** Deleting a Revline account disconnects every account it connected. Returns the ones whose access is still to be revoked. */
+export const disconnectOwner = internalMutation({
+  args: { ownerId: v.string() }, returns: v.array(v.id('postingAccounts')),
+  handler: async (ctx, { ownerId }) => {
+    const now = Date.now(), accounts = (await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect()).filter(account => account.tokenCipher !== undefined);
+    // No fallback purge here: the rows themselves are removed with the account.
+    for (const account of accounts) if (account.status !== 'disconnected') await markDisconnected(ctx, account, now);
+    return accounts.map(account => account._id);
+  },
+});
+/** A connected TikTok account of the signed-in owner, checked before its posting settings are read for the Post dialog. */
+export const ownedTikTok = internalQuery({
+  args: { accountId: v.id('postingAccounts') }, returns: v.null(),
+  handler: async (ctx, { accountId }) => {
+    const account = await ownedAccount(ctx, await requireOwner(ctx), accountId);
+    if (account.platform !== 'tiktok' || account.status !== 'connected') throw new ConvexError('Account not found');
     return null;
   },
 });
@@ -175,15 +224,49 @@ async function postableExport(ctx: QueryCtx | MutationCtx, ownerId: string, jobI
 export const createBatch = mutation({
   args: {
     jobId: v.id('renderJobs'), caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()), campaignId: v.optional(v.string()),
-    targets: v.array(v.object({ accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()) })),
+    targets: v.array(v.object({
+      accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()),
+      /** Who can view this account's post, and TikTok's per-post settings. Instagram ignores both. */
+      visibility: v.optional(postVisibility), tiktok: v.optional(tiktokChoices),
+    })),
   },
   returns: v.id('postingBatches'),
   handler: async (ctx, args) => createBatchFor(ctx, await requireOwner(ctx), args),
 });
 export type BatchInput = {
   jobId: Id<'renderJobs'>; caption: string; title?: string; scheduledAt?: number; campaignId?: string;
-  targets: { accountId: Id<'postingAccounts'>; caption?: string; title?: string }[];
+  targets: { accountId: Id<'postingAccounts'>; caption?: string; title?: string; visibility?: Doc<'postingPosts'>['visibility']; tiktok?: Doc<'postingPosts'>['tiktok'] }[];
 };
+/** The visibility of the owner's most recent YouTube post that carries one: the Post dialog's last-used value. "Public" before any. */
+async function lastYouTubeVisibility(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<YouTubeVisibility> {
+  // Every YouTube post made since the choice exists carries one, so the newest row answers; older rows are skipped.
+  const recent = await ctx.db.query('postingPosts').withIndex('by_owner_platform', q => q.eq('ownerId', ownerId).eq('platform', 'youtube')).order('desc').take(20);
+  const last = recent.find(post => post.visibility !== undefined)?.visibility;
+  return isYouTubeVisibility(last) ? last : YOUTUBE_FIRST_VISIBILITY;
+}
+/** What the Post dialog starts from: the YouTube visibility this owner used last. TikTok never has a default. */
+export const lastVisibility = query({
+  args: {}, returns: v.object({ youtube: youtubeVisibility }),
+  handler: async ctx => ({ youtube: await lastYouTubeVisibility(ctx, await requireOwner(ctx)) }),
+});
+/**
+ * The choices one post stores, checked against what its platform takes. A YouTube post without a choice (a post
+ * from the editor) uses the owner's last one. A TikTok post without one is sent by the adapter as "Only me" with
+ * interactions off. Instagram has no per-post privacy, so nothing is stored for it.
+ */
+async function postChoices(platform: Doc<'postingPosts'>['platform'], target: BatchInput['targets'][number], lastYouTube: () => Promise<YouTubeVisibility>): Promise<Pick<Doc<'postingPosts'>, 'visibility' | 'tiktok'>> {
+  if (platform === 'youtube') {
+    if (target.visibility !== undefined && !isYouTubeVisibility(target.visibility)) throw new ConvexError('Pick Public, Unlisted or Private for YouTube.');
+    return { visibility: target.visibility ?? await lastYouTube() };
+  }
+  if (platform !== 'tiktok') return {};
+  if (target.visibility !== undefined && !isTikTokVisibility(target.visibility)) throw new ConvexError('Pick who can view the TikTok post.');
+  // Without a choice the adapter posts as "Only me", so branded content needs a wider one stated.
+  if (target.tiktok?.brandedContent && (target.visibility ?? 'SELF_ONLY') === 'SELF_ONLY') throw new ConvexError('Branded content cannot be posted as "Only me" on TikTok.');
+  // Only what was switched on is stored: absent means off.
+  const on = Object.fromEntries(Object.entries(target.tiktok ?? {}).filter(([, value]) => value === true));
+  return { ...(target.visibility ? { visibility: target.visibility } : {}), ...(Object.keys(on).length ? { tiktok: on } : {}) };
+}
 /** The checks a post's text and time must pass, shared by `createBatch` and a post that waits for its export. */
 const text = (value: string | undefined, limit: number, name: string) => {
   const trimmed = value?.trim();
@@ -210,13 +293,15 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
     ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
     caption, ...(title ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now,
   });
+  let remembered: YouTubeVisibility | undefined;
+  const lastYouTube = async () => remembered ??= await lastYouTubeVisibility(ctx, ownerId);
   for (const target of args.targets) {
     const account = await ownedAccount(ctx, ownerId, target.accountId);
     if (account.status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
     const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
     const postId = await ctx.db.insert('postingPosts', {
       ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
-      status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
+      ...await postChoices(account.platform, target, lastYouTube), status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
     });
     // "Post now" does not wait for the next scheduler tick.
     if (!scheduledAt) await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
@@ -451,7 +536,10 @@ export const claim = internalMutation({
   args: { postId: v.id('postingPosts') },
   returns: v.union(v.null(), v.object({
     accountId: v.id('postingAccounts'), platform: postingPlatform,
-    input: v.object({ videoUrl: v.string(), videoBytes: v.number(), durationSeconds: v.number(), width: v.number(), height: v.number(), title: v.optional(v.string()), caption: v.string() }),
+    input: v.object({ videoUrl: v.string(), videoBytes: v.number(), durationSeconds: v.number(), width: v.number(), height: v.number(), title: v.optional(v.string()), caption: v.string(),
+      youtube: v.optional(v.object({ privacyStatus: youtubeVisibility })),
+      tiktok: v.optional(v.object({ privacyLevel: v.optional(tiktokVisibility), ...tiktokChoices.fields })),
+    }),
   })),
   handler: async (ctx, { postId }) => {
     const post = await ctx.db.get(postId), now = Date.now();
@@ -469,10 +557,13 @@ export const claim = internalMutation({
     const videoUrl = await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }, true).catch(() => null);
     if (!timeline || !videoUrl) return fail('The export file could not be read. Export the video again, then post it.');
     const size = job.outputSize ?? (job.outputStorageId ? (await ctx.db.system.get(job.outputStorageId))?.size : undefined) ?? 0;
+    // The stored choice in the shape each adapter reads. Without one the adapter's own default applies.
+    const choices = post.platform === 'youtube' ? isYouTubeVisibility(post.visibility) ? { youtube: { privacyStatus: post.visibility } } : {}
+      : post.platform === 'tiktok' && (post.visibility || post.tiktok) ? { tiktok: { ...(isTikTokVisibility(post.visibility) ? { privacyLevel: post.visibility } : {}), ...post.tiktok } } : {};
     await ctx.db.patch(postId, { status: 'posting', attempts: post.attempts + 1, claimedAt: now, dueAt: now, error: undefined, updatedAt: now });
     return {
       accountId: post.accountId, platform: post.platform,
-      input: { videoUrl, videoBytes: size, durationSeconds: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, job.resolution ?? 1080), ...(post.title ? { title: post.title } : {}), caption: post.caption },
+      input: { videoUrl, videoBytes: size, durationSeconds: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, job.resolution ?? 1080), ...(post.title ? { title: post.title } : {}), caption: post.caption, ...choices },
     };
   },
 });
@@ -492,7 +583,15 @@ export const settle = internalMutation({
     const post = await ctx.db.get(postId), now = Date.now();
     if (!post || post.status !== from) return null;
     if (outcome.status === 'published') await ctx.db.patch(postId, { status: 'published', platformPostId: outcome.platformPostId, url: outcome.url, publishedAt: now, error: undefined, updatedAt: now });
-    else if (outcome.status === 'processing') { if (from === 'posting') await ctx.db.patch(postId, { status: 'processing', platformJobId: outcome.platformJobId, dueAt: now + 60_000, updatedAt: now }); }
+    else if (outcome.status === 'processing') {
+      if (from === 'posting') {
+        // The tick stays away while the quick checks run, then polls as before.
+        await ctx.db.patch(postId, { status: 'processing', platformJobId: outcome.platformJobId, dueAt: now + PROCESSING_POLL_MS, updatedAt: now });
+        await ctx.scheduler.runAfter(QUICK_CHECK_DELAYS_MS[0], internal.posting.quickCheck, { postId, step: 0 });
+      }
+      // A check can move the job on (a YouTube upload that finished becomes a video to watch): the next check needs the new id.
+      else if (outcome.platformJobId !== post.platformJobId) await ctx.db.patch(postId, { platformJobId: outcome.platformJobId, updatedAt: now });
+    }
     else {
       const error = outcome.error.slice(0, ERROR_LIMIT) || 'The platform refused this post.';
       // At most MAX_ATTEMPTS tries, and only for errors the adapter marked retryable.
@@ -508,6 +607,33 @@ export const settle = internalMutation({
   },
 });
 
+/**
+ * One quick check of a post the platform accepted moments ago. Each check is scheduled by the one before it, so they
+ * never overlap, exist only while that post is processing, and end after the last delay; then the tick polls.
+ */
+export const quickCheck = internalMutation({
+  args: { postId: v.id('postingPosts'), step: v.number() }, returns: v.null(),
+  handler: async (ctx, { postId, step }) => {
+    const post = await ctx.db.get(postId), now = Date.now();
+    if (!post || post.status !== 'processing') return null;
+    await ctx.db.patch(postId, { dueAt: now + QUICK_CHECK_LEASE_MS });
+    await ctx.scheduler.runAfter(0, internal.postingActions.checkPost, { postId, quickStep: step });
+    return null;
+  },
+});
+/** A quick check ended with the post still processing: schedule the next one, or hand the post back to the tick after the last. */
+export const afterQuickCheck = internalMutation({
+  args: { postId: v.id('postingPosts'), step: v.number() }, returns: v.null(),
+  handler: async (ctx, { postId, step }) => {
+    const post = await ctx.db.get(postId), next = QUICK_CHECK_DELAYS_MS[step + 1];
+    if (!post || post.status !== 'processing') return null;
+    if (next !== undefined) await ctx.scheduler.runAfter(next, internal.posting.quickCheck, { postId, step: step + 1 });
+    // Due now, so the next tick polls it instead of waiting out the lease.
+    else await ctx.db.patch(postId, { dueAt: Date.now() });
+    return null;
+  },
+});
+
 /** A `processing` post's account and platform job, for a checkPublish poll. */
 export const processingPost = internalQuery({
   args: { postId: v.id('postingPosts') },
@@ -518,7 +644,7 @@ export const processingPost = internalQuery({
   },
 });
 
-/** Cron, every 5 minutes: start due posts, poll processing ones, and close posts whose action was lost. */
+/** Cron, every 5 minutes: start due posts, poll processing ones (after their quick checks), and close posts whose action was lost. */
 export const tick = internalMutation({
   args: {}, returns: v.null(),
   handler: async ctx => {

@@ -11,11 +11,10 @@ import {
 import { failureMessage, rejectionMessage } from './errors';
 import { getJson } from './http';
 import { buildMetadata, isShort, type YouTubePublishOptions } from './metadata';
-import { SCOPES, authUrl, exchangeCode, refresh } from './oauth';
+import { SCOPES, authUrl, exchangeCode, refresh, revoke } from './oauth';
 import { CHUNK_BYTES, JOB_MAX_AGE_MS, UPLOAD_BUDGET_MS, decodeJob, encodeJob, readChunk, runUpload, startSession, type UploadJob, type VideoJob } from './upload';
 
 export type { YouTubePublishOptions } from './metadata';
-export { revoke } from './oauth';
 
 type ChannelList = {
   items?: { id: string; snippet?: { title?: string; customUrl?: string; thumbnails?: Record<string, { url?: string } | undefined> } }[];
@@ -173,4 +172,5 @@ export const youtube: PlatformAdapter = {
   publish,
   checkPublish,
   postStats,
+  revoke: (_credentials, tokens) => revoke(tokens),
 };

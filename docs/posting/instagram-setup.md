@@ -152,3 +152,7 @@ cannot see codec, frame rate or bitrate; Instagram rejects those during processi
 - Call `refresh` at least once every 60 days per account (weekly is fine); it returns the same tokens when the token
   is younger than 24 hours.
 - Pass the `code` query parameter from the callback as received; a trailing `#_` is stripped.
+- Disconnect: the Instagram API with Instagram Login documents no call that revokes a token or removes the app's
+  permissions, so the adapter's `revoke` sends nothing. Revline deletes its copy of the token (which then expires
+  unrefreshed within 60 days); the person can also remove Revline in Instagram under Settings > Apps and websites.
+- Instagram has no per-post privacy, so the Post dialog offers none for it.

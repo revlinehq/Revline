@@ -1,7 +1,7 @@
 // TikTok adapter: Login Kit for Web (OAuth v2) + Content Posting API (Direct Post) + Display API (stats).
 // Setup, limits and what the posting base still has to add: docs/posting/tiktok-setup.md
 import { PostingError, type AccountProfile, type AccountTokens, type PlatformAdapter, type PlatformCredentials, type PostStats, type PublishCheck, type PublishInput, type PublishResult } from '../../adapter';
-import { callApi, callToken } from './api';
+import { callApi, callRevoke, callToken } from './api';
 import { creatorInfo, postInfo, validateVideo, type TikTokPrivacyLevel, type TikTokPublishInput } from './settings';
 import { MAX_UPLOAD_BYTES, chunkPlan, uploadFromUrl } from './upload';
 
@@ -183,4 +183,12 @@ export const tiktok: PlatformAdapter = {
   publish,
   checkPublish,
   postStats,
+  async revoke(credentials: PlatformCredentials, tokens: AccountTokens): Promise<void> {
+    let accessToken = tokens.accessToken;
+    // TikTok revokes by access token, and one lasts a day: an expired one is renewed first so there is something to revoke.
+    if (tokens.expiresAt !== undefined && tokens.expiresAt <= Date.now() && tokens.refreshToken) {
+      accessToken = String((await callToken({ client_key: credentials.clientId, client_secret: credentials.clientSecret, grant_type: 'refresh_token', refresh_token: tokens.refreshToken }, 'renew the connection')).access_token);
+    }
+    await callRevoke({ client_key: credentials.clientId, client_secret: credentials.clientSecret, token: accessToken }, 'disconnect the account');
+  },
 };

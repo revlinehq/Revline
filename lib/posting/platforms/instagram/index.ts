@@ -316,4 +316,10 @@ export const instagram: PlatformAdapter = {
       fetchedAt: Date.now(),
     };
   },
+
+  // The Instagram API with Instagram Login documents no call that revokes a token or removes the app's permissions
+  // (its endpoints are authorize, access_token and refresh_access_token; `DELETE /{user-id}/permissions` is documented
+  // for Facebook Login only). So there is nothing to send: Revline deletes its copy of the token, which then expires
+  // unrefreshed within 60 days, and the person can remove Revline in Instagram under Settings > Apps and websites.
+  async revoke() {},
 };
