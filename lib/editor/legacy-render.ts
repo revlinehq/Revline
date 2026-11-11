@@ -1,14 +1,33 @@
+import { captionPreset } from './caption-presets';
 import { legacyTextFont } from './text-fonts';
-import type { Timeline } from './types';
+import type { Clip, Timeline } from './types';
 
-/** The timeline as a media processor built before the newer text fonts can draw it: each newer font becomes the
- *  older font it names in `TEXT_FONTS` (Bangers → Anton, Outfit → DM Sans, Rubik and Figtree → Montserrat).
- *  Such a processor rejects a font it does not know, which would fail the whole export or frame read.
- *  The saved timeline is untouched; only the copy sent to that processor changes. Same object when nothing changes. */
-export function legacyRenderTimeline<T extends Pick<Timeline, 'clips'>>(timeline: T): T {
-  if (!timeline.clips.some(clip => legacyTextFont(clip.fontFamily))) return timeline;
-  return { ...timeline, clips: timeline.clips.map(clip => {
-    const fallback = legacyTextFont(clip.fontFamily);
-    return fallback ? { ...clip, fontFamily: fallback } : clip;
-  }) };
+/** What the deployed media processor lacks: newer fonts (`render:fonts-2`), caption presets (`render:caption-presets`). */
+export type LegacyRender = { fonts: boolean; presets: boolean };
+
+/** The timeline as an older media processor can draw it. Fonts: each newer font becomes the older font it names in
+ *  `TEXT_FONTS` (Bangers → Anton, Outfit → DM Sans, Rubik and Figtree → Montserrat); such a processor rejects a font
+ *  it does not know, failing the whole export or frame read. Presets: the caption keeps its static look and gets the
+ *  older karaoke motion the preset names (or none), with capitals written out, since that renderer cannot draw
+ *  the preset's own word motion. The saved timeline is untouched; only the copy sent to that processor changes.
+ *  Same object when nothing changes. */
+export function legacyRenderTimeline<T extends Pick<Timeline, 'clips'>>(timeline: T, missing: LegacyRender = { fonts: true, presets: true }): T {
+  const change = (clip: Clip): Clip => {
+    let next = clip;
+    const font = missing.fonts ? legacyTextFont(clip.fontFamily) : undefined;
+    if (font) next = { ...next, fontFamily: font };
+    if (missing.presets && clip.captionPreset) {
+      const preset = captionPreset(clip.captionPreset.id);
+      const { captionPreset: _, ...rest } = next;
+      next = { ...rest, ...(preset.uppercase && rest.text ? { text: rest.text.toLocaleUpperCase('en-US') } : {}) };
+      if (preset.wordBox?.color) next = { ...next, background: preset.wordBox.color };
+      if (next.textTemplate?.preset === 'karaoke') {
+        const { karaokeStyle: __, ...template } = next.textTemplate;
+        next = preset.legacy ? { ...next, textTemplate: { ...template, karaokeStyle: preset.legacy } } : (({ textTemplate: ___, ...without }) => without)(next);
+      }
+    }
+    return next;
+  };
+  const clips = timeline.clips.map(change);
+  return clips.every((clip, index) => clip === timeline.clips[index]) ? timeline : { ...timeline, clips };
 }

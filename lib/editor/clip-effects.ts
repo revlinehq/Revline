@@ -7,6 +7,7 @@ import { textTemplateTimingPatch, validateTextTemplate } from './text-templates'
 import { validatePlaybackRate } from './playback-rate';
 import { isTransitionPreset, validateTransitionSettings } from './clip-transitions';
 import { validateTextStyle } from './text-style';
+import { validateCaptionPreset } from './caption-presets';
 import { audioFadeTimingPatch,validateAudioSettings } from './audio-settings';
 import { textAnimationTimingPatch,validateTextAnimationTiming } from './text-animation-timing';
 import {validateVisualFade,visualFadeTimingPatch} from './visual-fades';
@@ -108,6 +109,7 @@ export function validateClipEffects(clip: Clip) {
   if (clip.effectKeyframes?.length && clip.kind !== 'video' && clip.kind !== 'image') throw new Error('Effect keyframes apply to video or image clips.');
   validateTextTemplate(clip);
   validateTextStyle(clip);
+  validateCaptionPreset(clip);
   validateTextGradient(clip);
   validateAudioSettings(clip);
   validateTextAnimationTiming(clip);

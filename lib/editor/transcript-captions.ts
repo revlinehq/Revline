@@ -2,10 +2,12 @@ import { refineTranscriptWithAudioActivity, type AudioActivity } from '../media-
 import type { Transcript, TranscriptWord } from '../media-analysis/transcript';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource } from './playback-rate';
 import type { Clip, Timeline } from './types';
+import { captionPreset, captionPresetPatch, type CaptionPresetId } from './caption-presets';
 import { CLIPPER_CAPTION_HIGHLIGHT, CLIPPER_CAPTION_MAX_WORDS, CLIPPER_CAPTION_STYLE, DEFAULT_CAPTION_STYLE } from './text-style';
 
-/** minimal: static phrases (default everywhere). clipper: the clip lane's 1–3 word karaoke captions. */
-export type TranscriptCaptionStyle = 'minimal' | 'clipper';
+/** minimal: static phrases (default everywhere). clipper: the clip lane's 1–3 word karaoke captions.
+ *  A caption preset: short captions with word timings, in that preset's look and words per caption. */
+export type TranscriptCaptionStyle = 'minimal' | 'clipper' | { preset: CaptionPresetId };
 
 export type SpeechAnalysis = { transcript?: Transcript; audioActivity?: AudioActivity; speechCleanup?: { edges?: number[] } };
 
@@ -37,6 +39,8 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
   // Speech cuts round measured edges to milliseconds; provider floats must not drop boundary words.
   const retained = (word: TranscriptWord) => word.start >= clip.sourceStart - .001 && word.start < sourceEnd - 1e-7 && word.end <= sourceEnd + .001 && word.text.trim();
   const measured = edges?.length === transcript.words.length * 2 ? edges : undefined;
+  const preset = typeof style === 'object' ? style.preset : undefined, timed = preset !== undefined || style === 'clipper';
+  const maxWords = preset ? captionPreset(preset).maxWords : CLIPPER_CAPTION_MAX_WORDS;
   const span = (group: TranscriptWord[]) => {
     const first = timelineTimeAtSource(clip, group[0].start);
     const last = timelineTimeAtSource(clip, Math.max(...group.map(word => word.end)));
@@ -57,7 +61,7 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
     const { start: phraseStart, end: phraseEnd } = span(phrase);
     // Balanced sizes (4 → 2+2, 5 → 3+2) so no word flashes alone; a chunk too close to its predecessor joins it,
     // so consecutive chunks never overlap.
-    const count = Math.ceil(phrase.length / CLIPPER_CAPTION_MAX_WORDS), chunks: TranscriptWord[][] = [], starts: number[] = [];
+    const count = Math.ceil(phrase.length / maxWords), chunks: TranscriptWord[][] = [], starts: number[] = [];
     for (let i = 0, from = 0; i < count; i++) {
       const to = Math.round((i + 1) * phrase.length / count), chunk = phrase.slice(from, to);
       from = to;
@@ -75,21 +79,27 @@ export function captionClipsFromTranscript(clip: Clip, transcript: Transcript, f
         previous = to;
         return { start: from, end: to };
       });
+      const text = tokens.map(({ token }) => token).join(' ');
+      if (preset) {
+        const base: Clip = { id: createId(), kind: 'caption', start, duration, sourceStart: 0, text, x: DEFAULT_CAPTION_STYLE.x, y: DEFAULT_CAPTION_STYLE.y, textTemplate: { preset: 'karaoke', duration, offset: 0, wordTimings } };
+        return { ...base, ...captionPresetPatch(base, preset) };
+      }
       return {
         id: createId(), kind: 'caption', start, duration, sourceStart: 0,
-        text: tokens.map(({ token }) => token).join(' ').toLocaleUpperCase('en-US'), ...CLIPPER_CAPTION_STYLE,
+        text: text.toLocaleUpperCase('en-US'), ...CLIPPER_CAPTION_STYLE,
         textTemplate: { preset: 'karaoke', highlightColor: CLIPPER_CAPTION_HIGHLIGHT, karaokeStyle: 'pop', duration, offset: 0, wordTimings },
       };
     });
   };
   if (!transcript.words.length) {
     // Segment text cannot be safely divided when individual words are absent.
-    return transcript.segments.filter(retained).map(segment => caption([segment]));
+    // A preset spreads the words evenly over the phrase when the source has no word timings.
+    return transcript.segments.filter(retained).map(segment => { const made = caption([segment]); return preset ? { ...made, ...captionPresetPatch(made, preset) } : made; });
   }
   const words = transcript.words.filter((word, index) => word.text.trim() && wordInSource(word, clip.sourceStart, sourceEnd, measured && { start: measured[index * 2], end: measured[index * 2 + 1] })).sort((a, b) => a.start - b.start);
   const result: Clip[] = [];
   let group: TranscriptWord[] = [];
-  const flush = () => { if (group.length) result.push(...(style === 'clipper' ? clipperCaptions(group) : [caption(group)])); group = []; };
+  const flush = () => { if (group.length) result.push(...(timed ? clipperCaptions(group) : [caption(group)])); group = []; };
   for (const word of words) {
     if (group.length && (group.length >= 6 || (word.end - group[0].start) / rate > 2.5 || (word.start - group.at(-1)!.end) / rate > .45 || group.map(entry => entry.text.trim()).join(' ').length + word.text.trim().length > 42)) flush();
     group.push(word);

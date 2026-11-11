@@ -1,6 +1,7 @@
 import type { TextGradient } from './text-gradient';
 import { textStyle, type TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
+import type { ClipCaptionPreset } from './caption-presets';
 
 export const VFX_TEXT_PRESETS = ['neon-echo', 'lyric-slam', 'kinetic-stack'] as const;
 export const EXPRESSIVE_TEXT_PRESETS = ['rgb-split', 'type-trails', 'blur-focus', 'character-scramble', 'spotlight-sweep', 'ink-write', 'tunnel-zoom'] as const;
@@ -50,11 +51,12 @@ export type TemplateTextProps = {
   textStyle?: TextAppearance; fontFamily?: string; fontWeight?: number; resolution?: number;
   wordTimings?: WordTiming[]; karaokeStyle?: KaraokeStyle;
   strength?: number; revealDuration?: number; stagger?: number;
+  captionPreset?: ClipCaptionPreset;
 };
 export type TemplateTextSource = { id: string; start: number; offset: number; props: Omit<TemplateTextProps, 'frame'> };
 type TextTemplateClip = {
   kind: string; start: number; duration: number; text?: string; color?: string; fontSize?: number; textTemplate?: TextTemplate;
-  textStyle?: TextAppearance; fontFamily?: TextFontId; textGradient?: TextGradient;
+  textStyle?: TextAppearance; fontFamily?: TextFontId; textGradient?: TextGradient; captionPreset?: ClipCaptionPreset;
 };
 
 export function validateTextTemplate(clip: Pick<TextTemplateClip, 'kind' | 'textTemplate'> & {text?: string; duration?: number}) {
@@ -101,5 +103,7 @@ export function templateTextProps(clip: TextTemplateClip, time: number, fps: num
     ...(template.stagger !== undefined ? { stagger: template.stagger } : {}),
     ...(template.wordTimings?{wordTimings:template.wordTimings}:{}),
     ...(template.karaokeStyle?{karaokeStyle:template.karaokeStyle}:{}),
+    // A caption preset draws the karaoke words its own way; another template on the clip ignores it.
+    ...(clip.captionPreset&&template.preset==='karaoke'?{captionPreset:clip.captionPreset}:{}),
   };
 }

@@ -4,6 +4,7 @@ import { Easing, interpolate, spring } from './frame-motion';
 import type { TemplateTextProps } from './text-templates';
 import { EXPRESSIVE_TEXT_PRESETS, VFX_TEXT_PRESETS, type ExpressiveTextPreset } from './text-templates';
 import { LyricText } from './lyric-text';
+import { CaptionPresetText } from './caption-preset-text';
 import { ExpressiveText } from './expressive-text';
 import { textAppearance, textTypographyStyle } from './text-style';
 
@@ -11,6 +12,7 @@ const clamp = { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' } as const;
 /** No wall clock, effects, or CSS animation: the same frame always produces the same pixels. */
 export function TemplateText(props: TemplateTextProps) {
   const { preset, text, frame, fps, durationInFrames, color, fontSize, highlightColor, textStyle, fontFamily, fontWeight, resolution, wordTimings, karaokeStyle } = props;
+  if(props.captionPreset)return <CaptionPresetText {...props} captionPreset={props.captionPreset}/>;
   if(EXPRESSIVE_TEXT_PRESETS.some(value=>value===preset))return <ExpressiveText {...props} preset={preset as ExpressiveTextPreset}/>;
   if(VFX_TEXT_PRESETS.some(value=>value===preset))return <LyricText {...{preset,text,frame,fps,durationInFrames,color,fontSize,highlightColor,textStyle,fontFamily,fontWeight,resolution,textGradient:props.textGradient,gradientTime:props.gradientTime}}/>;
   const tokens = text.split(/(\s+)/);

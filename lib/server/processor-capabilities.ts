@@ -22,8 +22,9 @@ export const GATED_READ_MODES = ['looks'] as const;
 export const GATED_TASK_KINDS = [] as const;
 /** What the renderer draws that an older image cannot. 'fonts-2': the text fonts added with caption presets (Bangers,
  *  Outfit, Rubik, Figtree, more Poppins weights). Convex sends an older processor each of those as the older font it
- *  names in lib/editor/text-fonts.ts, since that processor rejects a font it does not know. */
-export const GATED_RENDER_FEATURES = ['fonts-2'] as const;
+ *  names in lib/editor/text-fonts.ts, since that processor rejects a font it does not know. 'caption-presets': the word-by-word
+ *  motion of caption presets (lib/editor/caption-preset-text.tsx); an older processor gets the preset's static look. */
+export const GATED_RENDER_FEATURES = ['fonts-2', 'caption-presets'] as const;
 
 /** Removed with the motion and recreate lanes. Stored rows may still name them, so the schema keeps them; no processor
  *  runs or reports them, and nothing queues them. */

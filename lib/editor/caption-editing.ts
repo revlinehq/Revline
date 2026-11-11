@@ -1,7 +1,11 @@
 import { validateClipEffects,offsetClipMotion } from './clip-effects';
 import { DEFAULT_TRANSFORM,normalizeTimeline,trackOf,type Clip,type Timeline } from './types';
 import { resolvedTextAppearance,textStyle,type TextAppearance } from './text-style';
-import { templateTextProps } from './text-templates';
+import { templateTextProps, type WordTiming } from './text-templates';
+import { captionPresetPatch, type CaptionPresetId } from './caption-presets';
+import { wordInSource } from './transcript-captions';
+import { sourceEndOf, timelineTimeAtSource } from './playback-rate';
+import type { Transcript } from '../media-analysis/transcript';
 
 export type CaptionStyleChanges=Partial<Pick<Clip,'fontSize'|'fontFamily'|'color'|'background'|'x'|'y'|'blendMode'>>&{rotation?:number;textStyle?:Partial<TextAppearance>;textCase?:'sentence'|'upper'|'lower'};
 function caption(timeline:Timeline,id:string){const clip=timeline.clips.find(item=>item.id===id);if(!clip||clip.kind!=='caption')throw new Error('Choose an existing caption clip.');return clip}
@@ -20,6 +24,8 @@ function validateAppearance(clip:Clip){
 /** Copy appearance only. Each target keeps its own words, timing and animation. */
 export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetIds?:string[]):Timeline{
   const source=caption(timeline,sourceClipId),selected=targets(timeline,targetIds);
+  // A caption in a preset lends the preset, word motion included.
+  if(source.captionPreset)return applyCaptionPreset(timeline,source.captionPreset.id,[...selected],new Map(),{popScale:source.captionPreset.popScale,popDuration:source.captionPreset.popDuration});
   validateAppearance(source);
   const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:templateTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),textGradient:source.textGradient?{...source.textGradient,offset:0}:undefined,transform:{...DEFAULT_TRANSFORM,...source.transform}};
   return {...timeline,clips:timeline.clips.map(clip=>selected.has(clip.id)?{...clip,...patch}:clip)};
@@ -63,4 +69,44 @@ export function updateCaptionTiming(timeline:Timeline,clipId:string,changes:{sta
   if(blocker)throw new Error(`The caption range overlaps another clip on its V track. ${blocker.kind==='caption'?'Caption':'Clip'} ${blocker.id}${blocker.text?` ${JSON.stringify(blocker.text.slice(0,60))}`:''} occupies ${blocker.start.toFixed(2)}–${(blocker.start+blocker.duration).toFixed(2)} s. Retime that clip first, or keep this caption outside it.`);
   const next={...clip,...offsetClipMotion(clip,start-clip.start),start,duration};validateClipEffects(next);
   return {...timeline,clips:timeline.clips.map(item=>item.id===clipId?next:item)};
+}
+
+/** Saved speech per source asset, as `captionSpeech` returns it. */
+export type CaptionSpeechSources=ReadonlyMap<string,{transcript:Transcript;edges?:number[]}>;
+/** Each word's spoken time within a caption that has none saved, read from the transcript of the footage beneath it.
+ *  Undefined when the spoken words there do not match the caption's words one for one (edited or hand-written text):
+ *  the preset then spreads its words evenly over the caption. */
+export function captionWordTimings(timeline:Timeline,clip:Clip,speech:CaptionSpeechSources):WordTiming[]|undefined{
+  const tokens=(clip.text??'').trim().split(/\s+/).filter(Boolean),end=clip.start+clip.duration,frame=1/timeline.fps;
+  if(!tokens.length)return undefined;
+  const spoken:{start:number;end:number}[]=[];
+  for(const footage of timeline.clips){
+    if(!footage.assetId||!(footage.kind==='video'&&!footage.audioSeparated||footage.kind==='audio')||footage.start>=end||footage.start+footage.duration<=clip.start)continue;
+    const source=speech.get(footage.assetId);if(!source)continue;
+    const sourceEnd=sourceEndOf(footage),edges=source.edges?.length===source.transcript.words.length*2?source.edges:undefined;
+    source.transcript.words.forEach((word,index)=>{
+      if(!word.text.trim()||!wordInSource(word,footage.sourceStart,sourceEnd,edges&&{start:edges[index*2],end:edges[index*2+1]}))return;
+      const at=timelineTimeAtSource(footage,word.start),to=timelineTimeAtSource(footage,word.end);
+      if(at<clip.start-frame||at>=end)return;
+      for(const _ of word.text.trim().split(/\s+/))spoken.push({start:at,end:to});
+    });
+  }
+  spoken.sort((a,b)=>a.start-b.start);
+  if(spoken.length!==tokens.length)return undefined;
+  let previous=0;
+  return spoken.map(word=>{const start=Math.min(clip.duration,Math.max(previous,word.start-clip.start)),stop=Math.min(clip.duration,Math.max(start,word.end-clip.start));previous=stop;return {start,end:stop};});
+}
+/** Apply a caption preset's whole look and word motion to every caption, or exact targets. Words, timing and position
+ *  stay; a caption without word timings gets them from `speech` when its words match the transcript. */
+export function applyCaptionPreset(timeline:Timeline,id:CaptionPresetId,targetIds?:string[],speech:CaptionSpeechSources=new Map(),tuning:{popScale?:number;popDuration?:number}={}):Timeline{
+  const selected=targets(timeline,targetIds);
+  return {...timeline,clips:timeline.clips.map(clip=>{
+    if(!selected.has(clip.id))return clip;
+    const template=clip.textTemplate?.preset==='karaoke'?clip.textTemplate:undefined,saved=template?.wordTimings;
+    const timings=saved??captionWordTimings(timeline,clip,speech);
+    // Timings are kept only where they belong to these words; another template's frozen timing is dropped.
+    const base:Clip={...clip,textTemplate:{preset:'karaoke',duration:template?.duration??clip.duration,offset:template?.offset??0,...(timings?{wordTimings:timings}:{})}};
+    const next={...base,...captionPresetPatch(base,id,tuning)};
+    validateAppearance(next);return next;
+  })};
 }
