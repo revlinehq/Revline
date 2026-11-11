@@ -87,7 +87,9 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   }, [tiktokIds]);
   // The first thing still missing for a TikTok account; the post buttons stay off until there is none.
   const blocked = onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '';
-  async function submit(schedule: boolean) {
+  /** A picked time makes this a scheduled post; without one it goes out now. */
+  const schedule = !!when;
+  async function submit() {
     if (busy || !picked.length || !clip || blocked) return;
     const scheduledAt = schedule ? new Date(when).getTime() : undefined;
     if (schedule && (!Number.isFinite(scheduledAt) || scheduledAt! <= Date.now())) { setError('Pick a time in the future.'); return; }
@@ -101,7 +103,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
       await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), targets });
       if (onPostsPage) onClose();
       else setSent({ count: targets.length, scheduledAt, tiktok: onTikTok.length > 0 });
-    } catch (reason) { setError(userError(reason, 'Could not post this clip.')); }
+    } catch (reason) { setError(userError(reason, schedule ? 'Could not schedule this clip.' : 'Could not post this clip.')); }
     finally { setBusy(false); }
   }
   const label = clip?.label ?? finished?.find(entry => entry.jobId === current)?.label;
@@ -112,7 +114,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
     <DialogDescription className="sr-only">Send this clip to your connected accounts, now or at a time you pick.</DialogDescription>
     {sent ? <>
       <div className="post-dialog-done">
-        <p>{sent.scheduledAt ? `${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
+        <p>{sent.scheduledAt ? `Scheduled for ${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
         {sent.tiktok && <p>TikTok can take a few minutes to process a video before it shows on the profile.</p>}
       </div>
       <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
@@ -181,7 +183,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
             <label htmlFor="post-when">Schedule <small>Optional</small></label>
             <div className="post-when" data-empty={!when || undefined}>
               <CalendarDays aria-hidden="true" />
-              <Input id="post-when" type="datetime-local" min={localInputValue(Date.now())} value={when} onChange={event => { setWhen(event.target.value); setError(''); }} />
+              <Input id="post-when" type="datetime-local" min={localInputValue(Date.now())} value={when} onChange={event => { const next = event.target.value; setWhen(next); setError(next && new Date(next).getTime() <= Date.now() ? 'Pick a time in the future.' : ''); }} />
               <span aria-hidden="true">Pick a date and time</span>
             </div>
           </div>
@@ -192,8 +194,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
         {error ? <p className="dash-error" role="alert">{error}</p> : blocked && <p className="post-note post-blocked" role="status">{blocked}</p>}
         {/* A disabled button shows no hint of its own, so the reason sits on the wrapper as well as in the line beside it. */}
         <span className="post-dialog-actions" title={blocked || undefined}>
-          <Button variant="soft" disabled={busy || !picked.length || !clip || !when || !!blocked} onClick={() => void submit(true)}>Schedule</Button>
-          <Button variant="primary" disabled={busy || !picked.length || !clip || !!blocked} onClick={() => void submit(false)}>Post now</Button>
+          <Button variant="primary" disabled={busy || !picked.length || !clip || !!blocked} onClick={() => void submit()}>{schedule ? busy ? 'Scheduling…' : 'Schedule' : busy ? 'Posting…' : 'Post now'}</Button>
         </span>
       </div>
     </>}
