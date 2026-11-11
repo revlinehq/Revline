@@ -8,6 +8,7 @@ import { v } from 'convex/values';
 import { internalMutation } from './_generated/server';
 import { createProjectFor } from './projects';
 import { writeProject, readProject } from './lib/project_data';
+import { MAX_TIMELINE_TABS } from './timelineTabs';
 import { normalizeTimeline } from '../lib/editor/types';
 import { addMediaClip, patchClip } from '../lib/editor/operations';
 
@@ -88,7 +89,7 @@ export const importSnapshot = internalMutation({
     if (
       !args.assets.length ||
       args.assets.length > 200 ||
-      args.tabs.length > 10 ||
+      args.tabs.length > MAX_TIMELINE_TABS ||
       args.saved.length > 10
     )
       throw new Error("Snapshot exceeds project limits.");

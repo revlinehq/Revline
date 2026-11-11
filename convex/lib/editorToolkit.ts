@@ -210,7 +210,7 @@ const CLIP_EDGE_WAIT_MS = 120_000;
 const REST_OF_EDIT = 'Now do the rest of the request in order: the opening clip if it names one, then every image, b-roll and overlay it names at the timeline times of their words (find the phrase in lines above), then finish. The edit is not done while something the request names is missing.';
 /** Tools a task closed by failed finish checks still answers: its final result, and the agent's own reports. */
 const EXHAUSTED_CALLABLE = new Set(['finish', 'reportLimitation', 'reportIssue']);
-const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief', ...POSTING_TOOLS]);
+const APPROVAL_FREE_TOOLS = new Set(['readScript', 'planScript', 'findHighlights', 'planClips', 'checkClip', 'finishClipping', 'listTimelines', 'createTimeline', 'openTimeline', 'importVideoLink', 'getMediaTask', 'exportVideo', 'listExports', 'getExport', 'cancelExport', 'planEffects', 'previewRender', 'inspectTimeline', 'inspectClip', 'recordFix', 'analyzeMedia', 'detectFacecam', 'inspectVideo', 'inspectFrames', 'inspectAssetAnalysis', 'markMusicBeats', 'analyzeMusic', 'addMarker', 'moveMarker', 'removeMarker', 'removeMarkers', 'remember', 'recallMemory', 'forget', 'getFrames', 'askUser', 'readFrames', 'readSkill', 'analyzeColor', 'trackPoints', 'getTrack', 'addLayer', 'approveClip', 'unapproveClip', 'getSound', 'checkSound', 'readBrief', 'updateBrief', ...POSTING_TOOLS]);
 
 /** A getSound or checkSound result as the agent reads it: lists short enough to scan, one line per second of levels. */
 function soundReport(result: SoundResult, check: boolean) {
@@ -1049,11 +1049,25 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         await new Promise(resolve=>setTimeout(resolve,Math.min(1500,deadline-Date.now())));
       }
     } }),
-    exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Render a saved timeline to MP4 only when explicitly requested. timelineId selects a tab from listTimelines; omit for the open tab. Call once per requested timeline. Finish all timeline edits before exporting.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), ...EXPORT_SETTINGS_INPUT }), execute: async (_ctx, input) => {
+    exportVideo: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.exportVideo, description: "Export a timeline to MP4 when the user asks. In the editor it shows a card and nothing renders until the user presses Export on it; an unchanged timeline is never rendered twice. Leave out resolution, fps and quality to use the user's usual settings (those of their last export); pass one only when this message asks for a different value. timelineId selects a tab from listTimelines; omit for the open tab. Finish all requested edits first.", inputSchema: z.object({ timelineId: z.string().min(1).optional(), ...EXPORT_SETTINGS_INPUT }), execute: async (_ctx, input) => {
+      // The card ends the turn, so this request's edits must pass their checks before it is shown.
+      if (!isMcpRun(run.runId) && finishRequired && !finishResult?.passed) throw new Error('This request changed the timeline and finish has not passed yet. Call finish; once it passes, call exportVideo.');
       await verifyCurrentTimeline();
       await editSession.publish();
-      return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
+      // Over MCP the task already carries the user's confirmation, so the render starts (convex/mcpActions.ts).
+      if (isMcpRun(run.runId)) return ctx.runMutation(internal.assistant.exportRunVideo, { ...run, ...input, resolution: input.resolution ?? 1080, fps: input.fps ?? 30, quality: input.quality ?? 'high' });
+      return posting(() => ctx.runMutation(internal.assistant.proposeRunExport, { ...run, ...input }));
     } }),
+    // The project's exports, through the same owner- and project-checked functions as the MCP tools (convex/mcp.ts).
+    listExports: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listExports, description: "This project's recent exports, newest first: status, progress, settings and whether each is of the current version (current). Read-only.", inputSchema: z.object({ limit: z.number().int().min(1).max(20).optional() }).strict(), execute: async (_ctx, { limit }) => {
+      const jobs = await ctx.runQuery(internal.mcp.listExports, { ownerId: run.ownerId, projectId: run.projectId, limit: limit ?? 10 }) as { output: unknown }[];
+      return jobs.map(({ output: _output, ...job }) => job);
+    } }),
+    getExport: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getExport, description: "One export's status and progress by jobId. A finished export downloads from its card in the chat or the editor's export list. Read-only.", inputSchema: z.object({ jobId: z.string().min(1) }).strict(), execute: async (_ctx, { jobId }) => {
+      const { output: _output, ...job } = await ctx.runQuery(internal.mcp.exportJob, { ownerId: run.ownerId, projectId: run.projectId, jobId }) as { output: unknown };
+      return job;
+    } }),
+    cancelExport: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.cancelExport, description: "Stop a queued or rendering export of this project by jobId, when the user asks or it is stuck. Saved edits and finished exports are untouched.", inputSchema: z.object({ jobId: z.string().min(1) }).strict(), execute: async (_ctx, { jobId }) => ctx.runMutation(internal.mcp.cancelExport, { ownerId: run.ownerId, projectId: run.projectId, jobId }) }),
 
     // Posting to the user's connected social accounts (convex/assistantPosting.ts). Loaded with the posting capability.
     listConnectedAccounts: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listConnectedAccounts, description: "The user's connected social accounts (YouTube, TikTok, Instagram): accountId, platform, handle, status and whether one needs reconnecting. Call before postVideo or schedulePost to find the accountIds the user means. The user connects and reconnects accounts on the Accounts page (/accounts); no tool does that.", inputSchema: z.object({}), execute: async () => {
@@ -2423,7 +2437,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
       if(taskId){
         const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
-        if(name==='exportVideo'&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
+        if(name==='exportVideo'&&isMcpRun(run.runId)&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         // A closed task still answers finish, with its final result and what to do next: every task ends with finish,
         // and an error there read to an agent as a missing tool (issue #357). A limitation note still saves too.
         if(task?.result?.exhausted&&name==='finish'){finishResult=task.result;return {...task.result,...finishSaveState(),success:false,next:exhaustedNext(isMcpRun(run.runId))};}

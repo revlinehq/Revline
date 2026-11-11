@@ -30,3 +30,18 @@
 .canvas-toolbar:has(.timeline-tabs){flex-wrap:nowrap;min-width:0}
 .canvas-toolbar-end{display:flex;align-items:center;flex:none;gap:10px;margin-left:auto}
 @media(max-width:900px){.conversation-editor .canvas-toolbar:has(.timeline-tabs){height:40px;min-height:40px;padding:0 12px}}
+.timeline-tab{min-width:84px}
+.timeline-tab-main{flex:1;min-width:0}
+.timeline-tab-step{display:grid;place-items:center;flex:none;width:24px;height:28px;border:0;border-radius:6px;background:none;color:var(--ws-muted,#a1a3ab);cursor:pointer}
+.timeline-tab-step:hover:not(:disabled){background:#ffffff0f;color:var(--ws-text,#ededed)}
+.timeline-tab-step:disabled{cursor:default;opacity:.35}
+.timeline-tab-step[data-state=open]{background:#ffffff14;color:var(--ws-text,#ededed)}
+.timeline-tab-list{width:280px;padding:0;gap:0;background:#222;color:#ededed;border:1px solid #363636;box-shadow:0 12px 32px #0007}
+.timeline-tab-list [data-slot=command]{background:transparent;color:inherit}
+.timeline-tab-list [data-slot=command-item]{gap:8px;font-size:12px}
+.timeline-tab-list [data-slot=command-item][data-selected=true]{background:#ffffff14}
+.timeline-tab-list [data-slot=command-item] svg{margin-left:0}
+.timeline-tab-list-name{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.timeline-tab-list [data-slot=command-empty]{font-size:12px;color:var(--ws-muted,#a1a3ab)}
+.timeline-tab-list [data-slot=input-group]{background:#2a2a2a;border-color:#363636}
+.timeline-tab-step,.timeline-tab-list *{outline:none}
