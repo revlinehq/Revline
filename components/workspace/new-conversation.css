@@ -49,11 +49,9 @@ html[data-workspace-theme=dark] .new-conversation-error{color:#edaaaa}
 
 .new-conversation-actions-title{margin:0;font-family:var(--font-geist),sans-serif;font-size:12px;font-weight:500;line-height:18px;color:#aaa}
 .new-conversation-recent{display:grid;gap:12px}
-.new-conversation-recent-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.new-conversation-recent-actions{display:flex;align-items:center;gap:4px}
-.new-conversation-recent .new-conversation-upload-new{color:#b5b5b5;font-weight:400}
+.new-conversation-recent-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:28px}
 .new-conversation-recent .new-conversation-view-all{color:#8f8f8f;font-weight:400}
-.new-conversation-recent .new-conversation-upload-new:hover,.new-conversation-recent .new-conversation-view-all:hover{background:#2a2a2a;color:#eee}
+.new-conversation-recent .new-conversation-view-all:hover{background:#2a2a2a;color:#eee}
 .new-conversation-projects{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
 .new-conversation-projects .new-conversation-project{height:auto;min-width:0;justify-content:flex-start;gap:12px;padding:10px;border:1px solid #2b2b2b;border-radius:8px;background:#1f1f1f;color:#eee;text-align:left;white-space:normal}
 .new-conversation-projects .new-conversation-project:hover{border-color:#3b3b3b;background:#262626}
