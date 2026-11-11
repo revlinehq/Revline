@@ -1,0 +1,1 @@
+- Text rendering: emoji in captions and graphics draw as colour emoji (bundled Noto Color Emoji) in the preview, frames and exports instead of a "NO GLYPH" box. Why: a prod agent reported it on addCaption and addGraphic (#280); render machines have no emoji font.

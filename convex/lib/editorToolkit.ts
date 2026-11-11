@@ -1,3 +1,4 @@
+import { processorCan } from './processor_capabilities';
 import { retryAbortedTransaction } from './retry_aborted_transaction';
 import { materializeTranscript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
@@ -73,7 +74,7 @@ import { ZOOM_LIMITS, isZoomPreset, EFFECT_CATALOG,SOLID_COLOR_LIMITS, OFFERED_T
 import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { TEXT_EFFECT_PRESETS, TEXT_ANIMATION_PRESETS,TEXT_ANIMATION_LABELS,textAnimationPatch, textEffectPatch, textTemplatePatch } from '../../lib/editor/text-effects';
 import { TEXT_LOOKS,textLookPatch } from '../../lib/editor/text-looks';
-import { TEXT_FONTS } from '../../lib/editor/text-fonts';
+import { hasEmoji, TEXT_FONTS } from '../../lib/editor/text-fonts';
 import { applyCaptionStyle,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../../lib/editor/caption-editing';
 import { captionSpeech, captionsCoverTranscript, sourceCaptions } from '../../lib/editor/transcript-captions';
 import { AUDIO_LIMITS,audioSettings,audioSettingsPatch,configureAudio } from '../../lib/editor/audio-settings';
@@ -356,12 +357,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // (lib/editor/frame-grid.ts): edges on frames, shared boundaries rounded once, sub-frame gaps closed.
   const onFrameGrid = (timeline: Timeline, previous?: Timeline) => snapTimelineToFrames(timeline, assetId => assets.find(asset => asset._id === assetId)?.duration, previous);
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
-    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [];
+    let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false;
     const result = await editSession.checkpoint(timeline => { if (inspectFirst && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit: call inspectTimeline once, then repeat this call. One successful inspectTimeline clears this for the rest of the request.');
     const grid = onFrameGrid(edit(timeline), timeline); healed = grid.healed;
     // The edit that opens a hole says so in its own result, not three finish checks later.
     holes = newPictureGaps(timeline, grid.timeline);
     const next = grid.timeline, collision = newLayerOverlaps(timeline, next)[0];
+    emojiText = next.clips.some(clip => hasEmoji(clip.text) && timeline.clips.find(before => before.id === clip.id)?.text !== clip.text);
     // Refuse before the draft changes; the server repeats this check on every assistant write.
     if (collision) throw new TimelineGestureRejection(`Clips ${collision[0].id} and ${collision[1].id} would overlap on the same layer. Move one to another time or layer first.`, 'overlap');
     const touched = approvalViolations(timeline, next);
@@ -371,7 +373,10 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     receipts.checkpoint(result);
     if (result.unchanged) return result;
     const note = healedNote(healed), round = (value: number) => Math.round(value * 1000) / 1000;
-    return { ...result, ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
+    // An older media processor has no emoji font: say so with the edit instead of leaving a "NO GLYPH" box to be found in a frame.
+    // Only for an edit that wrote the emoji text, so moves and trims of that caption stay quiet.
+    const emoji = emojiText && !await processorCan(ctx, 'render:emoji');
+    return { ...result, ...(emoji ? { emojiNote: 'The emoji is saved and shows in the editor preview, but the media processor on this server cannot draw emoji yet: frames (getFrames) and exports show a "NO GLYPH" box in its place until the processor is updated. Tell the user, or leave the emoji out for now.' } : {}), ...(note ? { frameGrid: note } : {}), ...(holes.length ? { gapsCreated: holes.slice(0, 50).map(gap => ({ start: round(gap.start), end: round(gap.end), seconds: round(gap.end - gap.start), track: gap.track, ...(gap.afterClipId ? { afterClipId: gap.afterClipId } : {}), beforeClipId: gap.beforeClipId })), gapWarning: pictureGapNote(holes) } : {}) };
   };
   const markerCheckpoint = async (edit: (timeline: Timeline) => Timeline) => {
     const result = await checkpoint(edit);

@@ -31,11 +31,32 @@ export function editorTextFont(id?: TextFontId) {
   return { ...font, family: `Revline Text ${font.id}` };
 }
 export function isTextFont(value: unknown): value is TextFontId { return TEXT_FONTS.some(font => font.id === value); }
-export function textFontFaceCss(urls: Partial<Record<TextFontId, string>> = {}, scope: 'composition' | 'editor' = 'composition') {
+/** Colour emoji for every text font (Noto Color Emoji, COLRv1, OFL). None of the text fonts has emoji, and a render
+ *  machine has no system emoji font, so without this an emoji draws as a "NO GLYPH" box in frames and exports. */
+export const EMOJI_FONT_FILE = 'noto-color-emoji.woff2';
+/** Every font file a composition needs beside it. */
+export const TEXT_FONT_FILES = [...TEXT_FONTS.map(font => font.fileName), EMOJI_FONT_FILE];
+/** Emoji only. Symbols a text font draws itself (♥ ☀ ▶, digits, ©) stay in that font and its colour, so keycap
+ *  sequences (1️⃣) are not covered. U+200D stays in: without it a joined emoji (a family) falls apart. */
+const EMOJI_RANGE = 'U+200D,U+203C,U+2049,U+2139,U+2194-2199,U+21A9-21AA,U+231A-231B,U+2328,U+23CF,U+23E9-23F3,U+23F8-23FA,U+24C2,U+25AA-25AB,U+25B6,U+25C0,U+25FB-25FE,U+2600-27BF,U+2934-2935,U+2B05-2B07,U+2B1B-2B1C,U+2B50,U+2B55,U+3030,U+303D,U+3297,U+3299,U+1F000-1FAFF,U+E0020-E007F';
+const EMOJI_PATTERN = new RegExp(`[${EMOJI_RANGE.split(',').filter(range => range !== 'U+200D').map(range => range.slice(2).split('-').map(code => `\\u{${code}}`).join('-')).join('')}]`, 'u');
+/** True when the text has a character the emoji face draws (when the text font lacks it). */
+export const hasEmoji = (text: string | undefined) => !!text && EMOJI_PATTERN.test(text);
+export function textFontFaceCss(urls: Partial<Record<TextFontId | 'emoji', string>> = {}, scope: 'composition' | 'editor' = 'composition') {
+  const safe = (url: string) => {
+    if (!/^(https?:|blob:|\.\/|\/[^/])/i.test(url)) throw new Error('Font URLs must use HTTP, a blob URL, or a local path.');
+    return url.replace(/'/g, '%27').replace(/\n/g, '%0A').replace(/\r/g, '%0D').replace(/\\/g, '%5C');
+  };
+  const emoji = safe(urls.emoji ?? `/fonts/${EMOJI_FONT_FILE}`);
   return TEXT_FONTS.map(font => {
     const url = urls[font.id] ?? `/fonts/${font.fileName}`;
-    if (!/^(https?:|blob:|\.\/|\/[^/])/i.test(url)) throw new Error('Font URLs must use HTTP, a blob URL, or a local path.');
-    const escaped = url.replace(/'/g, '%27').replace(/\n/g, '%0A').replace(/\r/g, '%0D').replace(/\\/g, '%5C');
-    return `@font-face{font-family:'${scope === 'editor' ? editorTextFont(font.id).family : font.family}';font-style:normal;font-weight:${font.faceWeight};font-display:block;src:url('${escaped}') format('${font.fileName.endsWith('.ttf')?'truetype':'woff2'}')}`;
+    const family = scope === 'editor' ? editorTextFont(font.id).family : font.family;
+    // A second face of the same family, limited to emoji: the family itself falls back to colour emoji wherever it is
+    // used, with no change to any font-family value. Its weight descriptor must equal the text face's, or Chrome
+    // treats it as another weight of the family and never uses it. It is declared first so the text face, declared
+    // later, keeps every character it has (a ♥ stays a text glyph in the text colour). tech() keeps it from browsers that cannot draw COLRv1 (they use
+    // the system emoji font instead of blank glyphs).
+    return `@font-face{font-family:'${family}';font-style:normal;font-weight:${font.faceWeight};font-display:block;src:url('${emoji}') format('woff2') tech(color-COLRv1);unicode-range:${EMOJI_RANGE}}
+@font-face{font-family:'${family}';font-style:normal;font-weight:${font.faceWeight};font-display:block;src:url('${safe(url)}') format('${font.fileName.endsWith('.ttf')?'truetype':'woff2'}')}`;
   }).join('\n');
 }
