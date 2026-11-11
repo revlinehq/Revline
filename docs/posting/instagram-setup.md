@@ -64,7 +64,22 @@ Guide: [Business Login for Instagram](https://developers.facebook.com/docs/insta
 
   `<POSTING_CALLBACK_PATH>` is the callback route of the posting base (`convex/posting`); fill it in when that lands.
   It must match what the app sends character for character. Add one line per environment (production, development).
-- [ ] Add the **Deauthorize callback URL** and **Data deletion request URL** on the same screen (Meta requires both fields).
+- [ ] Add the two callback URLs on the same screen (Meta requires both fields before App Review):
+
+  | Field | Production URL |
+  |---|---|
+  | Deauthorize callback URL | `https://tryrevline.com/instagram/deauthorize` |
+  | Data deletion request URL | `https://tryrevline.com/instagram/data-deletion` |
+
+  Both are Convex HTTP actions (`convex/postingCallbacks.ts`) reached through the site's proxy without sign-in. Each
+  takes Meta's form-encoded `signed_request` and checks its HMAC-SHA256 signature against `INSTAGRAM_CLIENT_SECRET`
+  (and `META_APP_SECRET`, when set: Meta's pages say "your app secret" without saying which of the two an Instagram
+  Login app signs with, so set it if the dashboard's test call answers 401).
+  - Deauthorize: every Revline connection to that Instagram account is disconnected and its tokens and saved picture
+    are deleted. The account's name and post history stay, as after a disconnect in Revline.
+  - Data deletion: the connection is deleted outright (tokens, ids, username, name, picture). Posts made to it stay
+    in the Revline user's history with their own caption, title and export, without the Instagram post id, link, or
+    stats. Meta gets `{ url, confirmation_code }`; the URL is the public status page `/data-deletion/<code>`.
 
 ## 4. Test before review
 

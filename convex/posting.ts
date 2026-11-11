@@ -98,7 +98,7 @@ export const profilePicture = query({
 });
 
 /** Stop using an account: it reads as disconnected at once and posts still waiting for it fail. Its tokens are removed by `purgeTokens`. */
-async function markDisconnected(ctx: MutationCtx, account: Doc<'postingAccounts'>, now: number) {
+export async function markDisconnected(ctx: MutationCtx, account: Doc<'postingAccounts'>, now: number) {
   if (account.avatarStorageId) await ctx.storage.delete(account.avatarStorageId);
   await ctx.db.patch(account._id, { status: 'disconnected', tokenExpiresAt: undefined, refreshLeaseUntil: undefined, error: undefined, avatarStorageId: undefined, avatarCheckedAt: undefined, updatedAt: now });
   const waiting = await ctx.db.query('postingPosts').withIndex('by_account_status', q => q.eq('accountId', account._id).eq('status', 'scheduled')).collect();
@@ -177,13 +177,13 @@ export const consumeOauthState = internalMutation({
 });
 export const saveAccount = internalMutation({
   args: {
-    ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), username: v.string(), displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()),
+    ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), platformScopedId: v.optional(v.string()), username: v.string(), displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()),
     avatarStorageId: v.optional(v.id('_storage')), tokenCipher: v.string(), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, { ownerId, platform, platformAccountId, ...fields }) => {
     const now = Date.now(), current = await ctx.db.query('postingAccounts').withIndex('by_owner_platform_account', q => q.eq('ownerId', ownerId).eq('platform', platform).eq('platformAccountId', platformAccountId)).unique();
-    const values = { ...fields, status: 'connected' as const, error: undefined, refreshLeaseUntil: undefined, updatedAt: now };
+    const values = { ...fields, status: 'connected' as const, error: undefined, refreshLeaseUntil: undefined, connectedAt: now, updatedAt: now };
     // A new picture replaces the saved one; a reconnect whose picture could not be downloaded keeps the one it had.
     if (current?.avatarStorageId && fields.avatarStorageId) await ctx.storage.delete(current.avatarStorageId);
     // Reconnecting keeps the row, so the account's post history and stats stay attached.
