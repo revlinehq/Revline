@@ -10,10 +10,10 @@
 .editor-post-pill svg{width:14px;height:14px}
 .editor-post-progress[data-slot=progress]{width:56px;height:3px;border-radius:2px;background:#ffffff1f}
 .editor-post-progress [data-slot=progress-indicator]{background:#fff;transition:none}
-.editor-post-cancel.editor-post-cancel{width:20px;height:20px;margin-right:-6px;border-radius:9999px;color:var(--dash-muted)}
+.editor-post-cancel.editor-post-cancel{width:20px;height:20px;margin-right:-6px;border-radius:var(--radius-sm);color:var(--dash-muted)}
 .editor-post-cancel.editor-post-cancel:hover{background:var(--dash-pill);color:var(--dash-text)}
 .editor-post-note{margin-right:4px;color:var(--dash-muted);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.editor-post-state .editor-post-view.editor-post-view{height:32px;padding:0 10px;border-radius:9999px;color:var(--dash-text);font-size:13px;font-weight:500}
+.editor-post-state .editor-post-view.editor-post-view{height:32px;padding:0 10px;border-radius:var(--radius-md);color:var(--dash-text);font-size:13px;font-weight:500}
 .editor-post-view.editor-post-view:hover{background:var(--dash-pill)}
 
 .editor-post-card[data-slot=popover-content]{width:400px;max-width:calc(100vw - 24px);padding:14px;gap:10px;border:1px solid var(--dash-border);border-radius:14px;background:var(--dash-card);color:var(--dash-text);font-size:13px;box-shadow:0 16px 40px #00000066;animation:none;--tw-ring-shadow:0 0 #0000}
