@@ -186,17 +186,37 @@ export function flightText(html: string) {
   return joined;
 }
 
-/** The JSON value starting at `start` (an opening bracket), found by counting brackets outside strings. */
-function jsonAt(source: string, start: number): unknown {
-  let depth = 0, inString = false;
-  for (let index = start; index < source.length; index++) {
-    const char = source[index];
-    if (inString) { if (char === '\\') index++; else if (char === '"') inString = false; continue; }
-    if (char === '"') inString = true;
-    else if (char === '{' || char === '[') depth++;
-    else if (char === '}' || char === ']') { if (--depth === 0) return JSON.parse(source.slice(start, index + 1)); }
+type FlightRow = { id: string; text: boolean; body: string };
+const isHex = (byte: number) => (byte >= 0x30 && byte <= 0x39) || (byte >= 0x61 && byte <= 0x66);
+/**
+ * Splits the stream into its rows. A data row is "<hex id>:<json>" up to the line end. A text row is
+ * "<hex id>:T<byte length in hex>,<text>" and has no line end: the next row starts on the byte after the text,
+ * so rows cannot be found by looking for line starts. Lengths are UTF-8 bytes, hence the walk over bytes.
+ */
+function flightRows(flight: string): FlightRow[] {
+  const bytes = new TextEncoder().encode(flight), decoder = new TextDecoder();
+  const rows: FlightRow[] = [];
+  const lineEnd = (from: number) => { const end = bytes.indexOf(0x0a, from); return end < 0 ? bytes.length : end; };
+  for (let at = 0; at < bytes.length;) {
+    let colon = at;
+    while (colon < bytes.length && colon - at < 16 && isHex(bytes[colon])) colon++;
+    // Not the start of a row (a blank line, say): move on to the next line.
+    if (colon === at || bytes[colon] !== 0x3a) { at = lineEnd(at) + 1; continue; }
+    const id = decoder.decode(bytes.subarray(at, colon));
+    // A text row, when a length that fits the stream follows the T; anything else is read as a line.
+    let comma = colon + 2;
+    if (bytes[colon + 1] === 0x54) while (comma < bytes.length && comma - colon < 12 && isHex(bytes[comma])) comma++;
+    const textEnd = comma > colon + 2 && bytes[comma] === 0x2c ? comma + 1 + parseInt(decoder.decode(bytes.subarray(colon + 2, comma)), 16) : -1;
+    if (textEnd >= 0 && textEnd <= bytes.length) {
+      rows.push({ id, text: true, body: decoder.decode(bytes.subarray(comma + 1, textEnd)) });
+      at = textEnd;
+    } else {
+      const end = lineEnd(colon + 1);
+      rows.push({ id, text: false, body: decoder.decode(bytes.subarray(colon + 1, end)) });
+      at = end + 1;
+    }
   }
-  throw new ShapeError('page data ends before its JSON closes');
+  return rows;
 }
 
 /** Finds the page's cached campaign query (`queryKey: ["campaigns","detail",id]`) anywhere in a parsed value. */
@@ -222,29 +242,20 @@ export function parseCampaignPage(html: string, sourceId: string): PageReading {
     if (!isSourceId(sourceId)) return { kind: 'parse', reason: 'not a campaign id' };
     const flight = flightText(html);
     if (!flight) return { kind: 'parse', reason: 'page carries no embedded data' };
+    const rows = flightRows(flight);
     const marker = '"queryKey":["campaigns","detail"';
     let query: Json | undefined;
-    for (let at = flight.indexOf(marker); at >= 0 && !query; at = flight.indexOf(marker, at + 1)) {
-      // The marker sits inside one row of the stream ("<hex id>:<json>"); parse that row and look inside it.
-      const rowStart = Math.max(flight.lastIndexOf('\n', at) + 1, 0);
-      const prefix = /^[0-9a-f]+:/.exec(flight.slice(rowStart, rowStart + 12));
-      if (!prefix) continue;
-      const open = rowStart + prefix[0].length;
-      if (flight[open] !== '[' && flight[open] !== '{') continue;
-      query = campaignQuery(jsonAt(flight, open), sourceId);
+    for (const row of rows) {
+      if (query) break;
+      if (row.text || !row.body.includes(marker) || (row.body[0] !== '[' && row.body[0] !== '{')) continue;
+      query = campaignQuery(JSON.parse(row.body), sourceId);
     }
     if (!query) return { kind: 'parse', reason: 'no campaign query in the page data' };
     const state = isObject(query.state) ? query.state : fail('campaign query has no state');
     const data = plain(state.data);
     if (data === null || data === undefined) return { kind: 'no_data', reason: `campaign query is empty (${typeof state.status === 'string' ? state.status.slice(0, 40) : 'no status'})` };
     if (!isObject(data)) return { kind: 'parse', reason: 'campaign data is not an object' };
-    const resolve = (id: string) => {
-      // A text row: "<id>:T<byte length in hex>,<text>".
-      const head = new RegExp(`(?:^|\\n)${id}:T([0-9a-f]+),`).exec(flight);
-      if (!head) return undefined;
-      const start = head.index + head[0].length, bytes = parseInt(head[1], 16);
-      return new TextDecoder().decode(new TextEncoder().encode(flight.slice(start, start + bytes)).slice(0, bytes));
-    };
+    const resolve = (id: string) => rows.find(row => row.text && row.id === id)?.body;
     return { kind: 'campaign', campaign: campaignFrom(data, sourceId, resolve) };
   } catch (error) {
     return { kind: 'parse', reason: (error instanceof ShapeError ? error.message : `unreadable page data: ${error instanceof Error ? error.message : 'unknown error'}`).slice(0, 300) };

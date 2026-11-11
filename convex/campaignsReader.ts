@@ -9,7 +9,7 @@ import { endCampaign, upsertCampaign } from './campaignsStore';
 import { isSourceId } from '../lib/campaigns/source';
 import {
   DRAIN_LEASE_MS, FAILURE_KEEP_MS, HALT_MS, HOURLY_HOT_LIMIT, HOURLY_HOT_SCORE, HOURLY_WATCHED_LIMIT, MAX_BACKOFF_MS, MAX_CONSECUTIVE_FAILURES,
-  MAX_PAGE_ATTEMPTS, MIN_BACKOFF_MS, READER_OFF, SITEMAP_EVERY_MS, SITEMAP_RETRY_MS, readerEnabled,
+  MAX_PAGE_ATTEMPTS, MAX_UNREADABLE_PAGES, MIN_BACKOFF_MS, READER_OFF, SITEMAP_EVERY_MS, SITEMAP_RETRY_MS, readerEnabled,
 } from '../lib/campaigns/reader-config';
 
 export async function readerState(ctx: MutationCtx): Promise<Doc<'campaignReader'>> {
@@ -25,17 +25,32 @@ export async function enqueue(ctx: MutationCtx, sourceId: string, dueAt: number)
 function holds(state: Doc<'campaignReader'>, token: string, now: number) {
   return readerEnabled() && state.drainToken === token && !(state.haltedUntil && state.haltedUntil > now);
 }
+async function halt(ctx: MutationCtx, state: Doc<'campaignReader'>, now: number, why: string, reason: string) {
+  console.error(`[campaigns] Reader stopped after ${why} (last: ${reason}). It stays stopped for ${HALT_MS / 3_600_000} hours.`);
+  await ctx.db.patch(state._id, { consecutiveFailures: 0, unreadablePages: 0, haltedUntil: now + HALT_MS, haltReason: reason.slice(0, 300), drainToken: undefined, drainUntil: undefined, backoffUntil: undefined });
+  return false;
+}
 /** Counts a failure; after too many in a row the run stops and stays stopped for HALT_MS. */
 async function failed(ctx: MutationCtx, state: Doc<'campaignReader'>, now: number, reason: string, backoffMs?: number) {
   const consecutiveFailures = state.consecutiveFailures + 1;
-  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-    console.error(`[campaigns] Reader stopped after ${consecutiveFailures} failures in a row (last: ${reason}). It stays stopped for ${HALT_MS / 3_600_000} hours.`);
-    await ctx.db.patch(state._id, { consecutiveFailures: 0, haltedUntil: now + HALT_MS, haltReason: reason.slice(0, 300), drainToken: undefined, drainUntil: undefined, backoffUntil: undefined });
-    return false;
-  }
+  if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) return halt(ctx, state, now, `${consecutiveFailures} failures in a row`, reason);
   await ctx.db.patch(state._id, { consecutiveFailures, ...(backoffMs === undefined ? {} : { backoffUntil: now + backoffMs }) });
   return true;
 }
+/**
+ * Counts a page the site served but the parser could not understand, or whose reading could not be stored. A few of these among pages that read well
+ * are odd pages, noted and passed over; the run stops only when they outnumber the good pages by
+ * MAX_UNREADABLE_PAGES, which is what a block page or a changed page format looks like.
+ */
+async function unreadable(ctx: MutationCtx, state: Doc<'campaignReader'>, now: number, reason: string) {
+  const unreadablePages = (state.unreadablePages ?? 0) + 1;
+  if (unreadablePages >= MAX_UNREADABLE_PAGES) return halt(ctx, state, now, `${unreadablePages} more unreadable pages than readable ones`, reason);
+  // The run of request failures is left as it is: a block that mixes refusals with unreadable pages must still stop the run.
+  await ctx.db.patch(state._id, { unreadablePages });
+  return true;
+}
+/** A campaign read and stored: the run of failures is over, and one unreadable page is forgiven. */
+const readWell = (state: Doc<'campaignReader'>, now: number) => ({ consecutiveFailures: 0, unreadablePages: Math.max(0, (state.unreadablePages ?? 0) - 1), backoffUntil: undefined, lastReadAt: now });
 const backoffFor = (failures: number, retryAfterMs?: number) => Math.min(MAX_BACKOFF_MS, Math.max(MIN_BACKOFF_MS, retryAfterMs ?? MIN_BACKOFF_MS * 2 ** failures));
 
 /** Hourly cron. Off: says so and stops. On: queues the hourly set, lets the daily sitemap read fall due, starts a drain. */
@@ -109,7 +124,7 @@ export const record = internalMutation({ args: { token: v.string(), sourceId: v.
       // The record is validated whole before this runs and written in this one transaction: never half a record.
       await upsertCampaign(ctx, outcome.campaign, now);
       await done();
-      await ctx.db.patch(state._id, { consecutiveFailures: 0, backoffUntil: undefined, lastReadAt: now });
+      await ctx.db.patch(state._id, readWell(state, now));
       return { proceed: true };
     }
     if (outcome.kind === 'no_data') {
@@ -129,12 +144,13 @@ export const record = internalMutation({ args: { token: v.string(), sourceId: v.
       return { proceed: false };
     }
     // An unreadable page or an unexpected HTTP status: the stored campaign, if any, is left exactly as it was.
+    // The page leaves the queue and is next read with the daily sitemap, like any campaign that is not hot.
     await note(outcome.kind, outcome.reason, outcome.kind === 'http' ? outcome.status : undefined);
     await done();
-    return { proceed: await failed(ctx, state, now, `${sourceId}: ${outcome.reason}`) };
+    return { proceed: await (outcome.kind === 'parse' ? unreadable : failed)(ctx, state, now, `${sourceId}: ${outcome.reason}`) };
   } });
 
-/** Takes a page whose reading could not be stored off the queue, so it cannot stall the pages behind it. */
+/** Takes a page whose reading could not be stored off the queue, so it cannot stall the pages behind it. Counted like an unreadable page. */
 export const skip = internalMutation({ args: { token: v.string(), sourceId: v.string(), requestedAt: v.number(), reason: v.string() }, returns: v.object({ proceed: v.boolean() }),
   handler: async (ctx, { token, sourceId, requestedAt, reason }) => {
     const now = Date.now();
@@ -143,7 +159,7 @@ export const skip = internalMutation({ args: { token: v.string(), sourceId: v.st
     await ctx.db.patch(state._id, { lastRequestAt: Math.max(requestedAt, state.lastRequestAt ?? 0) });
     for (const row of await ctx.db.query('campaignReadQueue').withIndex('by_source', q => q.eq('sourceId', sourceId)).take(10)) await ctx.db.delete(row._id);
     await ctx.db.insert('campaignReadFailures', { sourceId, kind: 'parse', reason: `not stored: ${reason}`.slice(0, 300), at: now });
-    return { proceed: await failed(ctx, state, now, `${sourceId}: not stored`) };
+    return { proceed: await unreadable(ctx, state, now, `${sourceId}: not stored`) };
   } });
 
 /** The sitemap could not be read or looked wrong. Nothing is marked ended; it is tried again in a few hours. */
@@ -199,6 +215,30 @@ export const endMissing = internalMutation({ args: { sweepAt: v.number() }, retu
 export const store = internalMutation({ args: { campaign: parsedCampaignValidator }, returns: v.id('campaigns'), handler: async (ctx, { campaign }) => {
   if (!isSourceId(campaign.sourceId)) throw new Error('Not a campaign id');
   return upsertCampaign(ctx, campaign, Date.now());
+} });
+
+/**
+ * For an operator, after the cause of a stop is fixed: lifts the stop and puts back on the queue the pages that
+ * could not be understood or stored in the last `hours` (24 by default; the newest 4,000 notes are looked at)
+ * and have no stored campaign. `requeued` counts those pages, including any already waiting on the queue.
+ * Makes no request itself; the next hourly tick starts the drain.
+ */
+export const resume = internalMutation({ args: { hours: v.optional(v.number()) }, returns: v.object({ requeued: v.number() }), handler: async (ctx, { hours }) => {
+  const now = Date.now();
+  const state = await readerState(ctx);
+  await ctx.db.patch(state._id, { haltedUntil: undefined, haltReason: undefined, consecutiveFailures: 0, unreadablePages: 0, backoffUntil: undefined });
+  const since = now - Math.min(Math.max(hours ?? 24, 0), FAILURE_KEEP_MS / 3_600_000) * 3_600_000;
+  const sourceIds = new Set<string>();
+  for (const failure of await ctx.db.query('campaignReadFailures').withIndex('by_at', q => q.gte('at', since)).order('desc').take(4000)) {
+    if (failure.kind === 'parse' && isSourceId(failure.sourceId)) sourceIds.add(failure.sourceId);
+  }
+  let requeued = 0;
+  for (const sourceId of sourceIds) {
+    if (await ctx.db.query('campaigns').withIndex('by_source', q => q.eq('sourceId', sourceId)).unique()) continue;
+    await enqueue(ctx, sourceId, now);
+    requeued++;
+  }
+  return { requeued };
 } });
 
 /** What the reader is doing, for an operator. */

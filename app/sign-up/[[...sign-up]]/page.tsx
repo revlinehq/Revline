@@ -3,5 +3,5 @@ import { AuthForm } from '@/components/auth/auth-form';
 import '@/app/auth.css';
 
 export default function SignUpPage() {
-  return <Suspense><AuthForm /></Suspense>;
+  return <Suspense><AuthForm mode="sign-up" /></Suspense>;
 }

@@ -1,0 +1,2 @@
+- Sign-in: sign-in, sign-up, the email-code step and the Google callback use the dark landing and dashboard look with the blue primary button and short copy. Why: the founder saw the old light Revline page after the paid-clipping redesign.
+- Sign-in: signing in or signing up lands on Campaigns instead of the editor's new-project page; links that sent someone to sign in still return them there. Why: the founder asked why new users land in the editor.

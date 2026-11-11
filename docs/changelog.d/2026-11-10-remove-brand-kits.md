@@ -1,0 +1,1 @@
+- Workspace: removed Brand kits (the page, the account menu link, and the assistant and MCP brand kit tools); old `/brand-kits` links open the dashboard. Why: Revline is now a tool for paid clippers and Brand kits belonged to the old product.

@@ -1,11 +1,6 @@
 export const NEW_PROJECT_PATH = '/dashboard/new-project';
+/** Where a person lands after signing in or signing up, unless they were sent to sign in from a specific page. */
+export const SIGNED_IN_HOME_PATH = '/campaigns';
 
-// Sign-in and sign-up keep their own light design; every other page, the landing page included, is dark.
-const LIGHT_ROUTE_PREFIXES = ['/sign-in', '/sign-up'];
-
-export function isDarkRoute(pathname: string) {
-  return !LIGHT_ROUTE_PREFIXES.some(prefix => pathname.startsWith(prefix));
-}
-
-/** Runs before first paint with the same rule as isDarkRoute, so dark pages never flash light. */
-export const DARK_ROUTE_PRE_PAINT_SCRIPT = `try{var p=location.pathname;if(!${JSON.stringify(LIGHT_ROUTE_PREFIXES)}.some(function(x){return p.indexOf(x)===0})){document.documentElement.dataset.workspaceTheme='dark';document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}}catch(e){}`;
+/** Every page is dark. Runs before first paint so none flashes light. */
+export const DARK_PRE_PAINT_SCRIPT = `try{document.documentElement.dataset.workspaceTheme='dark';document.documentElement.classList.add('dark');document.documentElement.style.colorScheme='dark'}catch(e){}`;

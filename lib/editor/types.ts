@@ -12,7 +12,6 @@ import type { TextAppearance } from './text-style';
 import type { TextFontId } from './text-fonts';
 import type { RampPoint } from './speed-ramp';
 import type { ClipLut, ColorCurves, HslAdjust, TimelineLut } from './color-finish';
-import type { SceneBrand } from './brand-kit';
 import type { Transcript } from '../media-analysis/transcript';
 /** Every project frame, as its name and the width:height of its shape, narrowest first. */
 const ASPECT_RATIO_SHAPES = [['vertical', 9, 16], ['portrait-feed', 4, 5], ['square', 1, 1], ['classic', 4, 3], ['landscape', 16, 9]] as const;
@@ -129,6 +128,8 @@ export type SceneBlueprint = { name: string; code: string; codeRef?: string };
  * duration. So motion flows across clip edges, and an edit to the code changes every beat at once.
  */
 export type SceneFilm = { duration: number; builtThrough?: number; referenceAssetId?: string; referenceStart?: number };
+/** Fonts, colors and logo a scene saved while brand kits existed. Nothing writes or reads it now; stored scenes keep it. */
+export type SceneBrand = { kitId: string; name: string; colors: { name: string; value: string }[]; fonts: { family: string; weight: string; role: 'heading' | 'body' | 'other'; url: string }[]; logo?: string; screens?: { name: string; url: string }[] };
 export type SceneSource = { title: string; code: string; codeRef?: string; brand?: SceneBrand; media?: SceneMedia[]; blueprints?: SceneBlueprint[]; film?: SceneFilm };
 
 // Pixel tracking: how a clip follows a tracked point (lib/media-analysis/pixel-track holds the tracker's wire format).

@@ -90,6 +90,8 @@ export const campaignTables = {
     drainToken: v.optional(v.string()), drainUntil: v.optional(v.number()),
     lastRequestAt: v.optional(v.number()),
     consecutiveFailures: v.number(), backoffUntil: v.optional(v.number()),
+    /** Pages the parser could not understand, less the pages read well since (reader-config MAX_UNREADABLE_PAGES). */
+    unreadablePages: v.optional(v.number()),
     haltedUntil: v.optional(v.number()), haltReason: v.optional(v.string()),
     lastReadAt: v.optional(v.number()),
   }).index('by_name', ['name']),

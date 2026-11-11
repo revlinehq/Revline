@@ -11,7 +11,7 @@ const questions = [
   ['Can I cancel?', `Yes, anytime. The first ${EDITOR_PLAN.trialDays} days are free.`],
 ];
 
-/** Every answer starts open, so the server-rendered page reads in full before any script runs. */
+/** Answers start closed and open one at a time; search engines read them from the FAQ data below. */
 export function LandingFaq() {
   return <LandingSection id="faq" className="landing-faq" headingId="landing-faq-heading">
     <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify({
@@ -22,7 +22,7 @@ export function LandingFaq() {
       })),
     }).replace(/</g, '\\u003c') }} />
     <LandingHeading id="landing-faq-heading" title="Questions" />
-    <Accordion type="multiple" defaultValue={questions.map(([question]) => question)} className="landing-faq-list">
+    <Accordion type="single" collapsible className="landing-faq-list">
       {questions.map(([question, answer]) => <AccordionItem key={question} value={question}>
         <AccordionTrigger>{question}</AccordionTrigger>
         <AccordionContent><p>{answer}</p></AccordionContent>
