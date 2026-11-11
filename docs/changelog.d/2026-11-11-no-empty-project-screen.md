@@ -1,0 +1,1 @@
+- Editor: A project with no footage opens as the editor with a short note in the corner, instead of the full-page "Give your story a starting point" screen. Why: the founder does not want that page to appear.
