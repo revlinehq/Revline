@@ -1,23 +1,22 @@
-.assistant-result-cards{display:grid;gap:6px;margin:10px 0 16px}
-.assistant-result-card{display:flex;flex-direction:column;align-items:flex-start;gap:9px;min-height:32px;padding:0;border:0;border-radius:0;background:transparent;color:var(--foreground);font-size:12px;line-height:1.45}
-.assistant-result-card>button{margin-left:24px;max-width:calc(100% - 24px)}
-.assistant-result-card>svg{flex:none;color:var(--muted-foreground)}
-.assistant-result-card>div{min-width:0}
-.assistant-result-card small{display:block;margin-top:3px;color:var(--muted-foreground);font-size:11px;overflow-wrap:anywhere}
-.assistant-result-card.result-running{color:var(--muted-foreground)}
-.assistant-result-card.result-error{border-color:color-mix(in srgb,#d28b38,var(--border) 65%)}
-.assistant-result-card.result-error>svg{color:#c3853c}
-.assistant-result-card.result-prepared>svg{color:var(--muted-foreground);opacity:.6}
-@media(prefers-reduced-motion:reduce){.assistant-result-card .animate-spin{animation:none}}
-/* The tool chain is shadcn Trace; only its spacing in the chat lives here. */
-.tool-chain{margin:10px 0;font-size:12px}
-.thinking-latest{margin:4px 0 0;padding-left:24px;white-space:pre-line;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a);display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.thinking-text{margin:6px 0 0;padding-left:24px;max-height:260px;overflow-y:auto;scrollbar-width:none;white-space:pre-wrap;font-size:12px;line-height:1.55;color:var(--ws-muted,#9a9a9a)}.thinking-text::-webkit-scrollbar{display:none}
+/* A run in the chat: one summary line (shadcn Trace); only spacing and the opened details live here. */
+.run-summary{font-size:12px}
+.run-summary-note{overflow-wrap:anywhere;font-size:12px;line-height:1.5;color:var(--ws-muted,#9a9a9a)}
+.run-summary .run-summary-note :is(p,li,h3){font-size:12px;line-height:1.5}
+.run-summary-model{margin:2px 0 0;font-size:11px;line-height:1.4;color:var(--ws-muted,#9a9a9a);opacity:.75}
+/* A failed or stopped run: one line with the reason and at most one action. */
+.assistant-notice{display:flex;align-items:flex-start;gap:8px;min-width:0;font-size:12px;line-height:1.45;color:var(--foreground)}
+.assistant-notice>svg{flex:none;width:16px;height:16px;margin-top:1px;color:var(--muted-foreground)}
+.assistant-notice[data-state=error]>svg{color:#c3853c}
+.assistant-notice>span{flex:1;min-width:0;overflow-wrap:anywhere}
+.assistant-notice>button{flex:none;margin:-3px 0}
 /* Images a step returned (frames), indented under the step's title. */
-.tool-chain-images{display:flex;flex-wrap:wrap;gap:6px;padding-left:24px}
-.tool-chain-image{display:flex;flex-direction:column;gap:3px;width:150px;padding:0;border:0;background:none;color:var(--ws-muted,#9a9a9a);font-size:11px;text-align:left;cursor:zoom-in}
-.tool-chain-image img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;box-shadow:inset 0 0 0 1px #ffffff14;background:#0006}
-.tool-chain-image:hover img{box-shadow:0 0 0 1px #ffffff40}
-.tool-chain-image span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tool-chain-image-dialog{max-width:min(1200px,92vw)!important;width:auto}
-.tool-chain-image-dialog img{display:block;width:min(1150px,86vw);max-width:100%;max-height:80vh;height:auto;object-fit:contain;border-radius:8px}
+.run-summary-images{display:flex;flex-wrap:wrap;gap:6px;padding-left:22px}
+.run-summary-image{display:flex;flex-direction:column;gap:3px;width:84px;padding:0;border:0;background:none;color:var(--ws-muted,#9a9a9a);font-size:11px;text-align:left;cursor:zoom-in}
+.run-summary-image img{width:100%;aspect-ratio:16/10;object-fit:cover;border-radius:6px;box-shadow:inset 0 0 0 1px #ffffff14;background:#0006}
+.run-summary-image:hover img{box-shadow:0 0 0 1px #ffffff40}
+.run-summary-image span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.run-summary-image-dialog{max-width:min(1200px,92vw)!important;width:auto}
+.run-summary-image-dialog img{display:block;width:min(1150px,86vw);max-width:100%;max-height:80vh;height:auto;object-fit:contain;border-radius:8px}
+/* Opening the details is a plain state change: no slide, no turning chevron. */
+.run-summary [data-slot=trace-collapsible-content]{animation:none}
+.run-summary [data-slot=trace-collapsible-trigger] [data-slot=trace-icon]{transition:none}
