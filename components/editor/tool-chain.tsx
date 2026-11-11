@@ -94,8 +94,10 @@ export function ToolChain({ steps: saved, active = false }: { steps: ChatTool[];
             <TraceIcon className={mark}><Mark className={`size-3.5${row.state === 'running' ? ' animate-spin' : ''}`} aria-label={row.state === 'running' ? 'Running' : row.state === 'error' ? 'Failed' : row.state === 'stopped' ? 'Stopped' : 'Done'}/></TraceIcon>
             <TraceTitle className={row.state === 'error' ? undefined : 'text-foreground/85'}>{row.tool}</TraceTitle>
             {(row.args || row.count > 1) && <TraceDescription>{row.args}{row.count > 1 ? `${row.args ? ' ' : ''}×${row.count}` : ''}</TraceDescription>}
-            {row.state === 'error' && <TraceDescription title={row.detail}>{short(row.detail ?? assistantErrorDetail(undefined), 140)}</TraceDescription>}
-          </TraceLine>{row.images.length > 0 && <StepImages images={row.images}/>}</Fragment>;
+          </TraceLine>
+          {/* The reason sits under the row and wraps, so a long one never pushes the tool's name out. */}
+          {row.state === 'error' && <p className="tool-chain-reason">{row.detail ?? assistantErrorDetail(undefined)}</p>}
+          {row.images.length > 0 && <StepImages images={row.images}/>}</Fragment>;
         })}
       </Trace>
     </TraceCollapsibleContent>
