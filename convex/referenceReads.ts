@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
 import { internal } from './_generated/api';
@@ -27,7 +28,7 @@ export const request = internalMutation({ args: { ownerId: v.string(), projectId
   if(args.mode==='sheet'&&args.times&&(args.times.length>30||!args.times.length||args.times.some(time=>!Number.isFinite(time)||time<args.start||time>args.end||time<0||time>duration)))throw new ConvexError('Explicit frame times must be inside the source start/end window (up to 30 stills).');
   if (args.start > duration || args.end < args.start) throw new ConvexError(`Choose a window inside the video (0 to ${Math.round(duration * 100) / 100} source seconds).`);
   await requireMediaTaskCapacity(ctx, ownerId, 1);
-  const readId = await ctx.db.insert('referenceReads', { projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() });
+  const readId = await ctx.db.insert('referenceReads', tableRow<'referenceReads'>()({ projectId: project._id, ownerId, assetId: asset._id, ...args, status: 'queued', createdAt: Date.now() }));
   const taskId = await enqueueMediaTask(ctx, { ownerId, projectId: project._id, kind: 'read', assetId: asset._id, readId });
   await ctx.db.patch(readId, { taskId });
   // Readings are returned once; anything unread is removed shortly after.

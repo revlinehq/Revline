@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery } from './_generated/server';
@@ -82,7 +83,7 @@ export const request=internalMutation({args:{...runArgs,expectedRevision:v.numbe
   const used=new Set([...args.timeline.clips,...reference.clips].filter(clip=>clip.kind!=='audio'&&clip.assetId&&(clip.start<end&&clip.start+clip.duration>start||args.timeline.clips.some(transition=>transition.start<end&&transition.start+transition.duration>start&&(transition.transition?.fromClipId===clip.id||transition.transition?.toClipId===clip.id)))).map(clip=>clip.assetId));
   const assetIds=[];
   for(const value of used){const id=ctx.db.normalizeId('assets',value!);const asset=id?await ctx.db.get(id):null;if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Review source media is unavailable.');assetIds.push(asset._id);}
-  const reviewId=await ctx.db.insert('compositionReviews',{...runFields(args),revision:args.expectedRevision,timeline:args.timeline,reference,plans:bound,assetIds,start,end,status:'queued',createdAt:Date.now()});
+  const reviewId=await ctx.db.insert('compositionReviews',tableRow<'compositionReviews'>()({...runFields(args),revision:args.expectedRevision,timeline:args.timeline,reference,plans:bound,assetIds,start,end,status:'queued',createdAt:Date.now()}));
   const taskId=await enqueueMediaTask(ctx,{ownerId:args.ownerId,projectId:args.projectId,kind:'review',reviewId});
   await ctx.db.patch(reviewId,{taskId});await ctx.db.patch(saved._id,{reviews:saved.reviews+1});return reviewId;
 }});

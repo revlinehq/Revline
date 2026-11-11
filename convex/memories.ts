@@ -1,3 +1,4 @@
+import { tableRow, tablePatch } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
@@ -64,14 +65,14 @@ export const remember = internalMutation({
     const fields = { text, kind: args.kind, ...(args.topic ? { topic: args.topic } : {}), ...(name ? { name } : {}), ...(recipe ? { recipe } : {}), projectId, updatedAt: now };
     if (args.memoryId) {
       const row = await owned(ctx, args.ownerId, args.memoryId);
-      await ctx.db.patch(row._id, { ...fields, name, recipe: recipe ?? row.recipe });
+      await ctx.db.patch(row._id, tablePatch<'agentMemories'>()({ ...fields, name, recipe: recipe ?? row.recipe }));
       return view(ctx, (await ctx.db.get(row._id))!);
     }
     const rows = await ctx.db.query('agentMemories').withIndex('by_owner_project', q => q.eq('ownerId', args.ownerId).eq('projectId', projectId)).take(MAX_USER_MEMORIES + 1);
     const same = rows.find(row => row.text.toLowerCase() === text.toLowerCase() || (name && row.name?.toLowerCase() === name.toLowerCase()));
     if (same) { await ctx.db.patch(same._id, fields); return view(ctx, (await ctx.db.get(same._id))!); }
     if (rows.length >= (projectId ? MAX_PROJECT_MEMORIES : MAX_USER_MEMORIES)) throw new ConvexError('Memory is full. Rewrite or forget an outdated memory first.');
-    const memoryId = await ctx.db.insert('agentMemories', { ownerId: args.ownerId, ...fields, ...(args.kind === 'style' ? { sourceProjectId: args.projectId } : {}), uses: 0, createdAt: now });
+    const memoryId = await ctx.db.insert('agentMemories', tableRow<'agentMemories'>()({ ownerId: args.ownerId, ...fields, ...(args.kind === 'style' ? { sourceProjectId: args.projectId } : {}), uses: 0, createdAt: now }));
     return view(ctx, (await ctx.db.get(memoryId))!);
   },
 });

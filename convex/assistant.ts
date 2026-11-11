@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
 import { projectWorkingAgents, workingAgentValidator } from './mcpConnections';
@@ -187,7 +188,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
     if(pending.length>=10)throw new ConvexError('You can queue up to 10 messages. Remove one before adding more.');
     await consumeAssistantRequest(ctx,ownerId);
     const {prompt:_,projectId:__,modelChoice:___,reasoningEffort:____,speedMode:_____,editMode:_legacyEditMode,...context}=args;
-    await ctx.db.insert('assistantQueue',{projectId:project._id,ownerId,prompt,pinnedModel,...context,...(command?{command}:{}),createdAt:Date.now()});
+    await ctx.db.insert('assistantQueue',tableRow<'assistantQueue'>()({projectId:project._id,ownerId,prompt,pinnedModel,...context,...(command?{command}:{}),createdAt:Date.now()}));
     if(!project.aiRunning&&!project.aiQueuePaused)await ctx.scheduler.runAfter(0,internal.assistant.drainQueue,{projectId:project._id,ownerId});
     return null;
   }

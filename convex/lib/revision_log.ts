@@ -1,3 +1,4 @@
+import { tableRow } from './exact';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import type { Clip, Timeline } from '../../lib/editor/types';
@@ -66,7 +67,7 @@ export async function recordRevision(ctx: MutationCtx, project: Doc<'projects'>,
   if (!changes.length) return;
   const by = project.aiRunning ? runAuthorLabel(project.aiRunId, project.aiAgentName) : 'Editor';
   await ctx.db.insert('revisionLog', { projectId: project._id, timelineId, revision, at: Date.now(), by, ...(note?.tool ? { tool: note.tool.slice(0, 120) } : {}), summary: describe(changes, next), clipIds: changes.map(change => change.clipId).filter(id => id !== TIMELINE_ROW) });
-  for (const change of changes) await ctx.db.insert('revisionClips', { projectId: project._id, timelineId, revision, ...change });
+  for (const change of changes) await ctx.db.insert('revisionClips', tableRow<'revisionClips'>()({ projectId: project._id, timelineId, revision, ...change }));
   // Drop the oldest revisions past retention, a few per edit.
   const old = await ctx.db.query('revisionLog').withIndex('by_project_revision', q => q.eq('projectId', project._id).lte('revision', revision - REVISION_RETENTION)).take(3);
   for (const row of old) await removeRevision(ctx, project._id, row);
