@@ -102,3 +102,6 @@
 }
 [data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item]:hover { color: var(--dash-text); }
 [data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item][data-state=on] { background: var(--dash-pill); color: var(--dash-text); }
+
+/* Skeleton: <Skeleton>. One step lighter than a tile, so a placeholder reads on the page, on a card and on a tile. Still, never pulsing. */
+.dash-theme [data-slot=skeleton] { background: var(--dash-pill); }

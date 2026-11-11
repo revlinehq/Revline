@@ -22,14 +22,16 @@
 .dash-nav-row[data-slot=sidebar-menu-button][data-active=true] { background: var(--dash-row-active); color: var(--dash-text); font-weight: 500; }
 .dash-nav-row[data-slot=sidebar-menu-button][data-active=true] svg { color: var(--dash-text); }
 
-/* Collapsed to an icon rail: the wordmark and group labels go, rows become centred icons. */
-[data-collapsible=icon] .dash-sidebar-header { justify-content: center; padding: 0; }
-[data-collapsible=icon] .dash-wordmark { display: none; }
-[data-collapsible=icon] .dash-sidebar-content { padding: 0 10px 16px; gap: 0; }
-[data-collapsible=icon] .dash-nav-label { display: none; }
-[data-collapsible=icon] .dash-nav-group { padding-top: 8px; }
-[data-collapsible=icon] .dash-nav-row[data-slot=sidebar-menu-button] { width: 36px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
-[data-collapsible=icon] .dash-nav-row span { display: none; }
+/* Collapsed to an icon rail: the wordmark and group labels go, rows become centred icons.
+   `data-sidebar-collapsed` on <html> is the cookie's answer before the shell has hydrated, so the first paint already matches. */
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-sidebar-header { justify-content: center; padding: 0; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-wordmark { display: none; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-sidebar-content { padding: 0 10px 16px; gap: 0; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-label { display: none; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-group { padding-top: 8px; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-row[data-slot=sidebar-menu-button] { width: 36px !important; height: 36px !important; padding: 0 !important; justify-content: center; }
+:is([data-collapsible=icon], [data-sidebar-collapsed]) .dash-nav-row span { display: none; }
+[data-sidebar-collapsed] .dash-shell :is([data-slot=sidebar-gap], [data-slot=sidebar-container]) { width: var(--sidebar-width-icon); }
 
 /* Phone: the sidebar is a sheet opened from the navbar; it appears without motion. */
 [data-slot=sidebar][data-mobile=true] { animation: none !important; transition: none !important; border-color: var(--dash-border); }

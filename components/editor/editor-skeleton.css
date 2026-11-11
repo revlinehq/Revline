@@ -1,0 +1,19 @@
+/* The editor's frame while its project and its code load. Sizes follow the editor itself: a 48px bar, a 400px
+   conversation with its composer, the preview under its tab bar, and the timeline strip. Nothing here moves. */
+.editor-skeleton { display: flex; flex-direction: column; height: 100dvh; min-height: 600px; overflow: hidden; background: var(--dash-page); color: var(--dash-text); }
+.editor-skeleton-bar { display: flex; align-items: center; gap: 14px; height: 48px; flex-shrink: 0; padding: 0 12px; border-bottom: 1px solid var(--dash-divider); }
+.editor-skeleton-bar-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.editor-skeleton-body { display: grid; grid-template-columns: 400px minmax(0, 1fr); flex: 1; min-height: 0; }
+.editor-skeleton-chat { display: flex; flex-direction: column; gap: 14px; min-height: 0; padding: 22px 16px 12px; border-right: 1px solid var(--dash-divider); }
+.editor-skeleton-chat > :last-child { margin-top: auto; }
+.editor-skeleton-work { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.editor-skeleton-tabs { display: flex; align-items: center; gap: 10px; height: 40px; flex-shrink: 0; padding: 0 20px; }
+.editor-skeleton-stage { display: grid; place-items: center; flex: 1; min-height: 0; padding: 20px 28px; }
+.editor-skeleton-canvas { width: min(100%, 896px); max-height: 100%; aspect-ratio: 16 / 9; border-radius: 4px; }
+.editor-skeleton-timeline { display: flex; align-items: center; gap: 12px; height: 48px; flex-shrink: 0; padding: 0 20px; border-top: 1px solid var(--dash-divider); }
+/* Phone and narrow windows: the editor opens on its conversation, under the mode switch. */
+@media (max-width: 900px) {
+  .editor-skeleton-body { grid-template-columns: minmax(0, 1fr); }
+  .editor-skeleton-chat { border-right: 0; }
+  .editor-skeleton-work { display: none; }
+}

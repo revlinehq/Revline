@@ -19,6 +19,7 @@ import { clearOpeningBrief, clearOpeningRequestOptions, editorDraftKey, openingB
 import { EDITOR_MODELS, EDITOR_REASONING_EFFORTS } from '@/lib/ai/claude-model';
 import { WorkspaceNav } from '@/components/workspace/workspace-nav';
 import { FootagePreparation } from './footage-preparation';
+import { EditorSkeleton } from './editor-skeleton';
 import { api } from '@/convex/_generated/api';
 import type { Id, Doc } from '@/convex/_generated/dataModel';
 import { EditorShell } from './editor-shell';
@@ -40,9 +41,11 @@ import { useSourceUpload } from './use-source-upload';
 import { composerMedia } from '@/lib/editor/composer-media';
 import type { UploadProgress } from './footage-panel';
 const EMPTY_MESSAGES:ChatMessage[]=[];
+/** The editor while its project loads: its frame as still placeholders. A project opened straight from an upload keeps that footage's progress on screen instead. */
 function editorLoading(projectId: string) {
   const hint = openingFootage(projectId);
-  return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={NEW_WORKSPACE_LABEL} backHref={NEW_PROJECT_PATH}/><FootagePreparation progressKey={`project:${projectId}`} thumbnail={hint?.thumbnail} fileName={hint?.fileName}/></div>;
+  if (!hint) return <EditorSkeleton />;
+  return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={NEW_WORKSPACE_LABEL} backHref={NEW_PROJECT_PATH}/><FootagePreparation progressKey={`project:${projectId}`} thumbnail={hint.thumbnail} fileName={hint.fileName}/></div>;
 }
 /** The project's editor: timeline, preview and the assistant panel. */
 export function ConnectedEditor({projectId}: {projectId:string}) {
