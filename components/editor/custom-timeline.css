@@ -10,20 +10,25 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline{--timeline-selectio
 .custom-timeline .timeline-scroll::-webkit-scrollbar-button{display:none;width:0;height:0}
 .conversation-editor .custom-timeline .track-headers{overflow:hidden;min-height:0;background:var(--ws-bg);border-right-color:var(--ws-artifact-border)}
 .custom-timeline .track-headers{overflow-anchor:none}
-.conversation-editor .custom-timeline .track-label[data-group=audio]{flex-wrap:wrap;align-content:center;gap:0 7px}
-.custom-timeline .track-audio-controls{display:flex;align-items:center;gap:5px;width:100%;height:20px;margin-top:3px}
-.conversation-editor .custom-timeline .track-label .track-audio-toggle{display:grid;place-items:center;flex-shrink:0;width:18px;height:20px;padding:0;margin:0;border-radius:4px;color:var(--ws-muted);opacity:1}
+.custom-timeline{--track-header-width:64px}
+/* Track header column: one width for every lane, so lanes, ruler and playhead stay lined up beside it.
+   Each row is a compact chip (V1, A1, FX1), the mute button on audio rows and the layer menu;
+   expanded audio rows add the volume slider on a second line. */
+.custom-timeline .track-headers{width:var(--track-header-width);flex-shrink:0}
+.conversation-editor .custom-timeline .track-label{flex-wrap:wrap;align-content:center;gap:4px 1px;padding:0 2px 0 5px}
+.conversation-editor .custom-timeline .track-label .track-label-name{display:grid;place-items:center;min-width:20px;height:16px;margin-right:auto;padding:0 4px;border-radius:3px;background:color-mix(in srgb,var(--ws-text) 7%,transparent);font-size:10px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums;white-space:nowrap}
+.custom-timeline .track-audio-controls{display:contents}
+.conversation-editor .custom-timeline .track-label .track-audio-toggle{order:1;display:grid;place-items:center;flex-shrink:0;width:16px;height:18px;padding:0;margin:0;border-radius:3px;color:var(--ws-muted);opacity:1}
+.conversation-editor .custom-timeline .track-label .layer-options{order:2;flex-shrink:0;width:14px;height:18px;margin:0}
+@media(pointer:coarse){.conversation-editor .custom-timeline .track-label .layer-options{opacity:.7}}
 .custom-timeline .track-audio-toggle:hover,.custom-timeline .track-audio-toggle:focus-visible{background:var(--ws-hover);color:var(--ws-text)}
 .custom-timeline .track-audio-toggle[aria-pressed=true]{color:var(--ws-text)}
 .custom-timeline .track-audio-toggle:disabled{opacity:.35}
-.custom-timeline .track-label[data-group=audio] .layer-options{margin-left:auto}
-.custom-timeline .track-audio-controls input{appearance:none;min-width:0;width:0;flex:1;height:2px;padding:0;border:0;border-radius:2px;background:linear-gradient(to right,var(--ws-text) 0 var(--track-volume),var(--ws-artifact-border) var(--track-volume) 100%);cursor:ew-resize;touch-action:none}
+.custom-timeline .track-audio-controls input{order:3;appearance:none;min-width:0;width:0;flex:1 0 100%;margin:0 4px 0 0;height:2px;padding:0;border:0;border-radius:2px;background:linear-gradient(to right,var(--ws-text) 0 var(--track-volume),var(--ws-artifact-border) var(--track-volume) 100%);cursor:ew-resize;touch-action:none}
 .custom-timeline .track-audio-controls input::-webkit-slider-thumb{appearance:none;width:10px;height:10px;border:1px solid var(--ws-text);border-radius:50%;background:var(--ws-bg)}
 .custom-timeline .track-audio-controls input::-moz-range-thumb{width:8px;height:8px;border:1px solid var(--ws-text);border-radius:50%;background:var(--ws-bg)}
 .custom-timeline .track-audio-controls input:focus-visible{outline:1px solid var(--timeline-selection-border);outline-offset:5px}
 .custom-timeline .track-audio-controls input:disabled{opacity:.35}
-.conversation-editor .custom-timeline.tracks-compact .track-label[data-group=audio]{flex-wrap:nowrap;gap:7px}
-.custom-timeline.tracks-compact .track-audio-controls{width:auto;margin-top:0}
 .custom-timeline.tracks-compact .track-audio-controls input{display:none}
 .conversation-editor .custom-timeline .track-label,.custom-timeline .timeline-track{background:var(--ws-bg);border-bottom:1px solid var(--timeline-divider);color:var(--ws-muted)}
 .custom-timeline .timeline-top-space{box-sizing:border-box;flex-shrink:0;border:0;border-bottom:1px solid var(--timeline-divider)}
@@ -107,7 +112,6 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-in
 .custom-timeline .audio-volume-line output{position:absolute;right:6px;bottom:12px;padding:2px 5px;border-radius:3px;background:#23192fe6;color:#fff;font-size:10px;line-height:14px;white-space:nowrap;opacity:0;pointer-events:none}
 .custom-timeline .audio-volume-line:hover output,.custom-timeline .audio-volume-line:focus-visible output,.custom-timeline .audio-clip-volume[data-adjusting] output{opacity:1}
 .custom-timeline.tracks-compact .audio-clip-volume{inset:19px 0 5px}
-@media(max-width:600px){.custom-timeline .track-label[data-group=audio] .layer-options{width:14px}}
 /* The timeline is a keyboard shortcut scope, not a focus-ring control. */
 .custom-timeline:focus{outline:none}
 .custom-timeline .timeline-beat-marker{position:absolute;top:0;width:26px;height:27px;padding:2px 0 3px;border:0;background:transparent;color:#e68a28;cursor:ew-resize;touch-action:none;z-index:1;outline-offset:-2px}
@@ -143,9 +147,7 @@ html[data-workspace-theme=dark] .editor-app .custom-timeline .timeline-insert-in
 .custom-timeline[data-tool=blade] .audio-clip-volume{display:none}
 .custom-timeline .timeline-edit-actions [data-active]{background:var(--ws-hover);color:var(--ws-text)}
 
-/* Compact rows: headers keep the layer name and kind; per-track audio controls and the layer menu return when rows expand. */
-[data-compact-tracks] .track-label{gap:6px;font-size:9px}
-[data-compact-tracks] .track-label :is(.track-audio-controls,.layer-options){display:none}
+/* Compact rows keep the chip, mute and layer menu; the volume slider returns when rows expand. */
 [data-compact-tracks] .timeline-clip:is(.clip-caption,.clip-graphic)>span{height:100%;align-items:center;padding:0 6px;font-size:9px}
 [data-compact-tracks] .audio-clip-volume{display:none}
 
