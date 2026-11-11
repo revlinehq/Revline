@@ -1,0 +1,1 @@
+- Dashboard: the sidebar's Stats icon is now a bar chart instead of a pie that the sidebar's icon fill turned into a blob. Why: the founder reported the Stats icon still looked broken after the first fix.

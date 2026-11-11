@@ -39,7 +39,7 @@ function NavRow({ item, active, onPending }: { item: DashboardNavItem; active: b
     if (item.href === NEW_PROJECT_PATH && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) void startNewWorkspace(user?.id).catch(() => { /* The start page still opens with the previous draft. */ });
   }
   return <SidebarMenuItem><SidebarMenuButton asChild isActive={active} tooltip={item.label} className="dash-nav-row">
-    <Link href={item.href} prefetch aria-current={active ? 'page' : undefined} onClick={open}><NavPending onChange={report} /><Icon aria-hidden="true" /><span>{item.label}</span></Link>
+    <Link href={item.href} prefetch data-icon-style={item.strokeIcon ? 'stroke' : undefined} aria-current={active ? 'page' : undefined} onClick={open}><NavPending onChange={report} /><Icon aria-hidden="true" /><span>{item.label}</span></Link>
   </SidebarMenuButton></SidebarMenuItem>;
 }
 

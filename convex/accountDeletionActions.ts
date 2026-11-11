@@ -50,6 +50,11 @@ export const remove = action({ args: { policyVersion: v.literal(1), confirmation
       throw new ConvexError('The account could not be deleted. Sign in again and retry.');
     }
   }
+  // The account is gone, so Revline's access to its connected social accounts ends too: each is revoked at its
+  // platform before the rows are swept. This waits at most a few seconds per platform (they run together); one
+  // that fails or does not answer is logged and the deletion goes on.
+  try { await ctx.runAction(internal.postingActions.revokeOwner, { ownerId }); }
+  catch { console.warn('Account deletion: connected social accounts could not be revoked at their platforms; their tokens are deleted with the account.'); }
   await ctx.runMutation(internal.accountDeletion.activate, { ownerId });
   return null;
 } });

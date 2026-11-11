@@ -90,8 +90,9 @@ export async function refresh(credentials: PlatformCredentials, tokens: AccountT
 }
 
 /**
- * Revokes Revline's access. Not part of the adapter contract: the base calls this when a user disconnects,
- * which the YouTube API Services Developer Policies require (III.D.2).
+ * Revokes Revline's access when a user disconnects, which the YouTube API Services Developer Policies require
+ * (III.D.2). Revoking the refresh token ends the whole grant, access token included.
+ * https://developers.google.com/identity/protocols/oauth2/web-server#tokenrevoke
  */
 export async function revoke(tokens: AccountTokens): Promise<void> {
   await exchange(REVOKE_URL, {

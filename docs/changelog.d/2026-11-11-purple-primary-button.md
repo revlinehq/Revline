@@ -1,0 +1,1 @@
+- Web app: Primary buttons and the accent are purple again, with a white inner edge instead of the blue gradient. Why: the founder asked for the purple buttons he had before the blue dashboard redesign.

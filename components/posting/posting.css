@@ -114,6 +114,35 @@
 .post-when[data-empty]:not(:focus-within) [data-slot=input] { color: transparent; }
 .post-when[data-empty]:not(:focus-within) > span { display: block; }
 
+/* Visibility and the TikTok settings TikTok's posting rules prescribe. */
+.post-select-trigger[data-slot=select-trigger] { width: 100%; height: 40px; padding: 0 10px 0 12px; border: 1px solid var(--dash-border); border-radius: 10px; background: #FFFFFF08; color: var(--dash-text); font-size: 14px; }
+.post-select-trigger[data-slot=select-trigger]:hover { background: #FFFFFF0F; }
+.post-select-trigger[data-slot=select-trigger][data-placeholder] { color: var(--dash-muted); }
+.post-tiktok { gap: 12px; padding-top: 16px; border-top: 1px solid var(--dash-divider); }
+.post-tiktok-head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 500; }
+.post-tiktok-head svg { width: 14px; height: 14px; flex-shrink: 0; }
+.post-tiktok-head small, .post-tiktok-row small, .post-checks small { color: var(--dash-muted); font-size: 13px; font-weight: 400; }
+.post-tiktok .post-note strong { color: var(--dash-text); font-weight: 500; }
+.post-tiktok-row { display: flex; flex-direction: column; gap: 8px; min-width: 0; font-size: 14px; }
+.post-tiktok-disclose { flex-direction: row; align-items: center; justify-content: space-between; gap: 16px; }
+.post-tiktok-disclose label { display: flex; flex-direction: column; gap: 2px; min-width: 0; cursor: pointer; }
+.post-checks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.post-checks label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.post-checks label[data-disabled] { color: var(--dash-muted); cursor: default; }
+.post-checks-stacked { flex-direction: column; gap: 10px; }
+.post-checks-stacked label { flex-wrap: wrap; }
+.post-checks-stacked label small { flex-basis: 100%; padding-left: 26px; }
+.post-dialog [data-slot=switch] { flex-shrink: 0; background: #FFFFFF24; transition: none; }
+.post-dialog [data-slot=switch]:hover:not([data-disabled]) { background: #FFFFFF33; }
+.post-dialog [data-slot=switch][data-state=checked], .post-dialog [data-slot=switch][data-state=checked]:hover:not([data-disabled]) { background: var(--dash-text); }
+.post-dialog [data-slot=switch]:focus-visible { outline: none; border-color: transparent; box-shadow: none; }
+.post-dialog [data-slot=switch-thumb] { background: var(--dash-text); transition: none; }
+.post-dialog [data-slot=switch][data-state=checked] [data-slot=switch-thumb] { background: var(--dash-page); }
+.post-consent { flex-basis: 100%; font-size: 13px; }
+.post-consent a { color: var(--dash-text-soft); text-decoration: underline; text-underline-offset: 2px; }
+.post-consent a:hover { color: var(--dash-text); }
+.post-blocked { flex: 1; min-width: 160px; font-size: 13px; }
+.post-dialog-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 
 @media (max-width: 700px) {
   .post-dialog-body { grid-template-columns: minmax(0, 1fr); gap: 20px; padding: 16px; }

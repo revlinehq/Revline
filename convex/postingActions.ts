@@ -2,11 +2,12 @@ import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { action, internalAction, type ActionCtx } from './_generated/server';
-import { postingPlatform } from './postingTables';
+import { postingPlatform, tiktokVisibility } from './postingTables';
 import { PostingError, type AccountTokens, type PostingPlatform } from '../lib/posting/adapter';
 import { downloadAvatar } from '../lib/posting/avatar';
 import { decryptTokens, encryptTokens, signState, verifyState } from '../lib/posting/crypto';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
+import { creatorInfo } from '../lib/posting/platforms/tiktok';
 import { livePlatform, tokenSecret } from '../lib/posting/server';
 import { STATS_WINDOW_MS } from './posting';
 
@@ -15,6 +16,8 @@ import { STATS_WINDOW_MS } from './posting';
 
 /** Refresh tokens that expire within this window before using them. */
 const REFRESH_AHEAD_MS = 10 * 60_000;
+/** How long a disconnect waits for the platform to confirm the revoke before deleting the tokens anyway. */
+const REVOKE_TIMEOUT_MS = 15_000;
 const failure = (error: unknown, fallback: string) => error instanceof PostingError ? error.message : fallback;
 const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -98,6 +101,45 @@ async function accountTokens(ctx: ActionCtx, accountId: Id<'postingAccounts'>): 
 }
 
 /**
+ * End the platform's access for an account that was just disconnected, then delete its stored tokens. The tokens are
+ * deleted whatever the platform answered: a failed or unanswered revoke is logged (never with a token) and nothing more.
+ */
+async function revokeThenPurge(ctx: ActionCtx, accountId: Id<'postingAccounts'>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const account = await ctx.runQuery(internal.posting.accountSecret, { accountId });
+    // Connected again in the meantime: these are the new connection's tokens.
+    if (!account || account.status !== 'disconnected' || !account.tokenCipher) return;
+    const live = livePlatform(account.platform);
+    if (!live) throw new PostingError(`${PLATFORM_NAMES[account.platform]} is not set up on this server.`, false, 'unavailable');
+    const tokens = await decryptTokens(tokenSecret(), account.tokenCipher).catch(() => { throw new PostingError('The saved connection could not be read.', false, 'unreadable'); });
+    await Promise.race([
+      live.adapter.revoke(live.credentials, tokens),
+      new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new PostingError(`${PLATFORM_NAMES[account.platform]} did not answer in ${REVOKE_TIMEOUT_MS / 1000} seconds.`, true, 'timeout')), REVOKE_TIMEOUT_MS); }),
+    ]);
+  } catch (error) {
+    console.warn(`Posting: access for account ${accountId} was not revoked at its platform; its tokens are deleted here regardless. ${failure(error, 'Unexpected error.')}`);
+  } finally {
+    clearTimeout(timer);
+    await ctx.runMutation(internal.posting.purgeTokens, { accountId });
+  }
+}
+/** Scheduled by `posting.disconnect`. */
+export const revokeAccount = internalAction({
+  args: { accountId: v.id('postingAccounts') }, returns: v.null(),
+  handler: async (ctx, { accountId }) => { await revokeThenPurge(ctx, accountId); return null; },
+});
+/** Deleting a Revline account: disconnect every account it connected and revoke each at its platform, before its rows are removed. */
+export const revokeOwner = internalAction({
+  args: { ownerId: v.string() }, returns: v.null(),
+  handler: async (ctx, { ownerId }) => {
+    const accountIds: Id<'postingAccounts'>[] = await ctx.runMutation(internal.posting.disconnectOwner, { ownerId });
+    await Promise.allSettled(accountIds.map(accountId => revokeThenPurge(ctx, accountId)));
+    return null;
+  },
+});
+
+/**
  * Save a picture for an account that has none, scheduled by `saveTokens` right after a token renewal: one profile
  * call and one download. Failing leaves the account on its initials until the next weekly look or a reconnect.
  */
@@ -117,6 +159,32 @@ export const fillAvatar = internalAction({
       if (avatarStorageId) await ctx.storage.delete(avatarStorageId).catch(() => {});
     }
     return null;
+  },
+});
+
+/**
+ * What TikTok's Direct Post rules make the Post dialog show for an account before every post: who is posting, the
+ * privacy levels this account may use, and the interactions it has switched off. Read fresh each time the dialog
+ * asks (TikTok allows 20 reads a minute per account). `ok: false` carries TikTok's reason the account cannot post now.
+ */
+export const tiktokCreator = action({
+  args: { accountId: v.id('postingAccounts') },
+  returns: v.union(
+    v.object({ ok: v.literal(true), nickname: v.string(), username: v.string(), privacyLevels: v.array(tiktokVisibility), commentDisabled: v.boolean(), duetDisabled: v.boolean(), stitchDisabled: v.boolean(), maxDurationSeconds: v.number() }),
+    v.object({ ok: v.literal(false), error: v.string() }),
+  ),
+  handler: async (ctx, { accountId }) => {
+    // Throws unless this is the signed-in owner's connected TikTok account.
+    await ctx.runQuery(internal.posting.ownedTikTok, { accountId });
+    try {
+      const creator = await creatorInfo(await accountTokens(ctx, accountId));
+      // Nothing to choose from would leave the dialog asking for a choice that cannot be made.
+      if (!creator.privacyLevelOptions.length) return { ok: false as const, error: 'TikTok did not say who can view posts from this account. Try again in a moment.' };
+      return {
+        ok: true as const, nickname: creator.nickname, username: creator.username, privacyLevels: creator.privacyLevelOptions,
+        commentDisabled: creator.commentDisabled, duetDisabled: creator.duetDisabled, stitchDisabled: creator.stitchDisabled, maxDurationSeconds: creator.maxVideoDurationSeconds,
+      };
+    } catch (error) { return { ok: false as const, error: failure(error, 'TikTok did not share this account’s posting settings. Try again in a moment.') }; }
   },
 });
 
@@ -145,22 +213,25 @@ export const runPost = internalAction({
   },
 });
 
-/** Poll a post the platform is still processing. */
+/** Poll a post the platform is still processing. `quickStep`: this is one of the quick checks that follow an upload, which continue from here. */
 export const checkPost = internalAction({
-  args: { postId: v.id('postingPosts') }, returns: v.null(),
-  handler: async (ctx, { postId }) => {
+  args: { postId: v.id('postingPosts'), quickStep: v.optional(v.number()) }, returns: v.null(),
+  handler: async (ctx, { postId, quickStep }) => {
     const post = await ctx.runQuery(internal.posting.processingPost, { postId });
     if (!post) return null;
     const live = livePlatform(post.platform);
     if (!live) return null;
+    let settled = false;
     try {
       const check = await live.adapter.checkPublish(await accountTokens(ctx, post.accountId), post.platformJobId);
-      // Still processing: the next tick polls again.
-      if (check.status !== 'processing') await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check.status === 'published' ? { status: 'published', platformPostId: check.platformPostId, url: check.url } : { status: 'failed', error: check.error, retryable: check.retryable } });
+      // Still processing: the next check polls again, with the job id the platform is on now.
+      if (check.status === 'processing') { if (check.platformJobId !== post.platformJobId) await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check }); }
+      else { settled = true; await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: check.status === 'published' ? { status: 'published', platformPostId: check.platformPostId, url: check.url } : { status: 'failed', error: check.error, retryable: check.retryable } }); }
     } catch (error) {
       // A poll that could not run says nothing about the post, unless the account can no longer be used at all.
-      if (error instanceof PostingError && !error.retryable) await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: { status: 'failed', error: error.message, retryable: false } });
+      if (error instanceof PostingError && !error.retryable) { settled = true; await ctx.runMutation(internal.posting.settle, { postId, from: 'processing', outcome: { status: 'failed', error: error.message, retryable: false } }); }
     }
+    if (quickStep !== undefined && !settled) await ctx.runMutation(internal.posting.afterQuickCheck, { postId, step: quickStep });
     return null;
   },
 });

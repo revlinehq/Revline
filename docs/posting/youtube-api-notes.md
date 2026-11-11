@@ -94,10 +94,11 @@ real credentials; "not confirmed" marks what the pages did not state.
   works and the session has not expired.
 
 ## What the posting base has to add (the contract cannot carry these)
-- **Per-post YouTube settings.** `PublishInput` has no privacy, made-for-kids, AI-disclosure or
-  notify-subscribers field. Until it does, `publish` reads an optional `youtube` object on the input
-  (`YouTubePublishOptions`, exported from the adapter) and otherwise posts **public**, not made for kids.
-  YouTube's policies require offering the privacy choice.
+- **Per-post YouTube settings.** `PublishInput.youtube` (`YouTubePublishOptions`) carries them. The Post
+  dialog offers the privacy choice YouTube's policies require (Public, Unlisted, Private); it is stored on
+  the post as `visibility` and sent as `privacyStatus`. The dialog starts from the owner's last choice,
+  "Public" the first time; a post from the editor, which has no dialog, uses that last choice too.
+  Made-for-kids, AI-disclosure and notify-subscribers are not offered yet and keep the adapter's defaults.
 - **A file link that outlives the upload.** `platformJobId` stores the original `videoUrl`; `checkPublish`
   cannot be given a fresh one. The link must stay valid for as long as the scheduler may keep ticking, and
   the storage must answer `Range` requests.
@@ -107,6 +108,7 @@ real credentials; "not confirmed" marks what the pages did not state.
   and on any `PostingError` with code `unauthorized`, then call again.
 - **Retry spacing by code.** `quotaExceeded`: wait for midnight Pacific Time. `uploadLimitExceeded`: wait
   about a day. Both are `retryable`, but retrying sooner only burns quota.
-- **Disconnect.** Call the exported `revoke(tokens)` and delete the account's stored data.
+- **Disconnect.** Done: the adapter's `revoke` is called when an account is disconnected or its Revline
+  account is deleted, then the stored tokens are deleted (also when Google does not answer).
 - **Keep calling `checkPublish`** after the upload: the adapter answers `processing` until YouTube has
   processed the video, and gives up with `failed` one day after the job started.

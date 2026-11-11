@@ -38,10 +38,14 @@ export function SettingsPageSkeleton() {
   return <main className="dash-content"><div className="dash-column settings-page"><SettingsSkeleton /></div></main>;
 }
 
-/** The AI Editor's start page: its heading and composer, as placeholders. */
+/** The AI Editor's start page: its heading, composer and the four recent projects, as placeholders. */
 export function NewProjectPageSkeleton() {
   return <main className="dash-content flex flex-col items-center" aria-busy="true">
-    <Skeleton className="mt-[84px] h-10 w-[420px] max-w-full" /><Skeleton className="mt-6 h-[108px] w-full max-w-[656px] rounded-xl" />
+    <Skeleton className="mt-[84px] h-10 w-[420px] max-w-full" /><Skeleton className="mt-6 h-[108px] w-full max-w-[656px] rounded-lg" />
+    <div className="mt-8 flex w-full max-w-[656px] flex-col gap-3">
+      <Skeleton className="h-3 w-28" />
+      <div className="grid grid-cols-2 gap-2 max-[600px]:grid-cols-1">{Array.from({ length: 4 }, (_, index) => <Skeleton key={index} className="h-16 rounded-lg" />)}</div>
+    </div>
   </main>;
 }
 
