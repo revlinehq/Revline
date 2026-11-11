@@ -1,0 +1,1 @@
+- Dashboard: page background is #0D0D0D and the sidebar #111111; every signed-in page sits on the same 960px column as Stats; the navbar is rendered once by the shell. Why: the founder asked for the darker surfaces, one width for all pages and a single navbar definition.
