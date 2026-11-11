@@ -165,7 +165,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
-      return {...group,comparison,...presentation};
+      return {...group,comparison,...presentation,run:turnActivity(presentation.replies,group.id===turnId&&waiting)};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const reportedFailures=useRef(new Set<string>());
@@ -233,7 +233,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
         const editing = group.id === turnId && waiting;
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
-        const run=turnActivity(replies,editing);
+        const run=group.run;
         // As in shadcn Chat: each person's message is its own anchored item; the reply is the item after it.
         return <Fragment key={turnKey(group.id)}>
           {groupMessages.filter(message => message.role === 'user').map(message => <MessageScrollerItem key={turnKey(message.id)} messageId={turnKey(message.id)} scrollAnchor data-message-id={message.id} data-message-status={message.status}>

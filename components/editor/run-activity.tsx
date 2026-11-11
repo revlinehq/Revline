@@ -8,6 +8,7 @@ import { Separator } from '@/components/ui/separator';
 import { toolImages } from './assistant-results';
 import { assistantErrorDetail } from './assistant-turn-presentation';
 import { runWords, type RunStep, type ThoughtEntry } from './assistant-run';
+import { ChatProse } from './chat-prose';
 
 type Image = { label: string; src: string };
 type Row = { key: string; tool: string; plain: boolean; args: string; state: RunStep['state']; detail?: string; count: number; span?: [number, number]; images: Image[] };
@@ -90,12 +91,13 @@ function StepRow({ row }: { row: Row }) {
   </TraceCollapsible>;
 }
 
-/** The run's steps, compact: one "N steps" row that opens to a line per step. While the run works, the current
- * step shows under it; when it is done, every step is inside. Collapsed until opened; nothing is remembered. */
+/** The run's steps, compact: one "N steps" row that opens to a line per step. While a step runs it shows
+ * under that row; once it has a result, it is inside. Collapsed until opened; nothing is remembered. */
 export function RunSteps({ steps, active }: { steps: RunStep[]; active: boolean }) {
   const [open, setOpen] = useState(false);
   if (!steps.length) return null;
-  const current = active ? steps.at(-1) : undefined;
+  // The step running now shows on its own line; once it has a result it joins the others.
+  const current = active && steps.at(-1)?.state === 'running' ? steps.at(-1) : undefined;
   const earlier = current ? steps.slice(0, -1) : steps;
   const failed = earlier.filter(step => step.state === 'error').length, stopped = earlier.some(step => step.state === 'stopped');
   const Status = failed ? AlertTriangle : stopped ? CircleStop : CircleCheck;
@@ -138,7 +140,8 @@ export function RunThought({ entries, latest, active }: { entries: ThoughtEntry[
       <div className="run-thought-text" ref={follow}>
         {entries.map(entry => entry.kind === 'steps'
           ? <div key={entry.key} className="run-thought-steps" role="separator" aria-label={entry.labels.join(', ')}><span>{entry.labels.join(' · ')}</span><Separator className="flex-1"/></div>
-          : <p key={entry.key} className={entry.kind === 'note' ? 'run-thought-note' : undefined}>{entry.text.replace(/\*\*/g, '').trim()}</p>)}
+          : entry.kind === 'note' ? <div key={entry.key} className="run-thought-note"><ChatProse text={entry.text}/></div>
+          : <p key={entry.key}>{entry.text.replace(/\*\*/g, '').trim()}</p>)}
       </div>
     </TraceCollapsibleContent>
   </TraceCollapsible>;

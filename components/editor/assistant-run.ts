@@ -41,7 +41,7 @@ export type RunStep = ChatTool & { key: string; plain?: boolean };
 export type RunText = { key: string; text: string; streaming: boolean };
 /** The run's reasoning in order: what it thought, what it said along the way, and the steps it took in between. */
 export type ThoughtEntry = { key: string; kind: 'thought' | 'note'; text: string } | { key: string; kind: 'steps'; labels: string[] };
-export type TurnActivity = { thought: ThoughtEntry[]; latestThought: string; steps: RunStep[]; reply: RunText[]; thinkingNow: boolean };
+export type TurnActivity = { thought: ThoughtEntry[]; latestThought: string; steps: RunStep[]; reply: RunText[] };
 
 const plainLine = (text: string) => text.replace(/[*_#`]/g, '').split(/\n+/).map(line => line.trim()).filter(Boolean).at(-1) ?? '';
 
@@ -67,7 +67,8 @@ export function turnActivity(replies: readonly ChatMessage[], active: boolean): 
   // A run that ends on a step (a stop, a failure) keeps the last thing the assistant said as its reply. One that ends
   // on a question has its card as the reply; what it said before belongs to the Thought.
   const asked = lastTools >= 0 && (parts[lastTools] as Extract<Part, { type: 'tools' }>).steps.some(step => step.name === 'askUser');
-  const reply = after.length ? after : asked ? [] : texts.slice(-1);
+  // While the run works, what it said before its latest steps is narration and stays in the Thought.
+  const reply = after.length ? after : asked || active ? [] : texts.slice(-1);
   const shown = new Set(reply.map(text => text.index));
   const thought: ThoughtEntry[] = [], steps: RunStep[] = [];
   parts.forEach((part, index) => {
@@ -84,12 +85,12 @@ export function turnActivity(replies: readonly ChatMessage[], active: boolean): 
       if (labels.at(-1) !== words) labels.push(words);
     }
     const previous = thought.at(-1);
-    if (previous?.kind === 'steps') previous.labels.push(...labels.filter(label => previous.labels.at(-1) !== label));
+    if (previous?.kind === 'steps') previous.labels.push(...(previous.labels.at(-1) === labels[0] ? labels.slice(1) : labels));
     else thought.push({ key: part.key, kind: 'steps', labels });
   });
   // A separator marks only steps taken between two pieces of reasoning.
   while (thought[0]?.kind === 'steps') thought.shift();
   while (thought.at(-1)?.kind === 'steps') thought.pop();
   const lastThinking = parts.findLast(part => part.type === 'thinking');
-  return { thought, latestThought: lastThinking?.type === 'thinking' ? plainLine(lastThinking.text) : '', steps, reply: reply.map(({ key, text, streaming }) => ({ key, text, streaming })), thinkingNow: active && parts.at(-1)?.type === 'thinking' };
+  return { thought, latestThought: lastThinking?.type === 'thinking' ? plainLine(lastThinking.text) : '', steps, reply: reply.map(({ key, text, streaming }) => ({ key, text, streaming })) };
 }
