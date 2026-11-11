@@ -148,6 +148,13 @@ export const EDITOR_TOOL_DEFINITIONS = {
   resetVisual: { effect: 'timeline', mcp: 'exclusive', label: ['Resetting framing', 'Reset framing'] },
   setAspectRatio: { effect: 'timeline', mcp: 'exclusive', label: ['Resizing canvas', 'Resized canvas'] },
   followSubject: { effect: 'timeline', mcp: 'exclusive', label: ['Following subject', 'Applied subject tracking'] },
+  listConnectedAccounts: { effect: 'read', mcp: 'read', label: ['Checking connected accounts', 'Checked connected accounts'] },
+  postVideo: { effect: 'resource', mcp: 'read', writes: ['assistantPosting:propose', 'assistantPosting:send'], label: ['Preparing post', 'Prepared post'] },
+  schedulePost: { effect: 'resource', mcp: 'read', writes: ['assistantPosting:propose', 'assistantPosting:send'], label: ['Preparing scheduled post', 'Prepared scheduled post'] },
+  listPosts: { effect: 'read', mcp: 'read', label: ['Checking posts', 'Checked posts'] },
+  getPost: { effect: 'read', mcp: 'read', label: ['Checking post', 'Checked post'] },
+  cancelScheduledPost: { effect: 'resource', mcp: 'read', writes: ['assistantPosting:cancel'], label: ['Cancelling post', 'Cancelled post'] },
+  reschedulePost: { effect: 'resource', mcp: 'read', writes: ['assistantPosting:reschedule'], label: ['Rescheduling post', 'Rescheduled post'] },
   removeBackground: { effect: 'job', mcp: 'exclusive', writes: ['cutouts:startFromRun'], label: ['Starting background removal', 'Started background removal'] },
 } as const satisfies Record<string, ToolBehavior>;
 

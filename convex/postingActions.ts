@@ -2,7 +2,7 @@ import { ConvexError, v } from 'convex/values';
 import { internal } from './_generated/api';
 import type { Id } from './_generated/dataModel';
 import { action, internalAction, type ActionCtx } from './_generated/server';
-import { postingPlatform, tiktokVisibility } from './postingTables';
+import { postingPlatform, tiktokCreator as tiktokCreatorResult, tiktokVisibility } from './postingTables';
 import { PostingError, type AccountTokens, type PostingPlatform } from '../lib/posting/adapter';
 import { downloadAvatar } from '../lib/posting/avatar';
 import { decryptTokens, encryptTokens, signState, verifyState } from '../lib/posting/crypto';
@@ -185,6 +185,26 @@ export const tiktokCreator = action({
         commentDisabled: creator.commentDisabled, duetDisabled: creator.duetDisabled, stitchDisabled: creator.stitchDisabled, maxDurationSeconds: creator.maxVideoDurationSeconds,
       };
     } catch (error) { return { ok: false as const, error: failure(error, 'TikTok did not share this account’s posting settings. Try again in a moment.') }; }
+  },
+});
+
+/**
+ * `tiktokCreator` for the assistant's posting tools, which know the owner from the run or the MCP connection:
+ * what TikTok allows this owner's account right now. Never throws; `error` carries the reason.
+ */
+export const tiktokCreatorFor = internalAction({
+  args: { ownerId: v.string(), accountId: v.id('postingAccounts') },
+  returns: tiktokCreatorResult,
+  handler: async (ctx, { ownerId, accountId }) => {
+    try {
+      // Throws unless this is one of the owner's accounts.
+      const [account] = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ownerId, accountIds: [accountId] }) as { platform: PostingPlatform; connected: boolean }[];
+      if (account.platform !== 'tiktok') return { accountId, error: 'This is not a TikTok account.' };
+      if (!account.connected) return { accountId, error: 'This TikTok account needs reconnecting before it can be posted to. The user reconnects it on the Accounts page (/accounts).' };
+      const creator = await creatorInfo(await accountTokens(ctx, accountId));
+      if (!creator.privacyLevelOptions.length) return { accountId, error: 'TikTok did not say who can view posts from this account. Try again in a moment.' };
+      return { accountId, privacyLevels: creator.privacyLevelOptions, maxDurationSeconds: creator.maxVideoDurationSeconds };
+    } catch (error) { return { accountId, error: failure(error, error instanceof ConvexError && typeof error.data === 'string' ? error.data : 'TikTok did not share this account’s posting settings. Try again in a moment.') }; }
   },
 });
 

@@ -9,7 +9,7 @@ import { internal } from './_generated/api';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ConvexError, v, type ObjectType } from "convex/values";
-import { action, internalQuery, mutation, internalMutation, query, type MutationCtx } from "./_generated/server";
+import { action, internalQuery, mutation, internalMutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { listLimit, requireOwner, requireProject } from "./lib/auth";
 import { currentTimeline, validateTimeline } from "./lib/timeline";
@@ -22,7 +22,7 @@ import { accountLimit } from './lib/account_limits';
 const activeExportLimit = () => accountLimit('MAX_ACTIVE_EXPORTS_PER_ACCOUNT', 2, 1, 10);
 const startRenderForArgs = { burnCaptions: v.optional(v.boolean()), projectId: v.id("projects"), resolution: v.number(), fps: v.number(), quality: v.string(), clipId:v.optional(v.string()), timelineId:v.optional(v.string()) };
 /** The account's limit of exports in progress when it is reached, or 0 while another export can start. */
-export async function exportsFull(ctx: MutationCtx, ownerId: string, ultra: boolean) {
+export async function exportsFull(ctx: QueryCtx | MutationCtx, ownerId: string, ultra: boolean) {
   // With hosted exports, seats bound concurrent renders; beyond them exports wait in a longer queue.
   const limit = hostedRendersEnabled() ? queuedExportLimit(ultra) : activeExportLimit();
   const active = await Promise.all((['queued', 'rendering'] as const).map(status => ctx.db.query('renderJobs').withIndex('by_owner_status', q => q.eq('ownerId', ownerId).eq('status', status)).take(limit)));

@@ -188,6 +188,8 @@ export const begin = internalMutation({
     manual: v.optional(v.boolean()),
     reason: v.string(),
     exportConfirmed: v.boolean(),
+    /** From requestChecks: the user's request asks to post, publish or schedule. Never set by a tool. */
+    postRequested: v.optional(v.boolean()),
     /** From requestChecks: a final export/publish or full double-check request. Never set by a tool. */
     checkLevel: v.optional(v.literal('final')),
     /** From requestChecks: a length the user asked the finished video to have. finish enforces it. */
@@ -241,6 +243,7 @@ export const begin = internalMutation({
       ...(args.lockedLane ? { lockedLane: args.lockedLane } : {}),
       attempts: 0,
       exportConfirmed: args.exportConfirmed,
+      ...(args.postRequested ? { postRequested: true } : {}),
       ...(args.checkLevel ? { checkLevel: args.checkLevel } : {}),
       ...(args.requestedLength ? { requestedLength: args.requestedLength } : {}),
       ...(args.findMoments !== undefined ? { findMoments: args.findMoments } : {}),

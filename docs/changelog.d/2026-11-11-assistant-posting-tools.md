@@ -1,0 +1,1 @@
+- Assistant and MCP: seven posting tools (list accounts, post, schedule, list/get posts, cancel, reschedule) that export the clip when needed and need the user's confirmation; Posts shows clips still exporting and tags the assistant's posts. Why: the founder asked for the assistant to post and schedule to connected accounts from the editor and from MCP clients.

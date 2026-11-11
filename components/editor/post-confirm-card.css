@@ -1,0 +1,11 @@
+/* The assistant's post or schedule request, waiting for the user's press. Sized to the chat column like the choice card. */
+.post-confirm-card{width:100%;max-width:420px;min-width:0;gap:10px;padding:12px;border:1px solid var(--border);border-radius:10px}
+.post-confirm-card dl{display:flex;flex-direction:column;gap:8px;margin:0;font-size:13px}
+.post-confirm-card dl>div{display:grid;grid-template-columns:72px minmax(0,1fr);column-gap:10px}
+.post-confirm-card dt{color:var(--muted-foreground)}
+.post-confirm-card dd{display:flex;flex-direction:column;gap:2px;min-width:0;margin:0;overflow-wrap:anywhere}
+.post-confirm-card dd strong{font-weight:500}
+.post-confirm-caption{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:6;line-clamp:6;overflow:hidden;white-space:pre-wrap}
+.post-confirm-actions{display:flex;gap:8px}
+.post-confirm-card [data-error]{color:var(--destructive)}
+.post-confirm-card a{text-decoration:underline}

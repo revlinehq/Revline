@@ -2,6 +2,7 @@ import { laneHistory } from '../../lib/ai/lanes/history';
 import { laneInstructions, laneToolError, type LaneId } from '../../lib/ai/lanes';
 import { initialLaneSelection, reelRequested } from '../../lib/ai/lanes/selection';
 import { exportConfirmed } from '../../lib/ai/lanes/export-confirmation';
+import { POST_SENDING_TOOLS } from '../../lib/ai/lanes/base-tools';
 import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requestChecks, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
@@ -274,7 +275,13 @@ function passedFinish(part: object) {
 
 /** A choice card ends the turn: the user's pick arrives as their next message. */
 function askedUser(steps: readonly { content: readonly unknown[] }[]) {
-  return !!steps.at(-1)?.content.some(part => { const call = part as { type?: string; toolName?: string }; return call.type === 'tool-call' && call.toolName === 'askUser'; });
+  // A post or schedule call that left a confirmation card ends the turn too: only the user's press sends it.
+  // A refused one (no card) does not, so the assistant can ask for what is missing or say why.
+  return !!steps.at(-1)?.content.some(part => {
+    const call = part as { type?: string; toolName?: string; output?: { type?: string; value?: { awaitingConfirmation?: unknown }; awaitingConfirmation?: unknown } };
+    if (call.type === 'tool-call') return call.toolName === 'askUser';
+    return call.type === 'tool-result' && POST_SENDING_TOOLS.includes(call.toolName ?? '') && (call.output?.type === 'json' ? call.output.value?.awaitingConfirmation : call.output?.awaitingConfirmation) === true;
+  });
 }
 
 /** What the AI remembers about this user and project: rules to follow and styles to reuse, most-used first. */

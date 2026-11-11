@@ -25,6 +25,8 @@ const TURN_FUNCTIONS = new Set([
   'mediaTaskResults:consumeRead', 'referenceMotion:measure', 'referenceMotion:state', 'referenceMotion:markOff', 'referenceMotion:noteReference',
   'assistant:videoUnavailable', 'assistant:recordVideoUnavailable',
   'pixelTracks:referenceForRun', 'pixelTracks:pageForRun',
+  // Posting tools: reads of the run owner's own accounts and posts. Their writes go through toolWrites:run.
+  'assistantPosting:accounts', 'assistantPosting:accountPlatforms', 'assistantPosting:preview', 'assistantPosting:list', 'assistantPosting:get', 'postingActions:tiktokCreatorFor',
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */
