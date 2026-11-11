@@ -28,6 +28,10 @@ Local development uses `npm run dev:isolated` in an agent worktree. It starts th
 
 Hosted releases use explicit manifests and separate environment files, runtime preflight, authenticated queue verification, and real staging jobs before production promotion. See the [Railway hosting runbook](../docs/railway-worker-migration.md). No release command runs during install or build.
 
+## Emoji in text
+
+No text font has emoji and the image has no system emoji font, so every text font family carries a second face, `public/fonts/noto-color-emoji.woff2` (Noto Color Emoji, COLRv1, OFL), limited to emoji code points (`lib/editor/text-fonts.ts`). Frames and exports, and the preview in Chromium browsers, therefore draw the same colour emoji; a browser that cannot draw COLRv1 (Safari) previews with its system emoji. Characters a text font has itself (♥, ☀) stay in that font. Frames cached before the processor had the font keep their box until the timeline changes. A processor with it reports `render:emoji`; until one does, an edit whose text has an emoji returns an `emojiNote` saying frames and exports will show a "NO GLYPH" box. Keycap sequences (1️⃣) are not covered.
+
 ## Video-link imports (yt-dlp)
 
 The image bakes the yt-dlp pinned in `scripts/video-import-requirements.txt`; `npm run video-import:install` installs the same file into `.data/video-import` for local development. Because sites change faster than images are promoted, the processor (`VIDEO_IMPORT_AUTO_UPDATE=1` in the Dockerfile) installs the newest yt-dlp release into its scratch directory at start and once a day, loads it ahead of the baked copy, and keeps the baked copy if that fails. Set `VIDEO_IMPORT_AUTO_UPDATE=0` on the service to stay on the pin. The version in use is logged as `video-importer-ready` and appears in failure messages.
