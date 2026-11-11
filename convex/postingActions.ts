@@ -4,6 +4,7 @@ import type { Id } from './_generated/dataModel';
 import { action, internalAction, type ActionCtx } from './_generated/server';
 import { postingPlatform, tiktokVisibility } from './postingTables';
 import { PostingError, type AccountTokens, type PostingPlatform } from '../lib/posting/adapter';
+import { downloadAvatar } from '../lib/posting/avatar';
 import { decryptTokens, encryptTokens, signState, verifyState } from '../lib/posting/crypto';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
 import { creatorInfo } from '../lib/posting/platforms/tiktok';
@@ -49,11 +50,19 @@ export const finishConnect = action({
     if (!live) return { ok: false, platform, error: `${PLATFORM_NAMES[platform]} is not available right now.` };
     try {
       const tokens = await live.adapter.exchangeCode(live.credentials, code), profile = await live.adapter.profile(tokens);
-      await ctx.runMutation(internal.posting.saveAccount, {
-        ownerId, platform, platformAccountId: profile.platformAccountId, username: profile.username,
-        ...(profile.displayName ? { displayName: profile.displayName } : {}), ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}),
-        tokenCipher: await encryptTokens(tokenSecret(), tokens), ...(tokens.expiresAt ? { tokenExpiresAt: tokens.expiresAt } : {}), scopes: tokens.scopes,
-      });
+      // Revline keeps its own copy of the picture, because the platform's URL can expire.
+      // A picture that cannot be saved never stops the account from connecting.
+      const picture = await downloadAvatar(profile.avatarUrl), avatarStorageId = picture ? await ctx.storage.store(picture).catch(() => undefined) : undefined;
+      try {
+        await ctx.runMutation(internal.posting.saveAccount, {
+          ownerId, platform, platformAccountId: profile.platformAccountId, username: profile.username,
+          ...(profile.displayName ? { displayName: profile.displayName } : {}), ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}), ...(avatarStorageId ? { avatarStorageId } : {}),
+          tokenCipher: await encryptTokens(tokenSecret(), tokens), ...(tokens.expiresAt ? { tokenExpiresAt: tokens.expiresAt } : {}), scopes: tokens.scopes,
+        });
+      } catch (error) {
+        if (avatarStorageId) await ctx.storage.delete(avatarStorageId).catch(() => {});
+        throw error;
+      }
       return { ok: true, platform };
     } catch (error) {
       return { ok: false, platform, error: failure(error, `${PLATFORM_NAMES[platform]} did not finish connecting this account. Please try again.`) };
@@ -126,6 +135,29 @@ export const revokeOwner = internalAction({
   handler: async (ctx, { ownerId }) => {
     const accountIds: Id<'postingAccounts'>[] = await ctx.runMutation(internal.posting.disconnectOwner, { ownerId });
     await Promise.allSettled(accountIds.map(accountId => revokeThenPurge(ctx, accountId)));
+    return null;
+  },
+});
+
+/**
+ * Save a picture for an account that has none, scheduled by `saveTokens` right after a token renewal: one profile
+ * call and one download. Failing leaves the account on its initials until the next weekly look or a reconnect.
+ */
+export const fillAvatar = internalAction({
+  args: { accountId: v.id('postingAccounts'), platform: postingPlatform }, returns: v.null(),
+  handler: async (ctx, { accountId, platform }) => {
+    const live = livePlatform(platform);
+    if (!live) return null;
+    let avatarStorageId: Id<'_storage'> | undefined;
+    try {
+      const { username, avatarUrl } = await live.adapter.profile(await accountTokens(ctx, accountId)), picture = await downloadAvatar(avatarUrl);
+      if (!avatarUrl || !picture) return null;
+      avatarStorageId = await ctx.storage.store(picture);
+      await ctx.runMutation(internal.posting.saveAvatar, { accountId, username, avatarUrl, avatarStorageId });
+    } catch {
+      // No picture this time; a file that was stored but not attached to the account is removed.
+      if (avatarStorageId) await ctx.storage.delete(avatarStorageId).catch(() => {});
+    }
     return null;
   },
 });

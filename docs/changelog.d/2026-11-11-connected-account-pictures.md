@@ -1,0 +1,1 @@
+- Posting: Revline saves each connected account's picture, shows it in the Post dialog and as your own avatar, and every account row has Reconnect. Why: the founder asked for profile pictures and a reconnect button while connecting his YouTube channel; platform picture links expire.

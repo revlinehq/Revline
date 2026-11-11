@@ -47,8 +47,8 @@ async function profile(tokens: AccountTokens): Promise<AccountProfile> {
   const thumbnails = snippet.thumbnails ?? {};
   return {
     platformAccountId: channel.id,
-    // customUrl is the channel's handle ("@name") when it has one.
-    username: snippet.customUrl || snippet.title || channel.id,
+    // customUrl is the channel's handle ("@name") when it has one; the app writes the "@" itself.
+    username: snippet.customUrl?.replace(/^@/, '') || snippet.title || channel.id,
     displayName: snippet.title,
     avatarUrl: (thumbnails.high ?? thumbnails.medium ?? thumbnails.default)?.url,
   };

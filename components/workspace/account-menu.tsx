@@ -6,7 +6,7 @@ import { useClerk, useUser } from '@clerk/nextjs';
 import { Database, History, LoaderCircle, LogOut, Send, Share2, UserRound } from 'lucide-react';
 import { signOutToSignIn } from '@/lib/auth/sign-out';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { UserAvatar } from './user-avatar';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 /** `shell`: inside the dashboard shell the sidebar already links Posts and Connected accounts, and the profile page is called Settings. */
@@ -23,9 +23,9 @@ export function WorkspaceAccountMenu({ active, error, shell = false }: { active?
     catch { setAccountError('Could not sign out. Please try again.'); setSigningOut(false); }
   }
 
-  return <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="workspace-account-trigger rounded-full p-0" aria-label="Open account menu" disabled={!isLoaded}><Avatar>{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar></Button></DropdownMenuTrigger>
+  return <DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="workspace-account-trigger rounded-full p-0" aria-label="Open account menu" disabled={!isLoaded}><UserAvatar fallback={initial} /></Button></DropdownMenuTrigger>
     <DropdownMenuContent align="end" sideOffset={12} className="workspace-menu workspace-account-menu">
-      <div className="workspace-account-identity"><Avatar size="lg">{user?.imageUrl && <AvatarImage src={user.imageUrl} alt="" />}<AvatarFallback>{initial}</AvatarFallback></Avatar><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
+      <div className="workspace-account-identity"><UserAvatar size="lg" fallback={initial} /><div><strong>{user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace')}</strong><span>{user?.primaryEmailAddress?.emailAddress ?? 'Sign in to save your work'}</span></div></div>
       <DropdownMenuSeparator className="workspace-menu-divider" />
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/profile" aria-current={active === 'profile' ? 'page' : undefined}><UserRound size={16} />{shell ? 'Settings' : 'Profile'}</Link></DropdownMenuItem>
       <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/storage" aria-current={active === 'storage' ? 'page' : undefined}><Database size={16} />Cloud storage</Link></DropdownMenuItem>
