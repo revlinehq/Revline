@@ -32,7 +32,7 @@ import { normalizeMediaFile } from '@/lib/editor/media-file';
 import { EditComposer } from './edit-composer';
 import { ConversationStart } from './conversation-start';
 import { FootageProcessingCard, type FootageProcessingFile, type FootageProcessingPhase } from './footage-processing-card';
-import { WorkspaceNav, chatRecency, useWorkspaceChats } from './workspace-nav';
+import { WorkspaceNav, chatRecency } from './workspace-nav';
 import { ProjectCover } from './project-cover';
 import { acknowledgeDraftFiles, prepareExternalAuthRedirect, stashFiles, takeFiles } from '@/lib/editor/project-draft';
 import { NEW_WORKSPACE_EVENT } from './start-new-workspace';
@@ -41,8 +41,8 @@ import './new-conversation.css';
 
 type Processing = Omit<ProjectImportProgress, 'phase'> & { phase: FootageProcessingPhase };
 
-/** Recent projects on the start page, in one page; older ones are under "See all chats". */
-const RECENT_PROJECTS = 20;
+/** Recent projects on the start page; the rest are under "View all". */
+const RECENT_PROJECTS = 4;
 
 export function NewConversation() {
   const router = useRouter();
@@ -91,9 +91,14 @@ export function NewConversation() {
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
   const hasMedia = files.length + cloudIds.length > 0;
   const busy = startingBlank || sendAfterImport || processing !== null && processing.phase !== 'error';
-  const { chats: workspaceChats, loading: projectsLoading } = useWorkspaceChats(false, !processing, RECENT_PROJECTS);
   const holderIds: string[] = [...Object.values(linkHolders), ...(linkImport ? [linkImport.projectId] : [])];
-  const recentProjects = workspaceChats.filter(project => !holderIds.includes(project.id));
+  // The newest projects in one live query: more than are shown, so a fifth is known about behind a few link holders. A paged query keeps
+  // its first page's range after a delete, so it can neither refill the four nor tell that nothing older is left.
+  const newestProjects = useQuery(api.projects.list, isAuthenticated && !processing ? { limit: RECENT_PROJECTS + 4 } : 'skip');
+  const projectsLoading = !processing && (!isLoaded || !!isSignedIn && (authLoading || isAuthenticated && newestProjects === undefined));
+  const ownProjects = (newestProjects ?? []).filter(project => !holderIds.includes(project._id));
+  const recentProjects = ownProjects.slice(0, RECENT_PROJECTS);
+  const moreProjects = ownProjects.length > RECENT_PROJECTS;
   const showRecentProjects = projectsLoading || recentProjects.length > 0;
   const settings = useQuery(api.assistant.composerSettings, isAuthenticated ? {} : 'skip');
   const request = assistantRequest(settings ?? {});
@@ -405,8 +410,8 @@ export function NewConversation() {
   return <div className={`workspace-page new-conversation${!status ? ' new-conversation-empty' : ''}${showRecentProjects ? ' new-conversation-has-projects' : ''}`} {...fileDrop.handlers}>
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
     {status ? <FootageProcessingCard progressKey={session.current.projectId ? `project:${session.current.projectId}` : undefined} files={processingFiles} {...status} error={error} onRetry={() => void processFootage()} onReset={reset} onOpen={session.current.projectId ? () => void openPartialProject() : undefined}/> : <ConversationStart guidance={showRecentProjects ? <section className="new-conversation-recent" aria-labelledby="recent-projects-title">
-      <div className="new-conversation-recent-heading"><h2 id="recent-projects-title" className="new-conversation-actions-title">Recent projects</h2><Button type="button" variant="ghost" size="sm" className="new-conversation-upload-new" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/>Upload new</Button></div>
-      <div className="new-conversation-projects" aria-busy={projectsLoading}>{projectsLoading ? Array.from({ length: 6 }, (_, index) => <Button key={index} type="button" variant="ghost" className="new-conversation-project" disabled aria-label="Loading project"><Skeleton as="span" className="workspace-chat-cover"/><span className="new-conversation-project-details"><Skeleton as="span" className="h-3 w-28 bg-[#2a2a2a]"/><Skeleton as="span" className="h-3 w-16 bg-[#2a2a2a]"/></span></Button>) : recentProjects.map(project => <Button key={project.id} asChild variant="ghost" className="new-conversation-project"><Link href={`/editor/${project.id}`}><ProjectCover url={project.coverUrl} kind={project.coverKind}/><span className="new-conversation-project-details"><strong>{project.title}</strong><span>{project.running ? 'Editing…' : chatRecency(project.updatedAt)}</span></span></Link></Button>)}</div>
+      <div className="new-conversation-recent-heading"><h2 id="recent-projects-title" className="new-conversation-actions-title">Recent projects</h2><div className="new-conversation-recent-actions">{moreProjects && <Button asChild variant="ghost" size="sm" className="new-conversation-view-all"><Link href="/chats">View all</Link></Button>}<Button type="button" variant="ghost" size="sm" className="new-conversation-upload-new" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/>Upload new</Button></div></div>
+      <div className="new-conversation-projects" aria-busy={projectsLoading}>{projectsLoading ? Array.from({ length: RECENT_PROJECTS }, (_, index) => <Button key={index} type="button" variant="ghost" className="new-conversation-project" disabled aria-label="Loading project"><Skeleton as="span" className="workspace-chat-cover"/><span className="new-conversation-project-details"><Skeleton as="span" className="h-3 w-28 bg-[#2a2a2a]"/><Skeleton as="span" className="h-3 w-16 bg-[#2a2a2a]"/></span></Button>) : recentProjects.map(project => <Button key={project._id} asChild variant="ghost" className="new-conversation-project"><Link href={`/editor/${project._id}`}><ProjectCover url={project.coverUrl} kind={project.coverKind}/><span className="new-conversation-project-details"><strong>{project.title}</strong><span>{project.aiRunning ? 'Editing…' : chatRecency(project.updatedAt)}</span></span></Link></Button>)}</div>
       {projectsLoading && <span className="sr-only" role="status">Loading recent projects…</span>}
     </section> : <section className="new-conversation-actions" aria-labelledby="new-edit-actions-title">
       <h2 id="new-edit-actions-title" className="new-conversation-actions-title">Start new edit</h2>
