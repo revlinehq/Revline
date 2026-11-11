@@ -1,16 +1,27 @@
-import {userErrorMessage} from '@/lib/user-error';
+import {failureReference,plainFailureText} from '@/lib/ai/failure-text';
 import type {TimelinePublicationReceipt} from '@/lib/ai/publication-receipt';
 import type {ChatMessage,ResultCard} from './chat-types';
 
-const fallback='This step could not finish. Your saved edits remain.';
-/** Tool transport strings are diagnostics, not copy for the conversation. */
+/** A step that stored no reason at all. */
+const NO_RESULT='This step ended without a result, so it changed nothing. Send the request again.';
+/** A failure Revline has no words for yet. The code is derived from the stored error text (lib/ai/failure-text),
+ * so it can be matched to the turn's record and the logs; the raw text itself stays out of the chat. */
+const undescribed=(raw:string)=>`Something failed on Revline's side that it cannot describe yet (reference ${failureReference(raw)}). Your saved edits remain. Try again, and quote the reference if it repeats.`;
+const isUndescribed=(detail:string)=>detail===NO_RESULT||detail.startsWith("Something failed on Revline's side");
+/** What a stored failure means for the user, in plain words, from the kind of failure it is. Tool transport
+ * strings are diagnostics, not copy for the conversation: they are stripped, and what is left decides the wording. */
 export function assistantErrorDetail(value:string|undefined):string {
-  value=value?.replace(/^(?:Error:\s*)+(?=\S)/,'');
-  if(!value||/^(?:An error occurred[.!]?|Error|Unknown error|This step could not finish[.!]?)$/i.test(value.trim()))return fallback;
-  if(/\bTimelineGestureRejection:\s*Overlaps a clip\b/i.test(value))return 'These clips would overlap. This edit was not saved; previously saved edits remain.';
-  if(/timeline changed elsewhere|timeline changed while|revision conflict/i.test(value))return 'Your timeline changed while this edit was being prepared. This change was not saved. Previously saved edits remain.';
-  if(/\[CONVEX|ConvexError:|Request ID:|Server Error|\bUncaught\b|\bAI_\w+Error\b|unavailable tool/.test(value))return fallback;
-  return userErrorMessage(new Error(value),fallback);
+  const raw=(value??'').trim(),text=plainFailureText(raw);
+  if(/\bTimelineGestureRejection:\s*Overlaps a clip\b/i.test(raw))return 'These clips would overlap. This edit was not saved; previously saved edits remain.';
+  if(/timeline changed elsewhere|timeline changed while|revision conflict/i.test(raw))return 'Your timeline changed while this edit was being prepared. This change was not saved. Previously saved edits remain.';
+  if(/\bAI_NoSuchToolError\b|unavailable tool|is not available in this step/i.test(raw))return 'The assistant reached for a tool that is not available for this kind of edit, so that step did nothing. Send the request again, or say it another way.';
+  if(/\bAI_(?:InvalidToolInput|TypeValidation|InvalidArgument|JSONParse|ToolCallRepair)Error\b|Type validation failed|Invalid input for tool/i.test(raw))return 'The assistant sent an instruction the editor could not read, so that step was skipped. Send the request again.';
+  if(/\bAI_(?:APICall|Retry|NoOutputGenerated|NoContentGenerated|EmptyResponseBody|LoadAPIKey)Error\b|fetch failed|ECONNRESET|ETIMEDOUT|socket hang up/i.test(raw))return 'The model call failed before this step finished. Your saved edits remain. Try again.';
+  if(/AI run is no longer active|editing attempt has been replaced/i.test(raw))return 'This edit had already ended when the step ran, so the step changed nothing.';
+  if(!text||/^(?:An error occurred[.!]?|Error|Unknown error|This step could not finish[.!]?(?: Your saved edits remain\.)?)$/i.test(text))return raw&&text?NO_RESULT:raw?undescribed(raw):NO_RESULT;
+  // Anything still shaped like a diagnostic (a crash in our code, a schema or validator message, an SDK error name) is ours to fix, not the user's to read.
+  if(/Uncaught (?:Type|Reference|Range|Syntax)Error|Cannot read propert|is not a function|is not defined|is not iterable|\bAI_\w+Error\b|does not match the schema|Failed to insert or update|ArgumentValidationError|ReturnsValidationError|Convex answered \d+/.test(raw)||/^\{.*\}$/.test(text))return undescribed(raw);
+  return text;
 }
 
 function failureSummary(text:string):boolean {
@@ -43,10 +54,10 @@ export function assistantTurnPresentation(replies:readonly ChatMessage[],cards:r
   const savedChanges=Math.max(savedIds.size,reportedSaved);
   const saveFailed=failures.some(card=>card.saveFailed)||receipt?.status==='failed'||receipt?.status==='aborted';
   const hasDraft=!!receipt||replies.some(message=>message.steps?.some(step=>step.staged||step.output?.staged===true));
-  const specific=detailCandidates.find(value=>assistantErrorDetail(value)!==fallback&&!failureSummary(value)&&!/^This step did not confirm|^No saved confirmation|^The replacement edit was not saved|^No timeline changes were saved/i.test(value));
+  const specific=detailCandidates.find(value=>!isUndescribed(assistantErrorDetail(value))&&!failureSummary(value)&&!/^This step did not confirm|^No saved confirmation|^The replacement edit was not saved|^No timeline changes were saved/i.test(value));
   let detail=conflict?assistantErrorDetail(conflict):specific?assistantErrorDetail(specific):receipt&&receipt.status!=='saved'?'This replacement was not saved. Previously saved edits remain.':assistantErrorDetail(detailCandidates[0]);
   if(savedChanges&&!hasDraft&&!conflict){
-    if(detail===fallback||/pending replacement|edits were saved before the assistant stopped/.test(detail))detail='The request did not finish. Continue the unfinished part from the current timeline.';
+    if(isUndescribed(detail)||/pending replacement|edits were saved before the assistant stopped/.test(detail))detail='The request did not finish. Continue the unfinished part from the current timeline.';
   }
   detail=detail.replace('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.','Some steps remain unfinished. Your saved edits are still here.');
   if(savedChanges)detail=`${savedChanges} ${savedChanges===1?'change was':'changes were'} saved. ${detail}`;

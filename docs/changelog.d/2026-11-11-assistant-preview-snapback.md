@@ -1,0 +1,1 @@
+- Editor: while the assistant works, the timeline no longer snaps back to the pre-edit state for a moment each time an edit is saved or the run ends. Why: the founder saw the tracks jump during assistant runs.

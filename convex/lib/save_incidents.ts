@@ -36,7 +36,9 @@ export function incidentShape(value: unknown): string {
 export async function finishIncidentRun(ctx: MutationCtx, runId: string, publication?: { status: 'saved' | 'failed' | 'aborted'; stagedRevision: number; revision?: number }) {
   const run = await ctx.db.query('saveIncidentRuns').withIndex('by_run', q => q.eq('runId', runId)).unique();
   if (!run) return;
-  await ctx.db.patch(run._id, { finishedAt: Date.now(), ...(publication ? { publication } : {}) });
+  // Callers hold wider objects (a turn's publication also names its thread and prompt). Only these fields are stored;
+  // an extra one fails the table's schema and takes the whole finish down with it.
+  await ctx.db.patch(run._id, { finishedAt: Date.now(), ...(publication ? { publication: { status: publication.status, stagedRevision: publication.stagedRevision, ...(publication.revision === undefined ? {} : { revision: publication.revision }) } } : {}) });
   await ctx.scheduler.runAfter(0, internal.saveIncidents.settle, { runId });
 }
 

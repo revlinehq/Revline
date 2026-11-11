@@ -7,7 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CAPTION_LIMIT, TITLE_LIMIT } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
-import { YOUTUBE_VISIBILITIES, YOUTUBE_VISIBILITY_NAMES, type YouTubeVisibility } from '@/lib/posting/visibility';
+import { YOUTUBE_VISIBILITY_NAMES, type YouTubeVisibility } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { ProjectCover } from '@/components/workspace/project-cover';
@@ -55,6 +55,8 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const createBatch = useMutation(api.posting.createBatch), readCreator = useAction(api.postingActions.tiktokCreator);
   // YouTube starts from the visibility this owner used last ("Public" the first time). TikTok never starts from one.
   const lastVisibility = useQuery(api.posting.lastVisibility, isAuthenticated ? {} : 'skip');
+  // The visibilities a YouTube post can be given right now. With one, there is nothing to choose and the dialog says which it is.
+  const youtubeOptions = useQuery(api.posting.options, isAuthenticated ? {} : 'skip')?.youtubeVisibilities;
   const [youtubeChoice, setYoutubeChoice] = useState<YouTubeVisibility | null>(null);
   const [creators, setCreators] = useState<Record<string, TikTokCreator>>({}), [tiktok, setTiktok] = useState<Record<string, TikTokChoice>>({});
   /** The latest creator-info request per picked TikTok account: an answer to an older one is dropped. */
@@ -69,7 +71,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
-  const youtube = youtubeChoice ?? lastVisibility?.youtube;
+  const youtube = youtubeOptions && youtubeOptions.length > 1 ? youtubeChoice ?? lastVisibility?.youtube : undefined;
   const onTikTok = picked.filter(account => account.platform === 'tiktok'), tiktokIds = onTikTok.map(account => account.id).join(' ');
   /** TikTok's rules: the account's current settings are read each time the dialog shows it, not kept from before. */
   function loadCreator(accountId: Id<'postingAccounts'>) {
@@ -170,11 +172,12 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
             <label htmlFor="post-title">Title <small>YouTube</small></label>
             <Input id="post-title" maxLength={TITLE_LIMIT} value={title} onChange={event => setTitle(event.target.value)} />
           </div>}
-          {titled && <div className="post-field">
+          {titled && youtubeOptions?.length === 1 && <p className="post-note">YouTube videos are posted as {YOUTUBE_VISIBILITY_NAMES[youtubeOptions[0]]}.</p>}
+          {titled && youtubeOptions && youtubeOptions.length > 1 && <div className="post-field">
             <label htmlFor="post-visibility">Visibility <small>YouTube</small></label>
             <Select value={youtube ?? ''} onValueChange={value => setYoutubeChoice(value as YouTubeVisibility)}>
               <SelectTrigger id="post-visibility" className="post-select-trigger"><SelectValue /></SelectTrigger>
-              <SelectContent className="post-select">{YOUTUBE_VISIBILITIES.map(value => <SelectItem key={value} value={value}>{YOUTUBE_VISIBILITY_NAMES[value]}</SelectItem>)}</SelectContent>
+              <SelectContent className="post-select">{youtubeOptions.map(value => <SelectItem key={value} value={value}>{YOUTUBE_VISIBILITY_NAMES[value]}</SelectItem>)}</SelectContent>
             </Select>
           </div>}
           {onTikTok.map(account => <TikTokPostSettings key={account.id} username={account.username} creator={creators[account.id]} choice={tiktok[account.id] ?? NO_TIKTOK_CHOICE} durationSeconds={clip?.durationSeconds ?? null}

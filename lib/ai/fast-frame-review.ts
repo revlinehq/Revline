@@ -95,7 +95,15 @@ export class FastFrameReview {
 
   restore(times: number[]) { this.pending = new Set(times); }
 
-  times() { return [...this.pending].sort((a, b) => a - b); }
+  /** Keep every pending time on a frame this timeline can draw. A queue carried over from a longer draft that was
+   * discarded (a stopped run, a retry) otherwise asks for frames past the end, which no render can ever satisfy. */
+  fit(timeline: Timeline) {
+    const duration = timelineDuration(timeline);
+    this.pending = new Set(duration <= 0 ? [] : [...this.pending].map(time => renderedFrameTime(time, duration, timeline.fps)));
+  }
+
+  /** To the millisecond: a frame time such as 42.43333333333 is noise in the model's context on every read. */
+  times() { return [...new Set([...this.pending].map(time => Math.round(time * 1000) / 1000))].sort((a, b) => a - b); }
 
   feedback() {
     const all = this.times(), times = this.sample();

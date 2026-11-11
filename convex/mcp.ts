@@ -11,7 +11,7 @@ import { requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { syncProjectAgent, projectIdentity, projectRunContext, writeRunState, writeProject } from './lib/project_data';
 import { currentTimeline } from './lib/timeline';
-import { timelineDuration, type Timeline } from '../lib/editor/types';
+import { renderedFrameTime, timelineDuration, type Timeline } from '../lib/editor/types';
 import { MAX_SHEET_FRAMES } from '../lib/ai/frame-sampling';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { aspectRatio, frameResolution } from './schema';
@@ -255,7 +255,13 @@ export const requestFrames = internalMutation({ args: { sheet: v.optional(v.bool
   if (pacing && (!Number.isFinite(pacing.start) || pacing.start < 0 || pacing.end - pacing.start < .3 || !(pacing.fps >= 2 && pacing.fps <= timeline.fps))) throw new ConvexError(`Check pacing over at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds, at 2 to ${timeline.fps} samples a second.`);
   const sound = args.sound && { ...args.sound, end: Math.min(args.sound.end, duration) };
   if (sound && (!Number.isFinite(sound.start) || sound.start < 0 || sound.end - sound.start < .3 || sound.fps !== undefined && !(sound.fps >= 10 && sound.fps <= timeline.fps))) throw new ConvexError(`Listen to at least 0.3 s between 0 and ${Math.round(duration * 100) / 100} seconds${sound.check ? `, sampling the picture at 10 to ${timeline.fps} frames a second` : ''}.`);
-  if (!args.clipCheck && !normalization && !pacing && !sound && (!args.times.length || args.times.length > (args.sheet ? MAX_SHEET_FRAMES : 6) || args.times.some(time => !Number.isFinite(time) || time < 0 || time > duration))) throw new ConvexError(`Choose 1 to ${args.sheet ? MAX_SHEET_FRAMES : 6} times between 0 and ${Math.round(duration * 100) / 100} seconds.`);
+  if (!args.clipCheck && !normalization && !pacing && !sound) {
+    const round = (value: number) => Math.round(value * 100) / 100, last = renderedFrameTime(duration, duration, timeline.fps);
+    const late = args.times.find(time => Number.isFinite(time) && time > duration);
+    // Say which time is wrong and what the last frame is, so the caller can correct the request instead of repeating it.
+    if (late !== undefined) throw new ConvexError(`Frame time ${round(late)} s is past the end of this timeline: it is ${round(duration)} s long and its last frame is at ${round(last)} s. Ask for times from 0 to ${round(last)} s.`);
+    if (!args.times.length || args.times.length > (args.sheet ? MAX_SHEET_FRAMES : 6) || args.times.some(time => !Number.isFinite(time) || time < 0)) throw new ConvexError(`Choose 1 to ${args.sheet ? MAX_SHEET_FRAMES : 6} times between 0 and ${round(last)} seconds.`);
+  }
   const frozen = timeline;
   // One contact sheet instead of a frame per time: only for plain multi-frame looks.
   const sheet = !!args.sheet && args.times.length > 1 && !args.resolution && !args.clipCheck && !normalization && !pacing && !sound;

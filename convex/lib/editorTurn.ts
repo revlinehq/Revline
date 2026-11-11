@@ -33,7 +33,7 @@ import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, repeatedToolFailure, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
@@ -211,7 +211,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
         if (hasStalledReads(steps)) throw new AssistantReadLoopError();
-        if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+        { const repeated = repeatedToolFailure(steps); if (repeated) throw new AssistantToolRetryError(repeated); }
         // Reuse only server-validated review snapshots of the current visible
         // scope, including those saved before a durable continuation.
         // Plans recorded under full checks do not gate a lane that has since switched to lighter checks.
@@ -221,7 +221,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         if(failedLane?.exhausted)throw exhaustedLaneError(failedLane.lane,failedLane.failures.join(' '));
         repairFeedback = toolkit.requiresFinish()&&!toolkit.laneFinished()?`The task is unfinished. Call finish and repair its real check output: ${JSON.stringify(failedLane??'No finish check has passed.')}`:toolkit.fastReviewFeedback() ?? completionRepairFeedback(steps, finishReason, reviewRequirements);
         if (!repairFeedback) {
-          if (hasRepeatedToolFailures(steps)) throw new AssistantToolRetryError();
+          { const repeated = repeatedToolFailure(steps); if (repeated) throw new AssistantToolRetryError(repeated); }
           if (streamError) throw streamError;
           if (hasFailedRenderChecks(steps, reviewRequirements)) throw new AssistantRenderReviewError();
           const missingFastReview = toolkit.fastReviewFeedback();

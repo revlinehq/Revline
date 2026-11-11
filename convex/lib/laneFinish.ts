@@ -10,7 +10,7 @@ import {
   MAX_FINISH_ATTEMPTS,
 } from '../../lib/ai/lanes/task';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import type { Timeline } from '../../lib/editor/types';
+import { renderedFrameTime, type Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
@@ -181,9 +181,11 @@ export async function finishLane(
     if (!cheapClip && !failures.length && summary.clipCount && summary.duration > 0) {
       const fastTimes = task.lane === 'reel' && tab.timelineId === timelineId && isPlainReelTimeline(tab.timeline) ? options.fastFrameTimes : undefined;
       const pendingReview = fastTimes === undefined ? undefined : new FastFrameReview(fastTimes);
-      const times = fastTimes ?? (baseline
+      // Every sample is a frame this tab can draw: a time queued against a longer, discarded draft would be refused forever.
+      const drawable = (time: number) => renderedFrameTime(time, summary.duration, tab.timeline!.fps);
+      const times = [...new Set((fastTimes ?? (baseline
         ? await changedFrameTimes(tab.timeline, baseline)
-        : [0, summary.duration / 2]);
+        : [0, summary.duration / 2])).map(drawable))];
       // A plain reel at the standard level reuses its pending queue; other paths retain the rendered finish check.
       if (!times.length && fastTimes === undefined)
         times.push(
