@@ -20,8 +20,11 @@ export function timeAgo(at: number, now: number) {
   return unit(Math.floor(elapsed / (365 * DAY)), 'year');
 }
 
-/** New: Revline first saw the campaign within the last 5 days. */
-export const isNewCampaign = (campaign: Pick<CampaignView, 'firstSeenAt'>, now: number) => now - campaign.firstSeenAt < 5 * DAY;
+/** New: the campaign itself launched within the last 5 days. When Revline first read it does not count, and a campaign that states no launch date is never new. */
+export function isNewCampaign(campaign: Pick<CampaignView, 'launchedAt' | 'sourceCreatedAt'>, now: number) {
+  const launched = campaign.launchedAt ?? campaign.sourceCreatedAt;
+  return launched !== undefined && now - launched < 5 * DAY;
+}
 
 /** Share of the stated budget already spent, 0–100, or null when the campaign states no budget. */
 export function budgetSpentPercent(campaign: Pick<CampaignView, 'budgetCents' | 'budgetLeftCents'>) {
