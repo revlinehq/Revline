@@ -14,6 +14,7 @@ import type { Timeline } from '../../lib/editor/types';
 import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
@@ -73,6 +74,10 @@ export async function finishLane(
     failures.push(...looks.failures);
     warnings.push(...looks.warnings);
   }
+  // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
+  // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.
+  const cutRead = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId);
+  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys((cutRead.output as { accepted?: Record<string, string> }).accepted ?? {}), !!task.script));
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;
