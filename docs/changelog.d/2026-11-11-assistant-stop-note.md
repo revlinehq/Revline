@@ -1,0 +1,1 @@
+- Assistant: stopping a run writes into the chat what was saved (revision and clip counts) and that steps still running were not applied. Why: the founder paused a run and could not tell what had been kept.
