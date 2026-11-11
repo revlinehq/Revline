@@ -17,7 +17,7 @@ import { userError } from '@/lib/user-error';
 import { CampaignImage } from './campaign-card';
 import { budgetSpentPercent, count, isNewCampaign, money, timeAgo } from './campaign-format';
 import { useNow } from './use-now';
-import { GetClipsDialog } from './get-clips-dialog';
+import { MakeClipsButton } from './make-clips-button';
 import { PlatformIcon, orderedPlatforms, platformName } from './platform-icon';
 import './campaigns.css';
 
@@ -43,10 +43,9 @@ function BudgetCard({ campaign }: { campaign: CampaignView }) {
   </Card>;
 }
 
-function Campaign({ campaign, saved, openClips }: { campaign: CampaignView; saved: boolean | undefined; openClips: boolean }) {
+function Campaign({ campaign, saved }: { campaign: CampaignView; saved: boolean | undefined }) {
   const now = useNow();
   const save = useMutation(api.campaigns.save), unsave = useMutation(api.campaigns.unsave);
-  const [clipsOpen, setClipsOpen] = useState(openClips);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   async function toggleSaved() {
@@ -74,10 +73,10 @@ function Campaign({ campaign, saved, openClips }: { campaign: CampaignView; save
       </div>
       <div className="campaign-actions">
         <Button variant="soft" onClick={() => void toggleSaved()} disabled={saved === undefined || saving} aria-pressed={!!saved}>{saved ? <BookmarkCheck aria-hidden="true" /> : <Bookmark aria-hidden="true" />}{saved ? 'Saved' : 'Save'}</Button>
-        {!campaign.ended && <Button variant="primary" onClick={() => setClipsOpen(true)}>Make clips</Button>}
+        {!campaign.ended && <MakeClipsButton campaignId={campaign._id} name={campaign.name} variant="primary" onError={setError} />}
       </div>
     </div>
-    {error && <p className="get-clips-error" role="alert">{error}</p>}
+    {error && <p className="campaign-error" role="alert">{error}</p>}
     <div className="campaign-facts">
       {orderedPlatforms(campaign.payouts.map(payout => payout.platform)).map(platform => campaign.payouts.find(payout => payout.platform === platform)!).map(payout => <PayoutCard key={payout.platform} payout={payout} />)}
       <BudgetCard campaign={campaign} />
@@ -86,11 +85,10 @@ function Campaign({ campaign, saved, openClips }: { campaign: CampaignView; save
         <div className="campaign-rules-body"><Button asChild variant="soft"><a href={campaign.url} target="_blank" rel="noreferrer">Open on Content Rewards<ExternalLink aria-hidden="true" /></a></Button></div>
       </Card>
     </div>
-    {!campaign.ended && <GetClipsDialog campaign={campaign} open={clipsOpen} onOpenChange={setClipsOpen} />}
   </main>;
 }
 
-export function CampaignDetail({ campaignId, openClips = false }: { campaignId: string; openClips?: boolean }) {
+export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { isAuthenticated } = useConvexAuth();
   const campaign = useQuery(api.campaigns.get, isAuthenticated ? { campaignId: campaignId as Id<'campaigns'> } : 'skip');
   const mine = useQuery(api.campaigns.mine, isAuthenticated ? {} : 'skip');
@@ -98,6 +96,6 @@ export function CampaignDetail({ campaignId, openClips = false }: { campaignId: 
     <DashboardNavbar back={{ href: '/campaigns' }} />
     {campaign === undefined ? <main className="dash-content"><p className="campaigns-loading" role="status">Loading the campaign…</p></main>
       : campaign === null ? <main className="dash-content"><div className="dash-empty"><h2>Campaign not found</h2><p>It may have been removed. Go back to see the campaigns you can clip for.</p></div></main>
-      : <Campaign campaign={campaign} saved={mine?.some(entry => entry.saved && entry.campaign._id === campaign._id)} openClips={openClips} />}
+      : <Campaign campaign={campaign} saved={mine?.some(entry => entry.saved && entry.campaign._id === campaign._id)} />}
   </div>;
 }

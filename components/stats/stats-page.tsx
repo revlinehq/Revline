@@ -7,11 +7,13 @@ import { useUser } from '@clerk/nextjs';
 import { useConvexAuth, useQuery } from 'convex/react';
 import { Eye, Megaphone, Plug, Send, type LucideIcon } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
+import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { CampaignImage } from '@/components/campaigns/campaign-card';
 import { count, money } from '@/components/campaigns/campaign-format';
+import { MakeClipsButton } from '@/components/campaigns/make-clips-button';
 import '@/components/campaigns/campaigns.css';
 
 /** By the viewer's own clock, so it is worked out in the browser, never on the server. */
@@ -28,6 +30,7 @@ export function StatsPage() {
   const stats = useQuery(api.posting.stats, skip), earnings = useQuery(api.posting.earnings, skip);
   const mine = useQuery(api.campaigns.mine, skip), accounts = useQuery(api.posting.accounts, skip);
   const [hour, setHour] = useState<number | null>(null);
+  const [clipsError, setClipsError] = useState('');
   useEffect(() => setHour(new Date().getHours()), []);
   const perCampaign = new Map(earnings?.campaigns.map(entry => [entry.campaignId as string, entry]));
   // Saved and attached campaigns first, then any other campaign the user's posts earned from, so the rows add up to the total.
@@ -53,6 +56,7 @@ export function StatsPage() {
       </Card>
       <Card variant="dash" className="stats-campaigns">
         <div className="stats-campaigns-head"><h2>Your campaigns</h2>{!!rows?.length && <Button asChild variant="ghost" size="sm" className="campaigns-see-all"><Link href="/campaigns?view=mine">See all</Link></Button>}</div>
+        {clipsError && <p className="campaign-error" role="alert">{clipsError}</p>}
         {!rows ? <p className="campaigns-loading" role="status">Loading your campaigns…</p>
           : !rows.length ? <div className="dash-empty stats-empty"><h2>Nothing saved yet</h2><p>Save a campaign, or make clips for one, and its views and estimate show here.</p><Button asChild variant="soft"><Link href="/campaigns">Find a campaign</Link></Button></div>
           : rows.map(row => {
@@ -61,7 +65,7 @@ export function StatsPage() {
               <Link href={`/campaigns/${row.id}`} className="stats-campaign-link"><CampaignImage url={row.imageUrl} className="stats-campaign-thumb" />
                 <span className="stats-campaign-text"><strong>{row.name}</strong><span><span>Views <b>{count(totals?.views ?? 0)}</b></span><i aria-hidden="true">·</i><span>Posts <b>{count(totals?.posts ?? 0)}</b></span><i aria-hidden="true">·</i><span>Est. <b>{money(totals?.estimatedCents ?? 0, { whole: true })}</b></span></span></span>
               </Link>
-              {!row.ended && <Button asChild variant="soft"><Link href={`/campaigns/${row.id}?clips=1`}>Make clips</Link></Button>}
+              {!row.ended && <MakeClipsButton campaignId={row.id as Id<'campaigns'>} name={row.name} variant="soft" onError={setClipsError} />}
             </Card>;
           })}
       </Card>
