@@ -37,7 +37,7 @@ export function ComposerLinkShelf({ open, prefill = '', focusKey = 0, disabled =
       <Link2 className="composer-link-icon" aria-hidden="true"/>
       {/* The shelf sits inside the composer's form: Enter is handled here instead of sending the prompt, and the
           field is plain text so the browser's URL validation cannot block the prompt's send button. */}
-      <Input ref={input} type="text" inputMode="url" className="composer-link-input" aria-label="Video link" placeholder="Paste a YouTube or video link" maxLength={2048} autoComplete="off" spellCheck={false} value={url} disabled={locked} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined} onChange={event => change(event.target.value)} onKeyDown={event => {
+      <Input ref={input} type="text" inputMode="url" className="composer-link-input" aria-label="Video link" placeholder="Paste a YouTube, Twitch or video link" maxLength={2048} autoComplete="off" spellCheck={false} value={url} disabled={locked} aria-invalid={!!error} aria-describedby={error ? `${id}-error` : undefined} onChange={event => change(event.target.value)} onKeyDown={event => {
         if (event.key !== 'Enter' || event.nativeEvent.isComposing) return;
         event.preventDefault();
         if (url.trim()) void submit();

@@ -1,0 +1,1 @@
+- Link import: Twitch clips, VODs still being broadcast (by range), Dailymotion, Streamable, Loom and non-MP4 video files import; one import is capped at 3 hours with a refusal that asks for a start/end range. Why: a prod agent hit an unsupported link (#292) and a paid Twitch clipping campaign needs multi-hour VODs brought in by the cloud in parts.
