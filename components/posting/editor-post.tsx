@@ -34,12 +34,10 @@ function CopyButton({ text, label = 'Copy' }: { text: string; label?: string }) 
   return <Button type="button" data-slot="button" variant="soft" size="sm" disabled={!text} onClick={() => void copyText(text).then(setCopied)}>{copied ? <Check /> : <Copy />}{copied ? 'Copied' : label}</Button>;
 }
 
-export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBeforePost }: {
+export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   projectId: Id<'projects'>;
   /** The timeline tab on screen, so the post is of the clip the user is looking at. */
   timelineId?: string;
-  /** In the chat: every finished clip. Each is exported and posted on its own. */
-  timelineIds?: string[];
   /** Nothing to post yet, or an edit is running. */
   disabled?: boolean;
   /** Waits for the editor's pending saves, so the export is the version on screen. */
@@ -76,7 +74,7 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
     setBusy(true); setError('');
     try {
       await onBeforePost();
-      for (const id of timelineIds?.length ? timelineIds : [timelineId]) await start({ projectId, ...(id ? { timelineId: id } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}) });
+      await start({ projectId, ...(timelineId ? { timelineId } : {}), caption, accountIds: picked.map(account => account.id), ...(scheduledAt ? { scheduledAt } : {}) });
       setOpen(false);
     } catch (reason) { setError(userError(reason, 'Could not start this post.')); }
     finally { setBusy(false); }
@@ -119,7 +117,7 @@ export function EditorPost({ projectId, timelineId, timelineIds, disabled, onBef
         </div>
         <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit(false)}>Post now</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">{timelineIds && timelineIds.length > 1 ? `Revline exports these ${timelineIds.length} clips first, then posts them.` : 'Revline exports this clip first, then posts it.'}</p>
+        <p className="editor-post-hint">Revline exports this clip first, then posts it.</p>
       </PopoverContent>
     </Popover>
   </div>;

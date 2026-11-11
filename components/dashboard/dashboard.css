@@ -46,7 +46,6 @@ body:has([data-slot=sidebar][data-mobile=true]) [data-slot=sheet-overlay] { anim
 .dash-navbar .workspace-account-trigger [data-slot=avatar]::after { border: 0; }
 .dash-navbar .workspace-account-trigger [data-slot=avatar-fallback] { background: var(--dash-pill); color: var(--dash-text); font-size: 11px; font-weight: 600; }
 
-/* What a page adds after its name sits in the bar's own row. */
 
 
 /* The one content column: --dash-content-width, centred, with at least a gutter each side. The shell pads each page's

@@ -30,6 +30,5 @@ html[data-workspace-theme=dark] .preview-inspector-sheet .preview-inspector>.ins
 /* Timeline: a white playhead, as in the design; clips keep their own colours. */
 html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .playhead{background:#fff}
 html[data-workspace-theme=dark] .editor-app.conversation-editor .custom-timeline .timeline-playhead-cap{color:#fff}
-/* On a phone the chip is its icon alone, so the project name keeps its room. */
 /* On a phone, Export is its icon and the actions take only the room they need, so the name, Export and Post all fit. */
 @media(max-width:900px){html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-actions{flex:none}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger[data-slot=button]{flex:1 1 0;min-width:0;justify-content:flex-start}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-export[data-slot=button]{width:32px;padding:0;gap:0;font-size:0}}

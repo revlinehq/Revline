@@ -22,5 +22,4 @@
 .stats-account-text i { margin: 0 2px; font-style: normal; }
 .stats-empty { min-height: 200px; }
 .stats-empty [data-slot=button] { margin-top: 10px; }
-[data-slot=button]:is([data-variant=soft], [data-variant=primary]) svg { width: 15px; height: 15px; }
 @media (max-width: 767px) { .stats-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
