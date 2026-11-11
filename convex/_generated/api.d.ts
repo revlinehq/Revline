@@ -132,6 +132,7 @@ import type * as playback from "../playback.js";
 import type * as postExports from "../postExports.js";
 import type * as posting from "../posting.js";
 import type * as postingActions from "../postingActions.js";
+import type * as postingBridge from "../postingBridge.js";
 import type * as postingCallbacks from "../postingCallbacks.js";
 import type * as postingTables from "../postingTables.js";
 import type * as processorDiagnostics from "../processorDiagnostics.js";
@@ -288,6 +289,7 @@ declare const fullApi: ApiFromModules<{
   postExports: typeof postExports;
   posting: typeof posting;
   postingActions: typeof postingActions;
+  postingBridge: typeof postingBridge;
   postingCallbacks: typeof postingCallbacks;
   postingTables: typeof postingTables;
   processorDiagnostics: typeof processorDiagnostics;
