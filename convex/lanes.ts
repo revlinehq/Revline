@@ -18,7 +18,7 @@ import { activeTabOf, tabsOf, storedTabTimeline } from './timelineTabs';
 import { validateTimeline } from './lib/timeline';
 import { saveEvidence } from './lib/lane_evidence';
 import { summarizeTimeline } from './lib/inspectTimeline';
-import { laneBaseline, MAX_FINISH_ATTEMPTS } from '../lib/ai/lanes/task';
+import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS } from '../lib/ai/lanes/task';
 import { capabilityExists, isLane, type LaneId } from '../lib/ai/lanes';
 import { FastFrameReview, fastFrameEvidence, readFastFrameTimes } from '../lib/ai/fast-frame-review';
 import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
@@ -412,15 +412,25 @@ export const recordFinish = internalMutation({
     )
       throw new ConvexError('Task not found.');
     if (row.attempts >= MAX_FINISH_ATTEMPTS) return row.result!;
-    const attempt = row.attempts + 1,
-      result = {
+    // Fixing something and checking again is progress. Only a failed check that repaired nothing counts toward
+    // the stop: the same failures as the last failed check, or the same timeline. The first failure counts once.
+    const last = row.result && !row.result.passed ? row.result : undefined;
+    const same = (a: string[], b: string[]) => a.length === b.length && [...a].sort().join('\n') === [...b].sort().join('\n');
+    const stuck = !!last && (last.fingerprint === args.result.fingerprint || same(last.failures, args.result.failures));
+    // A pass clears the count: the first failure after it starts again at one.
+    const counted = last ? row.attempts : 0;
+    const attempt = args.result.passed ? row.attempts + 1 : stuck || !last ? counted + 1 : Math.max(1, counted);
+    const checks = (row.result?.checks ?? row.attempts) + (args.result.passed ? 0 : 1);
+    const result = {
         ...args.result,
         lane: isLane(row.lane) ? row.lane : 'edit',
         attempt,
-        exhausted: !args.result.passed && attempt >= MAX_FINISH_ATTEMPTS,
+        checks,
+        exhausted: !args.result.passed && (attempt >= MAX_FINISH_ATTEMPTS || checks >= MAX_FINISH_CHECKS),
       };
     await ctx.db.patch(row._id, {
-      attempts: args.result.passed ? row.attempts : attempt,
+      // An exhausted task is closed whichever limit it reached.
+      attempts: args.result.passed ? 0 : result.exhausted ? MAX_FINISH_ATTEMPTS : attempt,
       result,
     });
     return result;

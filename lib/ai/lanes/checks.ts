@@ -97,7 +97,7 @@ export function taskCheckLevel(task: { checkLevel?: CheckLevel; exportConfirmed?
 
 export const laneChecks = (lane: LaneId, level: CheckLevel): CheckRecipe => LANES[lane].checks[level];
 
-/** Whether edits queue getFrames times at each change and one frame either side (sample: once for plain reel styling). */
+/** Whether edits are tracked as changed spots. finish draws a few of them itself, on a budget; nothing is fetched per change. */
 export const tracksChangedFrames = (recipe: CheckRecipe) => recipe.frames === 'changes' || recipe.frames === 'sample';
 
 const laneName = (lane: LaneId) => sharedLane(lane) ? 'shared editing' : lane;
@@ -112,7 +112,7 @@ ${stepsUp ? 'The server raises this to the lane’s full checks only for a final
 const equalRecipes = (a: CheckRecipe, b: CheckRecipe) => a.frames === b.frames && a.fullTools === b.fullTools && a.boundedReads === b.boundedReads && (a.clipQa ?? []).join() === (b.clipQa ?? []).join();
 
 export function fullCheckRefusal(lane: LaneId, tool: string) {
-  return `${tool} is a full check and is not part of the ${laneName(lane)} lane’s checks for this request. ${laneChecks(lane, 'standard').frames === 'data' ? 'Use finishClipping data checks and short inspectVideo windows for action moments.' : 'Use getFrames at each changed spot and one frame either side.'} Full checks run when the user asks for a final export, publishing or a full double-check.`;
+  return `${tool} is a full check and is not part of the ${laneName(lane)} lane’s checks for this request. ${laneChecks(lane, 'standard').frames === 'data' ? 'Use finishClipping data checks and short inspectVideo windows for action moments.' : 'finish draws the few frames it needs itself and returns them; use getFrames only for a spot that looks wrong.'} Full checks run when the user asks for a final export, publishing or a full double-check.`;
 }
 
 export const BOUNDED_READ_REFUSAL = 'This lane reads a named source window up to three seconds. Reel visual cleanup may use one stillsOnly overview (count up to 12) or batched explicit join frames (up to 30 times), without fps or momentsOnly. Reuse saved frames; no dense full-video sweeps.';

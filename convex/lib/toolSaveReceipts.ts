@@ -18,7 +18,7 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 /** One field the model can quote: the flags beside it are easy to misread once the draft is published later. */
 const SAVE_STATES: Record<ToolSaveReceipt['status'], string> = {
   saved: 'saved',
-  staged: 'unsaved draft: saved when finish passes or this request ends, discarded by a user Stop or a conflicting manual edit',
+  staged: 'staged in this run, NOT saved yet: the saved timeline has not changed. It becomes a saved revision only when finish passes or this request ends. Do not tell the user it is saved, and do not describe an undo, until a result says saved',
   unchanged: 'unchanged',
   queued: 'queued',
   failed: 'not saved',
@@ -36,8 +36,13 @@ export class ToolSaveReceipts {
 
   private stamp(output: unknown, receipt: ToolSaveReceipt) {
     const parsed = object.safeParse(output);
-    const result = parsed.success ? parsed.data : { result: output ?? null };
-    return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, saveState: SAVE_STATES[receipt.status], saveReceipt: receipt };
+    // A draft's own markers never survive onto the saved result that replaces it.
+    const { savedRevision: _saved, draftOnRevision: _draft, ...result } = (parsed.success ? parsed.data : { result: output ?? null }) as Record<string, unknown>;
+    // `revision` alone reads as "saved as revision N" on a draft, where it is only the revision the draft is built on.
+    // The sentence beside it says which of the two it is, so a reply cannot honestly report a draft as saved.
+    const saveState = receipt.status === 'saved' && receipt.kind === 'timeline' ? `saved as revision ${receipt.revision}; Undo is available for it`
+      : receipt.status === 'staged' ? `${SAVE_STATES.staged} (still revision ${receipt.revision})` : SAVE_STATES[receipt.status];
+    return { ...result, saved: receipt.status === 'saved', unchanged: receipt.status === 'unchanged' || receipt.status === 'queued', staged: receipt.status === 'staged', revision: receipt.revision, ...(receipt.status === 'staged' ? { savedRevision: null, draftOnRevision: receipt.revision } : receipt.status === 'saved' && receipt.kind === 'timeline' ? { savedRevision: receipt.revision } : {}), saveState, saveReceipt: receipt };
   }
 
   publishedResult(output: unknown, revision: number) {
