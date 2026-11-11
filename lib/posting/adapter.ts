@@ -6,7 +6,10 @@ import type { YouTubePublishOptions } from './platforms/youtube/metadata';
 export type PostingPlatform = 'instagram' | 'tiktok' | 'youtube';
 export type PlatformCredentials = { clientId: string; clientSecret: string; redirectUri: string };
 export type AccountTokens = { accessToken: string; refreshToken?: string; expiresAt?: number; scopes: string[] };
-export type AccountProfile = { platformAccountId: string; username: string; displayName?: string; avatarUrl?: string };
+export type AccountProfile = { platformAccountId: string; username: string; displayName?: string; avatarUrl?: string;
+  /** A second id the platform uses for the same account (Instagram's app-scoped id), which its callbacks may send instead. */
+  scopedAccountId?: string;
+};
 export type PublishInput = { videoUrl: string; videoBytes: number; durationSeconds: number; width: number; height: number; title?: string; caption: string;
   /** What the user chose for this post on that platform (who can view it, and TikTok's interaction and disclosure settings). Instagram has no per-post privacy. */
   youtube?: YouTubePublishOptions; tiktok?: TikTokPostSettings;

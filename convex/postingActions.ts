@@ -55,7 +55,7 @@ export const finishConnect = action({
       const picture = await downloadAvatar(profile.avatarUrl), avatarStorageId = picture ? await ctx.storage.store(picture).catch(() => undefined) : undefined;
       try {
         await ctx.runMutation(internal.posting.saveAccount, {
-          ownerId, platform, platformAccountId: profile.platformAccountId, username: profile.username,
+          ownerId, platform, platformAccountId: profile.platformAccountId, username: profile.username, ...(profile.scopedAccountId ? { platformScopedId: profile.scopedAccountId } : {}),
           ...(profile.displayName ? { displayName: profile.displayName } : {}), ...(profile.avatarUrl ? { avatarUrl: profile.avatarUrl } : {}), ...(avatarStorageId ? { avatarStorageId } : {}),
           tokenCipher: await encryptTokens(tokenSecret(), tokens), ...(tokens.expiresAt ? { tokenExpiresAt: tokens.expiresAt } : {}), scopes: tokens.scopes,
         });
