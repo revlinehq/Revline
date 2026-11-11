@@ -1,3 +1,4 @@
+import { plainFailureText } from '../../lib/ai/failure-text';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getFunctionName } from 'convex/server';
 import { ConvexError } from 'convex/values';
@@ -13,7 +14,8 @@ type Execution = { name: string; callId:string; writes:Map<string,number>; behav
 class RecoveredWrite extends Error {}
 const object = z.record(z.string(), z.unknown());
 const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string() });
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).slice(0, 1000);
+// The reason without Convex's transport wrapping, so the model and the chat read what actually went wrong.
+const message = (error: unknown) => { const raw = error instanceof Error ? error.message : String(error); return (plainFailureText(raw) || raw).slice(0, 1000); };
 
 /** One field the model can quote: the flags beside it are easy to misread once the draft is published later. */
 const SAVE_STATES: Record<ToolSaveReceipt['status'], string> = {

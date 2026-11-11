@@ -295,7 +295,43 @@ export const stop = mutation({ args: { projectId: v.id('projects') }, returns: v
   const project = await requireProject(ctx, args.projectId, await requireOwner(ctx));
   return stopOwnedProject(ctx, project);
 }});
-export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>) {
+/** A run that ends without publishing its private draft (Stop, a failure, a runner that died) keeps the work: the
+ * last draft the server validated is saved as one revision, undone with the rest of the request. `receipt` records
+ * it as this run's publication, so a late call from the stopped run does not report the draft as cancelled.
+ * Null when there is no unpublished draft, the timeline moved since, or the draft no longer validates. */
+async function keepRunDraft(ctx:MutationCtx, projectId:Doc<'projects'>['_id'], ownerId:string, runId:string, receipt=false):Promise<{revision:number;summary:string}|null> {
+  if(isMcpRun(runId))return null;
+  const preview=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
+  if(!preview||preview.runId!==runId||preview.ownerId!==ownerId)return null;
+  const project=await requireProject(ctx,projectId,ownerId,false).catch(()=>null),base=project?.revision??0;
+  if(!project||preview.baseRevision!==base||equalTimelineValue(preview.timeline,currentTimeline(project)))return null;
+  let timeline;
+  // Only the check may refuse: it reads and writes nothing, so a refused draft leaves nothing half saved.
+  try { timeline=await validateTimeline(ctx,project,preview.timeline); }
+  catch(error) { console.warn(`[ai-draft-not-kept] ${JSON.stringify({projectId,runId,error:(error instanceof Error?error.message:String(error)).slice(0,300)})}`); return null; }
+  const note={tool:'Unfinished assistant edit'};
+  // What the kept draft changes against the saved timeline, in counts the chat can state.
+  const saved=currentTimeline(project),savedIds=new Set(saved.clips.map(clip=>clip.id)),keptIds=new Set(timeline.clips.map(clip=>clip.id));
+  const added=timeline.clips.filter(clip=>!savedIds.has(clip.id)).length,removed=saved.clips.filter(clip=>!keptIds.has(clip.id)).length;
+  const changed=timeline.clips.filter(clip=>savedIds.has(clip.id)&&!equalTimelineValue(clip,saved.clips.find(item=>item.id===clip.id))).length;
+  const count=(value:number,what:string)=>value?[`${value} ${value===1?'clip':'clips'} ${what}`]:[];
+  const summary=[...count(added,'added'),...count(changed,'changed'),...count(removed,'removed')].join(', ')||'timeline settings changed';
+  let revision:number;
+  if(project.aiUndoRecorded&&project.aiCheckpointRevision===base){
+    // Same undo group as the edits this request already saved.
+    revision=base+1;
+    await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,revision,aiCheckpointRevision:revision,updatedAt:Date.now()},undefined,note);
+  } else {
+    revision=await commitTimeline(ctx,project,timeline,base,undefined,undefined,undefined,note);
+    await writeProject(ctx,project._id,{aiUndoRecorded:true,aiCheckpointRevision:revision});
+  }
+  if(receipt)await ctx.db.insert('toolWriteReceipts',{projectId,ownerId,runId,writeId:`${runId}:kept:${base}`,toolName:'finish',functionName:'assistant:apply',value:null,receipt:{kind:'timeline',status:'saved',revision},stagedRevision:base,expiresAt:Date.now()+86_400_000});
+  console.info(`[ai-draft-kept] ${JSON.stringify({projectId,runId,revision,added,changed,removed})}`);
+  return {revision,summary};
+}
+const keptDraftNote=(kept:{revision:number;summary:string})=>`The edits made so far were saved as revision ${kept.revision} (${kept.summary}); one Undo takes back everything this request changed.`;
+/** `keepDraft` is false when the project is going away with its account: there is nothing to keep the draft for. */
+export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>, keepDraft=true) {
   if (!project.aiRunning) return null;
   if(project.aiRunId){const turn=await turnForRun(ctx,project.aiRunId);if(turn)await patchTurn(ctx,turn,{status:'stopped',updatedAt:Date.now()});}
   if (project.threadId) {
@@ -308,11 +344,20 @@ export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>)
   }
   const reviews=await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(2);
   for(const review of reviews)if(review.runId===project.aiRunId&&review.status==='queued'){if(review.taskId)await cancelMediaTask(ctx,review.taskId);await ctx.db.patch(review._id,{status:'failed',error:'Stopped by the user.'});}
+  // Stop ends the work, it does not throw it away: the draft on screen becomes a saved, undoable revision.
+  const kept=keepDraft&&project.aiRunId?await keepRunDraft(ctx,project._id,project.ownerId,project.aiRunId,true):null;
   await clearLivePreview(ctx,project._id);
+  if(keepDraft&&project.aiRunId&&project.threadId){
+    // The chat keeps what Stop did, across reloads and for the next request: what is saved, and that the rest never ran.
+    const turn=await turnForRun(ctx,project.aiRunId),edits=(turn?.savedEdits??0)+(kept?1:0);
+    if(turn&&kept)await patchTurn(ctx,turn,{savedEdits:edits});
+    const said=kept?`Stopped. What was done so far is saved as revision ${kept.revision} (${kept.summary}). One Undo takes back everything this request changed.`:edits?`Stopped. The edits already made in this request are saved; one Undo takes them back.`:'Stopped before any edit was made. Your timeline is unchanged.';
+    if(turn)await saveMessage(ctx,chatAgent,{threadId:turn.threadId,userId:project.ownerId,promptMessageId:turn.promptMessageId,message:{role:'assistant',content:`${said} Any step still running when you stopped was not applied. Your next message continues from the timeline as it is now.`}}).catch(()=>{});
+  }
   // Already-saved edits remain undoable; invalidating the run blocks every later checkpoint.
   if(project.aiWorkflowId)await cancelTurn(ctx,project.aiWorkflowId as WorkflowId);
   if(project.aiRunId)await stopRunnerTurn(ctx,project.aiRunId);
-  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped','Stopped by the user. Saved edits remain.'),aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
+  await writeProject(ctx,project._id, { aiRunning: false, aiEditing: false, aiRunId: undefined, aiWorkflowId:undefined, aiQueuePaused:true, aiError: undefined, aiRecovery:assistantRecovery(project,'stopped',kept===null?'Stopped by the user. Saved edits remain.':`Stopped by the user. ${keptDraftNote(kept)}`),aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
   if(project.threadId)await ctx.scheduler.runAfter(10_000,internal.assistantMessages.settleThread,{threadId:project.threadId,cursor:null});
   return null;
 }
@@ -609,10 +654,15 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
   const publication = args.publication && project?.ownerId === args.ownerId && project.threadId === args.publication.threadId ? args.publication : undefined;
   const written = publication ? await ctx.db.query('toolWriteReceipts').withIndex('by_run_stage', q => q.eq('runId', args.runId).eq('stagedRevision', publication.stagedRevision)).first() : null;
   const committed = written?.ownerId === args.ownerId && written.projectId === args.projectId && written.receipt?.kind === 'timeline' && written.receipt.status === 'saved' && written.receipt.revision === (publication?.stagedRevision ?? -1) + 1;
-  if(publication&&!committed)await savePublicationReceipt(ctx,args.ownerId,{version:1,kind:'timeline-publication',runId:args.runId,...publication});
-  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:args.error&&!committed?'failed':'completed',error:committed?undefined:args.error?.slice(0,1000)});
-  await finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication);
-  const error = committed ? undefined : args.error;
+  // A failed run's unpublished draft is kept as a revision rather than discarded; the failure is still reported.
+  const kept = !committed && args.error && project?.ownerId === args.ownerId && project.aiRunId === args.runId ? await keepRunDraft(ctx, args.projectId, args.ownerId, args.runId) : null;
+  if(publication&&!committed){
+    const receipt={version:1 as const,kind:'timeline-publication' as const,runId:args.runId,threadId:publication.threadId,promptMessageId:publication.promptMessageId,stagedRevision:publication.stagedRevision};
+    await savePublicationReceipt(ctx,args.ownerId,kept===null?{...receipt,status:publication.status}:{...receipt,status:'saved',revision:kept.revision});
+  }
+  const error = committed ? undefined : kept === null ? args.error : `${args.error!.replace(/\s*(?:The pending replacement was not saved\.|No timeline changes were saved\.)/g, '')} ${keptDraftNote(kept)}`.trim();
+  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000)});
+  await finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication && kept !== null ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: kept.revision } : publication);
   if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncident(ctx, {
     source: 'assistant', kind: 'turn-failure', message: error,
     context: { location: 'convex/assistant:finish', savedEdits: args.savedEdits },
@@ -626,7 +676,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     // receipts, not the assistant's prose, to retire the unfinished status.
     const reviews=!error&&project.aiRecovery&&!project.aiUndoRecorded?(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',project._id)).order('desc').take(8)).filter(review=>review.ownerId===project.ownerId&&review.runId===args.runId&&review.revision===(project.revision??0)&&review.status==='completed'):[];
     const recoveryChecked=reviews.length>0&&reviews.every(review=>review.result?.revision===(project.revision??0)&&review.result.observations.length>0&&review.result.observations.every(observation=>observation.verdict==='pass')&&review.result.checks.every(check=>check.timingPass&&check.pixelPass!==false&&check.returnPass!==false&&check.textSafe!==false));
-    await writeRunState(ctx,project._id, { aiRunning: false, aiEditing: false, aiReturnTimelineId: undefined, aiError: error?.slice(0, 1000), aiRecovery:error?assistantRecovery(project,'failed',error,args.savedEdits):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
+    await writeRunState(ctx,project._id, { aiRunning: false, aiEditing: false, aiReturnTimelineId: undefined, aiError: error?.slice(0, 1000), aiRecovery:error?assistantRecovery(project,'failed',error,args.savedEdits===undefined||kept===null?args.savedEdits:args.savedEdits+1):project.aiUndoRecorded||recoveryChecked?undefined:project.aiRecovery,aiRequest:undefined,aiAnalysisUsage:settledAnalysisUsage(project.aiAnalysisUsage) });
     // An MCP call that borrowed another tab hands the user's tab back.
     const returnTo=project.aiReturnTimelineId;
     if(returnTo&&returnTo!==activeTabOf(project)&&tabsOf(project).some(tab=>tab.id===returnTo))await openTabFor(ctx,project.ownerId,{projectId:project._id,timelineId:returnTo});

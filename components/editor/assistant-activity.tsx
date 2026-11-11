@@ -1,8 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Check, CircleAlert, CircleStop } from 'lucide-react';
-import type { ProcessingState } from './processing-status';
+import { useEffect, useState, type ReactNode } from 'react';
+import { CircleAlert, CircleStop } from 'lucide-react';
 import { Spinner } from '@/components/ui/spinner';
 import { Trace, TraceDescription, TraceIcon, TraceLine, TraceTitle } from '@/components/ui/trace';
 import { cn } from '@/lib/utils';
@@ -22,23 +21,27 @@ function Elapsed({ startedAt }: { startedAt: number }) {
   return <span aria-hidden="true">{minutesSeconds(seconds)}</span>;
 }
 
-export function AssistantActivity({ label, detail, state = 'working', startedAt, className = '' }: {
-  label: string; detail?: string | null; state?: ProcessingState; startedAt?: number | null; className?: string;
-}) {
-  const phase = state !== 'working' ? state
-    : /^Queued/i.test(label) ? 'queued'
+/** The one line a working run shows: what is happening now, in plain words. It changes in place. */
+export function AssistantActivity({ label, detail, startedAt, className = '' }: { label: string; detail?: string | null; startedAt?: number | null; className?: string }) {
+  const phase = /^Queued/i.test(label) ? 'queued'
     : /^(Listening|Finding the rhythm)/i.test(label) ? 'listening'
     : /^(Watching|Analyzing footage|Inspecting the moment|Finding shot changes)/i.test(label) ? 'watching'
     : /^Applying edits/i.test(label) ? 'applying' : 'working';
   const title = phase === 'watching' ? 'Watching footage' : phase === 'listening' ? 'Listening to audio' : phase === 'queued' ? 'Queued' : label;
-  const Icon = state === 'ready' ? Check : state === 'stopped' ? CircleStop : state === 'error' ? CircleAlert : null;
-  // One shadcn Trace line: a spinner and shimmering title while working, an icon for finished states.
-  return <Trace className={cn('assistant-activity', className)} data-state={state} data-phase={phase} role={state === 'error' ? 'alert' : 'status'}>
-    <TraceLine status={state === 'working' ? 'running' : state === 'error' ? 'error' : undefined}>
-      <TraceIcon>{Icon ? <Icon /> : <Spinner />}</TraceIcon>
-      <TraceTitle className="font-medium">{title}</TraceTitle>
-      {SHOW_ELAPSED && state === 'working' && startedAt != null && <TraceDescription><Elapsed startedAt={startedAt}/></TraceDescription>}
+  return <Trace className={cn('assistant-activity', className)} data-phase={phase} role="status">
+    <TraceLine>
+      <TraceIcon><Spinner /></TraceIcon>
+      <TraceTitle>{title}</TraceTitle>
+      {detail && <TraceDescription className="min-w-0 shrink truncate">{detail}</TraceDescription>}
+      {SHOW_ELAPSED && startedAt != null && <TraceDescription><Elapsed startedAt={startedAt}/></TraceDescription>}
     </TraceLine>
-    {detail && <p className="pl-6 text-xs text-muted-foreground">{detail}</p>}
   </Trace>;
+}
+
+/** One line for a run that failed or was stopped: the reason, and at most one action. */
+export function AssistantNotice({ state, children, action, className = '' }: { state: 'error' | 'stopped'; children: ReactNode; action?: ReactNode; className?: string }) {
+  const Icon = state === 'error' ? CircleAlert : CircleStop;
+  return <div className={cn('assistant-notice', className)} data-state={state} role={state === 'error' ? 'alert' : 'status'}>
+    <Icon aria-hidden="true"/><span>{children}</span>{action}
+  </div>;
 }

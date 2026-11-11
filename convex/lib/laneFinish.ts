@@ -23,6 +23,7 @@ import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/chec
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { MAX_SHEET_FRAMES } from '../../lib/ai/frame-sampling';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
@@ -35,7 +36,7 @@ type Render = (
   times: number[],
   revision?: number,
   timelineId?: string,
-) => Promise<{ revision: number; frames: { time: number; image: string }[] }>;
+) => Promise<{ revision: number; sheet?: string; frames: { time: number; image: string }[] }>;
 
 /** Executes real checks; finish takes no model-provided scores, counts or acceptance flags. */
 export async function finishLane(
@@ -227,12 +228,13 @@ export async function finishLane(
       const times = plan.spots.map((spot) => spot.time);
       if (!times.length && plan.keys.length === 0 && used >= FINISH_FRAMES_PER_TASK) warnings.push(`${prefix}This request has used its ${FINISH_FRAMES_PER_TASK} finish frames; this check passed on timeline data alone.`);
       if (times.length) try {
-        for (let index = 0; index < times.length; index += 4) {
-          const batch = times.slice(index, index + 4),
+        // One call, one contact sheet: the budget never exceeds a sheet.
+        for (let index = 0; index < times.length; index += MAX_SHEET_FRAMES) {
+          const batch = times.slice(index, index + MAX_SHEET_FRAMES),
             rendered = await options.render(batch, undefined, tab.timelineId);
           if (
             rendered.frames.length !== batch.length ||
-            rendered.frames.some((frame) => !frame.image)
+            (!rendered.sheet && rendered.frames.some((frame) => !frame.image))
           )
             throw new Error('Changed-range rendering returned missing frames.');
         }

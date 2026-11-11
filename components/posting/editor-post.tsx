@@ -10,6 +10,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { CAPTION_LIMIT } from '@/lib/posting/limits';
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '@/lib/posting/platform-names';
+import { YOUTUBE_VISIBILITY_NAMES } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -46,6 +47,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   const pending = useQuery(api.postExports.latest, { projectId });
   const accounts = useQuery(api.posting.accounts, {});
   const platforms = useQuery(api.posting.platforms, {});
+  const youtubeOptions = useQuery(api.posting.options, {})?.youtubeVisibilities;
   const start = useMutation(api.postExports.start), cancel = useMutation(api.postExports.cancel);
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState(''), [when, setWhen] = useState('');
@@ -118,7 +120,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
         </div>
         <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit()}>{schedule ? busy ? 'Scheduling…' : 'Schedule' : busy ? 'Posting…' : 'Post now'}</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">{schedule ? 'Revline exports this clip first, then schedules it.' : 'Revline exports this clip first, then posts it.'}</p>
+        <p className="editor-post-hint">{schedule ? 'Revline exports this clip first, then schedules it.' : 'Revline exports this clip first, then posts it.'}{youtubeOptions?.length === 1 && picked.some(account => account.platform === 'youtube') && ` YouTube videos are posted as ${YOUTUBE_VISIBILITY_NAMES[youtubeOptions[0]]}.`}</p>
       </PopoverContent>
     </Popover>
   </div>;

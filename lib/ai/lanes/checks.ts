@@ -1,6 +1,7 @@
 import { LANES, sharedLane } from './index';
 import { exportConfirmed, postRequested } from './export-confirmation';
 import type { CheckLevel, CheckRecipe, LaneId } from './types';
+import { MAX_SHEET_FRAMES } from '../frame-sampling';
 
 /** Whole-video passes. A lane recipe without fullTools refuses them. */
 export const FULL_CHECK_TOOLS = new Set(['checkPacing', 'previewRender', 'planEffects', 'checkSound']);
@@ -99,6 +100,8 @@ export const laneChecks = (lane: LaneId, level: CheckLevel): CheckRecipe => LANE
 
 /** Whether edits are tracked as changed spots. finish draws a few of them itself, on a budget; nothing is fetched per change. */
 export const tracksChangedFrames = (recipe: CheckRecipe) => recipe.frames === 'changes' || recipe.frames === 'sample';
+/** A standard check looks at one contact sheet of the changed frames; a final check (fullTools) looks at all of them. */
+export const changedFrameLimit = (recipe: CheckRecipe) => recipe.fullTools ? undefined : MAX_SHEET_FRAMES;
 
 const laneName = (lane: LaneId) => sharedLane(lane) ? 'shared editing' : lane;
 

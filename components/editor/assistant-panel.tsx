@@ -1,5 +1,5 @@
 'use client';
-import { ThinkingBlock, ToolChain } from './tool-chain';
+import { RunSummary } from './run-summary';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { PostConfirmCard, postProposalOf } from './post-confirm-card';
 import { reportClientIncident } from '@/lib/incident-client';
@@ -7,7 +7,7 @@ import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactNode } from 'react';
-import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
+import { ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
 import { EDITOR_EFFORT_LABELS, editorModelLabel } from './assistant-model-picker';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
@@ -28,13 +28,14 @@ import { Message, MessageContent } from '@/components/ui/message';
 import { Bubble, BubbleContent } from '@/components/ui/bubble';
 import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
-import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot } from './assistant-results';
+import { savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot } from './assistant-results';
+import { liveActivity, turnRun } from './assistant-run';
 import type { ChatMessage } from './chat-types';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
 import type { SourceEditSuggestion } from '@/lib/editor/types';
-import { AssistantActivity } from './assistant-activity';
+import { AssistantActivity, AssistantNotice } from './assistant-activity';
 import { AssistantHistoryExpansion } from './assistant-history-pagination';
 
 type Conversation = {projectId:Id<'projects'>;threadId:string};
@@ -89,12 +90,6 @@ export function AssistantPanel(props:PanelProps) {
 
 type PendingReply = { id: string; text: string; previousUserId?: string; previousError?: string | null };
 
-function AssistantReplyHeader({ loading, active=loading, label, detail, startedAt }: { loading: boolean; active?:boolean; label: string; detail?: string; startedAt?:number|null }) {
-  if (!active) return null;
-  return <div className="assistant-reply-header is-processing">
-    <AssistantActivity label={loading?label:'Working'} detail={loading?detail:undefined} startedAt={startedAt}/>
-  </div>;
-}
 
 function AssistantResponseText({ text, streaming }: { text: string; streaming: boolean }) {
   const [receivedLive, setReceivedLive] = useState(streaming);
@@ -164,7 +159,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
-      return {...group,comparison,...presentation};
+      return {...group,comparison,...presentation,steps,run:turnRun(presentation.replies)};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const reportedFailures=useRef(new Set<string>());
@@ -232,37 +227,35 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
         const editing = group.id === turnId && waiting;
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
+        const turnModel=requestMessage?.turnModel?`${editorModelLabel(requestMessage.turnModel)}${requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}`:undefined;
+        const live=editing?liveActivity(replies).label:'';
+        const steps=group.steps;
         // As in shadcn Chat: each person's message is its own anchored item; the reply is the item after it.
         return <Fragment key={turnKey(group.id)}>
           {groupMessages.filter(message => message.role === 'user').map(message => <MessageScrollerItem key={turnKey(message.id)} messageId={turnKey(message.id)} scrollAnchor data-message-id={message.id} data-message-status={message.status}>
             <Message align="end"><MessageContent><Bubble align="end" variant="muted"><BubbleContent className="whitespace-pre-wrap">{message.text}</BubbleContent></Bubble></MessageContent></Message>
           </MessageScrollerItem>)}
-          {(replies.length > 0 || editing || cards.length > 0) && <MessageScrollerItem messageId={`${turnKey(group.id)}-reply`} data-turn-id={group.id}>
+          {(editing || cards.length > 0 || group.run.steps > 0 || group.run.reply.length > 0) && <MessageScrollerItem messageId={`${turnKey(group.id)}-reply`} data-turn-id={group.id}>
             <Message><MessageContent className="gap-3">
-              {replies.map(message => <Fragment key={message.id}>
-                {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : block.type === 'thinking' ? <ThinkingBlock key={`thinking-${index}`} text={block.text} active={editing && message.status === 'streaming' && index === message.blocks!.length - 1}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : <>{message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}{!!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</>}
-                {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
-                {(message.steps ?? []).flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={step.id ?? step.name} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
-                {(message.steps ?? []).flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={step.id ?? proposalId} proposalId={proposalId} disabled={running || sending}/>] : []; })}
-                {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-              </Fragment>)}
-              {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
-              {requestMessage?.turnModel && <p className="assistant-turn-model text-[11px] text-neutral-500" data-turn-model={requestMessage.turnModel} data-turn-effort={requestMessage.turnEffort}>{editorModelLabel(requestMessage.turnModel)}{requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}</p>}
-              {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
-                <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
-                {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
-              </div>)}</div>}
-              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&now.label==='Working'?'Resuming…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
+              {/* One line for the run: what is happening now while it works, then a collapsed summary of what it did. */}
+              {editing ? <AssistantActivity label={stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&live==='Working'?'Resuming…':live} detail={budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined} startedAt={activityStartedAt}/> : <RunSummary run={group.run} failed={cards.some(card=>card.state==='error')} model={requestMessage?.turnModel} effort={requestMessage?.turnEffort} modelLabel={turnModel}/>}
+              {group.run.reply.map(text => <AssistantResponseText key={text.key} text={text.text} streaming={text.streaming}/>)}
+              {/* Cards that need the user are part of the reply, not of the run. */}
+              {steps.flatMap((step, index) => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={`ask-${index}`} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
+              {steps.flatMap((step, index) => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={`post-${index}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
+              {replies.some(message => message.id === demoNoteMessageId) && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
+              {/* A failed turn is one line: the reason, and Retry. */}
+              {cards.filter(card=>card.state==='error').map(card => <AssistantNotice key={card.key} state="error" action={card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry ? <Button type="button" variant="ghost" size="xs" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry</Button> : undefined}>{card.detail ?? card.title}</AssistantNotice>)}
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;
       })}
-      {!groups.length && waiting && <div className="assistant-reply"><AssistantReplyHeader loading label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/></div>}
+      {!groups.length && waiting && <AssistantActivity label={stopState==='stopping'?'Stopping…':'Working'} startedAt={activityStartedAt}/>}
       {results && !waiting && !externalAgent && <div data-chat-follow className="assistant-chat-results">{results}</div>}
-      {externalAgent && <div data-chat-follow data-alone={!groups.length||undefined} className="assistant-agent-notice" role="status"><span>Connected through <McpLogo className="assistant-agent-logo"/> MCP</span><strong><AgentLogo name={externalAgent} className="assistant-agent-logo"/>{externalAgent} is working</strong></div>}
-      {!waiting && stopState==='stopped'  && <AssistantActivity label="Stopped." detail="Your existing edit is still here." state="stopped"/>}
+      {externalAgent && <div data-chat-follow data-alone={!groups.length||undefined} className="assistant-agent-notice" role="status"><AgentLogo name={externalAgent} className="assistant-agent-logo"/><span><strong>{externalAgent}</strong> is working over</span><McpLogo className="assistant-agent-logo"/><span>MCP</span></div>}
+      {!waiting && stopState==='stopped'  && <AssistantNotice state="stopped">Stopped. What was saved is listed above.</AssistantNotice>}
       {showSuggestions && suggestions?.items.length && onSuggestion && configured ? <div data-chat-follow className="assistant-source-suggestions" aria-label="Suggested edits from this footage"><span title={suggestions.sourceName}><Lightbulb size={12} aria-hidden="true" />Ideas for {suggestions.sourceName}</span>{suggestions.items.map((suggestion, index) => <button key={`${suggestions.clipId}-${index}`} type="button" disabled={composerBusy || sending || !!pendingReply} onClick={() => void chooseSuggestion(suggestion)}><span>{suggestion.label}</span><ArrowUpRight size={14} aria-hidden="true" /></button>)}</div> : null}
-      {visibleError && <div data-chat-follow><AssistantActivity className="chat-error" label="Needs attention" detail={assistantErrorDetail(visibleError)} state="error"/></div>}
+      {visibleError && <div data-chat-follow><AssistantNotice className="chat-error" state="error">{assistantErrorDetail(visibleError)}</AssistantNotice></div>}
       {!!messages.length && !demo && !configured && <div className="assistant-demo-note">AI editing is temporarily unavailable. Your footage, preview, and timeline are ready.</div>}
       </MessageScrollerContent>
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>

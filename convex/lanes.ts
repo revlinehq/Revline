@@ -21,6 +21,7 @@ import { summarizeTimeline } from './lib/inspectTimeline';
 import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS } from '../lib/ai/lanes/task';
 import { capabilityExists, isLane, type LaneId } from '../lib/ai/lanes';
 import { FastFrameReview, fastFrameEvidence, readFastFrameTimes } from '../lib/ai/fast-frame-review';
+import { changedFrameLimit, laneChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
 import { timelineHistoryKey } from '../lib/editor/timeline-history-key';
 import type { Id } from './_generated/dataModel';
 import { supersedeTabTasks } from './mcpConnections';
@@ -542,7 +543,7 @@ export const reviewFrames = internalMutation({
     const fingerprint = await timelineHistoryKey(timeline);
     const pending = readFastFrameTimes(row.evidence, args.timelineId, fingerprint);
     if (!pending?.length) return null;
-    const review = new FastFrameReview(pending);
+    const review = new FastFrameReview(pending, () => changedFrameLimit(laneChecks(row.lane, taskCheckLevel(row))));
     review.reviewed(args.times, timeline);
     await saveEvidence(ctx, row, fastFrameEvidence(args.timelineId, fingerprint, review.times()));
     return null;

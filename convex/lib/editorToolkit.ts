@@ -16,7 +16,8 @@ import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
 import { CHOICE_TEXT, fitChoiceText, shortenedNote } from '../../lib/ai/choice-text';
 import { LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../../lib/incidents';
-import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
+import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, changedFrameLimit, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
+import { MAX_SHEET_FRAMES, MAX_ZOOM_FRAMES, sampleFrameTimes } from '../../lib/ai/frame-sampling';
 import type { CheckLevel } from '../../lib/ai/lanes/types';
 import { captionSyncFailures, retainedSpeechWords } from '../../lib/ai/lanes/reel/check';
 import { FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvidence } from '../../lib/ai/fast-frame-review';
@@ -100,7 +101,7 @@ import { describeColor, matchCurves, type ColorStats } from '../../lib/editor/co
 import { FREEZE_MODES, MAX_FREEZE_SECONDS, MIN_FREEZE_SECONDS, insertFreezeFrame } from '../../lib/editor/freeze-frame';
 import { retainSourceRanges, retainedSourceWindows, type RetainedRangeSummary } from '../../lib/editor/retained-ranges';
 import { currentSpeechCleanup, keptRanges, snapToSpeech } from '../../lib/speech-cleanup';
-import { applySplitEdit, MAX_SPLIT_EDIT_SECONDS } from '../../lib/editor/split-edits';
+import { applySplitEdits, MAX_SPLIT_EDIT_SECONDS, type SplitEditResult, type SpokenWord } from '../../lib/editor/split-edits';
 import type { CleanupCut } from '../../lib/speech-cleanup/types';
 import { FrameBudget, LOOKS_UNMEASURED, lookBaseline } from '../../lib/ai/eyes';
 import { brollRuns, cutKey, moveEdge, readSpot, reelSpots, spotTimes, type Range, type SpotRecord, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
@@ -263,9 +264,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const checkLevel: CheckLevel = options.checkLevel ?? 'standard';
   const recipe = () => laneChecks(lane, checkLevel);
   const tracksChanges = () => tracksChangedFrames(recipe());
-  const fastReview = new FastFrameReview(options.pendingFastFrames);
+  const fastReview = new FastFrameReview(options.pendingFastFrames, () => changedFrameLimit(recipe()));
   /** Frames the current finish call drew for its own check; a passed result hands them to the model as its look. */
-  let finishLook: { time: number; image: string }[] = [], finishSpots: FinishLookSpot[] = [];
+  let finishLook: { time: number; image: string }[] = [], finishSheets: string[] = [], finishSpots: FinishLookSpot[] = [];
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
     if ('status' in result) {
@@ -345,6 +346,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     beforeChange: beginEditing,
   }, abortSignal);
   if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(tracksChanges())fastReview.changed(before,options.draft);}
+  // Times queued against an earlier, longer draft are moved onto the frames this timeline has.
+  fastReview.fit(editSession.timeline);
   // Approved work (lib/editor/approvals.ts) is refused unless the call passes overrideApproved with the user's reason.
   // The override covers the calls running under it; what it let through is reported back on that call.
   const approvalOverride = { active: 0, reason: '', overridden: [] as ApprovalViolation[] };
@@ -686,10 +689,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     return (await mediaUrl(ctx, { r2Key: key }))!;
   };
   // Render frames of the saved (or this turn's staged) timeline as base64 JPEGs, as export draws them.
-  const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string, resolution?:720|1080) => {
+  // `sheet` asks for several frames as one small labeled contact sheet (the model's look); without it each frame is its own image.
+  const renderFrames = async (times: number[], revision?: number, targetTimelineId?:string, resolution?:720|1080, sheet = false) => {
     await editSession.wait();
     const timelineId = targetTimelineId??boundRunTab(run.runId);
-    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(resolution?{resolution}:{}), ...(revision !== undefined ? { revision } : {}) });
+    const snapshotId = await ctx.runMutation(internal.mcp.requestFrames, { ownerId: run.ownerId, projectId: run.projectId, ...(editSession.staged && revision === undefined && (!targetTimelineId||targetTimelineId===timelineIdForLane()) ? { runId: run.runId } : {}), ...(timelineId ? { timelineId } : {}), times, ...(resolution?{resolution}:{}), ...(sheet ? { sheet: true } : {}), ...(revision !== undefined ? { revision } : {}) });
     const deadline = Date.now() + 280_000;
     let started = false;
     while (Date.now() < deadline) {
@@ -697,12 +701,17 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
       if (state.started) started = true;
       if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
-      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), resolution:resolution??720, frames: (await snapshotFrames(state)).map(frame => ({ ...frame })) }; }
+      if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), resolution:resolution??720, frames: (await snapshotFrames(state)).map(frame => ({ ...frame, time: Math.round(frame.time * 1000) / 1000 })) }; }
       await new Promise(resolve => setTimeout(resolve, 1500));
     }
     await ctx.runMutation(internal.mcp.discardFrames, { snapshotId });
     // Say which wait it was: frames that never started were queued behind other renders, not too many.
     throw new Error(started ? 'Frames took too long to render. Try fewer times.' : 'These frames never started rendering: the media worker stayed busy with other renders. Try again shortly; the number of times was not the problem.');
+  };
+  // Several frames as one labeled contact sheet. A media processor from before sheets answers with separate frames, which pass through.
+  const renderSheet = async (times: number[], revision?: number, targetTimelineId?: string) => {
+    const result = await renderFrames(times, revision, targetTimelineId, undefined, times.length > 1);
+    return times.length > 1 && result.frames.length === 1 ? { ...result, sheet: result.frames[0].image, frames: times.map(time => ({ time, image: '' })) } : result;
   };
   // Pacing renders the whole range on the media worker and returns measurements only, so it may take minutes.
   const checkPacing = async (input: { start?: number; end?: number; fps?: number; checkId?:string; sourceCheckId?:string; revision?:number }) => {
@@ -937,14 +946,14 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       catch(error){if(abortSignal.aborted)throw error;}
       // finish looks for itself: on a hard budget it draws a few frames of what this request changed (new cuts, new
       // overlays, one caption sample) and returns them with the result. It never sends the model to fetch frames.
-      finishLook=[];finishSpots=[];
+      finishLook=[];finishSheets=[];finishSpots=[];
       const frameTask=recipe().frames==='sample'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,healed,looked:spots=>{finishSpots=spots;},...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),clipEdges:async tabs=>{
         // A busy media queue must not hold finish: past the wait the edges are reported unmeasured and finish goes on.
         const edges=await checkClipEdges(tabs,(assetId,times)=>{let timer:ReturnType<typeof setTimeout>|undefined;return Promise.race([runLooksRead(ctx,run.ownerId,run.projectId,assetId,times,undefined,abortSignal).then(read=>read.samples),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('the media worker took longer than two minutes')),CLIP_EDGE_WAIT_MS);})]).finally(()=>clearTimeout(timer));});
         abortSignal.throwIfAborted();return edges;
-      },render:async(times,revision,target)=>{const result=await renderFrames(times,revision,target);if((!target||target===timelineId)&&revision===undefined){fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);finishLook.push(...result.frames);}return result;},staged:editSession.staged});
+      },render:async(times,revision,target)=>{const result=await renderSheet(times,revision,target);if((!target||target===timelineId)&&revision===undefined){fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);finishLook.push(...result.frames);if('sheet' in result&&result.sheet)finishSheets.push(result.sheet);}return result;},staged:editSession.staged});
       finishResult=await check();
       // The look covers what this request changed: the queue of changed spots is settled with it.
       if(finishLook.length||finishResult.passed)fastReview.restore([]);
@@ -956,7 +965,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
       console.info(`[ai-lane-finish] ${JSON.stringify({projectId:run.projectId,runId:run.runId,...finishResult})}`);
       // The state the reply must report: whether this request's edits are saved now, at which revision, and what Undo does.
-      const saveState=editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes or this request ends; a user Stop or a conflicting manual edit discards them.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
+      const saveState=editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes. If this request ends or is stopped first, the last valid draft is normally saved as one undoable revision.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
       return {...finishResult,...saveState,success:finishResult.passed,next:finishResult.passed?'Checks passed. You may report the saved result.':finishResult.exhausted?`Stop. finish kept failing, so finish and the editing tools are now closed for this request. Report these failures honestly; this task is unfinished.`:`Repair the listed failures${finishResult.fixes?.length?' with the calls in fixes':''} and call finish again. Checking again after a repair is progress; a check that fails the same way with nothing fixed counts toward the stop (${finishResult.attempt} of ${MAX_FINISH_ATTEMPTS} so far), and a request gets at most ${MAX_FINISH_CHECKS} failed checks in all (${finishResult.checks??finishResult.attempt} so far).`};
     },toModelOutput:(ctx,options)=>labeledImages(ctx,options.output)}),
     reportIssue: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.reportIssue,
@@ -1767,7 +1776,42 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const chosen = input.keep ?? [{ start: speech.clip.sourceStart, end: speech.sourceEnd }];
       return applySpeechCut(input.clipId, speech, chosen, kinds, input.minConfidence ?? .6, input.preview);
     } }),
-    setSplitEdits: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setSplitEdits, description: "Make J and L cuts at existing video cuts in ONE change. Each edit names the video clip BEFORE the cut. L: the outgoing sound carries over while the picture changes early (reaction or B-roll lands under the end of a line). J: the next line's sound starts while the previous picture is still showing, then the picture follows. seconds is how far the picture edit moves (subtle: 0.1 to 0.2 is usually enough; at most 2). Sound, speech cleanup and caption timing stay exactly where they are; only the picture edit point moves, using the source footage beside each piece, and those video clips are unlinked from their sound. Use for 'add J/L cuts', 'smoother cuts', 'let the audio lead'. Inspect the timeline first for the clip IDs.", inputSchema: z.object({ edits: z.array(z.object({ clipId: z.string().min(1).max(100), kind: z.enum(['J', 'L']), seconds: z.number().positive().max(MAX_SPLIT_EDIT_SECONDS) }).strict()).min(1).max(100) }), execute: async (_ctx, input) => checkpoint(t => input.edits.reduce((timeline, edit) => applySplitEdit(timeline, edit.clipId, edit.kind, edit.seconds, assetId => assets.find(asset => asset._id === assetId)?.duration), t)) }),
+    setSplitEdits: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setSplitEdits, description: "J and L cuts (split edits) on existing video cuts, in ONE saved change. Use after the transcript cut, when the user asks for J-cuts, L-cuts, smoother cuts, the audio to lead or trail, or to hide jump cuts. Never hand-build split edits with unlink, trim, split or move: this tool keeps picture and sound in sync and the picture gapless. With no cuts it sets every cut on the main video layer (or track / range); cuts picks some by timeline second (at) or by the video clip before the cut (clipId). type J: the next line is heard while the previous picture holds, then the picture follows. L: the previous line carries on under the next picture. auto (default) reads the saved word timings per cut: J where the next line starts on the cut, L where the outgoing line runs up to it, and skips cuts with silence on both sides or one continuous take. none removes a split edit and links picture and sound again; do that before any later trim or cut-edge move, then set them again. frames is how far the picture edit sits from the sound edit: default 10 frames at 30 fps (20 at 60 fps, a third of a second); 8 to 12 at 30 fps is the useful range, and under 3 (6 at 60 fps) is not heard. Each cut is limited on its own by the length of the pieces beside it and their source footage: a cut with less room than the audible minimum is skipped with the reason and every other cut still applies, so one short piece never fails the call. The sound edit stays on its word boundary, so cleaned speech and captions keep their timing; a sound edit that clips a word is moved to the word's edge when the other side has silence. It sets, never adds: calling it again changes nothing. fadeFrames adds a short fade out and in at each sound edit (1 to 2 hides a click; no overlap, removed audio never returns). Returns cuts [{at, type, frames, words: last word | first word}] and skippedCuts [{at, reason}]: tell the user both in one or two lines.", inputSchema: z.object({
+      cuts: z.array(z.object({ at: z.number().min(0).optional().describe('Timeline second of the cut.'), clipId: z.string().min(1).max(100).optional().describe('The video clip before the cut.'), type: z.enum(['J', 'L', 'auto', 'none']).optional(), frames: z.number().int().min(1).max(240).optional() }).strict().refine(cut => (cut.at !== undefined) !== (cut.clipId !== undefined), { message: 'Name each cut by at or clipId.' })).min(1).max(200).optional().describe('Omit for every cut on the layer.'),
+      range: z.object({ start: z.number().min(0), end: z.number().positive() }).strict().refine(range => range.end > range.start, { message: 'range.end must be after range.start.' }).optional().describe('Timeline seconds: only cuts inside it (when cuts is omitted).'),
+      track: shotTrackInput,
+      type: z.enum(['J', 'L', 'auto', 'none']).optional().describe('For every cut that does not name its own. Default auto.'),
+      frames: z.number().int().min(1).max(240).optional(),
+      fadeFrames: z.number().int().min(0).max(12).optional(),
+      edits: z.array(z.object({ clipId: z.string().min(1).max(100), kind: z.enum(['J', 'L']), seconds: z.number().positive().max(MAX_SPLIT_EDIT_SECONDS) }).strict()).min(1).max(100).optional().describe('Older form of cuts: clipId, kind and seconds.'),
+    }).strict().refine(input => !(input.cuts && input.edits), { message: 'Use cuts or edits, not both.' }), execute: async (_ctx, input) => {
+      await editSession.wait();
+      // Word timings of every source on a video layer: the tool reports the words at each edit and auto chooses by them.
+      const spoken = new Map<string, SpokenWord[]>();
+      // Removing split edits reads no words.
+      const needsWords = input.edits !== undefined || (input.cuts ?? [{ type: input.type }]).some(cut => (cut.type ?? input.type ?? 'auto') !== 'none');
+      await Promise.all((needsWords ? [...new Set(editSession.timeline.clips.flatMap(clip => clip.kind === 'video' && clip.assetId ? [clip.assetId] : []))] : []).map(async assetId => {
+        let asset = await loadAsset(assetId).catch(() => undefined);
+        if (asset && !asset.analysis?.transcript?.words.length && asset.audioAssetId) asset = await loadAsset(asset.audioAssetId).catch(() => undefined);
+        const transcript = asset?.analysis?.transcript;
+        if (!asset || !transcript?.words.length) return;
+        const edges = currentSpeechCleanup(asset.analysis?.speechCleanup) ? asset.analysis!.speechCleanup!.edges : undefined;
+        // Measured sound edges where the source has them; otherwise the transcript's words pulled back to measured quiet.
+        const words = edges?.length === transcript.words.length * 2 ? transcript.words.map((word, index) => ({ text: word.text, start: edges[index * 2], end: edges[index * 2 + 1] }))
+          : (asset.analysis?.audioActivity ? refineTranscriptWithAudioActivity(transcript, asset.analysis.audioActivity) : transcript).words;
+        spoken.set(assetId, words);
+      }));
+      let outcome: Pick<SplitEditResult, 'applied' | 'skipped' | 'unchanged'> = { applied: [], skipped: [], unchanged: 0 };
+      const saved = await checkpoint(t => {
+        const request = input.edits ? { cuts: input.edits.map(edit => ({ clipId: edit.clipId, type: edit.kind, frames: Math.max(1, Math.round(edit.seconds * t.fps)) })) } : { cuts: input.cuts, range: input.range, track: input.track, type: input.type, frames: input.frames, fadeFrames: input.fadeFrames };
+        const result = applySplitEdits(t, request, { duration: assetId => assets.find(asset => asset._id === assetId)?.duration, audioAssetOf: assetId => assets.find(asset => asset._id === assetId)?.audioAssetId, words: assetId => spoken.get(assetId) });
+        outcome = result;
+        return result.timeline;
+      });
+      const { applied, skipped, unchanged } = outcome, count = (type: string) => applied.filter(item => item.type === type).length;
+      return { ...saved, fps: editSession.timeline.fps, summary: `${count('J')} J, ${count('L')} L${count('none') ? `, ${count('none')} removed` : ''}, ${skipped.length} skipped${unchanged ? `; ${unchanged} already set` : ''}`, cuts: applied, skippedCuts: skipped,
+        ...(applied.some(item => item.type !== 'none') ? { next: 'Picture and sound of these cuts are no longer linked, by design. Do not trim, move or relink them by hand, and do not move a cut edge (checkSpots, resizeClips) while they are set: call setSplitEdits with type none first, make the change, then set them again.' } : {}) };
+    } }),
     split: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.split, description: "Split an existing clip at a timeline time in seconds. The cut lands on the nearest timeline frame; a cut that would leave a piece shorter than 2 frames is refused (use the clip's own edge). Source edits remain staged until the request completes. For a speech cut with several retained source ranges, prefer retainSourceRanges instead of a split/trim/delete chain.", inputSchema: z.object({ clipId: z.string(), time: z.number().min(0) }), execute: async (_ctx, input) => checkpoint(t => splitClip(t, input.clipId, input.time, crypto.randomUUID(), MIN_CUT_FRAMES)) }),
     trim: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.trim, description: "Change duration and optional SOURCE trim start, in seconds. Use clipId/duration/sourceStart for one clip, OR edits:[{clipId,duration,sourceStart?}] for several independently specified trims in ONE validated operation. Prefer edits when several trim ranges are already known. Never supply both forms; target each linked pair only once because its audio stays synchronized automatically. Media source edits remain staged until completion. Shortening footage on the main footage layer closes up by default (ripple): later clips on that layer move earlier with their linked audio, so no hole is left; pass ripple:false to keep the hole. A hole an edit does leave is reported in gapWarning. Effect clips have no source trim: duration stretches their animation. A duration that would run into the next clip on the same layer is refused with the room available. Durations and starts are placed on the timeline's frame grid, and a neighbour within a frame of the new edge meets it exactly; the result's changedClips shows the times actually set.", inputSchema: z.object({ ripple:z.boolean().optional().describe('Close up after a shortened clip: later clips on its layer move earlier with their linked audio. Default true for footage on the main footage layer, false elsewhere. Pass false to leave the hole.'),clipId:z.string().min(1).optional(),duration:z.number().positive().optional(),sourceStart:z.number().min(0).optional(),edits:z.array(trimChangeInput).min(1).max(200).refine(edits=>new Set(edits.map(edit=>edit.clipId)).size===edits.length,{message:'Choose unique clip IDs.'}).optional() }).strict().refine(input=>input.edits!==undefined?input.clipId===undefined&&input.duration===undefined&&input.sourceStart===undefined:input.clipId!==undefined&&input.duration!==undefined,{message:'Specify one clipId/duration or an edits array.'}), execute: async (_ctx, input) => { let rippled:{clipId:string;movedClips:number;earlierBy:number}[]=[]; const saved=await checkpoint(t => {
       const edits=input.edits??[{clipId:input.clipId!,duration:input.duration!,sourceStart:input.sourceStart}];
@@ -1809,15 +1853,18 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await ctx.runMutation(internal.memories.forget, { ...run, memoryId: input.memoryId });
       return { forgotten: input.memoryId };
     } }),
-    getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: "Look at your work: render 1 to 4 frames of the saved timeline at timeline seconds, composited exactly as the export draws them (footage, text, effects), and see them as images. For existing edits follow footage-editing page edit-lanes for sampling; use it to check that text is readable, nothing overflows or clips, brand fonts, colors and logo show, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds; pick the moments that matter. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreClip.", inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: budgeted preview. 1080 returns one full-size composition frame without resizing for precise layout inspection.'), times: z.array(z.number().min(0)).min(1).max(4).describe('Timeline seconds, inside the timeline.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, revision, resolution }) => {
+    getFrames: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getFrames, description: `Look at your work: frames of the saved timeline at timeline seconds, composited exactly as the export draws them (footage, text, effects). Several frames come back as ONE small contact sheet with the time under each tile, up to ${MAX_SHEET_FRAMES} per call. Scan sparse first, then zoom: times for a spot that looks wrong in the frames finish returned or that needs a closer look (finish draws its own few frames; never fetch one per cut or per caption); range to scan a stretch at about one frame a second; around for a few consecutive frames at one moment (a cut edge, a gesture). Never read consecutive frames to watch a clip: the transcript and saved analysis say where to look. One time alone returns a larger preview frame, and resolution 1080 one full-size frame, for detail such as small text. Use it to check that text is readable, nothing overflows or clips, and frames are not empty; fix what is wrong before saying it is done. Each call takes 10 to 30 seconds. With revision (from listRevisions), it renders the timeline as it was at that saved revision instead: use it to see what the user means by an earlier version before restoring it with restoreClip.`, inputSchema: z.object({ resolution:z.union([z.literal(720),z.literal(1080)]).optional().describe('Default: small tiles on a sheet, or a preview for one frame. 1080 returns one full-size composition frame without resizing for precise layout inspection.'), times: z.array(z.number().min(0)).min(1).max(120).optional().describe(`Timeline seconds, inside the timeline. More than ${MAX_SHEET_FRAMES} are thinned to ${MAX_SHEET_FRAMES} evenly spaced ones and the result says so.`), range: z.object({ start: z.number().min(0), end: z.number().min(0), step: z.number().positive().optional().describe('Seconds between frames, default 1.') }).optional().describe(`Scan a stretch: evenly spaced frames from start to end, at most ${MAX_SHEET_FRAMES}.`), around: z.object({ time: z.number().min(0), frames: z.number().int().min(1).max(MAX_ZOOM_FRAMES).optional().describe('Consecutive frames, default 5.') }).optional().describe('Zoom in: consecutive frames centered on one timeline second.'), revision: z.number().int().min(0).optional().describe('A saved revision from listRevisions to look at instead of the current timeline.') }), execute: async (_ctx, { times, range, around, revision, resolution }) => {
       await editSession.wait();
       const snapshot = editSession.timeline;
-      const result = await renderFrames(times, revision, undefined, resolution);
+      // An earlier revision may be longer than the current timeline, so its times are only snapped to frames here.
+      const look = sampleFrameTimes({ ...(times ? { times } : {}), ...(range ? { range } : {}), ...(around ? { around } : {}) }, revision === undefined ? timelineDuration(snapshot) : Number.MAX_SAFE_INTEGER, snapshot.fps);
+      if (resolution === 1080 && look.times.length !== 1) throw new Error('1080 returns one full-size frame: pass a single time.');
+      const result = resolution === 1080 ? await renderFrames(look.times, revision, undefined, resolution) : await renderSheet(look.times, revision);
       if (revision === undefined && snapshot === editSession.timeline && result.revision === editSession.revision) fastReview.reviewed(result.frames.map(frame => frame.time), snapshot);
-      return result;
-    }, toModelOutput: async (ctx, options) => { const output = options.output as { revision: number; atRevision?: number; resolution?:number; frames: { time: number; image: string }[] }; return { type: 'content' as const, value: [
-      { type: 'text' as const, text: `${output.resolution===1080?'1080p':'Preview'} frames of the ${output.atRevision !== undefined ? `timeline as it was at revision ${output.atRevision}` : `saved timeline (revision ${output.revision})`} at ${output.frames.map(frame => `${frame.time}s`).join(', ')}, in that order.` },
-      ...await Promise.all(output.frames.map(frame => imagePart(ctx, frame.image, 'image/jpeg'))),
+      return { ...result, ...(look.note ? { note: look.note } : {}) };
+    }, toModelOutput: async (ctx, options) => { const output = options.output as { revision: number; atRevision?: number; resolution?:number; note?: string; sheet?: string; frames: { time: number; image: string }[] }; const of = output.atRevision !== undefined ? `timeline as it was at revision ${output.atRevision}` : `saved timeline (revision ${output.revision})`, at = output.frames.map(frame => `${frame.time.toFixed(3)}s`).join(', '); return { type: 'content' as const, value: [
+      { type: 'text' as const, text: `${output.sheet ? `One contact sheet of ${output.frames.length} frames of the ${of}, left to right, top to bottom, each labeled with its time: ${at}.` : `${output.resolution===1080?'1080p':'Preview'} frames of the ${of} at ${at}, in that order.`}${output.note ? ` ${output.note}` : ''}` },
+      ...(output.sheet ? [await imagePart(ctx, output.sheet, 'image/jpeg')] : await Promise.all(output.frames.map(frame => imagePart(ctx, frame.image, 'image/jpeg')))),
     ] }; } }),
     checkPacing: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkPacing, description: "Check how the motion reads over time, which still frames cannot show: renders the timeline range at 10 samples a second (fps) and measures how much of the frame changes each second, how long each new picture holds before the next change, how zooms and pans speed up and slow down, and where cuts and single-frame flashes land. Returns the change per second and flagged moments with reasons: a visible change (a new headline, a panel filling in) followed by under about 1 s of hold, 3 or more changes within 1 s, changes landing in 3 or more different places within 1.5 s, a zoom or pan that starts or stops at full speed or is cut off mid-move, a camera move too fast to follow, a one-sample jump, a flash, or a still hold of 3 s or more. Run it on the changed range after building or changing motion, alongside getFrames, and fix what it flags. Long ranges run in chunks. Follow every nextAction until completed is true. Pending chunks keep running and are retrieved by checkId.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).'), fps: z.number().min(2).max(30).optional().describe('Samples a second (default 10).') }).strict(), execute: async (_ctx, input) => checkPacing(input) }),
     getSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getSound, description: "Hear a timeline range, which frames cannot show: decodes the range's mix exactly as export mixes it and reports every clip that sounds there (sound effects, voice, music, footage audio) with its time and gain, the moments sounds start (onsets) with their level and which clip made them, momentary loudness (LUFS) and peak each 0.1 s with integrated loudness, silent stretches, and the spoken words with their timeline times. Use it to check what plays where before or after placing sound, music or narration.", inputSchema: z.object({ checkId:z.string().min(1).optional().describe('Resume a pending saved chunk from nextAction.'), sourceCheckId:z.string().min(1).optional().describe('Continue the next chunk from this saved check’s frozen timeline; use nextAction.'), revision:z.number().int().nonnegative().optional().describe('Keep nextAction on the original saved revision.'), start: z.number().min(0).optional().describe('Timeline second to start at (default 0).'), end: z.number().positive().optional().describe('Timeline second to end at (default the end of the timeline).') }).strict(), execute: async (_ctx, input) => listen(input, false) }),
@@ -2148,9 +2195,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if (output?.staged === true) stagedTools.add(name);
         // A passed finish returns the frames it drew, so the look needs no further call.
         if (name === 'finish' && finishLook.length && (output as { passed?: boolean } | undefined)?.passed) {
-          const frames = finishLook.splice(0).filter(frame => frame.image).slice(0, 8);
+          // One contact sheet when the media worker draws sheets; separate frames from an older worker.
+          const drawn = finishLook.splice(0), sheets = finishSheets.splice(0), frames = drawn.filter(frame => frame.image).slice(0, 8);
           const why = (time: number) => finishSpots.find(spot => Math.abs(spot.time - time) < .5 / editSession.timeline.fps)?.why ?? 'changed spot';
-          return { ...output, framesShown: `finish drew ${frames.length} frame${frames.length === 1 ? '' : 's'} of what this request changed (${frames.map(frame => `${frame.time.toFixed(2)} s: ${why(frame.time)}`).join(', ')}); they follow. That is the whole frame check: captions, gaps, overlaps and timing were verified from timeline data. Look at these before you reply; call getFrames only for a spot that looks wrong.`, images: frames.map(frame => ({ label: `${frame.time.toFixed(2)} s (${why(frame.time)})`, data: frame.image, mimeType: 'image/jpeg' })) };
+          const named = drawn.map(frame => `${frame.time.toFixed(2)} s: ${why(frame.time)}`).join(', ');
+          return { ...output, framesShown: `finish drew ${drawn.length} frame${drawn.length === 1 ? '' : 's'} of what this request changed (${named})${sheets.length ? ', as one contact sheet with the time under each tile' : ''}; ${sheets.length + frames.length === 1 ? 'it follows' : 'they follow'}. That is the whole frame check: captions, gaps, overlaps and timing were verified from timeline data. Look before you reply; call getFrames only for a spot that looks wrong.`, images: [...sheets.map(sheet => ({ label: `Contact sheet: ${named}`, data: sheet, mimeType: 'image/jpeg' })), ...frames.map(frame => ({ label: `${frame.time.toFixed(2)} s (${why(frame.time)})`, data: frame.image, mimeType: 'image/jpeg' }))] };
         }
         if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const moments = recipe().frames === 'sample' ? fastReelFrameMoments(name, before, editSession.timeline) : undefined;
@@ -2305,7 +2354,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if(options.scriptFirst&&lane==='reel'&&!scriptSaved&&!noScript&&['retainSourceRanges','cleanSpeech','split','trim'].includes(name)&&rawTake(input.clipId))throw new Error(`Read the script before cutting this take: call readScript ${JSON.stringify({clipId:input.clipId})}, then planScript, and cut once with the ranges planScript returns.`);
         if(tracksChanges()&&task){
           const saved=readFastFrameTimes(task.evidence,timelineId,await timelineHistoryKey(editSession.timeline));
-          if(saved!==undefined)fastReview.restore(saved);
+          if(saved!==undefined){fastReview.restore(saved);fastReview.fit(editSession.timeline);}
         }
         await ensureBaseline();
       }
