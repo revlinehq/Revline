@@ -13,4 +13,5 @@ crons.daily('Prune assistant run timings older than 30 days',{hourUTC:9,minuteUT
 crons.interval('Prune expired agent bridge nonces',{minutes:10},internal.agentRunner.pruneNonces,{});
 crons.interval('Run due social posts and poll processing ones',{minutes:5},internal.posting.tick,{});
 crons.interval('Refresh stats of published social posts',{hours:1},internal.postingActions.refreshStats,{});
+crons.daily('Delete tokens left from accounts connected before Post Bridge',{hourUTC:9,minuteUTC:40},internal.posting.retireLegacyAccounts,{});
 export default crons;

@@ -6,7 +6,7 @@
 import { useId } from 'react';
 import type { FunctionReturnType } from 'convex/server';
 import type { api } from '@/convex/_generated/api';
-import type { TikTokPrivacyLevel } from '@/lib/posting/platforms/tiktok/settings';
+import type { TikTokPrivacyLevel } from '@/lib/posting/platform-limits';
 import { TIKTOK_VISIBILITY_NAMES } from '@/lib/posting/visibility';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';

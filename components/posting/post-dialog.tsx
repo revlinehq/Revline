@@ -5,9 +5,9 @@ import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { CalendarDays, Pencil, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { CAPTION_LIMIT, TITLE_LIMIT } from '@/lib/posting/limits';
+import { CAPTION_LIMIT, POSTING_NOT_SET_UP, TITLE_LIMIT } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
-import { YOUTUBE_VISIBILITY_NAMES, type YouTubeVisibility } from '@/lib/posting/visibility';
+import { YOUTUBE_VISIBILITY_NOTE } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { ProjectCover } from '@/components/workspace/project-cover';
@@ -53,11 +53,6 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
   const createBatch = useMutation(api.posting.createBatch), readCreator = useAction(api.postingActions.tiktokCreator);
-  // YouTube starts from the visibility this owner used last ("Public" the first time). TikTok never starts from one.
-  const lastVisibility = useQuery(api.posting.lastVisibility, isAuthenticated ? {} : 'skip');
-  // The visibilities a YouTube post can be given right now. With one, there is nothing to choose and the dialog says which it is.
-  const youtubeOptions = useQuery(api.posting.options, isAuthenticated ? {} : 'skip')?.youtubeVisibilities;
-  const [youtubeChoice, setYoutubeChoice] = useState<YouTubeVisibility | null>(null);
   const [creators, setCreators] = useState<Record<string, TikTokCreator>>({}), [tiktok, setTiktok] = useState<Record<string, TikTokChoice>>({});
   /** The latest creator-info request per picked TikTok account: an answer to an older one is dropped. */
   const asked = useRef(new Map<string, number>());
@@ -71,7 +66,6 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
-  const youtube = youtubeOptions && youtubeOptions.length > 1 ? youtubeChoice ?? lastVisibility?.youtube : undefined;
   const onTikTok = picked.filter(account => account.platform === 'tiktok'), tiktokIds = onTikTok.map(account => account.id).join(' ');
   /** TikTok's rules: the account's current settings are read each time the dialog shows it, not kept from before. */
   function loadCreator(accountId: Id<'postingAccounts'>) {
@@ -88,7 +82,9 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
     for (const account of onTikTok) if (!asked.current.has(account.id)) loadCreator(account.id);
   }, [tiktokIds]);
   // The first thing still missing for a TikTok account; the post buttons stay off until there is none.
-  const blocked = onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '';
+  /** Posting is not set up on the server: the accounts are listed but none can be picked, and the line beside the buttons says why. */
+  const off = !!platforms && !live.size;
+  const blocked = off ? POSTING_NOT_SET_UP : onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '';
   /** A picked time makes this a scheduled post; without one it goes out now. */
   const schedule = !!when;
   async function submit() {
@@ -99,7 +95,6 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
     try {
       const targets = picked.map(account => ({
         accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}),
-        ...(account.platform === 'youtube' && youtube ? { visibility: youtube } : {}),
         ...(account.platform === 'tiktok' ? tiktokTarget(creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE) : {}),
       }));
       await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), targets });
@@ -141,15 +136,15 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
             {!platforms || !accounts ? <p className="post-note" role="status">Loading your accounts…</p> : platforms.map(entry => {
               const own = accounts.filter(account => account.platform === entry.platform);
               return <div key={entry.platform} className="post-platform">
-                <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span>{!entry.live && <small>Coming soon</small>}</div>
-                {entry.live && own.map(account => {
-                  const expired = account.status !== 'connected';
-                  return <label key={account.id} className="post-account" data-disabled={expired || undefined}>
-                    <Checkbox disabled={expired} checked={!expired && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Sign-in expired</small>}
+                <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span></div>
+                {own.map(account => {
+                  const expired = account.status !== 'connected', disabled = expired || !entry.live;
+                  return <label key={account.id} className="post-account" data-disabled={disabled || undefined}>
+                    <Checkbox disabled={disabled} checked={!disabled && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
+                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Reconnect needed</small>}
                   </label>;
                 })}
-                {entry.live && !own.length && <p className="post-note">No accounts connected yet.</p>}
+                {!own.length && <p className="post-note">No accounts connected yet.</p>}
               </div>;
             })}
             {platforms && accounts && live.size > 0 && !usable.length && <Button asChild variant="soft" size="sm" className="post-connect"><Link href="/accounts">Connect an account</Link></Button>}
@@ -172,14 +167,8 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
             <label htmlFor="post-title">Title <small>YouTube</small></label>
             <Input id="post-title" maxLength={TITLE_LIMIT} value={title} onChange={event => setTitle(event.target.value)} />
           </div>}
-          {titled && youtubeOptions?.length === 1 && <p className="post-note">YouTube videos are posted as {YOUTUBE_VISIBILITY_NAMES[youtubeOptions[0]]}.</p>}
-          {titled && youtubeOptions && youtubeOptions.length > 1 && <div className="post-field">
-            <label htmlFor="post-visibility">Visibility <small>YouTube</small></label>
-            <Select value={youtube ?? ''} onValueChange={value => setYoutubeChoice(value as YouTubeVisibility)}>
-              <SelectTrigger id="post-visibility" className="post-select-trigger"><SelectValue /></SelectTrigger>
-              <SelectContent className="post-select">{youtubeOptions.map(value => <SelectItem key={value} value={value}>{YOUTUBE_VISIBILITY_NAMES[value]}</SelectItem>)}</SelectContent>
-            </Select>
-          </div>}
+          {/* YouTube videos can only be posted public, so the dialog says it instead of offering a choice. */}
+          {titled && <p className="post-note">{YOUTUBE_VISIBILITY_NOTE}</p>}
           {onTikTok.map(account => <TikTokPostSettings key={account.id} username={account.username} creator={creators[account.id]} choice={tiktok[account.id] ?? NO_TIKTOK_CHOICE} durationSeconds={clip?.durationSeconds ?? null}
             onChange={next => setTiktok(previous => ({ ...previous, [account.id]: next }))} onRetry={() => loadCreator(account.id)} />)}
           <div className="post-field">

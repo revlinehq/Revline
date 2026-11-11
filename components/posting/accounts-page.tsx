@@ -7,6 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
 import { capMessage } from '@/lib/posting/account-caps';
+import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
@@ -16,7 +17,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AccountAvatar, PlatformIcon } from './account-avatar';
 import '@/components/dashboard/dash-list.css';
 
-/** Connected social accounts, a card per platform: connect, reconnect, disconnect, and "Coming soon" for platforms that are not live. */
+/** Connected social accounts, a card per platform: connect, reconnect, disconnect. While posting is not set up on the server, one line says so and the Connect and Reconnect buttons are off. */
 /** A card per platform, still, while the platforms and accounts load. */
 export function AccountsSkeleton() {
   return <div className="contents" role="status" aria-label="Loading your accounts">{Array.from({ length: 3 }, (_, index) => <Card key={index} variant="dash" className="dash-list">
@@ -28,13 +29,13 @@ export function AccountsSkeleton() {
 /**
  * Coming back from a platform's consent screen, and every time the page opens: the accounts are read again on the
  * server, then "Your TikTok account is connected" or the reason it was not. The address only says which message to
- * show (?status= and ?platform= from a connect link, ?connected= from Revline's own callback); which accounts exist
- * is never taken from it. Read in the browser, so the page itself stays static.
+ * show (?status= and ?platform= from the connect link); which accounts exist is never taken from it. Read in the
+ * browser, so the page itself stays static.
  */
 function ConnectedNote({ onError }: { onError: (message: string) => void }) {
   const params = useSearchParams(), router = useRouter(), { isAuthenticated } = useConvexAuth(), sync = useAction(api.postingActions.syncAccounts);
-  const status = params.get('status'), name = params.get('platform') ?? params.get('connected'), platform = name && name in PLATFORM_NAMES ? PLATFORM_NAMES[name as PostingPlatform] : null;
-  const [note, setNote] = useState(status ? '' : platform ? `Your ${platform} account is connected.` : '');
+  const status = params.get('status'), name = params.get('platform'), platform = name && name in PLATFORM_NAMES ? PLATFORM_NAMES[name as PostingPlatform] : null;
+  const [note, setNote] = useState('');
   useEffect(() => {
     if (!isAuthenticated) return;
     let current = true;
@@ -60,7 +61,7 @@ export function AccountsPage() {
   const { isAuthenticated } = useConvexAuth();
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
-  const options = useQuery(api.posting.options, isAuthenticated ? {} : 'skip');
+  const limit = useQuery(api.posting.accountLimit, isAuthenticated ? {} : 'skip');
   const startConnect = useAction(api.postingActions.startConnect), disconnect = useMutation(api.posting.disconnect);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   /** Connecting and reconnecting are the same round trip: the platform's consent screen, then back here. `accountId`: the account being reconnected. */
@@ -81,16 +82,17 @@ export function AccountsPage() {
   return <main className="dash-content"><div className="dash-column">
     <h1 className="sr-only">Connected accounts</h1>
     <p className="dash-column-note">Revline posts your clips to the accounts you connect here.</p>
+    {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}
     {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
       const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
       // At the plan's cap for this platform: nothing more can be connected until one is disconnected.
-      const full = !!options?.accountCap?.full.includes(platform);
+      const full = !!limit?.full.includes(platform);
       return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">
         <div className="dash-list-head">
           <PlatformIcon platform={platform} /><h2>{name}</h2>
-          <span className="dash-list-meta">{!live ? 'Coming soon' : own.length ? `${own.length} ${own.length === 1 ? 'account' : 'accounts'}` : ''}</span>
+          <span className="dash-list-meta">{own.length ? `${own.length} ${own.length === 1 ? 'account' : 'accounts'}` : ''}</span>
           <div className="dash-list-actions"><Button variant="soft" size="sm" disabled={!live || !!busy || full} aria-label={`Connect a ${name} account`} onClick={() => void connect(platform)}>Connect</Button></div>
         </div>
         {own.map(account => <div key={account.id} className="dash-list-row">
@@ -100,14 +102,14 @@ export function AccountsPage() {
             ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />{/expired/i.test(account.error ?? 'expired') ? 'Sign-in expired' : 'Reconnect needed'}</span>
             : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
           {/* Signing in again renews this account in place: new tokens, name and picture. It is the main action only when the sign-in is broken. */}
-          <Button variant={account.status === 'needs_reconnect' ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
+          <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
           </DropdownMenu>
         </div>)}
-        {!own.length && <div className="dash-list-row dash-list-note">{live ? 'No accounts connected yet.' : `Posting to ${name} is not available yet.`}</div>}
-        {live && full && <div className="dash-list-row dash-list-note" role="note">{capMessage(name, options!.accountCap!.perPlatform)}</div>}
+        {!own.length && <div className="dash-list-row dash-list-note">No accounts connected yet.</div>}
+        {live && full && <div className="dash-list-row dash-list-note" role="note">{capMessage(name, limit!.perPlatform)}</div>}
       </Card>;
     })}
   </div></main>;

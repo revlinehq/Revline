@@ -7,10 +7,9 @@ import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { exportsFull, startRenderFor } from './renders';
 import { internal } from './_generated/api';
 import { hasUltraPlan } from './lib/billing_access';
-import { accountPicture, accountState, batchText, createBatchFor, projectCover } from './posting';
+import { accountPicture, accountState, batchText, createBatchFor, projectCover, requirePosting } from './posting';
 import { postingPlatform } from './postingTables';
 import { pendingPostStatus } from './postingTables';
-import { platformLive } from '../lib/posting/server';
 import { shapeProblems } from '../lib/posting/precheck';
 import { dimensions, timelineDuration } from '../lib/editor/types';
 
@@ -40,7 +39,6 @@ async function targetsProblem(ctx: QueryCtx | MutationCtx, ownerId: string, acco
   for (const accountId of accountIds) {
     const account = await ctx.db.get(accountId);
     if (!account || account.ownerId !== ownerId || account.status === 'disconnected') return 'An account is no longer connected.';
-    if (!platformLive(account.platform)) return 'This platform is coming soon.';
     if (accountState(account).status !== 'connected') return `Reconnect @${account.username} before posting to it.`;
   }
   return null;
@@ -75,6 +73,8 @@ export async function startPendingFor(ctx: MutationCtx, ownerId: string, args: P
     const existing = await pendingForKey(ctx, ownerId, args.idempotencyKey);
     if (existing) return existing._id;
   }
+  // Refused before anything is exported. A post already waiting for its export is not: it becomes a scheduled post that waits.
+  requirePosting();
   if (!args.accountIds.length) throw new ConvexError('Pick at least one account.');
   if (args.accountIds.length > TARGET_LIMIT || new Set(args.accountIds).size !== args.accountIds.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
   const { caption, title } = batchText(args, now);

@@ -193,7 +193,7 @@ const POST_INPUT = {
     accountId: z.string().min(1).describe('From listConnectedAccounts.'),
     caption: z.string().max(CAPTION_LIMIT).optional().describe('This account’s own caption, when it differs from the shared one.'),
     title: z.string().max(TITLE_LIMIT).optional().describe('This account’s own title (YouTube).'),
-    visibility: z.enum([...YOUTUBE_VISIBILITIES, ...TIKTOK_VISIBILITIES]).optional().describe('Who can view the post. YouTube: public, unlisted or private (the user’s last choice when omitted). TikTok: required, one of the levels the account allows (PUBLIC_TO_EVERYONE, MUTUAL_FOLLOW_FRIENDS, FOLLOWER_OF_CREATOR, SELF_ONLY); the user chooses, there is no default. Instagram: none.'),
+    visibility: z.enum([...YOUTUBE_VISIBILITIES, ...TIKTOK_VISIBILITIES]).optional().describe('Who can view the post. YouTube: always public; omit it (unlisted and private are refused). TikTok: required, PUBLIC_TO_EVERYONE or SELF_ONLY (friends-only and followers-only are refused); the user chooses, there is no default. Instagram: none.'),
     tiktok: z.object({ allowComment: z.boolean().optional(), allowDuet: z.boolean().optional(), allowStitch: z.boolean().optional(), yourBrand: z.boolean().optional().describe('The video promotes the user’s own business.'), brandedContent: z.boolean().optional().describe('A paid partnership. Not with SELF_ONLY.') }).strict().optional().describe('TikTok only. Each is off unless the user asks for it.'),
   }).strict()).min(1).max(20).describe('The connected accounts to post to.'),
   caption: z.string().max(CAPTION_LIMIT).describe(`The caption every account uses unless it has its own, up to ${CAPTION_LIMIT} characters (YouTube: the description).`),
@@ -842,7 +842,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const sendPosts = (input: z.infer<z.ZodObject<typeof POST_INPUT>>, scheduledAt: number | undefined) => posting(async () => {
     const overMcp = isMcpRun(run.runId), schedule = scheduledAt !== undefined, owner = { ownerId: run.ownerId };
     const platforms = await ctx.runQuery(internal.assistantPosting.accountPlatforms, { ...owner, accountIds: input.accounts.map(account => account.accountId) }) as { accountId: Id<'postingAccounts'>; platform: string }[];
-    // TikTok's rules: what an account allows is read from TikTok before every post.
+    // What each TikTok account's post can be given, which the preview and the confirmation card state.
     const tiktokCreators = await Promise.all(platforms.filter(account => account.platform === 'tiktok').map(account => ctx.runAction(internal.postingActions.tiktokCreatorFor, { ...owner, accountId: account.accountId })));
     const request = {
       projectId: run.projectId, timelineIds: input.timelineIds ?? [timelineId], caption: input.caption, ...(input.title ? { title: input.title } : {}), ...(schedule ? { scheduledAt } : {}), tiktokCreators,

@@ -2,10 +2,8 @@
 // decides when this runs (convex/posting.ts), so every post is created to publish at once: Post Bridge never holds a
 // scheduled post of ours, and cancelling or moving one stays a change to Revline's own row.
 import { PostingError, type PostingPlatform, type PublishCheck, type PublishInput } from '../adapter';
+import { REEL_LIMITS, VIDEO_LIMITS, titleFromCaption } from '../platform-limits';
 import { shapeProblems, textProblems } from '../precheck';
-import { REEL_LIMITS } from '../platforms/instagram/limits';
-import { VIDEO_LIMITS } from '../platforms/tiktok/settings';
-import { titleFromCaption } from '../platforms/youtube/metadata';
 import { createPost, createUpload, getPostStatus, postResults } from './client';
 
 /** Post Bridge takes uploads up to this size on its signed upload address; a larger export is handed over as a link it downloads. */
