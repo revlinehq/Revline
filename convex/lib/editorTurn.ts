@@ -7,6 +7,7 @@ import { FULL_CHECK_TOOLS, checkInstructions, fullCheckRefusal, laneChecks, requ
 import { laneReplyGate, LaneFinishError } from '../../lib/ai/lanes/task';
 import type { LaneTask } from './run_types';
 import { exhaustedLaneError } from './laneFinish';
+import { safely } from './safely';
 import { editorCommandInstructions } from '../../lib/ai/slash-commands';
 import { chatAgent } from './chat_data';
 import { compactEditorHistory } from '../../lib/ai/history-compaction';
@@ -33,7 +34,7 @@ import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
 import { AnalysisStepError, createEditorToolkit } from "./editorToolkit";
-import { completionRepairFeedback, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, repeatedToolFailure, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
+import { completionRepairFeedback, AssistantRefusalError, AssistantToolRetryError, AssistantRenderReviewError, hasFailedRenderChecks, hasRepeatedToolFailures, repeatedToolFailure, hasUnresolvedToolFailures, unresolvedToolFailureIds } from "../../lib/ai/tool-failures";
 import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failures';
 export const editorTurnArgs=assistantRunArgs;
@@ -201,7 +202,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
           onStepStart: event => { currentStep = offset + event.stepNumber; },
           // Provider usage arrives before potentially slow analysis/tool execution.
           onLanguageModelCallEnd: event => costLog.modelCall({ ...event, stepNumber: currentStep }, progress()),
-          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()}); },
+          onStepEnd: async event => { costLog.toolsFinished(event); hooks.onStepFinished?.({ steps: offset + event.stepNumber + 1, savedEdits: progress().savedEdits, pendingFastFrames: toolkit.pendingFastFrames() }); await safely('turnCheckpoint',()=>ctx.runMutation(internal.assistantTurnRecovery.checkpoint,{...run,segment,savedEdits:progress().savedEdits,pendingFastFrames:toolkit.pendingFastFrames()})); },
           onError: ({ error }) => { streamError = error; },
           // A model call that goes silent ends here and the repair loop below retries it, instead of hanging the turn.
           timeout: MODEL_SILENCE_LIMITS,
@@ -210,6 +211,9 @@ For edit requests, use one brief initial sentence stating the requested action, 
         finishReason = reason;
         steps.push(...completed);
         if (streamError) throw streamError;
+        // A safety decline arrives as this finish reason. It is the provider's answer, not an interrupted step.
+        // Work that finish already checked is done; only its closing words were withheld.
+        if (finishReason === 'content-filter' && !askedUser(steps)) { if (toolkit.requiresFinish() && toolkit.laneFinished()) finishReason = 'stop'; else throw new AssistantRefusalError(); }
         const terminalLaneFailure=toolkit.laneFailure();
         if(terminalLaneFailure?.exhausted)throw exhaustedLaneError(terminalLaneFailure.lane,terminalLaneFailure.failures.join(' '));
         if(askedUser(steps)){await editSession.savePartial();break;}
@@ -256,12 +260,12 @@ For edit requests, use one brief initial sentence stating the requested action, 
       return null;
     }
     if(repairable(error)&&await ctx.runMutation(internal.assistantTurnRecovery.interrupted,{...run,segment,feedback:providerErrorText(error,selectedProvider)??'The connection was interrupted. Inspect saved work and finish only remaining steps.'}))return null;
-    let cause = abortSignal.aborted ? abortSignal.reason : (error instanceof AssistantToolRetryError || error instanceof LaneFinishError) ? error : streamError ?? error;
+    let cause = abortSignal.aborted ? abortSignal.reason : (error instanceof AssistantToolRetryError || error instanceof LaneFinishError || error instanceof AssistantRefusalError) ? error : streamError ?? error;
     let partialSaved = false;
     try { partialSaved = await session?.savePartial() ?? false; }
     catch (saveError) { cause = cause instanceof LaneFinishError?new LaneFinishError(`${cause.message} Partial save also failed: ${saveError instanceof Error?saveError.message:String(saveError)}`):saveError; }
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
-    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantRefusalError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
     console.error(`[ai-error] ${JSON.stringify({ runId: args.runId, provider: selectedProvider, reason: failureReason.slice(0, 400) })}`);
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved as revision ${session?.revision}. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
@@ -326,7 +330,7 @@ function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boo
 
 /** Configuration, exhausted credit and explicit budgets need a user/backend change. */
 function repairable(error:unknown) {
-  if(error instanceof LaneFinishError||error instanceof AssistantTokenBudgetError||error instanceof AssistantToolRetryError)return false;
+  if(error instanceof LaneFinishError||error instanceof AssistantTokenBudgetError||error instanceof AssistantToolRetryError||error instanceof AssistantRefusalError)return false;
   const detail=assistantFailureReason(error)??(error instanceof Error?error.message:'');
   return !/credits.*exhausted|billing|authentication failed|cannot access the selected model|requires .*API_KEY|token budget/i.test(detail);
 }

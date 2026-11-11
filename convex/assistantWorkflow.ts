@@ -4,7 +4,7 @@ import {internal} from './_generated/api';
 import {internalMutation,type MutationCtx} from './_generated/server';
 import {aiWorkflow,mediaWorkflow} from './lib/workflows';
 import {assistantRunArgs} from './lib/assistant_run';
-import {resumeInterruptedTurn} from './assistantTurnRecovery';
+import {resumeOrFinish} from './assistantTurnRecovery';
 import {projectRun,writeProject} from './lib/project_data';
 
 /** A turn inside Convex when no agent runner is configured. Paid generation steps are never retried. */
@@ -22,7 +22,7 @@ export const settle=internalMutation({args:{workflowId:vWorkflowId,result:vResul
     const run=await projectRun(ctx,project._id,args.context.ownerId);
     if(run.aiWorkflowId===args.workflowId){
       await writeProject(ctx,project._id,{aiWorkflowId:undefined});
-      if(run.aiRunning&&run.aiRunId===args.context.runId&&!await resumeInterruptedTurn(ctx,args.context.runId,'The editing process disconnected. Inspect saved work and continue the original request.'))await ctx.runMutation(internal.assistant.finish,{...args.context,error:'The editing request was interrupted. Your saved edits are still here. Retry unfinished steps to continue.'});
+      if(run.aiRunning&&run.aiRunId===args.context.runId)await resumeOrFinish(ctx,args.context,'The editing process disconnected. Inspect saved work and continue the original request.','The editing request was interrupted. Your saved edits are still here. Retry unfinished steps to continue.');
     }
   }
   await ctx.scheduler.runAfter(24*3600_000,internal.assistantWorkflow.cleanup,{workflowId:args.workflowId});

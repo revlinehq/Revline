@@ -100,6 +100,7 @@ import type * as lib_run_ids from "../lib/run_ids.js";
 import type * as lib_run_types from "../lib/run_types.js";
 import type * as lib_runner_auth from "../lib/runner_auth.js";
 import type * as lib_runner_turns from "../lib/runner_turns.js";
+import type * as lib_safely from "../lib/safely.js";
 import type * as lib_save_incidents from "../lib/save_incidents.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
@@ -255,6 +256,7 @@ declare const fullApi: ApiFromModules<{
   "lib/run_types": typeof lib_run_types;
   "lib/runner_auth": typeof lib_runner_auth;
   "lib/runner_turns": typeof lib_runner_turns;
+  "lib/safely": typeof lib_safely;
   "lib/save_incidents": typeof lib_save_incidents;
   "lib/share_chat": typeof lib_share_chat;
   "lib/shared_media": typeof lib_shared_media;

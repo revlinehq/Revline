@@ -35,7 +35,9 @@ export const run = internalMutation({
   returns: v.object({ value: v.any(), receipt: v.optional(toolWriteReceipt),replayed:v.optional(v.boolean()) }),
   handler: async (ctx, args) => {
     const definition = toolBehavior(args.toolName);
-    if (!definition || savesNothing(definition.effect) || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
+    // A check tool may only publish the staged draft it has just checked.
+    const publication = args.functionName === 'assistant:apply' && args.input.stagedPublication === true;
+    if (!definition || savesNothing(definition.effect) && !publication || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
     await projectIdentity(ctx, args.projectId, args.ownerId);
     const existing = await ctx.db.query('toolWriteReceipts').withIndex('by_write', q => q.eq('writeId', args.writeId)).unique();
     if (existing) {

@@ -26,3 +26,11 @@ export function failureReference(raw: string): string {
   for (let index = 0; index < raw.length; index++) { hash ^= raw.charCodeAt(index); hash = Math.imul(hash, 0x01000193); }
   return (hash >>> 0).toString(36).toUpperCase().padStart(7, '0').slice(-6);
 }
+
+/** The reason an application check refused something, as its author wrote it: a ConvexError's own text
+ * (`data`, or `data.message`). Empty for any other error, so callers can tell a refusal from a crash. */
+export function refusalReason(error: unknown): string {
+  const data = error && typeof error === 'object' && 'data' in error ? (error as { data?: unknown }).data : undefined;
+  const text = typeof data === 'string' ? data : data && typeof data === 'object' && typeof (data as { message?: unknown }).message === 'string' ? (data as { message: string }).message : '';
+  return text.trim().slice(0, 1000);
+}
