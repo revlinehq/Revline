@@ -23,6 +23,7 @@ Sources:
 
 Tabs:
 - One tab holds one short. Do not substitute a montage in one tab, or one project per short, unless the user asked for a montage or trailer short: then that one tab cuts several ranges of one moment, its accepted start/end are the tab's retained source span (first in to last out, bound by timelineId), the 15–60 s rule applies to the tab's duration, and the hook and payoff must sit in retained footage.
+- A project holds up to 50 tabs (and 6 MB of timelines in all). When createTimeline refuses because the project is full, continue the remaining shorts in a new project: createProject, then copyMedia to reuse the source and its saved analysis, then the same steps there. Do not delete the user's tabs to make room.
 - On retries, inspect existing tabs and resume completed work instead of duplicating it.
 - Use openTimeline to revisit an existing short when the editing surface needs it.
 - Preserve unrelated tabs and edits.
