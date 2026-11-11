@@ -23,6 +23,9 @@
   --dash-content-width: 960px;
   --dash-gutter: 32px;
 }
+/* The signed-in shell (sidebar pages) sits a step darker. The editor, landing and sign-in keep the values above.
+   On the document, not the shell, so the phone sidebar sheet and menus (portalled to <body>) get it too. */
+:root:has(.dash-shell) { --dash-page: #0D0D0D; --dash-sidebar: #111111; }
 
 /* Put `dash-theme` on a page root to map shadcn's tokens to the dashboard palette. The mapping sits on the
    document so dialogs, popovers and sheets (portalled to <body>) get it too. */
