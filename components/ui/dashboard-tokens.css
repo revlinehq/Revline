@@ -13,8 +13,9 @@
   --dash-pill-quiet: #1E1E1E;
   --dash-row-active: #1F1F1F;
   --dash-accent: #7C3AED;
-  /* The white edge drawn inside a filled accent button: a bright line along the top and a faint ring. */
-  --dash-accent-inset: inset 0 1px 0 #FFFFFF66, inset 0 0 0 1px #FFFFFF1F;
+  /* A filled accent button is flat: the fill only, a step lighter on hover and a step darker while pressed. */
+  --dash-accent-hover: #8B4CF0;
+  --dash-accent-pressed: #6D31D4;
   --dash-green: #22C55E;
   --dash-text: #F5F5F5;
   --dash-text-soft: #D6D6D6;
@@ -60,13 +61,14 @@
 }
 :root:has(.dash-theme) body { background: var(--dash-page); font-family: var(--font-inter), sans-serif; }
 
-/* Primary button: <Button variant="primary">. 36px tall, medium-rounded (--radius-md), purple fill with a white inner edge. */
+/* Primary button: <Button variant="primary">. 36px tall, medium-rounded (--radius-md), flat purple fill, no shadow or edge. */
 [data-slot=button][data-variant=primary] {
   height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: var(--radius-md);
   color: #fff; font-size: 14px; font-weight: 500;
-  background: var(--dash-accent); box-shadow: var(--dash-accent-inset);
+  background: var(--dash-accent); box-shadow: none;
 }
-[data-slot=button][data-variant=primary]:hover { filter: brightness(1.08); }
+[data-slot=button][data-variant=primary]:hover { background: var(--dash-accent-hover); }
+[data-slot=button][data-variant=primary]:active { background: var(--dash-accent-pressed); }
 [data-slot=button][data-variant=primary][data-size^=icon] { width: 36px; padding: 0; }
 
 /* Secondary button: <Button variant="soft">. A soft fill with no border, medium-rounded like the primary. */
