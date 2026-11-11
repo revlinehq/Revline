@@ -4,6 +4,8 @@ import { tools as clipTools } from './clip/tools';
 export const POSTING_TOOLS = ['listConnectedAccounts', 'postVideo', 'schedulePost', 'listPosts', 'getPost', 'cancelScheduledPost', 'reschedulePost'] as const;
 /** The two that send something outside Revline: each needs the user's confirmation. */
 export const POST_SENDING_TOOLS: readonly string[] = ['postVideo', 'schedulePost'];
+/** Export tools: callable after a request's edits passed finish, so "edit it, then export" works in one message. */
+export const EXPORT_TOOLS: ReadonlySet<string> = new Set(['exportVideo', 'listExports', 'getExport', 'cancelExport']);
 
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [

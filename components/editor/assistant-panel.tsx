@@ -2,6 +2,7 @@
 import { ThinkingBlock, ToolChain } from './tool-chain';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { PostConfirmCard, postProposalOf } from './post-confirm-card';
+import { ExportConfirmCard, exportProposalOf } from './export-confirm-card';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
@@ -244,6 +245,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
                 {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
                 {(message.steps ?? []).flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={step.id ?? step.name} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
                 {(message.steps ?? []).flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={step.id ?? proposalId} proposalId={proposalId} disabled={running || sending}/>] : []; })}
+                {(message.steps ?? []).flatMap(step => { const proposalId = exportProposalOf(step); return proposalId ? [<ExportConfirmCard key={step.id ?? proposalId} proposalId={proposalId} disabled={running || sending}/>] : []; })}
                 {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               </Fragment>)}
               {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
