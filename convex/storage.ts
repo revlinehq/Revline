@@ -100,20 +100,52 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
   const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
   return {...page,page:args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows};
 }});
-export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.array(v.id('projects')),handler:async(ctx,{fileIds})=>{
-  const ownerId=await requireOwner(ctx);if(!fileIds.length||fileIds.length>20)throw new ConvexError('Delete between 1 and 20 files');
-  const rows=await Promise.all([...new Set(fileIds)].map(id=>ctx.db.get(id)));
-  const projects=new Set<Id<'projects'>>();
-  for(const row of rows) {
-    if(!row)continue;
-    if(row.ownerId!==ownerId||row.pending||row.auxiliary)throw new ConvexError('File not found');
-    const info=await describe(ctx,row);if(!info.canDelete)throw new ConvexError(info.protectedReason??'Remove this media from its workspace first');
-    if(row.kind!=='export')for(const project of info.workspaces)projects.add(project.id);
+/** The projects a deletion takes with it: those whose edit uses a selected file, and those the selection would leave
+ * with no media and no clips. A project emptied this way is otherwise kept as an empty card in every project list.
+ * One with an export, or with an upload or media task still running, is kept: it holds more than the selection. */
+async function projectsDeletedWith(ctx:QueryCtx|MutationCtx,ownerId:string,rows:Doc<'storageObjects'>[],infos:Awaited<ReturnType<typeof describe>>[]) {
+  const doomed=new Map<Id<'projects'>,string>(),selected=new Map<Id<'projects'>,Set<string>>();
+  for(const [index,row] of rows.entries()) {
+    if(row.kind==='export')continue;
+    for(const project of infos[index].workspaces)doomed.set(project.id,project.title);
+    for(const asset of (await ownedObjectReferences(ctx,ownerId,row)).attachments){const ids=selected.get(asset.projectId)??new Set<string>();ids.add(String(asset._id));selected.set(asset.projectId,ids);}
   }
+  for(const [projectId,ids] of selected) {
+    if(doomed.has(projectId))continue;
+    const project=await ctx.db.get(projectId);if(!project||project.deleting||project.ownerId!==ownerId)continue;
+    const media=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(ids.size+1);
+    if(media.some(asset=>!ids.has(String(asset._id)))||(await allTabTimelines(ctx,project)).some(timeline=>timeline.clips.length))continue;
+    if(await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).first())continue;
+    if(await ctx.db.query('r2Uploads').withIndex('by_projectId_completed',q=>q.eq('projectId',projectId).eq('completed',false)).first())continue;
+    const tasks=await ctx.db.query('mediaTasks').withIndex('by_project_createdAt',q=>q.eq('projectId',projectId)).order('desc').take(20);
+    if(tasks.some(task=>task.status==='queued'||task.status==='running'||task.status==='retrying'))continue;
+    doomed.set(projectId,project.title);
+  }
+  return doomed;
+}
+async function selectedFiles(ctx:QueryCtx|MutationCtx,fileIds:Id<'storageObjects'>[]) {
+  if(!fileIds.length||fileIds.length>20)throw new ConvexError('Delete between 1 and 20 files');
+  return (await Promise.all([...new Set(fileIds)].map(id=>ctx.db.get(id)))).filter(row=>row!==null);
+}
+/** The projects the delete dialog names before `remove` deletes them with the selected files. Files that cannot be
+ * deleted are left out here; `remove` reports them. */
+export const deletedProjects=query({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.array(workspace),handler:async(ctx,{fileIds})=>{
+  const ownerId=await requireOwner(ctx),rows=(await selectedFiles(ctx,fileIds)).filter(row=>row.ownerId===ownerId&&!row.pending&&!row.auxiliary),reads=listingReads(ctx);
+  const infos=await Promise.all(rows.map(row=>describe(ctx,row,reads)));
+  return [...await projectsDeletedWith(ctx,ownerId,rows,infos)].map(([id,title])=>({id,title}));
+}});
+export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects')),confirmedProjects:v.optional(v.array(v.id('projects')))},returns:v.array(v.id('projects')),handler:async(ctx,{fileIds,confirmedProjects})=>{
+  const ownerId=await requireOwner(ctx),rows=await selectedFiles(ctx,fileIds);
+  if(rows.some(row=>row.ownerId!==ownerId||row.pending||row.auxiliary))throw new ConvexError('File not found');
+  const infos=[];
+  for(const row of rows){const info=await describe(ctx,row);if(!info.canDelete)throw new ConvexError(info.protectedReason??'Remove this media from its workspace first');infos.push(info);}
   // Validate the whole selection before hiding any project shared by several files.
+  const projects=new Set((await projectsDeletedWith(ctx,ownerId,rows,infos)).keys());
+  // The dialog named the projects it was confirmed with; one that joined since is not deleted unseen.
+  if(confirmedProjects&&[...projects].some(id=>!confirmedProjects.includes(id)))throw new ConvexError('This selection now deletes another project. Review the list and retry.');
   for(const projectId of projects){const project=await ctx.db.get(projectId);if(project)await beginProjectDeletion(ctx,ownerId,project);}
   for(const row of rows) {
-    if(!row||!await ctx.db.get(row._id))continue;
+    if(!await ctx.db.get(row._id))continue;
     if(row.kind==='export')await removeOwnedExport(ctx,ownerId,row.jobId!);
     else {
       const refs=await ownedObjectReferences(ctx,ownerId,row);
