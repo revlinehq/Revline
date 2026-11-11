@@ -1,1 +1,0 @@
-- Assistant: a run shows one status line in plain words while it works, then one collapsed "Ran N steps" line above the reply; thoughts and tool rows are gone, and a failed run is one line with the reason and Retry. Why: the founder found the stream of thoughts, running steps and tool calls spammy.
