@@ -1,0 +1,1 @@
+- Dashboard: the Stats sidebar icon is a pie chart again (solid body, outlined slice) instead of a filled blob. Why: the founder reported the icon as broken; filling every nav icon merged the pie's two shapes.

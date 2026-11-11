@@ -1,5 +1,5 @@
-/* The centred column and list cards of Connected accounts and Settings. Colours come from components/ui/dashboard-tokens.css. */
-.dash-column { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 760px; margin: 0 auto; }
+/* The column and list cards of Connected accounts and Settings. Colours come from components/ui/dashboard-tokens.css. */
+.dash-column { display: flex; flex-direction: column; gap: 12px; width: 100%; }
 .dash-column-note { margin: 0 0 4px; color: var(--dash-muted); font-size: 14px; line-height: 1.5; }
 .dash-error { margin: 0; color: #d98a76; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 
@@ -33,7 +33,12 @@
 .settings-photo { display: inline-flex; align-items: center; gap: 12px; }
 .settings-photo small { color: var(--dash-muted); font-size: 13px; }
 .settings-page { --ws-border: var(--dash-divider); --ws-input: var(--dash-tile); --ws-muted: var(--dash-muted); --ws-faint: var(--dash-muted); --ws-text: var(--dash-text); }
-.settings-page .mcp-connections li:first-child { border-top: 1px solid var(--dash-divider); }
+/* Settings keeps one hairline per card, under its head. The card's surface marks its edge, and spacing separates rows. */
+.settings-page [data-slot=card][data-variant=dash] { border-color: transparent; }
+.settings-page :is(.dash-list-row, .dash-list-body) { border-top-color: transparent; }
+.settings-page .dash-list-head + :is(.dash-list-row, .dash-list-body) { border-top-color: var(--dash-divider); }
+.settings-page .mcp-connections li { border-top: 0; }
+.settings-page .mcp-copy-field > code { border-color: transparent; }
 
 /* The quiet "more" button and its menu. */
 .dash-more[data-slot=button] { width: 32px; height: 32px; flex-shrink: 0; border-radius: 9999px; color: var(--dash-muted); }

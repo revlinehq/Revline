@@ -8,14 +8,11 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { AccountAvatar } from './account-avatar';
-import { BatchLinks } from './batch-links';
 import { PostDialog } from './post-dialog';
 import { postTime } from './post-time';
 import './posting.css';
@@ -58,7 +55,7 @@ export function PostsPage() {
   const clips = useQuery(api.posting.clipPosts, isAuthenticated ? {} : 'skip');
   const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
-  const [composing, setComposing] = useState(false), [links, setLinks] = useState<Id<'postingBatches'> | null>(null);
+  const [composing, setComposing] = useState(false);
   async function run(row: Row, posts: ClipPost[], action: typeof retry, fallback: string) {
     if (busy) return;
     setBusy(row.clip.batchId); setError('');
@@ -73,8 +70,7 @@ export function PostsPage() {
     { name: 'Posted', rows: rows.filter(row => !row.scheduled).sort((a, b) => b.time - a.time) },
   ].filter(section => section.rows.length);
   const newPost = <Button variant="primary" onClick={() => setComposing(true)}><Plus aria-hidden="true" />New post</Button>;
-  return <div className="dash-page">
-    <DashboardNavbar title="Posts" />
+  return <>
     <main className="dash-content posts-page">
       <h1 className="sr-only">Posts</h1>
       {error && <p className="dash-error" role="alert">{error}</p>}
@@ -83,15 +79,14 @@ export function PostsPage() {
         : sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
           <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && newPost}</div>
           <Card variant="dash" className="posts-list"><ul>{section.rows.map(row => <PostRow key={row.clip.batchId} row={row} busy={!!busy}
-            onRetry={() => void run(row, row.retryable, retry, 'Could not retry this post.')} onCancel={() => void run(row, row.cancellable, cancel, 'Could not cancel this post.')} onLinks={() => setLinks(row.clip.batchId)} />)}</ul></Card>
+            onRetry={() => void run(row, row.retryable, retry, 'Could not retry this post.')} onCancel={() => void run(row, row.cancellable, cancel, 'Could not cancel this post.')} />)}</ul></Card>
         </section>)}
     </main>
     {composing && <PostDialog onPostsPage onClose={() => setComposing(false)} />}
-    <Dialog open={!!links} onOpenChange={open => { if (!open) setLinks(null); }}><DialogContent className="post-dialog post-dialog-links"><div className="post-dialog-head"><DialogTitle>Campaign links</DialogTitle></div><div className="post-dialog-done"><DialogDescription>Content Rewards cannot receive these from Revline, so submit them there by hand.</DialogDescription>{links && <BatchLinks batchId={links} />}</div></DialogContent></Dialog>
-  </div>;
+  </>;
 }
 
-function PostRow({ row, busy, onRetry, onCancel, onLinks }: { row: Row; busy: boolean; onRetry: () => void; onCancel: () => void; onLinks: () => void }) {
+function PostRow({ row, busy, onRetry, onCancel }: { row: Row; busy: boolean; onRetry: () => void; onCancel: () => void }) {
   const { clip } = row, Icon = row.icon, text = clip.caption || clip.label;
   const extra = clip.posts.length - SHOWN_ACCOUNTS, live = row.published.filter(post => post.url);
   const menu = row.cancellable.length > 0 || live.length > 0 || row.reconnect;
@@ -113,7 +108,6 @@ function PostRow({ row, busy, onRetry, onCancel, onLinks }: { row: Row; busy: bo
           {row.cancellable.length > 0 && <DropdownMenuItem disabled={busy} onSelect={onCancel}>Cancel post</DropdownMenuItem>}
           {row.reconnect && <DropdownMenuItem asChild><Link href="/accounts">Reconnect account</Link></DropdownMenuItem>}
           {live.map(post => <DropdownMenuItem key={post.id} asChild><a href={post.url!} target="_blank" rel="noopener noreferrer"><span>View on {PLATFORM_NAMES[post.platform]} · @{post.username}</span></a></DropdownMenuItem>)}
-          {clip.campaignId && live.length > 0 && <DropdownMenuItem onSelect={onLinks}>Copy campaign links</DropdownMenuItem>}
         </DropdownMenuContent>
       </DropdownMenu>}
     </span>

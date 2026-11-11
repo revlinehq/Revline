@@ -18,7 +18,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { AccountAvatar, PlatformIcon } from './account-avatar';
-import { BatchLinks } from './batch-links';
 import { postTime } from './post-time';
 import './posting.css';
 
@@ -27,11 +26,11 @@ function localInputValue(time: number) { const date = new Date(time - new Date(t
 function clipLength(seconds: number) { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; }
 
 /** "Post" on a finished export: opens the dialog that sends it to connected accounts, now or on a schedule. */
-export function PostButton({ jobId, campaignId, size = 'default', className }: { jobId: string; campaignId?: string; size?: 'default' | 'sm'; className?: string }) {
+export function PostButton({ jobId, size = 'default', className }: { jobId: string; size?: 'default' | 'sm'; className?: string }) {
   const [open, setOpen] = useState(false);
   return <>
     <Button variant="secondary" size={size} className={className} onClick={() => setOpen(true)}><Send size={size === 'sm' ? 14 : 16} />Post</Button>
-    {open && <PostDialog jobId={jobId as Id<'renderJobs'>} campaignId={campaignId} onClose={() => setOpen(false)} />}
+    {open && <PostDialog jobId={jobId as Id<'renderJobs'>} onClose={() => setOpen(false)} />}
   </>;
 }
 
@@ -40,7 +39,7 @@ export function PostButton({ jobId, campaignId, size = 'default', className }: {
  * offers the owner's recent finished exports to choose from. `onPostsPage`: the new row is already in view behind
  * the dialog, so it closes on success instead of pointing at the Posts page.
  */
-export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; campaignId?: string; onPostsPage?: boolean; onClose: () => void }) {
+export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; onPostsPage?: boolean; onClose: () => void }) {
   const { isAuthenticated } = useConvexAuth();
   const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId ? {} : 'skip');
   const [choice, setChoice] = useState<Id<'renderJobs'> | null>(null);
@@ -56,13 +55,12 @@ export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: 
   const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [perAccount, setPerAccount] = useState(false);
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [sent, setSent] = useState<{ batchId: Id<'postingBatches'>; count: number; scheduledAt?: number; campaign: boolean } | null>(null);
+  const [sent, setSent] = useState<{ count: number; scheduledAt?: number } | null>(null);
   const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));
   // Only accounts that can post right now can be picked, so the buttons never promise more posts than they send.
   const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
-  const linked = campaignId ?? clip?.campaign?.id;
   async function submit(schedule: boolean) {
     if (busy || !picked.length || !clip) return;
     const scheduledAt = schedule ? new Date(when).getTime() : undefined;
@@ -70,14 +68,14 @@ export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: 
     setBusy(true); setError('');
     try {
       const targets = picked.map(account => ({ accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}) }));
-      const batchId = await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(linked ? { campaignId: linked } : {}), targets });
+      await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), targets });
       if (onPostsPage) onClose();
-      else setSent({ batchId, count: targets.length, scheduledAt, campaign: !!linked });
+      else setSent({ count: targets.length, scheduledAt });
     } catch (reason) { setError(userError(reason, 'Could not post this clip.')); }
     finally { setBusy(false); }
   }
   const label = clip?.label ?? finished?.find(entry => entry.jobId === current)?.label;
-  const detail = clip ? [clip.durationSeconds !== null ? clipLength(clip.durationSeconds) : null, clip.campaign?.name].filter(Boolean).join(' · ') : '';
+  const detail = clip && clip.durationSeconds !== null ? clipLength(clip.durationSeconds) : '';
   const missing = jobId ? clip === null : finished !== undefined && !finished.length;
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="post-dialog">
     <div className="post-dialog-head"><DialogTitle>{sent ? sent.scheduledAt ? 'Scheduled' : 'Posting now' : 'Post clip'}</DialogTitle></div>
@@ -85,7 +83,6 @@ export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: 
     {sent ? <>
       <div className="post-dialog-done">
         <p>{sent.scheduledAt ? `${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
-        {sent.campaign && <BatchLinks batchId={sent.batchId} />}
       </div>
       <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
     </> : missing ? <>
@@ -101,7 +98,7 @@ export function PostDialog({ jobId, campaignId, onPostsPage = false, onClose }: 
                 <SelectTrigger className="post-clip-select" aria-label="Clip to post"><SelectValue /></SelectTrigger>
                 <SelectContent className="post-select">{finished.map(entry => <SelectItem key={entry.jobId} value={entry.jobId}>{entry.label} · {postTime(entry.createdAt)}</SelectItem>)}</SelectContent>
               </Select> : <strong title={label}>{label ?? 'Loading…'}</strong>}
-              {clip === null ? <span>This clip can no longer be posted.</span> : detail && <span title={clip?.campaign ? `Campaign: ${clip.campaign.name}` : undefined}>{detail}</span>}
+              {clip === null ? <span>This clip can no longer be posted.</span> : detail && <span>{detail}</span>}
             </div>
           </Card>
           <div className="post-accounts">

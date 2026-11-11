@@ -9,10 +9,8 @@ import { waitForDemoStep } from '@/lib/editor/scripted-demo-chat';
 import { timelineDuration, type Timeline, type MediaAsset } from '@/lib/editor/types';
 import { applyTwoRowLayout } from '@/lib/editor/two-row-layout';
 import { TIMELINE_BASE_PX } from '@/lib/editor/timeline-zoom';
-import { FREE_EDITOR_MODEL_CHOICE } from '@/lib/ai/claude-model';
 import { EditorStateProvider } from '@/components/editor/editor-state';
 import { EditorShell } from '@/components/editor/editor-shell';
-import { useAssistantComposerControls } from '@/components/editor/assistant-composer-controls';
 import { AssistantPanel } from '@/components/editor/assistant-panel';
 import type { ChatMessage, ChatTool } from '@/components/editor/chat-types';
 import type { PreviewHandle } from '@/components/editor/preview';
@@ -73,7 +71,6 @@ export function ClipPrototype() {
   const run = useRef<AbortController | null>(null), speed = useRef(1), preview = useRef<PreviewHandle | null>(null), playOnReady = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const sourceCuts = useRef(sourceTimeline);
-  const controls = useAssistantComposerControls({ settings: { modelSwitcher: true, effortSwitcher: true, defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'medium' }, disabled: running });
   const ready = useCallback((handle: PreviewHandle) => { preview.current = handle; if (playOnReady.current) { handle.seek(0); handle.play(); } }, []);
   function show(next: Timeline, id: string) {
     playOnReady.current = id !== 'source';
@@ -148,6 +145,6 @@ export function ClipPrototype() {
   }, [active, running, started]);
   const tabs = [{ id: 'source', name: 'Source', aspectRatio: 'landscape' as const, duration: picks.duration, active: active === 'source' }, ...highlights.slice(0, count).map((pick, i) => ({ id: String(i), name: pick.title, aspectRatio: 'vertical' as const, duration: pick.end - pick.start, active: active === String(i) }))];
   return <div ref={root} className={started ? 'scripted-editor-demo' : 'workspace-page new-conversation new-conversation-empty'} data-building={running || undefined}>
-    {started ? <EditorStateProvider store={store}><EditorShell demo title={title} onTitle={setTitle} timeline={timeline} assets={assets} onChange={next => store.getState().edit(next)} saving={false} upload={null} error={error} onError={setError} onUndo={() => store.getState().undo()} onRedo={() => store.getState().redo()} canUndo={false} canRedo={false} onUpload={noUpload} onDropUpload={noUpload} messages={NO_MESSAGES} aiRunning={running} aiConfigured onSend={build} onStop={async () => { run.current?.abort(); }} onExport={noUpload} exportState={null} onPreviewReady={ready} timelineTabs={tabs} timelineTabActions={{ onOpen: async id => { show(id === 'source' ? sourceCuts.current : clipTimeline(Number(id)), id); }, onCreate: noUpload, onRename: noUpload, onRemove: noUpload }} assistantPanel={<PrototypeConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!timeline.clips.length} onSend={build} onStop={async () => { run.current?.abort(); }} activity={activity} error={error}/>}/></EditorStateProvider> : <><WorkspaceNav demo/><ConversationStart><div className="new-conversation-entry"><EditComposer slashCommands value={draft} onChange={setDraft} onSubmit={() => build(draft)} actions={controls.actions} placeholder="Describe your video, or drop footage here"/></div></ConversationStart></>}
+    {started ? <EditorStateProvider store={store}><EditorShell demo title={title} onTitle={setTitle} timeline={timeline} assets={assets} onChange={next => store.getState().edit(next)} saving={false} upload={null} error={error} onError={setError} onUndo={() => store.getState().undo()} onRedo={() => store.getState().redo()} canUndo={false} canRedo={false} onUpload={noUpload} onDropUpload={noUpload} messages={NO_MESSAGES} aiRunning={running} aiConfigured onSend={build} onStop={async () => { run.current?.abort(); }} onExport={noUpload} exportState={null} onPreviewReady={ready} timelineTabs={tabs} timelineTabActions={{ onOpen: async id => { show(id === 'source' ? sourceCuts.current : clipTimeline(Number(id)), id); }, onCreate: noUpload, onRename: noUpload, onRemove: noUpload }} assistantPanel={<PrototypeConversation chatStore={conversation} running={running} configured demo={false} hasClips={!!timeline.clips.length} onSend={build} onStop={async () => { run.current?.abort(); }} activity={activity} error={error}/>}/></EditorStateProvider> : <><WorkspaceNav demo/><ConversationStart><div className="new-conversation-entry"><EditComposer slashCommands value={draft} onChange={setDraft} onSubmit={() => build(draft)} placeholder="Describe your video, or drop footage here"/></div></ConversationStart></>}
   </div>;
 }

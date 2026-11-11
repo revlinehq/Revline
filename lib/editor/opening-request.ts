@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { Id } from '@/convex/_generated/dataModel';
 
-// The new-project page hands its brief, format, footage and model choices to the
+// The new-project page hands its brief, format and footage to the
 // editor through browser storage. Every key that handoff uses is spelled here.
 
 const NEXT_BRIEF_KEY = 'revline:next-brief';
@@ -12,16 +12,9 @@ export const FOOTAGE_DRAFT_KEY = 'revline:footage-draft';
 const briefKey = (projectId: string) => `revline:brief:${projectId}`;
 const briefOptionsKey = (projectId: string) => `revline:brief-options:${projectId}`;
 
-/** The editor's composer draft for one project; model and effort choices hang off it. */
+/** The editor's composer draft for one project. */
 export const editorDraftKey = (projectId: string) => `revline:editor-draft:${projectId}`;
-/** The new-project composer's draft for one signed-in user. */
-export const newProjectComposerKey = (userId: string) => `revline:next-composer:${userId}`;
 
-// Model choices persist across visits; effort lasts for the browser session.
-export const storedDraftModel = (draftKey: string) => localStorage.getItem(`${draftKey}:model`);
-export const storeDraftModel = (draftKey: string, value: string) => localStorage.setItem(`${draftKey}:model`, value);
-export const storedDraftEffort = (draftKey: string) => sessionStorage.getItem(`${draftKey}:effort`);
-export const storeDraftEffort = (draftKey: string, value: string) => sessionStorage.setItem(`${draftKey}:effort`, value);
 // The draft text itself lasts for the browser session. Both throw when storage is unavailable.
 export const storedDraftText = (draftKey: string) => sessionStorage.getItem(draftKey) ?? '';
 export const storeDraftText = (draftKey: string, value: string) => sessionStorage.setItem(draftKey, value);
@@ -64,10 +57,6 @@ type OpeningRequestOptions = { modelChoice?: string; reasoningEffort?: string };
 export function rememberOpeningRequest(projectId: string, prompt: string, options: OpeningRequestOptions) {
   sessionStorage.setItem(briefOptionsKey(projectId), JSON.stringify(options));
   if (prompt) sessionStorage.setItem(briefKey(projectId), prompt);
-  try {
-    if (options.modelChoice) storeDraftModel(editorDraftKey(projectId), options.modelChoice);
-    if (options.reasoningEffort) storeDraftEffort(editorDraftKey(projectId), options.reasoningEffort);
-  } catch { /* The first request still carries the choices when preference storage is unavailable. */ }
 }
 export function openingBrief(projectId: string) {
   return { prompt: sessionStorage.getItem(briefKey(projectId)) };
