@@ -2,7 +2,8 @@ import type { HttpRouter } from 'convex/server';
 import { internal } from './_generated/api';
 import { httpAction } from './_generated/server';
 
-async function boundedBody(request: Request) {
+/** The request body as text, or null when it is larger than 256 KB. Read in pieces, so an oversized body is dropped, not buffered. */
+export async function boundedBody(request: Request) {
   if (Number(request.headers.get('content-length')) > 256_000) return null;
   const reader = request.body?.getReader();
   if (!reader) return null;

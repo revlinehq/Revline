@@ -16,7 +16,7 @@ import { ProjectCover } from './project-cover';
 import { startNewWorkspace } from './start-new-workspace';
 import { PrimaryButton } from './primary-button';
 import { Button } from '@/components/ui/button';
-import { WorkspaceAccountMenu } from './account-menu';
+import { WorkspaceAccountLink } from './account-link';
 import { DiscordLink } from './discord-link';
 import { Input } from '@/components/ui/input';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
@@ -112,6 +112,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (!historyOpen) return; setClock(Date.now()); const timer = setInterval(() => setClock(Date.now()), 5000); return () => clearInterval(timer); }, [historyOpen]);
   const { user } = useUser();
+  const [accountError, setAccountError] = useState('');
   const [renameOpen, setRenameOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
   // Account pages sit under the workspace; they show where you are, not the chat menu.
@@ -136,7 +137,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
   // The link opens the start page at once. The previous import is dropped in memory first; its stored copy is cleared behind the navigation.
   function newWorkspace(event: MouseEvent<HTMLAnchorElement>) {
     if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    void startNewWorkspace(user?.id).catch(() => { /* The start page still opens with the previous draft. */ });
+    void startNewWorkspace(user?.id).catch(reason => setAccountError(userError(reason, 'Could not open a new workspace.')));
   }
   return <><header className="workspace-nav">
     {backHref ? <Button asChild variant="ghost" size="icon-sm" className="workspace-nav-back"><Link href={backHref} onClick={backHref === NEW_PROJECT_PATH ? newWorkspace : undefined} aria-label="Back to AI Editor"><ChevronLeft size={18} /></Link></Button> : <><Link href={NEW_PROJECT_PATH} onClick={newWorkspace} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
@@ -166,7 +167,8 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
       {actions}
       {editorHref && <Button asChild variant="outline" size="md"><Link href={editorHref} className="workspace-editor-link" aria-label="Editor"><PanelsTopLeft size={14} /><span>Editor</span></Link></Button>}
       {!demo && !pathname?.startsWith('/editor') && <DiscordLink />}
-      <WorkspaceAccountMenu active={active} />
+      {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}
+      <WorkspaceAccountLink />
     </div>
   </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
 });

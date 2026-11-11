@@ -18,6 +18,8 @@ export const tiktokChoices = v.object({
   yourBrand: v.optional(v.boolean()), brandedContent: v.optional(v.boolean()),
 });
 export const accountStatus = v.union(v.literal('connected'), v.literal('needs_reconnect'), v.literal('disconnected'));
+/** A platform's data deletion request: `received` when the connection is deleted, `completed` once its posts carry nothing from the platform. */
+export const deletionRequestStatus = v.union(v.literal('received'), v.literal('completed'));
 
 /** Tables of the posting base (convex/posting*): connected social accounts and the posts sent to them. */
 export const postingTables = {
@@ -26,6 +28,10 @@ export const postingTables = {
   // takes to revoke the access at the platform, then removes it.
   postingAccounts: defineTable({
     ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), username: v.string(),
+    // The platform's second id for the same account, where it has one (Instagram: the app-scoped id beside the
+    // professional account id). A platform callback may name the account by either. `connectedAt`: the last connect or
+    // reconnect, so a callback issued before it does not end the newer connection.
+    platformScopedId: v.optional(v.string()), connectedAt: v.optional(v.number()),
     displayName: v.optional(v.string()), avatarUrl: v.optional(v.string()), status: accountStatus, error: v.optional(v.string()),
     // Revline's own copy of the picture at `avatarUrl` (the platform's URL, which can expire), removed on disconnect.
     // `avatarCheckedAt`: when a token renewal last looked for a missing picture, so an account without one is asked weekly, not on every renewal.
@@ -33,7 +39,13 @@ export const postingTables = {
     tokenCipher: v.optional(v.string()), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
     // Held while one action refreshes the tokens, so two posts never spend the same refresh token.
     refreshLeaseUntil: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
-  }).index('by_owner', ['ownerId']).index('by_owner_platform_account', ['ownerId', 'platform', 'platformAccountId']),
+  }).index('by_owner', ['ownerId']).index('by_owner_platform_account', ['ownerId', 'platform', 'platformAccountId'])
+    // Every Revline user's connection to one platform account: how a platform callback (convex/postingCallbacks.ts) finds them.
+    .index('by_platform_account', ['platform', 'platformAccountId']).index('by_platform_scoped', ['platform', 'platformScopedId']),
+  // One data deletion request sent by a platform (Meta's Data Deletion Request callback). It holds no id of the person
+  // or account: `code` is the random confirmation code the status page (/data-deletion/<code>) is opened with.
+  postingDeletionRequests: defineTable({ code: v.string(), platform: postingPlatform, status: deletionRequestStatus, createdAt: v.number(), completedAt: v.optional(v.number()) })
+    .index('by_code', ['code']),
   // A pending "connect account" round trip. The nonce is single-use: the callback deletes the row.
   postingOauthStates: defineTable({ nonce: v.string(), ownerId: v.string(), platform: postingPlatform, expiresAt: v.number() })
     .index('by_nonce', ['nonce']).index('by_expiresAt', ['expiresAt']),

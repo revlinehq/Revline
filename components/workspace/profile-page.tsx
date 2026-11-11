@@ -12,7 +12,6 @@ import { McpConnectorSection } from './mcp-connector-section';
 import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/settings-card';
 import './workspace-pages.css';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserAvatar, useConnectedPicture } from './user-avatar';
 
@@ -29,7 +28,7 @@ function BillingFromAddress() {
   return <BillingSection checkoutReturn={checkout === 'success' || checkout === 'canceled' ? checkout : undefined} />;
 }
 
-/** Settings (/profile): the plan, the profile, connected AI apps and signing out, as one column of cards. */
+/** Settings (/profile): the plan, the profile (where signing out is) and connected AI apps, as one column of cards. */
 export function ProfilePage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const clerk = useClerk();
@@ -62,19 +61,18 @@ export function ProfilePage() {
     <h1 className="sr-only">Settings</h1>
     {!isLoaded ? <SettingsSkeleton /> : <>
       <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
-      <SettingsCard title="Profile" action={isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}>
+      <SettingsCard title="Profile" action={<>
+        {isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}
+        {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}
+      </>}>
         <SettingsRow label="Photo"><span className="settings-photo"><UserAvatar className="settings-avatar" alt="Your profile photo" fallback={initial} />{connectedPicture && <small>From your connected account</small>}</span></SettingsRow>
         <SettingsRow label="Name">{name}</SettingsRow>
         <SettingsRow label="Email">{email ?? 'Sign in to see your email'}</SettingsRow>
-        {photoError && <SettingsBody><p className="dash-error" role="alert">{photoError}</p></SettingsBody>}
+        {(photoError || error) && <SettingsBody><p className="dash-error" role="alert">{photoError || error}</p></SettingsBody>}
         <input hidden type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} />
       </SettingsCard>
       <McpConnectorSection />
       <DevAiCosts />
-      <Card variant="dash" className="dash-list"><div className="dash-list-row">
-        <span className="dash-list-row-name dash-list-note">{email ? `Signed in as ${email}` : 'You are not signed in'}</span>
-        {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}
-      </div></Card>
-    </>}{error && <p className="dash-error" role="alert">{error}</p>}
+    </>}
   </div></main>;
 }

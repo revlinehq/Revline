@@ -1,0 +1,1 @@
+- Composer: the send button carries a static scatter of small whitish squares, densest at its bottom-right corner; the stop button stays plain. Why: the founder asked for scattered cubes on the prompt button.
