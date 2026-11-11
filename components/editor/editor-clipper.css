@@ -2,12 +2,12 @@
    own palette variables point at them, and buttons use the shared soft and primary variants. Static: no transitions. */
 html[data-workspace-theme=dark] .editor-app{--ed-bg:var(--dash-page);--ed-panel:var(--dash-page);--ed-surface:var(--dash-card);--ed-surface-2:var(--dash-tile);--ed-border:var(--dash-border);--revline-accent:var(--dash-accent);--revline-primary-background:var(--dash-accent)}
 
-/* Top bar: back arrow, project name, saved mark; quiet actions at the right. */
+/* Top bar: Revline logo (home), project name, saved mark; quiet actions at the right. */
 html[data-workspace-theme=dark] .editor-app header.workspace-nav{height:48px;gap:6px;padding:0 12px 0 10px}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav [data-slot=button]{transition:none}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav :is([data-slot=button],a):focus-visible{outline:none;box-shadow:none}
-html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]{width:32px;height:32px;border-radius:var(--radius-md);color:var(--dash-text)}
-html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-back[data-slot=button]:hover{background:var(--dash-pill)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-brand{padding:0 4px}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-brand .revline-brand{gap:8px;font-size:15px;color:var(--dash-text)}html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-brand .revline-mark{width:20px;height:20px;color:var(--dash-text)}
+html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-divider{height:18px;margin:0 6px;background:var(--dash-divider)}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger[data-slot=button]{height:32px;padding:0 10px;border-radius:var(--radius-md);font-size:13px}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-chat-trigger:is(:hover,[data-state=open]){background:var(--dash-pill)}
 html[data-workspace-theme=dark] .editor-app header.workspace-nav .workspace-nav-save{margin-right:8px;font-size:12px;color:var(--dash-muted)}
