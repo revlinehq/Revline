@@ -28,10 +28,18 @@ export function isPlainReelTimeline(timeline: Timeline): boolean {
   );
 }
 
+const SPEECH_CUT_TOOLS = ['retainSourceRanges', 'cleanSpeech', 'readCutScript'];
+
+/** A speech cut on plain footage is checked from data in every lane: timeline data for gaps and overlaps, the script
+ * as cut for the words. Its edges queue no rendered frames. Undefined means the normal per-change checks. */
+export function speechCutMoments(tool: string, before: Timeline, after: Timeline): number[] | undefined {
+  return SPEECH_CUT_TOOLS.includes(tool) && isPlainReelTimeline(before) && isPlainReelTimeline(after) ? [] : undefined;
+}
+
 /** Empty moments mean saved-data checks; undefined means the normal per-change checks. */
 export function fastReelFrameMoments(tool: string, before: Timeline, after: Timeline): number[] | undefined {
   if (!isPlainReelTimeline(before) || !isPlainReelTimeline(after)) return undefined;
-  if (tool === 'retainSourceRanges' || tool === 'cleanSpeech') return [];
+  if (SPEECH_CUT_TOOLS.includes(tool)) return [];
   if (['addSubtitlesFromTranscript', 'styleCaptions', 'transformClip', 'cropClip'].includes(tool)) {
     const old = new Map(before.clips.map(clip => [clip.id, clip]));
     const sample = after.clips.find(clip => clip.kind !== 'audio' && !equalTimelineValue(clip, old.get(clip.id)));
@@ -71,14 +79,18 @@ export class FastFrameReview {
     // A cut edge is two frames: the last one before it and the first one after. A change inside a clip is one frame.
     const edges: number[] = [], inside: number[] = moments ? [...moments] : [];
     if (!moments) {
+      // Sound has no picture, so a change to it is never a frame to look at.
+      let silent = false;
       for (const clip of after.clips) {
         const old = previous.get(clip.id);
         if (equalTimelineValue(clip, old) || rippled(clip)) continue;
-        if (old && old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart) inside.push(clip.start + clip.duration / 2);
+        if (clip.kind === 'audio') { silent = true; continue; }
+        // Newly added media needs one look at its framing; where it starts and ends is timeline data.
+        if (!old || old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart) inside.push(clip.start + clip.duration / 2);
         else edges.push(clip.start, clip.start + clip.duration);
       }
-      edges.push(...before.clips.filter(clip => !current.has(clip.id)).map(clip => clip.start));
-      if (!edges.length && !inside.length) inside.push(0);
+      for (const clip of before.clips) if (!current.has(clip.id)) { if (clip.kind === 'audio') silent = true; else edges.push(clip.start); }
+      if (!edges.length && !inside.length && !silent) inside.push(0);
     }
     for (const time of inside) this.pending.add(clamp(time));
     for (const time of edges) for (const offset of [-1, 0]) this.pending.add(clamp(clamp(time) + offset / fps));

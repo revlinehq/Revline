@@ -65,6 +65,7 @@ This covers "remove the awkward moments", "cut where I look away", "clean up the
 ## Rules
 - Only cut what the user asked about. "Clean it up" with no visual words is a speech cleanup (cleanSpeech), not this skill.
 - An explicit transcript-only request skips visual inspection.
+- Speech cleanup and placing b-roll, images or an opening clip are transcript work: cut first, layer at transcript times, and read frames only at a flagged edge or in a narrow window around a known transcript time.
 - A quiet pause alone is not an awkward moment.
 - If the frames leave it unclear, keep the footage and say what was uncertain. Never claim a moment was removed that was not seen.
 

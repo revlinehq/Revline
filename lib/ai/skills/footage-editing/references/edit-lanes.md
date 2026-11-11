@@ -42,7 +42,7 @@ A good edit changes only the requested range, keeps everything around it in sync
 - Transcript reads and speech cuts follow footage-editing page `speech`.
 - Montage shot notes are one call each, by time, with no ID lookups or per-clip moves: remove a shot with delete {at, ripple:true}, swap two with swapClips {a, b}, lengthen with resizeClips {at, side:'right', delta, ripple:true}, mute with setVolume {at, volume:0}. Music and other layers keep their times; check once with inspectTimeline afterwards.
 - For other cuts: a trim that shortens footage on the main footage layer, and a delete of footage there, already close up (ripple is their default; the result's rippled field says what moved, ripple:false leaves the hole). Never move that layer's later clips again. Captions, b-roll and overlays on other layers keep their times: move those by the same delta in one moveClips call so they stay in sync. An edit that does leave a hole says so in gapWarning.
-- Verify with inspectTimeline: the new duration meets the target, with no gaps or orphaned captions.
+- Verify with inspectTimeline: the new duration meets the target, with no gaps or orphaned captions. Gaps, overlaps and stray clips are timeline data: read them there and from finish, never by rendering frames. Frames are for what only pixels show: an awkward face at a cut, a gesture, framing.
 
 ### Reporting
 - Report the sampled scope, never whole-video visual equivalence.
