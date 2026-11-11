@@ -11,6 +11,7 @@ import { usePlanStatus } from './use-plan-status';
 import { UltraPlanCard } from './ultra-plan-card';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/settings-card';
+import { Skeleton } from '@/components/ui/skeleton';
 import './billing-section.css';
 import { Button } from '@/components/ui/button';
 
@@ -69,7 +70,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
 
   return <SettingsCard id="billing" title="Plan" action={action}>
     {!isAuthenticated && !isLoading ? <SettingsBody><p>Sign in to view your plan and billing.</p></SettingsBody>
-      : !status ? <SettingsBody><p role="status">Loading your plan…</p></SettingsBody>
+      : !status ? ['Plan', 'Price', 'Status'].map(label => <SettingsRow key={label} label={label}><Skeleton className="h-4 w-44 max-w-full" /></SettingsRow>)
       : comingSoon ? <SettingsBody><p>Membership is coming soon. No payment is required.</p></SettingsBody>
       : subscription === 'apple' ? <>
         <SettingsRow label="Plan">{ultra ? 'Revline Ultra' : 'Revline Pro'}</SettingsRow>

@@ -1,4 +1,4 @@
-import { ChartNoAxesColumn, Clapperboard, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
+import { ChartNoAxesColumn, Clapperboard, Cloud, Plug, Send, Settings, type LucideIcon } from 'lucide-react';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 export type DashboardNavItem = { label: string; href: string; icon: LucideIcon; /** The icon is made of open strokes (bars, lines): the sidebar thickens them instead of filling the shape. */ strokeIcon?: boolean; /** Path prefixes that mark this item active; defaults to its href. */ match?: string[] };
@@ -15,6 +15,7 @@ export const DASHBOARD_NAV: { label: string; items: DashboardNavItem[] }[] = [
   { label: 'Account', items: [
     { label: 'Settings', href: '/profile', icon: Settings },
     { label: 'Connected accounts', href: '/accounts', icon: Plug },
+    { label: 'Cloud storage', href: '/storage', icon: Cloud },
   ] },
 ];
 
@@ -26,7 +27,7 @@ export function activeDashboardItem(pathname: string | null) {
 }
 
 /** Shell pages that are not a sidebar item's own page, and the name the navbar shows for them. */
-const PAGE_TITLES: [prefix: string, title: string][] = [['/chats', 'Your projects'], ['/storage', 'Cloud storage']];
+const PAGE_TITLES: [prefix: string, title: string][] = [['/chats', 'Your projects']];
 
 /** The navbar's name for a page: the sidebar item's label on its own page and the pages under it, else the table above. */
 export function dashboardPageTitle(pathname: string | null) {

@@ -60,18 +60,18 @@
 }
 :root:has(.dash-theme) body { background: var(--dash-page); font-family: var(--font-inter), sans-serif; }
 
-/* Primary button: <Button variant="primary">. A 36px full pill, purple fill with a white inner edge. */
+/* Primary button: <Button variant="primary">. 36px tall, medium-rounded (--radius-md), purple fill with a white inner edge. */
 [data-slot=button][data-variant=primary] {
-  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: 9999px;
+  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: var(--radius-md);
   color: #fff; font-size: 14px; font-weight: 500;
   background: var(--dash-accent); box-shadow: var(--dash-accent-inset);
 }
 [data-slot=button][data-variant=primary]:hover { filter: brightness(1.08); }
 [data-slot=button][data-variant=primary][data-size^=icon] { width: 36px; padding: 0; }
 
-/* Secondary button: <Button variant="soft">. A soft filled pill with no border. */
+/* Secondary button: <Button variant="soft">. A soft fill with no border, medium-rounded like the primary. */
 [data-slot=button][data-variant=soft] {
-  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: 9999px;
+  height: 36px; padding: 0 16px; gap: 6px; border: 0; border-radius: var(--radius-md);
   background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500;
 }
 [data-slot=button][data-variant=soft]:hover { background: var(--dash-pill-hover); }
@@ -94,11 +94,14 @@
   background: var(--dash-accent); color: #fff; font-size: 11px; font-weight: 600; letter-spacing: .02em;
 }
 
-/* Segmented switch: <Segmented> (components/ui/segmented.tsx), a full pill built on ToggleGroup. */
-[data-slot=toggle-group][data-segmented] { height: 36px; padding: 3px; gap: 0; border-radius: 9999px; background: var(--dash-pill-quiet); }
+/* Segmented switch: <Segmented> (components/ui/segmented.tsx), built on ToggleGroup. Medium-rounded; the items sit 3px inside, so their radius is 3px smaller. */
+[data-slot=toggle-group][data-segmented] { height: 36px; padding: 3px; gap: 0; border-radius: var(--radius-md); background: var(--dash-pill-quiet); }
 [data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item] {
-  height: 30px; min-width: 0; padding: 0 16px; border: 0; border-radius: 9999px; background: transparent;
+  height: 30px; min-width: 0; padding: 0 16px; border: 0; border-radius: calc(var(--radius-md) - 3px); background: transparent;
   color: var(--dash-muted); font-size: 14px; font-weight: 500; transition: none;
 }
 [data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item]:hover { color: var(--dash-text); }
 [data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item][data-state=on] { background: var(--dash-pill); color: var(--dash-text); }
+
+/* Skeleton: <Skeleton>. One step lighter than a tile, so a placeholder reads on the page, on a card and on a tile. Still, never pulsing. */
+.dash-theme [data-slot=skeleton] { background: var(--dash-pill); }

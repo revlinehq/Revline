@@ -27,8 +27,7 @@ import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,r
 import { importVideoFor } from './mediaTasks';
 import { startRenderFor } from './renders';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
-import { activeAppleEntitlement } from './lib/apple_entitlements';
-import { canChooseReasoningEffort, fixedEditorModel, hasPaidModelAccess, requireEditorAccess } from './lib/billing_access';
+import { canChooseReasoningEffort, hasPaidModelAccess, productionDefaultModel, productionOffer, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -47,7 +46,7 @@ import {savePublicationReceipt} from './lib/publicationReceipt';
 import { finishIncidentRun, publishIncidentRun } from './lib/save_incidents';
 import { enqueueMediaTask, cancelMediaTask, detachAnalysisRequest } from './lib/media_queue';
 import { consumeAssistantRequest, consumeAudioRequest, requireMediaTaskCapacity } from './lib/account_limits';
-import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, isRetiredEditorModelChoice, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed, withPlanReasoning, editorEffortSwitcherOffered } from '../lib/ai/claude-model';
+import { FREE_EDITOR_MODEL_CHOICE, EDITOR_PROVIDER_REASON, isRetiredEditorModelChoice, allowedClaudeModelChoices, enforceClaudeModelPolicy, freeEditorModel, assertEditorModelConfigured, claudeModelSwitcherEnabled, defaultEditorModelChoice, defaultEditorReasoningEffort, normalizeEditorReasoningEffort, resolveClaudeModel, withEditorReasoning, withEditorSpeed, withPlanReasoning, offeredEditorModel, EDITOR_REASONING_EFFORTS } from '../lib/ai/claude-model';
 import { claudeModelChoiceValidator, legacyCompatibleModelChoiceValidator, editorReasoningEffortValidator, storedEditorReasoningEffortValidator, editorSpeedModeValidator, pinnedClaudeModelValidator } from './lib/claude_model';
 import { assistantRecovery } from './lib/assistant_recovery';
 import { mediaTaskActivityLabel } from '../lib/media-analysis/activity';
@@ -55,10 +54,10 @@ import { editingWorkflowActive } from './lib/assistant_workflow';
 import { clipChangeAfter, historyStart, listRevisions, tabChangesAfter } from './lib/revision_log';
 const mobileModel = () => withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(FREE_EDITOR_MODEL_CHOICE)), 'medium');
 function configured(paidModelAccess = true) {
-  try{assertEditorModelConfigured(paidModelAccess ? fixedEditorModel() ?? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
+  try{assertEditorModelConfigured(paidModelAccess ? productionDefaultModel() ?? resolveClaudeModel() : freeEditorModel());return true;}catch{return false;}
 }
 function mobileConfigured(paidModelAccess: boolean) {
-  try{assertEditorModelConfigured((paidModelAccess ? fixedEditorModel() : null) ?? mobileModel());return true;}catch{return false;}
+  try{assertEditorModelConfigured((paidModelAccess ? productionDefaultModel() : null) ?? mobileModel());return true;}catch{return false;}
 }
 /** Paid accounts can choose any configured model. Null when the switcher is off. */
 function editorModelChoices() {
@@ -70,38 +69,34 @@ function canChooseEditorModel(modelChoice?: string) {
   return !!choices && (modelChoice === undefined || choices.some(choice => choice === modelChoice));
 }
 const composerSettingsFields = {
-  modelAccessNeedsSync: v.optional(v.boolean()),
   paidModelAccess: v.optional(v.boolean()),
   modelSwitcher: v.optional(v.boolean()),
-  catalogModels: v.optional(v.array(claudeModelChoiceValidator)),
   allowedModels: v.optional(v.array(claudeModelChoiceValidator)),
-  claudeViaMcp: v.optional(v.boolean()),
   defaultModelChoice: v.optional(claudeModelChoiceValidator),
   defaultReasoningEffort: v.optional(editorReasoningEffortValidator),
   effortSwitcher: v.optional(v.boolean()),
-  /** A paid plan below Ultra: the picker shows the effort levels locked. */
-  effortLocked: v.optional(v.boolean()),
+  /** The efforts this account may pick; one entry means the effort is not a choice. */
+  allowedEfforts: v.optional(v.array(editorReasoningEffortValidator)),
 };
 async function editorComposerSettings(ctx: QueryCtx, ownerId: string): Promise<ObjectType<typeof composerSettingsFields>> {
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
-  const catalogModels = [...allowedClaudeModelChoices()];
-  const apple = !paidModelAccess ? await activeAppleEntitlement(ctx, ownerId) : null;
-  // Production shows no picker: without modelSwitcher the composer renders none.
-  const fixed = fixedEditorModel();
-  if (!paidModelAccess) return { catalogModels, modelAccessNeedsSync: !!apple && apple.modelPayment === undefined, paidModelAccess: false, claudeViaMcp: false, ...(fixed ? {} : { modelSwitcher: true }), allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
-  if (fixed) return { paidModelAccess, catalogModels, modelAccessNeedsSync: false, defaultModelChoice: fixed.modelChoice, defaultReasoningEffort: fixed.reasoningEffort, claudeViaMcp: false };
+  // A free account has one model and one effort, so nothing to pick. The composer shows its pickers only when
+  // modelSwitcher is set and one of the two lists has more than one entry.
+  if (!paidModelAccess) return { paidModelAccess: false, allowedModels: [FREE_EDITOR_MODEL_CHOICE] satisfies ClaudeModelChoice[], allowedEfforts: ['low' as const], defaultModelChoice: FREE_EDITOR_MODEL_CHOICE, defaultReasoningEffort: 'low' as const };
+  // Production: the lists are PRODUCTION_EDITOR_OFFER for this plan, the same lists send and the run enforce.
+  const offer = await productionOffer(ctx, ownerId);
+  if (offer) return { paidModelAccess, defaultModelChoice: offer.default.model, defaultReasoningEffort: offer.default.effort, allowedModels: [...offer.models], allowedEfforts: [...offer.efforts], ...(offer.models.length > 1 || offer.efforts.length > 1 ? { modelSwitcher: true } : {}), ...(offer.efforts.length > 1 ? { effortSwitcher: true } : {}) };
   let defaultModelChoice; try { defaultModelChoice = defaultEditorModelChoice(); } catch {}
   const choices = editorModelChoices();
   const effortChoice = !!choices && await canChooseReasoningEffort(ctx, ownerId);
   return {
     paidModelAccess,
-    catalogModels,
-    modelAccessNeedsSync: false,
     ...(defaultModelChoice ? { defaultModelChoice } : {}),
     defaultReasoningEffort: defaultEditorReasoningEffort(),
     ...(choices ? { modelSwitcher: true, allowedModels: [...choices] } : {}),
-    claudeViaMcp: false,
-    ...(effortChoice ? { effortSwitcher: true } : choices && editorEffortSwitcherOffered() ? { effortLocked: true } : {}),
+    // Only Ultra picks an effort; every other paid plan runs the deployment default.
+    allowedEfforts: effortChoice ? [...EDITOR_REASONING_EFFORTS] : [defaultEditorReasoningEffort()],
+    ...(effortChoice ? { effortSwitcher: true } : {}),
   };
 }
 export const composerSettings = query({
@@ -156,15 +151,16 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
   if (mobile && (args.modelChoice !== FREE_EDITOR_MODEL_CHOICE || args.reasoningEffort !== 'medium' || args.speedMode !== undefined)) throw new ConvexError('iPhone editing uses GPT-6.1 Terra with medium reasoning.');
   // An old client may still send a retired model (Gemini 4 Argon): edit with the default instead.
   const modelChoice = isRetiredEditorModelChoice(args.modelChoice) ? undefined : args.modelChoice;
-  // Only Ultra picks an effort. Anyone else's is dropped, so a stale client or saved preference edits at the default instead of failing.
-  const reasoningEffort = paidModelAccess && !mobile && await canChooseReasoningEffort(ctx, ownerId) ? args.reasoningEffort : undefined;
+  // In production the plan's offer decides: a model or effort it does not list (a stale tab, a hand-made request,
+  // iPhone's fixed pair) runs on its default, and speed is ignored.
+  const offer = paidModelAccess ? await productionOffer(ctx, ownerId) : null;
+  // Elsewhere only Ultra picks an effort. Anyone else's is dropped, so a stale client or saved preference edits at the default instead of failing.
+  const reasoningEffort = !offer && paidModelAccess && !mobile && await canChooseReasoningEffort(ctx, ownerId) ? args.reasoningEffort : undefined;
   const manualEffort = reasoningEffort !== undefined && reasoningEffort !== 'auto';
   let pinnedModel;
   try {
-    // In production a stale tab's or hand-made request's model, effort and speed are accepted and ignored.
-    const fixed = paidModelAccess ? fixedEditorModel() : null;
-    if (!fixed && paidModelAccess && !mobile && (modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(modelChoice)) throw new Error('This AI model is not available.');
-    pinnedModel = !paidModelAccess ? freeEditorModel() : fixed ?? (mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(modelChoice)), reasoningEffort), args.speedMode)); assertEditorModelConfigured(pinnedModel);
+    if (!offer && paidModelAccess && !mobile && (modelChoice !== undefined || manualEffort || args.speedMode !== undefined) && !canChooseEditorModel(modelChoice)) throw new Error('This AI model is not available.');
+    pinnedModel = !paidModelAccess ? freeEditorModel() : offer ? offeredEditorModel(offer, mobile ? {} : { modelChoice, reasoningEffort: args.reasoningEffort }) : (mobile ? mobileModel() : withEditorSpeed(withEditorReasoning(enforceClaudeModelPolicy(resolveClaudeModel(modelChoice)), reasoningEffort), args.speedMode)); assertEditorModelConfigured(pinnedModel);
   } catch (error) { throw new ConvexError((error as Error).message); }
   if(args.attachedAssetIds){
     if(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length)throw new ConvexError('Attach up to 20 unique media files.');
@@ -210,7 +206,8 @@ export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:
   const runId=crypto.randomUUID(),text=prompt.text??'';
   const recovery:Doc<'projects'>['aiRecovery']=turn?{requests:[text],runId:turn.runId,revision:project.revision??0,savedEdits:turn.savedEdits,status:'failed',reason:turn.feedback??project.aiError??'Resume the unfinished request.',updatedAt:Date.now()}:project.aiRecovery;
   const sameUndoGroup=turn?.runId===project.aiRunId&&project.aiCheckpointRevision===project.revision;
-  const pinnedModel=await hasPaidModelAccess(ctx,ownerId)?validatePinnedClaudeModel(turn?.args.pinnedModel??resolveClaudeModel()):freeEditorModel();assertEditorModelConfigured(pinnedModel);
+  const paidModelAccess=await hasPaidModelAccess(ctx,ownerId),offer=paidModelAccess?await productionOffer(ctx,ownerId):null;
+  const pinnedModel=!paidModelAccess?freeEditorModel():offer?offeredEditorModel(offer,turn?.args.pinnedModel):validatePinnedClaudeModel(turn?.args.pinnedModel??resolveClaudeModel());assertEditorModelConfigured(pinnedModel);
   if(turn?.timelineId&&turn.timelineId!==activeTabOf(project))await openTabFor(ctx,ownerId,{projectId:args.projectId,timelineId:turn.timelineId});
   const resumed={...(turn?.args??{}),projectId:args.projectId,ownerId,runId,threadId:prompt.threadId,promptMessageId:args.promptMessageId,pinnedModel,...(recovery?{recovery}:{}),continuation:{segment:0,repairPass:0,savedEdits:0,pendingFastFrames:turn?.pendingFastFrames??[],feedback:'Resume the original request in place. Inspect the saved timeline and finish only unfinished work; never repeat a completed edit.'}};
   await writeProject(ctx,project._id,{aiRunning:true,aiEditing:false,aiAgentName:undefined,aiAgentActiveUntil:undefined,aiRunId:runId,aiError:undefined,aiQueuePaused:false,aiWorkflowId:undefined,aiAnalysisUsage:{runId,enqueued:0},aiRequest:{prompt:text,messageId:args.promptMessageId,startedRevision:project.revision??0},...(!sameUndoGroup?{aiUndoRecorded:false,aiCheckpointRevision:undefined}:{})});
@@ -268,7 +265,7 @@ export const messages = query({
     const display = args.paginationOpts.numItems === 0 ? null : await ctx.db.query('assistantMessageThreads').withIndex('by_thread', q => q.eq('threadId', project.threadId!)).unique();
     const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : display?.completed && (!args.paginationOpts.cursor || args.paginationOpts.cursor.startsWith('display:')) && (!args.paginationOpts.endCursor || args.paginationOpts.endCursor.startsWith('display:')) ? await listMessageViews(ctx, project.threadId, args.paginationOpts) : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
     const streams = await syncStreams(ctx, components.agent, { threadId: project.threadId, streamArgs: args.streamArgs });
-    const visible=await Promise.all(page.page.map(async message=>{if(message.role!=='user')return message;const view=await ctx.db.query('assistantTurnViews').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();if(view)return {...message,turnState:view.status,turnError:view.error,turnResuming:view.resuming};const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();return turn?{...message,turnState:turn.status,turnError:turn.error,turnResuming:turn.status==='running'&&(turn.pass>0||!!turn.args.continuation)}:message;}));
+    const visible=await Promise.all(page.page.map(async message=>{if(message.role!=='user')return message;const view=await ctx.db.query('assistantTurnViews').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();if(view)return {...message,turnState:view.status,turnError:view.error,turnResuming:view.resuming,turnModel:view.model,turnEffort:view.effort};const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();return turn?{...message,turnState:turn.status,turnError:turn.error,turnResuming:turn.status==='running'&&(turn.pass>0||!!turn.args.continuation)}:message;}));
     return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
@@ -320,10 +317,17 @@ export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>)
   return null;
 }
 /** Begin the timeline lock only when a mutating tool has a real change to make. */
-/** The effort the run is thinking at right now, for the development effort switcher. */
-export const recordEffort = internalMutation({ args: { ...runArgs, effort: editorReasoningEffortValidator }, returns: v.null(), handler: async (ctx, args) => {
+/** What the run really runs on, written once its model is resolved at inference time: the turn and its view keep
+ * the model and effort, and the chat shows them under the reply. A runner built before `model` sends the effort alone. */
+export const recordEffort = internalMutation({ args: { ...runArgs, effort: editorReasoningEffortValidator, model: v.optional(pinnedClaudeModelValidator) }, returns: v.null(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId);
   if (!project.aiRunning || project.aiRunId !== args.runId) return null;
+  // The saved pin (args.pinnedModel) stays what was asked, so a later retry is entitled afresh.
+  const view = args.model ? await ctx.db.query('assistantTurnViews').withIndex('by_run', q => q.eq('runId', args.runId)).unique() : null;
+  if (view && args.model && (view.model !== args.model.modelId || view.effort !== args.effort)) {
+    const ran = { model: args.model.modelId, effort: args.effort };
+    await ctx.db.patch(view.turnId, ran); await ctx.db.patch(view._id, ran);
+  }
   const row = await ctx.db.query('aiBudgets').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
   if (row) await ctx.db.patch(row._id, { runId: args.runId, ...(row.runId === args.runId ? {} : { used: 0 }), effort: args.effort, updatedAt: Date.now() });
   else await ctx.db.insert('aiBudgets', { projectId: args.projectId, runId: args.runId, used: 0, effort: args.effort, updatedAt: Date.now() });
@@ -412,7 +416,7 @@ export const modelForRun = internalQuery({
     await requireActiveRun(ctx, args);
     await requireEditorAccess(ctx, args.ownerId);
     if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
-    const fixed = fixedEditorModel(); if (fixed) return fixed;
+    const offer = await productionOffer(ctx, args.ownerId); if (offer) return offeredEditorModel(offer, args.pinnedModel);
     // Only Ultra keeps a chosen effort; this recheck covers queued, retried and recovered turns.
     return validatePinnedClaudeModel(withPlanReasoning(args.pinnedModel ?? resolveClaudeModel(), await canChooseReasoningEffort(ctx, args.ownerId)));
   },
@@ -755,9 +759,11 @@ export const startQueued=internalMutation({args:{projectId:v.id('projects'),owne
     await requireEditorAccess(ctx,args.ownerId);
     // A queued choice the plan no longer allows (Opus in-app on Pro) falls back to the default.
     const paidModelAccess=await hasPaidModelAccess(ctx,args.ownerId);
-    const queued=paidModelAccess?validatePinnedClaudeModel(row.pinnedModel):freeEditorModel();
+    // In production the queued pick runs as far as the plan's offer still lists it.
+    const offer=paidModelAccess?await productionOffer(ctx,args.ownerId):null;
+    const queued=!paidModelAccess?freeEditorModel():offer?offeredEditorModel(offer,row.pinnedModel):validatePinnedClaudeModel(row.pinnedModel);
     const chosen=queued.modelChoice!==undefined||queued.reasoningEffort!==undefined||queued.speedMode!==undefined;
-    const pinnedModel=!paidModelAccess?queued:row.clientPlatform==='ios'?mobileModel():chosen&&!canChooseEditorModel(queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
+    const pinnedModel=!paidModelAccess||offer?queued:row.clientPlatform==='ios'?mobileModel():chosen&&!canChooseEditorModel(queued.modelChoice)?enforceClaudeModelPolicy(resolveClaudeModel()):queued;assertEditorModelConfigured(pinnedModel);
     enforceClaudeModelPolicy(pinnedModel);
     for(const id of row.attachedAssetIds??[]){const asset=await ctx.db.get(id);if(!asset||asset.projectId!==project._id||asset.ownerId!==args.ownerId)throw new ConvexError('Attached footage is no longer available. Remove this queued message and send an updated request.');}
     const ids=new Set((await requestTimeline(ctx,project,row.timelineId).catch(()=>currentTimeline(project))).clips.map(clip=>clip.id));

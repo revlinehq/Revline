@@ -1,0 +1,1 @@
+- Web app: Sidebar pages and projects open the moment they are clicked, with still skeletons where data loads; signed-in pages are static and the proxy does the sign-in check. Why: the founder found every click waited on a server round trip before anything changed.

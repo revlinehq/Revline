@@ -37,7 +37,8 @@ export function PostConfirmCard({ proposalId, disabled }: { proposalId: Id<'post
   if (!proposal) return null;
   const { clips, accounts, scheduledAt } = proposal, status = proposal.status === 'proposed' && proposal.expiresAt <= now ? 'expired' as const : proposal.status;
   const exporting = clips.filter(clip => clip.exports).length, clipWord = clips.length === 1 ? 'this clip' : `${clips.length} clips`;
-  const action = scheduledAt ? 'Schedule' : 'Post', label = exporting ? `Export and ${action.toLowerCase()}` : action;
+  // The same words as the Post dialog's main button: "Schedule" once there is a time, otherwise "Post now".
+  const label = scheduledAt ? 'Schedule' : 'Post now';
   async function run(change: typeof confirm, fallback: string) {
     if (busy) return;
     setBusy(true); setError('');

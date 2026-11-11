@@ -1,5 +1,5 @@
 import { ULTRA_OFFERED } from '../../lib/billing/plan';
-import { editorEffortChoiceAllowed, productionEditorModel } from '../../lib/ai/claude-model';
+import { editorEffortChoiceAllowed, offeredEditorModel, productionEditorOffer, type EditorOffer } from '../../lib/ai/claude-model';
 import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
 import { components } from '../_generated/api';
@@ -57,9 +57,19 @@ export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: s
   return (await editorSubscriptions(ctx, ownerId)).some(hasPaidEditorSubscriptionTerm);
 }
 
-/** Production edits on one model with no picker: there a paid account's request, saved choice or queued
- * pin is ignored. Null on every other deployment, which keeps the pickers. Free accounts keep their own model. */
-export const fixedEditorModel = () => incidentDeployment() === 'prod' ? productionEditorModel() : null;
+/** Production, or a development deployment set to behave like it (EDITOR_PRODUCTION_OFFER=true), limits paid
+ * accounts to PRODUCTION_EDITOR_OFFER. Every other deployment leaves the choice to its own switches. */
+export const usesProductionOffer = () => incidentDeployment() === 'prod' || process.env.EDITOR_PRODUCTION_OFFER === 'true';
+
+/** What production runs for a paid account that picked nothing; null where the production offer does not apply. */
+export const productionDefaultModel = () => usesProductionOffer() ? offeredEditorModel(productionEditorOffer(false)) : null;
+
+/** The models and efforts this paid account may pick in production, by plan; null where the production offer
+ * does not apply. A request, saved choice or queued pin outside it runs on its default. Free accounts keep their own model. */
+export async function productionOffer(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<EditorOffer | null> {
+  // A deployment without billing meters no one, so there every account gets the Ultra list (as with canChooseReasoningEffort).
+  return usesProductionOffer() ? productionEditorOffer(!billingEnabled() || await hasUltraPlan(ctx, ownerId)) : null;
+}
 
 /** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess first: an Ultra trial is not a paid term. */
 export async function canChooseReasoningEffort(ctx: QueryCtx | MutationCtx, ownerId: string) {

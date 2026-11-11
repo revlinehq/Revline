@@ -1,7 +1,13 @@
 import { clerkMiddleware } from "@clerk/nextjs/server";
 import { NextResponse, type NextFetchEvent, type NextRequest } from "next/server";
 
-const clerk = clerkMiddleware();
+// Every page under app/(dashboard). Signed-out visitors are sent to sign-in here, before any page renders, so the
+// pages themselves are static: a click between them needs no server render. /editor/showcase is a public page.
+const SIGNED_IN_PAGES = /^\/(?:accounts|billing|chats|connect|dashboard|editor(?!\/showcase(?:\/|$))|posts|profile|stats|storage)(?:\/|$)/;
+
+const clerk = clerkMiddleware(async (auth, request) => {
+  if (SIGNED_IN_PAGES.test(request.nextUrl.pathname)) await auth.protect();
+});
 
 // Fallback path for the MCP server and its OAuth endpoints: the revline-mcp Worker (cf-workers/mcp) serves them on
 // tryrevline.com through routes, which take precedence over this Worker's custom domain. Without those routes
@@ -9,7 +15,11 @@ const clerk = clerkMiddleware();
 // Revline's own domain (see convex/lib/mcp_origin.ts).
 const MCP_PATHS = /^\/(?:mcp(?:\/upload(?:\/model)?)?|oauth\/(?:authorize|token|register|revoke)|\.well-known\/(?:oauth-protected-resource|oauth-authorization-server)(?:\/mcp)?|\.well-known\/openid-configuration)$/;
 
-async function forwardToMcp(request: NextRequest) {
+// Meta's signed callbacks for Instagram Login (convex/postingCallbacks.ts). Meta calls them signed out, on Revline's
+// own domain, so they pass straight to the Convex HTTP actions that verify the signature: no Clerk handshake.
+const PLATFORM_CALLBACK_PATHS = /^\/instagram\/(?:deauthorize|data-deletion)$/;
+
+async function forwardToConvex(request: NextRequest) {
   const target = new URL(request.nextUrl.pathname + request.nextUrl.search, process.env.NEXT_PUBLIC_CONVEX_SITE_URL);
   const headers = new Headers(request.headers);
   for (const name of ['host', 'cookie', 'content-length']) headers.delete(name);
@@ -41,7 +51,7 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
   // This public renderer shell authenticates project reads with the native Convex JWT.
   // A web-session handshake would navigate WKWebView outside its pinned player URL.
   if (/^\/mobile\/player\/[^/]+\/?$/.test(request.nextUrl.pathname)) return NextResponse.next();
-  return MCP_PATHS.test(request.nextUrl.pathname) ? forwardToMcp(request) : clerk(request, event);
+  return MCP_PATHS.test(request.nextUrl.pathname) || PLATFORM_CALLBACK_PATHS.test(request.nextUrl.pathname) ? forwardToConvex(request) : clerk(request, event);
 }
 
 export const config = {

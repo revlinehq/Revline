@@ -20,7 +20,7 @@
 .reference-detail p{margin:0}
 .reference-detail-meta{color:var(--muted-foreground)}
 .reference-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
-.reference-chip{padding:2px 8px;border:1px solid var(--border);border-radius:999px;background:transparent;color:var(--foreground);font-size:11px;cursor:pointer}
+.reference-chip{padding:2px 8px;border:1px solid var(--border);border-radius:var(--radius-md);background:transparent;color:var(--foreground);font-size:11px;cursor:pointer}
 .reference-chip:hover:not(:disabled){background:color-mix(in srgb,var(--foreground) 8%,transparent)}
 .reference-chip:disabled{cursor:default;opacity:.7}
 .reference-signatures{padding-top:8px;border-top:1px solid var(--border)}

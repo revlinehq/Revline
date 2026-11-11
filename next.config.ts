@@ -4,7 +4,9 @@ import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH } from './lib/workspace-routes';
 const config: NextConfig = {
   distDir: process.env.REVLINE_DIST_DIR || ".next",
   turbopack: { root: process.cwd() },
-  experimental: { agentUpgrade: 'security' },
+  // A page loaded ahead of its click (the sidebar links) stays usable for five minutes. That is Next's own default,
+  // written out because the hosted build (vinext) otherwise drops it after 30 seconds and asks the server again on the click.
+  experimental: { agentUpgrade: 'security', staleTimes: { static: 300 } },
   // The MCP consent page grants account access with one click; never let another site frame it.
   async headers() {
     return [{ source: '/connect', headers: [{ key: 'X-Frame-Options', value: 'DENY' }, { key: 'Content-Security-Policy', value: "frame-ancestors 'none'" }] }];

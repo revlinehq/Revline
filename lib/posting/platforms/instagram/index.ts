@@ -54,7 +54,7 @@ function longLivedTokens(response: TokenResponse, scopes: string[]): AccountToke
 async function fetchMe(tokens: AccountTokens): Promise<MeResponse & { accountId: string }> {
   const me = unwrap(
     await instagramRequest<MeResponse | { data?: MeResponse[] }>(`${GRAPH_URL}/me`, {
-      query: { fields: 'user_id,username,name,profile_picture_url', access_token: tokens.accessToken },
+      query: { fields: 'id,user_id,username,name,profile_picture_url', access_token: tokens.accessToken },
     }),
   );
   // `user_id` is the Instagram professional account ID used for publishing; `id` is app-scoped.
@@ -204,6 +204,7 @@ export const instagram: PlatformAdapter = {
     const me = await fetchMe(tokens);
     return {
       platformAccountId: me.accountId,
+      ...(me.id && String(me.id) !== me.accountId ? { scopedAccountId: String(me.id) } : {}),
       username: me.username ?? me.accountId,
       ...(me.name ? { displayName: me.name } : {}),
       ...(me.profile_picture_url ? { avatarUrl: me.profile_picture_url } : {}),

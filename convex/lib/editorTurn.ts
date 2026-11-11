@@ -101,7 +101,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const checkLevel=taskCheckLevel(laneTask);
     const recovery = args.recovery ?? project.aiRecovery;
     const recovering = recovery !== undefined || !!args.continuation;
-    void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort }).catch(() => {});
+    void ctx.runMutation(internal.assistant.recordEffort, { ...run, effort: selection.reasoningEffort, model: selection }).catch(() => {});
     const draft=args.continuation?await ctx.runQuery(internal.assistantTurnRecovery.draft,run):null;
     const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, segment,lane:initialLane,scriptFirst:reelRequest,taskId:args.runId,agent:selection.modelId,finishRequired:laneTask.required,laneChosen:true,capabilities:laneTask.capabilities,draft:draft?.timeline, checkLevel, pendingFastFrames: args.continuation?.pendingFastFrames, initialPlans: args.continuation && laneChecks(initialLane, checkLevel).fullTools ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;

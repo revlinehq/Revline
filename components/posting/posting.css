@@ -51,7 +51,7 @@
   border: 1px solid var(--dash-border); border-radius: 16px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none;
   font-family: var(--font-inter), sans-serif; font-size: 14px;
 }
-.post-dialog [data-slot=dialog-close] { top: 12px; right: 12px; width: 32px; height: 32px; border-radius: 9999px; color: var(--dash-muted); }
+.post-dialog [data-slot=dialog-close] { top: 12px; right: 12px; width: 32px; height: 32px; border-radius: var(--radius-md); color: var(--dash-muted); }
 .post-dialog [data-slot=dialog-close]:hover { background: var(--dash-pill); color: var(--dash-text); }
 .post-dialog-head { display: flex; align-items: center; min-height: 56px; padding: 0 56px 0 20px; border-bottom: 1px solid var(--dash-divider); flex-shrink: 0; }
 .post-dialog-head [data-slot=dialog-title] { margin: 0; font-size: 17px; font-weight: 500; line-height: 1.3; }

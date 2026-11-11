@@ -4,7 +4,7 @@ import * as React from "react"
 
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 
-/** A full-pill switch between a few views (All / Mine). One option is always selected. */
+/** A medium-rounded switch between a few views (All / Mine). One option is always selected. */
 function Segmented<T extends string>({
   value,
   onValueChange,

@@ -8,7 +8,8 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactNode } from 'react';
 import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
-import { assistantRequest, type ComposerSettings } from './assistant-composer-controls';
+import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
+import { EDITOR_EFFORT_LABELS, editorModelLabel } from './assistant-model-picker';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import type { ComposerAttachment } from '@/lib/editor/composer-media';
@@ -109,7 +110,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   results?: ReactNode;
   composerPlaceholder?: string;
   messages: ChatMessage[]; running: boolean; editing?:boolean; configured: boolean; error?: string | null;
-  /** The user's plan as the server reports it; it decides what a message asks for (assistant-composer-controls.tsx). */
+  /** The user's plan and the models and efforts the server offers it; they decide the pickers and what a message asks for (assistant-composer-controls.tsx). */
   settings?: ComposerSettings;
   onSend: (text: string, modelChoice?: ClaudeModelChoice, reasoningEffort?: EditorReasoningEffort, speedMode?: EditorSpeedMode) => Promise<void>; hasClips: boolean; demo: boolean;
   onRetry?: (promptMessageId:string) => Promise<void>;
@@ -136,7 +137,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
   const [pendingReply, setPendingReply] = useState<PendingReply | null>(null);
   // An MCP agent's work is not a reply in this chat; it shows as one centered notice instead.
   const answering = (running && !externalAgent) || sending || !!pendingReply || !!resumingTurnId;
-  const ask = assistantRequest(settings ?? NO_SETTINGS);
+  const composerControls = useAssistantComposerControls({ settings: settings ?? NO_SETTINGS, disabled: composerBusy || sending || !!pendingReply });
+  const ask = composerControls.request;
   const waiting = answering || (!externalAgent && !!activity);
   const latestUser = messages.findLast(message => message.role === 'user');
   const optimisticRequest = pendingReply && latestUser?.id === pendingReply.previousUserId ? pendingReply : null;
@@ -244,6 +246,8 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
                 {(message.steps ?? []).flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={step.id ?? proposalId} proposalId={proposalId} disabled={running || sending}/>] : []; })}
                 {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               </Fragment>)}
+              {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
+              {requestMessage?.turnModel && <p className="assistant-turn-model text-[11px] text-neutral-500" data-turn-model={requestMessage.turnModel} data-turn-effort={requestMessage.turnEffort}>{editorModelLabel(requestMessage.turnModel)}{requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}</p>}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
                 {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
@@ -264,7 +268,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
     </MessageScrollerViewport><MessageScrollerButton /></MessageScroller>
     <div className="manual-composer-dock">
     {queued.length>0&&<div className="assistant-queue" aria-label="Queued messages"><div className="assistant-queue-heading"><span>{queued.length} queued{queuePaused?' · paused':''}</span>{queuePaused&&onResumeQueue&&<button type="button" onClick={()=>void onResumeQueue().catch(e=>setLocalError(userError(e,'Could not resume the queue.')))}>Resume queue</button>}</div>{queued.map((message,index)=><div className="assistant-queued-message" key={message.id}><span className="assistant-queue-number">{index+1}</span><div><p>{message.prompt}</p>{message.error&&<small>{message.error}</small>}</div><button type="button" aria-label={`Remove queued message ${index+1}`} onClick={()=>void onRemoveQueued?.(message.id).catch(e=>setLocalError(userError(e,'Could not remove queued message.')))}><X size={13}/></button></div>)}</div>}
-    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
+    <EditComposer appearance="flat" slashCommands allowQueue={conversationStarted&&!demo} attachments={attachments} onRemoveAttachment={onRemoveAttachment} requireMedia={requireMedia} actions={composerControls.actions} variant="compact" className="manual-editor-composer" value={prompt} onChange={changePrompt} onSubmit={submit} onAttach={onAttach} placeholder={externalAgent ? `${externalAgent} is editing over MCP. What you send runs when it finishes.` : composerPlaceholder ?? "What would you change next?"} disabled={composerBusy || sending || !!pendingReply} running={running && !externalAgent} onStop={onStop ? stop : undefined} stopping={stopState==='stopping'} />
     </div>
   </div>;
 }
