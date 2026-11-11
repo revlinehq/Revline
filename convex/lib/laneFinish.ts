@@ -15,11 +15,14 @@ import { FastFrameReview, fastFrameEvidence, isPlainReelTimeline } from '../../l
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
-import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { changedFrameLimit, laneChecks, requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { MAX_SHEET_FRAMES, evenly } from '../../lib/ai/frame-sampling';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
 export type FinishResult = NonNullable<LaneTask['result']>;
+/** Frames a standard finish draws to prove the changed timeline renders. */
+const FINISH_PROOF_FRAMES = 4;
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
   return new LaneFinishError(`The ${lane} task stopped after three failed finish checks: ${failures}`);
@@ -28,7 +31,7 @@ type Render = (
   times: number[],
   revision?: number,
   timelineId?: string,
-) => Promise<{ revision: number; frames: { time: number; image: string }[] }>;
+) => Promise<{ revision: number; sheet?: string; frames: { time: number; image: string }[] }>;
 
 /** Executes real checks; finish takes no model-provided scores, counts or acceptance flags. */
 export async function finishLane(
@@ -192,12 +195,18 @@ export async function finishLane(
           ),
         );
       try {
-        for (let index = 0; index < times.length; index += 4) {
-          const batch = times.slice(index, index + 4),
+        // This render only proves the changed timeline draws; nobody looks at it. In a standard check the model has
+        // already looked at a sheet of the changed spots (finish refuses until it has), so four evenly spaced frames
+        // are the proof. A final check (export, publish, double-check) draws every changed frame. Gaps, overlaps and
+        // missing media are measured from saved data above either way.
+        const standard = !pendingReview && changedFrameLimit(laneChecks(task.lane, taskCheckLevel(task))) !== undefined;
+        const drawn = standard ? evenly(times, FINISH_PROOF_FRAMES) : times;
+        for (let index = 0; index < drawn.length; index += MAX_SHEET_FRAMES) {
+          const batch = drawn.slice(index, index + MAX_SHEET_FRAMES),
             rendered = await options.render(batch, undefined, tab.timelineId);
           if (
             rendered.frames.length !== batch.length ||
-            rendered.frames.some((frame) => !frame.image)
+            (!rendered.sheet && rendered.frames.some((frame) => !frame.image))
           )
             throw new Error('Changed-range rendering returned missing frames.');
           if (pendingReview) {

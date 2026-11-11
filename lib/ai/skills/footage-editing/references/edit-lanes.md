@@ -31,7 +31,8 @@ A good edit changes only the requested range, keeps everything around it in sync
 - Story restructuring checks every changed spot. An explicit whole-video review is a full double-check.
 
 ### Local and full checks
-- **Local checks:** getFrames at each changed moment and one frame either side (`t - 1/fps`, `t`, `t + 1/fps`, within the timeline).
+- **Local checks:** getFrames at each changed spot; a cut edge is two frames, the one before it and the one after (`t - 1/fps`, `t`). Up to 16 times per call come back as one contact sheet.
+- Scan sparse, then zoom: `range` samples about one frame a second, `around` shows a few consecutive frames at one moment. Never read consecutive frames to watch a clip; the transcript and saved analysis say where to look.
 - Local checks skip full sweeps, repeated finishing passes and checkPacing.
 - **Full checks:** getFrames across every changed range, plus checkPacing or checkSound where motion, timing or sound changed.
 - Rendered checks are required for visual changes in every lane, except the plain reel cleanup above.

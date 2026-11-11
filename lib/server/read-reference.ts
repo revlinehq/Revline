@@ -57,11 +57,11 @@ const timesIn = (start: number, end: number, count: number, source: Source) => {
 const escape = (text: string) => text.replace(/[<>&]/g, char => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' })[char]!);
 
 /** Tiles in a grid, each labeled under it, as one JPEG small enough to hand to a model. */
-export async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number, across?: number, limit = MAX_IMAGE) {
+export async function sheet(tiles: { image: Buffer; label: string; overlay?: string }[], aspect: number, across?: number, limit = MAX_IMAGE, sheetWidth = SHEET_WIDTH) {
   // Up to 4 across for a few frames; dense 10 fps reads (up to 30 frames) go 6 across so motion reads left to right.
   const columns = across ?? (tiles.length <= 4 ? tiles.length : tiles.length <= 16 ? Math.min(4, Math.ceil(Math.sqrt(tiles.length))) : 6);
   const rows = Math.ceil(tiles.length / columns);
-  let tileWidth = Math.floor((SHEET_WIDTH - GAP * (columns + 1)) / columns), quality = 82;
+  let tileWidth = Math.floor((sheetWidth - GAP * (columns + 1)) / columns), quality = 82;
   for (;;) {
     const tileHeight = Math.round(tileWidth / aspect), width = GAP + columns * (tileWidth + GAP), height = GAP + rows * (tileHeight + LABEL + GAP);
     const composites = await Promise.all(tiles.map(async (tile, index) => {

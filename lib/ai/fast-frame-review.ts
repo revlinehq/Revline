@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { LaneEvidence } from './lanes/types';
 import { equalTimelineValue } from '../editor/timeline-equality';
 import { renderedFrameTime, timelineDuration, type Timeline } from '../editor/types';
+import { MAX_SHEET_FRAMES, evenly } from './frame-sampling';
 
 const frameReview = z.object({ pendingFrameTimes: z.array(z.number().nonnegative()) });
 export function readFastFrameTimes(evidence: LaneEvidence[], timelineId: string, fingerprint: string) {
@@ -39,11 +40,12 @@ export function fastReelFrameMoments(tool: string, before: Timeline, after: Time
   return undefined;
 }
 
-/** Pending local frame checks (getFrames at each change ±1 frame), carried between finished runner steps. Lane recipes with frames 'changes' or 'sample' use it. */
+/** Pending local frame checks (getFrames at each changed spot; a cut edge is the frame before and the frame after), carried between finished runner steps. Lane recipes with frames 'changes' or 'sample' use it. */
 export class FastFrameReview {
   private pending: Set<number>;
 
-  constructor(times: number[] = []) { this.pending = new Set(times); }
+  /** `limit` is the most frames a standard check asks the model to look at; undefined asks for all of them (a final check). */
+  constructor(times: number[] = [], private limit: () => number | undefined = () => undefined) { this.pending = new Set(times); }
 
   changed(before: Timeline, after: Timeline, moments?: number[]) {
     if (equalTimelineValue(before, after)) return;
@@ -53,26 +55,42 @@ export class FastFrameReview {
     this.pending = new Set([...this.pending].map(clamp));
     const previous = new Map(before.clips.map(clip => [clip.id, clip]));
     const current = new Map(after.clips.map(clip => [clip.id, clip]));
-    const anchors = moments ?? [
-      ...after.clips.filter(clip => !equalTimelineValue(clip, previous.get(clip.id))).flatMap(clip => {
+    // A clip that only slid along the timeline with everything it shares the picture with (the shots after a ripple
+    // delete or trim) draws the same frames as before. The cut that moved it is checked at the clip that changed.
+    // A neighbour that slid by another amount, or did not move at all, changes the picture, so the clip keeps its edges.
+    const shift = (clip: Timeline['clips'][number]) => {
+      const old = previous.get(clip.id);
+      return old && old.start !== clip.start && equalTimelineValue({ ...clip, start: 0 }, { ...old, start: 0 }) ? Math.round((clip.start - old.start) * fps) : undefined;
+    };
+    const rippled = (clip: Timeline['clips'][number]) => {
+      const moved = shift(clip);
+      return moved !== undefined && after.clips.every(other => other.id === clip.id || other.kind === 'audio' ||
+        other.start >= clip.start + clip.duration || clip.start >= other.start + other.duration ||
+        shift(other) === moved || shift(other) === undefined && !equalTimelineValue(other, previous.get(other.id)));
+    };
+    // A cut edge is two frames: the last one before it and the first one after. A change inside a clip is one frame.
+    const edges: number[] = [], inside: number[] = moments ? [...moments] : [];
+    if (!moments) {
+      for (const clip of after.clips) {
         const old = previous.get(clip.id);
-        return old && old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart
-          ? [clip.start + clip.duration / 2]
-          : [clip.start, clip.start + clip.duration];
-      }),
-      ...before.clips.filter(clip => !current.has(clip.id)).map(clip => clip.start),
-    ];
-    if (!anchors.length && moments === undefined) anchors.push(0);
-    for (const time of anchors) for (const offset of [-1, 0, 1]) this.pending.add(clamp(clamp(time) + offset / fps));
+        if (equalTimelineValue(clip, old) || rippled(clip)) continue;
+        if (old && old.start === clip.start && old.duration === clip.duration && old.sourceStart === clip.sourceStart) inside.push(clip.start + clip.duration / 2);
+        else edges.push(clip.start, clip.start + clip.duration);
+      }
+      edges.push(...before.clips.filter(clip => !current.has(clip.id)).map(clip => clip.start));
+      if (!edges.length && !inside.length) inside.push(0);
+    }
+    for (const time of inside) this.pending.add(clamp(time));
+    for (const time of edges) for (const offset of [-1, 0]) this.pending.add(clamp(clamp(time) + offset / fps));
   }
 
   /** A rendered frame satisfies a pending time it was clamped to, so a queue saved before the timeline end moved still clears. */
   reviewed(times: number[], timeline: Timeline) {
-    const fps = timeline.fps, duration = timelineDuration(timeline);
-    for (const pending of this.pending) {
-      const drawn = renderedFrameTime(pending, duration, fps);
-      if (times.some(time => Math.abs(time - drawn) < .1 / fps)) this.pending.delete(pending);
-    }
+    const fps = timeline.fps, duration = timelineDuration(timeline), asked = this.sample();
+    const seen = (pending: number) => { const drawn = renderedFrameTime(pending, duration, fps); return times.some(time => Math.abs(time - drawn) < .1 / fps); };
+    // Looking at the evenly spaced sample settles a standard check: the rest of a long queue is not asked for.
+    if (this.limit() !== undefined && asked.length && asked.every(seen)) { this.pending.clear(); return; }
+    for (const pending of this.pending) if (seen(pending)) this.pending.delete(pending);
   }
 
   restore(times: number[]) { this.pending = new Set(times); }
@@ -88,7 +106,12 @@ export class FastFrameReview {
   times() { return [...new Set([...this.pending].map(time => Math.round(time * 1000) / 1000))].sort((a, b) => a - b); }
 
   feedback() {
-    const times = this.times();
-    return times.length ? `This lane requires rendered checks before completion. Call getFrames for these changed spots and their adjacent frames, in batches of up to four: ${JSON.stringify(times)}. Inspect the returned images, then finish. No full-video sweep or repeated checks.` : undefined;
+    const all = this.times(), times = this.sample();
+    if (!times.length) return undefined;
+    const spread = times.length < all.length ? ` These are ${times.length} evenly spaced of ${all.length} changed frames; they cover this check.` : '';
+    return `This lane requires rendered checks before completion. Call getFrames with times ${JSON.stringify(times)}${times.length > MAX_SHEET_FRAMES ? `, up to ${MAX_SHEET_FRAMES} per call` : ' in one call'}: each call returns one contact sheet of the changed spots (a cut edge is the frame before it and the frame after).${spread} Look at it, then finish. Do not render the frames in between, sweep the whole video or repeat a check.`;
   }
+
+  /** What the model is asked to look at: every pending time, or at a standard check an evenly spaced sheet of them. */
+  sample() { const all = this.times(), limit = this.limit(); return limit === undefined ? all : evenly(all, limit); }
 }

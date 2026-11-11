@@ -19,7 +19,7 @@ export const definition: LaneDefinition = {
       frames: 'changes',
       fullTools: true,
       boundedReads: false,
-      instructions: 'Full checks for a final export, publish or double-check request: verify retained ranges, linked audio and caption timing from saved data, check every cut and caption change with getFrames including one frame either side, and listen with getSound where a join is uncertain. finish renders every changed range.',
+      instructions: 'Full checks for a final export, publish or double-check request: verify retained ranges, linked audio and caption timing from saved data, check every cut and caption change with getFrames (a cut edge is the frame before it and the frame after, up to 16 times per call), and listen with getSound where a join is uncertain. finish renders every changed range.',
     },
   },
   // Speech edges and the first and last frame are measured locally; only flagged spots cost frames.
