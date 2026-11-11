@@ -1,0 +1,1 @@
+- Library: opening a file’s details no longer resizes or moves tiles and rows; the panel lies over the page’s right edge and the grid keeps its columns. Why: the founder saw tiles change size on every click.

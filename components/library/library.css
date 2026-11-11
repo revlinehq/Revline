@@ -176,12 +176,9 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
 .library-details-used a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .library-details-used svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
 .library-details-used p { margin: 0; color: var(--dash-muted); font-size: 13px; }
-/* The list makes room for the panel: three tiles a row, and the selection bar centres on what is left. */
+/* The panel lies over the page's right edge, so opening it never resizes or moves a tile or a row; only the selection bar steps aside to stay clear of it. */
 @media (min-width: 1280px) {
-  .dash-main > .library-page[data-details] { padding-right: calc(320px + var(--dash-gutter)); }
-  .library-page[data-details] :is(.library-folders, .library-files) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .library-page[data-details] .library-bar { left: calc(50% + var(--dash-sidebar-offset) / 2 - 160px); }
-  .library-page[data-details] :is(.library-col-duration, .library-col-used) { display: none; }
 }
 
 /* Dialogs (portalled to <body>, under the shell's colour mapping). */
