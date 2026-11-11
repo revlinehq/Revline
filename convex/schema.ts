@@ -153,7 +153,7 @@ export const projectFields = {
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId:v.optional(v.string()), ...aiStateFields,
   // Timeline tabs: the open tab's timeline is `timeline`; the others live in projectTimelines.
-  timelineTabs:v.optional(v.array(v.object({id:v.string(),name:v.string(),aspectRatio:v.optional(aspectRatio),duration:v.optional(v.number()),clipCount:v.optional(v.number())}))), activeTimelineId:v.optional(v.string()),
+  timelineTabs:v.optional(v.array(v.object({id:v.string(),name:v.string(),aspectRatio:v.optional(aspectRatio),duration:v.optional(v.number()),clipCount:v.optional(v.number()),bytes:v.optional(v.number())}))), activeTimelineId:v.optional(v.string()),
 };
 export const projectDocument = v.object({ _id: v.id("projects"), _creationTime: v.number(), ...projectFields });
 export const timedText = v.object({ start: v.number(), end: v.number(), text: v.string() });
