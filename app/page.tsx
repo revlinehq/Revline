@@ -22,7 +22,7 @@ const structuredData = {
     {
       '@type': ['SoftwareApplication', 'Product'], '@id': 'https://tryrevline.com/#application',
       name: 'Revline', url: 'https://tryrevline.com', applicationCategory: 'MultimediaApplication',
-      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v4.png',
+      operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v5.png',
       description: 'An AI video editor for people who clip for money: find a campaign that pays per view, let AI cut the clips, and post them to TikTok, Instagram and YouTube.',
       brand: { '@id': 'https://tryrevline.com/#organization' },
       offers: {

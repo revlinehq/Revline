@@ -1,10 +1,12 @@
-/* Public landing, from the design export landing.png: one dark page (#111), #1B1B1B cards, 5% white hairlines, one blue accent. Static: no animation or transitions. */
-.landing,.landing-nav,.landing-footer{--l-content:1200px;--l-gutter:48px;--l-bg:#111;--l-bg-subtle:#1b1b1b;--l-fg:#fff;--l-fg-2:#a1a1a1;--l-fg-3:#737373;--l-border:#ffffff0d;--l-brand:#3960e8;--l-brand-ring:#3960e866;--l-brand-tint:#3960e81f;--l-head:var(--font-inter,'Inter'),sans-serif;--l-body:var(--font-inter,'Inter'),sans-serif;color-scheme:dark}
-/* The blog and use-case pages keep their light reading layout between the dark top bar and footer. */
-.landing:is(.blog-page,.use-case-page){--l-bg:#fff;--l-bg-subtle:#f7f7f8;--l-fg:#121212;--l-fg-2:#5e5e5e;--l-fg-3:#8a8a8a;--l-border:#ebebee;--l-brand-ring:#c9d5fa;--l-brand-tint:#eef2fe;--l-head:var(--landing-font-head,'Outfit'),sans-serif;--l-body:var(--font-geist,'Geist'),sans-serif;color-scheme:light}
+/* Public landing: one light page (#fff), neutral grey cards (#f3f3f3) with hairline borders, dark text, one blue accent.
+   Light for everyone, whatever the OS setting; the signed-in app and sign-in stay dark. Static: no animation or transitions. */
+.landing,.landing-nav,.landing-footer{--l-content:1200px;--l-gutter:48px;--l-bg:#fff;--l-bg-subtle:#f3f3f3;--l-fg:#111;--l-fg-2:#5c5c5c;--l-fg-3:#6e6e6e;--l-border:#e2e2e2;--l-soft:#0000000f;--l-soft-hover:#0000001a;--l-brand:#3960e8;--l-brand-ring:#c9d5fa;--l-brand-tint:#eef2fe;--l-head:var(--font-inter,'Inter'),sans-serif;--l-body:var(--font-inter,'Inter'),sans-serif;color-scheme:light}
+/* The blog and use-case pages share the colours and keep their own reading fonts. */
+.landing:is(.blog-page,.use-case-page){--l-head:var(--landing-font-head,'Outfit'),sans-serif;--l-body:var(--font-geist,'Geist'),sans-serif}
 .landing{background:var(--l-bg);color:var(--l-fg);font-family:var(--l-body);overflow:clip;-webkit-font-smoothing:antialiased}
-body:has(main.landing:not(.blog-page,.use-case-page)){background:#111}
-body:has(main.landing:is(.blog-page,.use-case-page)){background:#fff}
+body:has(main.landing){background:#fff}
+/* The root layout marks every page dark before paint; here the page scrollbar and form controls follow the light page. */
+html:has(main.landing){color-scheme:light!important}
 /* In-page links jump: nothing on the landing pages moves by itself. */
 html:has(main.landing){scroll-behavior:auto}
 .landing *,.landing *::before,.landing *::after{box-sizing:border-box}
@@ -18,37 +20,37 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-section[id],.landing-product-block[id]{scroll-margin-top:92px}
 
 /* Shared UI: components/landing/ui.tsx */
-.landing-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;font:500 14px/1 var(--l-body);white-space:nowrap;color:#fff}
+.landing-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:999px;font:500 14px/1 var(--l-body);white-space:nowrap;color:var(--l-fg)}
 .landing-button[data-size=sm]{height:36px;padding-inline:16px}
 .landing-button[data-size=md]{height:44px;padding-inline:22px}
 .landing-button[data-size=lg]{height:46px;padding-inline:22px}
 .landing-button[data-block]{width:100%}
 .landing-button:disabled{cursor:default;opacity:.7}
 /* The one accent: a blue pill with a lighter highlight along its top edge. */
-.landing-button[data-variant=primary]{background:radial-gradient(60% 100% at 50% 0%,rgb(110 150 255) 0%,rgb(110 150 255 / 0) 100%),#3960e8}
+.landing-button[data-variant=primary]{color:#fff;background:radial-gradient(60% 100% at 50% 0%,rgb(110 150 255) 0%,rgb(110 150 255 / 0) 100%),#3960e8}
 .landing-button[data-variant=primary]:hover{filter:brightness(1.1)}
-.landing-button[data-variant=soft]{background:#ffffff0f}
-.landing-button[data-variant=soft]:hover{background:#ffffff1a}
+.landing-button[data-variant=soft]{background:var(--l-soft)}
+.landing-button[data-variant=soft]:hover{background:var(--l-soft-hover)}
 .landing-button[data-variant=quiet]{padding-inline:8px;background:none}
 .landing-button[data-variant=quiet]:hover{color:var(--l-fg-2)}
 .landing-heading{display:flex;flex-direction:column;align-items:center;gap:14px;max-width:100%;text-align:center}
-.landing-heading h2{font:600 48px/1.1 var(--l-head);letter-spacing:-.035em;color:#fff;text-wrap:balance}
+.landing-heading h2{font:600 48px/1.1 var(--l-head);letter-spacing:-.035em;color:var(--l-fg);text-wrap:balance}
 .landing-heading p{font-size:18px;line-height:1.5;color:var(--l-fg-2);text-wrap:balance}
-/* A screenshot sits in a lighter frame so its dark page does not melt into the landing background. */
+/* A screenshot is dark product UI: it sits in a grey frame with a hairline border, no shadow. */
 .landing-shot{padding:10px;border:1px solid var(--l-border);border-radius:24px;background:var(--l-bg-subtle)}
 .landing-shot img{display:block;width:100%;height:auto;border:1px solid var(--l-border);border-radius:14px}
 
 /* Top bar */
-.landing-nav{position:sticky;top:0;z-index:40;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-inline:max(var(--l-gutter),calc((100% - var(--l-content))/2));border-bottom:1px solid var(--l-border);background:#111;font-family:var(--l-body);color:#fff}
-.landing-nav .landing-brand,.landing-footer-brand strong{font:600 18px/1 var(--l-body);letter-spacing:-.02em;color:#fff}
+.landing-nav{position:sticky;top:0;z-index:40;height:68px;display:flex;align-items:center;justify-content:space-between;gap:16px;padding-inline:max(var(--l-gutter),calc((100% - var(--l-content))/2));border-bottom:1px solid var(--l-border);background:var(--l-bg);font-family:var(--l-body);color:var(--l-fg)}
+.landing-nav .landing-brand,.landing-footer-brand strong{font:600 18px/1 var(--l-body);letter-spacing:-.02em;color:var(--l-fg)}
 .landing-nav-right{display:flex;align-items:center;gap:8px}
 .landing-nav-link{padding-inline:14px;font-size:15px;line-height:36px;color:var(--l-fg-2)}
-.landing-nav-link:hover{color:#fff}
+.landing-nav-link:hover{color:var(--l-fg)}
 
 /* Hero */
 .landing-hero{display:flex;flex-direction:column;gap:100px;padding-block:144px 120px}
 .landing-hero-copy{display:flex;flex-direction:column;align-items:center;gap:32px;text-align:center}
-.landing-hero h1{font:600 96px/1 var(--l-head);letter-spacing:-.045em}
+.landing-hero h1{font:600 96px/1 var(--l-head);letter-spacing:-.045em;text-wrap:balance}
 .landing-hero-copy>p{width:660px;max-width:100%;font-size:22px;line-height:1.55;color:var(--l-fg-2)}
 .landing-hero-actions{display:flex;align-items:center;justify-content:center;flex-wrap:wrap;gap:12px;padding-top:12px}
 .landing-hero-actions .landing-button{padding-inline:48px;font-size:15px}
@@ -57,13 +59,13 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-how{display:flex;flex-direction:column;gap:56px;padding-bottom:140px}
 .landing-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .landing-step{display:flex;flex-direction:column;padding:24px 24px 28px;background:var(--l-bg-subtle);border:1px solid var(--l-border);border-radius:16px}
-.landing-step-number{display:grid;place-items:center;width:30px;height:30px;margin-bottom:22px;border-radius:999px;background:#ffffff14;font-size:14px;font-weight:600}
+.landing-step-number{display:grid;place-items:center;width:30px;height:30px;margin-bottom:22px;border:1px solid var(--l-border);border-radius:999px;background:var(--l-bg);font-size:14px;font-weight:600}
 .landing-step h3{margin-bottom:10px;font:600 18px/1.3 var(--l-head);letter-spacing:-.01em}
 .landing-step p{font-size:16px;line-height:1.4;color:var(--l-fg-2)}
 
 /* Product blocks: copy and screenshot side by side, the middle block mirrored. */
 .landing-product{display:flex;flex-direction:column;gap:24px;padding-bottom:140px}
-/* Each block is a card; its screenshot is the darker card nested inside. */
+/* Each block is a grey card; its dark screenshot is nested inside. */
 .landing-product-block{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,2fr);align-items:center;gap:60px;padding:48px;background:var(--l-bg-subtle);border:1px solid var(--l-border);border-radius:28px}
 .landing-product-block .landing-shot{padding:0;border:0;border-radius:14px;background:none}
 .landing-product-block:nth-child(even){grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
@@ -96,7 +98,7 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-faq{display:flex;flex-direction:column;align-items:center;gap:40px;padding-bottom:160px}
 .landing-faq-list{width:880px;max-width:100%;border-block:1px solid var(--l-border)}
 .landing-faq-list [data-slot=accordion-item]{border-color:var(--l-border)}
-.landing-faq-list [data-slot=accordion-trigger]{align-items:center;gap:24px;padding:26px 0 0;font:500 18px/1.3 var(--l-body);color:#fff}
+.landing-faq-list [data-slot=accordion-trigger]{align-items:center;gap:24px;padding:26px 0 0;font:500 18px/1.3 var(--l-body);color:var(--l-fg)}
 .landing-faq-list [data-slot=accordion-trigger][data-state=closed]{padding-bottom:26px}
 .landing-faq-list [data-slot=accordion-trigger]:hover,.landing-faq-list [data-slot=accordion-trigger]:hover [data-slot=accordion-trigger-icon]{color:var(--l-fg-2)}
 .landing-faq-list [data-slot=accordion-trigger-icon]{width:18px;height:18px;color:var(--l-fg-2)}
@@ -112,16 +114,16 @@ html:has(main.landing){scroll-behavior:auto}
 .landing-final-card .landing-button{font-size:15px}
 
 /* Footer */
-.landing-footer{padding-block:72px 28px;border-top:1px solid var(--l-border);background:#111;font-family:var(--l-body);color:#fff}
+.landing-footer{padding-block:72px 28px;border-top:1px solid var(--l-border);background:var(--l-bg-subtle);font-family:var(--l-body);color:var(--l-fg)}
 .landing-footer-top{display:flex;justify-content:space-between;gap:48px;padding-bottom:64px}
 .landing-footer-brand{display:flex;flex-direction:column;gap:14px}
 .landing-footer-brand p{margin:0;font-size:15px;color:var(--l-fg-2)}
 .landing-footer-columns{display:grid;grid-template-columns:repeat(3,160px)}
 /* Two classes: the use-case and blog pages style their own h2s. */
-.landing-footer .landing-footer-columns h2{margin:0 0 14px;font:600 15px/1.3 var(--l-body);letter-spacing:0;color:#fff}
+.landing-footer .landing-footer-columns h2{margin:0 0 14px;font:600 15px/1.3 var(--l-body);letter-spacing:0;color:var(--l-fg)}
 .landing-footer-columns ul{display:flex;flex-direction:column;gap:10px;margin:0;padding:0;list-style:none}
 .landing-footer-columns a{font-size:15px;line-height:1.3;color:var(--l-fg-2);text-decoration:none}
-.landing-footer-columns a:hover{color:#fff}
+.landing-footer-columns a:hover{color:var(--l-fg)}
 .landing-footer-bottom{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px 24px;padding-top:24px;border-top:1px solid var(--l-border)}
 .landing-footer-bottom small{font-size:14px;line-height:1.5;color:var(--l-fg-3)}
 
@@ -177,3 +179,6 @@ html:has(main.landing){scroll-behavior:auto}
   .landing-nav-link{display:none}
   .landing-nav .landing-button{padding-inline:14px}
 }
+/* shadcn outline buttons on the blog and use-case pages: the app's theme is dark, so they take the light page's colours here. */
+.landing [data-slot=button][data-variant=outline]{border:1px solid var(--l-border);background:var(--l-bg);color:var(--l-fg)}
+.landing [data-slot=button][data-variant=outline]:hover{background:var(--l-bg-subtle);color:var(--l-fg)}

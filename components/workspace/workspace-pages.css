@@ -35,6 +35,9 @@ html[data-workspace-theme="dark"] {
 .workspace-history-menu { width:min(312px,calc(100vw - 24px)); }
 .workspace-menu-chats { max-height:min(300px,40dvh); overflow-y:auto; scrollbar-width:thin; scrollbar-color:var(--ws-border) transparent; }
 .workspace-account-menu { width:min(280px,calc(100vw - 24px)); }
+/* The account menu has one outline, its own edge: spacing separates its groups and the photo has no ring. */
+.workspace-account-menu .workspace-menu-divider { background:transparent; }
+.workspace-account-menu [data-slot=avatar]::after { border:0; }
 .workspace-menu-item { display:flex; align-items:center; gap:10px; min-height:40px; padding:0 10px; border-radius:8px; color:var(--ws-text); font-size:13px; cursor:pointer; }
 .workspace-menu-item[data-highlighted],.workspace-menu-chat[data-highlighted] { background:var(--ws-hover); color:var(--ws-text); }
 .workspace-menu-item svg { color:var(--ws-muted); }

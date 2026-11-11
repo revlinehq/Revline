@@ -72,7 +72,7 @@ function Campaign({ campaign, saved }: { campaign: CampaignView; saved: boolean 
       </div>
       <div className="campaign-actions">
         <Button variant="soft" onClick={() => void toggleSaved()} disabled={saved === undefined || saving} aria-pressed={!!saved}>{saved ? <BookmarkCheck aria-hidden="true" /> : <Bookmark aria-hidden="true" />}{saved ? 'Saved' : 'Save'}</Button>
-        {!campaign.ended && <MakeClipsButton campaignId={campaign._id} name={campaign.name} variant="primary" onError={setError} />}
+        {!campaign.ended && <MakeClipsButton url={campaign.url} variant="primary" />}
       </div>
     </div>
     {error && <p className="campaign-error" role="alert">{error}</p>}
