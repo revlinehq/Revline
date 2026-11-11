@@ -169,6 +169,16 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects')),conf
   return [...projects];
 }});
 
+/** Makes a finished Library upload a project's media and queues its preparation. The caller records its storage. */
+export async function attachLibraryUpload(ctx:MutationCtx,ownerId:string,projectId:Id<'projects'>,library:Doc<'cloudMedia'>,fileName:string) {
+  const {r2Key,contentType,kind,size,duration,width,height}=library;
+  const assetId=await ctx.db.insert('assets',{ownerId,projectId,r2Key,fileName,contentType,kind,size,duration,width,height,createdAt:Date.now()});
+  if(kind!=='image'){
+    await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'extract':'waveform'});
+    await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
+  }
+  return ctx.db.get(assetId);
+}
 export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))},returns:v.id('projects'),handler:async(ctx,{fileIds})=>{
   const ownerId=await requireOwner(ctx);
   const ids=[...new Set(fileIds)];
@@ -194,15 +204,8 @@ export const createEdit=mutation({args:{fileIds:v.array(v.id('storageObjects'))}
   let timeline=normalizeTimeline({clips:[],fps:60,aspectRatio});
   for(const source of sources){
     let asset:Doc<'assets'>|null;
-    if(source.library){
-      const {r2Key,fileName,contentType,kind,size,duration,width,height}=source.library;
-      const assetId=await ctx.db.insert('assets',{ownerId,projectId,r2Key,fileName,contentType,kind,size,duration,width,height,createdAt:Date.now()});
-      asset=await ctx.db.get(assetId);
-      if(kind!=='image'){
-        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'extract':'waveform'});
-        await enqueueMediaTask(ctx,{ownerId,projectId,assetId,kind:kind==='video'?'preview':'transcribe'});
-      }
-    }else{
+    if(source.library)asset=await attachLibraryUpload(ctx,ownerId,projectId,source.library,source.row.fileName);
+    else{
       const candidates=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',ownerId).eq('projectId',projectId)).take(PROJECT_MEDIA_LIMIT);
       asset=candidates.find(asset=>(source.row.r2Key&&asset.r2Key===source.row.r2Key)||(source.row.storageId&&asset.storageId===source.row.storageId))??null;
     }

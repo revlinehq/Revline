@@ -7,12 +7,11 @@ import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
-import { enqueueMediaTask } from './lib/media_queue';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ownedObjectReferences, recordAssetStorage } from './lib/storage_accounting';
-import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
+import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, liveFolderId, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
 import { copyMediaFor } from './projects';
-import { describe, listingReads, storageItem } from './storage';
+import { attachLibraryUpload, describe, listingReads, storageItem } from './storage';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 
 const folderId = v.id('storageFolders');
@@ -22,6 +21,8 @@ const libraryItem = v.object({ ...storageItem.fields, folderId: v.union(folderId
 const visible = (ownerId: string) => ({ ownerId, auxiliary: false, pending: false }) as const;
 const STARTER_FOLDERS = ['Raw footage', 'Exports', 'Audio', 'Images'];
 const WAVEFORM_BARS = 48;
+/** Folder tiles that show thumbnails; the rest of a longer row show the folder alone. */
+const THUMBNAIL_FOLDERS = 48;
 /** Files one folder deletion moves per transaction; the rest follow in scheduled batches. */
 const DRAIN_BATCH = 500;
 
@@ -42,8 +43,8 @@ function waveformBars(waveform: Doc<'assets'>['waveform'] | null) {
 /** The small picture a folder tile shows for one file: the editor's thumbnail, or the image itself. */
 async function tileThumbnail(ctx: QueryCtx, row: Doc<'storageObjects'>) {
   if (row.kind !== 'video' && row.kind !== 'image') return null;
-  const attachments = row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(8)
-    : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(8) : [];
+  const attachments = row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(3)
+    : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(3) : [];
   const thumbnail = attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId;
   return thumbnail ? ctx.storage.getUrl(thumbnail) : row.kind === 'image' ? mediaUrl(ctx, row) : null;
 }
@@ -57,10 +58,11 @@ export const folders = query({ args: { parentId: v.optional(folderId) }, returns
   if (args.parentId && (await ctx.db.get(args.parentId))?.ownerId !== ownerId) return [];
   const rows = (await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', args.parentId)).take(MAX_FOLDERS)).filter(row => !row.deleting);
   rows.sort((a, b) => a.name.localeCompare(b.name));
-  return Promise.all(rows.map(async folder => {
-    // Six newest direct files are enough to find three with a picture.
-    const newest = folder.fileCount ? await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('folderId', folder._id)).order('desc').take(6) : [];
-    const thumbnails = (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(url => url !== null).slice(0, 3);
+  return Promise.all(rows.map(async (folder, index) => {
+    // Pictures come from the three newest files directly in the folder, by index, for the first tiles only:
+    // a long row of folders does not read every folder's files.
+    const newest = folder.fileCount && index < THUMBNAIL_FOLDERS ? await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('folderId', folder._id)).order('desc').take(3) : [];
+    const thumbnails = (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(url => url !== null);
     return { ...summarize(folder), thumbnails };
   }));
 } });
@@ -73,7 +75,9 @@ export const folderTree = query({ args: {}, returns: v.array(v.object(folderSumm
 export const folderPath = query({ args: { folderId: v.string() }, returns: v.union(v.null(), v.array(v.object({ id: folderId, name: v.string() }))), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx), path: { id: Id<'storageFolders'>; name: string }[] = [];
   // The ID comes from the page address, so anything may arrive here.
-  for (let id: Id<'storageFolders'> | undefined | null = ctx.db.normalizeId('storageFolders', args.folderId); id && path.length <= MAX_FOLDER_DEPTH + 1;) {
+  const start = ctx.db.normalizeId('storageFolders', args.folderId);
+  if (!start) return null;
+  for (let id: Id<'storageFolders'> | undefined = start; id && path.length <= MAX_FOLDER_DEPTH + 1;) {
     const folder: Folder | null = await ctx.db.get(id);
     if (!folder || folder.ownerId !== ownerId || folder.deleting) return null;
     path.unshift({ id: folder._id, name: folder.name }); id = folder.parentId;
@@ -81,7 +85,7 @@ export const folderPath = query({ args: { folderId: v.string() }, returns: v.uni
   return path;
 } });
 /** The files directly in one folder (the root when `folderId` is absent). A search covers the whole Library. */
-export const files = query({ args: { paginationOpts: paginationOptsValidator, folderId: v.optional(folderId), search: v.optional(v.string()), unused: v.optional(v.boolean()), sort: v.union(v.literal('newest'), v.literal('oldest'), v.literal('largest'), v.literal('name')) },
+export const files = query({ args: { paginationOpts: paginationOptsValidator, folderId: v.optional(folderId), search: v.optional(v.string()), unused: v.optional(v.boolean()), sort: v.union(v.literal('newest'), v.literal('oldest'), v.literal('largest')) },
   returns: v.object({ page: v.array(libraryItem), isDone: v.boolean(), continueCursor: v.string(), splitCursor: v.optional(v.union(v.string(), v.null())), pageStatus: v.optional(v.union(v.literal('SplitRecommended'), v.literal('SplitRequired'), v.null())) }),
   handler: async (ctx, args) => {
     const ownerId = await requireOwner(ctx);
@@ -89,9 +93,9 @@ export const files = query({ args: { paginationOpts: paginationOptsValidator, fo
     const search = args.search?.trim() ?? ''; if (search.length > 120) throw new ConvexError('Search is too long');
     if (args.folderId && (await ctx.db.get(args.folderId))?.ownerId !== ownerId) return { page: [], isDone: true, continueCursor: '' };
     const base = ctx.db.query('storageObjects'), scope = visible(ownerId);
-    const index = args.sort === 'largest' ? 'by_owner_folder_size' : args.sort === 'name' ? 'by_owner_folder_name' : 'by_owner_folder_created';
+    const index = args.sort === 'largest' ? 'by_owner_folder_size' : 'by_owner_folder_created';
     const listing = search ? base.withSearchIndex('search_name', q => q.search('fileName', search).eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false))
-      : base.withIndex(index, q => q.eq('ownerId', scope.ownerId).eq('auxiliary', scope.auxiliary).eq('pending', scope.pending).eq('folderId', args.folderId)).order(args.sort === 'oldest' || args.sort === 'name' ? 'asc' : 'desc');
+      : base.withIndex(index, q => q.eq('ownerId', scope.ownerId).eq('auxiliary', scope.auxiliary).eq('pending', scope.pending).eq('folderId', args.folderId)).order(args.sort === 'oldest' ? 'asc' : 'desc');
     const page = await listing.paginate(args.paginationOpts);
     const reads = listingReads(ctx), rows = await Promise.all(page.page.map(async row => {
       const { peaks, ...file } = await describe(ctx, row, reads);
@@ -184,10 +188,11 @@ export const move = mutation({ args: { fileIds: v.array(v.id('storageObjects')),
  * already include them, so no total changes. */
 async function drainFiles(ctx: MutationCtx, folder: Folder) {
   let budget = DRAIN_BATCH;
+  const parentId = await liveFolderId(ctx, folder.ownerId, folder.parentId);
   // Unfinished uploads move too, so they finish in the parent.
   for (const pending of [false, true]) {
     const rows = await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', folder.ownerId).eq('auxiliary', false).eq('pending', pending).eq('folderId', folder._id)).take(budget + 1);
-    for (const row of rows.slice(0, budget)) await ctx.db.patch(row._id, { folderId: folder.parentId });
+    for (const row of rows.slice(0, budget)) await ctx.db.patch(row._id, { folderId: parentId });
     if (rows.length > budget) return false;
     budget -= rows.length;
   }
@@ -202,12 +207,14 @@ export const drainFolder = internalMutation({ args: { folderId }, returns: v.nul
 } });
 /** Deletes a folder only. Everything inside it (files and folders) moves up into the folder that held it; no file is
  * deleted. A subfolder whose name is taken there gets a number added. */
-export const removeFolder = mutation({ args: { folderId }, returns: v.object({ files: v.number(), folders: v.number() }), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx), folder = await ownedFolder(ctx, ownerId, args.folderId), all = await ownerFolders(ctx, ownerId), now = Date.now();
-  const children = [...all.values()].filter(child => child.parentId === folder._id), names = siblingNames(all, folder.parentId, folder._id);
-  const direct = { files: folder.fileCount - children.reduce((sum, child) => sum + child.fileCount, 0), folders: children.length };
+export const removeFolder = mutation({ args: { folderId }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), folder = await ownedFolder(ctx, ownerId, args.folderId), now = Date.now();
+  const names = siblingNames(await ownerFolders(ctx, ownerId), folder.parentId, folder._id);
+  // A subfolder still handing its files up (being deleted itself) moves too, so those files keep a live parent.
+  const children = await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', folder._id)).take(MAX_FOLDERS + 100);
   for (const child of children) {
-    const name = freeName(names, child.name); names.push(name);
+    const name = child.deleting ? child.name : freeName(names, child.name);
+    if (!child.deleting) names.push(name);
     await ctx.db.patch(child._id, { parentId: folder.parentId, name, updatedAt: now });
   }
   if (await drainFiles(ctx, folder)) await ctx.db.delete(folder._id);
@@ -215,7 +222,7 @@ export const removeFolder = mutation({ args: { folderId }, returns: v.object({ f
     await ctx.db.patch(folder._id, { deleting: true });
     await ctx.scheduler.runAfter(0, internal.library.drainFolder, { folderId: folder._id });
   }
-  return direct;
+  return null;
 } });
 
 // ── Files ───────────────────────────────────────────────────────────────────────────────────────────────────
@@ -225,12 +232,13 @@ async function ownedFile(ctx: QueryCtx | MutationCtx, ownerId: string, fileId: I
   if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) throw new ConvexError('File not found');
   return row;
 }
-/** Renames the Library entry. A name typed without an extension keeps the old one. Project media keeps its own name. */
+/** Renames the Library entry. The file keeps its extension: it is added back when the new name does not end with it.
+ * Project media keeps its own name. */
 export const renameFile = mutation({ args: { fileId: v.id('storageObjects'), name: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const row = await ownedFile(ctx, await requireOwner(ctx), args.fileId);
   let name = args.name.trim().replace(/[\u0000-\u001f\u007f/\\]+/g, ' ').replace(/\s+/g, ' ').trim();
   const extension = /\.[A-Za-z0-9]{1,8}$/.exec(row.fileName)?.[0];
-  if (name && extension && !/\.[A-Za-z0-9]{1,8}$/.test(name)) name += extension;
+  if (name && extension && !name.toLowerCase().endsWith(extension.toLowerCase())) name += extension;
   if (!name || name.length > 255) throw new ConvexError('A file name needs between 1 and 255 characters');
   if (name !== row.fileName) await ctx.db.patch(row._id, { fileName: name });
   return name;
@@ -253,6 +261,7 @@ export const addToProject = mutation({ args: { fileIds: v.array(v.id('storageObj
   const ids = [...new Set(args.fileIds)];
   if (!ids.length || ids.length > 20) throw new ConvexError('Choose between 1 and 20 files');
   let added = 0, existing = 0;
+  const copies: { source: Doc<'assets'>; fileName: string }[] = [], uploads: { library: Doc<'cloudMedia'>; fileName: string }[] = [];
   for (const id of ids) {
     const row = await ownedFile(ctx, ownerId, id);
     if (row.kind === 'export') throw new ConvexError('An export cannot be added to a project. Download it and upload it as footage.');
@@ -261,27 +270,30 @@ export const addToProject = mutation({ args: { fileIds: v.array(v.id('storageObj
     // An attachment in a live project is copied the way the editor copies media between projects.
     let source: Doc<'assets'> | undefined;
     for (const asset of owned) { const home = await ctx.db.get(asset.projectId); if (home && !home.deleting && home.ownerId === ownerId) { source = asset; break; } }
-    if (source) {
-      const tasks = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', source._id)).order('desc').take(50);
-      if (tasks.some(task => ['queued', 'running', 'retrying'].includes(task.status))) throw new ConvexError(`${row.fileName} is still being prepared in its project. Add it once that finishes.`);
-      const [copy] = await copyMediaFor(ctx, ownerId, project._id, [source._id]);
-      if (copy.copied) { added++; if (source.fileName !== row.fileName) await ctx.db.patch(copy.assetId, { fileName: row.fileName }); } else existing++;
-      continue;
-    }
     const library = refs.library?.ownerId === ownerId && refs.library.completed && !refs.library.aborting ? refs.library : null;
-    if (!library) throw new ConvexError(`${row.fileName} is no longer available`);
-    const inProject = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT + 1);
-    if (inProject.length >= PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
-    const preparation = uploadPreparationTasks(library.kind);
-    if (preparation) await requireMediaTaskCapacity(ctx, ownerId, preparation);
-    const { r2Key, contentType, kind, size, duration, width, height } = library;
-    const assetId = await ctx.db.insert('assets', { ownerId, projectId: project._id, r2Key, fileName: row.fileName, contentType, kind, size, duration, width, height, createdAt: Date.now() });
-    if (kind !== 'image') {
-      await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId, kind: kind === 'video' ? 'extract' : 'waveform' });
-      await enqueueMediaTask(ctx, { ownerId, projectId: project._id, assetId, kind: kind === 'video' ? 'preview' : 'transcribe' });
+    if (source) copies.push({ source, fileName: row.fileName });
+    else if (library) uploads.push({ library, fileName: row.fileName });
+    else throw new ConvexError(`${row.fileName} is no longer available`);
+  }
+  if (copies.length) {
+    // The copy refuses media still being prepared; say so in this page's words first.
+    for (const { source, fileName } of copies) {
+      const tasks = await ctx.db.query('mediaTasks').withIndex('by_asset_kind', q => q.eq('assetId', source._id)).order('desc').take(50);
+      if (tasks.some(task => ['queued', 'running', 'retrying'].includes(task.status))) throw new ConvexError(`${fileName} is still being prepared in its project. Add it once that finishes.`);
     }
-    await recordAssetStorage(ctx, (await ctx.db.get(assetId))!);
-    added++;
+    const results = await copyMediaFor(ctx, ownerId, project._id, copies.map(copy => copy.source._id));
+    for (const [index, result] of results.entries()) {
+      if (!result.copied) { existing++; continue; }
+      added++;
+      if (copies[index].source.fileName !== copies[index].fileName) await ctx.db.patch(result.assetId, { fileName: copies[index].fileName });
+    }
+  }
+  if (uploads.length) {
+    const inProject = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT + 1);
+    if (inProject.length + uploads.length > PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
+    const preparation = uploads.reduce((total, upload) => total + uploadPreparationTasks(upload.library.kind), 0);
+    if (preparation) await requireMediaTaskCapacity(ctx, ownerId, preparation);
+    for (const { library, fileName } of uploads) { await recordAssetStorage(ctx, (await attachLibraryUpload(ctx, ownerId, project._id, library, fileName))!); added++; }
   }
   return { added, existing };
 } });

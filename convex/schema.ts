@@ -380,7 +380,7 @@ export default defineSchema({
     folderId:v.optional(v.id('storageFolders')) })
     .index('by_owner_key',['ownerId','objectKey']).index('by_owner_visible_size',['ownerId','auxiliary','pending','size']).index('by_owner_visible_created',['ownerId','auxiliary','pending','createdAt'])
     .index('by_owner_kind_size',['ownerId','auxiliary','pending','kind','size']).index('by_owner_kind_created',['ownerId','auxiliary','pending','kind','createdAt'])
-    .index('by_owner_folder_created',['ownerId','auxiliary','pending','folderId','createdAt']).index('by_owner_folder_size',['ownerId','auxiliary','pending','folderId','size']).index('by_owner_folder_name',['ownerId','auxiliary','pending','folderId','fileName'])
+    .index('by_owner_folder_created',['ownerId','auxiliary','pending','folderId','createdAt']).index('by_owner_folder_size',['ownerId','auxiliary','pending','folderId','size'])
     .searchIndex('search_name',{searchField:'fileName',filterFields:['ownerId','auxiliary','pending','kind']}),
   /** Library folders. `fileCount` and `totalBytes` cover the whole subtree (finished, visible files only) and are
    * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
