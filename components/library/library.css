@@ -158,6 +158,9 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
 .library-details-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: var(--dash-muted); font-size: 13px; }
 .library-details-preview { position: relative; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; border-radius: 10px; background: var(--dash-card); aspect-ratio: 16 / 9; }
 .library-details-preview :is(video, .library-file-thumb) { width: 100%; height: 100%; border-radius: 0; object-fit: contain; }
+.library-details-preview .library-file-thumb img { object-fit: contain; }
+/* Sized from the file's own ratio, never cropped: as wide as the panel, narrower when a tall file would pass the height cap. */
+.library-details-preview[data-sized] { --preview-max-height: min(400px, 46dvh); align-self: center; width: min(100%, calc(var(--preview-max-height) * var(--preview-ratio))); aspect-ratio: var(--preview-ratio); }
 .library-details-preview audio { width: calc(100% - 20px); }
 .library-details-play[data-slot=button] { position: absolute; width: 40px; height: 40px; border-radius: 9999px; background: #000000A6; color: #fff; }
 .library-details-play[data-slot=button]:hover { background: #000000D9; }
