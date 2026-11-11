@@ -1,0 +1,1 @@
+- Assistant tools: restored the `refineTranscriptWithAudioActivity` import that `setSplitEdits` uses. Why: #340 and #343 merged cleanly together but left main failing typecheck, blocking merges and the release.
