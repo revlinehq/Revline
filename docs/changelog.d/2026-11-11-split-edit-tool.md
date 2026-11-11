@@ -1,0 +1,1 @@
+- Assistant and MCP: `setSplitEdits` sets J and L cuts on every cut in one call, choosing per cut from word timings, clamping to the footage available and skipping short pieces with a reason. Why: the old tool failed the whole batch on one short clip, so the assistant hand-built J-cuts that broke.

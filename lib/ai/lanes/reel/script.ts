@@ -243,10 +243,14 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
   if (!script) return [];
   const asset = assets.find(item => item._id === script.assetId), transcript = asset?.analysis?.transcript;
   if (!asset || !transcript?.words.length) return [];
-  const spans = timeline.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && (clip.assetId === asset._id || !!asset.audioAssetId && clip.assetId === asset.audioAssetId))
-    .map(clip => ({ start: clip.sourceStart, end: sourceEndOf(clip) }));
+  const pieces = timeline.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && (clip.assetId === asset._id || !!asset.audioAssetId && clip.assetId === asset.audioAssetId));
+  const span = (clip: Timeline['clips'][number]) => ({ start: clip.sourceStart, end: sourceEndOf(clip) });
+  const shown = pieces.map(span);
   // The take left the timeline: nothing of this script to check.
-  if (!spans.length) return [];
+  if (!shown.length) return [];
+  // Words are kept by the sound. A J or L cut holds the picture over removed speech; that picture keeps no word.
+  const heard = pieces.filter(clip => clip.kind === 'audio' || !clip.audioSeparated).map(span);
+  const spans = heard.length ? heard : shown;
   const outline = scriptOutline(transcript, script.spans), { words, lines } = outline;
   // A provider word's end can run on through trailing silence, past where the measured cut ends: the word is kept when its onset is.
   const kept = (word: Word) => { const onset = wordAnchor(word); return spans.some(span => onset >= span.start && onset < span.end); };
@@ -277,7 +281,7 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
   }
   for (const shot of script.broll ?? []) {
     if (!shot.kept) continue;
-    const covered = spans.reduce((sum, span) => sum + Math.max(0, Math.min(span.end, shot.end) - Math.max(span.start, shot.start)), 0);
+    const covered = shown.reduce((sum, span) => sum + Math.max(0, Math.min(span.end, shot.end) - Math.max(span.start, shot.start)), 0);
     if (covered < (shot.end - shot.start) * .8) failures.push(`The b-roll shot at source ${seconds(shot.start)} to ${seconds(shot.end)} was cut out. It is footage the user placed, not silence: keep it where it is (pass planScript's ranges unchanged).`);
   }
   return failures.slice(0, 5);

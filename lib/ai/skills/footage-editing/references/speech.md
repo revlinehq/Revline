@@ -26,9 +26,8 @@ A good speech edit keeps every retained sentence complete and natural, cuts only
 - Listen only to an uncertain short join or an actual audio problem.
 
 ## J and L cuts
-- Use setSplitEdits selectively, where source handles and inspected context (b-roll, a reaction shot) make a speech join smoother.
-- Keep visible speaking mouths in sync: a same-camera talking-head jump cut stays a straight cut.
-- Never apply J/L to every cut or alternate them mechanically.
-- Batch all chosen edges in one call after inspectTimeline.
-- Keep speech audio and caption timing unchanged; never repeat words or fabricate room tone.
-- Follow the user's explicit cut preferences.
+- One setSplitEdits call, after the speech cut and any edge moves: it sets every cut on the layer (or `cuts` by timeline second), unlinks the affected picture from its sound and keeps both in sync. Never hand-build a split edit with unlink, trim, split or move.
+- type auto (default) reads the word timings per cut: J where the next line starts on the cut, L where the outgoing line runs up to it; it skips cuts with silence on both sides or one continuous take. Name J or L only for the user's explicit choice.
+- Use it when the user asks (J-cuts, L-cuts, smoother cuts, hide the jump cuts) or where a different shot meets a line: another speaker's clip handing off to the take, b-roll or a reaction under the end of a line. On a same-camera jump cut the picture shows removed footage for those frames, so leave those straight unless asked.
+- The sound edit and caption timing stay where the words put them; the default offset is a third of a second and is limited by the footage beside each piece. fadeFrames 1 to 2 only for an audible click.
+- Report the result's cuts and skippedCuts in a line; type none removes a split edit.
