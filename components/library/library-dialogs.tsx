@@ -56,14 +56,14 @@ export function MoveDialog({ tree, fileIds, folderIds, current, onClose, onMoved
     catch (reason) { setError(userError(reason, 'Could not move this. Please retry.')); setBusy(false); }
   }
   const option = (id: FolderId | 'root', name: string, depth: number, blocked: boolean) => <li key={id}>
-    <button type="button" className="library-tree-row" role="option" aria-selected={target === id} disabled={blocked || id === here} style={{ paddingLeft: 10 + depth * 18 }} onClick={() => setTarget(id)} onDoubleClick={() => void submit()}>
+    <Button variant="ghost" className="library-tree-row" aria-pressed={target === id} disabled={blocked || id === here} style={{ paddingLeft: 10 + depth * 18 }} onClick={() => setTarget(id)} onDoubleClick={() => void submit()}>
       {target === id ? <FolderOpen aria-hidden="true" /> : <Folder aria-hidden="true" />}<span>{name}</span>{id === here && <small>Current folder</small>}
-    </button>
+    </Button>
   </li>;
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="library-dialog library-move-dialog" showCloseButton={false}>
     <DialogTitle>Move {count === 1 ? '1 item' : `${count} items`}</DialogTitle>
     <DialogDescription>Choose where {count === 1 ? 'it goes' : 'they go'}.</DialogDescription>
-    <ul className="library-tree" role="listbox" aria-label="Folders">{option('root', 'Library', 0, false)}{rows.map(row => option(row.folder.id, row.folder.name, row.depth, row.blocked))}</ul>
+    <ul className="library-tree" aria-label="Folders">{option('root', 'Library', 0, false)}{rows.map(row => option(row.folder.id, row.folder.name, row.depth, row.blocked))}</ul>
     {error && <p className="dash-error" role="alert">{error}</p>}
     <div className="library-dialog-actions"><Button variant="soft" disabled={busy} onClick={onClose}>Cancel</Button><Button variant="primary" disabled={busy || !target} onClick={() => void submit()}>{busy ? 'Moving…' : 'Move here'}</Button></div>
   </DialogContent></Dialog>;
@@ -101,8 +101,8 @@ export function AddToProjectDialog({ files, onClose }: { files: LibraryFile[]; o
       <DialogDescription>{plural(files.length, 'file')} · {formatBytes(files.reduce((sum, file) => sum + file.size, 0))}. Files go into the project’s Media, not onto its timeline.</DialogDescription>
       <div className="library-search library-dialog-search"><Search aria-hidden="true" /><Input type="search" aria-label="Search projects" placeholder="Search projects" value={search} onChange={event => setSearch(event.target.value)} /></div>
       <ul className="library-tree" aria-label="Projects">
-        {!term && <li><button type="button" className="library-tree-row" disabled={!!busy || !!blocked || files.some(file => !file.canCreateEdit)} onClick={() => void startNew()}><Plus aria-hidden="true" /><span>{busy === 'new' ? 'Creating project…' : 'New project'}</span></button></li>}
-        {projects.map(project => <li key={project._id}><button type="button" className="library-tree-row" disabled={!!busy || !!blocked} onClick={() => void choose(project)}><Clapperboard aria-hidden="true" /><span>{project.title}</span>{busy === project._id && <small>Adding…</small>}</button></li>)}
+        {!term && <li><Button variant="ghost" className="library-tree-row" disabled={!!busy || !!blocked || files.some(file => !file.canCreateEdit)} onClick={() => void startNew()}><Plus aria-hidden="true" /><span>{busy === 'new' ? 'Creating project…' : 'New project'}</span></Button></li>}
+        {projects.map(project => <li key={project._id}><Button variant="ghost" className="library-tree-row" disabled={!!busy || !!blocked} onClick={() => void choose(project)}><Clapperboard aria-hidden="true" /><span>{project.title}</span>{busy === project._id && <small>Adding…</small>}</Button></li>)}
         {status === 'LoadingFirstPage' && <li className="library-tree-note">Loading your projects…</li>}
         {status !== 'LoadingFirstPage' && !projects.length && <li className="library-tree-note">{term ? 'No project matches.' : 'You have no projects yet.'}</li>}
         {status === 'CanLoadMore' && <li><Button variant="ghost" size="sm" onClick={() => loadMore(24)}>Load more projects</Button></li>}

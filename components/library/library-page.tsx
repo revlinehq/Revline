@@ -28,9 +28,9 @@ import { LibraryUsage } from './library-usage';
 import { useLibraryUpload, type UploadRow } from './use-library-upload';
 import './library.css';
 
-type Sort = 'newest' | 'oldest' | 'largest' | 'name';
+type Sort = 'newest' | 'oldest' | 'largest';
 type View = 'grid' | 'list';
-const SORTS: Record<Sort, string> = { newest: 'Newest', oldest: 'Oldest', largest: 'Largest', name: 'Name' };
+const SORTS: Record<Sort, string> = { newest: 'Newest', oldest: 'Oldest', largest: 'Largest' };
 const VIEWS = [{ value: 'grid', label: <LayoutGrid aria-label="Grid view" /> }, { value: 'list', label: <List aria-label="List view" /> }] as const;
 /** Delete and Add to project take 20 files a call, so a selection holds that many. */
 const MAX_SELECTED = 20;
@@ -133,7 +133,9 @@ export function LibraryPage() {
     onDragEnter: (event: DragEvent) => { if (!fromDesktop(event)) return; dragDepth.current++; setDropping(true); },
     onDragOver: (event: DragEvent) => { if (fromDesktop(event)) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; } },
     onDragLeave: (event: DragEvent) => { if (!fromDesktop(event)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (!dragDepth.current) setDropping(false); },
-    onDrop: (event: DragEvent) => { dragDepth.current = 0; setDropping(false); if (!fromDesktop(event)) return; event.preventDefault(); uploads.enqueue(Array.from(event.dataTransfer.files), folderId); },
+    // A folder tile takes its own drops and stops them there, so the overlay is cleared on the way down.
+    onDropCapture: () => { dragDepth.current = 0; setDropping(false); },
+    onDrop: (event: DragEvent) => { if (!fromDesktop(event)) return; event.preventDefault(); uploads.enqueue(Array.from(event.dataTransfer.files), folderId); },
   };
 
   // Projects that a delete took with it finish cleaning up in the background.
@@ -214,7 +216,7 @@ export function LibraryPage() {
           {results.map(file => <TableRow key={file.id} className="library-row" data-selected={selected.has(file.id) || undefined} data-active={activeId === file.id || undefined} draggable
             onDragStart={event => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload(file))); event.dataTransfer.effectAllowed = 'move'; }} onClick={event => open(file, event.metaKey || event.ctrlKey || event.shiftKey)}>
             <TableCell className="library-col-check" onClick={event => event.stopPropagation()}><Checkbox aria-label={`Select ${file.fileName}`} checked={selected.has(file.id)} onCheckedChange={() => toggle(file)} /></TableCell>
-            <TableCell><span className="library-row-name"><FileThumb file={file} badge={false} /><button type="button" title={file.fileName}>{file.fileName}</button></span></TableCell>
+            <TableCell><span className="library-row-name"><FileThumb file={file} badge={false} /><Button variant="ghost" title={file.fileName}>{file.fileName}</Button></span></TableCell>
             <TableCell className="library-col-type">{KIND_LABELS[file.kind]}</TableCell><TableCell className="library-col-size">{formatBytes(file.size)}</TableCell>
             <TableCell className="library-col-duration">{file.duration !== null && formatDuration(file.duration)}</TableCell>
             <TableCell className="library-col-used">{file.workspaces.length > 1 ? plural(file.workspaces.length, 'project') : file.workspaces[0]?.title ?? 'Not used'}</TableCell>
@@ -253,6 +255,6 @@ function FolderRow({ folder, renaming, onRename, onRenameEnd, menu, onOpen, onDr
     <TableCell><span className="library-row-name"><span className="library-file-thumb" data-kind="folder"><Folder aria-hidden="true" /></span>{renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <Link href={folderHref(folder.id)} title={folder.name} onClick={event => event.stopPropagation()}>{folder.name}</Link>}</span></TableCell>
     <TableCell className="library-col-type">Folder</TableCell><TableCell className="library-col-size">{formatBytes(folder.totalBytes)}</TableCell><TableCell className="library-col-duration" />
     <TableCell className="library-col-used">{folderMeta(folder).split(' · ')[0]}</TableCell><TableCell className="library-col-date">{shortDate(folder.updatedAt)}</TableCell>
-    <TableCell className="library-col-more" onClick={event => event.stopPropagation()}>{menu}</TableCell>
+    <TableCell className="library-col-more" onClick={event => event.stopPropagation()}>{!renaming && menu}</TableCell>
   </TableRow>;
 }

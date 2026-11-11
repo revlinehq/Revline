@@ -44,7 +44,8 @@ export function useLibraryUpload() {
           const details = { ...metadata, kind, fileName: file.name, contentType: file.type, size: file.size };
           // Choosing a file whose upload was interrupted continues it.
           await uploadResumable<Id<'cloudMedia'>, null>(file, {
-            scope: 'library',
+            // A file sent to another folder is a new upload: an interrupted one would finish in its first folder.
+            scope: folderId ? `library:${folderId}` : 'library',
             start: () => startDirect(options => folderId ? call.startInFolder({ ...details, folderId, ...options }) : call.start({ ...details, ...options })),
             resume: (uploadId, parts) => call.resume({ uploadId, size: file.size, parts }).catch(reason => { if (!backendLacks(reason)) throw reason; return undefined; }),
             // Each request for links marks the upload active; small batches keep that mark current on slow lines.

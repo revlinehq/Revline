@@ -99,12 +99,12 @@ type FileProps = { file: LibraryFile; selected: boolean; active: boolean; onOpen
 export function FileTile({ file, selected, active, onOpen, onToggle, dragPayload }: FileProps) {
   return <div className="library-file" data-selected={selected || undefined} data-active={active || undefined} draggable
     onDragStart={event => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload())); event.dataTransfer.effectAllowed = 'move'; }}>
-    <button type="button" className="library-file-hit" aria-label={`Details for ${file.fileName}`} aria-pressed={active} onClick={event => onOpen(event.metaKey || event.ctrlKey || event.shiftKey)}>
+    <Button variant="ghost" className="library-file-hit" aria-label={`Details for ${file.fileName}`} aria-pressed={active} onClick={event => onOpen(event.metaKey || event.ctrlKey || event.shiftKey)}>
       <FileThumb file={file} />
       <strong title={file.fileName}>{file.fileName}</strong>
       <small>{formatBytes(file.size)} · {shortDate(file.createdAt)}</small>
       {file.workspaces.length > 0 && <small className="library-file-used"><Clapperboard aria-hidden="true" />{usedIn(file)}</small>}
-    </button>
+    </Button>
     <Checkbox className="library-file-check" aria-label={`Select ${file.fileName}`} checked={selected} onCheckedChange={onToggle} />
   </div>;
 }

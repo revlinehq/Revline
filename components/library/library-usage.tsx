@@ -26,10 +26,10 @@ export function LibraryUsage({ summary }: { summary?: Summary }) {
   if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="animate-none h-1 w-[84px]" /><Skeleton className="animate-none h-3 w-20" /></div>;
   return <>
     <Popover>
-      <PopoverTrigger asChild><button type="button" className="library-usage" aria-label={`${formatBytes(summary.usedBytes)} used. Show storage by kind`}>
+      <PopoverTrigger asChild><Button variant="ghost" className="library-usage" aria-label={`${formatBytes(summary.usedBytes)} used. Show storage by kind`}>
         <span className="library-meter" aria-hidden="true">{KINDS.map(([field]) => <i key={field} data-kind={field} style={{ width: `${summary.usedBytes > 0 ? summary[field] / summary.usedBytes * 100 : 0}%` }} />)}</span>
         <span>{formatBytes(summary.usedBytes)} used</span>
-      </button></PopoverTrigger>
+      </Button></PopoverTrigger>
       <PopoverContent align="end" className="library-usage-panel">
         <strong>{formatBytes(summary.usedBytes)} used</strong>
         <ul>{KINDS.map(([field, label]) => <li key={field}><i data-kind={field} />{label}<span>{formatBytes(summary[field])}</span></li>)}</ul>
