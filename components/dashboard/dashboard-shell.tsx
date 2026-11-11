@@ -1,13 +1,14 @@
 'use client';
 
-import { useRef, type MouseEvent, type ReactNode } from 'react';
+import { useRef, useState, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { Sidebar, SidebarContent, SidebarGroup, SidebarGroupLabel, SidebarHeader, SidebarInset, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from '@/components/ui/sidebar';
 import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
-import { DashboardShellContext } from './shell-context';
+import { DashboardNavbarContext, DashboardShellContext } from './shell-context';
+import { DashboardNavbar } from './dashboard-navbar';
 import { DASHBOARD_NAV, activeDashboardItem, type DashboardNavItem } from './dashboard-nav';
 import './dashboard.css';
 
@@ -35,7 +36,9 @@ function NavRow({ item, active }: { item: DashboardNavItem; active: boolean }) {
 
 export function DashboardShell({ children, defaultOpen = true }: { children: ReactNode; defaultOpen?: boolean }) {
   const active = activeDashboardItem(usePathname());
-  return <DashboardShellContext.Provider value={true}>
+  // The one navbar. A page that adds controls to it (the Campaigns switch) reaches this element through context.
+  const [navbarItems, setNavbarItems] = useState<HTMLElement | null>(null);
+  return <DashboardShellContext.Provider value={true}><DashboardNavbarContext.Provider value={navbarItems}>
     <SidebarProvider defaultOpen={defaultOpen} className="dash-shell dash-theme" style={{ '--sidebar-width': 'var(--dash-sidebar-width)' } as React.CSSProperties}>
       <Sidebar collapsible="icon" className="dash-sidebar">
         <SidebarHeader className="dash-sidebar-header"><Link href="/campaigns" className="dash-wordmark">Revline</Link><SidebarTrigger className="dash-sidebar-toggle" aria-label="Collapse or expand the sidebar" /></SidebarHeader>
@@ -46,7 +49,10 @@ export function DashboardShell({ children, defaultOpen = true }: { children: Rea
           </SidebarGroup>)}
         </SidebarContent>
       </Sidebar>
-      <SidebarInset className="dash-main">{children}</SidebarInset>
+      <SidebarInset className="dash-main">
+        <DashboardNavbar itemsRef={setNavbarItems} />
+        {children}
+      </SidebarInset>
     </SidebarProvider>
-  </DashboardShellContext.Provider>;
+  </DashboardNavbarContext.Provider></DashboardShellContext.Provider>;
 }

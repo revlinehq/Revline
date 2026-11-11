@@ -8,7 +8,6 @@ import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -73,8 +72,7 @@ export function PostsPage() {
     { name: 'Posted', rows: rows.filter(row => !row.scheduled).sort((a, b) => b.time - a.time) },
   ].filter(section => section.rows.length);
   const newPost = <Button variant="primary" onClick={() => setComposing(true)}><Plus aria-hidden="true" />New post</Button>;
-  return <div className="dash-page">
-    <DashboardNavbar title="Posts" />
+  return <>
     <main className="dash-content posts-page">
       <h1 className="sr-only">Posts</h1>
       {error && <p className="dash-error" role="alert">{error}</p>}
@@ -88,7 +86,7 @@ export function PostsPage() {
     </main>
     {composing && <PostDialog onPostsPage onClose={() => setComposing(false)} />}
     <Dialog open={!!links} onOpenChange={open => { if (!open) setLinks(null); }}><DialogContent className="post-dialog post-dialog-links"><div className="post-dialog-head"><DialogTitle>Campaign links</DialogTitle></div><div className="post-dialog-done"><DialogDescription>Content Rewards cannot receive these from Revline, so submit them there by hand.</DialogDescription>{links && <BatchLinks batchId={links} />}</div></DialogContent></Dialog>
-  </div>;
+  </>;
 }
 
 function PostRow({ row, busy, onRetry, onCancel, onLinks }: { row: Row; busy: boolean; onRetry: () => void; onCancel: () => void; onLinks: () => void }) {

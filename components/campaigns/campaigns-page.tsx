@@ -7,7 +7,7 @@ import { api } from '@/convex/_generated/api';
 import type { CampaignView } from '@/convex/campaignsModel';
 import { Button } from '@/components/ui/button';
 import { Segmented } from '@/components/ui/segmented';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
+import { DashboardNavbarItems } from '@/components/dashboard/dashboard-navbar';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import { CampaignCard } from './campaign-card';
 import { timeAgo } from './campaign-format';
@@ -95,8 +95,8 @@ function MyCampaigns({ now }: { now: number }) {
 export function CampaignsPage({ view }: { view: CampaignsView }) {
   const router = useRouter();
   const now = useNow();
-  return <div className="dash-page">
-    <DashboardNavbar title="Campaigns"><Segmented aria-label="Which campaigns to show" value={view} options={VIEWS} onValueChange={next => router.replace(next === 'mine' ? '/campaigns?view=mine' : '/campaigns')} /></DashboardNavbar>
+  return <>
+    <DashboardNavbarItems><Segmented aria-label="Which campaigns to show" value={view} options={VIEWS} onValueChange={next => router.replace(next === 'mine' ? '/campaigns?view=mine' : '/campaigns')} /></DashboardNavbarItems>
     {view === 'mine' ? <MyCampaigns now={now} /> : <AllCampaigns now={now} />}
-  </div>;
+  </>;
 }

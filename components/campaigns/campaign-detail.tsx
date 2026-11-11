@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { DashboardNavbar } from '@/components/dashboard/dashboard-navbar';
 import { userError } from '@/lib/user-error';
 import { CampaignImage } from './campaign-card';
 import { budgetSpentPercent, count, isNewCampaign, money, timeAgo } from './campaign-format';
@@ -92,10 +91,7 @@ export function CampaignDetail({ campaignId }: { campaignId: string }) {
   const { isAuthenticated } = useConvexAuth();
   const campaign = useQuery(api.campaigns.get, isAuthenticated ? { campaignId: campaignId as Id<'campaigns'> } : 'skip');
   const mine = useQuery(api.campaigns.mine, isAuthenticated ? {} : 'skip');
-  return <div className="dash-page">
-    <DashboardNavbar back={{ href: '/campaigns' }} />
-    {campaign === undefined ? <main className="dash-content"><p className="campaigns-loading" role="status">Loading the campaign…</p></main>
-      : campaign === null ? <main className="dash-content"><div className="dash-empty"><h2>Campaign not found</h2><p>It may have been removed. Go back to see the campaigns you can clip for.</p></div></main>
-      : <Campaign campaign={campaign} saved={mine?.some(entry => entry.saved && entry.campaign._id === campaign._id)} />}
-  </div>;
+  return campaign === undefined ? <main className="dash-content"><p className="campaigns-loading" role="status">Loading the campaign…</p></main>
+    : campaign === null ? <main className="dash-content"><div className="dash-empty"><h2>Campaign not found</h2><p>It may have been removed. Go back to see the campaigns you can clip for.</p></div></main>
+    : <Campaign campaign={campaign} saved={mine?.some(entry => entry.saved && entry.campaign._id === campaign._id)} />;
 }
