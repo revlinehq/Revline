@@ -1,6 +1,6 @@
 ---
 name: "talking-head-graphics"
-description: "Sets the house look for titles and captions over a talking head: minimal captions, short text titles and layout around the speaker. Read before adding titles or captions over footage; user direction and brand fonts and colors override these defaults."
+description: "Sets the house look for titles and captions over a talking head: minimal captions, short text titles and layout around the speaker. Read before adding titles or captions over footage; user direction overrides these defaults."
 ---
 # Talking-head graphics
 
@@ -33,7 +33,7 @@ A good result keeps the face clear, shows one title at a time in step with the w
 | Timing | each word appears at its spoken time |
 
 ## Rules
-- Explicit user direction overrides the house defaults; confirmed brand fonts and colors override the remaining defaults.
+- Explicit user direction overrides the house defaults.
 - Never repeat the spoken words as a title: they are already in the captions. A title names the idea, a number or a label.
 - The speaker stays clear: titles take the free half of a split screen or the lower third, never cover the face.
 - One title at a time; the previous one leaves before the next idea starts.

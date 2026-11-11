@@ -8,7 +8,6 @@
 .choice-card [data-slot=field-content]>[data-slot=field-label]{-webkit-line-clamp:3;line-clamp:3}
 .choice-card [data-slot=field-description]{-webkit-line-clamp:4;line-clamp:4}
 .choice-card [data-slot=radio-group]{gap:6px}
-.choice-card-logo{flex:none;width:22px;height:22px;background:currentColor;mask-size:contain;mask-repeat:no-repeat;mask-position:center;-webkit-mask-size:contain;-webkit-mask-repeat:no-repeat;-webkit-mask-position:center}
 .choice-card-send{align-self:flex-start}
 /* Options with pictures (style previews, rendered frames) take the full chat width, the picture above the label, big enough to judge. */
 .choice-card [data-slot=field-label]:has(.choice-card-image){gap:0;overflow:hidden}

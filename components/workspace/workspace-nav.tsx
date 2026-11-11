@@ -76,7 +76,7 @@ export function chatRecency(timestamp: number) {
 export interface WorkspaceNavProps {
   title?: string;
   editorHref?: string;
-  active?: 'chat' | 'chats' | 'profile' | 'storage' | 'brand-kits' | 'accounts' | 'posts';
+  active?: 'chat' | 'chats' | 'profile' | 'storage' | 'accounts' | 'posts';
   demo?: boolean;
   saving?: boolean;
   saveFailed?: boolean;
@@ -122,7 +122,7 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
   const [renameOpen, setRenameOpen] = useState(false);
   const [newTitle, setNewTitle] = useState(title);
   // Account pages sit under the workspace; they show where you are, not the chat menu.
-  const settingsPage = active === 'profile' || active === 'storage' || active === 'brand-kits' || active === 'accounts' || active === 'posts';
+  const settingsPage = active === 'profile' || active === 'storage' || active === 'accounts' || active === 'posts';
   const [renameBusy, setRenameBusy] = useState(false);
   const [renameError, setRenameError] = useState('');
   const [copiedId, setCopiedId] = useState(false);
