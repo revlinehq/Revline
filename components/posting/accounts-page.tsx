@@ -56,8 +56,10 @@ export function AccountsPage({ connected }: { connected?: string }) {
             <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} />
             <span className="dash-list-row-name">@{account.username}{account.status === 'needs_reconnect' && account.error && !/expired/i.test(account.error) && <small>{account.error}</small>}</span>
             {account.status === 'needs_reconnect'
-              ? <><span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />Sign-in expired</span><Button variant="soft" size="sm" disabled={!live || !!busy} onClick={() => void connect(platform, account.id)}>Reconnect</Button></>
+              ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />Sign-in expired</span>
               : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
+            {/* Signing in again renews this account in place: new tokens, name and picture. It is the main action only when the sign-in is broken. */}
+            <Button variant={account.status === 'needs_reconnect' ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
