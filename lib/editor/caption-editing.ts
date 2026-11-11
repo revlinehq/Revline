@@ -24,11 +24,19 @@ function validateAppearance(clip:Clip){
 /** Copy appearance only. Each target keeps its own words, timing and animation. */
 export function applyCaptionStyle(timeline:Timeline,sourceClipId:string,targetIds?:string[]):Timeline{
   const source=caption(timeline,sourceClipId),selected=targets(timeline,targetIds);
-  // A caption in a preset lends the preset, word motion included.
-  if(source.captionPreset)return applyCaptionPreset(timeline,source.captionPreset.id,[...selected],new Map(),{popScale:source.captionPreset.popScale,popDuration:source.captionPreset.popDuration});
   validateAppearance(source);
+  const presetSource=source.captionPreset&&source.textTemplate?.preset==='karaoke'?source.textTemplate:undefined;
   const style=textStyle(source),patch={fontFamily:source.fontFamily??'space-grotesk' as const,fontSize:style.fontSize,color:templateTextProps(source,source.start,timeline.fps)?.color??style.color,background:style.background,x:style.x,y:style.y,blendMode:source.blendMode??'normal' as const,textStyle:resolvedTextAppearance(source),textGradient:source.textGradient?{...source.textGradient,offset:0}:undefined,transform:{...DEFAULT_TRANSFORM,...source.transform}};
-  return {...timeline,clips:timeline.clips.map(clip=>selected.has(clip.id)?{...clip,...patch}:clip)};
+  return {...timeline,clips:timeline.clips.map(clip=>{
+    if(!selected.has(clip.id)||clip.id===source.id)return clip;
+    // A preset caption lends its preset, as edited, with its word motion: each target keeps its own word timings.
+    if(presetSource){
+      const own=clip.textTemplate?.preset==='karaoke'?clip.textTemplate:undefined;
+      return {...clip,...patch,captionPreset:{...source.captionPreset!},textTemplate:{preset:'karaoke' as const,duration:own?.duration??clip.duration,offset:own?.offset??0,...(own?.wordTimings?{wordTimings:own.wordTimings}:{}),...(presetSource.highlightColor?{highlightColor:presetSource.highlightColor}:{}),...(presetSource.karaokeStyle?{karaokeStyle:presetSource.karaokeStyle}:{})}};
+    }
+    // A plain look replaces a target's preset: its word styling would otherwise keep drawing over the copied look.
+    return clip.captionPreset?{...clip,...patch,captionPreset:undefined,...(clip.textTemplate?.preset==='karaoke'?{textTemplate:undefined}:{})}:{...clip,...patch};
+  })};
 }
 /** Patch requested appearance fields only; animation changes are a separate explicit action. */
 export function patchCaptionStyles(timeline:Timeline,changes:CaptionStyleChanges,targetIds?:string[]):Timeline{
@@ -103,10 +111,21 @@ export function applyCaptionPreset(timeline:Timeline,id:CaptionPresetId,targetId
   return {...timeline,clips:timeline.clips.map(clip=>{
     if(!selected.has(clip.id))return clip;
     const template=clip.textTemplate?.preset==='karaoke'?clip.textTemplate:undefined,saved=template?.wordTimings;
-    const timings=saved??captionWordTimings(timeline,clip,speech);
-    // Timings are kept only where they belong to these words; another template's frozen timing is dropped.
-    const base:Clip={...clip,textTemplate:{preset:'karaoke',duration:template?.duration??clip.duration,offset:template?.offset??0,...(timings?{wordTimings:timings}:{})}};
+    // Saved timings keep their template clock; timings read now are measured from the clip's start, so the clock restarts there.
+    const read=saved?undefined:captionWordTimings(timeline,clip,speech);
+    const clock=saved?{duration:template!.duration??clip.duration,offset:template!.offset??0}:{duration:clip.duration,offset:0};
+    const base:Clip={...clip,textTemplate:{preset:'karaoke',...clock,...(saved??read?{wordTimings:(saved??read)!}:{})}};
     const next={...base,...captionPresetPatch(base,id,tuning)};
     validateAppearance(next);return next;
   })};
+}
+
+/** Captions among the targets (all captions without targets) with no saved word timings. */
+export function untimedCaptions(timeline:Timeline,targetIds?:readonly string[]):Clip[]{
+  return timeline.clips.filter(clip=>clip.kind==='caption'&&(!targetIds||targetIds.includes(clip.id))&&!(clip.textTemplate?.preset==='karaoke'&&clip.textTemplate.wordTimings));
+}
+/** The footage assets whose transcripts can time those captions: video or sound under one of them. */
+export function captionTimingSources(timeline:Timeline,targetIds?:readonly string[]):string[]{
+  const untimed=untimedCaptions(timeline,targetIds);
+  return [...new Set(timeline.clips.filter(footage=>footage.assetId&&(footage.kind==='video'||footage.kind==='audio')&&untimed.some(clip=>footage.start<clip.start+clip.duration&&clip.start<footage.start+footage.duration)).map(footage=>footage.assetId!))];
 }

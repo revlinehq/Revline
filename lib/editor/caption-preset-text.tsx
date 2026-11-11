@@ -1,21 +1,12 @@
 import { Fragment, type CSSProperties } from 'react';
 import { captionMotion, captionPreset, type CaptionPreset, type ClipCaptionPreset } from './caption-presets';
 import { textGradientFill } from './text-gradient';
+import { cubicBezierAt } from './motion-path';
 import { textAppearance, textTypographyStyle } from './text-style';
 import type { TemplateTextProps, WordTiming } from './text-templates';
 
 /** CSS cubic-bezier(x1,y1,x2,y2) as a function of progress 0–1 (y may overshoot 1). */
-export function cubicBezier(x1: number, y1: number, x2: number, y2: number) {
-  const at = (a: number, b: number, t: number) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
-  const slope = (a: number, b: number, t: number) => 3 * a * (1 - t) ** 2 + 6 * (b - a) * t * (1 - t) + 3 * (1 - b) * t * t;
-  return (x: number) => {
-    if (x <= 0) return 0;
-    if (x >= 1) return 1;
-    let t = x;
-    for (let i = 0; i < 8; i++) { const d = slope(x1, x2, t); if (Math.abs(d) < 1e-6) break; t -= (at(x1, x2, t) - x) / d; t = Math.max(0, Math.min(1, t)); }
-    return at(y1, y2, t);
-  };
-}
+const cubicBezier = (x1: number, y1: number, x2: number, y2: number) => (x: number) => x <= 0 ? 0 : x >= 1 ? 1 : cubicBezierAt([x1, y1, x2, y2], x);
 /** The word's spring: eases up past its target and settles (the reviewed page's cubic-bezier(.34,1.45,.5,1)). */
 const spring = cubicBezier(.34, 1.45, .5, 1);
 /** A new caption line rising in. */

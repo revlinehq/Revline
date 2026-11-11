@@ -6,9 +6,12 @@ import type { TextGradient } from './text-gradient';
 /**
  * Caption presets: complete caption looks with word-by-word motion, applied to captions in one step by the
  * assistant (applyCaptionStyle / addSubtitlesFromTranscript `preset`), MCP clients and the editor's Effects tab.
- * Sizes are design pixels on a 1080-wide frame. The look is written into the clip's ordinary fields (font, size,
- * colours, stroke, box), so it stays editable and an older renderer still draws it; `captionPreset` on the clip
- * adds the motion, drawn by `CaptionPresetText` in the preview, frames and exports alike.
+ * Sizes are design pixels on a 1080-wide frame. The base look is written into the clip's ordinary fields (font,
+ * size, colours, stroke, shadow, caption box, highlight colour), so it stays editable (setTextStyle, styleCaptions)
+ * and an older renderer still draws it. `captionPreset` adds the rest from this table (capitals, per-word boxes,
+ * dimming, growth, tilt) and the word motion, drawn by `CaptionPresetText` in the preview, frames and exports
+ * alike, while the clip's template is karaoke. A text look, another template or animation, or a plain caption's
+ * style copied over it ends the preset.
  */
 export const CAPTION_PRESET_IDS = ['bold-pop', 'karaoke-box', 'clean-minimal', 'impact-caps', 'comic-punch', 'marker', 'two-tone-stack', 'gradient-hype', 'tiktok-outline', 'tiktok-box', 'reels'] as const;
 export type CaptionPresetId = typeof CAPTION_PRESET_IDS[number];

@@ -26,14 +26,15 @@ export function textTemplatePatch(clip: Clip, preset: TextTemplatePreset): Parti
   const speech=preset==='karaoke'&&clip.textTemplate?.wordTimings?clip.textTemplate:undefined;
   const clock=clip.textTemplate?.preset===preset?clip.textTemplate:speech;
   const controls = clip.textTemplate ? Object.fromEntries((['strength','revealDuration','stagger'] as const).filter(key=>clip.textTemplate![key]!==undefined).map(key=>[key,clip.textTemplate![key]])) : {};
-  return { textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clock?.duration??clip.duration, offset: clock?.offset??0, ...controls, ...(speech?{wordTimings:speech.wordTimings,...(speech.karaokeStyle?{karaokeStyle:speech.karaokeStyle}:{})}:{}), ...(highlightColor ? { highlightColor } : {}) } };
+  // Choosing a template or animation ends a caption preset's word motion.
+  return { captionPreset: undefined, textStyle: resolvedTextAppearance(clip), textAnimationTiming: undefined, textTemplate: { preset, duration: clock?.duration??clip.duration, offset: clock?.offset??0, ...controls, ...(speech?{wordTimings:speech.wordTimings,...(speech.karaokeStyle?{karaokeStyle:speech.karaokeStyle}:{})}:{}), ...(highlightColor ? { highlightColor } : {}) } };
 }
 
 /** One animation selection replaces motion, while words and appearance stay untouched. */
 export function textAnimationPatch(clip: Clip, preset: TextAnimationPreset): Partial<Clip> {
   return TEXT_TEMPLATE_PRESETS.includes(preset as TextTemplatePreset)
     ? { ...textTemplatePatch(clip, preset as TextTemplatePreset), animation: 'none', motion: [], motionOffset: 0 }
-    : { ...textEffectPatch(clip, preset as TextEffectPreset), textStyle: resolvedTextAppearance(clip), textTemplate: undefined };
+    : { ...textEffectPatch(clip, preset as TextEffectPreset), textStyle: resolvedTextAppearance(clip), textTemplate: undefined, captionPreset: undefined };
 }
 
 export function selectedTextEffect(clip: Clip): TextEffectPreset | null {

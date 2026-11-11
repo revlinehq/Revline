@@ -73,7 +73,7 @@ import { PUNCH_LIMITS } from '../../lib/editor/motion-effect-settings';
 import { TEXT_EFFECT_PRESETS, TEXT_ANIMATION_PRESETS,TEXT_ANIMATION_LABELS,textAnimationPatch, textEffectPatch, textTemplatePatch } from '../../lib/editor/text-effects';
 import { TEXT_LOOKS,textLookPatch } from '../../lib/editor/text-looks';
 import { TEXT_FONTS } from '../../lib/editor/text-fonts';
-import { applyCaptionPreset,applyCaptionStyle,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../../lib/editor/caption-editing';
+import { applyCaptionPreset,applyCaptionStyle,captionTimingSources,patchCaptionStyles,patchTextStyles,updateCaptionTiming } from '../../lib/editor/caption-editing';
 import { CAPTION_MOTION_LIMITS,CAPTION_PRESET_GUIDE,CAPTION_PRESETS,findCaptionPreset } from '../../lib/editor/caption-presets';
 import { captionSpeech, captionsCoverTranscript, sourceCaptions } from '../../lib/editor/transcript-captions';
 import { AUDIO_LIMITS,audioSettings,audioSettingsPatch,configureAudio } from '../../lib/editor/audio-settings';
@@ -1296,12 +1296,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const chosen=resolveCaptionPreset(preset!);
       // Captions made without word timings get them from the transcript of the footage beneath them.
       await editSession.wait();
-      const untimed=editSession.timeline.clips.some(clip=>clip.kind==='caption'&&(!targetClipIds||targetClipIds.includes(clip.id))&&!(clip.textTemplate?.preset==='karaoke'&&clip.textTemplate.wordTimings));
       const speech=new Map<string,{transcript:Transcript;edges?:number[]}>();
-      if(untimed)for(const id of new Set(editSession.timeline.clips.flatMap(clip=>(clip.kind==='video'||clip.kind==='audio')&&clip.assetId?[clip.assetId]:[]))){
-        const known=assets.find(asset=>asset._id===id);if(!known?.analysisKinds?.includes('transcribe')&&!known?.analysis?.transcript)continue;
-        const loaded=await loadAsset(id).catch(()=>undefined),saved=loaded&&captionSpeech(loaded.analysis);if(saved)speech.set(id,saved);
-      }
+      const sources=captionTimingSources(editSession.timeline,targetClipIds).filter(id=>{const known=assets.find(asset=>asset._id===id);return !!known&&(!!known.analysisKinds?.includes('transcribe')||!!known.analysis?.transcript);});
+      await Promise.all(sources.map(async id=>{const loaded=await loadAsset(id).catch(()=>undefined),saved=loaded&&captionSpeech(loaded.analysis);if(saved)speech.set(id,saved);}));
       const result=await checkpoint(t=>applyCaptionPreset(t,chosen.id,targetClipIds,speech,{...(popScale!==undefined?{popScale}:{}),...(popSpeed!==undefined?{popDuration:popSpeed}:{})}));
       return {...result,preset:{number:chosen.number,name:chosen.name,id:chosen.id}};
     }}),

@@ -17,12 +17,15 @@ export function legacyRenderTimeline<T extends Pick<Timeline, 'clips'>>(timeline
     const font = missing.fonts ? legacyTextFont(clip.fontFamily) : undefined;
     if (font) next = { ...next, fontFamily: font };
     if (missing.presets && clip.captionPreset) {
-      const preset = captionPreset(clip.captionPreset.id);
       const { captionPreset: _, ...rest } = next;
-      next = { ...rest, ...(preset.uppercase && rest.text ? { text: rest.text.toLocaleUpperCase('en-US') } : {}) };
-      if (preset.wordBox?.color) next = { ...next, background: preset.wordBox.color };
-      if (next.textTemplate?.preset === 'karaoke') {
-        const { karaokeStyle: __, ...template } = next.textTemplate;
+      next = rest;
+      // The preset is drawn only over its karaoke template (templateTextProps); otherwise it was inert already.
+      const karaoke = next.textTemplate?.preset === 'karaoke' ? next.textTemplate : undefined;
+      if (karaoke) {
+        const preset = captionPreset(clip.captionPreset.id);
+        if (preset.uppercase && next.text) next = { ...next, text: next.text.toLocaleUpperCase('en-US') };
+        if (preset.wordBox?.color) next = { ...next, background: preset.wordBox.color };
+        const { karaokeStyle: __, ...template } = karaoke;
         next = preset.legacy ? { ...next, textTemplate: { ...template, karaokeStyle: preset.legacy } } : (({ textTemplate: ___, ...without }) => without)(next);
       }
     }
