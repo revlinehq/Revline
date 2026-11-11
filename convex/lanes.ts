@@ -421,7 +421,11 @@ export const recordFinish = internalMutation({
     // A pass clears the count: the first failure after it starts again at one.
     const counted = last ? row.attempts : 0;
     const attempt = args.result.passed ? row.attempts + 1 : stuck || !last ? counted + 1 : Math.max(1, counted);
-    const checks = (row.result?.checks ?? row.attempts) + (args.result.passed ? 0 : 1);
+    // The hard stop counts failed checks since the task last passed. A pass is convergence: a long job (one tab per
+    // clip, finish after each batch) starts its next round with the full budget instead of carrying every earlier
+    // round's failures, which closed a 48-clip task, finish included (issue #357).
+    // Opening another tab clears the stored result (addBaseline) but not the count, so only a recorded pass resets it.
+    const checks = args.result.passed ? 0 : (row.result?.passed ? 0 : row.result?.checks ?? row.attempts) + 1;
     const result = {
         ...args.result,
         lane: isLane(row.lane) ? row.lane : 'edit',

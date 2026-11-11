@@ -28,6 +28,9 @@ export function capabilityTools(name: string): readonly string[] {
 export function laneToolNames(lane: LaneId, capabilities: readonly string[] = []) {
   return [...new Set([...BASE_TOOLS, ...PROJECT_BASE_TOOLS, ...LANES[lane].tools, ...capabilities.flatMap(capabilityTools)])];
 }
+// Every task ends with finish, so every lane's tools include it. Checked when the module loads: a lane list without
+// finish fails the Convex deploy and the app build instead of shipping (issue #357).
+for (const lane of Object.keys(LANES) as LaneId[]) if (!laneToolNames(lane).includes('finish')) throw new Error(`The ${lane} lane's tools lack finish; every task must be able to end.`);
 export function laneToolAllowed(lane: LaneId, tool: string, capabilities: readonly string[] = []) {
   return laneToolNames(lane, capabilities).includes(tool);
 }
