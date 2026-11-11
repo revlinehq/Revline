@@ -36,6 +36,8 @@ export default function proxy(request: NextRequest, event: NextFetchEvent) {
     destination.port = '';
     return NextResponse.redirect(destination, 308);
   }
+  // Site-ownership files (public/tiktok*.txt) are fetched by a crawler; serve the file itself with no auth handshake.
+  if (/^\/tiktok[A-Za-z0-9]+\.txt$/.test(url.pathname)) return NextResponse.next();
   // This public renderer shell authenticates project reads with the native Convex JWT.
   // A web-session handshake would navigate WKWebView outside its pinned player URL.
   if (/^\/mobile\/player\/[^/]+\/?$/.test(request.nextUrl.pathname)) return NextResponse.next();
