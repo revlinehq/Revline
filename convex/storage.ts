@@ -53,9 +53,9 @@ export function listingReads(ctx:QueryCtx):DescriptionReads {
     activeExport:async(ownerId,id,assetIds)=>usedByActiveExport(ctx,ownerId,id,assetIds,await cached(exports,key(ownerId,id),()=>activeExportGroups(ctx,ownerId,id))),
   };
 }
-/** `duration` and `peaks` are for the Library listing; `files` returns the rest. */
+/** `duration`, `peaks`, `width` and `height` are for the Library listing; `files` returns the rest. */
 export async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'>,reads?:DescriptionReads) {
-  const result={duration:null as number|null,peaks:null as Doc<'assets'>['waveform']|null,canCreateEdit:false,cloudOnly:false,id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
+  const result={duration:null as number|null,width:null as number|null,height:null as number|null,peaks:null as Doc<'assets'>['waveform']|null,canCreateEdit:false,cloudOnly:false,id:row._id,fileName:row.fileName,kind:row.kind,size:row.size,createdAt:row.createdAt,workspaces:[] as {id:Doc<'projects'>['_id'];title:string}[],inUse:false,canDelete:false,protectedReason:null as string|null,thumbnailUrl:null as string|null};
   if(row.kind==='export') {
     const job=row.jobId?await ctx.db.get(row.jobId):null;
     if(!job||job.ownerId!==row.ownerId){result.protectedReason='This export is unavailable';return result;}
@@ -66,6 +66,9 @@ export async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'
   result.canCreateEdit=row.kind!=='model'&&(!!refs.library?.completed||refs.attachments.some(asset=>asset.kind!=='model'));
   result.cloudOnly=!!refs.library?.completed&&!refs.attachments.length;
   result.duration=refs.library?.duration??refs.attachments.find(asset=>asset.duration)?.duration??null;
+  // Display size as measured at upload (after rotation), so a preview takes the file's own shape.
+  const sized=refs.library?.width&&refs.library.height?refs.library:refs.attachments.find(asset=>asset.width&&asset.height);
+  if(sized?.width&&sized.height){result.width=sized.width;result.height=sized.height;}
   if(row.kind==='audio')result.peaks=refs.attachments.find(asset=>asset.waveform)?.waveform??null;
   // Listing previews reuse the editor's small JPEG thumbnail; an image falls back to itself.
   const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
@@ -101,7 +104,7 @@ export const files=query({args:{paginationOpts:paginationOptsValidator,kind:v.op
     : base.withIndex(args.sort==='largest'?'by_owner_visible_size':'by_owner_visible_created',q=>q.eq('ownerId',ownerId).eq('auxiliary',false).eq('pending',false)).order('desc');
   const page=await listing.paginate(args.paginationOpts);
   const reads=listingReads(ctx),rows=await Promise.all(page.page.map(row=>describe(ctx,row,reads)));
-  const visible=(args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows).map(({duration:_duration,peaks:_peaks,...file})=>file);
+  const visible=(args.unused?rows.filter(row=>row.canDelete&&!row.inUse):rows).map(({duration:_duration,peaks:_peaks,width:_width,height:_height,...file})=>file);
   return {...page,page:visible};
 }});
 /** The projects a deletion takes with it: those whose edit uses a selected file, and those the selection would leave

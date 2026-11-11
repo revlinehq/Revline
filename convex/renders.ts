@@ -1,4 +1,4 @@
-import { recordIncident, incidentDeployment } from './lib/incidents';
+import { recordIncidentSafely, incidentDeployment } from './lib/incidents';
 import { deleteRenderSnapshot, saveRenderSnapshot } from './lib/render_snapshots';
 import { clipExportTimeline } from '../lib/editor/clip-export';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
@@ -112,7 +112,7 @@ export const failStalled = internalMutation({ args: {}, returns: v.null(), handl
       if (active) await failMediaTask(ctx, active._id, error);
       const current = await ctx.db.get(job._id);
       if (current && (current.status === 'queued' || current.status === 'rendering')) {
-        await recordIncident(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render', ...(active ? { attempt: active.attempt, progress: active.progress } : {}) }, projectId: job.projectId, deployment: incidentDeployment() });
+        await recordIncidentSafely(ctx, { source: 'export', kind: 'export', message: error, context: { location: 'convex/renders:failStalled', jobId: job._id, taskKind: 'render', ...(active ? { attempt: active.attempt, progress: active.progress } : {}) }, projectId: job.projectId, deployment: incidentDeployment() });
         await ctx.db.patch(job._id, { status: 'failed', error, updatedAt: now });
         await ctx.scheduler.runAfter(0, internal.postExports.settle, { jobId: job._id });
       }

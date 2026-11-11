@@ -24,6 +24,8 @@ Reel means one coherent short-form rough cut: transcript/audio first, false star
 
 The reel lane reads a take as a script before cutting: `readScript` (deterministic outline: lines, opening, closing, repeated takes, chatter, b-roll shots) then `planScript` (the model's beats and priorities; saved on the task row as `script`, returns the ranges to cut). `finish` holds the cut to that plan. An app reel request on a raw take refuses the first speech cut until the plan exists; MCP flows without a plan are unchanged.
 
+After any speech cut, in every lane, `readCutScript` reads the cut back (`lib/ai/lanes/reel/cut-script.ts`): the surviving words in timeline order from each clip’s source range and the saved word timings, with flags for a repeat, a clipped word, a half sentence and a long pause. `remove` cuts flagged repeats and false starts out in one change. A task that read its cut is held to it by `finish`, which fails on unaccepted flags that sit at a cut. It hears only what the transcript holds. Speech cuts on plain footage and clips that only moved queue no rendered frame checks (`speechCutMoments`, `FastFrameReview.changed`): gaps and overlaps are timeline data.
+
 Eyes are one shared layer in `lib/ai/eyes` (measured face signals from the media worker's `looks` read, flags, a per-task frame budget, strips of about 480 px frames) with a per-lane policy on `LaneDefinition.eyes`: which spots, which flags, how many frames, what fails `finish`.
 
 - `reel` (enforced): speech edges plus the first and last frame; `checkSpots` measures, shows 3 frames per flagged spot, one extra round of 5, 27 per request; `finish` fails on an unreviewed flagged first or last frame and reports the rest. B-roll: shots with no face, one frame each, at most 6.

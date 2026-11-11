@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { Clapperboard, Pencil, Play, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { userError } from '@/lib/user-error';
-import { KIND_LABELS, formatBytes, formatDuration, longDate } from './format';
+import { KIND_LABELS, formatBytes, formatDimensions, formatDuration, longDate } from './format';
 import { FileThumb, RenameInput, type LibraryFile } from './library-tiles';
 
 /** One file, in a panel beside the list: preview, name (renamed in place), facts and the projects that use it. */
@@ -16,17 +16,23 @@ export function LibraryDetails({ file, selectedCount, folderName, onClose }: { f
   const [playing, setPlaying] = useState(false), [renaming, setRenaming] = useState(false), [error, setError] = useState('');
   const playable = file.kind === 'video' || file.kind === 'audio' || file.kind === 'export';
   const url = useQuery(api.library.previewUrl, playing && playable ? { fileId: file.id } : 'skip');
+  // The preview takes the file's own shape: the size stored at upload, else what the thumbnail or the playing video reports.
+  const [measured, setMeasured] = useState<{ id: string; width: number; height: number; exact: boolean } | null>(null);
   useEffect(() => { setPlaying(false); setRenaming(false); setError(''); }, [file.id]);
+  const seen = measured?.id === file.id ? measured : null;
+  const size = file.width && file.height ? { width: file.width, height: file.height, exact: true } : seen;
+  const measure = (width: number, height: number, exact: boolean) => { if (width && height && !(seen?.exact && !exact)) setMeasured({ id: file.id, width, height, exact }); };
   async function save(name: string) {
     setRenaming(false); setError('');
     try { await rename({ fileId: file.id, name }); } catch (reason) { setError(userError(reason, 'Could not rename this file. Please retry.')); }
   }
-  const facts: [string, string][] = [['Type', KIND_LABELS[file.kind]], ['Size', formatBytes(file.size)], ...(file.duration !== null ? [['Duration', formatDuration(file.duration)] as [string, string]] : []), ['Uploaded', longDate(file.createdAt)], ['Folder', folderName]];
+  const facts: [string, string][] = [['Type', KIND_LABELS[file.kind]], ['Size', formatBytes(file.size)], ...(file.duration !== null ? [['Duration', formatDuration(file.duration)] as [string, string]] : []), ...(size?.exact ? [['Dimensions', formatDimensions(size.width, size.height)] as [string, string]] : []), ['Uploaded', longDate(file.createdAt)], ['Folder', folderName]];
   return <aside className="library-details" aria-label={`Details for ${file.fileName}`}>
     <div className="library-details-head"><span>{selectedCount > 1 ? `1 of ${selectedCount} selected` : 'Details'}</span><Button variant="ghost" size="icon" className="dash-more" aria-label="Close details" onClick={onClose}><X /></Button></div>
-    <div className="library-details-preview">
-      {playing && url ? (file.kind === 'audio' ? <audio src={url} controls autoPlay /> : <video src={url} controls autoPlay playsInline poster={file.thumbnailUrl ?? undefined} />) : <>
-        <FileThumb file={file} badge={false} />
+    <div className="library-details-preview" data-sized={size && file.kind !== 'audio' ? '' : undefined} style={size && file.kind !== 'audio' ? { '--preview-ratio': size.width / size.height } as CSSProperties : undefined}>
+      {playing && url ? (file.kind === 'audio' ? <audio src={url} controls autoPlay /> : <video src={url} controls autoPlay playsInline poster={file.thumbnailUrl ?? undefined}
+        onLoadedMetadata={event => measure(event.currentTarget.videoWidth, event.currentTarget.videoHeight, true)} />) : <>
+        <FileThumb file={file} badge={false} onImageSize={file.kind === 'audio' ? undefined : (width, height) => measure(width, height, false)} />
         {playable && <Button variant="soft" size="icon" className="library-details-play" aria-label={`Play ${file.fileName}`} onClick={() => setPlaying(true)}><Play /></Button>}
       </>}
     </div>

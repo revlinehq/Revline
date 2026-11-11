@@ -782,6 +782,9 @@ export const tick = internalMutation({
     // Confirmation cards of the assistant that nobody pressed, a week after they expired.
     const stale = await ctx.db.query('postingProposals').withIndex('by_expiresAt', q => q.lte('expiresAt', now - 7 * 86400_000)).take(100);
     for (const proposal of stale) await ctx.db.delete(proposal._id);
+    // The assistant's export cards (convex/assistantExports.ts), on the same schedule.
+    const staleExports = await ctx.db.query('exportProposals').withIndex('by_expiresAt', q => q.lte('expiresAt', now - 7 * 86400_000)).take(100);
+    for (const proposal of staleExports) await ctx.db.delete(proposal._id);
     return null;
   },
 });

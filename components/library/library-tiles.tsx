@@ -84,10 +84,10 @@ export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDr
 }
 
 /** The picture of a file: its thumbnail, its waveform, or its type icon; with the duration in a corner. */
-export function FileThumb({ file, badge = true }: { file: LibraryFile; badge?: boolean }) {
+export function FileThumb({ file, badge = true, onImageSize }: { file: LibraryFile; badge?: boolean; onImageSize?: (width: number, height: number) => void }) {
   const Icon = KIND_ICONS[file.kind];
   return <span className="library-file-thumb" data-kind={file.kind} data-wave={file.waveform ? '' : undefined}>
-    {file.thumbnailUrl ? <img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false} />
+    {file.thumbnailUrl ? <img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false} onLoad={onImageSize && (event => onImageSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight))} />
       : file.waveform ? <span className="library-wave" aria-hidden="true">{file.waveform.map((value, index) => <i key={index} style={{ height: `${Math.max(6, value * 100)}%` }} />)}</span>
       : <Icon aria-hidden="true" />}
     {badge && file.duration !== null && <span className="library-file-duration">{formatDuration(file.duration)}</span>}

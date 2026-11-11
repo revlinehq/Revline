@@ -17,7 +17,15 @@ import { dirname, join } from "node:path";
 import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import { parseVideoLink } from "../editor/video-link";
+import {
+  EXACT_IMPORT_CUT_SECONDS,
+  MAX_IMPORT_SECONDS,
+  SUPPORTED_LINKS,
+  importClock,
+  importLimitText,
+  parseVideoLink,
+  type VideoLink,
+} from "../editor/video-link";
 import { AnalysisError, isMediaDiskFull } from "../media-analysis/errors";
 import { videoImporterPath } from "./worker-tool-path";
 import { z } from "zod";
@@ -28,7 +36,7 @@ const run = promisify(execFile);
 const DISK_PER_IMPORT_BYTE = 4;
 const tooLarge = () =>
   new AnalysisError(
-    "This video is too large for the media worker to import right now. Upload it as a file instead.",
+    "This video is too large for the media worker to import right now. Import a shorter part with start and end, or upload it as a file instead.",
     400,
   );
 const blocked = new BlockList();
@@ -73,7 +81,7 @@ async function videoResponse(
 ): Promise<import("node:http").IncomingMessage> {
   const link = parseVideoLink(value);
   if (link.kind !== "file")
-    throw new AnalysisError("Use a direct MP4 link for this download.", 400);
+    throw new AnalysisError("Use a direct video-file link for this download.", 400);
   const url = new URL(link.url);
   const addresses = await lookup(url.hostname, { all: true, verbatim: true });
   if (
@@ -97,7 +105,7 @@ async function videoResponse(
           },
           headers: {
             "User-Agent": "Revline/1.0",
-            Accept: "video/mp4,application/octet-stream",
+            Accept: "video/*,application/octet-stream",
             ...headers,
           },
         },
@@ -132,13 +140,12 @@ async function videoResponse(
   const type = response.headers["content-type"]?.split(";")[0].trim();
   if (
     type &&
-    !["video/mp4", "application/octet-stream", "binary/octet-stream"].includes(
-      type,
-    )
+    !type.startsWith("video/") &&
+    !["application/octet-stream", "binary/octet-stream"].includes(type)
   ) {
     response.destroy();
     throw new AnalysisError(
-      "That link opens a webpage instead of an MP4. Use the direct video link.",
+      `That link opens a webpage, not a video file, and its site is not one Revline imports. Supported links: ${SUPPORTED_LINKS}. Otherwise download the video and upload the file.`,
       400,
     );
   }
@@ -263,7 +270,7 @@ const IMPORT_STRATEGIES: ImportStrategy[] = [
 let preferredStrategy = IMPORT_STRATEGIES[0];
 /** Nothing another client or route can fix. */
 const PERMANENT_REFUSAL =
-  /private video|video unavailable|has been removed|copyright|age.restricted|confirm your age|members.only|not available in your country/i;
+  /private video|video unavailable|has been removed|copyright|age.restricted|confirm your age|members.only|subscribers?.only|only available (?:to|for) subscribers|not available in your country/i;
 /** The site answered but would not hand over the media: another client, format or route may work. */
 const SITE_REFUSAL =
   /HTTP Error 40[13]|HTTP Error 429|unable to download video data|sign in|confirm.*bot|requested format.*not available|no video formats|needs to be reloaded|po.?token/i;
@@ -333,9 +340,12 @@ export function videoImporter() {
   }
   return importer.ready;
 }
-/** Any length imports. With a range, only that window downloads, cut on exact frames. */
+/** yt-dlp prints this before its filters run, so a filtered-out video still says why. */
+const META = "REVLINE_META";
+/** With a range, only that window downloads, cut on exact frames. A whole video is limited to
+ * MAX_IMPORT_SECONDS and cannot be a broadcast still in progress. (Twitch VODs take twitchVodArguments.) */
 function youtubeArguments(
-  url: string,
+  link: VideoLink,
   path: string,
   maxBytes: number,
   range: ImportRange | undefined,
@@ -348,11 +358,22 @@ function youtubeArguments(
         "--force-keyframes-at-cuts",
       ]
     : [];
+  const filters = range
+    ? [
+        "--match-filters",
+        `duration > ${range.start} & !is_live`,
+        "--match-filters",
+        `duration >= ${range.end} & is_live`,
+      ]
+    : ["--match-filters", `!is_live & duration <=? ${MAX_IMPORT_SECONDS}`];
   return [
     "--ignore-config",
     "--no-plugin-dirs",
     "--no-playlist",
     "--no-warnings",
+    // Only sites with their own extractor: the generic one would fetch any page it is handed.
+    "--use-extractors",
+    "default,-generic",
     "--continue",
     "--no-overwrites",
     "--socket-timeout",
@@ -369,8 +390,7 @@ function youtubeArguments(
     "exp=1:4",
     "--max-filesize",
     String(maxBytes),
-    "--match-filters",
-    range ? `duration > ${range.start} & !is_live` : "!is_live",
+    ...filters,
     ...window,
     ...strategy.args,
     ...(process.env.VIDEO_IMPORT_PROXY
@@ -378,18 +398,22 @@ function youtubeArguments(
       : []),
     "--js-runtimes",
     `node:${process.execPath}`,
-    "-f",
-    "bv*[height<=1080]+ba/b[height<=1080]/best",
+    // Twitch clip renditions carry their audio; at equal size prefer H.264 so nothing re-encodes.
+    ...(link.kind === "twitch"
+      ? ["-f", "b[height<=1080]/bv*[height<=1080]+ba/b", "-S", "res,fps,vcodec:h264"]
+      : ["-f", "bv*[height<=1080]+ba/b[height<=1080]/best"]),
     "--merge-output-format",
     "mp4",
     "--remux-video",
     "mp4",
     "--print",
+    `pre_process:${META} %(duration)s %(is_live)s`,
+    "--print",
     "after_move:%(title)s",
     "-o",
     path,
     "--",
-    url,
+    link.url,
   ];
 }
 
@@ -400,8 +424,9 @@ function downloadYoutube(
   pythonPath?: string,
 ) {
   return new Promise<string>((resolve, reject) => {
+    // Its own process group: yt-dlp runs ffmpeg as a child, which otherwise survives an abort and keeps writing the file.
     const child = spawn(executable, args, {
-      signal,
+      detached: true,
       stdio: ["ignore", "pipe", "pipe"],
       ...(pythonPath
         ? { env: { ...process.env, PYTHONPATH: pythonPath } }
@@ -415,18 +440,271 @@ function downloadYoutube(
     child.stderr.on("data", (chunk: Buffer) => {
       stderr = (stderr + chunk.toString()).slice(-4096);
     });
+    const stop = () => {
+      try {
+        process.kill(-child.pid!, "SIGKILL");
+      } catch {
+        child.kill("SIGKILL");
+      }
+    };
+    if (signal.aborted) stop();
+    signal.addEventListener("abort", stop, { once: true });
     child.on("error", reject);
-    child.on("close", (code) =>
-      code === 0
-        ? resolve(stdout)
-        : reject(
-            Object.assign(new Error("The downloader did not finish."), {
-              stderr,
-            }),
-          ),
-    );
+    child.on("close", (code) => {
+      signal.removeEventListener("abort", stop);
+      if (signal.aborted) reject(signal.reason ?? new Error("Aborted."));
+      else if (code === 0) resolve(stdout);
+      else
+        reject(
+          Object.assign(new Error("The downloader did not finish."), {
+            stderr,
+          }),
+        );
+    });
   });
 }
+
+/** A Twitch VOD is read without yt-dlp's downloader: ffmpeg cannot seek into a long playlist of fMP4
+ * segments (it crawls from the start and writes an empty file), so the importer asks yt-dlp only where
+ * the playlist is, then hands ffmpeg a playlist holding just the segments the range needs. */
+function twitchVodArguments(link: VideoLink, strategy: ImportStrategy) {
+  return [
+    "--ignore-config",
+    "--no-plugin-dirs",
+    "--no-playlist",
+    "--no-warnings",
+    "--use-extractors",
+    "default,-generic",
+    "--socket-timeout",
+    "30",
+    "--extractor-retries",
+    "2",
+    ...strategy.args,
+    ...(process.env.VIDEO_IMPORT_PROXY
+      ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
+      : []),
+    "--simulate",
+    "-f",
+    "b[height<=1080]/b",
+    "-S",
+    "res,fps,vcodec:h264",
+    "--print",
+    `${META} %(duration)s %(is_live)s`,
+    "--print",
+    `${PLAYLIST} %(url)s`,
+    "--print",
+    "%(title)s",
+    "--",
+    link.url,
+  ];
+}
+const PLAYLIST = "REVLINE_PLAYLIST";
+
+/** Small text over HTTPS from an address checked to be public and pinned for the request. */
+async function publicText(value: string, signal: AbortSignal) {
+  const url = new URL(value);
+  if (url.protocol !== "https:" || url.username || url.password)
+    throw new AnalysisError("The video site returned an unusable stream address.", 502);
+  const addresses = await lookup(url.hostname, { all: true, verbatim: true });
+  if (!addresses.length || addresses.some((item) => !publicAddress(item.address)))
+    throw new AnalysisError("This link does not point to a public video server.", 400);
+  const selected = addresses.find((item) => item.family === 4) ?? addresses[0];
+  return new Promise<string>((resolve, reject) => {
+    const req = request(
+      url,
+      {
+        signal,
+        lookup: (_hostname, options, callback) => {
+          if (options.all) callback(null, [selected]);
+          else callback(null, selected.address, selected.family);
+        },
+        headers: { "User-Agent": "Revline/1.0" },
+      },
+      (response) => {
+        if (response.statusCode !== 200) {
+          response.destroy();
+          reject(
+            new AnalysisError(
+              `The video site returned HTTP ${response.statusCode} for this recording's stream.`,
+              502,
+            ),
+          );
+          return;
+        }
+        let text = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          text += chunk;
+          if (text.length > 8 * 1024 * 1024) response.destroy(new Error("The stream playlist is too large."));
+        });
+        response.on("end", () => resolve(text));
+        response.on("error", reject);
+      },
+    );
+    req.setTimeout(30_000, () => req.destroy(new Error("The video server stopped responding.")));
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+type HlsSegment = { uri: string; start: number; duration: number; discontinuity: boolean };
+function readMediaPlaylist(text: string) {
+  const segments: HlsSegment[] = [];
+  let map: string | undefined, ended = false, total = 0, next = 0, discontinuity = false;
+  for (const line of text.split(/\r?\n/).map((item) => item.trim())) {
+    if (line.startsWith("#EXT-X-MAP:")) map = /URI="([^"]+)"/.exec(line)?.[1];
+    else if (line.startsWith("#EXTINF:")) next = Number.parseFloat(line.slice(8));
+    else if (line === "#EXT-X-DISCONTINUITY") discontinuity = true;
+    else if (line === "#EXT-X-ENDLIST") ended = true;
+    else if (line && !line.startsWith("#")) {
+      if (!(next > 0)) continue;
+      segments.push({ uri: line, start: total, duration: next, discontinuity });
+      total += next;
+      next = 0;
+      discontinuity = false;
+    }
+  }
+  // Segment names are joined to the playlist's own folder: nothing in the playlist can point ffmpeg elsewhere.
+  if (!segments.length || [map, ...segments.map((item) => item.uri)].some((uri) => uri !== undefined && !/^[\w.-]+$/.test(uri)))
+    throw new AnalysisError("The video site returned a stream this importer cannot read.", 502);
+  return { segments, map, ended, total };
+}
+
+/** Downloads [start, end) of an HLS recording into `path`, reporting 0-60% as media arrives. */
+async function downloadHlsWindow(
+  playlistUrl: string,
+  playlist: ReturnType<typeof readMediaPlaylist>,
+  window: ImportRange,
+  exact: boolean,
+  directory: string,
+  path: string,
+  signal: AbortSignal,
+  onProgress: (percent: number) => void,
+  maxBytes: number,
+) {
+  const chosen = playlist.segments.filter(
+    (item) => item.start + item.duration > window.start && item.start < window.end,
+  );
+  const base = new URL(".", playlistUrl).toString();
+  const local = join(directory, "window.m3u8");
+  await writeFile(
+    local,
+    [
+      "#EXTM3U",
+      "#EXT-X-VERSION:6",
+      `#EXT-X-TARGETDURATION:${Math.ceil(Math.max(...chosen.map((item) => item.duration)))}`,
+      "#EXT-X-PLAYLIST-TYPE:VOD",
+      "#EXT-X-MEDIA-SEQUENCE:0",
+      ...(playlist.map ? [`#EXT-X-MAP:URI="${base}${playlist.map}"`] : []),
+      ...chosen.flatMap((item, index) => [
+        ...(item.discontinuity && index ? ["#EXT-X-DISCONTINUITY"] : []),
+        `#EXTINF:${item.duration.toFixed(3)},`,
+        `${base}${item.uri}`,
+      ]),
+      "#EXT-X-ENDLIST",
+      "",
+    ].join("\n"),
+  );
+  const length = window.end - window.start;
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(
+      "ffmpeg",
+      [
+        "-v",
+        "error",
+        "-nostdin",
+        "-y",
+        "-protocol_whitelist",
+        "file,crypto,data,https,tls,tcp",
+        "-ss",
+        String(window.start - chosen[0].start),
+        "-i",
+        local,
+        "-t",
+        String(length),
+        "-map",
+        "0:v:0",
+        "-map",
+        "0:a:0?",
+        ...(exact
+          ? ["-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k"]
+          : ["-c", "copy"]),
+        "-movflags",
+        "+faststart",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        path,
+      ],
+      { signal, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let stderr = "", moved = Date.now(), oversize = false;
+    // A stalled segment must not hold the task forever: no new media for two minutes ends the attempt.
+    // The stream has no stated size, so the disk budget is checked as the file grows.
+    const watchdog = setInterval(() => {
+      if (Date.now() - moved > 120_000) child.kill("SIGKILL");
+      void stat(path).then((info) => {
+        if (info.size > maxBytes) { oversize = true; child.kill("SIGKILL"); }
+      }).catch(() => {});
+    }, 10_000);
+    child.stdout.on("data", (chunk: Buffer) => {
+      const at = [...chunk.toString().matchAll(/out_time_(?:us|ms)=(\d+)/g)].at(-1);
+      if (!at) return;
+      moved = Date.now();
+      onProgress(Math.min(60, Math.floor((Number(at[1]) / 1e6 / length) * 60)));
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-2048);
+    });
+    child.on("error", (error) => { clearInterval(watchdog); reject(error); });
+    child.on("close", (code) => {
+      clearInterval(watchdog);
+      if (signal.aborted) reject(signal.reason ?? new Error("Aborted."));
+      else if (oversize) reject(tooLarge());
+      else if (code === 0) resolve();
+      else
+        reject(
+          isMediaDiskFull(stderr)
+            ? new AnalysisError("The media worker needs more free disk space before importing a video.", 503, false)
+            : new AnalysisError(
+                `The recording's stream stopped part-way through the download${code === null ? " (no data for two minutes)" : ""}. It will be retried; if it keeps failing, import a shorter range.`,
+                502,
+              ),
+        );
+    });
+  });
+}
+
+/** Refusals that follow from what the site said about the video; returns when the import may go on. */
+function refuseBySiteFacts(
+  site: { duration?: number; live: boolean },
+  range: ImportRange | undefined,
+) {
+  const length = site.duration ? importClock(site.duration) : undefined;
+  if (site.live && !range)
+    throw new AnalysisError(
+      `This broadcast is still live, or just ended and is still being processed, so it cannot be imported whole. Pass start and end (source seconds) for a part that has already aired${length ? ` (it has reached ${length})` : ""}, or try again once the recording is final.`,
+      400,
+    );
+  if (site.live && range && (site.duration ?? 0) < range.end)
+    throw new AnalysisError(
+      `This broadcast is still live and has only reached ${length ?? "an unknown length"}. Import a range that ends before that.`,
+      400,
+    );
+  if (!range && (site.duration ?? 0) > MAX_IMPORT_SECONDS)
+    throw new AnalysisError(
+      `This video is ${length} long. ${importLimitText} ${SPLIT_HINT}`,
+      400,
+    );
+  if (range && site.duration && site.duration <= range.start)
+    throw new AnalysisError(
+      `The import range starts after the end of this video, which is ${length} long.`,
+      400,
+    );
+}
+
+const SPLIT_HINT =
+  "Import it in parts: give the assistant the link with start and end times (importVideoLink takes start and end in source seconds); each part becomes its own source.";
 
 export async function importVideoLink(
   value: string,
@@ -449,6 +727,8 @@ export async function importVideoLink(
     return { path: join(directory, "video.mp4"), ...saved };
   if (range && (!(range.start >= 0) || !(range.end > range.start)))
     throw new AnalysisError("An imported range must end after it starts.", 400);
+  if (range && range.end - range.start > MAX_IMPORT_SECONDS)
+    throw new AnalysisError(`${importLimitText} ${SPLIT_HINT}`, 400);
   const disk = await statfs(directory);
   const maxBytes = Math.floor(
     (disk.bavail * disk.bsize) / DISK_PER_IMPORT_BYTE,
@@ -461,6 +741,10 @@ export async function importVideoLink(
     );
   const source = join(directory, "download.mp4");
   let title = "Imported video";
+  /** What the site said about the video before any filter: length in seconds, and whether it is still being broadcast. */
+  let site: { duration?: number; live: boolean } | undefined;
+  const vod = link.kind === "twitch" && /\/videos\/\d+$/.test(link.url);
+  let playlistUrl: string | undefined;
   if (link.kind !== "file") {
     const executable = videoImporterPath();
     const { version, pythonPath } = await videoImporter();
@@ -473,11 +757,21 @@ export async function importVideoLink(
       try {
         const stdout = await downloadYoutube(
           executable,
-          youtubeArguments(link.url, source, maxBytes, range, strategy),
+          vod
+            ? twitchVodArguments(link, strategy)
+            : youtubeArguments(link, source, maxBytes, range, strategy),
           signal,
           pythonPath,
         );
-        title = stdout.trim().split("\n").at(-1) || title;
+        const lines = stdout.trim().split("\n");
+        const meta = lines.find((line) => line.startsWith(META))?.split(" ");
+        if (meta)
+          site = {
+            ...(Number(meta[1]) > 0 ? { duration: Number(meta[1]) } : {}),
+            live: meta[2] === "True",
+          };
+        playlistUrl = lines.find((line) => line.startsWith(PLAYLIST))?.split(" ")[1];
+        title = lines.filter((line) => !line.startsWith(META) && !line.startsWith(PLAYLIST)).at(-1) || title;
         preferredStrategy = strategy;
         if (refusals.length)
           console.log(
@@ -501,12 +795,12 @@ export async function importVideoLink(
             ?.slice(0, 300) ?? "The downloader returned no diagnostic.";
         if (PERMANENT_REFUSAL.test(stderr))
           throw new AnalysisError(
-            "The video provider blocked this download. Use a public MP4 link or upload the video file instead.",
+            "The video site will not serve this video to our servers: it is private, removed, restricted by age, subscription or region, or blocked. Download it on your device and upload the file instead.",
             400,
           );
-        if (/unsupported url/i.test(stderr))
+        if (/unsupported url|no suitable extractor/i.test(stderr))
           throw new AnalysisError(
-            "This link has no downloadable video format.",
+            `This link is not a video Revline can import. Supported links: ${SUPPORTED_LINKS}. Otherwise download the video and upload the file.`,
             422,
           );
         if (!SITE_REFUSAL.test(stderr))
@@ -535,11 +829,34 @@ export async function importVideoLink(
     try {
       title = decodeURIComponent(
         new URL(link.url).pathname.split("/").at(-1) || title,
-      ).replace(/\.mp4$/i, "");
+      ).replace(/\.(mp4|mov|m4v|webm|mkv)$/i, "");
     } catch {
       /* A safe default name works too. */
     }
   }
+  if (vod && !playlistUrl?.startsWith("https://"))
+    throw new AnalysisError(
+      "Twitch did not return a stream for this recording. It may be subscriber-only or deleted; upload the file instead.",
+      400,
+    );
+  if (vod && playlistUrl) {
+    const playlist = readMediaPlaylist(await publicText(playlistUrl, signal));
+    // The playlist is the recording itself: its length is what has aired, and a missing end tag means it is still growing.
+    const facts = { duration: playlist.total, live: !playlist.ended };
+    refuseBySiteFacts(facts, range);
+    const window = { start: range?.start ?? 0, end: Math.min(range?.end ?? playlist.total, playlist.total) };
+    await downloadHlsWindow(
+      playlistUrl,
+      playlist,
+      window,
+      !!range && window.end - window.start <= EXACT_IMPORT_CUT_SECONDS,
+      directory,
+      source,
+      signal,
+      onProgress,
+      maxBytes,
+    );
+  } else if (!existsSync(source) && site) refuseBySiteFacts(site, range);
   if (!existsSync(source))
     throw new AnalysisError(
       range
@@ -563,7 +880,7 @@ export async function importVideoLink(
     { signal, timeout: 30_000, maxBuffer: 1024 * 1024 },
   ).catch(() => {
     throw new AnalysisError(
-      "The link did not contain a readable MP4 video.",
+      "The link did not contain a readable video file.",
       400,
     );
   });
@@ -591,7 +908,13 @@ export async function importVideoLink(
     : fullDuration;
   if (cut && fullDuration <= cut.start)
     throw new AnalysisError(
-      "The import range starts after the end of this video.",
+      `The import range starts after the end of this video, which is ${importClock(fullDuration)} long.`,
+      400,
+    );
+  // Site videos were filtered on the length the site reported; a file's length is only known here.
+  if (!range && link.kind === "file" && fullDuration > MAX_IMPORT_SECONDS + 60)
+    throw new AnalysisError(
+      `This video is ${importClock(fullDuration)} long. ${importLimitText} ${SPLIT_HINT}`,
       400,
     );
   if (

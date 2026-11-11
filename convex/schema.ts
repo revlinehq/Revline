@@ -1,5 +1,6 @@
 import { clippingManifest,clipCheckRequestValidator } from './lib/clipping_validator';
 import { postingTables } from './postingTables';
+import { stepTimingValidator } from './lib/step_timing_validator';
 import { laneValidator, laneEvidenceValidator, laneBaselineValidator, laneResultValidator } from './lib/lane_validators';
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
 import { pixelTrackRequestValidator, pixelTrackResultValidator, pixelTrackHeaderValidator, pixelTrackSampleValidator, pixelTrackBindingValidator } from './lib/pixel_track_validator';
@@ -158,7 +159,7 @@ export const projectFields = {
   timeline: v.optional(timelineValidator), revision: v.optional(v.number()), history: v.optional(v.array(timelineValidator)),
   threadId:v.optional(v.string()), ...aiStateFields,
   // Timeline tabs: the open tab's timeline is `timeline`; the others live in projectTimelines.
-  timelineTabs:v.optional(v.array(v.object({id:v.string(),name:v.string(),aspectRatio:v.optional(aspectRatio),duration:v.optional(v.number()),clipCount:v.optional(v.number())}))), activeTimelineId:v.optional(v.string()),
+  timelineTabs:v.optional(v.array(v.object({id:v.string(),name:v.string(),aspectRatio:v.optional(aspectRatio),duration:v.optional(v.number()),clipCount:v.optional(v.number()),bytes:v.optional(v.number())}))), activeTimelineId:v.optional(v.string()),
 };
 export const projectDocument = v.object({ _id: v.id("projects"), _creationTime: v.number(), ...projectFields });
 export const timedText = v.object({ start: v.number(), end: v.number(), text: v.string() });
@@ -237,6 +238,8 @@ export const renderFields = {
   progress: v.optional(v.number()), assetIds: v.optional(v.array(v.id("assets"))), taskId: v.optional(v.id('mediaTasks')),
   // Which render path and renderer version drew the picture (worker-reported); picture reuse requires an exact match.
   renderer: v.optional(v.string()),
+  // A setting the user asked the assistant for once ("1080p instead"): this export never becomes their default.
+  settingsOverride: v.optional(v.boolean()),
 };
 export const renderDocument = v.object({ _id: v.id("renderJobs"), _creationTime: v.number(), ...renderFields, url: v.union(v.string(), v.null()) });
 const {timeline:_snapshot,...renderSummaryFields}=renderFields;
@@ -312,6 +315,9 @@ export default defineSchema({
   assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean(),
     // Copied from the turn: what its latest run resolved at inference time; absent until that run records it and on older turns.
     model:v.optional(v.string()),effort:v.optional(v.string())}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
+  // Where each run's time went (lib/ai/step-timing.ts): names, times and token counts only, no user content, no owner.
+  // Rows expire after 30 days; `npm run incidents:speed` reads them.
+  assistantRunTimings: defineTable({ runId: v.string(), source: v.union(v.literal('editor'), v.literal('mcp')), lane: v.optional(v.string()), model: v.optional(v.string()), effort: v.optional(v.string()), startedAt: v.number(), updatedAt: v.number(), expiresAt: v.number(), steps: v.array(stepTimingValidator) }).index('by_run', ['runId']).index('by_started', ['startedAt']).index('by_expires', ['expiresAt']),
   assistantTurns: defineTable({
     projectId:v.id('projects'),runId:v.string(),promptMessageId:v.string(),threadId:v.string(),
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
@@ -431,6 +437,17 @@ export default defineSchema({
   assets: defineTable(assetFields).index('by_project_import',['projectId','importSourceUrl','importRange.start','importRange.end']).index("by_analysis",["analysisId"]).index("by_ownerId_projectId", ["ownerId", "projectId"]).index('by_owner_project_r2Key',['ownerId','projectId','r2Key']).index("by_ownerId_createdAt", ["ownerId", "createdAt"]).index("by_storageId", ["storageId"]).index("by_r2Key", ["r2Key"]).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']).index('by_owner_audio',['ownerId','audioAssetId']),
   // The timeline an export renders, apart from its job so listing exports never reads whole timelines.
   renderSnapshots: defineTable({ jobId: v.id('renderJobs'), timeline: timelineValidator }).index('by_job', ['jobId']),
+  // What the in-app assistant asked to export, shown as a card in the chat. Nothing renders until the signed-in user
+  // presses Export on the card; `jobId` is the export that press started (or the finished one it reused).
+  exportProposals: defineTable({
+    ownerId: v.string(), projectId: v.id('projects'), timelineId: v.string(), resolution: v.number(), fps: v.number(), quality: v.string(),
+    // The timeline as the card shows it, saved with the card so an open chat never re-reads whole timelines.
+    timelineName: v.string(), duration: v.number(), aspectRatio: v.string(),
+    /** The settings the user asked for in chat that differ from their existing ones; never stored as a default. */
+    changed: v.array(v.string()),
+    status: v.union(v.literal('proposed'), v.literal('confirmed'), v.literal('cancelled')), jobId: v.optional(v.id('renderJobs')),
+    createdAt: v.number(), expiresAt: v.number(),
+  }).index('by_expiresAt', ['expiresAt']),
   renderJobs: defineTable(renderFields).index("by_ownerId_projectId", ["ownerId", "projectId"]).index("by_status_createdAt", ["status", "createdAt"]).index("by_owner_project_status",["ownerId","projectId","status"]).index('by_owner_status',['ownerId','status']),
   analysisRequests: defineTable(analysisRequestFields).index("by_projectId_runId", ["projectId", "aiRunId"]).index("by_projectId", ["projectId"]),
   r2Uploads: defineTable(r2UploadFields).index("by_projectId", ["projectId"]).index("by_projectId_completed", ["projectId", "completed"]).index('by_owner_completed',['ownerId','completed']),

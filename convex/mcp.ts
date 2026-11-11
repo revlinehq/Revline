@@ -215,9 +215,10 @@ export const cancelExport = internalMutation({ args: { ownerId: v.string(), jobI
   return { jobId: job._id, status: 'cancelled', previousStatus: previous, cancelled: true, note: 'The render stopped. Saved edits and finished exports are unchanged; frame checks and a new export no longer wait on it.' };
 }});
 
-export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.string() }, returns: v.any(), handler: async (ctx, args) => {
+export const exportJob = internalQuery({ args: { ownerId: v.string(), jobId: v.string(), projectId: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, args) => {
   const id = ctx.db.normalizeId('renderJobs', args.jobId), job = id ? await ctx.db.get(id) : null;
   if (!job || job.ownerId !== args.ownerId) throw new ConvexError('Export not found.');
+  if (args.projectId !== undefined && projectIdOf(ctx, args.projectId) !== job.projectId) throw new ConvexError('This export belongs to another project.');
   const project = await requireProject(ctx, job.projectId, args.ownerId, false);
   return { jobId: job._id, status: job.status, progress: job.progress, resolution: job.resolution, fps: job.fps, ...(job.label ? { timeline: job.label } : {}), ...(job.error ? { error: job.error } : {}), output: job.status === 'completed' ? { storageId: job.outputStorageId, r2Key: job.outputR2Key, fileName: exportFileName(project.title, job.label) } : null };
 }});

@@ -24,7 +24,7 @@ import { visualEffectsRuntimeScript } from './visual-effects-runtime';
 import { expandBackgroundFills, mirrorBlurSources, mirrorFillOwner } from './mirror-blur-layout';
 import { textLayerSources } from './text-layers';
 import { textStyle, textAppearance } from './text-style';
-import { TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
+import { EMOJI_FONT_FILE, TEXT_FONTS, textFontFaceCss, type TextFontId } from './text-fonts';
 import { playbackRateOf, sourceEndOf, timelineTimeAtSource, validatePlaybackRate } from './playback-rate';
 import { dimensions, timelineDuration, deriveTrackCounts, normalizeTimeline, trackOf, DEFAULT_TRANSFORM, type Clip, type MediaAsset, type Timeline } from './types';
 
@@ -43,7 +43,7 @@ export type CompositionOptions = {
   textRuntimeUrl?: string;
   transitionsRuntimeUrl?: string;
   fontUrl?: string;
-  fontUrls?: Partial<Record<TextFontId, string>>;
+  fontUrls?: Partial<Record<TextFontId | 'emoji', string>>;
   assetUrls?: Record<string, string>;
 };
 
@@ -250,7 +250,7 @@ export function generateComposition(timeline: Timeline, assets: MediaAsset[], op
   const sceneScripts=`${hasText?`<script src="${textRuntimeUrl}"></script>`:''}${transitions.length?`<script src="${transitionsRuntimeUrl}"></script>`:''}`;
   const defaultFontUrl = /^https?:/i.test(options.gsapUrl ?? '') ? new URL('/fonts/space-grotesk-latin.woff2', options.gsapUrl).href : '/fonts/space-grotesk-latin.woff2';
   const fontUrl = mediaUrl(options.fontUrl ?? defaultFontUrl);
-  const fontUrls = Object.fromEntries(TEXT_FONTS.map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
+  const fontUrls = Object.fromEntries([...TEXT_FONTS, { id: 'emoji' as const, fileName: EMOJI_FONT_FILE }].map(font => [font.id, mediaUrl(options.fontUrls?.[font.id] ?? (font.id === 'space-grotesk' ? fontUrl : /^https?:/i.test(options.gsapUrl ?? '') ? new URL(`/fonts/${font.fileName}`,options.gsapUrl).href : `/fonts/${font.fileName}`))]));
   // Reserve runtime ownership before GSAP becomes discoverable. Otherwise a
   // late runtime leaves HyperFrames controlling its cached direct-GSAP adapter.
   const previewRuntimeBridge=options.preview?'<script>window.__player=window.__player||{};</script>':'';

@@ -18,11 +18,11 @@ const mutations = new Set([
   'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',
   'assistant:beginEditing', 'assistant:previewDraft', 'assistant:requestAnalysis', 'assistant:clearAnalysis',
-  'assistant:attachRunStockAudio', 'assistant:reserveAudioRequest', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo',
+  'assistant:attachRunStockAudio', 'assistant:reserveAudioRequest', 'assistant:saveGeneratedSound', 'assistant:importRunVideo', 'assistant:exportRunVideo', 'assistant:proposeRunExport',
   'blueprints:requestCheck', 'blueprints:saveFromCheck',
   'compositionReview:savePlan', 'compositionReview:request', 'compositionReview:cancel',
   'cutouts:startFromRun', 'derivations:startFromRun',
-  'mcp:requestFrames', 'mcp:requestGuard', 'mcp:discardFrames', 'mcp:takeFrames',
+  'mcp:requestFrames', 'mcp:cancelExport', 'mcp:requestGuard', 'mcp:discardFrames', 'mcp:takeFrames',
   'assistantPosting:propose', 'assistantPosting:send', 'assistantPosting:cancel', 'assistantPosting:reschedule',
   'briefs:update', 'memories:remember', 'memories:forget',
   'referenceReads:request', 'referenceReads:take', 'referenceReads:discard',
@@ -35,7 +35,9 @@ export const run = internalMutation({
   returns: v.object({ value: v.any(), receipt: v.optional(toolWriteReceipt),replayed:v.optional(v.boolean()) }),
   handler: async (ctx, args) => {
     const definition = toolBehavior(args.toolName);
-    if (!definition || savesNothing(definition.effect) || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
+    // A check tool may only publish the staged draft it has just checked.
+    const publication = args.functionName === 'assistant:apply' && args.input.stagedPublication === true;
+    if (!definition || savesNothing(definition.effect) && !publication || !mutations.has(args.functionName)) throw new ConvexError(`This mutation is not registered for editing tools: ${args.toolName} -> ${args.functionName}.`);
     await projectIdentity(ctx, args.projectId, args.ownerId);
     const existing = await ctx.db.query('toolWriteReceipts').withIndex('by_write', q => q.eq('writeId', args.writeId)).unique();
     if (existing) {
