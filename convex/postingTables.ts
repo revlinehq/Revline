@@ -45,13 +45,21 @@ export const postingTables = {
     tokenCipher: v.optional(v.string()), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
     // Held while one action refreshes the tokens, so two posts never spend the same refresh token.
     refreshLeaseUntil: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
-  }).index('by_owner', ['ownerId']).index('by_owner_platform_account', ['ownerId', 'platform', 'platformAccountId'])
+    // Set on an account connected through Post Bridge, which then holds its tokens: `providerAccountId` is Post
+    // Bridge's social account id. Revline's whole user base shares one Post Bridge workspace, so this row is the
+    // only thing that says whose account that id is; no id from a client is ever sent to Post Bridge.
+    provider: v.optional(v.literal('postbridge')), providerAccountId: v.optional(v.number()),
+  }).index('by_owner', ['ownerId']).index('by_provider_account', ['provider', 'providerAccountId']).index('by_owner_platform_account', ['ownerId', 'platform', 'platformAccountId'])
     // Every Revline user's connection to one platform account: how a platform callback (convex/postingCallbacks.ts) finds them.
     .index('by_platform_account', ['platform', 'platformAccountId']).index('by_platform_scoped', ['platform', 'platformScopedId']),
   // One data deletion request sent by a platform (Meta's Data Deletion Request callback). It holds no id of the person
   // or account: `code` is the random confirmation code the status page (/data-deletion/<code>) is opened with.
   postingDeletionRequests: defineTable({ code: v.string(), platform: postingPlatform, status: deletionRequestStatus, createdAt: v.number(), completedAt: v.optional(v.number()) })
     .index('by_code', ['code']),
+  // The reference Post Bridge tags a user's accounts with (`external_ref` on its connect links): random, so it
+  // cannot be guessed from a user id, and fixed for the user, so every account they connect carries the same one.
+  // `syncedAt`: when the user's accounts were last read from Post Bridge, so opening a page often does not spend the shared API key's rate limit.
+  postingConnectRefs: defineTable({ ownerId: v.string(), ref: v.string(), createdAt: v.number(), syncedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']).index('by_ref', ['ref']),
   // A pending "connect account" round trip. The nonce is single-use: the callback deletes the row.
   postingOauthStates: defineTable({ nonce: v.string(), ownerId: v.string(), platform: postingPlatform, expiresAt: v.number() })
     .index('by_nonce', ['nonce']).index('by_expiresAt', ['expiresAt']),
@@ -75,6 +83,9 @@ export const postingTables = {
     visibility: v.optional(postVisibility), tiktok: v.optional(tiktokChoices),
     // Latest stats from the platform. Estimated earnings (views x the campaign's rate) will be derived from `views` once campaigns carry a rate.
     views: v.optional(v.number()), likes: v.optional(v.number()), comments: v.optional(v.number()), shares: v.optional(v.number()), statsFetchedAt: v.optional(v.number()),
+    // Set when the post was handed to Post Bridge: its job id and its outcome are Post Bridge's, whatever its account is
+    // connected through later. `providerResultId` is Post Bridge's id for the outcome, which its analytics are read by.
+    provider: v.optional(v.literal('postbridge')), providerResultId: v.optional(v.string()),
     createdAt: v.number(), updatedAt: v.number(),
   }).index('by_owner_createdAt', ['ownerId', 'createdAt']).index('by_owner_status', ['ownerId', 'status', 'publishedAt']).index('by_batch', ['batchId'])
     .index('by_status_dueAt', ['status', 'dueAt']).index('by_status_publishedAt', ['status', 'publishedAt']).index('by_account_status', ['accountId', 'status'])

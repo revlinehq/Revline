@@ -2,15 +2,15 @@ import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner, requireProject } from './lib/auth';
-import { batchText, cancelPostFor, lastYouTubeVisibility, notSent, postChoices, reschedulePostFor, scheduleTime } from './posting';
+import { accountState, batchText, cancelPostFor, lastYouTubeVisibility, notSent, postChoices, reschedulePostFor, scheduleTime } from './posting';
 import { clipShape, exportPlan, pendingForKey, startPendingFor } from './postExports';
 import { postTarget, postVisibility, tiktokChoices, tiktokCreator } from './postingTables';
 import { tabsOf, storedTabTimeline } from './timelineTabs';
 import { MAX_EXPORT_LABEL, MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
 import { shapeProblems, textProblems } from '../lib/posting/precheck';
-import { livePlatform } from '../lib/posting/server';
-import { TIKTOK_VISIBILITY_NAMES, YOUTUBE_VISIBILITIES, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
+import { platformLive, visibilityOptions } from '../lib/posting/server';
+import { TIKTOK_VISIBILITY_NAMES, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
 
 // Posting for the assistant: one implementation behind the in-app assistant's tools and the MCP tools
 // (convex/lib/editorToolkit.ts). Every function takes the owner the caller was authenticated as and reads or writes
@@ -36,13 +36,13 @@ export const accounts = internalQuery({
   handler: async (ctx, { ownerId }) => {
     const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
     return rows.filter(row => row.status !== 'disconnected').map(row => {
-      const live = !!livePlatform(row.platform);
+      const live = platformLive(row.platform), state = accountState(row);
       return {
         accountId: row._id, platform: row.platform, handle: `@${row.username}`, ...(row.displayName ? { name: row.displayName } : {}),
-        status: row.status, needsReconnect: row.status === 'needs_reconnect', ...(row.error ? { problem: row.error } : {}),
-        canPost: live && row.status === 'connected',
+        status: state.status, needsReconnect: state.status === 'needs_reconnect', ...(state.error ? { problem: state.error } : {}),
+        canPost: live && state.status === 'connected',
         ...(live ? {} : { unavailable: `${PLATFORM_NAMES[row.platform]} posting is not switched on for this Revline server yet.` }),
-        visibility: row.platform === 'youtube' ? [...YOUTUBE_VISIBILITIES] : row.platform === 'tiktok' ? 'Required. The levels this account allows are read from TikTok for each post: call postVideo without confirm to see them.' : 'Instagram has no per-post visibility.',
+        visibility: row.platform === 'youtube' ? [...visibilityOptions().youtube] : row.platform === 'tiktok' ? 'Required. The levels this account allows are read from TikTok for each post: call postVideo without confirm to see them.' : 'Instagram has no per-post visibility.',
       };
     });
   },
@@ -56,7 +56,7 @@ export const accountPlatforms = internalQuery({
     for (const raw of accountIds) {
       const id = ctx.db.normalizeId('postingAccounts', raw), account = id ? await ctx.db.get(id) : null;
       if (!account || account.ownerId !== ownerId || account.status === 'disconnected') throw new ConvexError(`Account ${raw} is not one of this user's connected accounts. Call listConnectedAccounts for their IDs.`);
-      found.push({ accountId: account._id, platform: account.platform, connected: account.status === 'connected' });
+      found.push({ accountId: account._id, platform: account.platform, connected: accountState(account).status === 'connected', bridged: account.provider === 'postbridge' });
     }
     return found;
   },
@@ -79,8 +79,8 @@ async function plan(ctx: QueryCtx | MutationCtx, ownerId: string, args: PostRequ
     const account = await ctx.db.get(target.accountId);
     if (!account || account.ownerId !== ownerId || account.status === 'disconnected') throw new ConvexError(`Account ${target.accountId} is not one of this user's connected accounts. Call listConnectedAccounts for their IDs.`);
     const name = PLATFORM_NAMES[account.platform], handle = `@${account.username}`;
-    if (!livePlatform(account.platform)) throw new ConvexError(`${name} posting is not switched on for this Revline server yet, so ${handle} cannot be posted to.`);
-    if (account.status !== 'connected') throw new ConvexError(`${handle} on ${name} needs reconnecting before it can be posted to. The user reconnects it on the Accounts page (/accounts).`);
+    if (!platformLive(account.platform)) throw new ConvexError(`${name} posting is not switched on for this Revline server yet, so ${handle} cannot be posted to.`);
+    if (accountState(account).status !== 'connected') throw new ConvexError(`${handle} on ${name} needs reconnecting before it can be posted to. The user reconnects it on the Accounts page (/accounts).`);
     const own = batchText({ caption: target.caption ?? '', title: target.title }, now), text = { caption: own.caption || caption, title: own.title ?? title };
     const refused = textProblems(account.platform, text)[0];
     if (refused) throw new ConvexError(`${handle}: ${refused}`);
@@ -293,7 +293,7 @@ async function postView(ctx: QueryCtx, post: Doc<'postingPosts'>) {
     clip: batch?.exportLabel ?? 'Video', caption: post.caption, ...(post.title ? { title: post.title } : {}), ...(post.visibility ? { visibility: post.visibility } : {}),
     ...(post.scheduledAt ? { scheduledFor: iso(post.scheduledAt) } : {}), ...(post.publishedAt ? { publishedAt: iso(post.publishedAt) } : {}), ...(post.url ? { link: post.url } : {}),
     ...(post.status === 'failed' || post.error ? { reason: post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post.` } : {}),
-    ...(post.status === 'failed' && account?.status === 'needs_reconnect' ? { needsReconnect: true } : {}),
+    ...(post.status === 'failed' && account && accountState(account).status === 'needs_reconnect' ? { needsReconnect: true } : {}),
     ...(post.statsFetchedAt ? { stats: { views: post.views ?? 0, likes: post.likes ?? 0, comments: post.comments ?? 0, ...(post.shares !== undefined ? { shares: post.shares } : {}), asOf: iso(post.statsFetchedAt) } } : {}),
     createdBy: batch?.createdBy === 'assistant' ? batch.agentName ?? 'Revline assistant' : 'the user', ...(outdated ? { outdated } : {}),
   };
