@@ -96,7 +96,6 @@ export function findCaptionPreset(value: string | number): CaptionPreset | undef
   return CAPTION_PRESETS.find(preset => String(preset.number) === key || preset.id.replace(/-/g, ' ') === key || preset.name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() === key);
 }
 /** The 11 presets as one line each, for tool descriptions. */
-export const CAPTION_PRESET_GUIDE = CAPTION_PRESETS.map(preset => `${preset.number} ${preset.name} (${preset.id}): ${preset.description}`).join(' ');
 
 export function captionMotion(stored: Pick<ClipCaptionPreset, 'id' | 'popScale' | 'popDuration'>): CaptionMotion {
   return { ...DEFAULT_CAPTION_MOTION, ...captionPreset(stored.id).motion, ...(stored.popScale !== undefined ? { popScale: stored.popScale } : {}), ...(stored.popDuration !== undefined ? { popDuration: stored.popDuration } : {}) };

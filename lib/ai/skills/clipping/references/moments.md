@@ -51,3 +51,12 @@ Boundaries:
 - If a candidate cannot stand alone within 60 s, choose another or explain the constraint. When no word-timed pause follows the payoff, planClips suggests the moment's own range; finishClipping then checks the built tab's in and out points against the words.
 - A moment longer than 60 s is deliverable only as a requested montage or trailer: one tab cutting several of its ranges to 15–60 s, accepted by its retained source span and timelineId.
 - Respect exact user timestamps and flag any conflict with the 15–60 s range.
+
+## planClips and findHighlights details
+- Transcript-first discovery, or a findHighlights that fell back: register the COMPLETE found set after reading the transcript.
+- On the visual path, spoken moments are grounded by their quotes; action or non-verbal hooks and payoffs need a saved targeted inspectVideo observation and come back unresolved when Gemini is unavailable or the inspection budget is spent.
+- Use planClips' suggested ranges by default; changes stay within 12 s of each suggested boundary and keep the hook and payoff. Accepted tabs keep the source aspect and framing unless the user asked for reframing. Bind timelineId when known; exact unique tab titles also resolve.
+- A choice bound to a built tab is measured by that tab: 15–60 s, or for a requested montage or trailer cut from several ranges, its retained source span (first in to last out) with the hook and payoff inside retained footage.
+- Revise the plan when a built candidate is dropped and restore or remove its abandoned tab: updating the plan removes that tab only when this batch created it and it holds no approved work.
+- shortfallReason goes into finishClipping's finalMessage. finish compares the plan to the populated tabs with cheap data checks; only explicitly requested QA needs receipts, and no normalization or checkClip runs unless requested.
+- findHighlights: commentary over gaming or action does not prove the visuals irrelevant; establish visual events with short explicit inspectVideo windows. Silent content uses bounded adaptive video discovery. Preserve original framing and audio.

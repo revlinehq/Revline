@@ -4,7 +4,7 @@ description: "Layer, b-roll, undo, speed and effect judgment for footage edits, 
 ---
 # Layers and effects
 
-A good result changes only the requested clips, keeps linked video and audio together, and uses each effect for a reason the viewer can see. Exact parameters live in each tool's description; this page covers when to use what.
+A good result changes only the requested clips, keeps linked video and audio together, and uses each effect for a reason the viewer can see. Argument rules live in each tool's description and exact controls, ranges and examples in page `effect-tools`; this page covers when to use what.
 
 ## Rules
 - Batch identical changes across clips with the tool's clipIds selector in one call; run independent calls with known inputs in the same step.

@@ -56,6 +56,19 @@ The direction is where the picture travels on screen: in a whip left, both shots
   - when a reference uses a different transition at that cut (match the reference).
 - Other presets (spin-zoom, film-burn, gradient-wipe, iris-wipe, blur-dissolve, zoom-through) only when the user asks for one or a reference uses one.
 
+### Other presets
+| Preset | Look | Duration |
+|---|---|---|
+| crossfade | dissolve with complementary opacity; keeps transparency and audio timing | about 0.6 s |
+| spin-zoom | the outgoing frame rotates and zooms away, the incoming one settles from the opposite tilt; `direction` clockwise or counter-clockwise | about 0.6 s |
+| blur-dissolve | the outgoing shot blurs out as the incoming one comes into focus | about 0.6 s |
+| gradient-wipe | a moving soft edge reveals the incoming shot; `wipeDirection`, `softness` | about 0.6 s |
+| iris-wipe | a circle or ellipse opens into the incoming shot; `centerX`, `centerY`, `shape`, `softness` | about 0.6 s |
+| zoom-through | a push into the outgoing shot until it blows past the camera, the incoming one landing from behind | 0.4–0.6 s |
+| film-burn | the cut burns out to warm overexposed light, then the incoming shot develops back in | 0.6–1 s |
+
+Durations snap to whole frames (at least 2) and are limited by the footage around the cut. Transitions cannot be split.
+
 ### Settings
 addTransition is part of every lane (edits, reels, clips).
 

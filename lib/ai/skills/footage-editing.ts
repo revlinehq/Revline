@@ -28,5 +28,5 @@ export const footageEditing: EditorSkill = {
   name: skillDocument("footage-editing/SKILL.md").name,
   description: skillDocument("footage-editing/SKILL.md").description,
   body: skillText("footage-editing/SKILL.md"),
-  pages: [page("footage-editing/references/edit-lanes.md"), page("footage-editing/references/speech.md"), textStyling, page("footage-editing/references/layers-and-effects.md", [EFFECT_RULES])],
+  pages: [page("footage-editing/references/edit-lanes.md"), page("footage-editing/references/speech.md"), textStyling, page("footage-editing/references/layers-and-effects.md", [EFFECT_RULES]), page("footage-editing/references/effect-tools.md")],
 };

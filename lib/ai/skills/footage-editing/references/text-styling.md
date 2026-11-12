@@ -27,6 +27,9 @@ Good text is readable at a glance, clear of faces and app controls, and styled t
 - Change animation with setTextAnimation only when the user asks for an animation change.
 - Vertical captions stay out of the bottom 20% of the frame, where app controls sit, and at least 24 design px from faces. Check the extremes of any movement with getFrames.
 - Use one look per text role: title, captions, callout.
+- addSubtitlesFromTranscript makes phrases of at most six words, up to eight where a cut would leave a word alone on screen. The clip lane's clipper style is uppercase Montserrat Black, white with a black outline and no background, 1–3 words per caption, each word popping in as spoken with the active word in green; sentence-only transcripts get minimal captions instead.
+- Caption presets (catalog captionPresets) pop the spoken word to popScale (default 1.14, 1.1 for presets 9–11) over popSpeed seconds (default 0.34); change those only when asked.
+- Template controls (configureTextTemplate): strength (default 1), revealDuration in seconds (default .65) and stagger in seconds per character or word (default .07) never change clip duration, words or timing. Karaoke takes karaokeStyle box (a highlight pill behind the active word) or pop (words pop in as spoken, active word in the highlight color).
 
 ## Catalog
 Every font, look, animation, template and text control, with guidance:
