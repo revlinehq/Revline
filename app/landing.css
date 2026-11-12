@@ -118,22 +118,10 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
 .landing-pricing{display:flex;flex-direction:column;align-items:center;gap:40px;padding-block:96px;background:#0b0b0d}
 .landing-pricing .landing-heading h2{letter-spacing:-1.1px;color:#fff}
 .landing-pricing .landing-heading p{color:#ffffff99}
-.landing-plans{display:flex;align-items:stretch;justify-content:center;gap:24px;width:100%}
-.landing-plan{width:440px;max-width:100%;display:flex;flex-direction:column;gap:28px;padding:32px;background:#141418;border:1px solid #ffffff1a;border-radius:10px}
-.landing-plan header{display:flex;flex-direction:column;gap:6px}
-.landing-plan h3{font:500 22px/1.2 var(--l-head);letter-spacing:-.3px;color:#fff}
-.landing-plan header p{font-size:14px;color:#ffffffa6}
-.landing-price{display:flex;align-items:flex-end;gap:6px}
-.landing-price strong{font:400 56px/1 var(--l-head);letter-spacing:-1.8px;color:#fff}
-.landing-price>span{padding-bottom:6px;font-size:15px;color:#ffffffa6}
-.landing-plan ul{flex:1;display:flex;flex-direction:column;gap:12px}
-.landing-plan li{display:flex;align-items:center;gap:10px;font-size:15px;line-height:1.25;color:#fff}
-.landing-plan li svg{flex-shrink:0;color:#ffffffcc}
-.landing-plan .landing-plan-lead{font-size:14px;color:#ffffffa6}
-.landing-plan footer{display:flex;flex-direction:column;align-items:center;gap:12px}
-.landing-plan footer small{font-size:13px;color:#ffffff73}
+/* The plan cards are the upgrade dialog's (components/workspace/plan-card.css), in its dark colors. */
+.landing-pricing .plan-grid{--ws-bg:#141414;--ws-border:#2d2d2d;--ws-text:#f2f2f2;--ws-muted:#969696;max-width:1040px}
 /* On the dark card the gradient stands alone: no light ring around it. */
-.landing-plan .landing-button[data-variant=primary]{border-color:transparent;box-shadow:none}
+.landing-pricing .plan-card .landing-button[data-variant=primary]{border-color:transparent;box-shadow:none}
 
 /* FAQ: dark. */
 .landing-faq{display:flex;gap:80px;padding-block:96px;background:#0b0b0d}
@@ -199,7 +187,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
   .landing-faq{flex-direction:column;gap:32px}
   .landing-faq .landing-heading{width:100%}
-  .landing-plans{flex-direction:column;align-items:center}
 }
 @media(max-width:760px){
   .landing{--l-gutter:20px}
@@ -222,7 +209,6 @@ div.landing-hero-buttons>.landing-reveal-content{display:flex;align-items:center
   .landing-mcp-agents li{width:48px;height:48px;border-radius:14px}
   .landing-mcp-agents li+li{margin-left:-12px}
   .landing-mcp-agents img{width:34px;height:34px}
-  .landing-plan{padding:24px}
   .landing-final{padding-inline:12px}
   .landing-final-card{padding:56px 20px}
   .landing-heading[data-size=lg] h2{font-size:36px;letter-spacing:-1px}

@@ -1,4 +1,5 @@
 import { reportClientFailure } from './incident-client';
+import { planLimitOf } from './billing/limit-events';
 /** Convex transports safe application errors in data; never show its server stack. */
 export function userErrorMessage(error:unknown,fallback='This action could not finish. Please retry.'):string {
   if(error&&typeof error==='object'&&'data' in error) {
@@ -12,7 +13,8 @@ export function userErrorMessage(error:unknown,fallback='This action could not f
 
 /** Capture a surfaced operation failure once, then format its safe message. */
 export function userError(error:unknown,fallback='This action could not finish. Please retry.'):string {
-  reportClientFailure(error);
+  // A plan limit (storage full, AI usage used up) is not a failure; the Convex client already opened the upgrade dialog.
+  if(!planLimitOf(error))reportClientFailure(error);
   return userErrorMessage(error,fallback);
 }
 

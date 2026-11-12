@@ -1,6 +1,7 @@
 import { PROJECT_MEDIA_LIMIT, uploadPartSize } from '../lib/editor/limits';
 import { recordStorageObject, recordAssetStorage, forgetStorageObject } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
+import { requireStorageRoom } from './lib/plan_limits';
 import type { Doc, Id } from './_generated/dataModel';
 import { ConvexError, v, type ObjectType } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery, type ActionCtx, type QueryCtx, type MutationCtx } from './_generated/server';
@@ -63,11 +64,11 @@ async function retryOnWriteConflict<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
-export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, duration:v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
+export const authorize = internalQuery({ args: { ownerId: v.optional(v.string()), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, duration:v.optional(v.number()), size: v.optional(v.number()), kind: assetKind, contentType: v.string() }, returns: v.string(), handler: async (ctx, args) => {
   const task = args.taskId && args.leaseToken ? await requireMediaTask(ctx, args.taskId, args.leaseToken) : null;
   if (args.taskId && !task) throw new ConvexError('Media task credentials are required');
   const ownerId = task?.ownerId ?? args.ownerId ?? await requireOwner(ctx); await projectIdentity(ctx, args.projectId, ownerId);
-  if (!task && !args.jobId) await requireEditorAccess(ctx, ownerId);
+  if (!task && !args.jobId) { await requireEditorAccess(ctx, ownerId); await requireStorageRoom(ctx, ownerId, args.size ?? null); }
   await previewSource(ctx,args,task);
   if(task?.kind==='snapshot'){
     const snapshot=task.snapshotId?await ctx.db.get(task.snapshotId):null;
@@ -84,7 +85,8 @@ export const authorize = internalQuery({ args: { ownerId: v.optional(v.string())
 }});
 export const createLease = internalMutation({ args: { ...metadata, ownerId: v.string(), projectId: v.id('projects'), jobId: v.optional(v.id('renderJobs')), ...taskAuth,...previewUpload, key: v.string(), uploadId: v.string(), partSize: v.number(), direct: v.optional(v.boolean()) }, returns: v.id('r2Uploads'), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
-  if (!args.taskId && !args.jobId) await requireEditorAccess(ctx, args.ownerId);
+  // A person's upload must fit the plan's storage; worker outputs of accepted work (previews, exports) always land.
+  if (!args.taskId && !args.jobId) { await requireEditorAccess(ctx, args.ownerId); await requireStorageRoom(ctx, args.ownerId, args.size); }
   const task=args.taskId?await requireMediaTask(ctx,args.taskId,args.leaseToken??''):null;
   await previewSource(ctx,args,task);
   // Transactional with the insert below: parallel starts reserve in turn.
@@ -121,7 +123,7 @@ const startArgs = { projectId: v.id('projects'), jobId: v.optional(v.id('renderJ
 export const start = action({ args: startArgs, returns: uploadInfo, handler: (ctx, args) => openUpload(ctx, args) });
 /** Opens a multipart upload. ownerId is passed only by trusted server callers (MCP); browsers authenticate through Clerk. */
 export async function openUpload(ctx: ActionCtx, args: ObjectType<typeof startArgs>, trustedOwnerId?: string): Promise<{ uploadId: Id<'r2Uploads'>; partSize: number; partCount: number }> {
-  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}) });
+  const ownerId = await ctx.runQuery(internal.r2.authorize, { ...(trustedOwnerId ? { ownerId: trustedOwnerId } : {}), projectId: args.projectId, ...(Number.isSafeInteger(args.size) ? { size: args.size } : {}), kind: args.kind, contentType: args.contentType,...(args.duration!==undefined?{duration:args.duration}:{}),...(args.purpose?{purpose:args.purpose,sourceAssetId:args.sourceAssetId,previewFps:args.previewFps,previewVersion:args.previewVersion,...(args.previewRange?{previewRange:args.previewRange}:{})}:{}), ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}), ...(args.jobId ? { jobId: args.jobId } : {}) });
   if(!args.purpose&&(args.previewRange!==undefined||args.sourceAssetId!==undefined||args.previewFps!==undefined||args.previewVersion!==undefined))throw new ConvexError('Preview upload purpose is required');
   const fileName = args.fileName.trim();
   if (!fileName || fileName.length > 255 || !/^(video|image|audio)\//.test(args.contentType) || args.contentType.length > 128) throw new ConvexError('Choose a supported media file');
@@ -158,6 +160,8 @@ export const resumableLease = internalQuery({ args: { uploadId: v.id('r2Uploads'
   if (!lease || lease.ownerId !== ownerId || lease.projectId !== args.projectId || lease.size !== args.size || lease.completed || lease.aborting || lease.taskId || lease.jobId || lease.purpose || lease.expiresAt < Date.now() + 60_000) return null;
   await projectIdentity(ctx, lease.projectId, ownerId);
   await requireEditorAccess(ctx, ownerId);
+  // Its bytes are already reserved, so it only needs the account to be within its plan's storage.
+  await requireStorageRoom(ctx, ownerId, 0);
   return lease;
 }});
 /** Continues an interrupted upload: which remembered parts storage holds, so only the rest are sent.

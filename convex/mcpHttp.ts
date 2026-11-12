@@ -60,7 +60,7 @@ const mcpHandler = httpAction(async (ctx, request) => {
   if ('error' in auth) {
     if (auth.error === 'invalid_token') return json({ jsonrpc: '2.0', id: null, error: { code: -32001, message: 'This Revline connection expired or was revoked. Connect again.' } }, 401, { 'WWW-Authenticate': challenge('invalid_token') });
     if (auth.error === 'rate_limited') return json({ jsonrpc: '2.0', id: null, error: { code: -32002, message: 'Too many tool calls. Wait a minute and retry.' } }, 429, { 'Retry-After': '60' });
-    return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Ultra plan.' } }, 403);
+    return json({ jsonrpc: '2.0', id: null, error: { code: -32003, message: 'The Revline MCP connector is part of the Pro and Studio plans.' } }, 403);
   }
   // Transports are request-local; the conversation ID survives in Convex, scoped
   // to the grant. Never use a shared grant as the conversation identity.

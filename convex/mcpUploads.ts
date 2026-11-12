@@ -4,6 +4,7 @@ import { MAX_MODEL_BYTES, PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { issueUpload, consumeUpload } from './uploads';
 import { projectIdentity } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
+import { requireStorageRoom } from './lib/plan_limits';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { z } from 'zod';
 import { internal } from './_generated/api';
@@ -77,6 +78,7 @@ export const prepare = httpAction(async (ctx, request) => {
 export const modelUploadUrl = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects') }, returns: v.string(), handler: async (ctx, args) => {
   await projectIdentity(ctx, args.projectId, args.ownerId);
   await requireEditorAccess(ctx, args.ownerId);
+  await requireStorageRoom(ctx, args.ownerId, null);
   return issueUpload(ctx, args.ownerId, args.projectId);
 } });
 export const finishModel = internalMutation({ args: { ownerId: v.string(), projectId: v.id('projects'), storageId: v.id('_storage'), fileName: v.string() }, returns: v.id('assets'), handler: async (ctx, args) => {

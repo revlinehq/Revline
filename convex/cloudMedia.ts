@@ -8,6 +8,7 @@ import type { ObjectType } from 'convex/values';
 import { ownedFolder } from './lib/storage_folders';
 import { requireOwner } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
+import { requireStorageRoom } from './lib/plan_limits';
 import { storageControl } from './lib/media_storage';
 import { cloudMediaKind } from './schema';
 import { forgetStorageObject, recordStorageObject } from './lib/storage_accounting';
@@ -33,6 +34,7 @@ export const authorize = internalQuery({args:{},returns:v.string(),handler:async
 }});
 export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2Key:v.string(),uploadId:v.string(),partSize:v.number(),direct:v.optional(v.boolean()),folderId:v.optional(v.id('storageFolders'))},returns:v.id('cloudMedia'),handler:async(ctx,{folderId,...args})=>{
   await requireEditorAccess(ctx,args.ownerId);
+  await requireStorageRoom(ctx,args.ownerId,args.size);
   if(folderId)await ownedFolder(ctx,args.ownerId,folderId);
   const now=Date.now();
   // Abandoned uploads stop counting at once; their scheduled cleanup frees the storage.

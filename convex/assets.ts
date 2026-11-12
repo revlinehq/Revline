@@ -6,6 +6,7 @@ import { hydrateAsset,transportAsset,storeAnalysis,compactAnalysis } from './lib
 import { writeProject,projectIdentity } from './lib/project_data';
 import { recordAssetStorage,usedByActiveExport,forgetStorageObject,setStorageObjectListed } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
+import { requireStorageRoom } from './lib/plan_limits';
 import { mediaConfig, mediaUrl, previewUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
 import { paginationOptsValidator } from 'convex/server';
@@ -38,7 +39,7 @@ export const catalogAudioUrl = action({ args: { catalogId: v.string() }, returns
   return `${url}/read?token=${token}`;
 }});
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireStorageRoom(ctx, ownerId, 0); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
 export const attachThumbnail=mutation({args:{assetId:v.id('assets'),storageId:v.id('_storage')},returns:v.null(),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx);const asset=await ctx.db.get(args.assetId);
