@@ -8,9 +8,9 @@ import { useMutation, useQuery } from 'convex/react';
 import { CalendarClock, Check, ChevronDown, CircleAlert, CircleCheck, Copy, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
-import { CAPTION_LIMIT } from '@/lib/posting/limits';
+import { CAPTION_LIMIT, POSTING_NOT_SET_UP } from '@/lib/posting/limits';
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '@/lib/posting/platform-names';
-import { YOUTUBE_VISIBILITY_NAMES } from '@/lib/posting/visibility';
+import { YOUTUBE_VISIBILITY_NOTE } from '@/lib/posting/visibility';
 import { userError } from '@/lib/user-error';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -47,7 +47,6 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   const pending = useQuery(api.postExports.latest, { projectId });
   const accounts = useQuery(api.posting.accounts, {});
   const platforms = useQuery(api.posting.platforms, {});
-  const youtubeOptions = useQuery(api.posting.options, {})?.youtubeVisibilities;
   const start = useMutation(api.postExports.start), cancel = useMutation(api.postExports.cancel);
   const [open, setOpen] = useState(false);
   const [caption, setCaption] = useState(''), [when, setWhen] = useState('');
@@ -63,7 +62,9 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
 
   const exporting = pending?.status === 'waiting' || pending?.status === 'queued';
   const total = pending?.accounts ?? 0;
-  const inFlight = pending?.status === 'created' && pending.sending > 0;
+  /** Posting is not set up on the server: a post that has not gone out waits, so the bar offers the Post menu (which says why) rather than "Posting to…". */
+  const off = !!platforms && !live.size;
+  const inFlight = !off && pending?.status === 'created' && pending.sending > 0;
   const posted = pending?.status === 'created' && !inFlight && pending.published > 0 && pending.scheduled === 0;
   const scheduled = pending?.status === 'created' && !inFlight && pending.scheduled > 0;
   const failure = pending?.status === 'failed' ? pending.error ?? 'This post could not be sent.' : pending?.status === 'created' && !inFlight && pending.failed > 0 ? pending.postError ?? 'A post could not be sent.' : '';
@@ -110,17 +111,17 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
           return <li key={account.id} data-disabled={!usable || undefined}><label>
             <Checkbox disabled={!usable} checked={usable && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
             <span className="editor-post-account">@{account.username}</span><small>{PLATFORM_NAMES[account.platform]}</small>
-          </label>{soon ? <em>Coming soon</em> : !usable && <Link href="/accounts">Reconnect</Link>}</li>;
+          </label>{!soon && !usable && <Link href="/accounts">Reconnect</Link>}</li>;
         })}</ul> : <ul className="editor-post-accounts">{POSTING_PLATFORMS.map(platform => <li key={platform} data-disabled={!live.has(platform) || undefined}>
           <label><Checkbox disabled checked={false} aria-label={PLATFORM_NAMES[platform]} /><span className="editor-post-account">{PLATFORM_NAMES[platform]}</span></label>
-          {live.has(platform) ? <Link href="/accounts">Connect</Link> : <em>Coming soon</em>}
+          {live.has(platform) && <Link href="/accounts">Connect</Link>}
         </li>)}</ul>}
         <div className="editor-post-schedule">
           <Input type="datetime-local" className="editor-post-when" aria-label="Schedule for a date and time (optional)" value={when} onChange={event => { const next = event.target.value; setWhen(next); setError(next && new Date(next).getTime() <= Date.now() ? 'Pick a date and time in the future.' : ''); }} />
         </div>
         <Button type="button" variant="primary" className="editor-post-now" disabled={busy || !picked.length} onClick={() => void submit()}>{schedule ? busy ? 'Scheduling…' : 'Schedule' : busy ? 'Posting…' : 'Post now'}</Button>
         {error && <p className="editor-post-hint" role="alert" data-error>{error}</p>}
-        <p className="editor-post-hint">{schedule ? 'Revline exports this clip first, then schedules it.' : 'Revline exports this clip first, then posts it.'}{youtubeOptions?.length === 1 && picked.some(account => account.platform === 'youtube') && ` YouTube videos are posted as ${YOUTUBE_VISIBILITY_NAMES[youtubeOptions[0]]}.`}</p>
+        {off ? <p className="editor-post-hint" role="status">{POSTING_NOT_SET_UP}</p> : <p className="editor-post-hint">{schedule ? 'Revline exports this clip first, then schedules it.' : 'Revline exports this clip first, then posts it.'}{picked.some(account => account.platform === 'youtube') && ` ${YOUTUBE_VISIBILITY_NOTE}`}</p>}
       </PopoverContent>
     </Popover>
   </div>;

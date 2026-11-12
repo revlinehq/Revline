@@ -1,16 +1,31 @@
 # Posting through Post Bridge
 
-Revline can post through [Post Bridge](https://www.post-bridge.com) instead of its own YouTube, TikTok and Instagram apps. Post Bridge holds the platform tokens; a user connects an account through one of its connect links, so Revline needs no approved platform app of its own. Reference: <https://api.post-bridge.com/reference> (OpenAPI at `/openapi.json`).
+Revline posts through [Post Bridge](https://www.post-bridge.com). Post Bridge holds the platform tokens; a user connects an account through one of its connect links, so Revline needs no approved YouTube, TikTok or Instagram app of its own and stores no platform token. Reference: <https://api.post-bridge.com/reference> (OpenAPI at `/openapi.json`).
 
 ## Settings (Convex environment)
 
 | Setting | Meaning |
 | --- | --- |
-| `POSTING_PROVIDER` | `postbridge` or `native` (default). Read on every call, so `npx convex env set POSTING_PROVIDER postbridge` switches without a deploy. |
 | `POSTBRIDGE_API_KEY` | Revline's Post Bridge API key (`pb_live_…`). Server only: no function returns it and nothing logs it. |
 | `APP_ORIGIN` | Connect links send the user back to `<APP_ORIGIN>/accounts`. |
 
-An account belongs to the provider it was connected through. Under the other provider it reads "Reconnect needed" and cannot be posted to; its posts and stats stay. Reconnecting the same handle keeps the same row; tokens Revline's own app stored for it are revoked at the platform and deleted.
+## Without the key
+
+While `POSTBRIDGE_API_KEY` is not set, nothing crashes and nothing half-works; every surface gives the same line, "Posting isn't set up yet: no Post Bridge key provided." (`POSTING_NOT_SET_UP` in `lib/posting/limits.ts`):
+
+- Connected accounts shows the line and its Connect and Reconnect buttons are off. Disconnect still works; the removal at Post Bridge is asked again every six hours until the key exists.
+- The Post dialog and the editor's Post button list the accounts but none can be picked, with the line beside the button. The server refuses a new post, a retry and a connect link with the same line.
+- The assistant and MCP tools return it as a refusal (`postVideo`, `schedulePost`), `listConnectedAccounts` marks every account `canPost: false` with it, and `getPost`/`listPosts` give it as the reason on a post that waits.
+- A post already queued stays queued: it is not claimed, failed or deleted, reads "Waiting" on Posts with the line, and goes out at the next scheduler tick after the key is set. Cancel and reschedule keep working.
+- Stats show the numbers already stored; nothing is refreshed. Tokens of accounts connected before Post Bridge are kept.
+
+Setting the key (`npx convex env set POSTBRIDGE_API_KEY …`) turns everything on with no deploy.
+
+## Accounts connected before Post Bridge
+
+Accounts connected through Revline's own platform apps cannot be moved over. They read "Reconnect needed" with one message, and their posts stay in the history. Reconnecting the same handle keeps the same row. Their stored tokens are deleted by a daily job (`posting.retireLegacyAccounts`), which does nothing until `POSTBRIDGE_API_KEY` is set; a post that was still waiting for one fails at its time with "Reconnect @handle, then retry". Revline's old grant stays listed in the person's Google, TikTok or Instagram settings until they remove it there; Revline holds nothing that could use it.
+
+Post Bridge needs no callback from Revline: it has no webhooks, and the platforms' own callbacks (Meta's deauthorize and data deletion) go to Post Bridge's apps.
 
 ## How it works
 

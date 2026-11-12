@@ -11,10 +11,11 @@ import { downloadAvatar } from '../lib/posting/avatar';
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { analytics, createConnectLink, deleteAccount, getAccount, listAccounts, syncAnalytics, PLAN_FULL, type BridgeAccount } from '../lib/posting/postbridge/client';
 import { checkPublish, publish } from '../lib/posting/postbridge/publish';
-import { accountsUrl, platformLive, postBridgeKey, postingProvider } from '../lib/posting/server';
+import { POSTING_NOT_SET_UP } from '../lib/posting/limits';
+import { accountsUrl, postBridgeKey } from '../lib/posting/server';
 
 // Posting through Post Bridge (lib/posting/postbridge): connecting accounts with its connect links, publishing,
-// reading results and stats, and disconnecting. Post Bridge holds the platform tokens; Revline holds none for these.
+// reading results and stats, and disconnecting. Post Bridge holds the platform tokens; Revline holds none.
 //
 // Tenant isolation. Every Revline user's accounts sit in Revline's one Post Bridge workspace, so the API key can
 // reach all of them. What keeps users apart is here:
@@ -28,9 +29,8 @@ const LINK_SECONDS = 15 * 60;
 const SIGN_IN_EXPIRED = 'This account’s sign-in expired. Reconnect it to keep posting.';
 const GONE = 'This account is no longer connected. Reconnect it to keep posting.';
 const TAKEN = 'This account was connected to another Revline account. Reconnect it to post from here.';
-const UNAVAILABLE = 'Posting is not available right now. Please try again later.';
 const isPlatform = (value: string): value is PostingPlatform => (POSTING_PLATFORMS as readonly string[]).includes(value);
-const failure = (error: unknown, fallback: string) => error instanceof PostingError ? error.message : fallback;
+export const failure = (error: unknown, fallback: string) => error instanceof PostingError ? error.message : fallback;
 
 /** How many accounts this owner may connect per platform (lib/posting/account-caps.ts). A deployment without billing meters no one. */
 export async function accountCap(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<number> {
@@ -53,7 +53,7 @@ export const begin = internalMutation({
   args: { platform: postingPlatform, accountId: v.optional(v.id('postingAccounts')) }, returns: v.string(),
   handler: async (ctx, { platform, accountId }) => {
     const ownerId = await requireOwner(ctx);
-    if (!platformLive(platform)) throw new ConvexError('This platform is coming soon.');
+    if (!postBridgeKey()) throw new ConvexError(POSTING_NOT_SET_UP);
     const accounts = await ownerAccounts(ctx, ownerId), cap = await accountCap(ctx, ownerId);
     const renewing = accountId !== undefined && accounts.some(account => account._id === accountId && account.platform === platform && holdsSlot(account));
     if (!renewing && accounts.filter(account => account.platform === platform && holdsSlot(account)).length >= cap) throw new ConvexError(capMessage(PLATFORM_NAMES[platform], cap));
@@ -69,7 +69,7 @@ export const begin = internalMutation({
 export async function connectLink(ctx: ActionCtx, platform: PostingPlatform, accountId?: Id<'postingAccounts'>): Promise<string> {
   const externalRef: string = await ctx.runMutation(internal.postingBridge.begin, { platform, ...(accountId ? { accountId } : {}) });
   const key = postBridgeKey();
-  if (!key) throw new ConvexError('This platform is coming soon.');
+  if (!key) throw new ConvexError(POSTING_NOT_SET_UP);
   try { return await createConnectLink(key, { platform, returnUrl: accountsUrl(), externalRef, expiresInSeconds: LINK_SECONDS }); }
   catch (error) {
     // Revline's own Post Bridge plan is full: nothing the user can change, so it is logged for whoever runs the server.
@@ -135,8 +135,8 @@ export const applySync = internalMutation({
       if (row?.status === 'disconnected' && !((incoming.linkedAt ?? 0) > row.updatedAt)) { await unused(); continue; }
       // Disconnected while this listing was on its way: the listing is older than the disconnect and does not undo it.
       if (!row && rows.some(candidate => sameHandle(candidate) && candidate.status === 'disconnected' && candidate.updatedAt >= listedAt)) { await unused(); continue; }
-      // The same handle keeps its row, so its post history stays attached: one connected before through Revline's own
-      // apps or disconnected since, or one that needs reconnecting and came back under a new Post Bridge id.
+      // The same handle keeps its row, so its post history stays attached: one connected before Post Bridge (through
+      // Revline's own platform apps) or disconnected since, or one that needs reconnecting and came back under a new Post Bridge id.
       row ??= rows.find(candidate => sameHandle(candidate) && (!holdsSlot(candidate) || candidate.status === 'needs_reconnect' && (candidate.providerAccountId === undefined || !present.has(candidate.providerAccountId)))) ?? null;
       const held = !!row && holdsSlot(row);
       if (!held && (slots.get(incoming.platform) ?? 0) >= cap) { over.push(incoming.id); await unused(); continue; }
@@ -151,10 +151,8 @@ export const applySync = internalMutation({
       if (!row) { await ctx.db.insert('postingAccounts', { ownerId, platform: incoming.platform, platformAccountId: `postbridge:${incoming.id}`, scopes: [], createdAt: now, connectedAt: now, ...fields }); continue; }
       used.add(row._id);
       if (row.avatarStorageId && incoming.avatarStorageId) await ctx.storage.delete(row.avatarStorageId);
-      await ctx.db.patch(row._id, { ...fields, refreshLeaseUntil: undefined, ...(renewed ? { connectedAt: now } : {}) });
-      // Post Bridge holds this account's tokens from here on. The ones Revline stored through its own app are
-      // revoked at the platform, then deleted.
-      if (row.tokenCipher !== undefined) await ctx.scheduler.runAfter(0, internal.postingActions.revokeAccount, { accountId: row._id });
+      // Post Bridge holds this account's tokens. Any that Revline stored through its own platform app are deleted.
+      await ctx.db.patch(row._id, { ...fields, tokenCipher: undefined, tokenExpiresAt: undefined, refreshLeaseUntil: undefined, ...(renewed ? { connectedAt: now } : {}) });
     }
     if (complete) {
       for (const row of rows) if (row.provider === 'postbridge' && row.status === 'connected' && !used.has(row._id) && row.providerAccountId !== undefined && !present.has(row.providerAccountId)) await ctx.db.patch(row._id, { status: 'needs_reconnect', error: GONE, updatedAt: now });
@@ -170,7 +168,7 @@ export const applySync = internalMutation({
  */
 export async function syncAccounts(ctx: ActionCtx, afterLink: boolean): Promise<{ connected: string[]; overLimit: number; cap: number }> {
   const key = postBridgeKey(), nothing = { connected: [], overLimit: 0, cap: 0 };
-  if (postingProvider() !== 'postbridge' || !key) return nothing;
+  if (!key) return nothing;
   const state = await ctx.runQuery(internal.postingBridge.syncState, {}), listedAt = Date.now();
   // Every user shares Revline's one API key and its rate limit, so the same accounts are not read again right away.
   if (!state || listedAt - state.syncedAt < (afterLink ? SYNC_AFTER_LINK_MS : SYNC_EVERY_MS)) return nothing;
@@ -213,7 +211,7 @@ export const account = internalQuery({
 
 // ---------------------------------------------------------------- disconnect
 
-const REMOVE_RETRY_MS = [60_000, 10 * 60_000, 60 * 60_000, 6 * 3600_000];
+const REMOVE_RETRY_MS = [60_000, 10 * 60_000, 60 * 60_000, 6 * 3600_000], REMOVE_WITHOUT_KEY_MS = 6 * 3600_000;
 /** The account was removed at Post Bridge: forget its id, unless the row points at an account connected since. */
 export const detached = internalMutation({
   args: { accountId: v.id('postingAccounts'), providerAccountId: v.number() }, returns: v.null(),
@@ -238,8 +236,9 @@ export async function removeAtProvider(ctx: ActionCtx, removal: Removal, attempt
   // Connected again in the meantime, on the same Post Bridge account: it stays.
   if (row && row.status !== 'disconnected' && row.providerAccountId === providerAccountId) return;
   const key = postBridgeKey();
+  // Nothing can be removed while Post Bridge is not set up: asked again later, without using up the retries.
+  if (!key) { await ctx.scheduler.runAfter(REMOVE_WITHOUT_KEY_MS, internal.postingActions.removeProviderAccount, { accountId: removal.accountId, providerAccountId, ...(ref ? { ref } : {}), attempt }); return; }
   try {
-    if (!key) throw new PostingError('POSTBRIDGE_API_KEY is not set.', true);
     if (!ref) throw new PostingError('The owner’s reference is missing, so the account cannot be checked before removing it.', false);
     const remote = await getAccount(key, providerAccountId);
     // Only an account that still carries this owner's reference is removed.
@@ -259,10 +258,10 @@ type Outcome = { status: 'published'; platformPostId: string; url: string; provi
 /** Send a claimed post. Post Bridge publishes it at once and reports the outcome later, so success here is `processing`. */
 export async function publishPost(ctx: ActionCtx, accountId: Id<'postingAccounts'>, platform: PostingPlatform, input: PublishInput): Promise<Outcome> {
   const key = postBridgeKey();
-  if (!key) return { status: 'failed', error: UNAVAILABLE, retryable: true };
+  if (!key) return { status: 'failed', error: POSTING_NOT_SET_UP, retryable: true };
   const row = await ctx.runQuery(internal.postingBridge.account, { accountId });
   const reconnect = async (error: string): Promise<Outcome> => {
-    await ctx.runMutation(internal.posting.refreshFailed, { accountId, reconnect: true, error });
+    await ctx.runMutation(internal.posting.needsReconnect, { accountId, error });
     return { status: 'failed', error: `Reconnect @${row?.username ?? 'this account'}, then retry.`, retryable: false };
   };
   if (!row || row.providerAccountId === null || !row.ref) return reconnect(GONE);
@@ -281,7 +280,7 @@ export async function publishPost(ctx: ActionCtx, accountId: Id<'postingAccounts
 /** Poll a post Post Bridge is still publishing. Throws PostingError when the poll itself could not run. */
 export async function checkPost(ctx: ActionCtx, accountId: Id<'postingAccounts'>, platform: PostingPlatform, job: string): Promise<PublishCheck & { providerResultId?: string }> {
   const key = postBridgeKey();
-  if (!key) throw new PostingError(UNAVAILABLE, true);
+  if (!key) throw new PostingError(POSTING_NOT_SET_UP, true);
   // The post was already handed over, and its job says which Post Bridge account it went to: its outcome is still
   // read when the account was disconnected or reconnected since. The row only names the account for a missing link.
   const row = await ctx.runQuery(internal.postingBridge.account, { accountId });
@@ -320,8 +319,8 @@ export async function refreshStats(ctx: ActionCtx, since: number): Promise<void>
   if (!key) return;
   const now = Date.now(), due: { postId: Id<'postingPosts'>; resultId: string }[] = [];
   for (let cursor: string | null = null, done = false; !done;) {
-    const page: { posts: { postId: Id<'postingPosts'>; providerResultId?: string; publishedAt: number; statsFetchedAt?: number }[]; cursor: string; done: boolean } = await ctx.runQuery(internal.posting.statsPage, { cursor, since });
-    for (const post of page.posts) if (post.providerResultId && statsDue(post, now)) due.push({ postId: post.postId, resultId: post.providerResultId });
+    const page: { posts: { postId: Id<'postingPosts'>; providerResultId: string; publishedAt: number; statsFetchedAt?: number }[]; cursor: string; done: boolean } = await ctx.runQuery(internal.posting.statsPage, { cursor, since });
+    for (const post of page.posts) if (statsDue(post, now)) due.push({ postId: post.postId, resultId: post.providerResultId });
     cursor = page.cursor; done = page.done;
   }
   if (!due.length) return;

@@ -6,6 +6,7 @@ import type { FunctionReturnType } from 'convex/server';
 import { CircleAlert, CircleCheck, Clock, Ellipsis, Loader, Plus, Send } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
 import { ProjectCover } from '@/components/workspace/project-cover';
@@ -33,16 +34,19 @@ function reason(post: ClipPost) {
 }
 
 /** One clip as one row: which section it belongs to, when, one status word, and what can be done about it. */
-function describe(clip: Clip) {
+function describe(clip: Clip, off: boolean) {
   const { posts } = clip, now = Date.now();
+  // Posting is not set up on the server: a post that has not gone out stays queued and reads "Waiting"; the line above the list says why.
+  const held = off && posts.some(post => post.status === 'scheduled' || post.status === 'processing');
   const failed = posts.filter(post => post.status === 'failed'), published = posts.filter(post => post.status === 'published'), queued = posts.filter(post => waiting(post, now));
   const scheduled = queued.length > 0;
   const time = scheduled ? Math.min(...queued.map(post => post.scheduledAt!)) : Math.max(...posts.map(post => post.publishedAt ?? post.scheduledAt ?? clip.createdAt));
   const counted = published.filter(post => post.views !== null);
   return {
-    clip, scheduled, time, failed, published,
-    status: failed.length ? `${failed.length} of ${posts.length} failed` : scheduled ? 'Scheduled' : published.length === posts.length ? 'Posted' : 'Posting',
-    icon: failed.length ? CircleAlert : scheduled ? Clock : published.length === posts.length ? CircleCheck : Send,
+    // A held post waits with the scheduled ones.
+    clip, scheduled: scheduled || held, time, failed, published,
+    status: failed.length ? `${failed.length} of ${posts.length} failed` : scheduled ? 'Scheduled' : published.length === posts.length ? 'Posted' : held ? 'Waiting' : 'Posting',
+    icon: failed.length ? CircleAlert : scheduled || held ? Clock : published.length === posts.length ? CircleCheck : Send,
     reasons: [...new Set(failed.map(reason))],
     views: counted.length ? counted.reduce((sum, post) => sum + post.views!, 0) : null,
     retryable: failed.filter(post => post.accountStatus === 'connected'),
@@ -73,6 +77,7 @@ export function PostsPage() {
   const { isAuthenticated } = useConvexAuth();
   const clips = useQuery(api.posting.clipPosts, isAuthenticated ? {} : 'skip');
   const exporting = useQuery(api.postExports.exporting, isAuthenticated ? {} : 'skip');
+  const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip'), off = !!platforms && !platforms.some(entry => entry.live);
   const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel), cancelExporting = useMutation(api.postExports.cancel);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   const [composing, setComposing] = useState(false);
@@ -84,7 +89,7 @@ export function PostsPage() {
     if (failure) setError(userError(failure.reason, fallback));
     setBusy(null);
   }
-  const rows = clips?.map(describe) ?? [];
+  const rows = clips?.map(clip => describe(clip, off)) ?? [];
   const sections = [
     { name: 'Scheduled', rows: rows.filter(row => row.scheduled).sort((a, b) => a.time - b.time) },
     { name: 'Posted', rows: rows.filter(row => !row.scheduled).sort((a, b) => b.time - a.time) },
@@ -93,6 +98,7 @@ export function PostsPage() {
   return <>
     <main className="dash-content posts-page">
       <h1 className="sr-only">Posts</h1>
+      {off && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
       {error && <p className="dash-error" role="alert">{error}</p>}
       {!clips ? <PostsSkeleton />
         : !sections.length && !exporting?.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>

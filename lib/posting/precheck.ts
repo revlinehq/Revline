@@ -1,11 +1,8 @@
 // What a platform would refuse about a clip or its text, known before anything is exported or sent. Each rule is
-// the platform's own documented limit (lib/posting/platforms/<platform>); the adapters check the same limits again
-// at publish time, with the file in hand. Safe to import in the browser.
+// the platform's own documented limit (lib/posting/platform-limits.ts). Safe to import in the browser.
 import type { PostingPlatform } from './adapter';
 import { PLATFORM_NAMES } from './platform-names';
-import { REEL_LIMITS } from './platforms/instagram/limits';
-import { VIDEO_LIMITS } from './platforms/tiktok/settings';
-import { DESCRIPTION_MAX_BYTES, TITLE_MAX_CHARS, titleFromCaption } from './platforms/youtube/metadata';
+import { DESCRIPTION_MAX_BYTES, REEL_LIMITS, TITLE_MAX_CHARS, VIDEO_LIMITS, titleFromCaption } from './platform-limits';
 
 export type PostShape = { durationSeconds: number; width: number; height: number };
 export type PostText = { caption: string; title?: string };

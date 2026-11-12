@@ -2,15 +2,16 @@ import { ConvexError, v, type Infer } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner, requireProject } from './lib/auth';
-import { accountState, batchText, cancelPostFor, lastYouTubeVisibility, notSent, postChoices, reschedulePostFor, scheduleTime } from './posting';
+import { accountState, batchText, cancelPostFor, notSent, postChoices, requirePosting, reschedulePostFor, scheduleTime } from './posting';
 import { clipShape, exportPlan, pendingForKey, startPendingFor } from './postExports';
 import { postTarget, postVisibility, tiktokChoices, tiktokCreator } from './postingTables';
 import { tabsOf, storedTabTimeline } from './timelineTabs';
 import { MAX_EXPORT_LABEL, MAX_EXPORT_SECONDS } from '../lib/editor/limits';
 import { PLATFORM_NAMES } from '../lib/posting/platform-names';
 import { shapeProblems, textProblems } from '../lib/posting/precheck';
-import { platformLive, visibilityOptions } from '../lib/posting/server';
-import { TIKTOK_VISIBILITY_NAMES, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
+import { POSTING_NOT_SET_UP } from '../lib/posting/limits';
+import { postingReady } from '../lib/posting/server';
+import { TIKTOK_VISIBILITY_NAMES, VISIBILITY_OPTIONS, isTikTokVisibility } from '../lib/posting/visibility';
 
 // Posting for the assistant: one implementation behind the in-app assistant's tools and the MCP tools
 // (convex/lib/editorToolkit.ts). Every function takes the owner the caller was authenticated as and reads or writes
@@ -36,13 +37,13 @@ export const accounts = internalQuery({
   handler: async (ctx, { ownerId }) => {
     const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
     return rows.filter(row => row.status !== 'disconnected').map(row => {
-      const live = platformLive(row.platform), state = accountState(row);
+      const live = postingReady(), state = accountState(row);
       return {
         accountId: row._id, platform: row.platform, handle: `@${row.username}`, ...(row.displayName ? { name: row.displayName } : {}),
         status: state.status, needsReconnect: state.status === 'needs_reconnect', ...(state.error ? { problem: state.error } : {}),
         canPost: live && state.status === 'connected',
-        ...(live ? {} : { unavailable: `${PLATFORM_NAMES[row.platform]} posting is not switched on for this Revline server yet.` }),
-        visibility: row.platform === 'youtube' ? [...visibilityOptions().youtube] : row.platform === 'tiktok' ? 'Required. The levels this account allows are read from TikTok for each post: call postVideo without confirm to see them.' : 'Instagram has no per-post visibility.',
+        ...(live ? {} : { unavailable: `${POSTING_NOT_SET_UP} Nothing can be posted or scheduled until it is; tell the user exactly this.` }),
+        visibility: row.platform === 'youtube' ? 'Always public: YouTube videos cannot be posted as unlisted or private from Revline.' : row.platform === 'tiktok' ? [...VISIBILITY_OPTIONS.tiktok] : 'Instagram has no per-post visibility.',
       };
     });
   },
@@ -56,7 +57,7 @@ export const accountPlatforms = internalQuery({
     for (const raw of accountIds) {
       const id = ctx.db.normalizeId('postingAccounts', raw), account = id ? await ctx.db.get(id) : null;
       if (!account || account.ownerId !== ownerId || account.status === 'disconnected') throw new ConvexError(`Account ${raw} is not one of this user's connected accounts. Call listConnectedAccounts for their IDs.`);
-      found.push({ accountId: account._id, platform: account.platform, connected: accountState(account).status === 'connected', bridged: account.provider === 'postbridge' });
+      found.push({ accountId: account._id, platform: account.platform, connected: accountState(account).status === 'connected' });
     }
     return found;
   },
@@ -74,12 +75,13 @@ async function plan(ctx: QueryCtx | MutationCtx, ownerId: string, args: PostRequ
   else if (args.scheduledAt !== undefined) throw new ConvexError('postVideo posts now. Use schedulePost to post at a later time.');
   const { caption, title } = batchText(args, now);
 
+  // The one plain reason, as the person pressing a confirmation card reads it too. What to do with it is in the posting skill.
+  requirePosting();
   const accounts = [];
   for (const target of args.targets) {
     const account = await ctx.db.get(target.accountId);
     if (!account || account.ownerId !== ownerId || account.status === 'disconnected') throw new ConvexError(`Account ${target.accountId} is not one of this user's connected accounts. Call listConnectedAccounts for their IDs.`);
     const name = PLATFORM_NAMES[account.platform], handle = `@${account.username}`;
-    if (!platformLive(account.platform)) throw new ConvexError(`${name} posting is not switched on for this Revline server yet, so ${handle} cannot be posted to.`);
     if (accountState(account).status !== 'connected') throw new ConvexError(`${handle} on ${name} needs reconnecting before it can be posted to. The user reconnects it on the Accounts page (/accounts).`);
     const own = batchText({ caption: target.caption ?? '', title: target.title }, now), text = { caption: own.caption || caption, title: own.title ?? title };
     const refused = textProblems(account.platform, text)[0];
@@ -88,7 +90,7 @@ async function plan(ctx: QueryCtx | MutationCtx, ownerId: string, args: PostRequ
     if (account.platform === 'youtube' && target.tiktok !== undefined) throw new ConvexError(`${handle}: the tiktok settings only apply to TikTok accounts.`);
     let allowed: readonly string[] | undefined, maxSeconds: number | undefined;
     if (account.platform === 'tiktok') {
-      // TikTok's rules: the user chooses who can view every post, from what this account allows right now. No default.
+      // TikTok's rules: the user chooses who can view every post. No default.
       const creator = args.tiktokCreators.find(item => item.accountId === account._id);
       if (!creator || creator.error || !creator.privacyLevels?.length) throw new ConvexError(`${handle}: ${creator?.error ?? 'TikTok did not share this account’s posting settings. Try again in a moment.'}`);
       allowed = creator.privacyLevels; maxSeconds = creator.maxDurationSeconds;
@@ -96,15 +98,14 @@ async function plan(ctx: QueryCtx | MutationCtx, ownerId: string, args: PostRequ
       if (!isTikTokVisibility(target.visibility)) throw new ConvexError(`${handle}: TikTok needs the user's choice of who can view this post. Ask the user, then pass visibility as one of: ${levels}.`);
       if (!creator.privacyLevels.includes(target.visibility)) throw new ConvexError(`${handle}: this TikTok account does not allow ${target.visibility} right now. It allows: ${levels}.`);
     }
-    // The same checks the Post dialog's posts pass. A YouTube post without a choice uses the owner's last one, resolved
-    // here so the preview and the card state who will be able to view it.
-    const choices = await postChoices(account.platform, target, () => lastYouTubeVisibility(ctx, ownerId));
+    // The same checks the Post dialog's posts pass, resolved here so the preview and the card state who will be able to view it.
+    const choices = postChoices(account.platform, target);
     const visibility = choices.visibility;
     accounts.push({
       account, text, maxSeconds,
       view: {
         accountId: account._id, platform: account.platform, handle, caption: text.caption, ...(text.title ? { title: text.title } : {}),
-        ...(account.platform === 'youtube' ? { visibility: isYouTubeVisibility(target.visibility) ? visibility : `${visibility} (${YOUTUBE_VISIBILITY_NAMES[visibility as keyof typeof YOUTUBE_VISIBILITY_NAMES]}: none was given, so the user's last YouTube choice is used)` } : {}),
+        ...(account.platform === 'youtube' ? { visibility } : {}),
         ...(account.platform === 'tiktok' ? { visibility: `${target.visibility} (${TIKTOK_VISIBILITY_NAMES[target.visibility as keyof typeof TIKTOK_VISIBILITY_NAMES]})`, allowedVisibility: allowed, tiktok: { allowComment: false, allowDuet: false, allowStitch: false, yourBrand: false, brandedContent: false, ...choices.tiktok } } : {}),
       },
       target: { accountId: account._id, ...(own.caption ? { caption: own.caption } : {}), ...(own.title ? { title: own.title } : {}), ...(visibility ? { visibility } : {}), ...(choices.tiktok ? { tiktok: choices.tiktok } : {}) },
@@ -255,7 +256,7 @@ export const confirmProposal = mutation({
     if (row.status === 'confirmed') return null;
     if (proposalState(row, now) !== 'proposed') throw new ConvexError(row.status === 'cancelled' ? 'This post was cancelled. Ask the assistant again to post it.' : 'This confirmation expired. Ask the assistant again to post it.');
     // The clip may have been edited and an account disconnected since the card was made: everything is checked again
-    // against the project as it is now. (TikTok's own limits are read again by the adapter when the post is sent.)
+    // against the project as it is now. (Each platform's limits are checked again when the post is sent.)
     const checked = await plan(ctx, ownerId, { projectId: row.projectId, timelineIds: row.timelineIds, targets: row.targets, caption: row.caption, ...(row.title ? { title: row.title } : {}), ...(row.scheduledAt !== undefined ? { scheduledAt: row.scheduledAt } : {}), tiktokCreators: row.tiktokCreators ?? [] }, row.scheduledAt !== undefined);
     const created = await createPending(ctx, ownerId, { projectId: row.projectId, timelineIds: row.timelineIds, targets: checked.targets, caption: checked.caption, title: checked.title, scheduledAt: row.scheduledAt, key: `proposal:${proposalId}` });
     await ctx.db.patch(proposalId, { status: 'confirmed', pendingIds: created.map(item => item.pendingId) });
@@ -289,10 +290,10 @@ async function postView(ctx: QueryCtx, post: Doc<'postingPosts'>) {
     }
   }
   return {
-    postId: post._id, status: waiting ? 'scheduled' : post.status === 'scheduled' ? 'posting' : STATUS[post.status], platform: post.platform, account: `@${account?.username ?? 'removed account'}`,
+    postId: post._id, status: waiting || post.status === 'scheduled' && !postingReady() ? 'scheduled' : post.status === 'scheduled' ? 'posting' : STATUS[post.status], platform: post.platform, account: `@${account?.username ?? 'removed account'}`,
     clip: batch?.exportLabel ?? 'Video', caption: post.caption, ...(post.title ? { title: post.title } : {}), ...(post.visibility ? { visibility: post.visibility } : {}),
     ...(post.scheduledAt ? { scheduledFor: iso(post.scheduledAt) } : {}), ...(post.publishedAt ? { publishedAt: iso(post.publishedAt) } : {}), ...(post.url ? { link: post.url } : {}),
-    ...(post.status === 'failed' || post.error ? { reason: post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post.` } : {}),
+    ...(post.status === 'failed' || post.error ? { reason: post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post.` } : (post.status === 'scheduled' || post.status === 'processing') && !postingReady() ? { reason: `${POSTING_NOT_SET_UP} This post stays queued and goes out once it is.` } : {}),
     ...(post.status === 'failed' && account && accountState(account).status === 'needs_reconnect' ? { needsReconnect: true } : {}),
     ...(post.statsFetchedAt ? { stats: { views: post.views ?? 0, likes: post.likes ?? 0, comments: post.comments ?? 0, ...(post.shares !== undefined ? { shares: post.shares } : {}), asOf: iso(post.statsFetchedAt) } } : {}),
     createdBy: batch?.createdBy === 'assistant' ? batch.agentName ?? 'Revline assistant' : 'the user', ...(outdated ? { outdated } : {}),

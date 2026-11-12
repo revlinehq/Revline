@@ -21,17 +21,18 @@ export const tiktokChoices = v.object({
 export const postTarget = v.object({ accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()), visibility: v.optional(postVisibility), tiktok: v.optional(tiktokChoices) });
 /** Set on what the assistant or an MCP agent created, so the Posts page can say so. Absent on posts the user made by hand. */
 export const postAuthor = { createdBy: v.optional(v.literal('assistant')), agentName: v.optional(v.string()) };
-/** What TikTok said one account may do when it was asked (postingActions.tiktokCreatorFor). */
+/** What a TikTok account's post can be given (postingActions.tiktokCreatorFor). */
 export const tiktokCreator = v.object({ accountId: v.id('postingAccounts'), error: v.optional(v.string()), privacyLevels: v.optional(v.array(tiktokVisibility)), maxDurationSeconds: v.optional(v.number()) });
 export const accountStatus = v.union(v.literal('connected'), v.literal('needs_reconnect'), v.literal('disconnected'));
-/** A platform's data deletion request: `received` when the connection is deleted, `completed` once its posts carry nothing from the platform. */
+/** No longer written (see `postingDeletionRequests`). */
 export const deletionRequestStatus = v.union(v.literal('received'), v.literal('completed'));
 
 /** Tables of the posting base (convex/posting*): connected social accounts and the posts sent to them. */
 export const postingTables = {
-  // One connected social account. An owner can hold many per platform. `tokenCipher` is the AES-GCM sealed
-  // AccountTokens (lib/posting/crypto.ts); it never leaves the server. A disconnect keeps it only for the moments it
-  // takes to revoke the access at the platform, then removes it.
+  // One connected social account. An owner can hold several per platform (lib/posting/account-caps.ts). Post Bridge
+  // holds its tokens. `tokenCipher`, `tokenExpiresAt`, `refreshLeaseUntil`, `platformScopedId` and `scopes` are from
+  // accounts connected through Revline's own platform apps, before Post Bridge: no longer written, and the stored
+  // tokens are deleted (posting.tick).
   postingAccounts: defineTable({
     ownerId: v.string(), platform: postingPlatform, platformAccountId: v.string(), username: v.string(),
     // The platform's second id for the same account, where it has one (Instagram: the app-scoped id beside the
@@ -45,22 +46,22 @@ export const postingTables = {
     tokenCipher: v.optional(v.string()), tokenExpiresAt: v.optional(v.number()), scopes: v.array(v.string()),
     // Held while one action refreshes the tokens, so two posts never spend the same refresh token.
     refreshLeaseUntil: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
-    // Set on an account connected through Post Bridge, which then holds its tokens: `providerAccountId` is Post
-    // Bridge's social account id. Revline's whole user base shares one Post Bridge workspace, so this row is the
+    // Set on an account connected through Post Bridge: `providerAccountId` is Post Bridge's social account id. An
+    // account without `provider` was connected before Post Bridge and needs reconnecting. Revline's whole user base shares one Post Bridge workspace, so this row is the
     // only thing that says whose account that id is; no id from a client is ever sent to Post Bridge.
     provider: v.optional(v.literal('postbridge')), providerAccountId: v.optional(v.number()),
   }).index('by_owner', ['ownerId']).index('by_provider_account', ['provider', 'providerAccountId']).index('by_owner_platform_account', ['ownerId', 'platform', 'platformAccountId'])
-    // Every Revline user's connection to one platform account: how a platform callback (convex/postingCallbacks.ts) finds them.
+    // No longer read: these found the accounts a platform callback named, when Revline ran its own platform apps.
     .index('by_platform_account', ['platform', 'platformAccountId']).index('by_platform_scoped', ['platform', 'platformScopedId']),
-  // One data deletion request sent by a platform (Meta's Data Deletion Request callback). It holds no id of the person
-  // or account: `code` is the random confirmation code the status page (/data-deletion/<code>) is opened with.
+  // No longer written: one data deletion request sent by Meta while Revline ran its own Instagram app. Post Bridge's
+  // app receives those callbacks now.
   postingDeletionRequests: defineTable({ code: v.string(), platform: postingPlatform, status: deletionRequestStatus, createdAt: v.number(), completedAt: v.optional(v.number()) })
     .index('by_code', ['code']),
   // The reference Post Bridge tags a user's accounts with (`external_ref` on its connect links): random, so it
   // cannot be guessed from a user id, and fixed for the user, so every account they connect carries the same one.
   // `syncedAt`: when the user's accounts were last read from Post Bridge, so opening a page often does not spend the shared API key's rate limit.
   postingConnectRefs: defineTable({ ownerId: v.string(), ref: v.string(), createdAt: v.number(), syncedAt: v.optional(v.number()) }).index('by_owner', ['ownerId']).index('by_ref', ['ref']),
-  // A pending "connect account" round trip. The nonce is single-use: the callback deletes the row.
+  // No longer written: a pending sign-in to one of Revline's own platform apps. Leftover rows are deleted by posting.tick.
   postingOauthStates: defineTable({ nonce: v.string(), ownerId: v.string(), platform: postingPlatform, expiresAt: v.number() })
     .index('by_nonce', ['nonce']).index('by_expiresAt', ['expiresAt']),
   // One submit of the Post dialog: an export sent to several accounts with a shared default caption.

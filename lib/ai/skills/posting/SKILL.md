@@ -16,9 +16,11 @@ Posting is outward-facing: other people see it, and a post on TikTok or Instagra
 4. getPost or listPosts to answer "is it posted yet": exporting (with progress), scheduled, posting, published (with the link and stats once the platform reports them) or failed (with the reason).
 5. cancelScheduledPost and reschedulePost work on posts that have not been sent. A published post cannot be deleted or edited from Revline.
 
+If a posting tool answers that posting isn't set up yet (no Post Bridge key provided), nothing can be connected, posted or scheduled until whoever runs Revline sets it. Tell the user exactly that and stop; do not retry or try another tool. Posts already queued stay queued.
+
 ## Per-platform rules
-- YouTube: title up to 100 characters (taken from the caption's first line when absent), caption is the description. visibility public, unlisted or private; without one the user's last choice is used.
-- TikTok: visibility is required for every post and must be one the account allows (the call tells you which). There is no default: ask the user. allowComment, allowDuet and allowStitch are off unless the user asks for them. yourBrand and brandedContent are the user's commercial disclosures; set them only when the user says so, and brandedContent cannot be SELF_ONLY. Until TikTok has audited Revline, only TikTok accounts set to private can be posted to; a refused post says so in getPost.
+- YouTube: title up to 100 characters (taken from the caption's first line when absent), caption is the description. Videos are always posted public: unlisted and private are not available, so say so if the user asks for one and never pass them.
+- TikTok: visibility is required for every post: PUBLIC_TO_EVERYONE (everyone) or SELF_ONLY (only the user). Friends-only and followers-only are not available. There is no default: ask the user. allowComment, allowDuet and allowStitch are off unless the user asks for them. yourBrand and brandedContent are the user's commercial disclosures; set them only when the user says so, and brandedContent cannot be SELF_ONLY.
 - Instagram: Reels of 3 seconds to 15 minutes, caption up to 2,200 characters, 30 hashtags, 20 mentions. No per-post visibility.
 - Captions per account: accounts[].caption overrides the shared caption for that account.
 
