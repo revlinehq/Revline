@@ -108,6 +108,9 @@ export const createCheckout = action({ args: { plan: planArg }, returns: v.objec
   // Only identity.subject selects a customer. Email fallback can alias unrelated identities.
   const customer = await stripe.getOrCreateCustomer(ctx, { userId: identity.subject });
   const client = new Stripe(process.env.STRIPE_SECRET_KEY!);
+  // Checkout prefills the customer's email, so it no longer asks. The email comes from the verified Clerk token and is
+  // only written to this user's own customer; it never selects one.
+  if (identity.email && identity.emailVerified !== false) await client.customers.update(customer.customerId, { email: identity.email });
   const priceId = await planPrice(client, tier);
   // Also check Stripe directly so delayed webhooks cannot create duplicate subscriptions or trials.
   const remote = await client.subscriptions.list({ customer: customer.customerId, status: 'all', limit: 100 });
