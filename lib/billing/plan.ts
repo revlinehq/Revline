@@ -44,6 +44,9 @@ export const PLANS: Record<PlanTier, Plan> = {
   },
 };
 
+/** The plan a Stripe price's lookup key belongs to, if any. */
+export const tierForLookupKey = (lookupKey: string | null | undefined): PlanTier | undefined => PLAN_TIERS.find(tier => PLANS[tier].lookupKey === lookupKey);
+
 /** Ranks plans for upgrade and downgrade wording. */
 export const PLAN_RANK: Record<PlanTier, number> = { starter: 0, pro: 1, studio: 2 };
 

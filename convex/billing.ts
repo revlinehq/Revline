@@ -77,11 +77,11 @@ export const applySubscriptionSync = internalMutation({
     return true;
   },
 });
-/** The plan's Stripe price: STRIPE_<TIER>_PRICE_ID when release pinned one, otherwise the active price with the plan's
- *  lookup key. Either way it must be the plan's monthly USD amount. */
+/** The plan's Stripe price: the active price with the plan's lookup key, or STRIPE_<TIER>_PRICE_ID when no price
+ *  carries it. Either way it must be the plan's monthly USD amount. */
 async function planPrice(client: Stripe, tier: PlanTier) {
   const plan = PLANS[tier], pinned = pinnedPriceId(tier);
-  const price = pinned ? await client.prices.retrieve(pinned) : (await client.prices.list({ lookup_keys: [plan.lookupKey], active: true, limit: 1 })).data[0];
+  const price = (await client.prices.list({ lookup_keys: [plan.lookupKey], active: true, limit: 1 })).data[0] ?? (pinned ? await client.prices.retrieve(pinned) : undefined);
   if (!price) throw new ConvexError(`${plan.name} is not available yet.`);
   if (!price.active || price.currency !== 'usd' || price.unit_amount !== plan.monthlyPrice * 100 || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) throw new ConvexError('Billing price does not match the plan.');
   return price.id;

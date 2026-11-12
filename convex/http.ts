@@ -11,6 +11,7 @@ import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { registerMcpBridgeRoutes } from './mcpBridgeHttp';
 import { registerAppleBillingRoutes } from './appleBillingHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
+import { tierForLookupKey } from '../lib/billing/plan';
 const http = httpRouter();
 http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
 registerAlertWebhooks(http);
@@ -72,13 +73,15 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
           const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
           const item = subscription.items.data[0];
           if (subscription.id !== stripeSubscriptionId) throw new Error('Invalid subscription response');
+          const plan = tierForLookupKey(item?.price.lookup_key);
           await ctx.runMutation(internal.billing.applySubscriptionSync, {
             stripeSubscriptionId, eventId: event.id, token,
             stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
             status: subscription.status, currentPeriodEnd: item?.current_period_end ?? 0,
             cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
             cancelAt: subscription.cancel_at ?? undefined, quantity: item?.quantity ?? 1,
-            priceId: item?.price.id ?? '', metadata: subscription.metadata,
+            // The price's lookup key names the plan, so a price changed in the portal or dashboard still reads right.
+            priceId: item?.price.id ?? '', metadata: { ...subscription.metadata, ...(plan ? { plan } : {}) },
           });
         }
       } else {
