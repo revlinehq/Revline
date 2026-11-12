@@ -15,19 +15,25 @@ function requireBilling() {
   if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || (origin.protocol !== "https:" && !(origin.protocol === "http:" && ["localhost", "127.0.0.1"].includes(origin.hostname)))) throw new ConvexError("Billing origin is invalid");
   return origin.origin;
 }
-export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), tier: v.optional(v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"))), ultraAvailable: v.boolean() }), handler: async (ctx) => {
-  const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let paymentIssue = false;
+export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), tier: v.optional(v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"))), ultraAvailable: v.boolean(),
+  /** The web subscription's dates, in ms: when its free trial ends, and when a scheduled cancellation ends it. Added after
+   *  installed iOS builds; they ignore it. */
+  subscriptionDates: v.optional(v.object({ trialEnd: v.optional(v.number()), cancelAt: v.optional(v.number()) })) }), handler: async (ctx) => {
+  const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let paymentIssue = false; let subscriptionDates: { trialEnd?: number; cancelAt?: number } | undefined;
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
   const tier = identity ? await activePlanTier(ctx, identity.subject) : null;
   const apple = identity ? await activeAppleEntitlement(ctx, identity.subject) : null;
-  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(sub => hasEditorAccess(sub) && subscriptionTier(sub) !== null); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
+  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); const current = subs.find(sub => hasEditorAccess(sub) && subscriptionTier(sub) !== null); subscribed = !!current;
+    // While trialing, Stripe's current period is the trial, so it ends with it. A cancellation ends at cancelAt, or at the period end.
+    if (current) { const cancelAt = current.cancelAt ?? (current.cancelAtPeriodEnd ? current.currentPeriodEnd : undefined); subscriptionDates = { ...(current.status === 'trialing' ? { trialEnd: current.currentPeriodEnd * 1000 } : {}), ...(cancelAt !== undefined ? { cancelAt: cancelAt * 1000 } : {}) }; }
+    trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
   const stripeSubscribed = subscribed;
   const subscriptionSource: 'apple' | 'stripe' | undefined = apple ? 'apple' : stripeSubscribed ? 'stripe' : undefined;
   subscribed ||= !!apple;
   // `plan` keeps the shape installed iOS builds read: Studio reads as 'ultra' and Starter as 'pro'. `tier` names the plan.
   const plan: 'ultra' | 'pro' | 'free' = tier === 'studio' ? 'ultra' : subscribed || complimentary ? 'pro' : 'free';
   const entitlement = complimentary ? await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', identity!.subject)).unique() : null;
-  return { enabled: billingEnabled(), configured: ready() || !!apple, subscribed, ...(subscriptionSource ? { subscriptionSource } : {}), ...(apple ? { appleExpiresAt: apple.accessUntil } : {}), ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary || apple ? false : trialEligible, needsPayment: !!identity && billingEnabled() && !subscribed && !complimentary, paymentIssue: !subscribed && !complimentary && paymentIssue, plan, ...(tier && (subscribed || complimentary) ? { tier } : {}), ultraAvailable: ready() };
+  return { enabled: billingEnabled(), configured: ready() || !!apple, subscribed, ...(subscriptionSource ? { subscriptionSource } : {}), ...(apple ? { appleExpiresAt: apple.accessUntil } : {}), ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary || apple ? false : trialEligible, needsPayment: !!identity && billingEnabled() && !subscribed && !complimentary, paymentIssue: !subscribed && !complimentary && paymentIssue, plan, ...(tier && (subscribed || complimentary) ? { tier } : {}), ultraAvailable: ready(), ...(subscriptionDates && Object.keys(subscriptionDates).length ? { subscriptionDates } : {}) };
 }});
 export const reserveCheckout = internalMutation({
   args: { ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), expiredRequestId: v.optional(v.string()) },

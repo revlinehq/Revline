@@ -14,6 +14,12 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
 
 export type CheckoutReturn = 'success' | 'canceled' | undefined;
+const day = (time: number) => new Date(time).toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
+/** "Trial ends …" and "Cancels …" when the web subscription has them, else that it is the current plan. */
+function subscriptionState(dates?: { trialEnd?: number; cancelAt?: number }) {
+  const parts = [dates?.trialEnd !== undefined && `Trial ends ${day(dates.trialEnd)}`, dates?.cancelAt !== undefined && `Cancels ${day(dates.cancelAt)}`].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'Your current plan';
+}
 
 export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
@@ -71,7 +77,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
       </> : <>
         <SettingsRow label="Plan">{status.subscribed || status.complimentary ? `Revline ${plan.name}` : 'No plan yet'}</SettingsRow>
         <SettingsRow label="Price">{status.complimentary ? 'Complimentary membership' : status.subscribed ? `$${plan.monthlyPrice} per month · ${plan.currency}` : `From $${PLANS.starter.monthlyPrice} per month · ${PLANS.starter.currency}`}</SettingsRow>
-        <SettingsRow label="Status">{status.complimentary ? status.complimentaryExpiresAt ? `Free access until ${new Date(status.complimentaryExpiresAt).toLocaleDateString()}` : 'Free access forever' : status.subscribed ? 'Your current plan' : 'No active plan'}</SettingsRow>
+        <SettingsRow label="Status">{status.complimentary ? status.complimentaryExpiresAt ? `Free access until ${new Date(status.complimentaryExpiresAt).toLocaleDateString()}` : 'Free access forever' : status.subscribed ? subscriptionState(status.subscriptionDates) : 'No active plan'}</SettingsRow>
         {usage && (status.subscribed || status.complimentary) && <PlanUsageRows usage={usage} />}
         {(changing || checkoutReturn || !status.complimentary || error) && <SettingsBody>
           {changing && <p role="status">Moving you to {PLANS[changingTo!].name}. This takes a few seconds…</p>}
