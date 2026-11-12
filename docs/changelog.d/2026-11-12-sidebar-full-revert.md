@@ -1,0 +1,1 @@
+- Editor: the side panel is back to its pre-#375 form (pull tab, Media and Effects tabs) and the rail, clip header and Applied effects list are gone. Why: the founder asked for the whole sidebar change to be undone.
