@@ -10,6 +10,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkspaceThemeProvider } from '@/components/workspace/theme-provider';
 import { usePathname } from 'next/navigation';
 import { UserSync } from '@/components/user-sync';
+import { PlanLimitDialog } from '@/components/workspace/plan-limit-dialog';
+import { notifyPlanLimit, planLimitOf } from '@/lib/billing/limit-events';
 
 const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
 if (!convexUrl) {
@@ -21,11 +23,12 @@ const originalAction = convex.action.bind(convex);
 configureIncidentClient(incident => originalMutation(api.incidents.reportClient, incident));
 convex.mutation = async (ref, ...args) => {
   try { return await originalMutation(ref, ...args); }
-  catch (error) { if (getFunctionName(ref) !== 'incidents:reportClient') reportClientFailure(error, getFunctionName(ref)); throw error; }
+  catch (error) { if (planLimitOf(error)) notifyPlanLimit(error); else if (getFunctionName(ref) !== 'incidents:reportClient') reportClientFailure(error, getFunctionName(ref)); throw error; }
 };
 convex.action = async (ref, ...args) => {
   try { return await originalAction(ref, ...args); }
-  catch (error) { reportClientFailure(error, getFunctionName(ref)); throw error; }
+  // A plan limit (storage full, AI usage used up) is not a failure: it opens the upgrade dialog instead.
+  catch (error) { if (planLimitOf(error)) notifyPlanLimit(error); else reportClientFailure(error, getFunctionName(ref)); throw error; }
 };
 if (typeof window !== 'undefined') installUncaughtIncidentHandlers();
 
@@ -34,6 +37,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
       {!prototype && <UserSync />}
+      {!prototype && <PlanLimitDialog />}
       <WorkspaceThemeProvider><TooltipProvider>{children}</TooltipProvider></WorkspaceThemeProvider>
     </ConvexProviderWithClerk>
   );

@@ -6,7 +6,7 @@ import { projectIdentity } from './lib/project_data';
 import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { exportsFull, startRenderFor } from './renders';
 import { internal } from './_generated/api';
-import { hasUltraPlan } from './lib/billing_access';
+import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { accountPicture, accountState, batchText, createBatchFor, projectCover, requirePosting } from './posting';
 import { postingPlatform } from './postingTables';
 import { pendingPostStatus } from './postingTables';
@@ -26,7 +26,7 @@ function sameVersion(job: Doc<'renderJobs'>, project: Doc<'projects'>, timelineI
 }
 /**
  * The export settings the user last chose for a whole timeline of this project (a finished export), or the export
- * dialog's defaults. No new preference is stored. 4K stays with the Ultra plan.
+ * dialog's defaults. No new preference is stored. 4K stays with the Studio plan.
  */
 function exportSettings(jobs: Doc<'renderJobs'>[], fps: number, ultra: boolean) {
   // A one-off setting the user asked the assistant for is never taken as their choice.
@@ -157,6 +157,9 @@ async function settleJob(ctx: MutationCtx, jobId: Id<'renderJobs'>) {
     // Checked before the batch is written: a mutation that caught an error half way would keep the rows written so far.
     const reason = await targetsProblem(ctx, pending.ownerId, pending.accountIds);
     if (reason) { await fail(pending, `Nothing was posted. ${reason}`); continue; }
+    // createBatchFor refuses an owner whose plan lapsed while the export rendered: fail this post instead of the whole settle.
+    const lapsed = await requireEditorAccess(ctx, pending.ownerId).then(() => null, (error: unknown) => { if (error instanceof ConvexError) return 'Your plan has ended. Renew it to post.'; throw error; });
+    if (lapsed) { await fail(pending, `Nothing was posted. ${lapsed}`); continue; }
     const batchId = await createBatchFor(ctx, pending.ownerId, {
       jobId, caption: pending.caption, ...(pending.title ? { title: pending.title } : {}), ...(pending.campaignId ? { campaignId: pending.campaignId } : {}),
       // A time that passed while the export rendered posts now.

@@ -89,6 +89,7 @@ import type * as lib_media_task_data from "../lib/media_task_data.js";
 import type * as lib_normalization_validator from "../lib/normalization_validator.js";
 import type * as lib_pacing_validator from "../lib/pacing_validator.js";
 import type * as lib_pixel_track_validator from "../lib/pixel_track_validator.js";
+import type * as lib_plan_limits from "../lib/plan_limits.js";
 import type * as lib_processor_backend from "../lib/processor_backend.js";
 import type * as lib_processor_capabilities from "../lib/processor_capabilities.js";
 import type * as lib_project_data from "../lib/project_data.js";
@@ -158,6 +159,7 @@ import type * as timelineShares from "../timelineShares.js";
 import type * as timelineTabs from "../timelineTabs.js";
 import type * as toolWrites from "../toolWrites.js";
 import type * as uploads from "../uploads.js";
+import type * as usage from "../usage.js";
 import type * as users from "../users.js";
 
 import type {
@@ -248,6 +250,7 @@ declare const fullApi: ApiFromModules<{
   "lib/normalization_validator": typeof lib_normalization_validator;
   "lib/pacing_validator": typeof lib_pacing_validator;
   "lib/pixel_track_validator": typeof lib_pixel_track_validator;
+  "lib/plan_limits": typeof lib_plan_limits;
   "lib/processor_backend": typeof lib_processor_backend;
   "lib/processor_capabilities": typeof lib_processor_capabilities;
   "lib/project_data": typeof lib_project_data;
@@ -317,6 +320,7 @@ declare const fullApi: ApiFromModules<{
   timelineTabs: typeof timelineTabs;
   toolWrites: typeof toolWrites;
   uploads: typeof uploads;
+  usage: typeof usage;
   users: typeof users;
 }>;
 

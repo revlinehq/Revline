@@ -15,6 +15,7 @@ import { shouldUnderstandFootage } from '../lib/media-analysis/overview-policy';
 import { TRANSCRIPT_VERSION } from '../lib/media-analysis/transcript';
 import { createProject,readProject,projectIdentity,projectRun } from './lib/project_data';
 import { requireEditorAccess } from './lib/billing_access';
+import { requireStorageRoom } from './lib/plan_limits';
 import { ConvexError, v, type Infer, type ObjectType } from 'convex/values';
 import { vResultValidator, vWorkflowId, type WorkflowId } from '@convex-dev/workflow';
 import { internal } from './_generated/api';
@@ -179,6 +180,8 @@ export const start = mutation({ args: { projectId: v.id('projects'), assetId: v.
 const importVideoForArgs = { sourcesOnly: v.optional(v.boolean()), projectId: v.optional(v.id('projects')), url: v.string(), start: v.optional(v.number()), end: v.optional(v.number()) };
 export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof importVideoForArgs>) {
   await requireEditorAccess(ctx, ownerId);
+  // The video's size is unknown until it downloads, so the account only needs room left.
+  await requireStorageRoom(ctx, ownerId, null);
   let link: VideoLink;
   try { link = parseVideoLink(args.url); } catch (error) { throw new ConvexError((error as Error).message); }
   const sourceUrl = link.url;

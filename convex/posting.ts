@@ -3,6 +3,7 @@ import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
+import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
 import { exportFileName } from './renders';
 import { accountStatus, postingPlatform, postStatus, postVisibility, tiktokChoices, tiktokVisibility, youtubeVisibility } from './postingTables';
@@ -239,6 +240,8 @@ export function batchText(args: Pick<BatchInput, 'caption' | 'title' | 'schedule
 }
 /** `createBatch` for an owner already identified: also what a post waiting for its export runs when the export completes. */
 export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: BatchInput) {
+  // Posting is part of a plan: a lapsed trial or subscription cannot schedule new posts.
+  await requireEditorAccess(ctx, ownerId);
   const now = Date.now();
   if (!args.targets.length) throw new ConvexError('Pick at least one account.');
   if (args.targets.length > TARGET_LIMIT || new Set(args.targets.map(target => target.accountId)).size !== args.targets.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
@@ -272,6 +275,7 @@ export const retry = mutation({
   handler: async (ctx, { postId }) => {
     const ownerId = await requireOwner(ctx), post = await ownedPost(ctx, ownerId, postId), now = Date.now();
     requirePosting();
+    await requireEditorAccess(ctx, ownerId);
     if (post.status !== 'failed') throw new ConvexError('Only a failed post can be retried.');
     const account = await ctx.db.get(post.accountId);
     if (!account || accountState(account).status !== 'connected') throw new ConvexError('Reconnect this account before retrying.');

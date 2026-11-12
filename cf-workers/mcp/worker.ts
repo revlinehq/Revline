@@ -39,7 +39,7 @@ const validSession = (value: string) => /^[\x21-\x7e]{1,256}$/.test(value);
 function refused(auth: AuthError) {
   if (auth.error === 'invalid_token') return rpcError(-32001, 'This Revline connection expired or was revoked. Connect again.', 401, { 'WWW-Authenticate': challenge('invalid_token') });
   if (auth.error === 'rate_limited') return rpcError(-32002, 'Too many tool calls. Wait a minute and retry.', 429, { 'Retry-After': '60' });
-  return rpcError(-32003, 'The Revline MCP connector is part of the Ultra plan.', 403);
+  return rpcError(-32003, 'The Revline MCP connector is part of the Pro and Studio plans.', 403);
 }
 
 type CallAuth = { credential: string };
@@ -78,7 +78,7 @@ export class RevlineMcp extends McpAgent<Env, unknown, Record<string, never>> {
         name: request.params.name, arguments: request.params.arguments ?? {},
       });
       if ('error' in reply) {
-        const text = reply.error === 'session_closed' ? 'This MCP session ended. Initialize a new session.' : reply.error === 'rate_limited' ? 'Too many tool calls. Wait a minute and retry.' : reply.error === 'plan' ? 'The Revline MCP connector is part of the Ultra plan.' : 'This Revline connection expired or was revoked. Connect again.';
+        const text = reply.error === 'session_closed' ? 'This MCP session ended. Initialize a new session.' : reply.error === 'rate_limited' ? 'Too many tool calls. Wait a minute and retry.' : reply.error === 'plan' ? 'The Revline MCP connector is part of the Pro and Studio plans.' : 'This Revline connection expired or was revoked. Connect again.';
         return { content: [{ type: 'text' as const, text }], isError: true };
       }
       const outcome = reply.outcome;
@@ -185,7 +185,7 @@ const consent = {
       // The handle is spent by now; a Convex failure gets a clear page rather than a bare error.
       try { grant = await bridge(env, { op: 'createGrant', approval, handle, clientId: approved.request.clientId, clientName: client?.clientName ?? 'MCP client' }); }
       catch (error) { console.error(`[mcp-oauth] ${JSON.stringify({ event: 'create-grant-failed', message: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`); return page('Revline could not finish connecting. Start again from the app you are connecting.', 503); }
-      if ('error' in grant) return page(grant.error === 'plan' ? 'Connecting AI apps needs an active Revline plan.' : 'This approval expired. Start again from the app you are connecting.', grant.error === 'plan' ? 403 : 400);
+      if ('error' in grant) return page(grant.error === 'plan' ? 'Connecting AI apps needs the Pro or Studio plan.' : 'This approval expired. Start again from the app you are connecting.', grant.error === 'plan' ? 403 : 400);
       // Each approval is its own connection, as in Convex: approving an app again does not end its other connections.
       const { redirectTo } = await oauth.completeAuthorization({ request: approved.request, userId: grant.ownerId, metadata: { grantId: grant.grantId }, scope: ['revline'], props: { credential: grant.grantKey } satisfies Props, revokeExistingGrants: false });
       approved.headers.set('Location', redirectTo);

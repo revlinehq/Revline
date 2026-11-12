@@ -16,7 +16,7 @@ const TURN_FUNCTIONS = new Set([
   'toolWrites:run', 'toolWrites:receipt',
   'saveIncidents:observe', 'incidents:reportAgent', 'incidents:reportLimitation', 'incidents:reportRunner',
   'assistantMessages:add', 'assistantMessages:finalize', 'assistantMessages:update',
-  'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record',
+  'agentRunner:claim', 'agentRunner:heartbeat', 'agentRunner:settle', 'agentRunner:release', 'aiCosts:record', 'usage:aiRefusal',
   'assistant:listRunTimelines', 'assistant:createRunTimeline', 'assistant:openRunTimeline', 'assistant:importRunVideo', 'assistant:runMediaTask', 'assistant:exportRunVideo',
   'assistant:analysisRequest', 'assistant:apply', 'assistant:attachRunStockAudio', 'assistant:beginEditing', 'assistant:clearAnalysis', 'assistant:currentPrompt', 'assistant:earlierRequests', 'assistant:finish', 'assistant:getRun', 'assistant:getRunAsset', 'assistant:getRunTimeline', 'assistant:isRunActive', 'assistant:modelForRun', 'assistant:previewDraft', 'assistant:recordBudget', 'assistant:recordEffort', 'assistant:requestAnalysis', 'assistant:recordFix', 'assistant:revisionChanges', 'assistant:revisionHistory', 'assistant:reserveAudioRequest', 'assistant:saveGeneratedSound', 'assistant:undoLatestEdit',
   'blueprints:checkState', 'blueprints:getForTools', 'blueprints:listForTools', 'blueprints:requestCheck', 'blueprints:saveFromCheck',

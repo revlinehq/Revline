@@ -11,6 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { userError } from '@/lib/user-error';
 import { formatBytes } from './format';
+import { usePlanUsage } from '@/components/workspace/plan-usage';
 
 type Summary = FunctionReturnType<typeof api.storage.summary>;
 type Unfinished = FunctionReturnType<typeof api.cloudMedia.unfinished>[number];
@@ -19,19 +20,22 @@ const KINDS = [['videoBytes', 'Video'], ['audioBytes', 'Audio'], ['imageBytes', 
 const QUIET_MS = 30 * 60_000;
 function elapsed(ms: number) { const minutes = Math.floor(ms / 60_000); if (minutes < 1) return 'under a minute'; if (minutes < 60) return `${minutes} min`; const hours = Math.floor(minutes / 60); return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} d`; }
 
-/** The quiet meter beside the page name. No storage limit is enforced, so it shows what is used and how that
- * splits by kind, never a share of an allowance. */
+/** The quiet meter beside the page name: what is stored against the plan's storage limit (convex/lib/plan_limits.ts
+ * refuses uploads past it), split by kind. Without a limit (billing off) the bar splits what is used. */
 export function LibraryUsage({ summary }: { summary?: Summary }) {
   const [review, setReview] = useState(false);
+  const limit = usePlanUsage()?.storage.limitBytes ?? null;
   if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="h-1 w-[84px]" /><Skeleton className="h-3 w-20" /></div>;
+  const scale = limit ?? summary.usedBytes, used = limit === null ? `${formatBytes(summary.usedBytes)} used` : `${formatBytes(summary.usedBytes)} of ${formatBytes(limit)}`;
   return <>
     <Popover>
-      <PopoverTrigger asChild><Button variant="ghost" className="library-usage" aria-label={`${formatBytes(summary.usedBytes)} used. Show storage by kind`}>
-        <span className="library-meter" aria-hidden="true">{KINDS.map(([field]) => <i key={field} data-kind={field} style={{ width: `${summary.usedBytes > 0 ? summary[field] / summary.usedBytes * 100 : 0}%` }} />)}</span>
-        <span>{formatBytes(summary.usedBytes)} used</span>
+      <PopoverTrigger asChild><Button variant="ghost" className="library-usage" aria-label={`${used}. Show storage by kind`}>
+        <span className="library-meter" aria-hidden="true">{KINDS.map(([field]) => <i key={field} data-kind={field} style={{ width: `${scale > 0 ? Math.min(100, summary[field] / scale * 100) : 0}%` }} />)}</span>
+        <span>{used}</span>
       </Button></PopoverTrigger>
       <PopoverContent align="end" className="library-usage-panel">
-        <strong>{formatBytes(summary.usedBytes)} used</strong>
+        <strong>{used}</strong>
+        {limit !== null && summary.usedBytes + summary.reservedBytes >= limit && <p>Your storage is full. Delete files or upgrade your plan to upload more. Nothing stored is removed.</p>}
         <ul>{KINDS.map(([field, label]) => <li key={field}><i data-kind={field} />{label}<span>{formatBytes(summary[field])}</span></li>)}</ul>
         {summary.reservedBytes > 0 && <p>{formatBytes(summary.reservedBytes)} reserved for uploads in progress. <Button variant="soft" size="sm" onClick={() => setReview(true)}>Review</Button></p>}
       </PopoverContent>
