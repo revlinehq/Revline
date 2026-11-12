@@ -408,6 +408,10 @@ export default defineSchema({
    * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
   storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()) })
     .index('by_owner_parent',['ownerId','parentId']),
+  /** Video links imported from the Library. Each runs as a `sourcesOnly` import in a holding project of its own; when it
+   * ends, `library.settleLinkImport` keeps the video as a Library file in `folderId` and removes the holder. */
+  libraryLinkImports: defineTable({ ownerId:v.string(), taskId:v.id('mediaTasks'), projectId:v.id('projects'), folderId:v.optional(v.id('storageFolders')), createdAt:v.number() })
+    .index('by_task',['taskId']).index('by_owner_created',['ownerId','createdAt']),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
   appleBillingAccounts: defineTable({ ownerId: v.string(), appAccountToken: v.string(), createdAt: v.number() }).index('by_owner', ['ownerId']).index('by_token', ['appAccountToken']),
