@@ -1,10 +1,7 @@
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS} from '../../lib/ai/edit-progress';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
-import { rebaseNonDestructiveEdit } from './editSessionRebase';
-import { applyTimelineEdit } from '../../lib/editor/timeline-sync';
 import { isApprovalRejection, isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
-const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
 export class IncompleteEditError extends Error {
   constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number, steps = 0) {
     const cause = reason === 'step_limit' ? steps >= EDITOR_HARD_STEPS ? 'This request reached its editing step limit before finishing.' : 'The request paused because recent steps made no new timeline changes.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
@@ -13,28 +10,16 @@ export class IncompleteEditError extends Error {
   }
 }
 
-/** The draft's changes since `base`, on top of what was saved meanwhile. applyTimelineEdit merges clips, markers,
- * fps, aspect ratio and tracks; every other timeline setting the draft changed (LUTs, audio normalization) is carried too. */
-function rebaseDraft(base: Timeline, draft: Timeline, saved: Timeline): Timeline {
-  const merged = applyTimelineEdit(base, draft, saved) as Timeline & Record<string, unknown>;
-  const before = base as Timeline & Record<string, unknown>, after = draft as Timeline & Record<string, unknown>;
-  for (const key of new Set([...Object.keys(before), ...Object.keys(after)])) {
-    if (['clips', 'markers', 'fps', 'aspectRatio', 'tracks'].includes(key) || JSON.stringify(before[key]) === JSON.stringify(after[key])) continue;
-    if (after[key] === undefined) delete merged[key]; else merged[key] = after[key];
-  }
-  return merged;
-}
-
 type EditStorage = {
   apply: (timeline: Timeline, revision: number, publication?:boolean) => Promise<number>;
   validate: (timeline: Timeline, revision: number) => Promise<unknown>;
-  refresh?: () => Promise<{ timeline: Timeline; revision: number }>;
   beforeChange?: () => Promise<unknown>;
 };
 
 const sourcePlacementFields = ['assetId', 'kind', 'start', 'duration', 'sourceStart', 'playbackRate', 'track'] as const;
 
-/** One serialized model turn. Source edits stay private until publication. */
+/** One serialized model turn. Source edits stay private until publication. The project is locked for the whole
+ * run (editingWorkflowActive), so nothing else moves the revision under it: a stale revision is a fault, not a merge. */
 export class EditSession {
   timeline: Timeline;
   revision: number;
@@ -42,44 +27,21 @@ export class EditSession {
   staged = false;
   private pending: Promise<unknown> = Promise.resolve();
   private failed = false;
-  private needsInspection = false;
   private stagedEdits = 0;
-  /** The saved timeline at `revision`: what a private draft was built on. */
-  private base: Timeline;
 
   constructor(timeline: Timeline, revision: number, private storage: EditStorage, private signal?: AbortSignal) {
     this.timeline = normalizeTimeline(timeline);
-    this.base = this.timeline;
     this.revision = revision;
   }
 
-  /** The project was saved elsewhere since this session last read it (the user's open editor, a finished
-   * media job). Adopt the saved timeline and revision; a private draft keeps its own changes on top of it,
-   * so the next write names the current revision instead of repeating the stale one. False when nothing moved. */
-  private async adoptSaved() {
-    if (!this.storage.refresh) return false;
-    const fresh = await this.storage.refresh();
-    if (fresh.revision === this.revision) return false;
-    const saved = normalizeTimeline(fresh.timeline);
-    this.timeline = this.staged && this.stagedEdits ? normalizeTimeline(rebaseDraft(this.base, this.timeline, saved)) : saved;
-    this.base = saved; this.revision = fresh.revision;
-    return true;
-  }
-
-  /** Publish the private draft; a revision that moved underneath it is rebased once and published again. */
+  /** Publish the private draft. */
   private async applyStaged() {
-    try { this.revision = await this.storage.apply(this.timeline, this.revision, true); }
-    catch (error) {
-      if (!isTimelineConflict(error) || !await this.adoptSaved()) throw error;
-      await this.storage.validate(this.timeline, this.revision);
-      this.revision = await this.storage.apply(this.timeline, this.revision, true);
-    }
-    this.base = this.timeline;
+    this.revision = await this.storage.apply(this.timeline, this.revision, true);
   }
 
   private enqueue<T>(operation: () => Promise<T>, rejectedBeforeChange?: (error: unknown) => boolean): Promise<T> {
     const result = this.pending.then(() => { this.signal?.throwIfAborted(); return operation(); });
-    this.pending = result.catch(error => { if (this.staged && !rejectedBeforeChange?.(error)) this.failed = true; if (isTimelineConflict(error)) this.needsInspection = true; });
+    this.pending = result.catch(error => { if (this.staged && !rejectedBeforeChange?.(error)) this.failed = true; });
     return result;
   }
 
@@ -98,17 +60,15 @@ export class EditSession {
     if (!force&&current.revision <= this.revision) return;
     const advanced=current.revision>this.revision;
     this.timeline = normalizeTimeline(current.timeline);
-    this.base = this.timeline;
     this.revision = current.revision;
     if(advanced)this.savedEdits++;
     this.staged = false;
     this.stagedEdits = 0;
     this.failed = false;
-    this.needsInspection = false;
   }
 
   private async publishCurrentTimeline() {
-    if (this.failed || this.needsInspection) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');
+    if (this.failed) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');
     if (!this.staged) return;
     await this.applyStaged();
     this.savedEdits++;
@@ -125,7 +85,6 @@ export class EditSession {
       const opened = await open(this.revision);
       const timelineChanged = opened.revision !== this.revision;
       this.timeline = normalizeTimeline(opened.timeline);
-      this.base = this.timeline;
       this.revision = opened.revision;
       if (timelineChanged) this.savedEdits++;
       return { timelineId: opened.timelineId, opened: true, timelineChanged, revision: this.revision, saved: timelineChanged };
@@ -135,8 +94,7 @@ export class EditSession {
   checkpoint(edit: (timeline: Timeline) => Timeline) {
     let preflightRejection: TimelineGestureRejection | undefined;
     return this.enqueue(async () => {
-      if (this.needsInspection) throw new Error('The timeline changed elsewhere. Inspect the refreshed timeline before continuing.');
-      let previous = this.timeline;
+      const previous = this.timeline;
       let edited: Timeline;
       try { edited = edit(previous); }
       catch (error) {
@@ -145,7 +103,7 @@ export class EditSession {
         if (isOverlapPlacementRejection(error) || isApprovalRejection(error)) preflightRejection = error;
         throw error;
       }
-      let next = normalizeTimeline(edited);
+      const next = normalizeTimeline(edited);
       if (next === previous || JSON.stringify(next) === JSON.stringify(previous)) return { applied: false, saved: false, staged: this.staged, unchanged: true, revision: this.revision, changedClips: [], removedClipIds: [], removedMarkerIds: [], aspectRatio: previous.aspectRatio };
       await this.storage.beforeChange?.();
       // What this edit removes and changes, between the timeline it ran on and its result.
@@ -163,39 +121,17 @@ export class EditSession {
         const removedMarkerIds = (previous.markers ?? []).filter(marker => !remainingMarkerIds.has(marker.id)).map(marker => marker.id);
         return { removedClipIds, sourceChanged, changedMarkerIds, removedMarkerIds };
       };
-      let { removedClipIds, sourceChanged, changedMarkerIds, removedMarkerIds } = describe(previous, next);
+      const { removedClipIds, sourceChanged, changedMarkerIds, removedMarkerIds } = describe(previous, next);
       // Splits preserve the original IDs, and trims/moves can temporarily leave gaps.
       // Stage the first source change, not just its later deletion/replacement.
       // Only a validated draft makes the session staged: a refused first draft leaves nothing private to protect.
       const staging = this.staged || removedClipIds.length > 0 || sourceChanged;
       if (staging) {
-        try { await this.storage.validate(next, this.revision); }
-        catch (error) {
-          if (!isTimelineConflict(error) || !await this.adoptSaved()) throw error;
-          // Repeat this edit on the refreshed timeline. An edit that no longer applies there fails with its own reason.
-          previous = this.timeline;
-          next = normalizeTimeline(edit(previous));
-          ({ removedClipIds, sourceChanged, changedMarkerIds, removedMarkerIds } = describe(previous, next));
-          await this.storage.validate(next, this.revision);
-        }
+        await this.storage.validate(next, this.revision);
         this.staged = true;
       } else {
-        try { this.revision = await this.storage.apply(next, this.revision); }
-        catch (error) {
-          if (!isTimelineConflict(error) || !this.storage.refresh) throw error;
-          const fresh = await this.storage.refresh();
-          this.timeline = normalizeTimeline(fresh.timeline); this.base = this.timeline; this.revision = fresh.revision;
-          try {
-            next = rebaseNonDestructiveEdit(previous, next, this.timeline); previous = this.timeline;
-            if (JSON.stringify(next) === JSON.stringify(previous)) return { applied:false, saved:false, staged:false, unchanged:true, revision:this.revision, changedClips:[], removedClipIds:[], removedMarkerIds:[], aspectRatio:previous.aspectRatio };
-            this.revision = await this.storage.apply(next, this.revision);
-          } catch (retryError) {
-            if (isTimelineConflict(retryError)) this.needsInspection = true;
-            throw retryError;
-          }
-        }
+        this.revision = await this.storage.apply(next, this.revision);
         this.savedEdits++;
-        this.base = next;
       }
       this.timeline = next;
       if (this.staged) this.stagedEdits++;
@@ -207,18 +143,13 @@ export class EditSession {
   inspect(read: () => Promise<{ timeline: Timeline; revision: number }>) {
     return this.enqueue(async () => {
       const current = await read();
+      // A private draft is the run's own view of the timeline; nothing else saves while the run holds the lock.
       if (this.staged) {
-        // The draft keeps its changes on top of whatever was saved meanwhile; the preview follows it.
-        if (current.revision !== this.revision) {
-          if (!await this.adoptSaved()) throw new Error('The timeline changed elsewhere. Your replacement was not saved.');
-          await this.storage.validate(this.timeline, this.revision);
-        }
+        if (current.revision !== this.revision) throw new Error('The timeline changed elsewhere. Your replacement was not saved.');
       } else {
         this.timeline = normalizeTimeline(current.timeline);
-        this.base = this.timeline;
         this.revision = current.revision;
       }
-      this.needsInspection = false;
       return { timeline: this.timeline, revision: this.revision, staged: this.staged };
     });
   }
@@ -229,7 +160,6 @@ export class EditSession {
   async confirmRepairs() {
     await this.pending;
     this.signal?.throwIfAborted();
-    if (this.needsInspection) throw new Error('The timeline changed elsewhere. Inspect the refreshed timeline before continuing.');
     if (this.failed) {
       await this.storage.validate(this.timeline, this.revision);
       this.failed = false;
@@ -244,7 +174,7 @@ export class EditSession {
       throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= EDITOR_SOFT_STEPS ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits, steps);
     }
     if (!this.staged) {
-      if (this.needsInspection || toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
+      if (toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;
     }
     if (this.failed || toolFailed) throw new Error('A tool could not complete. The pending replacement was not saved.');
@@ -262,9 +192,8 @@ export class EditSession {
    * in storage and therefore still refuses late writes. */
   async savePartial() {
     await this.pending;
-    if (!this.staged || !this.stagedEdits || this.needsInspection) return false;
-    try { await this.storage.validate(this.timeline, this.revision); }
-    catch (error) { if (!isTimelineConflict(error) || !await this.adoptSaved()) throw error; await this.storage.validate(this.timeline, this.revision); }
+    if (!this.staged || !this.stagedEdits) return false;
+    await this.storage.validate(this.timeline, this.revision);
     await this.applyStaged();
     this.savedEdits++;
     this.staged = false;

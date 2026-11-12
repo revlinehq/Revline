@@ -1,5 +1,4 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
-import { isMcpRun } from './lib/run_ids';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
@@ -76,9 +75,8 @@ async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId:
     if (!project.aiRunning || project.aiRunId !== runId) throw new ConvexError('AI run is no longer active');
     return project;
   }
-  // An in-app turn works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.
-  // MCP runs are single calls; their own tab switch happens as the run takes the lock.
-  if (project.aiRunning && !isMcpRun(project.aiRunId) || await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
+  // A run works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.
+  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   return project;
 }
 
