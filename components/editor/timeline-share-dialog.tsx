@@ -51,7 +51,8 @@ function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, stat
   const selected = picked ?? (tabs ?? []).filter(tab => shared ? shared.includes(tab.id) : tab.active).map(tab => tab.id);
   function toggleTab(id: string, on: boolean) { setPicked((tabs ?? []).filter(tab => tab.id === id ? on : selected.includes(tab.id)).map(tab => tab.id)); setCopied(false); }
   const shareId = localId !== undefined ? localId : status?.published ? status._id : null;
-  const url = shareId ? `${origin}${timelineSharePath(timelineShareKey(shareId, status?._id === shareId ? status.token : undefined))}` : '';
+  // The token comes with the share's status; until it matches the share just published, there is no link to show.
+  const url = shareId && status?._id === shareId ? `${origin}${timelineSharePath(timelineShareKey(shareId, status.token))}` : '';
   const cover = timelineCover(timeline, assets);
   const chatPending = includeChat && chatPreview === undefined, noTabs = multiTab && !selected.length;
   function toggleChat(enabled: boolean) { setIncludeChat(enabled); onChatPreviewChange?.(enabled); setCopied(false); }

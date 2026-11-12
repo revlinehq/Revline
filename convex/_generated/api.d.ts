@@ -107,6 +107,7 @@ import type * as lib_runner_turns from "../lib/runner_turns.js";
 import type * as lib_safely from "../lib/safely.js";
 import type * as lib_save_incidents from "../lib/save_incidents.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
+import type * as lib_share_token from "../lib/share_token.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_sound_validator from "../lib/sound_validator.js";
 import type * as lib_step_timing_validator from "../lib/step_timing_validator.js";
@@ -269,6 +270,7 @@ declare const fullApi: ApiFromModules<{
   "lib/safely": typeof lib_safely;
   "lib/save_incidents": typeof lib_save_incidents;
   "lib/share_chat": typeof lib_share_chat;
+  "lib/share_token": typeof lib_share_token;
   "lib/shared_media": typeof lib_shared_media;
   "lib/sound_validator": typeof lib_sound_validator;
   "lib/step_timing_validator": typeof lib_step_timing_validator;

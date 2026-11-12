@@ -17,9 +17,8 @@ import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { timelineValidator,publicMediaAsset,sharedChatMessage,shareChatPreviewMessage } from './schema';
 import { previewSharedChat,snapshotSharedChat } from './lib/share_chat';
 import { normalizeTimeline } from '../lib/editor/types';
+import { newShareToken } from './lib/share_token';
 const shareStatus=v.object({_id:v.id('timelineShares'),token:v.optional(v.string()),title:v.string(),published:v.boolean(),updatedAt:v.number(),includesChat:v.boolean(),timelineIds:v.array(v.string())});
-/** A share link's key is `<id>.<token>`. 18 random bytes, base64url. */
-function newShareToken(){const bytes=crypto.getRandomValues(new Uint8Array(18));return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
 /** The published share a link key opens. A share with a token opens only with it, unless it is a link sent before
  *  tokens existed (no token yet, or `openById`, kept until its owner turns sharing off). */
 async function openShare(ctx:QueryCtx,key:string,token?:string){
