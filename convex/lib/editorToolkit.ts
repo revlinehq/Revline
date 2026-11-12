@@ -377,7 +377,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const editSession = new EditSession(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
     apply: (timeline, expectedRevision,publication) => receipts.commit(() => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication?{stagedPublication:true}:{}),...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) })),
     validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
-    refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
   }, abortSignal);
   if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(tracksChanges())fastReview.changed(before,options.draft);}
@@ -2303,6 +2302,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(at<clip.start||at>=clip.start+clip.duration)throw new Error('Choose a subject seed time inside the clip.');
       const sourceTime=sourceTimeAt(clip,at);
       const result = await ctx.runMutation(internal.cutouts.startFromRun, { ...run, clipId, ...(mode ? { mode } : {}), ...(seed?{selection:{time:sourceTime,seed:resolveSubjectSeed(seed,clip.assetId,sourceTime)}}:{}) });
+      // A reused cut-out goes on through this run's edit session, so a staged draft keeps it.
+      if (result.reused && result.outputAssetId) { const outputAssetId = result.outputAssetId; await checkpoint(t => ({ ...t, clips: t.clips.map(item => item.id === clipId ? { ...item, assetId: outputAssetId } : item) })); }
       return result.reused ? { applied: true, reusedExistingCutOut: true, estimatedUsd: 0, note: 'An existing cut-out of this footage was applied; the background is already removed. Visuals belong on a lower V layer.' } : { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
   };

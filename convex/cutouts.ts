@@ -11,6 +11,7 @@ import { requireMediaTaskCapacity } from './lib/account_limits';
 import { readProject } from './lib/project_data';
 import { commitTimeline, currentTimeline } from './lib/timeline';
 import { editingWorkflowActive } from './lib/assistant_workflow';
+import { TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { enqueueMediaTask } from './lib/media_queue';
 import { sourceEndOf } from '../lib/editor/playback-rate';
 import { applyCutoutEffect, CUTOUT_EFFECT_INFO, validateCutoutEffect, type CutoutEffect } from '../lib/editor/cutout-effects';
@@ -24,7 +25,7 @@ const PLACEMENT_DELAY_MS = 10_000, PLACEMENT_ATTEMPTS = 360;
 /** Queue background removal for the source range one video clip uses; the clip switches when it finishes.
  * Person matting is the default; foreground mode extracts salient content or a seeded subject.
  * With an effect, the original stays and the effect is built from it and the cut-out instead. */
-export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, clipId: string, mode?: 'person' | 'foreground', effect?: CutoutEffect, selection?: Pick<PixelTrackRequest, 'time' | 'seed'>) {
+export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectId: Id<'projects'>, clipId: string, mode?: 'person' | 'foreground', effect?: CutoutEffect, selection?: Pick<PixelTrackRequest, 'time' | 'seed'>, fromRun = false): Promise<{ cutoutId: Id<'cutouts'>; estimatedUsd: number; alreadyRunning: boolean; reused: boolean; outputAssetId?: Id<'assets'> }> {
   if (effect) { try { validateCutoutEffect(effect); } catch (error) { throw new ConvexError(error instanceof Error ? error.message : 'Invalid effect.'); } }
   const target = effect ? CUTOUT_EFFECT_INFO[effect.kind] : undefined;
   if (selection) mode = 'foreground';
@@ -52,6 +53,9 @@ export async function startCutoutFor(ctx: MutationCtx, ownerId: string, projectI
     if (subjectSelectionKey(row.selection) !== subjectSelectionKey(selection) || row.status !== 'completed' || !row.outputAssetId || row.subject !== undefined || (row.mode ?? 'person') !== mode || row.sourceAssetId !== asset._id || row.start > clip.sourceStart + 1e-6 || row.end < sourceEndOf(clip) - 1e-6) continue;
     const output = await ctx.db.get(row.outputAssetId);
     if (!output || output.ownerId !== ownerId || output.projectId !== project._id || !output.duration || output.duration < sourceEndOf(clip) - 1e-3) continue;
+    // A run places the reused cut-out through its own edit session; the user's start waits for a run like any edit.
+    if (fromRun) return { cutoutId: row._id, estimatedUsd: 0, alreadyRunning: false, reused: true, outputAssetId: output._id };
+    if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
     await commitTimeline(ctx, project, placed(currentTimeline(project), clip.id, output._id, effect), project.revision ?? 0);
     return { cutoutId: row._id, estimatedUsd: 0, alreadyRunning: false, reused: true };
   }
@@ -71,10 +75,10 @@ function placed(timeline: ReturnType<typeof currentTimeline>, clipId: string, ou
 }
 const estimate = (seconds: number, fps = 30) => Math.max(.01, Math.round(Math.ceil(seconds * fps) * USD_PER_FRAME * 100) / 100);
 
-export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string(), mode: v.optional(cutoutMode), selection: v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
+export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string(), mode: v.optional(cutoutMode), selection: v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean(), outputAssetId: v.optional(v.id('assets')) }), handler: async (ctx, args) => {
   const project = await readProject(ctx, args.projectId);
   if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
-  return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId, args.mode, undefined, args.selection);
+  return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId, args.mode, undefined, args.selection, true);
 }});
 
 export const start = mutation({ args: { projectId: v.id('projects'), clipId: v.string(), mode: v.optional(cutoutMode), effect: v.optional(cutoutEffectValidator), selection:v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => startCutoutFor(ctx, await requireOwner(ctx), args.projectId, args.clipId, args.mode, args.effect, args.selection) });
@@ -94,6 +98,7 @@ export const restore = mutation({ args: { projectId: v.id('projects'), clipId: v
   const ownerId = await requireOwner(ctx);
   await requireEditorAccess(ctx, ownerId);
   const project = await requireProject(ctx, args.projectId, ownerId, false), timeline = currentTimeline(project);
+  if (await editingWorkflowActive(ctx, project)) throw new ConvexError(TIMELINE_LOCKED);
   const clip = timeline.clips.find(item => item.id === args.clipId);
   const id = clip?.assetId ? ctx.db.normalizeId('assets', clip.assetId) : null, cutout = id ? await ctx.db.get(id) : null;
   if (!clip || !cutout?.cutoutOf || cutout.ownerId !== ownerId || cutout.projectId !== project._id) throw new ConvexError('This clip has no cut-out to restore.');
