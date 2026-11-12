@@ -8,7 +8,6 @@ import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Skeleton } from '@/components/ui/skeleton';
 import { userError } from '@/lib/user-error';
 import { formatBytes } from './format';
 import { usePlanUsage } from '@/components/workspace/plan-usage';
@@ -25,7 +24,8 @@ function elapsed(ms: number) { const minutes = Math.floor(ms / 60_000); if (minu
 export function LibraryUsage({ summary }: { summary?: Summary }) {
   const [review, setReview] = useState(false);
   const limit = usePlanUsage()?.storage.limitBytes ?? null;
-  if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="h-1 w-[84px]" /><Skeleton className="h-3 w-20" /></div>;
+  // Nothing while it loads: the page shows at most one placeholder, in its body.
+  if (!summary?.ready) return <div className="library-usage" aria-busy="true" />;
   const scale = limit ?? summary.usedBytes, used = limit === null ? `${formatBytes(summary.usedBytes)} used` : `${formatBytes(summary.usedBytes)} of ${formatBytes(limit)}`;
   return <>
     <Popover>

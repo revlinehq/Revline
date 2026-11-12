@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type DragEvent, type MouseEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import type { FunctionReturnType } from 'convex/server';
 import { AudioLines, Box, Clapperboard, Download, Ellipsis, Folder, ImageIcon, Video } from 'lucide-react';
@@ -19,6 +19,21 @@ export type FolderId = Id<'storageFolders'>;
 export const LIBRARY_DRAG = 'application/x-revline-library';
 export type DragPayload = { files: Id<'storageObjects'>[]; folders: FolderId[] };
 export const folderHref = (id?: string | null) => id ? `/library?folder=${id}` : '/library';
+/** Opens a folder in place: the native history call changes only the address, which useSearchParams follows (Back and
+ *  Forward too), so the page keeps its loaded lists and skips the router's round trip for a page already on screen. */
+export function openFolder(id?: string | null, replace = false) {
+  if (replace) { window.history.replaceState(null, '', folderHref(id)); return; }
+  window.history.pushState(null, '', folderHref(id));
+  // A Link would scroll the new page to the top; so does this.
+  window.scrollTo(0, 0);
+}
+/** A folder link's click: opens in place, leaving new-tab and modified clicks to the browser. */
+export function openFolderLink(id?: string | null) {
+  return (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault(); openFolder(id);
+  };
+}
 export const KIND_ICONS = { video: Video, audio: AudioLines, image: ImageIcon, model: Box, export: Download };
 
 export function readDrag(event: DragEvent): DragPayload | null {
@@ -62,11 +77,11 @@ export function FolderMenu({ name, onRename, onMove, onDelete }: { name: string;
   </DropdownMenu>;
 }
 
-type FolderProps = { folder: LibraryFolder; renaming: boolean; onRename: (name: string) => void; onRenameEnd: () => void; menu: ReactNode; onDropItems: (payload: DragPayload) => void; onDropFiles: (files: File[]) => void };
+type FolderProps = { folder: LibraryFolder; renaming: boolean; onRename: (name: string) => void; onRenameEnd: () => void; menu: ReactNode; onDropItems: (payload: DragPayload) => void; onDropFiles: (files: File[]) => void; onWarm?: () => void; onCool?: () => void };
 const dragFolder = (folder: LibraryFolder) => (event: DragEvent) => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify({ files: [], folders: [folder.id] } satisfies DragPayload)); event.dataTransfer.effectAllowed = 'move'; };
 export const folderMeta = (folder: LibraryFolder) => folder.fileCount ? `${plural(folder.fileCount, 'item')} · ${formatBytes(folder.totalBytes)}` : '0 items';
 
-export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDropItems, onDropFiles }: FolderProps) {
+export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDropItems, onDropFiles, onWarm, onCool }: FolderProps) {
   const { over, handlers } = useDropTarget(onDropItems, onDropFiles);
   const thumbnails = folder.thumbnails ?? [], blanks = Math.max(0, Math.min(3, folder.fileCount) - thumbnails.length);
   const body = <>
@@ -77,8 +92,8 @@ export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDr
     {renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <strong title={folder.name}>{folder.name}</strong>}
     <small>{folderMeta(folder)}</small>
   </>;
-  return <div className="library-folder" data-drop={over || undefined} draggable={!renaming} onDragStart={dragFolder(folder)} {...handlers}>
-    {renaming ? <div className="library-folder-link">{body}</div> : <Link href={folderHref(folder.id)} className="library-folder-link" draggable={false}>{body}</Link>}
+  return <div className="library-folder" data-drop={over || undefined} draggable={!renaming} onDragStart={dragFolder(folder)} onPointerEnter={onWarm} onPointerLeave={onCool} onFocus={onWarm} onBlur={onCool} {...handlers}>
+    {renaming ? <div className="library-folder-link">{body}</div> : <Link href={folderHref(folder.id)} className="library-folder-link" draggable={false} onClick={openFolderLink(folder.id)}>{body}</Link>}
     {!renaming && menu}
   </div>;
 }
