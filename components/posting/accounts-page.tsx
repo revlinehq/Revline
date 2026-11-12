@@ -1,12 +1,13 @@
 'use client';
 import { Suspense, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
-import { capMessage } from '@/lib/posting/account-caps';
+import { capMessage, overCapNote } from '@/lib/posting/account-caps';
 import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
@@ -98,18 +99,23 @@ export function AccountsPage() {
         {own.map(account => <div key={account.id} className="dash-list-row">
           <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} />
           <span className="dash-list-row-name">@{account.username}{account.status === 'needs_reconnect' && account.error && !/expired/i.test(account.error) && <small>{account.error}</small>}</span>
-          {account.status === 'needs_reconnect'
+          {account.overLimit
+            ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />Over your plan's limit</span>
+            : account.status === 'needs_reconnect'
             ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />{/expired/i.test(account.error ?? 'expired') ? 'Sign-in expired' : 'Reconnect needed'}</span>
             : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
           {/* Signing in again renews this account in place: new tokens, name and picture. It is the main action only when the sign-in is broken. */}
-          <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
+          {/* Beyond the plan's cap after a downgrade or lapse: still connected, never removed for them, but not postable until they upgrade or disconnect another. */}
+          {account.overLimit
+            ? <Button asChild variant="primary" size="sm" className="dash-reconnect" aria-label={`Upgrade your plan to post to @${account.username}`}><Link href="/billing">Upgrade</Link></Button>
+            : <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>}
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
           </DropdownMenu>
         </div>)}
         {!own.length && <div className="dash-list-row dash-list-note">No accounts connected yet.</div>}
-        {live && full && <div className="dash-list-row dash-list-note" role="note">{capMessage(name, limit!.perPlatform)}</div>}
+        {live && full && <div className="dash-list-row dash-list-note" role="note">{own.some(account => account.overLimit) ? overCapNote(name, limit!.perPlatform) : capMessage(name, limit!.perPlatform)}</div>}
       </Card>;
     })}
   </div></main>;

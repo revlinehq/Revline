@@ -57,7 +57,7 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
   useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 60_000); return () => clearInterval(timer); }, []);
 
   const live = new Set((platforms ?? []).filter(item => item.live).map(item => item.platform));
-  const selectable = (accounts ?? []).filter(account => account.status === 'connected' && live.has(account.platform));
+  const selectable = (accounts ?? []).filter(account => account.status === 'connected' && !account.overLimit && live.has(account.platform));
   const picked = selectable.filter(account => chosen.has(account.id));
 
   const exporting = pending?.status === 'waiting' || pending?.status === 'queued';
@@ -107,11 +107,11 @@ export function EditorPost({ projectId, timelineId, disabled, onBeforePost }: {
         <Textarea id="editor-post-caption" className="editor-post-caption" rows={4} maxLength={CAPTION_LIMIT} placeholder="Write a caption" value={caption} onChange={event => setCaption(event.target.value)} />
         <span className="editor-post-label">Post to</span>
         {!accounts || !platforms ? <p className="editor-post-hint" role="status">Loading your accounts…</p> : accounts.length ? <ul className="editor-post-accounts">{accounts.map(account => {
-          const soon = !live.has(account.platform), usable = !soon && account.status === 'connected';
+          const soon = !live.has(account.platform), usable = !soon && account.status === 'connected' && !account.overLimit;
           return <li key={account.id} data-disabled={!usable || undefined}><label>
             <Checkbox disabled={!usable} checked={usable && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
             <span className="editor-post-account">@{account.username}</span><small>{PLATFORM_NAMES[account.platform]}</small>
-          </label>{!soon && !usable && <Link href="/accounts">Reconnect</Link>}</li>;
+          </label>{!soon && !usable && (account.overLimit ? <Link href="/billing">Upgrade</Link> : <Link href="/accounts">Reconnect</Link>)}</li>;
         })}</ul> : <ul className="editor-post-accounts">{POSTING_PLATFORMS.map(platform => <li key={platform} data-disabled={!live.has(platform) || undefined}>
           <label><Checkbox disabled checked={false} aria-label={PLATFORM_NAMES[platform]} /><span className="editor-post-account">{PLATFORM_NAMES[platform]}</span></label>
           {live.has(platform) && <Link href="/accounts">Connect</Link>}
