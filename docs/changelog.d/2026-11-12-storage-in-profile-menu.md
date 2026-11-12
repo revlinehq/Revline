@@ -1,0 +1,1 @@
+- Dashboard: storage moved from the Library header into the profile menu on the avatar, as a bar with the per-kind breakdown and an Upgrade link near the limit. Why: the founder wanted storage in the profile, not on the Library page.

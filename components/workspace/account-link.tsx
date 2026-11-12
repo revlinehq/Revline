@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { UserAvatar } from './user-avatar';
 
 /**
- * The avatar in every top bar: a plain link to Settings (/profile), where the profile, the plan and signing out live.
+ * The avatar in the editor and landing top bars: a plain link to Settings (/profile), where the profile, the plan and
+ * signing out live. The dashboard shell opens WorkspaceAccountMenu instead, which falls back to this link.
  * A visitor (the demo workspace) gets a link to sign in. `shell`: the dashboard shell shows two initials.
  * The photo has no ring; hovering dims it.
  */

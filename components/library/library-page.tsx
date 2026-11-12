@@ -24,7 +24,6 @@ import { LibrarySheet } from './library-sheet';
 import { AddToProjectDialog, DeleteFilesDialog, DeleteFolderDialog, MoveDialog, NewFolderDialog } from './library-dialogs';
 import { FileRowsSkeleton, FileTilesSkeleton, FolderTilesSkeleton } from './library-skeleton';
 import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
-import { LibraryUsage } from './library-usage';
 import { useLibraryUpload, type UploadRow } from './use-library-upload';
 import './library.css';
 
@@ -77,7 +76,6 @@ export function LibraryPage() {
   const [view, setView] = useLibraryView();
   const [search, setSearch] = useState(''), [sort, setSort] = useState<Sort>('newest'), [unused, setUnused] = useState(false);
   const term = useDeferredValue(search.trim()), ready = isAuthenticated && !resolving && !(requested && !folderId);
-  const summary = useQuery(api.storage.summary, isAuthenticated ? {} : 'skip');
   const tree = useQuery(api.library.folderTree, isAuthenticated ? {} : 'skip');
   const children = useQuery(api.library.folders, ready && !term ? (folderId ? { parentId: folderId } : {}) : 'skip');
   const { results, status, loadMore } = usePaginatedQuery(api.library.files, ready ? { sort, unused, ...(term ? { search: term } : folderId ? { folderId } : {}) } : 'skip', { initialNumItems: PAGE });
@@ -169,7 +167,6 @@ export function LibraryPage() {
         <Crumb name="Library" current={!requested} onDropItems={moveTo(undefined)} />
         {(path ?? []).map((step, index, all) => <span key={step.id} className="library-crumb-step"><BreadcrumbSeparator /><Crumb id={step.id} name={step.name} current={index === all.length - 1} onDropItems={moveTo(step.id)} /></span>)}
       </BreadcrumbList></Breadcrumb>
-      <LibraryUsage summary={summary} />
     </div>
 
     <div className="library-toolbar">
