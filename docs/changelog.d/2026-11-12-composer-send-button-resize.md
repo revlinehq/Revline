@@ -1,0 +1,1 @@
+- Editor: the chat send button keeps its full size when the chat panel is narrow; the model picker truncates and drops the effort label instead. Why: at the panel's minimum width the button was pushed past the composer edge and clipped.
