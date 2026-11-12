@@ -1,4 +1,4 @@
-import { PLAN_RANK, PLAN_TIERS, isPlanTier, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
+import { PLAN_RANK, PLAN_TIERS, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
 import { editorEffortChoiceAllowed, offeredEditorModel, productionEditorOffer, type EditorOffer } from '../../lib/ai/claude-model';
 import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
@@ -16,24 +16,32 @@ export const pinnedPriceId = (tier: PlanTier) => process.env[PRICE_ENV[tier]]?.t
 /** The retired Ultra price, if a deployment still names it: such a subscription is treated as Studio. */
 const legacyUltraPrice = () => process.env.STRIPE_ULTRA_PRICE_ID?.trim() || undefined;
 type SubscriptionLike = { priceId: string; metadata?: Record<string, unknown> };
-export const isEditorSubscription = (sub: SubscriptionLike) => sub.metadata?.app === 'revline-editor' || PLAN_TIERS.some(tier => pinnedPriceId(tier) === sub.priceId) || (!!legacyUltraPrice() && sub.priceId === legacyUltraPrice());
-/** A Stripe subscription as Revline reads it. A price with a Revline lookup key names the plan (and marks the
- *  subscription as Revline's), overriding metadata that checkout wrote, so a price changed in the Stripe portal or
- *  dashboard reads right. The webhook stores this form; checkout and changePlan read live Stripe through it too. */
-export function fromStripeSubscription(sub: { metadata: Record<string, string>; items: { data: Array<{ price: { id: string; lookup_key: string | null } }> } }) {
-  const price = sub.items.data[0]?.price, plan = tierForLookupKey(price?.lookup_key);
-  return { priceId: price?.id ?? '', metadata: { ...sub.metadata, ...(plan ? { plan, app: 'revline-editor' } : {}) } };
-}
-/** Which plan a subscription is on: a named price ID first, then the plan in its metadata (from the lookup key,
- *  see fromStripeSubscription, or from checkout). A subscription from before plans had names is Pro. */
-export function subscriptionTier(sub: SubscriptionLike): PlanTier {
+/** Where fromStripeSubscription records the price's lookup key ('' when the price has none). Only our webhook,
+ *  checkout and changePlan write it, always from the live Stripe price, overriding any metadata of that name. */
+const LOOKUP_KEY_FIELD = 'priceLookupKey';
+/** Which plan a subscription's price is, and only its price: the price's lookup key first, then a deployment's
+ *  STRIPE_<TIER>_PRICE_ID, then the retired Ultra price (Studio). Metadata `plan` is never read: checkout and the
+ *  Stripe dashboard can both write it. An unknown price is no paid plan (null). */
+export function subscriptionTier(sub: SubscriptionLike): PlanTier | null {
+  const lookupKey = sub.metadata?.[LOOKUP_KEY_FIELD];
+  const byKey = typeof lookupKey === 'string' ? tierForLookupKey(lookupKey) : undefined;
+  if (byKey) return byKey;
   const pinned = PLAN_TIERS.find(tier => pinnedPriceId(tier) === sub.priceId);
   if (pinned) return pinned;
   if (legacyUltraPrice() && sub.priceId === legacyUltraPrice()) return 'studio';
-  return isPlanTier(sub.metadata?.plan) ? sub.metadata.plan : 'pro';
+  return null;
+}
+export const isEditorSubscription = (sub: SubscriptionLike) => sub.metadata?.app === 'revline-editor' || subscriptionTier(sub) !== null;
+/** A Stripe subscription as Revline reads it: its price ID, and the price's lookup key in metadata, which names
+ *  the plan (see subscriptionTier). The webhook stores this form; checkout and changePlan read live Stripe through it too. */
+export function fromStripeSubscription(sub: { metadata: Record<string, string>; items: { data: Array<{ price: { id: string; lookup_key: string | null } }> } }) {
+  const price = sub.items.data[0]?.price, plan = tierForLookupKey(price?.lookup_key);
+  return { priceId: price?.id ?? '', metadata: { ...sub.metadata, [LOOKUP_KEY_FIELD]: price?.lookup_key ?? '', ...(plan ? { app: 'revline-editor' } : {}) } };
 }
 export const hasPaidEditorSubscriptionTerm = (sub: { status: string; currentPeriodEnd: number }) => sub.status === 'active' && sub.currentPeriodEnd > Date.now() / 1000;
 export const hasEditorAccess = (sub: { status: string; currentPeriodEnd: number }) => (sub.status === 'active' || sub.status === 'trialing') && sub.currentPeriodEnd > Date.now() / 1000;
+/** A subscription that grants a plan now: current, and on a price Revline knows. */
+const grantsPlan = (sub: SubscriptionLike & { status: string; currentPeriodEnd: number }) => hasEditorAccess(sub) && subscriptionTier(sub) !== null;
 const highest = (tiers: PlanTier[]) => tiers.reduce<PlanTier | null>((best, tier) => !best || PLAN_RANK[tier] > PLAN_RANK[best] ? tier : best, null);
 
 export async function editorSubscriptions(ctx: QueryCtx | MutationCtx | ActionCtx, userId: string) {
@@ -55,7 +63,7 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
 export async function activePlanTier(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<PlanTier | null> {
   const apple = await activeAppleEntitlement(ctx, ownerId), complimentary = await activeComplimentaryEntitlement(ctx, ownerId);
   if (apple?.plan === 'ultra' || complimentary?.plan === 'ultra') return 'studio';
-  const stripe = billingEnabled() && billingConfigured() ? (await editorSubscriptions(ctx, ownerId)).filter(hasEditorAccess).map(subscriptionTier) : [];
+  const stripe = billingEnabled() && billingConfigured() ? (await editorSubscriptions(ctx, ownerId)).filter(grantsPlan).map(sub => subscriptionTier(sub)!) : [];
   return highest([...stripe, ...(apple || complimentary ? ['pro' as const] : [])]);
 }
 
@@ -70,7 +78,7 @@ export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: 
   if (await hasComplimentaryEditorAccess(ctx, ownerId)) return;
   if (await activeAppleEntitlement(ctx, ownerId)) return;
   if (!billingConfigured()) throw new ConvexError({ code: 'BILLING_UNAVAILABLE', message: 'Billing is temporarily unavailable. Please try again.' });
-  if (!(await editorSubscriptions(ctx, ownerId)).some(hasEditorAccess)) {
+  if (!(await editorSubscriptions(ctx, ownerId)).some(grantsPlan)) {
     throw new ConvexError({ code: 'SUBSCRIPTION_REQUIRED', message: 'Start your free trial or renew your subscription to edit and export.' });
   }
 }
@@ -91,7 +99,7 @@ export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: s
   if (await hasPaidAppleModelAccess(ctx, ownerId)) return true;
   if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   if (!billingConfigured()) return false;
-  return (await editorSubscriptions(ctx, ownerId)).some(hasPaidEditorSubscriptionTerm);
+  return (await editorSubscriptions(ctx, ownerId)).some(sub => hasPaidEditorSubscriptionTerm(sub) && subscriptionTier(sub) !== null);
 }
 
 /** Production, or a development deployment set to behave like it (EDITOR_PRODUCTION_OFFER=true), limits paid

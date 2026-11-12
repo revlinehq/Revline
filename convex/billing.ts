@@ -20,7 +20,7 @@ export const status = query({ args: {}, returns: v.object({ enabled: v.boolean()
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
   const tier = identity ? await activePlanTier(ctx, identity.subject) : null;
   const apple = identity ? await activeAppleEntitlement(ctx, identity.subject) : null;
-  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasEditorAccess); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
+  if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(sub => hasEditorAccess(sub) && subscriptionTier(sub) !== null); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
   const stripeSubscribed = subscribed;
   const subscriptionSource: 'apple' | 'stripe' | undefined = apple ? 'apple' : stripeSubscribed ? 'stripe' : undefined;
   subscribed ||= !!apple;
@@ -161,7 +161,8 @@ async function changeSubscriptionPlan(ctx: ActionCtx, tier: PlanTier) {
   const [subscription] = current, [item] = subscription.items.data;
   const from = subscriptionTier(fromStripeSubscription(subscription));
   if (item.price.id === priceId && from === tier) return null;
-  const upgrade = PLAN_RANK[tier] > PLAN_RANK[from];
+  // A price Revline does not know is no plan, so any move off it counts as an upgrade.
+  const upgrade = !from || PLAN_RANK[tier] > PLAN_RANK[from];
   try {
     await client.subscriptions.update(subscription.id, {
       items: [{ id: item.id, price: priceId, quantity: 1 }],
