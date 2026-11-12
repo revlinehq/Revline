@@ -1,7 +1,7 @@
 'use client';
 import { userError } from '@/lib/user-error';
 
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useClerk, useUser } from '@clerk/nextjs';
@@ -15,9 +15,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { UserAvatar, useConnectedPicture } from './user-avatar';
 
-/** The Plan and Profile cards, still, until the account is known. */
+/** The Profile and Plan cards, still, until the account is known. */
 export function SettingsSkeleton() {
-  return <div className="contents" role="status" aria-label="Loading your account">{[['Plan', 'Plan', 'Price', 'Status'], ['Profile', 'Photo', 'Name', 'Email']].map(([title, ...rows]) => <SettingsCard key={title} title={title}>
+  return <div className="contents" role="status" aria-label="Loading your account">{[['Profile', 'Photo', 'Name', 'Email'], ['Plan', 'Plan', 'Price', 'Status']].map(([title, ...rows]) => <SettingsCard key={title} title={title}>
     {rows.map(label => <SettingsRow key={label} label={label}><Skeleton className={label === 'Photo' ? 'size-10 rounded-full' : 'h-4 w-44 max-w-full'} /></SettingsRow>)}
   </SettingsCard>)}</div>;
 }
@@ -28,7 +28,7 @@ function BillingFromAddress() {
   return <BillingSection checkoutReturn={checkout === 'success' || checkout === 'canceled' ? checkout : undefined} />;
 }
 
-/** Settings (/profile): the plan, the profile (where signing out is) and connected AI apps, as one column of cards. */
+/** Settings (/profile): the profile (where signing out is), the plan and connected AI apps, as one column of cards. */
 export function ProfilePage() {
   const { user, isLoaded, isSignedIn } = useUser();
   const clerk = useClerk();
@@ -42,6 +42,21 @@ export function ProfilePage() {
   const name = user?.fullName ?? (isSignedIn ? 'Your account' : 'Demo workspace');
   const email = user?.primaryEmailAddress?.emailAddress;
   const initial = (user?.firstName ?? email ?? 'D').slice(0, 1).toUpperCase();
+  const column = useRef<HTMLDivElement>(null);
+  // The cards render and fill in after the browser has looked for a link's target (#billing, #mcp), so it is kept
+  // in view here while the column grows, until the reader scrolls or a few seconds pass.
+  useEffect(() => {
+    const id = isLoaded && location.hash.length > 1 ? decodeURIComponent(location.hash.slice(1)) : '';
+    if (!id || !column.current) return;
+    const reveal = () => document.getElementById(id)?.scrollIntoView({ block: 'start' });
+    const observer = new ResizeObserver(reveal);
+    const stop = () => { observer.disconnect(); window.clearTimeout(timer); for (const type of ['wheel', 'touchstart', 'keydown'] as const) window.removeEventListener(type, stop); };
+    const timer = window.setTimeout(stop, 4000);
+    for (const type of ['wheel', 'touchstart', 'keydown'] as const) window.addEventListener(type, stop, { passive: true });
+    observer.observe(column.current);
+    reveal();
+    return stop;
+  }, [isLoaded]);
   async function changePhoto(file: File | undefined) {
     if (fileInput.current) fileInput.current.value = '';
     if (!file || !user || photoBusy) return;
@@ -57,10 +72,9 @@ export function ProfilePage() {
     try { await signOutToSignIn(clerk); }
     catch { setError('Could not sign out. Please try again.'); setSigningOut(false); }
   }
-  return <main className="dash-content"><div className="dash-column settings-page">
+  return <main className="dash-content"><div ref={column} className="dash-column settings-page">
     <h1 className="sr-only">Settings</h1>
     {!isLoaded ? <SettingsSkeleton /> : <>
-      <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
       <SettingsCard title="Profile" action={<>
         {isSignedIn && connectedPicture === null && <Button variant="soft" size="sm" disabled={photoBusy} onClick={() => fileInput.current?.click()}>{photoBusy ? 'Updating…' : 'Change photo'}</Button>}
         {isSignedIn ? <Button variant="soft" size="sm" onClick={() => void signOut()} disabled={signingOut}>Sign out</Button> : <Button asChild variant="soft" size="sm"><Link href="/sign-in">Sign in</Link></Button>}
@@ -71,6 +85,7 @@ export function ProfilePage() {
         {(photoError || error) && <SettingsBody><p className="dash-error" role="alert">{photoError || error}</p></SettingsBody>}
         <input hidden type="file" accept="image/*" ref={fileInput} aria-label="Choose a profile photo" onChange={event => void changePhoto(event.target.files?.[0])} />
       </SettingsCard>
+      <Suspense fallback={<BillingSection />}><BillingFromAddress /></Suspense>
       <McpConnectorSection />
       <DevAiCosts />
     </>}

@@ -1,0 +1,1 @@
+- Settings: the Profile card now comes first, then Plan; links to #billing still scroll to the Plan card. Why: the founder asked for profile first.
