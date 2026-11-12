@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import type { Doc, Id } from './_generated/dataModel';
 import { mutation, query, type MutationCtx } from './_generated/server';
@@ -31,10 +32,10 @@ export async function proposeExportFor(ctx: MutationCtx, ownerId: string, args: 
   const changed = (Object.keys(requested) as (keyof ExportSettings)[]).filter(key => requested[key] !== plan.existing[key]);
   // An unchanged timeline is never rendered twice: a finished or running export with these settings is reused.
   const reuse = plan.ready ?? plan.running, now = Date.now();
-  const proposalId = await ctx.db.insert('exportProposals', {
+  const proposalId = await ctx.db.insert('exportProposals', tableRow<'exportProposals'>()({
     ownerId, projectId: project._id, timelineId, timelineName: tab.name, duration, aspectRatio: timeline.aspectRatio, ...plan.settings, changed, createdAt: now, expiresAt: now + PROPOSAL_MS,
     ...(reuse ? { status: 'confirmed' as const, jobId: reuse._id } : { status: 'proposed' as const }),
-  });
+  }));
   const settings = { ...plan.settings, ...(changed.length ? { changedForThisExport: changed.map(key => SETTING_NAMES[key]) } : {}) };
   if (reuse) return {
     awaitingConfirmation: false, proposalId, ...(plan.ready ? { alreadyExported: true } : { alreadyExporting: true }), jobId: reuse._id, timeline: tab.name, duration, settings,

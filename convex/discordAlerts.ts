@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { v } from 'convex/values';
 import { internalAction, internalMutation } from './_generated/server';
 import { internal } from './_generated/api';
@@ -15,7 +16,7 @@ export const enqueue = internalMutation({
     const previous = await ctx.db.query('discordAlerts').withIndex('by_source_event', q => q.eq('source', args.source).eq('eventId', args.eventId)).unique();
     if (previous) return previous._id;
     const now = Date.now();
-    const id = await ctx.db.insert('discordAlerts', { ...args, title: alertText(args.title, 200), description: alertText(args.description, 1500), status: 'queued', attempts: 0, createdAt: now, updatedAt: now });
+    const id = await ctx.db.insert('discordAlerts', tableRow<'discordAlerts'>()({ ...args, title: alertText(args.title, 200), description: alertText(args.description, 1500), status: 'queued', attempts: 0, createdAt: now, updatedAt: now }));
     await ctx.scheduler.runAfter(0, internal.discordAlerts.deliver, { id });
     return id;
   },

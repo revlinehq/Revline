@@ -53,7 +53,7 @@ export async function writeRunState(ctx:MutationCtx,projectId:Id<'projects'>,pat
   if(payloadKeys.some(key=>Object.hasOwn(patch,key))){
     const payload=await runPayload(ctx,projectId);
     const value=Object.fromEntries(payloadKeys.map(key=>[key,Object.hasOwn(patch,key)?patch[key]:payload?.[key]]));
-    if(payload)await ctx.db.patch(payload._id,value);else if(Object.values(value).some(value=>value!==undefined))await ctx.db.insert('aiRunPayloads',{projectId,...value});
+    if(payload)await ctx.db.patch(payload._id,value);else if(Object.values(value).some(value=>value!==undefined))await ctx.db.insert('aiRunPayloads',{projectId,...value}); // run-path-check: allow wide-row (keys are computed from the fixed aiKeys/payloadKeys lists above)
   }
   const next={...row,...patch};
   await syncProjectAgent(ctx,projectId,next);
@@ -166,7 +166,7 @@ export async function writeProject(ctx:MutationCtx,projectId:Id<'projects'>,patc
   const payload=await runPayload(ctx,projectId);
   const previous={...raw,...aiFields(existing??{}),...aiFields(payload??{}),...aiFields(raw)},next={...previous,...patch};
   const aiPatch=Object.fromEntries(aiKeys.map(key=>[key,payloadKeys.some(name=>name===key)?undefined:next[key]]));
-  if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...Object.fromEntries(runKeys.filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key))||payloadKeys.some(key=>Object.hasOwn(existing,key)))await ctx.db.patch(existing._id,aiPatch);
+  if(!existing)await ctx.db.insert('aiRuns',{projectId,ownerId:raw.ownerId,...Object.fromEntries(runKeys.filter(key=>next[key]!==undefined).map(key=>[key,next[key]]))});else if(aiKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(raw,key))||payloadKeys.some(key=>Object.hasOwn(existing,key)))await ctx.db.patch(existing._id,aiPatch); // run-path-check: allow wide-row (keys are computed from the fixed aiKeys/payloadKeys lists above)
   if(!payload||payloadKeys.some(key=>Object.hasOwn(patch,key)||Object.hasOwn(existing??{},key)||Object.hasOwn(raw,key))){
     const value={projectId,aiRequest:next.aiRequest,aiRecovery:next.aiRecovery};
     if(payload)await ctx.db.patch(payload._id,value);else if(next.aiRequest!==undefined||next.aiRecovery!==undefined)await ctx.db.insert('aiRunPayloads',value);

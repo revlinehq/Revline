@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { recordIncident, incidentDeployment } from './lib/incidents';
 import { v, ConvexError } from 'convex/values';
 import { internalMutation, internalQuery } from './_generated/server';
@@ -68,7 +69,7 @@ export const settle = internalMutation({ args: { runId: v.string() }, returns: v
       const group = await ctx.db.query('saveIncidentGroups').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
       const { _id, _creationTime, ...latest } = step;
       if (group) await ctx.db.patch(group._id, { count: group.count + 1, firstSeenAt: Math.min(group.firstSeenAt, step.observedAt), lastSeenAt: Math.max(group.lastSeenAt, step.observedAt), ...(step.observedAt >= group.lastSeenAt ? { latest, latestPublication: run.publication } : {}), ...(group.status === 'fixed' ? { status: 'open', fixedAt: undefined, prUrl: undefined } : {}) });
-      else await ctx.db.insert('saveIncidentGroups', { ...identity, fingerprint, condition, toolName: step.toolName, count: 1, firstSeenAt: step.observedAt, lastSeenAt: step.observedAt, status: 'open', latest, ...(run.publication ? { latestPublication: run.publication } : {}) });
+      else await ctx.db.insert('saveIncidentGroups', tableRow<'saveIncidentGroups'>()({ ...identity, fingerprint, condition, toolName: step.toolName, count: 1, firstSeenAt: step.observedAt, lastSeenAt: step.observedAt, status: 'open', latest, ...(run.publication ? { latestPublication: run.publication } : {}) }));
     }
     await ctx.db.delete(step._id);
   }

@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { v } from 'convex/values';
 import { MAX_MODEL_BYTES, PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 import { issueUpload, consumeUpload } from './uploads';
@@ -86,7 +87,7 @@ export const finishModel = internalMutation({ args: { ownerId: v.string(), proje
   const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', args.ownerId).eq('projectId', args.projectId)).take(PROJECT_MEDIA_LIMIT);
   if (count.length >= PROJECT_MEDIA_LIMIT) throw new Error(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files.`);
   await consumeUpload(ctx, args.storageId, args.ownerId, args.projectId);
-  const id = await ctx.db.insert('assets', { ...args, kind: 'model', contentType: file.contentType, size: file.size, createdAt: Date.now() });
+  const id = await ctx.db.insert('assets', tableRow<'assets'>()({ ...args, kind: 'model', contentType: file.contentType, size: file.size, createdAt: Date.now() }));
   await recordAssetStorage(ctx, (await ctx.db.get(id))!);
   return id;
 } });

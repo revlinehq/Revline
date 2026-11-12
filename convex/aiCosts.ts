@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, query } from './_generated/server';
 import { requireOwner } from './lib/auth';
@@ -17,7 +18,7 @@ export const record = internalMutation({
       if (existing.projectId !== args.projectId) throw new ConvexError('Cost record belongs to another project');
       return null;
     }
-    await ctx.db.insert('aiCostRecords', { ownerId: project.ownerId, projectId: args.projectId, runId: args.runId,...(args.threadId!==undefined?{threadId:args.threadId,promptMessageId:args.promptMessageId}:{}), ...args.record });
+    await ctx.db.insert('aiCostRecords', tableRow<'aiCostRecords'>()({ ownerId: project.ownerId, projectId: args.projectId, runId: args.runId,...(args.threadId!==undefined?{threadId:args.threadId,promptMessageId:args.promptMessageId}:{}), ...args.record }));
     return null;
   },
 });

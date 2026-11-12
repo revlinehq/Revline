@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { mutation, internalQuery, httpAction, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
@@ -25,7 +26,7 @@ export const append = mutation({ args: { ...mediaTaskCredentials, direction: v.u
     const previous = await ctx.db.query('pixelTrackChunks').withIndex('by_track_attempt_sequence', q => q.eq('derivationId', row._id).eq('attempt', task.attempt).eq('direction', chunk.direction).eq('sequence', chunk.sequence - 1)).unique();
     if (!previous || (chunk.direction === 'forward' ? previous.samples[previous.samples.length - 1].frameIndex + 1 !== samples[0].frameIndex : samples[samples.length - 1].frameIndex + 1 !== previous.samples[0].frameIndex)) throw new ConvexError('Tracking chunks must be contiguous.');
   }
-  await ctx.db.insert('pixelTrackChunks', { ownerId: row.ownerId, projectId: row.projectId, derivationId: row._id, attempt: task.attempt, ...chunk, start: samples[0].time, end: samples[samples.length - 1].time });
+  await ctx.db.insert('pixelTrackChunks', tableRow<'pixelTrackChunks'>()({ ownerId: row.ownerId, projectId: row.projectId, derivationId: row._id, attempt: task.attempt, ...chunk, start: samples[0].time, end: samples[samples.length - 1].time }));
   await ctx.db.patch(row._id, { trackingCount: (row.trackingCount ?? 0) + samples.length });
   return null;
 } });

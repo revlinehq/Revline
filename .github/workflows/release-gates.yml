@@ -33,3 +33,7 @@ jobs:
       # Fails a change that breaks the installed iOS app, the deployed media processor or stored data.
       - name: Compatibility with what is already shipped
         run: node scripts/compat-check.mjs --base "$(git merge-base "origin/$GITHUB_BASE_REF" HEAD)"
+      # Fails a change whose assistant turn would work inside Convex and be refused on the production agent runner,
+      # that forces a tool call on a Claude model, or whose cleanup can throw.
+      - name: Assistant run path
+        run: node scripts/run-path-check.mjs

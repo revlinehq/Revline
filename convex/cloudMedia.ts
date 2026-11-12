@@ -1,3 +1,4 @@
+import { tableRow } from './lib/exact';
 import { ConvexError, v } from 'convex/values';
 import { action, internalAction, internalMutation, internalQuery, query } from './_generated/server';
 import { internal } from './_generated/api';
@@ -37,7 +38,7 @@ export const reserve = internalMutation({args:{...metadata,ownerId:v.string(),r2
   // Abandoned uploads stop counting at once; their scheduled cleanup frees the storage.
   const pending=(await unfinishedUploads(ctx,args.ownerId)).filter(row=>!abandoned(row,now));
   if(pending.length>=MAX_PENDING)throw new ConvexError(`You have ${MAX_PENDING} unfinished cloud uploads. Cancel some in the Library, then try again.`);
-  const id=await ctx.db.insert('cloudMedia',{...args,createdAt:now,activeAt:now,expiresAt:now+IDLE_MS,completed:false});
+  const id=await ctx.db.insert('cloudMedia',tableRow<'cloudMedia'>()({...args,createdAt:now,activeAt:now,expiresAt:now+IDLE_MS,completed:false}));
   await recordStorageObject(ctx,{...args,createdAt:now,pending:true,folderId});
   await ctx.scheduler.runAfter(IDLE_MS,internal.cloudMedia.cleanup,{uploadId:id});
   return id;

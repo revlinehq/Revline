@@ -1,5 +1,6 @@
 "use node";
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
+import { safely } from './lib/safely';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
 import { argumentKey } from '../lib/ai/step-timing';
 import { MAX_SHEET_FRAMES, evenly } from '../lib/ai/frame-sampling';
@@ -383,6 +384,8 @@ async function callEditorTool(ctx: ActionCtx, ownerId: string, name: string, raw
     return {...result(stopped ? 'Stopped in the editor before this edit finished. Saved edits remain.' : message(error), true), ...(stopped?{ended:true}:{})};
   } finally {
     clearInterval(watch);
-    await ctx.runMutation(internal.assistant.finish, run);
+    // Releasing the lock must not replace this call's result: a saved edit reported as failed is retried and applied twice.
+    // If the release itself fails, beginRun's scheduled finish frees the project.
+    await safely('mcpFinish', () => ctx.runMutation(internal.assistant.finish, run));
   }
 }

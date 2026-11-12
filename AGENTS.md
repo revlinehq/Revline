@@ -30,6 +30,8 @@ Public Convex functions called by the iOS app (call sites in `mobile/`, e.g. `pr
 
 The `Release gates` workflow enforces this on every pull request with `scripts/compat-check.mjs` (`npm run compat:check`), which also fails a removed or changed table, index or field in `convex/schema.ts` and a new media-processor read mode or task kind that is not listed as gated in `lib/server/processor-capabilities.ts` with its Convex caller guarded by `processorCan`. An intended break needs a reviewed line in `mobile/CONTRACT_CHANGES.md` in the same pull request.
 
+The same workflow runs `scripts/run-path-check.mjs` (`npm run runpath:check`) on the code an assistant turn executes. It fails a Convex call that is missing from the agent runner's allowlist (`TURN_FUNCTIONS` in `convex/agentRunnerHttp.ts`) or the tool-write list (`convex/toolWrites.ts`): such a call works where no runner is configured and is refused in production. It also fails a forced tool call on a Claude model (use `editorToolChoice`), a Convex call awaited in a `finally` block without `safely()` (`convex/lib/safely.ts`), and a run-path database row built by spreading a variable without `tableRow`/`tablePatch` (`convex/lib/exact.ts`).
+
 Work on your own branch and commit there in coherent, verified batches. Never push to or merge into main yourself. Every finished change is reviewed by the user as a draft GitHub pull request and merged only when the user says so.
 
 The agent that built the change writes its pull request, because it knows what it built:

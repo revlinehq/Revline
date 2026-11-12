@@ -1,0 +1,2 @@
+- Release gates: a new check on the assistant run path fails a Convex call the production agent runner would refuse, a forced tool call on Claude, cleanup that can throw and rows built from wider objects. Why: each of those failed in production or was found waiting to.
+- Assistant: face measurement at cut edges and resuming a long source-frame read now work in the app, not only over MCP. Why: the runner's allowlist was missing both functions; the new check found them.
