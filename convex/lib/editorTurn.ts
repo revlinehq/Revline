@@ -199,8 +199,11 @@ For edit requests, use one brief initial sentence stating the requested action, 
             if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
             throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
           },
-          // The owner's model access was checked when this turn started or resumed (modelForRun above), not per step.
+          // The owner's model access was checked when this turn started or resumed (modelForRun above); the plan's AI
+          // allowance is re-checked before every step, so a long turn stops once it is used up.
           prepareStep: async ({ steps: current, messages }) => {
+            const refusal = await ctx.runQuery(internal.usage.aiRefusal, { ownerId: args.ownerId });
+            if (refusal) throw new Error(refusal);
             toolkit.newStep();
 
             const completedSteps = [...steps, ...current];

@@ -2,7 +2,6 @@
  *  override), and checkout refuses a price whose amount differs from `monthlyPrice`. */
 export const PLAN_TIERS = ['starter', 'pro', 'studio'] as const;
 export type PlanTier = typeof PLAN_TIERS[number];
-export const isPlanTier = (value: unknown): value is PlanTier => PLAN_TIERS.includes(value as PlanTier);
 
 type Plan = { name: string; tagline: string; monthlyPrice: number; currency: 'USD'; lookupKey: string; trialDays: number; featured?: boolean; lead?: string; features: readonly string[] };
 

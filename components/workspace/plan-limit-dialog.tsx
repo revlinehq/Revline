@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { PLANS, type PlanTier } from '@/lib/billing/plan';
+import type { PlanTier } from '@/lib/billing/plan';
 import { onPlanLimit, type PlanLimit } from '@/lib/billing/limit-events';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
@@ -52,4 +52,3 @@ export function PlanLimitDialog() {
 
 /** The AI meter's level: warning from AI_USAGE_WARNING, full at the allowance. */
 export const meterLevel = (share: number, warning: number) => share >= 1 ? 'full' : share >= warning ? 'warning' : undefined;
-export const planName = (tier: PlanTier | null | undefined) => tier ? PLANS[tier].name : '';

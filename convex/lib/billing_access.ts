@@ -136,7 +136,8 @@ export async function productionOffer(ctx: QueryCtx | MutationCtx, ownerId: stri
   return usesProductionOffer() ? productionEditorOffer(tier === 'studio' ? 'ultra' : 'pro') : null;
 }
 
-/** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess first: an Ultra trial is not a paid term. */
+/** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess and productionOffer first: a trial
+ * passes hasPaidModelAccess but productionOffer holds it to Starter's single effort. */
 export async function canChooseReasoningEffort(ctx: QueryCtx | MutationCtx, ownerId: string) {
   const billing = billingEnabled();
   return editorEffortChoiceAllowed({ billing, ultra: billing && await hasUltraPlan(ctx, ownerId) });

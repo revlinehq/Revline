@@ -18,10 +18,11 @@ export const status = query({
     const ownerId = await requireOwner(ctx);
     const plan = billingEnabled() ? await activePlan(ctx, ownerId) : null;
     const { usedBytes, reservedBytes, limitBytes } = await storageState(ctx, ownerId, plan?.tier ?? null);
-    const ai = await aiUsageState(ctx, ownerId);
+    const ai = await aiUsageState(ctx, ownerId, plan);
     return { tier: plan?.tier ?? null, storage: { usedBytes, reservedBytes, limitBytes }, ai: ai && { used: ai.used, today: ai.today, blocked: ai.blocked, resetsAt: ai.resetsAt, dayResetsAt: ai.dayResetsAt } };
   },
 });
 
 /** For MCP model tools: the message refusing a call past the plan's AI allowance, or null. */
+/** Also read by a running turn before each model step (lib/editorTurn.ts prepareStep). */
 export const aiRefusal = internalQuery({ args: { ownerId: v.string() }, returns: v.union(v.string(), v.null()), handler: async (ctx, args) => (await aiUsageRefusal(ctx, args.ownerId))?.message ?? null });

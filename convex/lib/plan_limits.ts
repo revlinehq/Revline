@@ -39,7 +39,9 @@ export async function requireStorageRoom(ctx: Context, ownerId: string, bytes: n
  *  UTC calendar month for grants without one. */
 export function usagePeriod(now: number, periodEnd?: number) {
   if (periodEnd !== undefined && periodEnd > now) {
-    const end = new Date(periodEnd), start = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, end.getUTCDate(), end.getUTCHours(), end.getUTCMinutes(), end.getUTCSeconds());
+    // One month back, clamped to the shorter month's last day (a period ending Mar 31 starts Feb 28), as Stripe bills.
+    const end = new Date(periodEnd), lastDay = new Date(Date.UTC(end.getUTCFullYear(), end.getUTCMonth(), 0)).getUTCDate();
+    const start = Date.UTC(end.getUTCFullYear(), end.getUTCMonth() - 1, Math.min(end.getUTCDate(), lastDay), end.getUTCHours(), end.getUTCMinutes(), end.getUTCSeconds());
     if (start <= now) return { start, end: periodEnd };
   }
   const today = new Date(now);
@@ -62,8 +64,8 @@ export async function recordAiUsage(ctx: MutationCtx, ownerId: string, usd: numb
 }
 
 /** How much of the plan's AI allowance this owner has used, as shares (never dollars), or null where no limit applies. */
-export async function aiUsageState(ctx: Context, ownerId: string) {
-  const plan = await limitedPlan(ctx, ownerId);
+export async function aiUsageState(ctx: Context, ownerId: string, known?: Awaited<ReturnType<typeof limitedPlan>>) {
+  const plan = known === undefined ? await limitedPlan(ctx, ownerId) : known;
   if (!plan) return null;
   const now = Date.now(), period = usagePeriod(now, plan.periodEnd), limits = PLAN_LIMITS[plan.tier];
   const row = await usageRow(ctx, ownerId, period.start), dayStart = dayStartOf(now);
@@ -84,8 +86,9 @@ export async function aiUsageRefusal(ctx: Context, ownerId: string) {
   return { code: 'usage_limit' as const, tier: state.tier, resetsAt: state.blocked === 'month' ? state.resetsAt : state.dayResetsAt, message };
 }
 
-/** Refuses a new assistant turn or model step past the plan's AI allowance. */
-export async function requireAiAllowance(ctx: Context, ownerId: string) {
+/** Refuses a new assistant turn or model step past the plan's AI allowance. Client calls get the coded error the
+ *  upgrade dialog reads; a running turn (`plain`) gets the message alone, which its chat shows as the stop reason. */
+export async function requireAiAllowance(ctx: Context, ownerId: string, { plain = false }: { plain?: boolean } = {}) {
   const refusal = await aiUsageRefusal(ctx, ownerId);
-  if (refusal) throw new ConvexError(refusal);
+  if (refusal) throw new ConvexError(plain ? refusal.message : refusal);
 }

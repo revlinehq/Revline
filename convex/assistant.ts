@@ -472,8 +472,8 @@ export const modelForRun = internalQuery({
   handler: async (ctx, args): Promise<ClaudeModelSelection> => {
     await requireActiveRun(ctx, args);
     await requireEditorAccess(ctx, args.ownerId);
-    // Every model step: a turn that reaches the plan's AI allowance stops before its next call.
-    await requireAiAllowance(ctx, args.ownerId);
+    // A turn past the plan's AI allowance does not start; prepareStep (lib/editorTurn.ts) re-checks before each model step.
+    await requireAiAllowance(ctx, args.ownerId, { plain: true });
     if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
     const offer = await productionOffer(ctx, args.ownerId); if (offer) return offeredEditorModel(offer, args.pinnedModel);
     // Only Ultra keeps a chosen effort; this recheck covers queued, retried and recovered turns.

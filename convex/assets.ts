@@ -39,7 +39,7 @@ export const catalogAudioUrl = action({ args: { catalogId: v.string() }, returns
   return `${url}/read?token=${token}`;
 }});
 export const generateUploadUrl = mutation({ args: { projectId: v.id("projects") }, returns: v.string(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireStorageRoom(ctx, ownerId, null); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireStorageRoom(ctx, ownerId, 0); await requireProject(ctx, args.projectId, ownerId); return await issueUpload(ctx, ownerId, args.projectId);
 }});
 export const attachThumbnail=mutation({args:{assetId:v.id('assets'),storageId:v.id('_storage')},returns:v.null(),handler:async(ctx,args)=>{
   const ownerId=await requireOwner(ctx);const asset=await ctx.db.get(args.assetId);

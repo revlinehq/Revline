@@ -13,9 +13,15 @@ import { UpgradeDialog, canUpgrade, meterLevel } from './plan-limit-dialog';
 import './plan-card.css';
 
 export type PlanUsage = FunctionReturnType<typeof api.usage.status>;
+/** The meters, with a day or period that has ended since the query last ran read as reset: Convex re-runs the
+ *  query only when its data changes, not when the clock passes midnight or the period end. */
 export function usePlanUsage(): PlanUsage | undefined {
   const { isAuthenticated } = useConvexAuth();
-  return useQuery(api.usage.status, isAuthenticated ? {} : 'skip');
+  const usage = useQuery(api.usage.status, isAuthenticated ? {} : 'skip');
+  if (!usage?.ai) return usage;
+  const now = Date.now(), ai = usage.ai;
+  const used = now >= ai.resetsAt ? 0 : ai.used, today = ai.today === null ? null : now >= ai.dayResetsAt || now >= ai.resetsAt ? 0 : ai.today;
+  return { ...usage, ai: { ...ai, used, today, blocked: used >= 1 ? 'month' : today !== null && today >= 1 ? 'day' : null } };
 }
 const percent = (share: number) => Math.min(100, Math.round(share * 100));
 const resetDate = (time: number) => new Date(time).toLocaleDateString(undefined, { month: 'long', day: 'numeric' });
