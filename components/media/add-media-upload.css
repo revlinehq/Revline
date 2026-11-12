@@ -1,0 +1,16 @@
+/* Shared Upload page of the Add media dialogs. Colours come from the workspace tokens, so it fits the editor and the dashboard. */
+.add-media-upload{display:flex;flex-direction:column;gap:14px;min-width:0}
+.add-media-upload [data-slot=button].add-media-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;width:100%;height:auto;min-height:220px;padding:24px;border:1px dashed color-mix(in srgb,var(--ws-text,#171717) 22%,transparent);border-radius:12px;background:transparent;color:var(--ws-text,#171717);font:inherit;white-space:normal;transition:none;box-shadow:none}
+.add-media-upload [data-slot=button].add-media-drop:hover:not(:disabled),.add-media-upload [data-slot=button].add-media-drop[data-dragging]{background:var(--ws-hover,#eee);border-color:color-mix(in srgb,var(--ws-text,#171717) 45%,transparent)}
+.add-media-upload [data-slot=button].add-media-drop:focus-visible{outline:none;box-shadow:none}
+.add-media-drop svg{width:24px;height:24px;margin-bottom:4px;color:var(--ws-muted,#777)}
+.add-media-drop strong{font-size:15px;font-weight:500}
+.add-media-drop span{font-size:12px;color:var(--ws-muted,#777)}
+.add-media-drop small{margin-top:8px;font-size:11px;color:var(--ws-muted,#777)}
+.add-media-link{display:flex;flex-direction:column;gap:6px}
+.add-media-link-field{display:flex;gap:8px;min-width:0}
+.add-media-link-field [data-slot=input]{flex:1;min-width:0;height:36px;font-size:13px}
+.add-media-link-field [data-slot=input]:focus-visible{box-shadow:none}
+.add-media-link-field [data-slot=button]{flex:none;min-width:76px;height:36px;font-size:13px}
+.add-media-note{margin:0;font-size:11px;line-height:1.5;color:var(--ws-muted,#777)}
+.add-media-error{margin:0;font-size:12px;color:var(--destructive)}
