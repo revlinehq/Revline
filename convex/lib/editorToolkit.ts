@@ -722,11 +722,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   // Generate with ElevenLabs, upload to the project's R2 media like an upload, and register an ordinary audio asset holding its request.
   const reserveAudio = async () => { abortSignal.throwIfAborted(); await ctx.runMutation(internal.assistant.reserveAudioRequest, run); abortSignal.throwIfAborted(); };
-  const createGeneratedSound = async (request: SoundEffectRequest, name?: string) => {
+  const createGeneratedSound = async (request: SoundEffectRequest, name?: string, saveToLibrary?: boolean) => {
     const { samples, rate } = await generateSoundEffect(request, abortSignal, reserveAudio), key = newProjectMediaKey(run.ownerId, run.projectId);
     const size = await putMediaObject(key, encodeWav(samples, rate), 'audio/wav');
     try {
-      const asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? 'Generated sound').replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration: samples[0].length / rate, waveform: soundWaveform(samples, rate), recipe: JSON.stringify(request) });
+      const asset = await ctx.runMutation(internal.assistant.saveGeneratedSound, { ...run, r2Key: key, fileName: `${(name ?? 'Generated sound').replace(/[\\/:*?"<>|]/g, '')}.wav`, size, duration: samples[0].length / rate, waveform: soundWaveform(samples, rate), recipe: JSON.stringify(request), ...(saveToLibrary ? { saveToLibrary } : {}) });
       assets.push(asset);
       return asset;
     } catch (error) { await storageControl({ action: 'delete', key }).catch(() => {}); throw error; }
@@ -2032,8 +2032,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!asset) { asset = await ctx.runMutation(internal.assistant.attachRunStockAudio, { ...run, catalogId: effect }); assets.push(asset); }
       return { ...await placeEffectSound(asset._id, sound.duration, at, gain), effect, name: sound.name, duration: sound.duration };
     } }),
-    generateSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.generateSound, description: "The default way to add any sound effect: describe it in words and ElevenLabs generates it as real sound design, then it is placed on a free A layer at timeline seconds at (frame-snapped), starting on its first audible sample; save immediately. Time it exactly to the motion: a whoosh as long as a slide-in (duration), a pop per card, a riser into a hit. When the user gives a time, use exactly that time. gain is the clip volume 0..2 (default 0.7); sounds peak at -3 dBFS. If generation fails nothing is placed: say so, never substitute another sound. Returns the clip, its duration and any audible non-effect audio it overlaps.", inputSchema: soundEffectInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional(), name: z.string().trim().min(1).max(60).optional() }), execute: async (_ctx, { at, gain = .7, name, ...request }) => {
-      const asset = await createGeneratedSound(request, name);
+    generateSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.generateSound, description: "The default way to add any sound effect: describe it in words and ElevenLabs generates it as real sound design, then it is placed on a free A layer at timeline seconds at (frame-snapped), starting on its first audible sample; save immediately. Time it exactly to the motion: a whoosh as long as a slide-in (duration), a pop per card, a riser into a hit. When the user gives a time, use exactly that time. gain is the clip volume 0..2 (default 0.7); sounds peak at -3 dBFS. If generation fails nothing is placed: say so, never substitute another sound. Returns the clip, its duration and any audible non-effect audio it overlaps.", inputSchema: soundEffectInput.extend({ at: z.number().min(0), gain: z.number().min(0).max(2).optional(), name: z.string().trim().min(1).max(60).optional(), saveToLibrary: z.boolean().optional().describe('true only when the user explicitly asks to keep this sound in their media library. Otherwise the sound lives on the timeline only and is not listed in Media or the Library.') }), execute: async (_ctx, { at, gain = .7, name, saveToLibrary, ...request }) => {
+      const asset = await createGeneratedSound(request, name, saveToLibrary);
       return { ...await placeEffectSound(asset._id, asset.duration!, at, gain), name: asset.fileName, duration: asset.duration };
     } }),
     editSound: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.editSound, description: "Regenerate a generated sound clip from a new prompt (and duration), keeping its start, layer and volume (it moves up a layer only if the new length would overlap). inspectClip shows the current prompt. Library and uploaded audio cannot be regenerated; delete and replace them.", inputSchema: soundEffectInput.extend({ clipId: z.string(), name: z.string().trim().min(1).max(60).optional() }), execute: async (_ctx, { clipId, name, ...request }) => {
@@ -2041,7 +2041,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const current = find(editSession.timeline, clipId);
       const previous = assets.find(item => item._id === current.assetId);
       if (current.kind !== 'audio' || !previous?.soundRecipe) throw new Error('Choose a generated sound clip; library and uploaded audio cannot be regenerated.');
-      const asset = await createGeneratedSound(request, name ?? previous.fileName.replace(/\.wav$/, ''));
+      const asset = await createGeneratedSound(request, name ?? previous.fileName.replace(/\.wav$/, ''), previous.libraryHidden === false);
       const result = await checkpoint(t => { const clip = find(t, clipId); return placeOnFreeLayer(t, { ...clip, assetId: asset._id, sourceStart: 0, duration: asset.duration! }); });
       return { ...result, clipId, name: asset.fileName, duration: asset.duration };
     } }),

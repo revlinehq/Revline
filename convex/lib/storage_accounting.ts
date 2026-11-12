@@ -4,6 +4,7 @@ import { ConvexError } from 'convex/values';
 import type { Doc, Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import { isStockAudioKey } from '../../lib/editor/stock-audio';
+import { hiddenFromLibrary } from '../../lib/editor/library-visibility';
 import { adjustFolderTotals, liveFolderId } from './storage_folders';
 
 type StoredObject = { r2Key?:string; storageId?:Id<'_storage'> };
@@ -47,8 +48,21 @@ export async function forgetStorageObject(ctx:MutationCtx,ownerId:string,source:
   const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
   if(row){await adjust(ctx,ownerId,row,-1);if(!row.pending&&!row.auxiliary)await adjustFolderTotals(ctx,row.folderId,-1,-row.size);await ctx.db.delete(row._id);}
 }
+/** Lists or unlists an already recorded file in the Library. Its bytes stay counted either way; only the file count
+ *  and folder totals follow what is listed. A hidden file remembers its folder and returns to it when listed again. */
+export async function setStorageObjectListed(ctx:MutationCtx,ownerId:string,source:StoredObject,listed:boolean) {
+  const key=objectKey(source);if(!key)return;
+  const row=await ctx.db.query('storageObjects').withIndex('by_owner_key',q=>q.eq('ownerId',ownerId).eq('objectKey',key)).unique();
+  if(!row||row.pending||row.auxiliary===!listed)return;
+  await adjust(ctx,ownerId,row,-1);
+  if(!listed)await adjustFolderTotals(ctx,row.folderId,-1,-row.size);
+  const folderId=listed?await liveFolderId(ctx,ownerId,row.folderId):row.folderId;
+  await ctx.db.patch(row._id,{auxiliary:!listed,folderId});
+  await adjust(ctx,ownerId,{...row,auxiliary:!listed},1);
+  if(listed)await adjustFolderTotals(ctx,folderId,1,row.size);
+}
 export async function recordAssetStorage(ctx:MutationCtx,asset:Doc<'assets'>) {
-  await recordStorageObject(ctx,asset);
+  await recordStorageObject(ctx,{...asset,auxiliary:hiddenFromLibrary(asset)});
   await updateProjectCover(ctx,asset);
   if(hasPreview(asset))await recordStorageObject(ctx,{ownerId:asset.ownerId,r2Key:asset.previewR2Key,fileName:`${asset.fileName} preview`,kind:'video',size:asset.previewSize!,createdAt:asset.createdAt,auxiliary:true});
   if(asset.thumbnailStorageId){const metadata=await ctx.db.system.get(asset.thumbnailStorageId);if(metadata)await recordStorageObject(ctx,{ownerId:asset.ownerId,storageId:asset.thumbnailStorageId,fileName:`${asset.fileName} thumbnail`,size:metadata.size,kind:'image',createdAt:asset.createdAt,auxiliary:true});}

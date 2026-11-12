@@ -220,7 +220,9 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   }
   const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', lease.ownerId).eq('projectId', project._id)).take(PROJECT_MEDIA_LIMIT);
   if (count.length >= PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
-  const assetId = await ctx.db.insert('assets', { ownerId: lease.ownerId, projectId: lease.projectId, r2Key: lease.key, fileName: lease.fileName, contentType: lease.contentType, kind: lease.kind, size: lease.size, createdAt: Date.now(), ...(lease.duration !== undefined ? { duration: lease.duration } : {}), ...(lease.width !== undefined ? { width: lease.width } : {}), ...(lease.height !== undefined ? { height: lease.height } : {}) });
+  const assetId = await ctx.db.insert('assets', { ownerId: lease.ownerId, projectId: lease.projectId, r2Key: lease.key, fileName: lease.fileName, contentType: lease.contentType, kind: lease.kind, size: lease.size, createdAt: Date.now(), ...(lease.duration !== undefined ? { duration: lease.duration } : {}), ...(lease.width !== undefined ? { width: lease.width } : {}), ...(lease.height !== undefined ? { height: lease.height } : {}),
+    // Audio extracted from a video, or a normalized mix, is made automatically, not uploaded.
+    ...(lease.kind === 'audio' && await madeByTask(ctx, lease.taskId) ? { libraryHidden: true } : {}) });
   await recordAssetStorage(ctx,(await ctx.db.get(assetId))!);
   await ctx.db.patch(lease._id, { completed: true, assetId });
   if (lease.taskId) await ctx.db.patch(lease.taskId, { outputAssetId: assetId });
@@ -236,6 +238,11 @@ export const finish = internalMutation({ args: { uploadId: v.id('r2Uploads'), si
   }
   return assetId;
 }});
+async function madeByTask(ctx: MutationCtx, taskId: Id<'mediaTasks'> | undefined) {
+  const task = taskId ? await ctx.db.get(taskId) : null;
+  // A snapshot task uploads audio only for loudness normalization.
+  return task?.kind === 'extract' || task?.kind === 'snapshot';
+}
 export const complete = action({ args: { uploadId: v.id('r2Uploads'), parts: partsValidator, ...taskAuth }, returns: v.union(v.id('assets'), v.null()), handler: async (ctx, args): Promise<Id<'assets'> | null> => {
   const lease = await ctx.runQuery(internal.r2.getLease, { uploadId: args.uploadId, ...(args.taskId ? { taskId: args.taskId, leaseToken: args.leaseToken } : {}) });
   return completeUpload(ctx, lease, args.parts);

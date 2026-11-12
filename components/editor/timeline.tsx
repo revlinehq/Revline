@@ -1,6 +1,6 @@
 'use client';
 import type { LiveEditChange } from '@/lib/editor/live-edit';
-import { Download } from 'lucide-react';
+import { Download, BookmarkPlus } from 'lucide-react';
 import { userError } from '@/lib/user-error';
 import { STOCK_AUDIO_DRAG_TYPE } from '@/lib/editor/stock-audio-drag';
 import { Fragment, createContext, memo, useContext, useState, useRef, useCallback, useLayoutEffect, useEffect, useMemo } from 'react';
@@ -30,6 +30,7 @@ import { zoomAtAnchor, reorderLayer, deleteEmptyLayer, removeEmptyLayers, resize
 import { isTimelineGestureRejection, TimelineGestureRejection } from '@/lib/editor/timeline-edit-errors';
 import { timelineGestureFrame } from '@/lib/editor/timeline-gesture-frame';
 import { applyTimelineEdit } from '@/lib/editor/timeline-sync';
+import { hiddenFromLibrary } from '@/lib/editor/library-visibility';
 import { splitAtPlayhead } from '@/lib/editor/split-at-playhead';
 import { minimumTimelineZoom, timelineZoomPosition, timelineZoomAtPosition, TIMELINE_BASE_PX, TIMELINE_MAX_ZOOM } from '@/lib/editor/timeline-zoom';
 import './custom-timeline.css';
@@ -58,6 +59,8 @@ type Props={
   workingLabel?:string;
   liveEdit?:LiveEditChange & {sequence:number;runId:string};
   onExportClip?:(clipId:string)=>void;
+  /** Lists audio the editor made by itself (catalog, generated or extracted) in the Media tab and the Library. */
+  onSaveToLibrary?:(assetId:string)=>Promise<void>;
   ultra?:boolean;
 };
 
@@ -672,6 +675,8 @@ export function TimelinePanel(p:Props){
   // A cue on a section start's frame flags the other way, so both stay visible and grabbable on one pole.
   const sectionFrames=new Set((timeline.markers??[]).filter(isSectionMarker).map(marker=>Math.round(marker.time*timeline.fps)));
   const contextAudio=contextClip?.kind==='audio'?contextClip:timeline.clips.find(clip=>clip.id===contextClip?.linkedClipId);
+  const contextSound=contextClip?.kind==='audio'&&contextClip.assetId?assetMap.get(contextClip.assetId):undefined;
+  const unsavedSound=!!contextSound&&hiddenFromLibrary(contextSound,assets.some(video=>video.audioAssetId===contextSound._id));
   // Selected clips the context menu can link: one explicit video/audio pair, or several paired by matching timing.
   const audioAssetOf=(videoAssetId:string)=>assetMap.get(videoAssetId)?.audioAssetId;
   const contextSelection=contextClip&&selectedIds.includes(contextClip.id)?timeline.clips.filter(clip=>selectedIds.includes(clip.id)):[];
@@ -788,6 +793,7 @@ export function TimelinePanel(p:Props){
       {linkablePair&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>runContext(()=>onChange(linkClips(timeline,linkablePair.video.id,linkablePair.audio.id,audioAssetOf)))}><Link/>Link video and audio</ContextMenuItem>}
       {matchingLinks.length>0&&<ContextMenuItem disabled={editingDisabled} onSelect={linkMatching}><Link/>Link matching audio{matchingLinks.length>1?` (${matchingLinks.length})`:''}</ContextMenuItem>}
       {(contextClip.kind==='audio'||contextClip.kind==='video'&&!contextClip.audioSeparated)&&<ContextMenuItem disabled={editingDisabled} onSelect={()=>toggleTrackSound([contextClip])}>{(contextAudio??contextClip).volume===0?<VolumeX/>:<Volume2/>}{(contextAudio??contextClip).volume===0?'Unmute clip':'Mute clip'}</ContextMenuItem>}
+      {unsavedSound&&p.onSaveToLibrary&&<ContextMenuItem onSelect={()=>{void p.onSaveToLibrary!(contextSound!._id).catch(report);}}><BookmarkPlus/>Save to library</ContextMenuItem>}
       <ContextMenuSeparator/>
     </>:<>
       {context?.group!=='audio'&&context?.group!=='effects'&&<><ContextMenuItem disabled={editingDisabled} onSelect={()=>runContext(()=>onChange(addTextClip(timeline,crypto.randomUUID(),'caption',contextTime)))}><Type/>Add caption here</ContextMenuItem><ContextMenuItem disabled={editingDisabled} onSelect={()=>runContext(()=>onChange(addTextClip(timeline,crypto.randomUUID(),'graphic',contextTime)))}><Layers/>Add graphic here</ContextMenuItem><ContextMenuSeparator/></>}
