@@ -33,6 +33,7 @@ import { startRenderFor } from './renders';
 import { proposeExportFor } from './assistantExports';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { canChooseReasoningEffort, hasPaidModelAccess, productionDefaultModel, productionOffer, requireEditorAccess } from './lib/billing_access';
+import { requireAiAllowance } from './lib/plan_limits';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
 import { vStreamDelta, vStreamMessage } from "@convex-dev/agent/validators";
 import { paginationOptsValidator } from "convex/server";
@@ -149,7 +150,7 @@ async function clearLivePreview(ctx:import('./_generated/server').MutationCtx,pr
 }
 export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.string(), clientPlatform: v.optional(v.literal("ios")), modelChoice: v.optional(legacyCompatibleModelChoiceValidator), reasoningEffort: v.optional(storedEditorReasoningEffortValidator), speedMode: v.optional(editorSpeedModeValidator), // Older clients still send editMode; it validates and is ignored. The lane sets the checks.
   editMode: v.optional(editorEditModeValidator), attachedAssetIds:v.optional(v.array(v.id('assets'))), selectedClipId: v.optional(v.string()), selectedClipIds: v.optional(v.array(v.string())), playhead: v.optional(v.number()), timelineId: v.optional(v.string()) }, returns: v.null(), handler: async (ctx, args) => {
-  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
+  const ownerId = await requireOwner(ctx); await requireEditorAccess(ctx, ownerId); await requireAiAllowance(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const paidModelAccess = await hasPaidModelAccess(ctx, ownerId);
   const mobile = args.clientPlatform === 'ios';
   if(mobile){const user=await ctx.db.query('users').withIndex('by_clerk_id',q=>q.eq('clerkId',ownerId)).unique();if(user?.aiConsentVersion!==1)throw new ConvexError('Review and allow AI data sharing before editing.');}
@@ -200,7 +201,7 @@ export const send = mutation({ args: { projectId: v.id("projects"), prompt: v.st
 type QueuedContext=Pick<Doc<'assistantQueue'>,'command'|'attachedAssetIds'|'selectedClipId'|'selectedClipIds'|'playhead'|'timelineId'>;
 /** Retry is a continuation of an existing prompt; it never writes a user message. */
 export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:v.string()},returns:v.null(),handler:async(ctx,args)=>{
-  const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);
+  const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);await requireAiAllowance(ctx,ownerId);
   const project=await requireProject(ctx,args.projectId,ownerId);
   const [prompt]=await ctx.runQuery(components.agent.messages.getMessagesByIds,{messageIds:[args.promptMessageId]});
   if(!prompt||prompt.threadId!==project.threadId||prompt.message?.role!=='user')throw new ConvexError('The original request is no longer available in this conversation.');
@@ -471,6 +472,8 @@ export const modelForRun = internalQuery({
   handler: async (ctx, args): Promise<ClaudeModelSelection> => {
     await requireActiveRun(ctx, args);
     await requireEditorAccess(ctx, args.ownerId);
+    // Every model step: a turn that reaches the plan's AI allowance stops before its next call.
+    await requireAiAllowance(ctx, args.ownerId);
     if (!await hasPaidModelAccess(ctx, args.ownerId)) return freeEditorModel();
     const offer = await productionOffer(ctx, args.ownerId); if (offer) return offeredEditorModel(offer, args.pinnedModel);
     // Only Ultra keeps a chosen effort; this recheck covers queued, retried and recovered turns.

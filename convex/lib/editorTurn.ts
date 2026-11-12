@@ -22,7 +22,7 @@ import { AssistantTokenBudget, editorTokenLimits, AssistantTokenBudgetError, edi
 import {shouldStopEditingSteps} from '../../lib/ai/edit-progress';
 import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { StepTimer } from '../../lib/ai/step-timing';
-import { CostHistoryWriter, costRecordingEnabled, costHistoryRecord } from '../../lib/ai/cost-history';
+import { CostHistoryWriter, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
 import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
@@ -59,7 +59,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
   const timer = new StepTimer();
   const costLog = new AssistantCostLog({ projectId: args.projectId, runId: args.runId }, event => {
     console.log(`[ai-cost] ${JSON.stringify(event)}`);
-    if (!costRecordingEnabled()) return;
+    // Always recorded: every model call's cost counts toward the plan's AI allowance.
     const record = costHistoryRecord(event);
     if (record) costHistory.enqueue(record);
   });

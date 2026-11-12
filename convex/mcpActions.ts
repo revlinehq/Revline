@@ -121,6 +121,7 @@ function toolFailureMessage(text: string): string {
   return typeof parsed.data.error === 'string' ? parsed.data.error : parsed.data.error?.message ?? parsed.data.message ?? parsed.data.reason ?? 'Revline tool returned an unsuccessful result';
 }
 
+const AI_METERED_TOOLS=new Set(['analyzeMedia','findHighlights','generateSound']);
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
   // The task whose working badge this call raised, and the task this call ends. Settled in finally, so thrown failures count.
@@ -153,6 +154,8 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   const task = session ? await ctx.runQuery(internal.lanes.task, {ownerId:args.ownerId,projectId:session.projectId,taskId:session.taskId}) as LaneTask|null : null;
   const lane=task?.lane??sessionLane;
   if(!laneToolAllowed(lane,args.name,task?.capabilities))return result(laneToolError(lane,args.name),true);
+  // Tools that run a model on Revline's side count toward the plan's AI allowance; past it they are refused.
+  if(AI_METERED_TOOLS.has(args.name)){const refusal=await ctx.runQuery(internal.usage.aiRefusal,{ownerId:args.ownerId});if(refusal)return result(refusal,true);}
   if(args.name==='startTask'){
     const parsed=PROJECT_TOOLS.startTask.inputSchema.safeParse(input);
     if(!parsed.success)return result(z.prettifyError(parsed.error),true);

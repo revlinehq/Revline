@@ -108,6 +108,7 @@ import type * as lib_share_chat from "../lib/share_chat.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_sound_validator from "../lib/sound_validator.js";
 import type * as lib_step_timing_validator from "../lib/step_timing_validator.js";
+import type * as lib_plan_limits from "../lib/plan_limits.js";
 import type * as lib_storage_accounting from "../lib/storage_accounting.js";
 import type * as lib_storage_folders from "../lib/storage_folders.js";
 import type * as lib_timeline from "../lib/timeline.js";
@@ -158,6 +159,7 @@ import type * as timelineShares from "../timelineShares.js";
 import type * as timelineTabs from "../timelineTabs.js";
 import type * as toolWrites from "../toolWrites.js";
 import type * as uploads from "../uploads.js";
+import type * as usage from "../usage.js";
 import type * as users from "../users.js";
 
 import type {
@@ -267,6 +269,7 @@ declare const fullApi: ApiFromModules<{
   "lib/shared_media": typeof lib_shared_media;
   "lib/sound_validator": typeof lib_sound_validator;
   "lib/step_timing_validator": typeof lib_step_timing_validator;
+  "lib/plan_limits": typeof lib_plan_limits;
   "lib/storage_accounting": typeof lib_storage_accounting;
   "lib/storage_folders": typeof lib_storage_folders;
   "lib/timeline": typeof lib_timeline;
@@ -317,6 +320,7 @@ declare const fullApi: ApiFromModules<{
   timelineTabs: typeof timelineTabs;
   toolWrites: typeof toolWrites;
   uploads: typeof uploads;
+  usage: typeof usage;
   users: typeof users;
 }>;
 
