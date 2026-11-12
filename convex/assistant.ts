@@ -1,3 +1,4 @@
+import { textOf } from '../lib/ai/history-compaction';
 import { tableRow } from './lib/exact';
 import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
@@ -215,7 +216,7 @@ export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:
   if(turn?.timelineId&&turn.timelineId!==activeTabOf(project))await openTabFor(ctx,ownerId,{projectId:args.projectId,timelineId:turn.timelineId});
   const resumed={...(turn?.args??{}),projectId:args.projectId,ownerId,runId,threadId:prompt.threadId,promptMessageId:args.promptMessageId,pinnedModel,...(recovery?{recovery}:{}),continuation:{segment:0,repairPass:0,savedEdits:0,pendingFastFrames:turn?.pendingFastFrames??[],feedback:'Resume the original request in place. Inspect the saved timeline and finish only unfinished work; never repeat a completed edit.'}};
   await writeProject(ctx,project._id,{aiRunning:true,aiEditing:false,aiAgentName:undefined,aiAgentActiveUntil:undefined,aiRunId:runId,aiError:undefined,aiQueuePaused:false,aiWorkflowId:undefined,aiAnalysisUsage:{runId,enqueued:0},aiRequest:{prompt:text,messageId:args.promptMessageId,startedRevision:project.revision??0},...(!sameUndoGroup?{aiUndoRecorded:false,aiCheckpointRevision:undefined}:{})});
-  if(turn)await patchTurn(ctx,turn,{runId,args:resumed,pass:0,segment:0,status:'running',error:undefined,savedEdits:0,feedback:resumed.continuation.feedback,updatedAt:Date.now()});
+  if(turn)await patchTurn(ctx,turn,{runId,args:resumed,pass:0,segment:0,status:'running',error:undefined,savedEdits:0,revision:undefined,feedback:resumed.continuation.feedback,updatedAt:Date.now()});
   else await rememberTurn(ctx,resumed,project);
   await dispatchTurn(ctx,resumed);
   return null;
@@ -354,7 +355,7 @@ export async function stopOwnedProject(ctx:MutationCtx, project:Doc<'projects'>,
   if(keepDraft&&project.aiRunId&&project.threadId){
     // The chat keeps what Stop did, across reloads and for the next request: what is saved, and that the rest never ran.
     const turn=await turnForRun(ctx,project.aiRunId),edits=(turn?.savedEdits??0)+(kept?1:0);
-    if(turn&&kept)await patchTurn(ctx,turn,{savedEdits:edits});
+    if(turn)await patchTurn(ctx,turn,{...(kept?{savedEdits:edits}:{}),revision:kept?.revision??(await projectRunContext(ctx,project._id)).revision});
     const said=kept?`Stopped. What was done so far is saved as revision ${kept.revision} (${kept.summary}). One Undo takes back everything this request changed.`:edits?`Stopped. The edits already made in this request are saved; one Undo takes them back.`:'Stopped before any edit was made. Your timeline is unchanged.';
     if(turn)await saveMessage(ctx,chatAgent,{threadId:turn.threadId,userId:project.ownerId,promptMessageId:turn.promptMessageId,message:{role:'assistant',content:`${said} Any step still running when you stopped was not applied. Your next message continues from the timeline as it is now.`}}).catch(()=>{});
   }
@@ -671,7 +672,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     await savePublicationReceipt(ctx,args.ownerId,kept===null?{...receipt,status:publication.status}:{...receipt,status:'saved',revision:kept.revision});
   }
   const error = committed ? undefined : kept === null ? args.error : `${args.error!.replace(/\s*(?:The pending replacement was not saved\.|No timeline changes were saved\.)/g, '')} ${keptDraftNote(kept)}`.trim();
-  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000)});
+  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000),revision:kept?.revision??(committed?written?.receipt?.revision:undefined)??state?.revision});
   await safely('finishIncidentRun', () => finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication && kept !== null ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: kept.revision } : publication));
   if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncidentSafely(ctx, {
     source: 'assistant', kind: 'turn-failure', message: error,
@@ -775,6 +776,23 @@ export const currentPrompt = internalQuery({
   },
 });
 
+/** The turn record of each earlier request in this chat, oldest first, for its line in the model's history
+ * (lib/ai/history-compaction.ts). Reads the same window the agent loads as recent messages. */
+export const earlierRequests = internalQuery({
+  args: { ...runArgs, threadId: v.string(), promptMessageId: v.string() },
+  returns: v.array(v.object({ text: v.string(), turn: v.union(v.null(), v.object({ status: v.union(v.literal('running'), v.literal('completed'), v.literal('failed'), v.literal('stopped')), savedEdits: v.number(), revision: v.optional(v.number()), error: v.optional(v.string()) })) })),
+  handler: async (ctx, args) => {
+    const project = await requireProject(ctx, args.projectId, args.ownerId);
+    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw new ConvexError('AI run is no longer active');
+    const { page } = await ctx.runQuery(components.agent.messages.listMessagesByThreadId, { threadId: args.threadId, order: 'desc', upToAndIncludingMessageId: args.promptMessageId, statuses: ['success'], excludeToolMessages: true, paginationOpts: { cursor: null, numItems: 100 } });
+    const prompts = page.filter(message => message._id !== args.promptMessageId && message.message?.role === 'user').reverse();
+    return Promise.all(prompts.map(async message => {
+      const view = await ctx.db.query('assistantTurnViews').withIndex('by_prompt', q => q.eq('projectId', args.projectId).eq('promptMessageId', message._id)).unique();
+      const turn = view ? await ctx.db.get(view.turnId) : await ctx.db.query('assistantTurns').withIndex('by_prompt', q => q.eq('projectId', args.projectId).eq('promptMessageId', message._id)).unique();
+      return { text: textOf(message.message?.content), turn: turn ? { status: turn.status, savedEdits: turn.savedEdits, ...(turn.revision === undefined ? {} : { revision: turn.revision }), ...(turn.error ? { error: turn.error } : {}) } : null };
+    }));
+  },
+});
 
 export const queued=query({args:{projectId:v.id('projects')},returns:v.object({paused:v.boolean(),messages:v.array(v.object({id:v.id('assistantQueue'),prompt:v.string(),error:v.optional(v.string())}))}),handler:async(ctx,{projectId})=>{
   const project=await projectRun(ctx,projectId,await requireOwner(ctx));

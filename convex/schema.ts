@@ -325,6 +325,8 @@ export default defineSchema({
     status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
     // The API model id and effort the latest run resolved at inference time (assistant.recordEffort); args.pinnedModel is what was asked.
     model:v.optional(v.string()),effort:v.optional(v.string()),
+    // The timeline revision when the request ended (finish or Stop): the next requests' history line names it.
+    revision:v.optional(v.number()),
   }).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   toolWriteReceipts: defineTable({
     projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), writeId: v.string(),

@@ -23,8 +23,8 @@ export async function turnSummaryForRun(ctx:QueryCtx|MutationCtx,runId:string){
   const legacy=await ctx.db.query('assistantTurns').withIndex('by_run',q=>q.eq('runId',runId)).unique();
   return legacy?{...legacy,turnId:legacy._id,legacy}:null;
 }
-export async function settleTurn(ctx:MutationCtx,turn:NonNullable<Awaited<ReturnType<typeof turnSummaryForRun>>>,patch:{status:'failed'|'completed';error?:string}){
+export async function settleTurn(ctx:MutationCtx,turn:NonNullable<Awaited<ReturnType<typeof turnSummaryForRun>>>,patch:{status:'failed'|'completed';error?:string;revision?:number}){
   if(turn.legacy){await patchTurn(ctx,turn.legacy,{...patch,updatedAt:Date.now()});return;}
   await ctx.db.patch(turn.turnId,tablePatch<'assistantTurns'>()({...patch,updatedAt:Date.now()}));
-  await ctx.db.patch(turn._id,tablePatch<'assistantTurnViews'>()({...patch,resuming:false}));
+  await ctx.db.patch(turn._id,tablePatch<'assistantTurnViews'>()({status:patch.status,error:patch.error,resuming:false}));
 }
