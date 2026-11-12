@@ -39,7 +39,7 @@ const validSession = (value: string) => /^[\x21-\x7e]{1,256}$/.test(value);
 function refused(auth: AuthError) {
   if (auth.error === 'invalid_token') return rpcError(-32001, 'This Revline connection expired or was revoked. Connect again.', 401, { 'WWW-Authenticate': challenge('invalid_token') });
   if (auth.error === 'rate_limited') return rpcError(-32002, 'Too many tool calls. Wait a minute and retry.', 429, { 'Retry-After': '60' });
-  return rpcError(-32003, 'The Revline MCP connector is part of the Ultra plan.', 403);
+  return rpcError(-32003, 'The Revline MCP connector is part of the Pro and Studio plans.', 403);
 }
 
 type CallAuth = { credential: string };
@@ -78,7 +78,7 @@ export class RevlineMcp extends McpAgent<Env, unknown, Record<string, never>> {
         name: request.params.name, arguments: request.params.arguments ?? {},
       });
       if ('error' in reply) {
-        const text = reply.error === 'session_closed' ? 'This MCP session ended. Initialize a new session.' : reply.error === 'rate_limited' ? 'Too many tool calls. Wait a minute and retry.' : reply.error === 'plan' ? 'The Revline MCP connector is part of the Ultra plan.' : 'This Revline connection expired or was revoked. Connect again.';
+        const text = reply.error === 'session_closed' ? 'This MCP session ended. Initialize a new session.' : reply.error === 'rate_limited' ? 'Too many tool calls. Wait a minute and retry.' : reply.error === 'plan' ? 'The Revline MCP connector is part of the Pro and Studio plans.' : 'This Revline connection expired or was revoked. Connect again.';
         return { content: [{ type: 'text' as const, text }], isError: true };
       }
       const outcome = reply.outcome;

@@ -26,7 +26,7 @@ function sameVersion(job: Doc<'renderJobs'>, project: Doc<'projects'>, timelineI
 }
 /**
  * The export settings the user last chose for a whole timeline of this project (a finished export), or the export
- * dialog's defaults. No new preference is stored. 4K stays with the Ultra plan.
+ * dialog's defaults. No new preference is stored. 4K stays with the Studio plan.
  */
 function exportSettings(jobs: Doc<'renderJobs'>[], fps: number, ultra: boolean) {
   // A one-off setting the user asked the assistant for is never taken as their choice.

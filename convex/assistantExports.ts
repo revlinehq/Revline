@@ -28,7 +28,7 @@ export async function proposeExportFor(ctx: MutationCtx, ownerId: string, args: 
   if (duration > MAX_EXPORT_SECONDS) throw new ConvexError('Exports currently support up to five minutes. Shorten the edit before exporting.');
   const requested = Object.fromEntries((['resolution', 'fps', 'quality'] as const).flatMap(key => args[key] === undefined ? [] : [[key, args[key]]])) as Partial<ExportSettings>;
   const plan = await exportPlan(ctx, ownerId, project, timelineId, requested);
-  if (plan.settings.resolution === 2160 && !plan.ultra) throw new ConvexError('4K export is part of the Ultra plan. Nothing was exported.');
+  if (plan.settings.resolution === 2160 && !plan.ultra) throw new ConvexError('4K export is part of the Studio plan. Nothing was exported.');
   const changed = (Object.keys(requested) as (keyof ExportSettings)[]).filter(key => requested[key] !== plan.existing[key]);
   // An unchanged timeline is never rendered twice: a finished or running export with these settings is reused.
   const reuse = plan.ready ?? plan.running, now = Date.now();

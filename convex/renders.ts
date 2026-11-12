@@ -31,7 +31,7 @@ export async function exportsFull(ctx: QueryCtx | MutationCtx, ownerId: string, 
 export async function startRenderFor(ctx: MutationCtx, ownerId: string, args: ObjectType<typeof startRenderForArgs>) {
   await requireEditorAccess(ctx, ownerId); const project = await requireProject(ctx, args.projectId, ownerId);
   const ultra = await hasUltraPlan(ctx, ownerId);
-  if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Ultra plan." : "Invalid export settings");
+  if (![720, 1080, ...(ultra ? [2160] : [])].includes(args.resolution) || ![24, 30, 60].includes(args.fps) || !["draft", "standard", "high"].includes(args.quality)) throw new ConvexError(args.resolution === 2160 ? "4K export is part of the Studio plan." : "Invalid export settings");
   // A tab that is not open exports from its stored timeline.
   const tabs=tabsOf(project),tab=args.timelineId!==undefined?tabs.find(item=>item.id===args.timelineId):undefined;
   if(args.timelineId!==undefined&&!tab)throw new ConvexError('That timeline no longer exists.');
