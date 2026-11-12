@@ -1,5 +1,5 @@
 import { Minus, Plus } from 'lucide-react';
-import { PLANS } from '@/lib/billing/plan';
+import { EDITOR_PLAN } from '@/lib/billing/plan';
 import { LandingHeading, LandingSection } from './ui';
 
 const questions = [
@@ -10,7 +10,7 @@ const questions = [
   ['What file formats and lengths are supported?', 'Upload common video, audio and image files, or import a YouTube link. Long recordings are fine.'],
   ['Will my videos use my brand fonts and colors?', 'Ask for them in the conversation. Revline can style captions and titles with its built-in fonts and the colors you choose.'],
   ['Is my footage private?', 'Your projects belong to your account and require sign-in. Your footage is used to prepare your edits and exports.'],
-  ['How much does Revline cost? Is there a free plan?', `There is no free plan. Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice} and Studio $${PLANS.studio.monthlyPrice} ${PLANS.pro.currency} per month. Pro starts with a ${PLANS.pro.trialDays}-day free trial; cancel before it ends if you don’t want to continue.`],
+  ['How much does Revline cost? Is there a free plan?', `Revline is one plan at $${EDITOR_PLAN.monthlyPrice} ${EDITOR_PLAN.currency} per month, after a ${EDITOR_PLAN.trialDays}-day free trial. Cancel before the trial ends if you don’t want to continue.`],
 ];
 
 export function LandingFaq() {

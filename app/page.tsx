@@ -7,7 +7,7 @@ import { LandingPricing } from '@/components/landing/pricing';
 import { LandingFaq } from '@/components/landing/faq';
 import { LandingFinalCta } from '@/components/landing/final-cta';
 import { LandingFooter } from '@/components/landing/footer';
-import { PLANS, PLAN_TIERS } from '@/lib/billing/plan';
+import { EDITOR_PLAN } from '@/lib/billing/plan';
 import type { Metadata } from 'next';
 import './landing.css';
 
@@ -26,12 +26,12 @@ const structuredData = {
       operatingSystem: 'Web', image: 'https://tryrevline.com/og-revline-v6.png',
       description: 'An AI video editor for real footage: prompt-based cuts, captions, vertical clips and short-form edits, with MCP access for AI agents.',
       brand: { '@id': 'https://tryrevline.com/#organization' },
-      offers: PLAN_TIERS.map(tier => ({
-        '@type': 'Offer', name: `Revline ${PLANS[tier].name}`, url: 'https://tryrevline.com/pricing', price: PLANS[tier].monthlyPrice,
-        priceCurrency: PLANS[tier].currency,
-        priceSpecification: { '@type': 'UnitPriceSpecification', price: PLANS[tier].monthlyPrice, priceCurrency: PLANS[tier].currency, unitText: 'month' },
-        description: PLANS[tier].trialDays ? `${PLANS[tier].trialDays}-day trial, then $${PLANS[tier].monthlyPrice} USD per month.` : `$${PLANS[tier].monthlyPrice} USD per month.`,
-      })),
+      offers: {
+        '@type': 'Offer', url: 'https://tryrevline.com/pricing', price: EDITOR_PLAN.monthlyPrice,
+        priceCurrency: EDITOR_PLAN.currency,
+        priceSpecification: { '@type': 'UnitPriceSpecification', price: EDITOR_PLAN.monthlyPrice, priceCurrency: EDITOR_PLAN.currency, unitText: 'month' },
+        description: `${EDITOR_PLAN.trialDays}-day trial, then $${EDITOR_PLAN.monthlyPrice} USD per month.`,
+      },
     },
   ],
 };

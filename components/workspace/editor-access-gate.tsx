@@ -5,11 +5,12 @@ import { NEW_WORKSPACE_LABEL } from '@/lib/editor/workspace-labels';
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useAction } from 'convex/react';
-import { LoaderCircle } from 'lucide-react';
+import { Check, LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
+import { EDITOR_PLAN, PRO_FEATURES } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
 import { usePlanStatus } from './use-plan-status';
-import { PlanPicker } from './plan-picker';
+import { UltraPlanCard } from './ultra-plan-card';
 import { WorkspaceNav } from './workspace-nav';
 import './shared.css';
 import './editor-access-gate.css';
@@ -17,8 +18,9 @@ import { Button } from '@/components/ui/button';
 
 export function EditorAccessGate({ children, loading, checkoutPending = false }: { children: ReactNode; loading?: ReactNode; checkoutPending?: boolean }) {
   const status = usePlanStatus();
+  const checkout = useAction(api.billing.createCheckout);
   const portal = useAction(api.billing.createPortal);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'' | 'pro' | 'ultra'>('');
   const [error, setError] = useState('');
   const inFlight = useRef(false);
 
@@ -33,48 +35,49 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
       <div><Button asChild variant="outline" size="md"><Link href="/profile#billing">View billing</Link></Button></div>
     </section></main>
   </div>;
+  const trial = status.trialEligible && !paymentIssue;
 
-  async function openPortal() {
+  async function openCheckout(plan: 'pro' | 'ultra' = 'pro') {
     if (!status?.configured || inFlight.current) return;
-    inFlight.current = true; setBusy(true); setError('');
+    inFlight.current = true; setBusy(plan); setError('');
     try {
-      const result = await portal({});
-      if (!result.url) throw new Error('Could not open billing. Please try again.');
+      const result = paymentIssue ? await portal({}) : await checkout({ plan });
+      if (!result.url) throw new Error('Could not open checkout. Please try again.');
       window.location.assign(result.url);
     } catch (cause) {
       setError(userError(cause, 'Could not open billing. Please try again.'));
-      inFlight.current = false; setBusy(false);
+      inFlight.current = false; setBusy('');
     }
   }
 
   // A member whose payment failed fixes it first; everyone else picks a plan.
-  if (paymentIssue) return <div className="workspace-page editor-access-page">
+  const offerUltra = status.ultraAvailable && !paymentIssue;
+  return <div className="workspace-page editor-access-page">
     <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
-    <main className="editor-access-main">
+    <main className="editor-access-main" data-plans={offerUltra || undefined}>
       <section className="editor-access-card" aria-labelledby="editor-access-title">
         <header className="editor-access-heading">
-          <h1 id="editor-access-title">Update your payment method</h1>
-          <p>Update your payment method to restore editor access.</p>
+          <h1 id="editor-access-title">{paymentIssue ? 'Update your payment method' : offerUltra ? 'Revline Pro' : 'Continue with Revline'}</h1>
+          {paymentIssue ? <p>Update your payment method to restore editor access.</p> : offerUltra && <p>For creators editing every week.</p>}
         </header>
+        <div className="editor-access-offer">
+          <div className="editor-access-price"><strong>${EDITOR_PLAN.monthlyPrice}</strong><span>/ month · {EDITOR_PLAN.currency}</span></div>
+        </div>
+        <ul className="editor-access-features" aria-label="Included features">
+          {PRO_FEATURES.map(feature => <li key={feature}><Check size={16} strokeWidth={1.5} aria-hidden="true" />{feature}</li>)}
+        </ul>
         {!status.configured && <p role="status">Billing is temporarily unavailable. Please try again shortly.</p>}
         <div className="editor-access-action">
-          <PrimaryButton className="editor-access-start" disabled={busy || !status.configured} onClick={() => void openPortal()}>
-            {busy && <LoaderCircle size={14} className="animate-spin" />}Update payment method
+          <PrimaryButton className="editor-access-start" disabled={!!busy || !status.configured} onClick={() => void openCheckout()}>
+            {busy === 'pro' && <LoaderCircle size={14} className="animate-spin" />}
+            {paymentIssue ? 'Update payment method' : trial ? `Start ${EDITOR_PLAN.trialDays}-day free trial` : 'Start creating'}
           </PrimaryButton>
         </div>
         {error && <p className="editor-access-error" role="alert">{error}</p>}
       </section>
-    </main>
-  </div>;
-
-  return <div className="workspace-page editor-access-page">
-    <WorkspaceNav title={NEW_WORKSPACE_LABEL} />
-    <main className="editor-access-main" data-plans>
-      <header className="editor-access-intro">
-        <h1>Choose your plan</h1>
-        <p>Pick a plan to start editing. Cancel anytime.</p>
-      </header>
-      <PlanPicker status={status} />
+      {offerUltra && <UltraPlanCard>
+        <PrimaryButton disabled={!!busy || !status.configured} onClick={() => void openCheckout('ultra')}>{busy === 'ultra' && <LoaderCircle size={14} className="animate-spin" />}Get Ultra</PrimaryButton>
+      </UltraPlanCard>}
     </main>
   </div>;
 }

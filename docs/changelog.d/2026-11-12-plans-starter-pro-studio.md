@@ -1,1 +1,0 @@
-- Billing: three plans, Starter ($15), Pro ($39, 3-day trial) and Studio ($99), shown as the same cards in the upgrade dialog, the editor paywall and the landing pricing; Stripe prices are found by lookup key, MCP needs Pro or Studio, and Studio grants what Ultra did. Why: the founder asked for a cheaper entry plan and a higher one.
