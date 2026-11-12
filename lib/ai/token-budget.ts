@@ -2,6 +2,7 @@ import { isUsageCount as count } from './usage-counts';
 import type { LanguageModelV4, LanguageModelV4CallOptions, LanguageModelV4Usage, LanguageModelV4ToolResultPart, SharedV4ProviderMetadata } from '@ai-sdk/provider';
 import type { LanguageModelMiddleware } from 'ai';
 import { compactEditorPrompt } from './editor-context';
+import type { RunFailureCode } from './run-failure';
 
 // An anomaly backstop, not a work limit: a three-scene film (13 calls)
 // used ~10% of these ceilings. Only runaway tool loops should reach them.
@@ -77,6 +78,8 @@ function weightedInput(usage:LanguageModelV4Usage,model:NativeCacheModel,metadat
 }
 
 export class AssistantTokenBudgetError extends Error {
+  /** A provider that reports no reliable usage is refused further paid calls; every other reason is a budget reached. */
+  readonly failureCode: RunFailureCode;
   constructor(reason: 'context' | 'tokens' | 'usage' | 'runaway') {
     super(reason === 'runaway'
       ? 'This request used far more model input than an edit needs, so it was stopped. Previously saved edits remain; send the request again from the current timeline.'
@@ -85,6 +88,7 @@ export class AssistantTokenBudgetError extends Error {
       : reason === 'usage' ? 'The editing provider did not report reliable token usage, so further paid requests were stopped. Previously saved edits remain.'
       : 'This request reached its token budget. Previously saved edits remain; continue from the current timeline.');
     this.name = 'AssistantTokenBudgetError';
+    this.failureCode = reason === 'usage' ? 'refused' : 'limit';
   }
 }
 

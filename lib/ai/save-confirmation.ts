@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { EDITOR_TOOL_DEFINITIONS, toolBehavior } from './tool-definitions';
+import { RUN_FAILURE_CODES } from './run-failure';
 
 const revision = z.number().int().nonnegative();
 const toolSaveReceiptSchema = z.union([
   z.object({ kind: z.literal('timeline'), status: z.enum(['saved', 'staged', 'unchanged']), revision }),
   z.object({ kind: z.literal('resource'), status: z.enum(['saved', 'unchanged']), revision }),
   z.object({ kind: z.literal('job'), status: z.enum(['queued', 'unchanged']), revision }),
-  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('failed'), revision, message: z.string() }),
-  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('interrupted'), revision, message: z.string() }),
+  // code: what kind of failure it was (lib/ai/run-failure); receipts stored before codes have none.
+  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('failed'), revision, message: z.string(), code: z.enum(RUN_FAILURE_CODES).optional() }),
+  z.object({ kind: z.enum(['timeline', 'resource', 'job']), status: z.literal('interrupted'), revision, message: z.string(), code: z.enum(RUN_FAILURE_CODES).optional() }),
 ]);
 export type ToolSaveReceipt = z.infer<typeof toolSaveReceiptSchema>;
 export function toolSaveReceipt(output: { saveReceipt?: unknown } | undefined) {

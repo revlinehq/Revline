@@ -1,4 +1,5 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
+import { runFailure } from '../lib/ai/run-failure';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { pixelTrackRequestValidator, pixelTrackResultValidator } from './lib/pixel_track_validator';
 import { subjectSelection, subjectSelectionKey, pixelTrackRequest, parsePixelTrackResult, type PixelTrackRequest, type PixelTrackResult } from '../lib/media-analysis/pixel-track';
@@ -95,7 +96,7 @@ export async function startDerivation(ctx: MutationCtx, input: StartInput) {
 
 async function requireRun(ctx: MutationCtx | import('./_generated/server').QueryCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
+  if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
 }
 
 export const startFromRun = internalMutation({

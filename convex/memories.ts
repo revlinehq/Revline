@@ -1,4 +1,5 @@
 import { tableRow, tablePatch } from './lib/exact';
+import { runFailure } from '../lib/ai/run-failure';
 import { ConvexError, v } from 'convex/values';
 import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
@@ -42,7 +43,7 @@ function memoryText(value: string) {
 }
 async function requireRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }) {
   const run = await projectRun(ctx, args.projectId, args.ownerId);
-  if (run.aiRunId !== args.runId || !run.aiRunning) throw new ConvexError('AI run is no longer active');
+  if (run.aiRunId !== args.runId || !run.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
 }
 async function owned(ctx: QueryCtx, ownerId: string, memoryId: string) {
   const id = ctx.db.normalizeId('agentMemories', memoryId), row = id ? await ctx.db.get(id) : null;

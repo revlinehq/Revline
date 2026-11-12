@@ -1,4 +1,5 @@
 import { plainFailureText } from '../../lib/ai/failure-text';
+import { RUN_FAILURE_CODES, runFailureOf, type RunFailureCode } from '../../lib/ai/run-failure';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { getFunctionName } from 'convex/server';
 import { ConvexError } from 'convex/values';
@@ -10,10 +11,10 @@ import type { ToolSaveReceipt } from '../../lib/ai/save-confirmation';
 import type { EditorRun } from './run_types';
 import { savesNothing } from './tool_write_receipt';
 
-type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; recovered?: number; writeFailed?: string; interrupted?: string; responseLost?: boolean };
+type Execution = { name: string; callId:string; writes:Map<string,number>; behavior: ToolBehavior; receipt?: ToolSaveReceipt; recovered?: number; writeFailed?: { message: string; code?: RunFailureCode }; interrupted?: string; responseLost?: boolean };
 class RecoveredWrite extends Error {}
 const object = z.record(z.string(), z.unknown());
-const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string() });
+const writeFailure = z.object({ kind: z.literal('tool-write-failed'), message: z.string(), code: z.enum(RUN_FAILURE_CODES).optional() });
 // The reason without Convex's transport wrapping, so the model and the chat read what actually went wrong.
 const message = (error: unknown) => { const raw = error instanceof Error ? error.message : String(error); return (plainFailureText(raw) || raw).slice(0, 1000); };
 
@@ -113,7 +114,7 @@ export class ToolSaveReceipts {
       } catch (error) {
         if(error instanceof RecoveredWrite)throw error;
         const rejected = writeFailure.safeParse(error instanceof ConvexError ? error.data : undefined);
-        if (rejected.success) execution.writeFailed = rejected.data.message;
+        if (rejected.success) execution.writeFailed = { message: rejected.data.message, ...(rejected.data.code ? { code: rejected.data.code } : {}) };
         else {
           // Give a late acknowledgement time to arrive. Replays carry the same
           // identity and return the original transaction's result without another write.
@@ -139,15 +140,17 @@ export class ToolSaveReceipts {
       try { output = await execute(); }
       catch (error) {
         if (savesNothing(behavior.effect)) throw error;
-        output = { success: false, error: message(error) };
+        // An uncoded error stays uncoded: its sentence is read the way it was before codes.
+        const code = runFailureOf(error)?.code;
+        output = { success: false, error: message(error), ...(code ? { errorCode: code } : {}) };
       }
       if (savesNothing(behavior.effect)) return output;
       if (execution.receipt?.kind === 'timeline' && execution.receipt.status === 'saved' && (execution.responseLost||execution.receipt.revision > revision())) await reconcile();
       if (execution.responseLost && execution.receipt) output = { recovered: true, note: 'The write committed. Its response was interrupted; inspect the saved state before continuing.' };
       const kind = behavior.effect;
       const receipt: ToolSaveReceipt = execution.receipt
-        ?? (execution.writeFailed ? { kind, status: 'failed', revision: revision(), message: execution.writeFailed }
-          : execution.interrupted ? { kind, status: 'interrupted', revision: revision(), message: execution.interrupted }
+        ?? (execution.writeFailed ? { kind, status: 'failed', revision: revision(), message: execution.writeFailed.message, ...(execution.writeFailed.code ? { code: execution.writeFailed.code } : {}) }
+          : execution.interrupted ? { kind, status: 'interrupted', revision: revision(), message: execution.interrupted, code: 'unavailable' }
             : { kind, status: 'unchanged', revision: revision() });
       return this.stamp(output, receipt);
     });

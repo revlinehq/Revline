@@ -13,6 +13,7 @@ import { equalTimelineValue } from '../../lib/editor/timeline-equality';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { newLayerOverlaps } from '../../lib/editor/operations';
 import { TIMELINE_CONFLICT } from '../../lib/editor/timeline-sync';
+import { runFailure } from '../../lib/ai/run-failure';
 import type { Doc } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -127,7 +128,7 @@ export async function validateTimeline(ctx: MutationCtx | QueryCtx, project: Doc
  * overlaps (older trims did), and those must keep loading, rendering and undoing. */
 export function rejectNewLayerOverlaps(before: Timeline, after: Timeline) {
   const collision = newLayerOverlaps(before, after)[0];
-  if (collision) throw new ConvexError(`Clips ${collision[0].id} and ${collision[1].id} would overlap on the same layer. Move one to another time or layer first.`);
+  if (collision) throw runFailure('invalid', `Clips ${collision[0].id} and ${collision[1].id} would overlap on the same layer. Move one to another time or layer first.`);
 }
 /** Find an ordered anchor, preferring the earliest equal-scoring match so an
  * identical future state cannot reappear after an older local undo. */

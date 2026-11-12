@@ -1,10 +1,15 @@
+import { runFailureOf } from './run-failure';
+
 /** A failure as stored or thrown, reduced to the sentence a person wrote: Convex's transport wrapping ("[CONVEX
  * M(...)]", "Uncaught ConvexError:", request ids, "at handler (file:line)") and a tool write's JSON envelope are
  * removed. Empty when nothing readable is left. The raw text stays where it was recorded; this is only for reading. */
 export function plainFailureText(value: unknown): string {
   let text = typeof value === 'string' ? value : value instanceof Error ? value.message : value && typeof value === 'object' && typeof (value as { message?: unknown }).message === 'string' ? String((value as { message: string }).message) : '';
   for (let pass = 0; pass < 3; pass++) {
-    // {"kind":"tool-write-failed","message":"..."}: the message is the reason.
+    // A coded failure ({"code":"conflict","message":"..."}, a tool-write envelope with its code): the message is the reason.
+    const coded = runFailureOf(text);
+    if (coded?.message) text = coded.message;
+    // {"kind":"tool-write-failed","message":"..."}, stored before codes: the message is the reason.
     const envelope = /\{"kind":"tool-write-failed","message":("(?:[^"\\]|\\.)*")\}/.exec(text);
     if (envelope) { try { text = JSON.parse(envelope[1]) as string; } catch { /* keep the text as it is */ } }
     const cleaned = text

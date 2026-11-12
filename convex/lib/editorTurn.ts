@@ -24,12 +24,13 @@ import { AssistantCostLog } from '../../lib/ai/cost-log';
 import { StepTimer } from '../../lib/ai/step-timing';
 import { CostHistoryWriter, costHistoryRecord } from '../../lib/ai/cost-history';
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
-import { assistantFailureReason, providerErrorText, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
+import { assistantFailureReason, providerErrorText, providerFailureCode, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
+import { runFailure, runFailureOf, type RunFailureCode } from "../../lib/ai/run-failure";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, editorToolChoice, type ClaudeModelSelection } from "../../lib/ai/claude-model";
 import { Agent, saveMessage } from "@convex-dev/agent";
-import { type ObjectType } from "convex/values";
+import { ConvexError, type ObjectType } from "convex/values";
 import { internal } from "../_generated/api";
 import type { ActionCtx } from "../_generated/server";
 import { EditSession, IncompleteEditError } from "./editSession";
@@ -80,10 +81,14 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     }).catch(() => {}).finally(() => { checking = false; });
   }, 2000);
   try {
-    const selection = validatePinnedClaudeModel(await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: args.pinnedModel }));
+    const pinned = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: args.pinnedModel });
+    // A model this deployment does not offer or has no key for refuses the turn; asking again cannot change that.
+    const configured = (check: () => void) => { try { check(); } catch (error) { throw runFailure('refused', error instanceof Error ? error.message : String(error)); } };
+    let selection!: ReturnType<typeof validatePinnedClaudeModel>;
+    configured(() => { selection = validatePinnedClaudeModel(pinned); });
     selectedProvider = selection.provider;
     costLog.selectModel(selection.modelId, selection.provider, selection.reasoningEffort, selection.speedMode ?? 'standard');
-    assertEditorModelConfigured(selection);
+    configured(() => assertEditorModelConfigured(selection));
     // Independent reads: one round trip's wait instead of five before the model starts.
     const [{ project, assets }, memories, brief, currentPrompt, storedLane, earlierRequests] = await Promise.all([
       ctx.runQuery(internal.assistant.getRun, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId }),
@@ -93,7 +98,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
       ctx.runQuery(internal.lanes.forRun, { projectId: args.projectId, ownerId: args.ownerId }),
       ctx.runQuery(internal.assistant.earlierRequests, { ...run, threadId: args.threadId, promptMessageId: args.promptMessageId }),
     ]);
-    if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw new Error('Attached media is unavailable in this project.');
+    if(args.attachedAssetIds&&(args.attachedAssetIds.length>20||new Set(args.attachedAssetIds).size!==args.attachedAssetIds.length||args.attachedAssetIds.some(id=>!assets.some(asset=>asset._id===id))))throw runFailure('invalid', 'Attached media is unavailable in this project.');
     // "Edit my rough for a reel" on one take starts in the reel workflow instead of waiting for the model to choose it.
     const reelRequest=!args.command&&reelRequested(currentPrompt,project.timeline);
     const selectionState=initialLaneSelection(args.command,storedLane?.lane,storedLane?.manual,undefined,reelRequest);
@@ -197,13 +202,15 @@ For edit requests, use one brief initial sentence stating the requested action, 
           // "unavailable tool" line and a list of ninety names.
           experimental_repairToolCall: async ({ toolCall, error }) => {
             if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
+            // Model-facing guidance, so a plain sentence: the chat reads this one by its text (lib/ai/failure-text).
             throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
           },
           // The owner's model access was checked when this turn started or resumed (modelForRun above); the plan's AI
           // allowance is re-checked before every step, so a long turn stops once it is used up.
           prepareStep: async ({ steps: current, messages }) => {
             const refusal = await ctx.runQuery(internal.usage.aiRefusal, { ownerId: args.ownerId });
-            if (refusal) throw new Error(refusal);
+            // Billing's own code, which a run reads as a limit (lib/ai/run-failure).
+            if (refusal) throw new ConvexError({ code: 'usage_limit', message: refusal });
             toolkit.newStep();
 
             const completedSteps = [...steps, ...current];
@@ -283,7 +290,7 @@ For edit requests, use one brief initial sentence stating the requested action, 
         if(pass===MAX_REPAIR_PASSES)throw new LaneFinishError(`The request is unfinished after three attempts. ${unfinishedSummary(steps,failedLane&&!failedLane.passed?failedLane.failures:undefined)} Send the request again to continue from the current timeline.`);
       } catch(passError) {
         if(pass===MAX_REPAIR_PASSES||abortSignal.aborted||!repairable(passError))throw passError;
-        repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
+        repairFeedback=completionRepairFeedback(steps,'stop',reviewRequirements)??`Continue the same request after an interrupted step. Inspect the current timeline and receipts before changing anything. Keep every committed edit, reuse existing media, and repair only unfinished work. Diagnostic: ${runFailureOf(passError)?.message??providerErrorText(passError,selectedProvider)??'The connection was interrupted.'}`;
       }
       if(!await ctx.runMutation(internal.assistantTurnRecovery.advance,{...run,segment,expectedPass:pass,feedback:repairFeedback??'Inspect saved work and finish the remaining steps.'}))return null;
       console.info(`[ai-repair] ${JSON.stringify({projectId:args.projectId,runId:args.runId,pass:pass+1,steps:steps.length})}`);
@@ -298,18 +305,23 @@ For edit requests, use one brief initial sentence stating the requested action, 
       if(session?.staged)await ctx.runMutation(internal.assistant.finish,{...run,segment,publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:'aborted'}});
       return null;
     }
-    if(repairable(error)&&await ctx.runMutation(internal.assistantTurnRecovery.interrupted,{...run,segment,feedback:providerErrorText(error,selectedProvider)??'The connection was interrupted. Inspect saved work and finish only remaining steps.'}))return null;
+    if(repairable(error)&&await ctx.runMutation(internal.assistantTurnRecovery.interrupted,{...run,segment,feedback:runFailureOf(error)?.message??providerErrorText(error,selectedProvider)??'The connection was interrupted. Inspect saved work and finish only remaining steps.'}))return null;
     let cause = abortSignal.aborted ? abortSignal.reason : (error instanceof AssistantToolRetryError || error instanceof LaneFinishError || error instanceof AssistantRefusalError) ? error : streamError ?? error;
     let partialSaved = false;
     try { partialSaved = await session?.savePartial() ?? false; }
     catch (saveError) { cause = cause instanceof LaneFinishError?new LaneFinishError(`${cause.message} Partial save also failed: ${saveError instanceof Error?saveError.message:String(saveError)}`):saveError; }
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
-    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantRefusalError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    // The code goes beside the sentence; the sentence stays plain words, because iOS and older chats show it as it is.
+    const coded = runFailureOf(cause);
+    // Uncoded: an error raised outside the run's own code paths (an SDK, a library). A crash in our code is internal;
+    // anything else stays uncoded and the chat reads its text as it did before codes.
+    const errorCode: RunFailureCode | undefined = coded?.code ?? providerFailureCode(cause) ?? (cause instanceof TypeError || cause instanceof ReferenceError || cause instanceof RangeError || cause instanceof SyntaxError ? 'internal' : undefined);
+    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantRefusalError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : coded ? coded.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
     console.error(`[ai-error] ${JSON.stringify({ runId: args.runId, provider: selectedProvider, reason: failureReason.slice(0, 400) })}`);
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved as revision ${session?.revision}. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
     try { await saveMessage(ctx, chatAgent, { threadId: args.threadId, userId: args.ownerId,promptMessageId:args.promptMessageId, message: { role: "assistant", content: edits ? `${edits} edits were saved before the assistant stopped. Undo restores the state before the latest consecutive group of AI edits. ${reason}` : `No timeline changes were saved. ${reason}` } }); } catch { /* Status remains the recovery path if the message service is unavailable. */ }
-    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
+    await ctx.runMutation(internal.assistant.finish, { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId, segment,error: reason, ...(errorCode ? { errorCode } : {}), savedEdits: progress().savedEdits,...(session?.staged?{publication:{threadId:args.threadId,promptMessageId:args.promptMessageId,stagedRevision:session.revision,status:abortSignal.aborted?'aborted' as const:'failed' as const}}:{}) });
   } finally { clearInterval(watch); await costHistory.flush(); }
   return null;
 }

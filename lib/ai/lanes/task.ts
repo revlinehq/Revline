@@ -1,5 +1,6 @@
 import type { LanguageModelV4StreamPart } from '@ai-sdk/provider';
 import type { LaneId } from './types';
+import type { RunFailureCode } from '../run-failure';
 import { renderedFrameTime, type Timeline } from '../../editor/types';
 import { timelineHistoryKey } from '../../editor/timeline-history-key';
 import { snapTimelineToFrames } from '../../editor/frame-grid';
@@ -23,7 +24,8 @@ export function evenlySpaced<T>(items: T[], limit: number): T[] {
   if (limit <= 1) return items.slice(0, Math.max(0, limit));
   return Array.from({ length: limit }, (_, index) => items[Math.round(index * (items.length - 1) / (limit - 1))]);
 }
-export class LaneFinishError extends Error {}
+/** The lane's checks still fail after the bounded attempts: the checks refuse the result. */
+export class LaneFinishError extends Error { readonly failureCode: RunFailureCode = 'refused'; }
 /** One clip's fingerprint, apart from the rest of its timeline: adding a layer or a marker elsewhere must not make
  * every clip read as changed. The frame rate and frame shape stay in, since they change how every clip draws. */
 const clipKey = (timeline: Timeline, clip: Timeline['clips'][number]) => timelineHistoryKey({ clips: [clip], fps: timeline.fps, aspectRatio: timeline.aspectRatio });
