@@ -107,13 +107,17 @@ export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: s
 export const usesProductionOffer = () => incidentDeployment() === 'prod' || process.env.EDITOR_PRODUCTION_OFFER === 'true';
 
 /** What production runs for a paid account that picked nothing; null where the production offer does not apply. */
-export const productionDefaultModel = () => usesProductionOffer() ? offeredEditorModel(productionEditorOffer(false)) : null;
+export const productionDefaultModel = () => usesProductionOffer() ? offeredEditorModel(productionEditorOffer('pro')) : null;
 
-/** The models and efforts this paid account may pick in production, by plan; null where the production offer
- * does not apply. A request, saved choice or queued pin outside it runs on its default. Free accounts keep their own model. */
+/** The models and efforts this paid account may pick, by plan; null where no offer applies (the deployment's own
+ * switches decide). Starter is held to PRODUCTION_EDITOR_OFFER.starter on every billed deployment; Pro and Studio
+ * get theirs in production. A request, saved choice or queued pin outside it runs on its default. Free accounts keep their own model. */
 export async function productionOffer(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<EditorOffer | null> {
   // A deployment without billing meters no one, so there every account gets the Ultra list (as with canChooseReasoningEffort).
-  return usesProductionOffer() ? productionEditorOffer(!billingEnabled() || await hasUltraPlan(ctx, ownerId)) : null;
+  if (!billingEnabled()) return usesProductionOffer() ? productionEditorOffer('ultra') : null;
+  const tier = await activePlanTier(ctx, ownerId);
+  if (tier === 'starter') return productionEditorOffer('starter');
+  return usesProductionOffer() ? productionEditorOffer(tier === 'studio' ? 'ultra' : 'pro') : null;
 }
 
 /** Picking the reasoning effort is an Ultra feature. Callers check hasPaidModelAccess first: an Ultra trial is not a paid term. */

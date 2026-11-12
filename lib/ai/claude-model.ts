@@ -157,14 +157,17 @@ const ALL_EDITOR_CHOICES = { models: ['haiku', 'sonnet', 'opus', 'gpt-6.1-terra'
  */
 export const PRODUCTION_EDITOR_OFFER = {
   default: { model: 'haiku', effort: 'medium' },
+  /** Starter keeps this list on every billed deployment, not only production: the default model and effort, no picker. */
+  starter: { models: ['haiku'], efforts: ['medium'] },
   pro: { models: ['haiku'], efforts: ['medium'] },
   ultra: ALL_EDITOR_CHOICES,
-} as const satisfies { default: EditorOffer['default'] } & Record<'pro' | 'ultra', Omit<EditorOffer, 'default'>>;
+} as const satisfies { default: EditorOffer['default'] } & Record<EditorOfferPlan, Omit<EditorOffer, 'default'>>;
+export type EditorOfferPlan = 'starter' | 'pro' | 'ultra';
 
 /** The plan's list, less every model whose provider key this deployment lacks (the default stays: it is what runs).
  * EDITOR_EFFORT_SWITCHER=false leaves every plan the default effort alone, as it does outside production. */
-export function productionEditorOffer(ultra: boolean, env: ClaudeModelEnvironment = process.env): EditorOffer {
-  const plan: Omit<EditorOffer, 'default'> = PRODUCTION_EDITOR_OFFER[ultra ? 'ultra' : 'pro'], fallback = PRODUCTION_EDITOR_OFFER.default;
+export function productionEditorOffer(tier: EditorOfferPlan, env: ClaudeModelEnvironment = process.env): EditorOffer {
+  const plan: Omit<EditorOffer, 'default'> = PRODUCTION_EDITOR_OFFER[tier], fallback = PRODUCTION_EDITOR_OFFER.default;
   return { models: plan.models.filter(id => id === fallback.model || !!env[editorModelProviderKey(id)]?.trim()), efforts: editorEffortSwitcherOffered(env) ? plan.efforts : [fallback.effort], default: fallback };
 }
 
