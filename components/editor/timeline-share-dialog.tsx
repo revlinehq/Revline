@@ -10,12 +10,12 @@ import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/compone
 import { PrimaryButton } from '@/components/workspace/primary-button';
 import { aspectRatioLabel, formatTime, timelineDuration, type MediaAsset, type Timeline } from '@/lib/editor/types';
 import { timelineCover } from '@/lib/editor/timeline-cover';
-import { timelineSharePath } from '@/lib/editor/timeline-share';
+import { timelineShareKey, timelineSharePath } from '@/lib/editor/timeline-share';
 import type { ShareChatPreview, ShareChatPreviewMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
 
-type ShareStatus = { _id: string; title: string; published: boolean; updatedAt: number; includesChat?: boolean; timelineIds?: string[] } | null;
+type ShareStatus = { _id: string; token?: string; title: string; published: boolean; updatedAt: number; includesChat?: boolean; timelineIds?: string[] } | null;
 export type ShareableTab = { id: string; name: string; active: boolean; duration: number };
 type Props = {
   open: boolean; onOpenChange: (open: boolean) => void;
@@ -51,7 +51,7 @@ function TimelineShareDialog({ open, onOpenChange, title, timeline, assets, stat
   const selected = picked ?? (tabs ?? []).filter(tab => shared ? shared.includes(tab.id) : tab.active).map(tab => tab.id);
   function toggleTab(id: string, on: boolean) { setPicked((tabs ?? []).filter(tab => tab.id === id ? on : selected.includes(tab.id)).map(tab => tab.id)); setCopied(false); }
   const shareId = localId !== undefined ? localId : status?.published ? status._id : null;
-  const url = shareId ? `${origin}${timelineSharePath(shareId)}` : '';
+  const url = shareId ? `${origin}${timelineSharePath(timelineShareKey(shareId, status?._id === shareId ? status.token : undefined))}` : '';
   const cover = timelineCover(timeline, assets);
   const chatPending = includeChat && chatPreview === undefined, noTabs = multiTab && !selected.length;
   function toggleChat(enabled: boolean) { setIncludeChat(enabled); onChatPreviewChange?.(enabled); setCopied(false); }
