@@ -2,33 +2,32 @@ import { StripeSubscriptions } from "@convex-dev/stripe";
 import Stripe from 'stripe';
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
-import { action, internalMutation, query } from "./_generated/server";
-import { EDITOR_PLAN, ULTRA_OFFERED, ULTRA_PLAN } from "../lib/billing/plan";
+import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
+import { PLANS, PLAN_RANK, type PlanTier } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
-import { billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, hasUltraPlan, isEditorSubscription, ultraBillingConfigured } from './lib/billing_access';
+import { activePlanTier, billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription, pinnedPriceId, subscriptionTier } from './lib/billing_access';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
 
 function ready() { return billingEnabled() && billingConfigured(); }
-function requireBilling(plan: 'pro' | 'ultra' = 'pro') {
+function requireBilling() {
   if (!ready()) throw new ConvexError("Billing is not active");
-  if (plan === 'ultra' && (!ULTRA_OFFERED || !process.env.STRIPE_ULTRA_PRICE_ID?.startsWith("price_"))) throw new ConvexError("Ultra is not available yet");
   const origin = new URL(process.env.APP_ORIGIN!);
   if (origin.username || origin.password || origin.pathname !== "/" || origin.search || origin.hash || (origin.protocol !== "https:" && !(origin.protocol === "http:" && ["localhost", "127.0.0.1"].includes(origin.hostname)))) throw new ConvexError("Billing origin is invalid");
-  if (!process.env.STRIPE_PRO_PRICE_ID!.startsWith("price_")) throw new ConvexError("Billing price is not configured");
   return origin.origin;
 }
-export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), ultraAvailable: v.boolean() }), handler: async (ctx) => {
+export const status = query({ args: {}, returns: v.object({ enabled: v.boolean(), configured: v.boolean(), subscribed: v.boolean(), complimentary: v.optional(v.boolean()), complimentaryExpiresAt: v.optional(v.number()), trialEligible: v.boolean(), needsPayment: v.boolean(), paymentIssue: v.optional(v.boolean()), subscriptionSource: v.optional(v.union(v.literal('apple'), v.literal('stripe'))), appleExpiresAt: v.optional(v.number()), plan: v.union(v.literal("free"), v.literal("pro"), v.literal("ultra")), tier: v.optional(v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"))), ultraAvailable: v.boolean() }), handler: async (ctx) => {
   const identity = await ctx.auth.getUserIdentity(); let subscribed = false; let trialEligible = true; let paymentIssue = false;
   const complimentary = !!identity && await hasComplimentaryEditorAccess(ctx, identity.subject);
-  const ultra = !!identity && await hasUltraPlan(ctx, identity.subject);
+  const tier = identity ? await activePlanTier(ctx, identity.subject) : null;
   const apple = identity ? await activeAppleEntitlement(ctx, identity.subject) : null;
   if (identity && ready()) { const subs = await editorSubscriptions(ctx, identity.subject); subscribed = subs.some(hasEditorAccess); trialEligible = subs.length === 0; paymentIssue = subs.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status)); }
   const stripeSubscribed = subscribed;
   const subscriptionSource: 'apple' | 'stripe' | undefined = apple ? 'apple' : stripeSubscribed ? 'stripe' : undefined;
   subscribed ||= !!apple;
-  const plan: 'ultra' | 'pro' | 'free' = ultra ? 'ultra' : subscribed || complimentary ? 'pro' : 'free';
+  // `plan` keeps the shape installed iOS builds read: Studio reads as 'ultra' and Starter as 'pro'. `tier` names the plan.
+  const plan: 'ultra' | 'pro' | 'free' = tier === 'studio' ? 'ultra' : subscribed || complimentary ? 'pro' : 'free';
   const entitlement = complimentary ? await ctx.db.query('editorEntitlements').withIndex('by_owner', q => q.eq('ownerId', identity!.subject)).unique() : null;
-  return { enabled: billingEnabled(), configured: ready() || !!apple, subscribed, ...(subscriptionSource ? { subscriptionSource } : {}), ...(apple ? { appleExpiresAt: apple.accessUntil } : {}), ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary || apple ? false : trialEligible, needsPayment: !!identity && billingEnabled() && !subscribed && !complimentary, paymentIssue: !subscribed && !complimentary && paymentIssue, plan, ultraAvailable: ready() && ultraBillingConfigured() };
+  return { enabled: billingEnabled(), configured: ready() || !!apple, subscribed, ...(subscriptionSource ? { subscriptionSource } : {}), ...(apple ? { appleExpiresAt: apple.accessUntil } : {}), ...(complimentary ? { complimentary: true, ...(entitlement?.expiresAt !== undefined ? { complimentaryExpiresAt: entitlement.expiresAt } : {}) } : {}), trialEligible: complimentary || apple ? false : trialEligible, needsPayment: !!identity && billingEnabled() && !subscribed && !complimentary, paymentIssue: !subscribed && !complimentary && paymentIssue, plan, ...(tier && (subscribed || complimentary) ? { tier } : {}), ultraAvailable: ready() };
 }});
 export const reserveCheckout = internalMutation({
   args: { ownerId: v.string(), priceId: v.string(), origin: v.string(), trialEligible: v.boolean(), expiredRequestId: v.optional(v.string()) },
@@ -78,32 +77,38 @@ export const applySubscriptionSync = internalMutation({
     return true;
   },
 });
-async function verifiedPrice(client: Stripe, plan: 'pro' | 'ultra') {
-  const priceId = plan === 'ultra' ? process.env.STRIPE_ULTRA_PRICE_ID! : process.env.STRIPE_PRO_PRICE_ID!;
-  const amount = (plan === 'ultra' ? ULTRA_PLAN : EDITOR_PLAN).monthlyPrice * 100;
-  const price = await client.prices.retrieve(priceId);
-  if (!price.active || price.currency !== 'usd' || price.unit_amount !== amount || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) throw new ConvexError('Billing price does not match the plan.');
-  return priceId;
+/** The plan's Stripe price: STRIPE_<TIER>_PRICE_ID when release pinned one, otherwise the active price with the plan's
+ *  lookup key. Either way it must be the plan's monthly USD amount. */
+async function planPrice(client: Stripe, tier: PlanTier) {
+  const plan = PLANS[tier], pinned = pinnedPriceId(tier);
+  const price = pinned ? await client.prices.retrieve(pinned) : (await client.prices.list({ lookup_keys: [plan.lookupKey], active: true, limit: 1 })).data[0];
+  if (!price) throw new ConvexError(`${plan.name} is not available yet.`);
+  if (!price.active || price.currency !== 'usd' || price.unit_amount !== plan.monthlyPrice * 100 || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) throw new ConvexError('Billing price does not match the plan.');
+  return price.id;
 }
-export const createCheckout = action({ args: { plan: v.union(v.literal("pro"), v.literal("ultra")) }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx, { plan }): Promise<{sessionId: string; url: string | null}> => {
+const planArg = v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"), v.literal("ultra"));
+/** 'ultra' is the retired name for Studio, still accepted from older clients. */
+const tierOf = (plan: 'starter' | 'pro' | 'studio' | 'ultra'): PlanTier => plan === 'ultra' ? 'studio' : plan;
+export const createCheckout = action({ args: { plan: planArg }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx, args): Promise<{sessionId: string; url: string | null}> => {
+  const tier = tierOf(args.plan);
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
   if (await ctx.runQuery(internal.editorAccess.hasComplimentary, { ownerId: identity.subject })) throw new ConvexError('Your complimentary membership already includes editor access. No payment is required.');
   if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Your subscription is managed in the App Store.');
-  const origin = requireBilling(plan); const stripe = new StripeSubscriptions(components.stripe, {});
+  const origin = requireBilling(); const stripe = new StripeSubscriptions(components.stripe, {});
   const subscriptions = await editorSubscriptions(ctx, identity.subject);
-  if (subscriptions.some(hasEditorAccess)) throw new ConvexError(plan === 'ultra' ? "You already have a subscription. Upgrade it to Ultra from billing." : "You already have a subscription. Manage it in billing.");
+  if (subscriptions.some(hasEditorAccess)) throw new ConvexError("You already have a subscription. Change your plan from billing.");
   if (subscriptions.some(sub => ['past_due', 'unpaid', 'paused', 'incomplete'].includes(sub.status))) throw new ConvexError('Update your existing subscription in billing before creating a new one.');
   // Only identity.subject selects a customer. Email fallback can alias unrelated identities.
   const customer = await stripe.getOrCreateCustomer(ctx, { userId: identity.subject });
   const client = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  const priceId = await verifiedPrice(client, plan);
+  const priceId = await planPrice(client, tier);
   // Also check Stripe directly so delayed webhooks cannot create duplicate subscriptions or trials.
   const remote = await client.subscriptions.list({ customer: customer.customerId, status: 'all', limit: 100 });
   if (remote.has_more) throw new ConvexError('Please manage your existing subscriptions in billing.');
   const editor = remote.data.filter(sub => isEditorSubscription({ priceId: sub.items.data[0]?.price.id ?? '', metadata: sub.metadata }));
   if (editor.some(sub => !['canceled', 'incomplete_expired'].includes(sub.status))) throw new ConvexError('You already have a subscription. Manage it in billing.');
-  // Only Pro starts with a trial.
-  const reservationArgs = { ownerId: identity.subject, priceId, origin, trialEligible: plan === 'pro' && subscriptions.length === 0 && editor.length === 0 };
+  // Only plans with trialDays (Pro) start with a trial.
+  const reservationArgs = { ownerId: identity.subject, priceId, origin, trialEligible: PLANS[tier].trialDays > 0 && subscriptions.length === 0 && editor.length === 0 };
   let reservation = await ctx.runMutation(internal.billing.reserveCheckout, reservationArgs);
   if (reservation.sessionId) {
     const previous = await client.checkout.sessions.retrieve(reservation.sessionId);
@@ -111,18 +116,21 @@ export const createCheckout = action({ args: { plan: v.union(v.literal("pro"), v
     if (previous.status === 'complete') throw new ConvexError('Your checkout is complete. Waiting for Stripe to confirm your membership.');
     reservation = await ctx.runMutation(internal.billing.reserveCheckout, { ...reservationArgs, expiredRequestId: reservation.requestId });
   }
+  // A checkout left open for another plan could still be paid, giving two subscriptions: close it first.
+  const open = await client.checkout.sessions.list({ customer: customer.customerId, status: 'open', limit: 100 });
+  await Promise.all(open.data.filter(previous => previous.metadata?.app === 'revline-editor').map(previous => client.checkout.sessions.expire(previous.id)));
   const session = await client.checkout.sessions.create({
     mode: 'subscription', customer: customer.customerId,
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${origin}${NEW_PROJECT_PATH}?checkout=success`, cancel_url: `${origin}/billing?checkout=canceled`,
     integration_identifier: 'revline-editor-xpkzqvna', payment_method_collection: 'always',
     managed_payments: { enabled: false },
-    metadata: { userId: identity.subject, app: 'revline-editor' },
+    metadata: { userId: identity.subject, app: 'revline-editor', plan: tier },
     subscription_data: {
-      metadata: { userId: identity.subject, app: 'revline-editor' },
-      ...(reservationArgs.trialEligible ? { trial_period_days: EDITOR_PLAN.trialDays, trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } } } : {}),
+      metadata: { userId: identity.subject, app: 'revline-editor', plan: tier },
+      ...(reservationArgs.trialEligible ? { trial_period_days: PLANS[tier].trialDays, trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } } } : {}),
     },
-  }, { idempotencyKey: `revline-checkout-v2-${reservation.requestId}` });
+  }, { idempotencyKey: `revline-checkout-v3-${reservation.requestId}` });
   if (!session.url) throw new ConvexError('Stripe did not return a checkout link.');
   await ctx.runMutation(internal.billing.saveCheckout, { ownerId: identity.subject, requestId: reservation.requestId, sessionId: session.id, url: session.url, expiresAt: session.expires_at * 1000 });
   return { sessionId: session.id, url: session.url };
@@ -135,32 +143,40 @@ export const createPortal = action({ args: {}, returns: v.object({ url: v.string
   if (!customer) throw new ConvexError("No billing account exists");
   return await new StripeSubscriptions(components.stripe, {}).createCustomerPortalSession(ctx, { customerId: customer.stripeCustomerId, returnUrl: `${origin}/billing` });
 }});
-/** Moves an active Pro subscription to Ultra in place. Stripe invoices the prorated
- *  difference now and ends any Pro trial, since Ultra has none. The webhook then syncs the plan. */
-export const upgradeToUltra = action({ args: {}, returns: v.null(), handler: async (ctx) => {
+/** Moves the one active Stripe subscription to another plan in place, and writes the plan into its metadata.
+ *  An upgrade invoices the prorated difference now; a downgrade credits it to the next invoice. Moving off Pro
+ *  ends its trial, since only Pro has one. The webhook then syncs the plan. */
+async function changeSubscriptionPlan(ctx: ActionCtx, tier: PlanTier) {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
-  if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Manage or upgrade your subscription in the App Store.');
-  requireBilling('ultra');
+  if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Manage or change your subscription in the App Store.');
+  requireBilling();
   const customer = await ctx.runQuery(components.stripe.public.getCustomerByUserId, { userId: identity.subject });
-  if (!customer) throw new ConvexError('Start a membership before upgrading.');
+  if (!customer) throw new ConvexError('Start a membership before changing plans.');
   const client = new Stripe(process.env.STRIPE_SECRET_KEY!);
-  const priceId = await verifiedPrice(client, 'ultra');
+  const priceId = await planPrice(client, tier);
   const remote = await client.subscriptions.list({ customer: customer.stripeCustomerId, status: 'all', limit: 100 });
   const current = remote.data.filter(sub => ['active', 'trialing'].includes(sub.status) && isEditorSubscription({ priceId: sub.items.data[0]?.price.id ?? '', metadata: sub.metadata }));
   if (current.length !== 1 || current[0].items.data.length !== 1) throw new ConvexError('Please manage your subscription in billing.');
   const [subscription] = current, [item] = subscription.items.data;
-  if (item.price.id === priceId) return null;
+  const from = subscriptionTier({ priceId: item.price.id, metadata: subscription.metadata });
+  if (item.price.id === priceId && from === tier) return null;
+  const upgrade = PLAN_RANK[tier] > PLAN_RANK[from];
   try {
     await client.subscriptions.update(subscription.id, {
       items: [{ id: item.id, price: priceId, quantity: 1 }],
-      proration_behavior: 'always_invoice', payment_behavior: 'error_if_incomplete', cancel_at_period_end: false,
-      ...(subscription.status === 'trialing' ? { trial_end: 'now' as const } : {}),
+      metadata: { ...subscription.metadata, plan: tier },
+      // An upgrade renews the subscription; a downgrade keeps a cancellation the member already scheduled.
+      proration_behavior: upgrade ? 'always_invoice' : 'create_prorations', payment_behavior: 'error_if_incomplete', ...(upgrade ? { cancel_at_period_end: false } : {}),
+      ...(subscription.status === 'trialing' && PLANS[tier].trialDays === 0 ? { trial_end: 'now' as const } : {}),
     });
   } catch (error) {
     // No idempotency key: a retry after fixing the card must reach Stripe again, and
-    // the price check above already makes a repeated upgrade a no-op.
+    // the price check above already makes a repeated change a no-op.
     if (error instanceof Stripe.errors.StripeCardError) throw new ConvexError('Your card was declined. Update your payment method in billing, then try again.');
     throw error;
   }
   return null;
-}});
+}
+export const changePlan = action({ args: { plan: planArg }, returns: v.null(), handler: async (ctx, args) => changeSubscriptionPlan(ctx, tierOf(args.plan)) });
+/** The earlier name for moving to Studio (once Ultra); kept for clients that still call it. */
+export const upgradeToUltra = action({ args: {}, returns: v.null(), handler: async (ctx) => changeSubscriptionPlan(ctx, 'studio') });

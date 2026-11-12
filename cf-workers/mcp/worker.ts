@@ -185,7 +185,7 @@ const consent = {
       // The handle is spent by now; a Convex failure gets a clear page rather than a bare error.
       try { grant = await bridge(env, { op: 'createGrant', approval, handle, clientId: approved.request.clientId, clientName: client?.clientName ?? 'MCP client' }); }
       catch (error) { console.error(`[mcp-oauth] ${JSON.stringify({ event: 'create-grant-failed', message: error instanceof Error ? error.message.slice(0, 300) : 'unknown' })}`); return page('Revline could not finish connecting. Start again from the app you are connecting.', 503); }
-      if ('error' in grant) return page(grant.error === 'plan' ? 'Connecting AI apps needs an active Revline plan.' : 'This approval expired. Start again from the app you are connecting.', grant.error === 'plan' ? 403 : 400);
+      if ('error' in grant) return page(grant.error === 'plan' ? 'Connecting AI apps needs the Pro or Studio plan.' : 'This approval expired. Start again from the app you are connecting.', grant.error === 'plan' ? 403 : 400);
       // Each approval is its own connection, as in Convex: approving an app again does not end its other connections.
       const { redirectTo } = await oauth.completeAuthorization({ request: approved.request, userId: grant.ownerId, metadata: { grantId: grant.grantId }, scope: ['revline'], props: { credential: grant.grantKey } satisfies Props, revokeExistingGrants: false });
       approved.headers.set('Location', redirectTo);
