@@ -40,7 +40,9 @@ import { AssistantReadLoopError, hasStalledReads } from '../../lib/ai/tool-failu
 export const editorTurnArgs=assistantRunArgs;
 export type EditorTurnArgs=ObjectType<typeof editorTurnArgs>;
 /** What the agent runner adds: its own stop, and a checkpoint after every finished model step. */
-type EditorTurnHooks={signal?:AbortSignal;onStepFinished?:(progress:{steps:number;savedEdits:number;pendingFastFrames:number[]})=>void};
+/** pollActive: false when the caller's signal already reports Stop. The agent runner aborts it on /runs/stop and when
+ * its 30-second heartbeat finds the run no longer active, so only a turn inside a Convex action polls every 2 seconds. */
+type EditorTurnHooks={signal?:AbortSignal;pollActive?:boolean;onStepFinished?:(progress:{steps:number;savedEdits:number;pendingFastFrames:number[]})=>void};
 
 /** One chat turn: the model loop with the editor tools. Convex runs it in an action, or the agent runner on
  * Cloudflare runs it with a context that calls these same functions over HTTP, with no time limit. */
@@ -70,7 +72,7 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
   if (hooks.signal?.aborted) controller.abort(hooks.signal.reason);
   let checking = false;
   const run = { projectId: args.projectId, ownerId: args.ownerId, runId: args.runId };
-  const watch = setInterval(() => {
+  const watch = hooks.pollActive === false ? undefined : setInterval(() => {
     if (checking || abortSignal.aborted) return;
     checking = true;
     void ctx.runQuery(internal.assistant.isRunActive, run).then(active => {
@@ -186,9 +188,9 @@ For edit requests, use one brief initial sentence stating the requested action, 
             if (!NoSuchToolError.isInstance(error) || !Object.hasOwn(tools, toolCall.toolName)) return null;
             throw new Error(withheldToolGuidance(toolCall.toolName, toolkit.lane(), { finished: toolkit.laneFinished(), allowed: toolkit.availableToolNames().includes(toolCall.toolName) }));
           },
+          // The owner's model access was checked when this turn started or resumed (modelForRun above), not per step.
           prepareStep: async ({ steps: current, messages }) => {
-            const entitled = await ctx.runQuery(internal.assistant.modelForRun, { ...run, pinnedModel: selection });
-            if (entitled.modelId !== selection.modelId || entitled.reasoningEffort !== selection.reasoningEffort) throw new Error('Your model access changed. Send the request again to continue with your available model.');
+            toolkit.newStep();
 
             const completedSteps = [...steps, ...current];
             if (!hasUnresolvedToolFailures(completedSteps)) await editSession.confirmRepairs();

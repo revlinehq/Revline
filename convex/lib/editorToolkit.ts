@@ -8,7 +8,7 @@ import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS, type FinishLookSpot } from '../../lib/ai/lanes/task';
 import { exhaustedLaneError, exhaustedNext, finishLane, FramesUnavailableError, type FinishResult } from './laneFinish';
 import { safely } from './safely';
-import type { EditorRun, LaneTask } from './run_types';
+import type { EditorRun, LaneTaskFields } from './run_types';
 import { snapshotFrames } from '../../lib/ai/snapshot-frames';
 import { impactSettingsSchema, overlaySettingsSchema, parallaxSettingsSchema, DEFAULT_IMPACT, DEFAULT_OVERLAY, DEFAULT_PARALLAX, vfxDuration } from '../../lib/editor/montage-vfx';
 import { pixelTrackRequest, trackSeed, type PixelTrackRequest } from '../../lib/media-analysis/pixel-track';
@@ -240,9 +240,17 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Only a run picked up after a crash must look before it edits: a write may or may not have landed. A continuation
   // of the same run works on its own draft, so its clip ids are current and no re-read is asked for.
   const inspectFirst = options.inspectFirst ?? recovering;
-  const laneCtx=ctx;
+  // The task row is read once per model step and shared by that step's tools (readTask below). Any write through this
+  // toolkit can change the row (toolWrites:run updates its frame evidence), so a write drops the shared read.
+  let taskReads = new Map<string, Promise<LaneTaskFields | null>>();
+  const dropTaskReads = () => { taskReads = new Map(); };
+  const dropAround = <T,>(write: () => Promise<T>) => { dropTaskReads(); return write().finally(dropTaskReads); };
+  const baseCtx = ctx;
+  const runMutation: ActionCtx['runMutation'] = (ref, ...args) => dropAround(() => baseCtx.runMutation(ref, ...args));
+  const runAction: ActionCtx['runAction'] = (ref, ...args) => dropAround(() => baseCtx.runAction(ref, ...args));
+  const laneCtx: ActionCtx = { ...baseCtx, runMutation, runAction };
   const receipts = new ToolSaveReceipts(run,options.segment);
-  ctx = receipts.context(ctx);
+  ctx = receipts.context(laneCtx);
   let selectedClipIds = options.selectedClipIds;
   let lane:LaneId=options.lane??'edit';
   const taskId=options.taskId;
@@ -256,6 +264,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   };
   let finishRequired=options.finishRequired??true;
   let requiredPersisted=finishRequired;
+  let requiringFinish:Promise<void>|undefined;
   const noteToolIntent=(name:string)=>{if(name==='finish'||EDITOR_TOOL_DEFINITIONS[name as keyof typeof EDITOR_TOOL_DEFINITIONS]?.effect==='timeline')finishRequired=true;};
   let timelineId=boundRunTab(run.runId)??project.activeTimelineId??project.timelineTabs?.[0]?.id??'main';
   const timelineIdForLane=()=>timelineId;
@@ -263,10 +272,24 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   /** What a finish reply must report: whether this request's edits are saved now, at which revision, and what Undo does. */
   const finishSaveState=()=>editSession.staged?{timelineSaved:false,saveState:'unsaved draft: these edits are not saved yet. They are saved when finish passes. If this request ends or is stopped first, the last valid draft is normally saved as one undoable revision.'}:{timelineSaved:true,savedRevision:editSession.revision,saveState:editSession.savedEdits?'saved: every edit this request made is in the saved timeline':'no edits were saved by this request and no draft is pending',...(editSession.savedEdits?{undo:'This whole request is one undo step: one Undo restores the timeline as it was before this request changed it, unless the user edited by hand in between.'}:{})};
   const taskScope={ownerId:run.ownerId,projectId:run.projectId,taskId:taskId??run.runId};
+  /** This task's small fields with the few small evidence entries tool calls and finish read (changed frames, the
+   * frame budget, accepted cut-script flags), plus the evidence of the named checks; never the whole evidence list.
+   * Shared until the next write or model step. */
+  const readTask=(checks:string[]=[]):Promise<LaneTaskFields|null>=>{
+    if(!taskId)return Promise.resolve(null);
+    const evidenceTools=[...new Set(['fastFrameReview','eyesBudget','readCutScript',...checks])].sort(),key=evidenceTools.join(',');
+    let read=taskReads.get(key);
+    if(!read){
+      const reads=taskReads,pending=laneCtx.runQuery(internal.lanes.taskFields,{...taskScope,evidenceTools}) as Promise<LaneTaskFields|null>;
+      read=pending;reads.set(key,pending);
+      pending.catch(()=>{if(reads.get(key)===pending)reads.delete(key);});
+    }
+    return read;
+  };
   const ensureBaseline=async()=>{
     if(!taskId)return;
-    const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
-    if(!task?.baselines.some(item=>item.timelineId===timelineId))await laneCtx.runMutation(internal.lanes.baseline,{...taskScope,baseline:await laneBaseline(timelineId,editSession.timeline,summarizeTimeline(editSession.timeline,assets).gaps)});
+    const task=await readTask();
+    if(!task?.baselineTimelineIds.includes(timelineId))await laneCtx.runMutation(internal.lanes.baseline,{...taskScope,baseline:await laneBaseline(timelineId,editSession.timeline,summarizeTimeline(editSession.timeline,assets).gaps)});
   };
 
   const sourceFrameRates=new Map<string,number>();
@@ -635,7 +658,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Frames shown to the model are counted per task, so every tool call of one request shares the lane's budget.
   let framesUsed: number | undefined;
   const frameBudget = async (total: number) => {
-    if (framesUsed === undefined) { const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null; framesUsed = (task?.evidence.find(item => item.tool === 'eyesBudget')?.output as { used?: number } | undefined)?.used ?? 0; }
+    if (framesUsed === undefined) { const task = await readTask(); framesUsed = (task?.evidence.find(item => item.tool === 'eyesBudget')?.output as { used?: number } | undefined)?.used ?? 0; }
     const budget = new FrameBudget(total, framesUsed);
     return { budget, save: async () => { framesUsed = budget.used; if (taskId) await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'eyesBudget', timelineId, fingerprint: '', input: {}, output: { used: budget.used } } }); } };
   };
@@ -861,7 +884,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       confirmed: false, preview,
       next: `Nothing was exported or ${schedule ? 'scheduled' : 'posted'}. This is exactly what would be sent. Show it to the user (clips, accounts, captions, visibility, time) and call ${schedule ? 'schedulePost' : 'postVideo'} again with the same arguments and confirm: true only after they agree to it.`,
     };
-    const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null;
+    const task = await readTask();
     if (!task?.postRequested) throw new Error('Posting needs the user’s own request. confirm: true only counts in a task that was started with the user asking to post, publish or schedule: call startTask with their request in their words (for example "post this clip to my TikTok"), loadCapability posting, then call this again. Never post on your own initiative.');
     return ctx.runMutation(internal.assistantPosting.send, { ...run, schedule, ...(options.agent ? { agentName: options.agent } : {}), ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}), ...request });
   });
@@ -943,7 +966,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     finishClipping:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finishClipping,description:'Server-enforced close-out of a findHighlights/planClips batch; a task that cut source ranges it was given skips it and calls finish. Compare accepted candidates against actual created/changed tabs, populated source footage, names, source ranges, duration and cheap saved-data checks inline. Only explicitly requested scoped QA requires receipts; no compulsory checkClip, normalization or media job. Returns trusted found/accepted/tabs counts, drop reasons and an exact finalMessage to report. It fails with zero accepted candidates or zero populated tabs: stop and report that no moment qualified instead of retrying. Fix every error before saying done.',inputSchema:z.object({}),execute:async()=>{
       await editSession.wait();await selectClipQa();
       // Cuts at source ranges the request named have no plan to close out: finish runs their cheap checks.
-      const clipTask=taskId?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null:null;
+      const clipTask=await readTask();
       if(clipTask&&cutsGiven(clipTask,await ctx.runQuery(internal.clipping.runStarted,clippingRun)))return {required:false,passed:true,rangeCuts:true,errors:[],next:'No clip plan applies: this task cut source ranges it was given and ran neither findHighlights nor planClips. Call finish now. It checks each new tab’s length (15–60 s), its source footage and the first and last frames of every cut for a stray frame of a neighbouring shot.'};
       const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
       if(!state.passed)throw new Error(`Clipping delivery is incomplete: ${JSON.stringify(state.errors)}`);
@@ -967,7 +990,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         // Each call starts with metadata rows; saved transcripts live in source analysis.
         await Promise.all(assets.filter(asset=>audibleIds.has(asset._id)||asset.audioAssetId&&audibleIds.has(asset.audioAssetId)).map(asset=>loadAsset(asset._id)));
       }
-      if(lane==='reel'){const planned=((await laneCtx.runQuery(internal.lanes.task,taskScope)) as LaneTask|null)?.script as SavedScript|undefined;if(planned&&assets.some(asset=>asset._id===planned.assetId))await loadAsset(planned.assetId);}
+      if(lane==='reel'){const planned=(await readTask())?.script as SavedScript|undefined;if(planned&&assets.some(asset=>asset._id===planned.assetId))await loadAsset(planned.assetId);}
       if(lane==='clip')await selectClipQa();
       // Unviewed changed frames keep the task open the same way in the app and over MCP. The refusal spends no finish attempt.
       // Rounding artefacts are closed here, inside the check: a gap or overlap shorter than a frame is never a failure.
@@ -979,9 +1002,9 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       // finish looks for itself: on a hard budget it draws a few frames of what this request changed (new cuts, new
       // overlays, one caption sample) and returns them with the result. It never sends the model to fetch frames.
       finishLook=[];finishSheets=[];finishSpots=[];
-      const frameTask=recipe().frames==='sample'?await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask:null;
+      const frameTask=recipe().frames==='sample'?await readTask():null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
-      if(cutRead||taskId&&(await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null)?.evidence.some(item=>item.tool==='readCutScript'&&item.timelineId===timelineId))await loadSavedSpeech();
+      if(cutRead||(await readTask())?.evidence.some(item=>item.tool==='readCutScript'&&item.timelineId===timelineId))await loadSavedSpeech();
       const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,healed,looked:spots=>{finishSpots=spots;},...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),clipEdges:async tabs=>{
         // A busy media queue must not hold finish: past the wait the edges are reported unmeasured and finish goes on.
         const edges=await checkClipEdges(tabs,(assetId,times)=>{let timer:ReturnType<typeof setTimeout>|undefined;return Promise.race([runLooksRead(ctx,run.ownerId,run.projectId,assetId,times,undefined,abortSignal).then(read=>read.samples),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('the media worker took longer than two minutes')),CLIP_EDGE_WAIT_MS);})]).finally(()=>clearTimeout(timer));});
@@ -1646,7 +1669,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!outline.lines.length) { noScript = true; throw new Error('No spoken words are left in this clip’s retained source. Edit it as footage.'); }
       const line = (n: number) => outline.lines[n - 1], opening = line(outline.opening), closing = line(outline.closing);
       const script = outline.lines.filter(item => !item.note).map(item => item.n);
-      const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null, target = task?.requestedLength;
+      const task = await readTask(), target = task?.requestedLength;
       const estimate = await scriptSeconds(input.clipId, speech, linesToRanges(outline, script).map(range => ({ start: range.start - speech.offset, end: range.end - speech.offset })));
       const takes = outline.lines.filter(item => item.note === 'earlier take').length + outline.removable.filter(cut => script.some(n => cut.start >= line(n).start && cut.end <= line(n).end + .01)).length;
       // B-roll: shots with no speaker in frame are footage, never "silence". One frame of each goes to the model.
@@ -1692,7 +1715,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const ranges = withShots(linesToRanges(outline, kept, input.keepLines), keptShots).map(toClip);
       savedScript = { ...(savedScript ?? {}), assetId: speech.evidence._id, broll: allShots.map(shot => ({ ...shot, kept: keptShots.includes(shot) })) } as SavedScript;
       const estimate = await scriptSeconds(input.clipId, speech, ranges);
-      const task = await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null, target = task?.requestedLength;
+      const task = await readTask(), target = task?.requestedLength;
       const first = kept[0], last = kept.at(-1)!;
       const beats = await Promise.all(input.beats.map(async (beat, index) => {
         const lines = kept.filter(n => n >= beat.from && n <= beat.to);
@@ -1754,7 +1777,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
       const script = removed ? cutScript(editSession.timeline, assets, { maxPause: input.maxPause }) : read;
       if (!script.words.length) return { wordCount: 0, note: 'No saved transcript words are on this timeline. Transcribe the footage first (analyzeMedia transcribe), or edit it as footage without speech.' };
-      const task = taskId ? await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null : null;
+      const task = await readTask();
       const prior = ([...task?.evidence ?? []].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId)?.output as { accepted?: Record<string, string> } | undefined)?.accepted ?? {};
       // Reasons stay with their ids across re-reads; an id whose flag is gone is dropped.
       const accepted = Object.fromEntries(Object.entries({ ...prior, ...Object.fromEntries((input.accept ?? []).map(item => [item.id, item.reason])) }).filter(([id]) => script.flags.some(flag => flag.id === id)));
@@ -1778,7 +1801,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!policy || policy.status !== 'enforced') throw new Error(`checkSpots is not part of the ${lane} lane’s checks. It works in the reel lane.`);
       if (!taskId) throw new Error('Start a task first with startTask.');
       await editSession.wait();
-      const task = await laneCtx.runQuery(internal.lanes.task, taskScope) as LaneTask | null;
+      const task = await readTask(['checkSpots']);
       if (task?.script) savedScript = task.script as SavedScript;
       const prior = [...task?.evidence ?? []].reverse().find(item => item.tool === 'checkSpots' && item.timelineId === timelineId)?.output as SpotsEvidence | undefined;
       const sources = [...new Set(editSession.timeline.clips.filter(clip => clip.kind === 'video' && clip.assetId).map(clip => clip.assetId!))].slice(0, 6);
@@ -2450,7 +2473,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         if(fps&&Number(input.fps)<fps)throw new Error(`Recreation frame windows require full source fps (${fps}).`);
       }
       if(taskId){
-        const task=await laneCtx.runQuery(internal.lanes.task,taskScope) as LaneTask|null;
+        const task=await readTask();
         if(name==='exportVideo'&&isMcpRun(run.runId)&&!task?.exportConfirmed)throw new Error('Export needs explicit user confirmation in the current request. Ask the user before exporting.');
         // A closed task still answers finish, with its final result and what to do next: every task ends with finish,
         // and an error there read to an agent as a missing tool (issue #357). A limitation note still saves too.
@@ -2465,7 +2488,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         await ensureBaseline();
       }
       noteToolIntent(name);
-      if(taskId&&finishRequired&&!requiredPersisted){await laneCtx.runMutation(internal.lanes.requireFinish,taskScope);requiredPersisted=true;}
+      // Parallel tool calls of one step share the one write.
+      if(taskId&&finishRequired&&!requiredPersisted){requiringFinish??=laneCtx.runMutation(internal.lanes.requireFinish,taskScope).then(()=>{requiredPersisted=true;}).finally(()=>{requiringFinish=undefined;});await requiringFinish;}
       const before=await timelineHistoryKey(editSession.timeline);
       let output:Record<string,unknown>;
       try{output=await execute.apply(this??tool,args) as Record<string,unknown>;}finally{previousTool=name;}
@@ -2480,5 +2504,5 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return output;
     };
   }
-  return { tools, editSession, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),/* No turn is held open for frame fetching: finish draws its own few frames. */ fastReviewFeedback: (): string | undefined => undefined };
+  return { tools, editSession, /** A new model step: its tools read the task afresh, once. */ newStep: dropTaskReads, lane:()=>lane, laneChosen:()=>laneChosen, requiresFinish:()=>finishRequired, noteToolIntent, availableToolNames, laneFinished:()=>!!finishResult?.passed, laneFailure:()=>finishResult, publicationResult: async (output: unknown) => receipts.publishedResult(output, editSession.revision), plans: () => effectPlans, checkLevel: () => checkLevel, recipe, pendingFastFrames: () => fastReview.times(), clippingState:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId}),/* No turn is held open for frame fetching: finish draws its own few frames. */ fastReviewFeedback: (): string | undefined => undefined };
 }
