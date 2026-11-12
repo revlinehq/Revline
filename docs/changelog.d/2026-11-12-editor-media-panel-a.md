@@ -1,0 +1,1 @@
+- Editor: the Media panel has Upload and Paste link at the top, type chips with counts, named tiles with per-file upload/processing/failed states, + to add at the playhead, an In timeline mark and a drop-zone empty state. Why: the founder picked design A ("Sharper side panel") over the restored old panel.

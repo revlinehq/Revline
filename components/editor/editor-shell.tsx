@@ -35,7 +35,7 @@ import { unfinishedUploadHint, useUnfinishedUploads } from './use-unfinished-upl
 import { MediaTab } from './media-tab';
 import { TimelinePanel } from './timeline';
 import type { VideoImportState } from './video-link-import';
-import type { UploadProgress } from './footage-panel';
+import type { FailedUpload, UploadProgress } from './footage-panel';
 import type { ClaudeModelChoice,EditorReasoningEffort,EditorSpeedMode } from '@/lib/ai/claude-model';
 import type { ComposerSettings } from './assistant-composer-controls';
 import { AssistantPanel } from './assistant-panel';
@@ -84,7 +84,9 @@ export type EditorShellProps = {
   assistantPanel?: ReactNode;
   onExport: (settings: ExportSettings) => Promise<string | void>; onDownloadExport?: (jobId:string)=>Promise<void>; onCancelExport?: (jobId:string)=>Promise<void>; exportState: ExportState; exports?: NonNullable<ExportState>[]; timelineTabs?: TimelineTab[]; timelineTabActions?: TimelineTabActions; /** The app connected over MCP (its name), null when none is, undefined while loading. */ mcpConnection?: string | null; switchingTimeline?: boolean; demo?: boolean; ultra?: boolean;
   analysisBusy?: string | null; analysisSource?: string | null; analysisProgress?: number | null; analysisStartedAt?:number|null; assistantBudgetUsed?:number; preparationActivity?:string; onLoadMore?: () => void; canLoadMore?: boolean;
-  projectId?: string; onImportVideo?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
+  projectId?: string; onImportVideo?: (url:string)=>Promise<void>;
+  /** The media panel's Paste link: imports into the project's sources without attaching it to the next chat message. */
+  onImportSource?: (url:string)=>Promise<void>; videoImports?: VideoImportState[];
   onRefreshMedia?:RefreshPlaybackMedia;
   onRemoveAsset?: (asset:MediaAsset)=>Promise<void>;
   /** Sends media already in the project with the next chat message. */
@@ -98,6 +100,10 @@ export type EditorShellProps = {
   navActions?: ReactNode;
   /** Loads one source with its saved analysis (transcript), for the quick subtitles control. */
   onLoadAsset?: (assetId:string)=>Promise<MediaAsset>;
+  /** Uploads whose transfer failed this session, with Retry and Dismiss in the media panel. */
+  failedUploads?: FailedUpload[]; onRetryUpload?: (id:string)=>void; onDismissUpload?: (id:string)=>void;
+  /** Starts a source's failed preparation step again. */
+  onRetryPreparation?: (asset:MediaAsset)=>Promise<void>;
 };
 
 const TIMELINE_MIN_HEIGHT = 160;
@@ -469,7 +475,7 @@ export function EditorShell(p: EditorShellProps) {
 
   function addAsset(asset: MediaAsset) {
     if (editLock.current) return;
-    try { const id = crypto.randomUUID(); onChange(addMediaClip(timeline, asset, id)); setSelected(id); }
+    try { const id = crypto.randomUUID(); onChange(addMediaClip(timeline, asset, id, readPlaybackTime())); setSelected(id); }
     catch (error) { onError(userError(error, 'Could not add this source.')); }
   }
   async function addStockAudio(catalogId: string, at: number, track = 1) {
@@ -501,7 +507,7 @@ export function EditorShell(p: EditorShellProps) {
   const browseSources=()=>{setImportDestination('sources');setImportOpen(true);};
   const browseComposer=()=>{setImportDestination('composer');setImportOpen(true);};
 
-  const inspector = <PreviewInspector resumeHint={unfinishedUploadHint(unfinished)} onRemoveAsset={p.onRemoveAsset} onAttachAsset={p.onAttachAsset&&(asset=>p.onAttachAsset!(asset._id))} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onAdd={addAsset} effects={p.demo ? undefined : <EffectsPanel timeline={timeline} assets={assets} locked={editing} onChange={onChange} onError={onError} onLoadAsset={p.onLoadAsset}/>}/>;
+  const inspector = <PreviewInspector resumeHint={unfinishedUploadHint(unfinished)} onRemoveAsset={p.onRemoveAsset} onAttachAsset={p.onAttachAsset&&(asset=>p.onAttachAsset!(asset._id))} usedAssetIds={usedAssetIds} sourceRequest={sourceRequest} videoImports={p.videoImports} assets={assets} upload={p.upload} onUpload={browseSources} onUploadFiles={files=>{void p.onDropUpload(files);}} onImportVideo={editing?undefined:p.onImportSource??p.onImportVideo} failedUploads={p.failedUploads} onRetryUpload={p.onRetryUpload} onDismissUpload={p.onDismissUpload} onRetryPreparation={p.onRetryPreparation} onAdd={addAsset} effects={p.demo ? undefined : <EffectsPanel timeline={timeline} assets={assets} locked={editing} onChange={onChange} onError={onError} onLoadAsset={p.onLoadAsset}/>}/>;
 
   // On desktop the ratio chip sits on the preview frame's top-left corner, as in the design.
   const ratioOnFrame = !compact && !!previewTimeline.clips.length;
