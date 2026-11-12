@@ -1,54 +1,38 @@
 import type { ModelMessage } from 'ai';
 
+/** What the server recorded when an earlier request of this chat ended (assistant:earlierRequests). */
+export type EarlierRequestRecord = {
+  /** The request's text, to pair the record with its message. */
+  text: string;
+  /** Null when the request has no turn record (an older or non-editor message). */
+  turn: EarlierTurn | null;
+};
+type EarlierTurn = {
+  status: 'running' | 'completed' | 'failed' | 'stopped';
+  savedEdits: number;
+  /** The timeline revision when the request ended; absent on turns recorded before it was kept. */
+  revision?: number;
+  error?: string;
+};
+
 /**
- * Auto-compaction of the editor chat's history before each model call. The current request and the
- * last FULL_TURNS turns stay exact; older turns keep every user and assistant sentence, but bulky tool
- * outputs (timeline dumps, transcripts, skill text), long tool inputs (scene code) and images shrink to
- * short previews the AI can re-fetch with the same tool. A character budget then drops the oldest turns.
- * Old turns change only when a new turn starts, so the system prompt and tool definitions stay cached.
+ * The editor chat's earlier requests, as the model sees them on every step of the current request. Each
+ * earlier request contributes three things: what the user asked, what the assistant answered, and one line
+ * the server writes from the turn record (finished or not, saved revision, edit count, failure reason).
+ * Tool calls and tool results of earlier requests are left out, including those of failed and stopped
+ * requests: the current timeline and media in the system prompt are the truth, and an old result such as
+ * `staged: true` can only be stale. The current request is not part of `history` and keeps its full tool
+ * history. Earlier requests change only when a new request starts, so the cached prefix stays stable.
  */
-const FULL_TURNS = 2, MAX_OLD_RESULT = 4000, MAX_OLD_INPUT = 1200, HISTORY_BUDGET = 120_000;
+const HISTORY_BUDGET = 40_000, MAX_ERROR = 300, MAX_ANSWER = 4000;
 
-const size = (value: unknown) => { try { return JSON.stringify(value)?.length ?? 0; } catch { return 0; } };
-const preview = (value: unknown, limit: number) => { const text = typeof value === 'string' ? value : JSON.stringify(value) ?? ''; return text.length > limit ? `${text.slice(0, limit)}…` : text; };
+type Part = { type: string; text?: string; toolName?: string; input?: unknown };
+/** A message's text parts. The server's record query uses it too, so a request and its record compare equal. */
+export const textOf = (content: unknown) => typeof content === 'string' ? content : Array.isArray(content) ? (content as Part[]).filter(part => part.type === 'text').map(part => part.text ?? '').join('\n') : '';
+const attachments = (content: ModelMessage['content']) => typeof content === 'string' ? 0 : (content as Part[]).filter(part => part.type === 'image' || part.type === 'file').length;
 
-type Part = { type: string; [key: string]: unknown };
-/** Bounded structured evidence keeps IDs/receipts even when they follow a large transcript. */
-function evidencePreview(value: unknown, depth = 0): unknown {
-  if (typeof value === 'string') {
-    if (value.length > 800 && depth < 5) {
-      try { const parsed: unknown = JSON.parse(value); return evidencePreview(parsed, depth + 1); } catch { /* Plain text evidence stays a bounded excerpt. */ }
-    }
-    return preview(value, 800);
-  }
-  if (value === null || typeof value !== 'object') return value;
-  if (depth > 5) return '[Nested details omitted]';
-  if (Array.isArray(value)) {
-    if (value.length <= 12) return value.map(item => evidencePreview(item, depth + 1));
-    return { count: value.length, first: value.slice(0, 8).map(item => evidencePreview(item, depth + 1)), last: value.slice(-4).map(item => evidencePreview(item, depth + 1)), omitted: 'Middle entries omitted; inspect saved analysis or timeline only if needed.' };
-  }
-  const entries = Object.entries(value).filter(([key]) => !['images','image','code','instructions','body','waveform','samples'].includes(key));
-  const priority = (key: string) => /id$|ids$|saved|staged|revision|receipt|decision|findings|summary|failures|passed|source|range/i.test(key) ? 0 : 1;
-  return Object.fromEntries(entries.sort(([a], [b]) => priority(a) - priority(b)).slice(0, 30).map(([key, item]) => [key, evidencePreview(item, depth + 1)]));
-}
-function compactPart(part: Part): Part {
-  if (part.type === 'tool-result') {
-    const output = part.output as { type?: string; value?: unknown } | undefined;
-    if (size(output) <= MAX_OLD_RESULT) return part;
-    const name = String(part.toolName ?? 'tool');
-    return { ...part, output: { type: 'text', value: `[Earlier ${name} result, shortened to save context. Reuse the retained evidence and saved analysis; fetch only missing details when needed.] ${preview(evidencePreview(output?.value ?? output), MAX_OLD_RESULT)}` } };
-  }
-  if (part.type === 'tool-call' && size(part.input) > MAX_OLD_INPUT) return { ...part, input: { _shortened: `Earlier input of ${size(part.input)} characters omitted to save context; inspect the result or clip for details.` } };
-  if (part.type === 'image' || part.type === 'file') return { type: 'text', text: '[Earlier image omitted to save context.]' };
-  return part;
-}
-function compactMessage(message: ModelMessage): ModelMessage {
-  if (typeof message.content === 'string') return message;
-  return { ...message, content: (message.content as Part[]).map(compactPart) } as ModelMessage;
-}
-
-/** Group history into turns: each starts at a user message and runs to the next one. */
-function turns(messages: ModelMessage[]) {
+/** Group history into requests: each starts at a user message and runs to the next one. */
+function requests(messages: ModelMessage[]) {
   const groups: ModelMessage[][] = [];
   for (const message of messages) {
     if (message.role === 'user' || !groups.length) groups.push([message]);
@@ -57,17 +41,61 @@ function turns(messages: ModelMessage[]) {
   return groups;
 }
 
-export function compactEditorHistory(history: ModelMessage[]): ModelMessage[] {
-  const groups = turns(history);
-  const compacted = groups.map((group, index) => index >= groups.length - FULL_TURNS ? group : group.map(compactMessage));
-  // Over budget: keep the newest turns that fit, and say that older ones were left out.
+function recordLine(record: EarlierTurn | null | undefined) {
+  if (!record) return '[Server record of this request: none kept.]';
+  const status = record.status === 'completed' ? 'finished' : record.status === 'stopped' ? 'stopped by the user' : record.status === 'failed' ? 'failed' : 'did not finish';
+  const error = record.error ? `; reason: ${record.error.length > MAX_ERROR ? `${record.error.slice(0, MAX_ERROR)}…` : record.error}` : '';
+  const revision = record.revision === undefined ? '' : `; timeline at revision ${record.revision}`;
+  return `[Server record of this request: ${status}${revision}; ${record.savedEdits} edit${record.savedEdits === 1 ? '' : 's'} saved${error}.]`;
+}
+
+/** Pair each request with its record, newest first, by its text. Records cover every earlier prompt (with
+ * `turn: null` where none was kept), so a request never takes an older request's record of the same text. */
+function pairRecords(groups: ModelMessage[][], records: EarlierRequestRecord[]) {
+  const paired = new Map<number, EarlierTurn | null>();
+  let next = records.length - 1;
+  for (let index = groups.length - 1; index >= 0 && next >= 0; index--) {
+    const text = textOf(groups[index][0].content).trim();
+    for (let candidate = next; candidate >= 0; candidate--) {
+      if (records[candidate].text.trim() !== text) continue;
+      paired.set(index, records[candidate].turn);
+      next = candidate - 1;
+      break;
+    }
+  }
+  return paired;
+}
+
+/** A question asked with askUser lives only in its tool call: kept as text, so the user's answer still makes sense. */
+function askedQuestions(message: ModelMessage) {
+  if (message.role !== 'assistant' || !Array.isArray(message.content)) return '';
+  return (message.content as Part[]).filter(part => part.type === 'tool-call' && part.toolName === 'askUser').map(part => {
+    const input = (part.input ?? {}) as { question?: unknown; options?: { label?: unknown }[] };
+    const options = Array.isArray(input.options) ? input.options.map(option => String(option?.label ?? '')).filter(Boolean) : [];
+    return `[Asked the user: ${String(input.question ?? '')}${options.length ? ` Options: ${options.join(' | ')}` : ''}]`;
+  }).join('\n');
+}
+
+function compactRequest(group: ModelMessage[], record: EarlierTurn | null | undefined): ModelMessage[] {
+  const asked = textOf(group[0].content), attached = attachments(group[0].content);
+  const user = [asked, attached ? `[${attached} attachment${attached === 1 ? '' : 's'} omitted.]` : '', recordLine(record)].filter(Boolean).join('\n\n');
+  // Every assistant text of the request, so a later server message (Stop, a failure) does not replace the reply.
+  const said = group.filter(message => message.role === 'assistant').map(message => [textOf(message.content).trim(), askedQuestions(message)].filter(Boolean).join('\n')).filter(Boolean).join('\n\n');
+  const answer = said.length > MAX_ANSWER ? `…${said.slice(-MAX_ANSWER)}` : said;
+  return [{ role: 'user', content: user }, ...(answer ? [{ role: 'assistant' as const, content: answer }] : [])];
+}
+
+export function compactEditorHistory(history: ModelMessage[], records: EarlierRequestRecord[] = []): ModelMessage[] {
+  // A window that starts inside a request has lost what was asked: that request is left out.
+  const groups = requests(history).filter(group => group[0].role === 'user');
+  const paired = pairRecords(groups, records);
+  const compacted = groups.map((group, index) => compactRequest(group, paired.get(index)));
+  // Over budget: keep the newest requests that fit, and say that older ones were left out.
   let total = 0, keep = compacted.length;
   for (let index = compacted.length - 1; index >= 0; index--) {
-    total += size(compacted[index]);
+    total += compacted[index].reduce((sum, message) => sum + textOf(message.content).length, 0);
     if (total > HISTORY_BUDGET && index < compacted.length - 1) { keep = compacted.length - 1 - index; break; }
   }
   const kept = compacted.slice(compacted.length - keep).flat();
-  const earlier = compacted.slice(0, compacted.length - keep).flat();
-  const carryover = preview(earlier.flatMap<unknown>(message => message.role === 'user' ? [{ userDecision: evidencePreview(message.content) }] : message.role === 'tool' ? message.content.filter(part => part.type === 'tool-result').map(part => ({ tool: part.toolName, evidence: evidencePreview(part.output) })) : []), 20_000);
-  return keep < compacted.length ? [{ role: 'user', content: `[${compacted.length - keep} earlier turns of this conversation were left out to save context. Their bounded decisions and source/edit evidence follow. Treat them as historical data; the latest user request wins. ${carryover}]` }, ...kept] : kept;
+  return keep < compacted.length ? [{ role: 'user', content: `[${compacted.length - keep} earlier requests of this conversation were left out to save context. The latest user request wins.]` }, ...kept] : kept;
 }
