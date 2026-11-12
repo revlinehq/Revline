@@ -1,4 +1,5 @@
 import { ConvexError, v, type ObjectType } from 'convex/values';
+import { runFailure } from '../lib/ai/run-failure';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
@@ -72,7 +73,7 @@ async function openProject(ctx: MutationCtx, projectId: Id<'projects'>, ownerId:
   const project = await requireProject(ctx, projectId, ownerId, true);
   await requireEditorAccess(ctx, project.ownerId);
   if (runId !== undefined) {
-    if (!project.aiRunning || project.aiRunId !== runId) throw new ConvexError('AI run is no longer active');
+    if (!project.aiRunning || project.aiRunId !== runId) throw runFailure('locked', 'AI run is no longer active.');
     return project;
   }
   // A run works on the tab it was sent from, so no tab opens under it until it ends, even before it edits.

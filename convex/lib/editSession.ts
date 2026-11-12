@@ -1,8 +1,11 @@
 import {EDITOR_SOFT_STEPS,EDITOR_HARD_STEPS} from '../../lib/ai/edit-progress';
 import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
+import { runFailure, type RunFailureCode } from '../../lib/ai/run-failure';
 import { isApprovalRejection, isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
 export class IncompleteEditError extends Error {
+  /** Step and output limits are limits; a model that stopped early did not answer in full. */
+  get failureCode(): RunFailureCode { return this.reason === 'incomplete' ? 'unavailable' : 'limit'; }
   constructor(readonly reason: 'step_limit' | 'output_limit' | 'incomplete', staged: boolean, savedEdits: number, steps = 0) {
     const cause = reason === 'step_limit' ? steps >= EDITOR_HARD_STEPS ? 'This request reached its editing step limit before finishing.' : 'The request paused because recent steps made no new timeline changes.' : reason === 'output_limit' ? 'This request reached the model output limit before finishing.' : 'The assistant stopped before finishing this request.';
     super(`${cause} ${staged ? 'The pending replacement was not saved.' : savedEdits ? 'Your saved changes remain. Continue the unfinished part from the current timeline.' : 'No timeline changes were saved.'}`);
@@ -68,7 +71,7 @@ export class EditSession {
   }
 
   private async publishCurrentTimeline() {
-    if (this.failed) throw new Error('Resolve the current timeline errors before publishing it or opening another timeline.');
+    if (this.failed) throw runFailure('refused', 'Resolve the current timeline errors before publishing it or opening another timeline.');
     if (!this.staged) return;
     await this.applyStaged();
     this.savedEdits++;
@@ -145,7 +148,7 @@ export class EditSession {
       const current = await read();
       // A private draft is the run's own view of the timeline; nothing else saves while the run holds the lock.
       if (this.staged) {
-        if (current.revision !== this.revision) throw new Error('The timeline changed elsewhere. Your replacement was not saved.');
+        if (current.revision !== this.revision) throw runFailure('conflict', 'The timeline changed elsewhere. Your replacement was not saved.');
       } else {
         this.timeline = normalizeTimeline(current.timeline);
         this.revision = current.revision;
@@ -174,10 +177,10 @@ export class EditSession {
       throw new IncompleteEditError(finishReason === 'tool-calls' && steps >= EDITOR_SOFT_STEPS ? 'step_limit' : finishReason === 'length' ? 'output_limit' : 'incomplete', this.staged, this.savedEdits, steps);
     }
     if (!this.staged) {
-      if (toolFailed) throw new Error('Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
+      if (toolFailed) throw runFailure('unavailable', 'Some requested changes were not saved. Inspect the current timeline before continuing; previously saved edits remain.');
       return false;
     }
-    if (this.failed || toolFailed) throw new Error('A tool could not complete. The pending replacement was not saved.');
+    if (this.failed || toolFailed) throw runFailure('unavailable', 'A tool could not complete. The pending replacement was not saved.');
     await this.applyStaged();
     this.savedEdits++;
     this.staged = false;

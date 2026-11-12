@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { codedAs } from '../lib/ai/run-failure';
 import {
   internalMutation,
   internalQuery,
@@ -410,7 +411,7 @@ export const validate = internalMutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const project = await requireProject(ctx, args.projectId, args.ownerId);
-    await validateTimeline(ctx, project, args.timeline);
+    await codedAs('invalid', () => validateTimeline(ctx, project, args.timeline));
     return null;
   },
 });

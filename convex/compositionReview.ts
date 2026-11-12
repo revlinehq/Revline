@@ -1,4 +1,5 @@
 import { tableRow } from './lib/exact';
+import { codedAs, runFailure } from '../lib/ai/run-failure';
 import { ConvexError, v } from 'convex/values';
 import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery } from './_generated/server';
@@ -15,7 +16,7 @@ import type { Id } from './_generated/dataModel';
 
 async function active(ctx:MutationCtx|QueryCtx,args:{projectId:Id<'projects'>;ownerId:string;runId:string}) {
   const run=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!run.aiRunning||run.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active.');
+  if(!run.aiRunning||run.aiRunId!==args.runId)throw runFailure('locked', 'AI run is no longer active.');
 }
 export const readPlan=internalQuery({args:runArgs,returns:v.array(effectPlanValidator),handler:async(ctx,args)=>{
   await active(ctx,args);
@@ -25,7 +26,7 @@ export const readPlan=internalQuery({args:runArgs,returns:v.array(effectPlanVali
 export const completionState=internalQuery({args:{...runArgs,timeline:timelineValidator,expectedRevision:v.number()},returns:v.object({plans:v.array(effectPlanValidator),validReviews:v.array(v.object({planIds:v.array(v.string()),output:v.object({...compositionReviewResult.fields,reviewed:v.literal(true),stale:v.literal(false),currentRevision:v.number()})}))}),handler:async(ctx,args)=>{
   await active(ctx,args);
   const project=(await ctx.db.get(args.projectId))!;
-  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect before completing review.');
+  if((project.revision??0)!==args.expectedRevision)throw runFailure('conflict', 'The timeline changed elsewhere. Inspect before completing review.');
   const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   const plans=saved?.runId===args.runId?saved.plans:[];
   if(!plans.length)return {plans,validReviews:[]};
@@ -61,8 +62,8 @@ export const savePlan=internalMutation({args:{...runArgs,plans:v.array(effectPla
 export const request=internalMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator,planIds:v.array(v.string()),bindings:v.array(v.object({planId:v.string(),clipId:v.string()}))},returns:v.id('compositionReviews'),handler:async(ctx,args)=>{
   await active(ctx,args);
   const project=(await ctx.db.get(args.projectId))!;
-  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect before reviewing.');
-  await validateTimeline(ctx,project,args.timeline);
+  if((project.revision??0)!==args.expectedRevision)throw runFailure('conflict', 'The timeline changed elsewhere. Inspect before reviewing.');
+  await codedAs('invalid',()=>validateTimeline(ctx,project,args.timeline));
   const saved=await ctx.db.query('assistantPlans').withIndex('by_project',q=>q.eq('projectId',args.projectId)).unique();
   if(!saved||saved.runId!==args.runId)throw new ConvexError('Save the effect expectations before reviewing.');
   const recent=(await ctx.db.query('compositionReviews').withIndex('by_project',q=>q.eq('projectId',args.projectId)).order('desc').take(MAX_COMPOSITION_REVIEW_ATTEMPTS+1)).filter(review=>review.runId===args.runId);
