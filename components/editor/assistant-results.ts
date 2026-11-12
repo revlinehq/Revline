@@ -1,5 +1,7 @@
 import { normalizeTimeline, type Timeline } from '@/lib/editor/types';
 import {assistantErrorDetail} from './assistant-turn-presentation';
+import { describeRunFailure } from '@/lib/ai/failure-text';
+import type { RunFailureCode } from '@/lib/ai/run-failure';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
 import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
@@ -46,7 +48,7 @@ function latestPublicationReceipt(receipts: readonly TimelinePublicationReceipt[
 }
 
 /** Preserve the SDK's raw prompt identity alongside its stable streamed React key. */
-export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;turnState?:ChatMessage['turnState'];turnError?:string;turnResuming?:boolean;turnModel?:string;turnEffort?:string;parts:readonly unknown[]}):ChatMessage {
+export function chatMessageFromUI(message:{id:string;key?:string;threadId?:string;role:string;status?:string;turnState?:ChatMessage['turnState'];turnError?:string;turnErrorCode?:RunFailureCode;turnResuming?:boolean;turnModel?:string;turnEffort?:string;parts:readonly unknown[]}):ChatMessage {
   const publicationReceipt=latestPublicationReceipt(message.parts.flatMap(part=>{const receipt=publicationReceiptFromPart(part);return receipt?[receipt]:[];}));
   // Text and tool calls in the order the model produced them; adjacent tool calls form one group.
   const blocks:ChatBlock[]=[];
@@ -59,7 +61,7 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
     if(!text.trim())continue;
     if(last?.type==='text')last.text+=`\n\n${text}`;else blocks.push({type:'text',text});
   }
-  return {turnModel:message.turnModel,turnEffort:message.turnEffort,turnError:message.turnError,turnResuming:message.turnResuming,turnState:message.turnState,id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
+  return {turnModel:message.turnModel,turnEffort:message.turnEffort,turnError:message.turnError,turnErrorCode:message.turnErrorCode,turnResuming:message.turnResuming,turnState:message.turnState,id:chatMessageKey(message),sourceId:message.id,threadId:message.threadId,role:message.role,status:message.status,blocks,text:message.parts.filter(part=>record(part)?.type==='text').map(part=>String(record(part)?.text??'')).join('\n\n'),steps:message.parts.flatMap(part=>{const step=chatToolFromPart(part);return step?[step]:[];}),...(publicationReceipt?{publicationReceipt}:{})};
 }
 
 /** The receipt stays with its original request, including a paginated partial turn. */
@@ -101,13 +103,17 @@ function unpack(value: unknown): { output?: Record<string, unknown>; error?: str
   return { output: wrapped };
 }
 
+const receiptCode = (output?: Record<string, unknown>) => { const receipt = toolSaveReceipt(output); return receipt && 'code' in receipt ? receipt.code : undefined; };
+
 /** Stored Agent error-text results can arrive as output-available; that is not success. */
 function chatToolFromPart(value: unknown): ChatTool | null {
   const part = record(value);
   if (!part || typeof part.type !== 'string' || !part.type.startsWith('tool-') || typeof part.state !== 'string') return null;
   const { output, error } = unpack(part.output);
   const failed = part.state === 'output-error' || part.state === 'output-denied' || !!part.errorText || error !== undefined || (part.state === 'output-available' && !output);
-  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || '')))).slice(0, 240) } : {}) };
+  // The code the failed result carries (errorCode, a save receipt's code), or the one its error text holds.
+  const failureCode = failed ? describeRunFailure(output)?.code ?? receiptCode(output) ?? describeRunFailure(String(part.errorText || error || ''))?.code : undefined;
+  return { id: typeof part.toolCallId === 'string' ? part.toolCallId : undefined, name: part.type.slice(5), state: failed ? 'error' : part.state === 'output-available' ? 'done' : 'running', staged: output?.staged === true, ...(record(part.input)?{input:record(part.input)}:{}), output, ...(failureCode ? { failureCode } : {}), ...(failed ? { detail: assistantErrorDetail(mediaErrorMessage(new Error(String(part.errorText || error || ''))), failureCode).slice(0, 240) } : {}) };
 }
 
 /** What the agent is doing right now, from the newest part of its reply: a running tool (scene code is named while it is
@@ -165,10 +171,10 @@ export function summarizeTools(steps: ChatTool[], evidence:{publishedRevision?:n
   return [...groups].map(([key, group]): ResultCard | null => {
     const step = group[0], name = toolBehavior(step.name)?.label ?? ['Working on your edit', 'Updated your edit'];
     const save = toolSaveReceipt(step.output);
-    if (step.state === 'error') return { key, title: save?.status === 'failed' ? `Could not save: ${step.name}` : save?.status === 'saved' ? `Changes saved; ${step.name} could not finish` : `Could not finish: ${step.name}`, detail: save?.status === 'failed' ? assistantErrorDetail(save.message) : step.detail, state: step.state, saveFailed: save?.status === 'failed' };
+    if (step.state === 'error') return { key, title: save?.status === 'failed' ? `Could not save: ${step.name}` : save?.status === 'saved' ? `Changes saved; ${step.name} could not finish` : `Could not finish: ${step.name}`, detail: save?.status === 'failed' ? assistantErrorDetail(save.message, save.code) : step.detail, failureCode: save?.status === 'failed' ? save.code ?? step.failureCode : step.failureCode, state: step.state, saveFailed: save?.status === 'failed' };
     if (step.state === 'running') return { key, title: name[0], state: step.state };
     const outputs = group.map(item => item.output ?? {});
-    if (save?.status === 'failed') return { key, title: `Could not save: ${step.name}`, detail: assistantErrorDetail(save.message), state: 'error', saveFailed: true };
+    if (save?.status === 'failed') return { key, title: `Could not save: ${step.name}`, detail: assistantErrorDetail(save.message, save.code), failureCode: save.code, state: 'error', saveFailed: true };
     if (save?.status === 'queued') return { key, title: `Queued: ${step.name}`, detail: typeof step.output?.note === 'string' ? step.output.note : 'Processing will continue in the background.', state: 'done' };
     // Old results without a receipt cannot prove a failed write. Keep them in the tool history.
     if (!step.staged && !SAVED_ELSEWHERE.has(step.name) && !outputs.some(output => hasSaveEvidence(output) || published(output))) return null;
