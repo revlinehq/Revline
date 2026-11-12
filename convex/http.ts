@@ -11,7 +11,6 @@ import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { registerMcpBridgeRoutes } from './mcpBridgeHttp';
 import { registerAppleBillingRoutes } from './appleBillingHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
-import { fromStripeSubscription } from './lib/billing_access';
 const http = httpRouter();
 http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
 registerAlertWebhooks(http);
@@ -79,8 +78,7 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
             status: subscription.status, currentPeriodEnd: item?.current_period_end ?? 0,
             cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
             cancelAt: subscription.cancel_at ?? undefined, quantity: item?.quantity ?? 1,
-            // The price's lookup key names the plan, so a price changed in the portal or dashboard still reads right.
-            ...fromStripeSubscription(subscription),
+            priceId: item?.price.id ?? '', metadata: subscription.metadata,
           });
         }
       } else {

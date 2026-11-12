@@ -95,7 +95,7 @@ export function ConnectPage({ request }: { request: ConnectRequest }) {
     <p className="connect-lead">An app calling itself “{details.clientName}” is asking to use your Revline account{user?.primaryEmailAddress ? <> ({user.primaryEmailAddress.emailAddress})</> : null}. Access will be sent to <strong>{details.redirectHost}</strong>.</p>
     {!details.trusted && <p className="connect-warning" role="note">This isn’t a Claude, ChatGPT or local address. Only allow it if you started this connection yourself and recognize {details.redirectHost}.</p>}
     {details.allowed ? <ul className="connect-permissions">{permissions.map(item => <li key={item}><Check size={14} />{item}</li>)}</ul>
-      : <p className="connect-message">Connecting AI apps needs the Pro or Studio plan.</p>}
+      : <p className="connect-message">Connecting AI apps needs an active Revline plan.</p>}
     <p className="connect-note">Revoke access any time in your profile.</p>
     {error && <p className="workspace-inline-error" role="alert">{error}</p>}
     <div className="connect-actions">

@@ -3,7 +3,7 @@ import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, type ActionCtx, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
-import { activePlanTier, billingEnabled } from './lib/billing_access';
+import { billingEnabled, hasUltraPlan, requireEditorAccess } from './lib/billing_access';
 import { accountStatus, postingPlatform } from './postingTables';
 import { ACCOUNT_CAPS, capMessage } from '../lib/posting/account-caps';
 import { PostingError, type PostingPlatform, type PublishCheck, type PublishInput } from '../lib/posting/adapter';
@@ -35,8 +35,8 @@ export const failure = (error: unknown, fallback: string) => error instanceof Po
 /** How many accounts this owner may connect per platform (lib/posting/account-caps.ts). A deployment without billing meters no one. */
 export async function accountCap(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<number> {
   if (!billingEnabled()) return ACCOUNT_CAPS.paid;
-  const tier = await activePlanTier(ctx, ownerId);
-  return tier === 'studio' ? ACCOUNT_CAPS.ultra : tier === 'starter' ? ACCOUNT_CAPS.starter : tier ? ACCOUNT_CAPS.paid : ACCOUNT_CAPS.none;
+  if (await hasUltraPlan(ctx, ownerId)) return ACCOUNT_CAPS.ultra;
+  return requireEditorAccess(ctx, ownerId).then(() => ACCOUNT_CAPS.paid, () => ACCOUNT_CAPS.none);
 }
 /** An account that takes one of the owner's slots: connected through Post Bridge and not disconnected. */
 export const holdsSlot = (account: Doc<'postingAccounts'>) => account.provider === 'postbridge' && account.status !== 'disconnected';

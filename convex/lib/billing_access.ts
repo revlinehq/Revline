@@ -1,4 +1,4 @@
-import { PLAN_RANK, PLAN_TIERS, isPlanTier, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
+import { ULTRA_OFFERED } from '../../lib/billing/plan';
 import { editorEffortChoiceAllowed, offeredEditorModel, productionEditorOffer, type EditorOffer } from '../../lib/ai/claude-model';
 import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
@@ -7,34 +7,12 @@ import type { ActionCtx, MutationCtx, QueryCtx } from '../_generated/server';
 import { activeAppleEntitlement, hasPaidAppleModelAccess } from './apple_entitlements';
 
 export const billingEnabled = () => process.env.BILLING_ENABLED === 'true';
-/** Prices are found by lookup key, so no price ID setting is required. */
-export const billingConfigured = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_WEBHOOK_SECRET && !!process.env.APP_ORIGIN;
-const PRICE_ENV: Record<PlanTier, string> = { starter: 'STRIPE_STARTER_PRICE_ID', pro: 'STRIPE_PRO_PRICE_ID', studio: 'STRIPE_STUDIO_PRICE_ID' };
-/** A price ID a deployment names for a plan: optional, used only when no price carries the plan's lookup key,
- *  and to recognise subscriptions from before lookup keys (production's STRIPE_PRO_PRICE_ID). */
-export const pinnedPriceId = (tier: PlanTier) => process.env[PRICE_ENV[tier]]?.trim() || undefined;
-/** The retired Ultra price, if a deployment still names it: such a subscription is treated as Studio. */
-const legacyUltraPrice = () => process.env.STRIPE_ULTRA_PRICE_ID?.trim() || undefined;
-type SubscriptionLike = { priceId: string; metadata?: Record<string, unknown> };
-export const isEditorSubscription = (sub: SubscriptionLike) => sub.metadata?.app === 'revline-editor' || PLAN_TIERS.some(tier => pinnedPriceId(tier) === sub.priceId) || (!!legacyUltraPrice() && sub.priceId === legacyUltraPrice());
-/** A Stripe subscription as Revline reads it. A price with a Revline lookup key names the plan (and marks the
- *  subscription as Revline's), overriding metadata that checkout wrote, so a price changed in the Stripe portal or
- *  dashboard reads right. The webhook stores this form; checkout and changePlan read live Stripe through it too. */
-export function fromStripeSubscription(sub: { metadata: Record<string, string>; items: { data: Array<{ price: { id: string; lookup_key: string | null } }> } }) {
-  const price = sub.items.data[0]?.price, plan = tierForLookupKey(price?.lookup_key);
-  return { priceId: price?.id ?? '', metadata: { ...sub.metadata, ...(plan ? { plan, app: 'revline-editor' } : {}) } };
-}
-/** Which plan a subscription is on: a named price ID first, then the plan in its metadata (from the lookup key,
- *  see fromStripeSubscription, or from checkout). A subscription from before plans had names is Pro. */
-export function subscriptionTier(sub: SubscriptionLike): PlanTier {
-  const pinned = PLAN_TIERS.find(tier => pinnedPriceId(tier) === sub.priceId);
-  if (pinned) return pinned;
-  if (legacyUltraPrice() && sub.priceId === legacyUltraPrice()) return 'studio';
-  return isPlanTier(sub.metadata?.plan) ? sub.metadata.plan : 'pro';
-}
+export const billingConfigured = () => !!process.env.STRIPE_SECRET_KEY && !!process.env.STRIPE_WEBHOOK_SECRET && !!process.env.STRIPE_PRO_PRICE_ID && !!process.env.APP_ORIGIN;
+export const ultraBillingConfigured = () => ULTRA_OFFERED && billingConfigured() && !!process.env.STRIPE_ULTRA_PRICE_ID;
+const isUltraSubscription = (sub: { priceId: string }) => !!process.env.STRIPE_ULTRA_PRICE_ID && sub.priceId === process.env.STRIPE_ULTRA_PRICE_ID;
+export const isEditorSubscription = (sub: { priceId: string; metadata?: Record<string, unknown> }) => sub.priceId === process.env.STRIPE_PRO_PRICE_ID || isUltraSubscription(sub) || sub.metadata?.app === 'revline-editor';
 export const hasPaidEditorSubscriptionTerm = (sub: { status: string; currentPeriodEnd: number }) => sub.status === 'active' && sub.currentPeriodEnd > Date.now() / 1000;
 export const hasEditorAccess = (sub: { status: string; currentPeriodEnd: number }) => (sub.status === 'active' || sub.status === 'trialing') && sub.currentPeriodEnd > Date.now() / 1000;
-const highest = (tiers: PlanTier[]) => tiers.reduce<PlanTier | null>((best, tier) => !best || PLAN_RANK[tier] > PLAN_RANK[best] ? tier : best, null);
 
 export async function editorSubscriptions(ctx: QueryCtx | MutationCtx | ActionCtx, userId: string) {
   return (await ctx.runQuery(components.stripe.public.listSubscriptionsByUserId, { userId })).filter(isEditorSubscription);
@@ -50,19 +28,12 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
   return !!await activeComplimentaryEntitlement(ctx, ownerId);
 }
 
-/** The plan this owner is on now, or null without one. App Store and operator grants are Pro, or Studio
- *  when they carry the Ultra entitlement; Stripe subscriptions give their plan. The highest of them counts. */
-export async function activePlanTier(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<PlanTier | null> {
-  const apple = await activeAppleEntitlement(ctx, ownerId), complimentary = await activeComplimentaryEntitlement(ctx, ownerId);
-  if (apple?.plan === 'ultra' || complimentary?.plan === 'ultra') return 'studio';
-  const stripe = billingEnabled() && billingConfigured() ? (await editorSubscriptions(ctx, ownerId)).filter(hasEditorAccess).map(subscriptionTier) : [];
-  return highest([...stripe, ...(apple || complimentary ? ['pro' as const] : [])]);
-}
-
-/** Studio grants the Ultra entitlement (4K, the faster export lane, model and effort choice). It comes from an
- *  active Studio subscription, or an App Store or operator grant that carries 'ultra'. */
+/** Ultra comes from an active Ultra subscription, or an operator grant on an active complimentary entitlement. */
 export async function hasUltraPlan(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  return await activePlanTier(ctx, ownerId) === 'studio';
+  if ((await activeAppleEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
+  if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
+  if (!billingEnabled() || !ultraBillingConfigured()) return false;
+  return (await editorSubscriptions(ctx, ownerId)).some(sub => isUltraSubscription(sub) && hasEditorAccess(sub));
 }
 
 export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
@@ -72,14 +43,6 @@ export async function requireEditorAccess(ctx: QueryCtx | MutationCtx, ownerId: 
   if (!billingConfigured()) throw new ConvexError({ code: 'BILLING_UNAVAILABLE', message: 'Billing is temporarily unavailable. Please try again.' });
   if (!(await editorSubscriptions(ctx, ownerId)).some(hasEditorAccess)) {
     throw new ConvexError({ code: 'SUBSCRIPTION_REQUIRED', message: 'Start your free trial or renew your subscription to edit and export.' });
-  }
-}
-
-/** MCP (editing from Claude, Codex or Cursor) is part of Pro and Studio, not Starter. */
-export async function requireMcpAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
-  await requireEditorAccess(ctx, ownerId);
-  if (billingEnabled() && await activePlanTier(ctx, ownerId) === 'starter') {
-    throw new ConvexError({ code: 'PLAN_REQUIRED', message: 'Editing from Claude, Codex or Cursor is part of Pro. Change your plan in Settings to connect.' });
   }
 }
 
