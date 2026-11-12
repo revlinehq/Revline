@@ -7,8 +7,8 @@ import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { exportsFull, startRenderFor } from './renders';
 import { internal } from './_generated/api';
 import { hasUltraPlan, requireEditorAccess } from './lib/billing_access';
-import { accountPicture, accountState, batchText, createBatchFor, projectCover, requirePosting } from './posting';
-import { postingPlatform } from './postingTables';
+import { accountPicture, accountState, batchText, checkTargets, createBatchFor, projectCover, requirePosting } from './posting';
+import { postingPlatform, postTarget } from './postingTables';
 import { pendingPostStatus } from './postingTables';
 import { shapeProblems } from '../lib/posting/precheck';
 import { dimensions, timelineDuration } from '../lib/editor/types';
@@ -80,6 +80,8 @@ export async function startPendingFor(ctx: MutationCtx, ownerId: string, args: P
   const { caption, title } = batchText(args, now);
   const problem = await targetsProblem(ctx, ownerId, args.accountIds);
   if (problem) throw new ConvexError(problem);
+  // Checked at the press, so a choice the platform refuses fails here instead of after the export.
+  if (args.targets) await checkTargets(ctx, ownerId, args.accountIds, args.targets);
   const open = activeTabOf(project), timelineId = args.timelineId ?? open;
   if (!tabsOf(project).some(tab => tab.id === timelineId)) throw new ConvexError('That timeline no longer exists.');
   if (project.aiRunning) throw new ConvexError('Wait for the current edit to finish, then post.');
@@ -126,6 +128,8 @@ export const start = mutation({
     projectId: v.id('projects'), caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()), campaignId: v.optional(v.string()), accountIds: v.array(v.id('postingAccounts')),
     /** The timeline tab to post: the one on the user's screen, or a clip picked in the chat. Without it, the open tab. */
     timelineId: v.optional(v.string()),
+    /** Each account's own caption, title and choices (the post dialog's TikTok settings); one per account in `accountIds`. */
+    targets: v.optional(v.array(postTarget)),
   },
   returns: v.id('postingPending'),
   handler: async (ctx, args) => startPendingFor(ctx, await requireOwner(ctx), args),

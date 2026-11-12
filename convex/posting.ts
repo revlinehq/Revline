@@ -234,6 +234,17 @@ const text = (value: string | undefined, limit: number, name: string) => {
   if (trimmed && trimmed.length > limit) throw new ConvexError(`${name} can be up to ${limit} characters.`);
   return trimmed || undefined;
 };
+/** One account's own text and choices: what `createBatchFor` stores, and what a post waiting for its export is checked against at the press. */
+async function checkTarget(ctx: QueryCtx | MutationCtx, ownerId: string, target: BatchInput['targets'][number]) {
+  const account = await ownedAccount(ctx, ownerId, target.accountId);
+  return { account, caption: text(target.caption, CAPTION_LIMIT, 'A caption'), title: text(target.title, TITLE_LIMIT, 'A title'), choices: postChoices(account.platform, target) };
+}
+/** Each picked account's own text and choices, with exactly one per account, checked before an export is spent on them. */
+export async function checkTargets(ctx: QueryCtx | MutationCtx, ownerId: string, accountIds: Id<'postingAccounts'>[], targets: BatchInput['targets']) {
+  const picked = new Set(accountIds);
+  if (targets.length !== picked.size || targets.some(target => !picked.delete(target.accountId))) throw new ConvexError('Each picked account needs exactly one post.');
+  for (const target of targets) await checkTarget(ctx, ownerId, target);
+}
 export function batchText(args: Pick<BatchInput, 'caption' | 'title' | 'scheduledAt' | 'campaignId'>, now: number) {
   const caption = text(args.caption, CAPTION_LIMIT, 'A caption') ?? '', title = text(args.title, TITLE_LIMIT, 'A title');
   if (args.scheduledAt !== undefined && (!Number.isFinite(args.scheduledAt) || args.scheduledAt < now - 60_000 || args.scheduledAt > now + SCHEDULE_HORIZON_MS)) throw new ConvexError('Pick a time in the next 90 days.');
@@ -258,13 +269,12 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
     ...(args.createdBy ? { createdBy: args.createdBy } : {}), ...(args.agentName ? { agentName: args.agentName } : {}),
   });
   for (const target of args.targets) {
-    const account = await ownedAccount(ctx, ownerId, target.accountId);
+    const { account, caption: own, title: ownTitle, choices } = await checkTarget(ctx, ownerId, target), postTitle = ownTitle ?? title;
     if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
     if (over.has(account._id)) throw new ConvexError(overCapMessage(account.username, account.platform));
-    const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
     const postId = await ctx.db.insert('postingPosts', {
-      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
-      ...postChoices(account.platform, target), status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
+      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
+      ...choices, status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
     });
     // "Post now" does not wait for the next scheduler tick.
     if (!scheduledAt) await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
