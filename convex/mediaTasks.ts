@@ -188,6 +188,7 @@ export async function importVideoFor(ctx: MutationCtx, ownerId: string, args: Ob
   // The processor is released separately: one from before these links would fetch the page as a file and fail.
   if (link.needs && !await processorCan(ctx, `import:${link.needs}`)) throw new ConvexError(link.needs === 'twitch-clips'
     ? 'Twitch clip links need a media processor update that is not live on this server yet. Import the same moment from its VOD instead (twitch.tv/videos/<id> with start and end), or upload the clip file.'
+    : link.needs === 'social' ? 'TikTok and Instagram links need a media processor update that is not live on this server yet. Download the video on your device and upload the file instead.'
     : 'Links from this site need a media processor update that is not live on this server yet. Upload the video file instead.');
   let importRange: { start: number; end: number } | undefined;
   if (args.start !== undefined || args.end !== undefined) {

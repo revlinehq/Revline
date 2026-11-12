@@ -21,8 +21,8 @@ export const BASELINE_TASK_KINDS = ['highlights', 'transcribe', 'understand', 's
 export const GATED_READ_MODES = ['looks'] as const;
 export const GATED_TASK_KINDS = [] as const;
 /** Links the first importer did not read (it knew YouTube, Twitch VODs, Kick, X and MP4 files). An older processor
- *  would download their page as a file and fail, so Convex refuses them with a plain message until one reports these. */
-export const GATED_IMPORT_SOURCES = ['twitch-clips', 'more-sites'] as const;
+ *  would download their page as a file and fail ('social': TikTok and Instagram, which an older processor refuses outright), so Convex refuses them with a plain message until one reports these. */
+export const GATED_IMPORT_SOURCES = ['twitch-clips', 'more-sites', 'social'] as const;
 /** What the renderer draws that an older image cannot. 'emoji': colour emoji in text (the image has no emoji font, and
  *  the bundled one arrived later), so frames and exports from an older processor show a "NO GLYPH" box instead.
  *  'fonts-2': the text fonts added with caption presets (Bangers, Outfit, Rubik, Figtree, more Poppins weights); Convex

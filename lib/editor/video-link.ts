@@ -1,8 +1,8 @@
 export type VideoLink = {
-  kind: 'youtube' | 'twitch' | 'kick' | 'x' | 'page' | 'file';
+  kind: 'youtube' | 'twitch' | 'kick' | 'x' | 'page' | 'social' | 'file';
   url: string;
   /** Set when the link needs a media processor newer than the first link importer (see GATED_IMPORT_SOURCES). */
-  needs?: 'twitch-clips' | 'more-sites';
+  needs?: 'twitch-clips' | 'more-sites' | 'social';
 };
 
 /** One import brings in at most this much video: a whole video up to this long, or a start/end range up to this long. */
@@ -10,7 +10,7 @@ export const MAX_IMPORT_SECONDS = 3 * 3600;
 /** Twitch ranges up to this long are cut on the exact frame (re-encoded); longer ones are stream-copied from the keyframe before the start, at most about two seconds early. Other sites always cut exactly. */
 export const EXACT_IMPORT_CUT_SECONDS = 180;
 /** What links import, said the same way in every refusal. */
-export const SUPPORTED_LINKS = 'YouTube, Twitch VODs and clips, Kick recordings, X posts, Dailymotion, Streamable and Loom videos, or a direct link to a video file';
+export const SUPPORTED_LINKS = 'YouTube, TikTok, Instagram reels and video posts, Twitch VODs and clips, Kick recordings, X posts, Dailymotion, Streamable and Loom videos, or a direct link to a video file';
 export const importClock = (seconds: number) => {
   const total = Math.floor(seconds), h = Math.floor(total / 3600), m = Math.floor(total % 3600 / 60), s = total % 60;
   return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
@@ -25,9 +25,16 @@ const PAGE_SITES: { hosts: string[]; path: RegExp; site: string; url: (match: Re
   { site: 'Streamable', hosts: ['streamable.com', 'www.streamable.com'], path: /^\/([a-z0-9]+)\/?$/, url: m => `https://streamable.com/${m[1]}` },
   { site: 'Loom', hosts: ['loom.com', 'www.loom.com'], path: /^\/share\/([0-9a-f]+)\/?$/, url: m => `https://www.loom.com/share/${m[1]}` },
 ];
+/** Social sites that serve public posts to a server only through a residential route (VIDEO_IMPORT_PROXY on the processor). */
+const SOCIAL_SITES: typeof PAGE_SITES = [
+  { site: 'TikTok', hosts: ['tiktok.com', 'www.tiktok.com', 'm.tiktok.com'], path: /^\/@([\w.-]+)\/video\/(\d+)\/?$/, url: m => `https://www.tiktok.com/@${m[1]}/video/${m[2]}` },
+  { site: 'TikTok', hosts: ['m.tiktok.com'], path: /^\/v\/(\d+)(?:\.html)?\/?$/, url: m => `https://www.tiktok.com/@_/video/${m[1]}` },
+  { site: 'TikTok', hosts: ['vm.tiktok.com', 'vt.tiktok.com'], path: /^\/([A-Za-z0-9]+)\/?$/, url: m => `https://vm.tiktok.com/${m[1]}/` },
+  { site: 'Instagram', hosts: ['instagram.com', 'www.instagram.com'], path: /^(?:\/[\w.]+)?\/(p|reels?|tv)\/([\w-]+)\/?$/, url: m => `https://www.instagram.com/${m[1] === 'p' || m[1] === 'tv' ? 'p' : 'reel'}/${m[2]}/` },
+];
 /** Sites that only serve video to a signed-in viewer or refuse server addresses (checked with yt-dlp 2026.10.26 on 2026-11-11):
  *  a plain refusal instead of a queued download that fails. A direct file on one of them still imports. */
-const SIGNED_IN_SITES: Record<string, string> = { 'vimeo.com': 'Vimeo', 'www.vimeo.com': 'Vimeo', 'player.vimeo.com': 'Vimeo', 'tiktok.com': 'TikTok', 'www.tiktok.com': 'TikTok', 'm.tiktok.com': 'TikTok', 'vm.tiktok.com': 'TikTok', 'vt.tiktok.com': 'TikTok', 'rumble.com': 'Rumble', 'www.rumble.com': 'Rumble', 'instagram.com': 'Instagram', 'www.instagram.com': 'Instagram', 'facebook.com': 'Facebook', 'www.facebook.com': 'Facebook', 'm.facebook.com': 'Facebook', 'fb.watch': 'Facebook' };
+const SIGNED_IN_SITES: Record<string, string> = { 'vimeo.com': 'Vimeo', 'www.vimeo.com': 'Vimeo', 'player.vimeo.com': 'Vimeo', 'rumble.com': 'Rumble', 'www.rumble.com': 'Rumble', 'facebook.com': 'Facebook', 'www.facebook.com': 'Facebook', 'm.facebook.com': 'Facebook', 'fb.watch': 'Facebook' };
 
 /** Share validation between the form, queue and downloader. DNS is checked by the worker. */
 export function parseVideoLink(value: string): VideoLink {
@@ -68,6 +75,12 @@ export function parseVideoLink(value: string): VideoLink {
     if (!match) throw new Error(`Use a link to one public ${site.site} video.`);
     return { kind: 'page', url: site.url(match), needs: 'more-sites' };
   }
+  const social = SOCIAL_SITES.filter(site => site.hosts.includes(host));
+  for (const site of social) {
+    const match = site.path.exec(url.pathname);
+    if (match) return { kind: 'social', url: site.url(match), needs: 'social' };
+  }
+  if (social.length && !MEDIA_FILE.test(url.pathname)) throw new Error(`Use a link to one public ${social[0].site} video${social[0].site === 'Instagram' ? ' (a reel or a video post)' : ''}.`);
   if (SIGNED_IN_SITES[host] && !MEDIA_FILE.test(url.pathname)) throw new Error(`${SIGNED_IN_SITES[host]} videos cannot be imported from a link. Download the video and upload the file instead.`);
   return { kind: 'file', url: url.toString() };
 }
