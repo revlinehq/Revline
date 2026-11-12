@@ -19,7 +19,9 @@ export async function incidentFingerprint(identity: string[]) {
   return `incident-v1-${Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('')}`;
 }
 
-export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incidentInput>) {
+/** `client`: filed from a browser by any signed-in account. Such a row never re-opens a resolved incident, earns no
+ * priority bonus, and waits for triage before the fixer or its webhook sees it. */
+export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incidentInput>, { client = false }: { client?: boolean } = {}) {
   const scrub = (text: string) => {
     for (const [key, value] of Object.entries(process.env)) if (/SECRET|TOKEN|KEY|PASSWORD/.test(key) && value && value.length >= 8) text = text.replaceAll(value, '[redacted]');
     return text;
@@ -35,8 +37,8 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
   const existing = await ctx.db.query('incidents').withIndex('by_fingerprint', q => q.eq('fingerprint', fingerprint)).unique();
   const now = Date.now();
   const sample = { at: now, context, ...(input.projectId ? { projectId: input.projectId } : {}), ...(input.runId ? { runId: incidentText(input.runId, 150) } : {}) };
-  const opens = !existing || (existing.status === 'resolved' && !agentFiled);
-  const priority = (input.kind === 'turn-failure' || input.kind === 'export' || input.kind === 'save-confirmation' ? 1000 : 0) + Math.min(999, (existing?.count ?? 0) + 1);
+  const opens = !existing || (existing.status === 'resolved' && !agentFiled && !client);
+  const priority = (!client && (input.kind === 'turn-failure' || input.kind === 'export' || input.kind === 'save-confirmation') ? 1000 : 0) + Math.min(999, (existing?.count ?? 0) + 1);
   const value = {
     source: incidentText(input.source, 100), kind: incidentText(input.kind, 100), message,
     ...(input.stack ? { stack: incidentText(scrub(input.stack), 6000) } : {}),
@@ -45,11 +47,11 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
     samples: [...(existing?.samples ?? []).slice(-3), sample],
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
-  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}) }));
+  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' || client ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}), ...(client ? { needsTriage: true } : {}) }));
   // A new occurrence gives an exhausted issue delivery a fresh budget; issue bodies are bounded now.
   const issueRetry = agentFiled && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
   if (existing) await ctx.db.patch(id, tablePatch<'incidents'>()({ ...value, ...issueRetry, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) }));
-  if (opens && !agentFiled && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
+  if (opens && !agentFiled && !client && process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id, generation });
   return id;
 }
 

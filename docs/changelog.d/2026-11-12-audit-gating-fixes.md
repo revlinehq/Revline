@@ -1,0 +1,2 @@
+- Billing, Sharing, Posting: a dispute or full refund ends the Revline subscription now, new share links need their token, and accounts beyond the plan's per-platform cap can't be posted to (never disconnected). Why: gating audit #4, #8, #10.
+- Incidents: browser-filed reports are allowlisted, capped, never re-open or prioritise, and wait for triage before the fixer sees them. Why: gating audit #7.

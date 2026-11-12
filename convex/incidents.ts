@@ -1,10 +1,11 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
+import { internal } from './_generated/api';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
 import { incidentArgs, incidentDeployment, incidentFingerprint, recordIncident } from './lib/incidents';
 import { z } from 'zod';
 import { requireOwner, requireProject } from './lib/auth';
-import { incidentText, isAgentFiled, limitationIdentity, LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../lib/incidents';
+import { incidentNormalized, incidentText, isAgentFiled, limitationIdentity, LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../lib/incidents';
 
 export const reportIncident = internalMutation({ args: incidentArgs, handler: recordIncident });
 
@@ -80,12 +81,18 @@ export const reportMcp = internalMutation({ args: { ownerId: v.string(), project
   return await recordIncident(ctx, { source: 'mcp', kind: 'tool-failure', message: args.message, stack: args.stack, context: { location: 'convex/mcpActions:callTool', toolName: args.toolName }, ...(projectId ? { projectId } : {}), deployment: incidentDeployment() });
 } });
 
+// What the web app files (lib/incident-client.ts and its callers). Anything else is labelled a generic client report.
+const CLIENT_SOURCES = new Set(['client', 'preview', 'editor', 'editor-chat']);
+const CLIENT_KINDS = new Set(['user-failure', 'preview-error', 'turn-failure', 'save-confirmation']);
+const CLIENT_MESSAGE_LIMIT = 500;
+const CLIENT_STACK_LIMIT = 2000;
+// Any signed-in account can call this with free text, so its rows never reach the autonomous fixer on their own:
+// they wait for triage (out of the delivery queue), earn no priority, never re-open a resolved incident and never merge into a server-filed row.
 export const reportClient = mutation({
   args: { source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), context: v.any(), projectId: v.optional(v.string()), runId: v.optional(v.string()) },
   handler: async (ctx, args) => {
     const owner = await requireOwner(ctx);
-    // Only reportAgent and reportLimitation may create agent-filed rows: they are published as public issues.
-    if (JSON.stringify(args).length > 20_000 || isAgentFiled(incidentText(args.kind, 100))) return null;
+    if (JSON.stringify(args).length > 20_000) return null;
     // Reuse the existing per-owner window store, with an independent namespace.
     const key = `incidents:${owner}`;
     const rate = await ctx.db.query('mcpUsage').withIndex('by_owner', q => q.eq('ownerId', key)).unique();
@@ -94,10 +101,17 @@ export const reportClient = mutation({
     if (current && rate.calls >= 20) return null;
     if (rate) await ctx.db.patch(rate._id, { windowStart: current ? rate.windowStart : now, calls: current ? rate.calls + 1 : 1 });
     else await ctx.db.insert('mcpUsage', { ownerId: key, windowStart: now, calls: 1 });
-    const { projectId: rawProjectId, ...report } = args;
-    const projectId = rawProjectId ? ctx.db.normalizeId('projects', rawProjectId) : null;
+    const known = CLIENT_SOURCES.has(args.source) && CLIENT_KINDS.has(args.kind);
+    const source = known ? args.source : 'client', kind = known ? args.kind : 'client-report';
+    const message = args.message.slice(0, CLIENT_MESSAGE_LIMIT);
+    const location = z.object({ location: z.string() }).catch({ location: '' }).parse(args.context).location;
+    const projectId = args.projectId ? ctx.db.normalizeId('projects', args.projectId) : null;
     const allowedProject = projectId ? await requireProject(ctx, projectId, owner).then(() => projectId).catch(() => null) : null;
-    return await recordIncident(ctx, { ...report, ...(allowedProject ? { projectId: allowedProject } : {}), deployment: incidentDeployment() });
+    return await recordIncident(ctx, {
+      source, kind, message, ...(args.stack ? { stack: args.stack.slice(0, CLIENT_STACK_LIMIT) } : {}), context: args.context,
+      ...(args.runId ? { runId: args.runId } : {}), ...(allowedProject ? { projectId: allowedProject } : {}), deployment: incidentDeployment(),
+      identity: ['client', kind, incidentNormalized(message), incidentNormalized(location)],
+    }, { client: true });
   },
 });
 
@@ -114,12 +128,12 @@ const claimed = { ...identity, claimToken: v.string() };
 
 export const undelivered = query({ args: credentials, handler: async (ctx, { secret }) => {
   authorize(secret);
-  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).filter(q => q.and(q.neq(q.field('kind'), 'agent-limitation'), q.or(q.neq(q.field('kind'), 'agent-report'), q.eq(q.field('issueDispatchReady'), true)))).order('desc').take(100);
+  return await ctx.db.query('incidents').withIndex('by_delivery_priority', q => q.eq('delivery', 'pending')).filter(q => q.and(q.neq(q.field('needsTriage'), true), q.neq(q.field('kind'), 'agent-limitation'), q.or(q.neq(q.field('kind'), 'agent-report'), q.eq(q.field('issueDispatchReady'), true)))).order('desc').take(100);
 } });
 export const claim = mutation({ args: { ...identity, claimToken: v.string() }, handler: async (ctx, args) => {
   authorize(args.secret);
   const row = await ctx.db.get(args.id);
-  if (!row || row.kind === 'agent-limitation' || (row.kind === 'agent-report' && !row.issueDispatchReady) || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
+  if (!row || row.needsTriage || row.kind === 'agent-limitation' || (row.kind === 'agent-report' && !row.issueDispatchReady) || row.generation !== args.generation || row.delivery !== 'pending' || row.status === 'resolved') return false;
   await ctx.db.patch(row._id, { delivery: 'claimed', claimToken: args.claimToken, claimedAt: Date.now() });
   return true;
 } });
@@ -194,5 +208,15 @@ export const dispatchIssue = mutation({ args: identity, handler: async (ctx, arg
   const row = await ctx.db.get(args.id);
   if (!row || row.kind !== 'agent-report' || !row.issueUrl || row.prUrl || row.status === 'resolved' || row.generation !== args.generation || row.issueDispatchReady) return false;
   await ctx.db.patch(row._id, { issueDispatchReady: true, delivery: 'pending', claimToken: undefined });
+  return true;
+} });
+
+// An operator read a browser-filed report and wants the fixer to take it: the only way such a row reaches it.
+export const triageClient = mutation({ args: identity, handler: async (ctx, args) => {
+  authorize(args.secret);
+  const row = await ctx.db.get(args.id);
+  if (!row?.needsTriage || row.status === 'resolved' || row.generation !== args.generation) return false;
+  await ctx.db.patch(row._id, { needsTriage: false, delivery: 'pending', claimToken: undefined });
+  if (process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id: row._id, generation: row.generation });
   return true;
 } });

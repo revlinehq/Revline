@@ -311,7 +311,9 @@ export default defineSchema({
     count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),
     status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('resolved')),
     delivery: v.union(v.literal('pending'), v.literal('claimed'), v.literal('finished'), v.literal('failed')),
-    issueDelivery: v.optional(v.union(v.literal('claimed'), v.literal('finished'), v.literal('failed'))), issueClaimToken: v.optional(v.string()), issueClaimedAt: v.optional(v.number()), issueDeliveredCount: v.optional(v.number()), issueDispatchReady: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
+    issueDelivery: v.optional(v.union(v.literal('claimed'), v.literal('finished'), v.literal('failed'))), issueClaimToken: v.optional(v.string()), issueClaimedAt: v.optional(v.number()), issueDeliveredCount: v.optional(v.number()), issueDispatchReady: v.optional(v.boolean()),
+    // A browser-filed report: free text from any signed-in account. It waits here until an operator triages it (incidents:triageClient).
+    needsTriage: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
   }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
@@ -418,7 +420,10 @@ export default defineSchema({
     superwallSequence: v.optional(v.number()), source: v.union(v.literal('apple'), v.literal('superwall')), updatedAt: v.number(),
   }).index('by_transaction', ['transactionId']).index('by_original', ['originalTransactionId']).index('by_owner_access', ['ownerId', 'accessUntil']),
   appleBillingEvents: defineTable({ source: v.union(v.literal('apple'), v.literal('superwall')), eventId: v.string(), transactionId: v.string(), receivedAt: v.number() }).index('by_source_event', ['source', 'eventId']),
-  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,openTimelineId:v.optional(v.string()),tabCount:v.optional(v.number()),chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),cardTitle:v.optional(v.string()),cardImage:v.optional(v.string()),cardStorageId:v.optional(v.id('_storage')),cardUpdatedAt:v.optional(v.number()),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
+  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,openTimelineId:v.optional(v.string()),tabCount:v.optional(v.number()),chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),cardTitle:v.optional(v.string()),cardImage:v.optional(v.string()),cardStorageId:v.optional(v.id('_storage')),cardUpdatedAt:v.optional(v.number()),createdAt:v.number(),updatedAt:v.number(),
+    // The link's secret: `/editor/showcase/<id>.<token>`. Absent on links sent before tokens (they open by id), and
+    // `openById` keeps such a link working after its owner updates it, until sharing is turned off.
+    token:v.optional(v.string()),openById:v.optional(v.boolean())}).index('by_project',['projectId']),
   // Extra tabs of a multi-tab share; the share row keeps the first tab as `timeline` for older links.
   shareTimelines:defineTable({shareId:v.id('timelineShares'),timelineId:v.string(),name:v.string(),position:v.number(),timeline:timelineValidator}).index('by_share',['shareId','position']),
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),

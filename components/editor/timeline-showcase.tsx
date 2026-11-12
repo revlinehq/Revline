@@ -21,7 +21,7 @@ import { PreviewViewport, PreviewZoomControls, PreviewZoomProvider } from './pre
 import { PlaybackControls } from './playback-controls';
 import { TimelinePanel } from './timeline';
 import { timelineCover } from '@/lib/editor/timeline-cover';
-import { timelineSharePath } from '@/lib/editor/timeline-share';
+import { timelineSharePath, timelineShareToken } from '@/lib/editor/timeline-share';
 import type { SharedChatMessage } from '@/lib/editor/shared-chat';
 import { SharedChatMessages } from './shared-chat-messages';
 import './timeline-sharing.css';
@@ -41,8 +41,9 @@ export function TimelineShowcase({ shareId }: { shareId: string }) {
   // A multi-tab share shows one timeline at a time; switching remounts the player on that tab.
   const tab = share.tabs?.find(tab => tab.id === (tabId ?? share.openTimelineId)) ?? share.tabs?.[0];
   return <TimelineShowcaseView key={`${share._id}:${share.updatedAt}:${tab?.id ?? ''}`} share={tab ? { ...share, timeline: tab.timeline } : share} tabId={tab?.id} onTab={setTabId} signedIn={!!isSignedIn} useDisabled={!isLoaded || (!!isSignedIn && !isAuthenticated)} onUse={async () => {
-    if (!isSignedIn) { router.push(timelineSignInPath(share._id)); return; }
-    const projectId = await copy({ shareId: share._id, ...(tab ? { timelineId: tab.id } : {}) });
+    if (!isSignedIn) { router.push(timelineSignInPath(shareId)); return; }
+    const token = timelineShareToken(shareId);
+    const projectId = await copy({ shareId: share._id, ...(tab ? { timelineId: tab.id } : {}), ...(token ? { token } : {}) });
     router.push(`/editor/${projectId}`);
   }}/>;
 }
