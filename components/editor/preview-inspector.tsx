@@ -14,11 +14,11 @@ import './effects-panel.css';
 /** The editor's side panel: the project's media and, when the editor passes them, the timeline's effects.
  *  On desktop the rail beside it picks the tab and the panel shows that tab under its title; in the phone sheet the two
  *  tabs are a segmented control at the top. */
-export function PreviewInspector({ assets, onRemoveAsset, onAttachAsset, usedAssetIds, upload, onUpload, onAdd, videoImports, sourceRequest = 0, resumeHint, effects, tab, onTabChange, onClose, sheet = false }: { resumeHint?: string; assets: MediaAsset[]; onRemoveAsset?: (asset: MediaAsset) => Promise<void>; onAttachAsset?: (asset: MediaAsset) => void; usedAssetIds?: readonly string[]; upload: UploadProgress; onUpload: () => void; onAdd: (asset: MediaAsset) => void; videoImports?: VideoImportState[]; sourceRequest?: number;
+export function PreviewInspector({ assets, onRemoveAsset, onAttachAsset, usedAssetIds, upload, onUpload, onImportLink, onAdd, videoImports, sourceRequest = 0, resumeHint, effects, tab, onTabChange, onClose, sheet = false }: { resumeHint?: string; assets: MediaAsset[]; onRemoveAsset?: (asset: MediaAsset) => Promise<void>; onAttachAsset?: (asset: MediaAsset) => void; usedAssetIds?: readonly string[]; upload: UploadProgress; onUpload: () => void; onImportLink?: () => void; onAdd: (asset: MediaAsset) => void; videoImports?: VideoImportState[]; sourceRequest?: number;
   /** The Effects tab's content; without it the panel is the media library alone. */ effects?: ReactNode;
   tab: SidePanelTab; onTabChange: (tab: SidePanelTab) => void; onClose?: () => void;
   /** Inside the phone sheet: segmented tabs, no title row. */ sheet?: boolean }) {
-  const media = <FootagePanel resumeHint={resumeHint} onRemove={onRemoveAsset} onAttach={onAttachAsset} usedAssetIds={usedAssetIds} key={sourceRequest} videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onAdd={onAdd}/>;
+  const media = <FootagePanel resumeHint={resumeHint} onRemove={onRemoveAsset} onAttach={onAttachAsset} usedAssetIds={usedAssetIds} key={sourceRequest} videoImports={videoImports} assets={assets} upload={upload} onUpload={onUpload} onImportLink={onImportLink} onAdd={onAdd}/>;
   const current = effects ? tab : 'media';
   if (!sheet || !effects) return <aside className="preview-inspector" aria-label={current === 'media' ? 'Media' : 'Effects'}>
     {!sheet && <header className="inspector-head">
