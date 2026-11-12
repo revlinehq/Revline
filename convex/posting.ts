@@ -11,7 +11,7 @@ import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, POSTING_NOT_SET_UP, TITLE_LIMIT } from '../lib/posting/limits';
 import { postingReady } from '../lib/posting/server';
-import { accountCap, holdsSlot } from './postingBridge';
+import { accountCap, holdsSlot, overCapAccounts, overCapMessage } from './postingBridge';
 import { TIKTOK_VISIBILITY_NAMES, VISIBILITY_OPTIONS, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
 
 // The posting base: connected social accounts, posts to them, and the scheduler state machine.
@@ -77,16 +77,18 @@ export const platforms = query({
 const accountView = v.object({
   id: v.id('postingAccounts'), platform: postingPlatform, username: v.string(), displayName: v.union(v.string(), v.null()), avatarUrl: v.union(v.string(), v.null()),
   status: accountStatus, error: v.union(v.string(), v.null()), connectedAt: v.number(),
+  /** Beyond the plan's per-platform cap (a downgrade or lapse): still connected, but nothing can be posted to it. */
+  overLimit: v.optional(v.boolean()),
 });
 /** The signed-in owner's connected accounts. Tokens are never part of this. */
 export const accounts = query({
   args: {}, returns: v.array(accountView),
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
-    const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
+    const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect(), over = await overCapAccounts(ctx, ownerId, rows);
     return Promise.all(rows.filter(row => row.status !== 'disconnected').map(async row => {
       const state = accountState(row);
-      return { id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row), status: state.status, error: optional(state.error), connectedAt: row.createdAt };
+      return { id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row), status: state.status, error: optional(state.error), connectedAt: row.createdAt, ...(over.has(row._id) ? { overLimit: true } : {}) };
     }));
   },
 });
@@ -232,6 +234,17 @@ const text = (value: string | undefined, limit: number, name: string) => {
   if (trimmed && trimmed.length > limit) throw new ConvexError(`${name} can be up to ${limit} characters.`);
   return trimmed || undefined;
 };
+/** One account's own text and choices: what `createBatchFor` stores, and what a post waiting for its export is checked against at the press. */
+async function checkTarget(ctx: QueryCtx | MutationCtx, ownerId: string, target: BatchInput['targets'][number]) {
+  const account = await ownedAccount(ctx, ownerId, target.accountId);
+  return { account, caption: text(target.caption, CAPTION_LIMIT, 'A caption'), title: text(target.title, TITLE_LIMIT, 'A title'), choices: postChoices(account.platform, target) };
+}
+/** Each picked account's own text and choices, with exactly one per account, checked before an export is spent on them. */
+export async function checkTargets(ctx: QueryCtx | MutationCtx, ownerId: string, accountIds: Id<'postingAccounts'>[], targets: BatchInput['targets']) {
+  const picked = new Set(accountIds);
+  if (targets.length !== picked.size || targets.some(target => !picked.delete(target.accountId))) throw new ConvexError('Each picked account needs exactly one post.');
+  for (const target of targets) await checkTarget(ctx, ownerId, target);
+}
 export function batchText(args: Pick<BatchInput, 'caption' | 'title' | 'scheduledAt' | 'campaignId'>, now: number) {
   const caption = text(args.caption, CAPTION_LIMIT, 'A caption') ?? '', title = text(args.title, TITLE_LIMIT, 'A title');
   if (args.scheduledAt !== undefined && (!Number.isFinite(args.scheduledAt) || args.scheduledAt < now - 60_000 || args.scheduledAt > now + SCHEDULE_HORIZON_MS)) throw new ConvexError('Pick a time in the next 90 days.');
@@ -248,7 +261,7 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   const { caption, title } = batchText(args, now);
   const found = await postableExport(ctx, ownerId, args.jobId);
   if (!found.job) throw new ConvexError(found.error);
-  const project = await ctx.db.get(found.job.projectId);
+  const project = await ctx.db.get(found.job.projectId), over = await overCapAccounts(ctx, ownerId);
   const scheduledAt = args.scheduledAt !== undefined && args.scheduledAt > now ? args.scheduledAt : undefined, dueAt = scheduledAt ?? now;
   const batchId = await ctx.db.insert('postingBatches', {
     ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
@@ -256,12 +269,12 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
     ...(args.createdBy ? { createdBy: args.createdBy } : {}), ...(args.agentName ? { agentName: args.agentName } : {}),
   });
   for (const target of args.targets) {
-    const account = await ownedAccount(ctx, ownerId, target.accountId);
+    const { account, caption: own, title: ownTitle, choices } = await checkTarget(ctx, ownerId, target), postTitle = ownTitle ?? title;
     if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
-    const own = text(target.caption, CAPTION_LIMIT, 'A caption'), ownTitle = text(target.title, TITLE_LIMIT, 'A title') ?? title;
+    if (over.has(account._id)) throw new ConvexError(overCapMessage(account.username, account.platform));
     const postId = await ctx.db.insert('postingPosts', {
-      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(ownTitle ? { title: ownTitle } : {}),
-      ...postChoices(account.platform, target), status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
+      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
+      ...choices, status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
     });
     // "Post now" does not wait for the next scheduler tick.
     if (!scheduledAt) await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
@@ -279,6 +292,7 @@ export const retry = mutation({
     if (post.status !== 'failed') throw new ConvexError('Only a failed post can be retried.');
     const account = await ctx.db.get(post.accountId);
     if (!account || accountState(account).status !== 'connected') throw new ConvexError('Reconnect this account before retrying.');
+    if ((await overCapAccounts(ctx, ownerId)).has(account._id)) throw new ConvexError(overCapMessage(account.username, account.platform));
     await ctx.db.patch(postId, { status: 'scheduled', attempts: 0, error: undefined, dueAt: now, claimedAt: undefined, platformJobId: undefined, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
     return null;
@@ -525,6 +539,8 @@ export const claim = internalMutation({
     const account = await ctx.db.get(post.accountId);
     if (!account || account.status === 'disconnected') return fail('This account was disconnected before the post went out.');
     if (accountState(account).status !== 'connected') return fail(`Reconnect @${account.username}, then retry.`);
+    // A scheduled post fires under the plan the owner has now, not the one it was scheduled under.
+    if ((await overCapAccounts(ctx, post.ownerId)).has(account._id)) return fail(overCapMessage(account.username, account.platform));
     // Without Post Bridge set up, a due post that could go out is left exactly as it is: still scheduled, not failed,
     // and sent once the key exists. One that could not go out anyway (the checks above) fails with its own reason.
     if (!postingReady()) return null;

@@ -1,6 +1,6 @@
 'use client';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, List, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Copy, Download, List, Pencil, Plus, Send, Trash2 } from 'lucide-react';
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
@@ -22,6 +22,8 @@ export type TimelineTabActions = {
   onRename: (id: string, name: string) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onExport?: (id: string) => void;
+  /** Opens the post dialog for this timeline. */
+  onPost?: (id: string) => void;
 };
 
 /** Above this many timelines the list menu gets a search field. */
@@ -31,7 +33,7 @@ const isMac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(n
 const shortcut = (key: '[' | ']') => isMac() ? `⌘⌥${key}` : `Ctrl+Alt+${key}`;
 
 /** Spreadsheet-style tabs in the bar above the preview: each is its own video in this project. */
-export function TimelineTabs({ tabs, working, agentName, locked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
+export function TimelineTabs({ tabs, working, agentName, locked, postLocked, onError, ...actions }: { tabs: TimelineTab[]; working: boolean; /** The MCP app editing, or null for Revline's own AI. */ agentName?: string | null; locked: boolean; /** An AI run is active: posts wait for it. */ postLocked?: boolean; onError: (error: unknown) => void } & TimelineTabActions) {
   const [busy, setBusy] = useState(false);
   // The clicked tab highlights on the next frame; the timeline it opens follows.
   const [opening, setOpening] = useState<string | null>(null);
@@ -125,6 +127,7 @@ export function TimelineTabs({ tabs, working, agentName, locked, onError, ...act
         <DropdownMenuItem disabled={locked} onSelect={() => setDialog({ mode: 'rename', id: tab.id, name: tab.name })}><Pencil/>Rename</DropdownMenuItem>
         <DropdownMenuItem disabled={blocked} onSelect={() => void run(() => actions.onCreate('duplicate'))}><Copy/>Duplicate</DropdownMenuItem>
         {actions.onExport && <DropdownMenuItem onSelect={() => actions.onExport?.(tab.id)}><Download/>Export this video</DropdownMenuItem>}
+        {actions.onPost && <DropdownMenuItem disabled={postLocked || !tab.duration} onSelect={() => actions.onPost?.(tab.id)}><Send/>Post this video</DropdownMenuItem>}
         <DropdownMenuSeparator/>
         <DropdownMenuItem variant="destructive" disabled={blocked || tabs.length <= 1} onSelect={() => setDialog({ mode: 'remove', id: tab.id, name: tab.name })}><Trash2/>Delete timeline</DropdownMenuItem>
       </DropdownMenuContent></DropdownMenu>}

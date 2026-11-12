@@ -1,4 +1,5 @@
 import { chatAgent, createMessageHistory } from './lib/chat_data';
+import { newShareToken } from './lib/share_token';
 import { sharedAssetFields } from './lib/shared_media';
 import { createThread, saveMessages } from '@convex-dev/agent';
 import { ConvexError, v, type Infer } from 'convex/values';
@@ -130,7 +131,7 @@ export const importSnapshot = internalMutation({
       await saveMessages(ctx, chatAgent, { threadId, userId: ownerId, agentName: 'Revline', messages: args.conversation.slice(offset, offset + 100).map(({ role, text }) => ({ role, content: text })) });
     }
     await writeProject(ctx, projectId, { timeline, history, threadId });
-    const shareId = await ctx.db.insert('timelineShares', { ownerId, projectId, title, timeline: timeline, ...(args.publicChat.length ? { chat: args.publicChat } : {}), published: true, createdAt: now, updatedAt: now });
+    const shareId = await ctx.db.insert('timelineShares', { ownerId, projectId, title, timeline: timeline, token: newShareToken(), ...(args.publicChat.length ? { chat: args.publicChat } : {}), published: true, createdAt: now, updatedAt: now });
     const pinned = new Map<string, Doc<'assets'>>();
     for (const clip of timeline.clips) if (clip.assetId) pinned.set(clip.assetId, imported.get(clip.assetId)!);
     for (const asset of Array.from(pinned.values())) if (asset.audioAssetId) pinned.set(asset.audioAssetId, imported.get(asset.audioAssetId)!);

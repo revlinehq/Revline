@@ -1,1 +1,0 @@
-- Editor: the side panel has a Media and Effects rail; Effects names the selected clip, lists its effects with on/off, remove and settings, and keeps the timeline-wide controls below. Why: the founder approved the new sidebar design (without the Texture and Transitions groups).

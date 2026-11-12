@@ -1,1 +1,0 @@
-- Editor: the Media tab is back to its previous look (Add files, search, type filter, three-column thumbnails); the rail, Effects, clip header and Applied list stay. Why: the founder preferred the old Media panel.

@@ -3,7 +3,7 @@ import { remapTimelineAssets } from '../lib/editor/copy-timeline';
 import { writeProject,createProject } from './lib/project_data';
 import { recordAssetStorage } from './lib/storage_accounting';
 import { ConvexError,v } from 'convex/values';
-import { internalAction,internalQuery,internalMutation,mutation,query } from './_generated/server';
+import { internalAction,internalQuery,internalMutation,mutation,query,type QueryCtx } from './_generated/server';
 import { internal } from './_generated/api';
 import { enqueueMediaTask } from './lib/media_queue';
 import { timelineDuration } from '../lib/editor/types';
@@ -17,7 +17,22 @@ import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { timelineValidator,publicMediaAsset,sharedChatMessage,shareChatPreviewMessage } from './schema';
 import { previewSharedChat,snapshotSharedChat } from './lib/share_chat';
 import { normalizeTimeline } from '../lib/editor/types';
-const shareStatus=v.object({_id:v.id('timelineShares'),title:v.string(),published:v.boolean(),updatedAt:v.number(),includesChat:v.boolean(),timelineIds:v.array(v.string())});
+import { newShareToken } from './lib/share_token';
+const shareStatus=v.object({_id:v.id('timelineShares'),token:v.optional(v.string()),title:v.string(),published:v.boolean(),updatedAt:v.number(),includesChat:v.boolean(),timelineIds:v.array(v.string())});
+/** The published share a link key opens. A share with a token opens only with it, unless it is a link sent before
+ *  tokens existed (no token yet, or `openById`, kept until its owner turns sharing off). */
+async function openShare(ctx:QueryCtx,key:string,token?:string){
+  const dot=key.indexOf('.'),raw=dot<0?key:key.slice(0,dot),given=token??(dot<0?undefined:key.slice(dot+1));
+  const id=ctx.db.normalizeId('timelineShares',raw),share=id?await ctx.db.get(id):null;
+  if(!share?.published)return null;
+  if(share.token&&!share.openById&&!sameToken(given,share.token))return null;
+  return share;
+}
+function sameToken(given:string|undefined,expected:string){
+  if(given===undefined||given.length!==expected.length)return false;
+  let difference=0;for(let i=0;i<expected.length;i++)difference|=given.charCodeAt(i)^expected.charCodeAt(i);
+  return difference===0;
+}
 const sharedTab=v.object({id:v.string(),name:v.string(),timeline:timelineValidator});
 
 export const status=query({args:{projectId:v.id('projects')},returns:v.union(shareStatus,v.null()),handler:async(ctx,{projectId})=>{
@@ -25,7 +40,7 @@ export const status=query({args:{projectId:v.id('projects')},returns:v.union(sha
   const share=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
   if(!share)return null;
   const tabs=share.tabCount?await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',share._id)).take(20):[];
-  return {_id:share._id,title:share.title,published:share.published,updatedAt:share.updatedAt,includesChat:!!share.chat?.length,timelineIds:tabs.map(tab=>tab.timelineId)};
+  return {_id:share._id,...(share.token?{token:share.token}:{}),title:share.title,published:share.published,updatedAt:share.updatedAt,includesChat:!!share.chat?.length,timelineIds:tabs.map(tab=>tab.timelineId)};
 }});
 export const chatPreview=query({args:{projectId:v.id('projects')},returns:v.object({messages:v.array(shareChatPreviewMessage),truncated:v.boolean()}),handler:async(ctx,{projectId})=>previewSharedChat(ctx,await requireProject(ctx,projectId,await requireOwner(ctx)))});
 
@@ -54,8 +69,11 @@ export const publish=mutation({args:{projectId:v.id('projects'),chat:v.optional(
   if(assets.size>200)throw new ConvexError('A shared timeline supports up to 200 sources.');
   const existing=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).unique(),now=Date.now();
   const tabCount=tabs.length>1?tabs.length:undefined,openTimelineId=tabCount?primary.id:undefined;
-  const shareId=existing?existing._id:await ctx.db.insert('timelineShares',{projectId,ownerId,title:project.title,timeline,...(tabCount?{tabCount,openTimelineId}:{}),...(chat?.length?{chat}:{}),published:true,createdAt:now,updatedAt:now});
-  if(existing){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,tabCount,openTimelineId,chat:chat?.length?chat:undefined,published:true,updatedAt:now});}
+  // A new share, or one shared again after it was turned off, gets a new token: the old link stays dead. Updating a live
+  // share keeps its link: one already tokened keeps its token, and one sent before tokens keeps opening by id.
+  const token=existing?.published&&existing.token?existing.token:newShareToken(),openById=existing?.published&&(!existing.token||existing.openById)?true:undefined;
+  const shareId=existing?existing._id:await ctx.db.insert('timelineShares',{projectId,ownerId,title:project.title,timeline,token,...(tabCount?{tabCount,openTimelineId}:{}),...(chat?.length?{chat}:{}),published:true,createdAt:now,updatedAt:now});
+  if(existing){await removeShareAssets(ctx,shareId);await removeShareTabs(ctx,shareId);await ctx.db.patch(shareId,{title:project.title,timeline,tabCount,openTimelineId,chat:chat?.length?chat:undefined,published:true,updatedAt:now,token,openById});}
   if(tabCount)for(const [position,tab] of tabs.entries())await ctx.db.insert('shareTimelines',{shareId,timelineId:tab.id,name:tab.name,position,timeline:tab.timeline});
   for(const asset of assets.values())await ctx.db.insert('shareAssets',{shareId,ownerId,...sharedAssetFields(asset)});
   // The link's preview card: the timeline's name and a frame of it, rendered in the background.
@@ -76,15 +94,13 @@ export const requestCard=internalMutation({args:{shareId:v.id('timelineShares')}
 
 /** What a link preview needs: the timeline name and whether a card image exists. Public, like the share itself. */
 export const card=query({args:{shareId:v.string()},returns:v.union(v.object({title:v.string(),hasImage:v.boolean(),updatedAt:v.number()}),v.null()),handler:async(ctx,{shareId})=>{
-  const id=ctx.db.normalizeId('timelineShares',shareId),share=id?await ctx.db.get(id):null;
-  if(!share?.published)return null;
+  const share=await openShare(ctx,shareId);if(!share)return null;
   return {title:share.cardTitle??share.title,hasImage:!!(share.cardStorageId||share.cardImage),updatedAt:share.cardUpdatedAt??share.updatedAt};
 }});
 
 /** The card image itself, served by the share-card HTTP route. */
 export const cardImage=query({args:{shareId:v.string()},returns:v.union(v.string(),v.null()),handler:async(ctx,{shareId})=>{
-  const id=ctx.db.normalizeId('timelineShares',shareId),share=id?await ctx.db.get(id):null;
-  if(!share?.published)return null;
+  const share=await openShare(ctx,shareId);if(!share)return null;
   return share.cardStorageId?ctx.storage.getUrl(share.cardStorageId):share.cardImage??null;
 }});
 /** Only the one-shot storage action reads rendered card bytes. Metadata subscriptions keep file IDs. */
@@ -117,11 +133,10 @@ export const finishCard = internalMutation({ args: { snapshotId:v.id('frameSnaps
 }});
 export const revoke=mutation({args:{projectId:v.id('projects')},returns:v.null(),handler:async(ctx,{projectId})=>{
   await requireProject(ctx,projectId,await requireOwner(ctx));const share=await ctx.db.query('timelineShares').withIndex('by_project',q=>q.eq('projectId',projectId)).unique();
-  if(share){if(share.cardStorageId)await ctx.storage.delete(share.cardStorageId);await ctx.db.patch(share._id,{cardStorageId:undefined,cardImage:undefined,published:false,chat:undefined,tabCount:undefined,openTimelineId:undefined,updatedAt:Date.now()});await removeShareAssets(ctx,share._id);await removeShareTabs(ctx,share._id);}return null;
+  if(share){if(share.cardStorageId)await ctx.storage.delete(share.cardStorageId);await ctx.db.patch(share._id,{cardStorageId:undefined,cardImage:undefined,published:false,openById:undefined,chat:undefined,tabCount:undefined,openTimelineId:undefined,updatedAt:Date.now()});await removeShareAssets(ctx,share._id);await removeShareTabs(ctx,share._id);}return null;
 }});
 export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:v.id('timelineShares'),title:v.string(),updatedAt:v.number(),timeline:timelineValidator,tabs:v.optional(v.array(sharedTab)),openTimelineId:v.optional(v.string()),assets:v.array(publicMediaAsset),chat:v.optional(v.array(sharedChatMessage))}),v.null()),handler:async(ctx,{shareId})=>{
-  const id=ctx.db.normalizeId('timelineShares',shareId);if(!id)return null;
-  const share=await ctx.db.get(id);if(!share?.published)return null;
+  const share=await openShare(ctx,shareId);if(!share)return null;const id=share._id;
   const pins=await ctx.db.query('shareAssets').withIndex('by_share',q=>q.eq('shareId',id)).take(200);
   const assets=await Promise.all(pins.map(async pin=>({_id:String(pin.sourceId),fileName:pin.fileName,kind:pin.kind,url:await mediaUrl(ctx,pin),...await previewUrl(ctx,pin),...(pin.previewVersion!==undefined?{previewSize:pin.previewSize,previewWidth:pin.previewWidth,previewHeight:pin.previewHeight,previewFps:pin.previewFps,previewVersion:pin.previewVersion}:{}),...(pin.duration!==undefined?{duration:pin.duration}:{}),...(pin.width!==undefined?{width:pin.width}:{}),...(pin.height!==undefined?{height:pin.height}:{}),...(pin.audioAssetId?{audioAssetId:String(pin.audioAssetId)}:{}),...(pin.audioExtracted!==undefined?{audioExtracted:pin.audioExtracted}:{}),...(pin.waveform?{waveform:pin.waveform}:{}),...(pin.thumbnailStorageId?{thumbnailUrl:await ctx.storage.getUrl(pin.thumbnailStorageId)}:{})})));
   const rows=share.tabCount?await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',id)).take(20):[];
@@ -129,8 +144,8 @@ export const get=query({args:{shareId:v.string()},returns:v.union(v.object({_id:
   return {_id:share._id,title:share.title,updatedAt:share.updatedAt,timeline:share.timeline,...(tabs.length?{tabs,openTimelineId:share.openTimelineId??tabs[0].id}:{}),assets,...(share.chat?.length?{chat:share.chat}:{})};
 }});
 /** Copy one shared timeline (the tab being viewed, for multi-tab shares) into a new project. */
-export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timelineId:v.optional(v.string())},returns:v.id('projects'),handler:async(ctx,{shareId,timelineId})=>{
-  const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await ctx.db.get(shareId);if(!share?.published)throw new ConvexError('This timeline is no longer shared.');
+export const useTimeline=mutation({args:{shareId:v.id('timelineShares'),timelineId:v.optional(v.string()),token:v.optional(v.string())},returns:v.id('projects'),handler:async(ctx,{shareId,timelineId,token})=>{
+  const ownerId=await requireOwner(ctx);await requireEditorAccess(ctx,ownerId);const share=await openShare(ctx,shareId,token);if(!share)throw new ConvexError('This timeline is no longer shared.');
   const tab=timelineId&&share.tabCount?(await ctx.db.query('shareTimelines').withIndex('by_share',q=>q.eq('shareId',shareId)).take(20)).find(row=>row.timelineId===timelineId):undefined;
   const source=tab?.timeline??share.timeline,used=new Set([...source.clips.flatMap(clip=>[...clip.assetId?[clip.assetId]:[],...clip.normalizedAudio?[clip.normalizedAudio.assetId]:[]]),...source.audioNormalization?[source.audioNormalization.assetId]:[]]);
   // A multi-tab share pins every tab's media; the copy keeps only what its timeline uses (and linked audio).

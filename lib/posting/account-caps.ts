@@ -20,3 +20,10 @@ export function capMessage(platformName: string, cap: number) {
     ? `You have connected ${cap} of ${cap} ${platformName} accounts, the most your plan includes. Disconnect one to connect another.`
     : 'Connecting accounts is part of a Revline plan. Start your plan, then connect your accounts.';
 }
+
+/** What the user reads when a platform has more accounts than the plan includes (after a downgrade or lapse). */
+export function overCapNote(platformName: string, cap: number) {
+  return cap > 0
+    ? `Your plan posts to ${cap} ${platformName} ${cap === 1 ? 'account' : 'accounts'}: the ${cap === 1 ? 'one' : 'ones'} you connected first. Upgrade to post to the others, or disconnect one.`
+    : 'Posting is part of a Revline plan. Start your plan to post to these accounts.';
+}
