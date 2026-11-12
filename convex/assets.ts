@@ -4,7 +4,7 @@ import { allTabTimelines } from './timelineTabs';
 import { facecamAnalysis, speakerAnalysis } from '../lib/media-analysis/clipping';
 import { hydrateAsset,transportAsset,storeAnalysis,compactAnalysis } from './lib/asset_analysis';
 import { writeProject,projectIdentity } from './lib/project_data';
-import { recordAssetStorage,usedByActiveExport,forgetStorageObject } from './lib/storage_accounting';
+import { recordAssetStorage,usedByActiveExport,forgetStorageObject,setStorageObjectListed } from './lib/storage_accounting';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaConfig, mediaUrl, previewUrl } from './lib/media_storage';
 import { removeMediaAttachment } from './lib/shared_media';
@@ -95,11 +95,23 @@ export async function attachStockAudio(ctx: MutationCtx, ownerId: string, projec
   const count = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', projectId)).take(PROJECT_MEDIA_LIMIT);
   if (count.length >= PROJECT_MEDIA_LIMIT) throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(entry.waveform);
-  const id = await ctx.db.insert('assets', { ownerId, projectId, kind: 'audio', fileName: `${entry.name}.ogg`, r2Key: entry.r2Key, contentType: entry.contentType, size: entry.size, duration: entry.duration, waveform: entry.waveform, createdAt: Date.now() });
+  const id = await ctx.db.insert('assets', { ownerId, projectId, kind: 'audio', fileName: `${entry.name}.ogg`, r2Key: entry.r2Key, contentType: entry.contentType, size: entry.size, duration: entry.duration, waveform: entry.waveform, libraryHidden: true, createdAt: Date.now() });
   const asset = (await ctx.db.get(id))!;
   await recordAssetStorage(ctx, asset);
   return asset;
 }
+/** Keeps audio the editor made by itself (a catalog sound, a generated sound, audio from a video) as a file of its own:
+ *  it is listed in the Media tab and, when stored in the account, in the Library. */
+export const saveToLibrary = mutation({ args: { assetId: v.id('assets') }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), asset = await ctx.db.get(args.assetId);
+  if (!asset || asset.ownerId !== ownerId) throw new ConvexError('Media not found');
+  if (asset.kind !== 'audio') throw new ConvexError('Only audio can be saved to the library this way');
+  await requireEditorAccess(ctx, ownerId); await requireProject(ctx, asset.projectId, ownerId);
+  if (asset.libraryHidden === false) return null;
+  await ctx.db.patch(asset._id, { libraryHidden: false });
+  await setStorageObjectListed(ctx, ownerId, asset, true);
+  return null;
+}});
 export const list = query({ args: { projectId: v.id("projects"), limit: v.optional(v.number()) }, returns: v.array(assetWithUrl), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx); await projectIdentity(ctx,args.projectId,ownerId);
   const limit = args.limit ?? 50;

@@ -268,6 +268,9 @@ export type MediaAsset = {
   previewOriginalPlayable?: boolean;
   previewSegments?: PreviewSegment[];
   audioAssetId?: string; audioExtracted?: boolean;
+  r2Key?: string; soundRecipe?: string;
+  /** Audio the editor made by itself; see hiddenFromLibrary. */
+  libraryHidden?: boolean;
   /** Set on a background-removed copy (VP9 with alpha) of cutoutOf, on the same source timeline; frames before cutoutStart are transparent. */
   cutoutOf?: string; cutoutStart?: number;
   /** Set on a processed copy of derivedOf: a freeze still, or slow-motion/upscaled video on the same source timeline. */

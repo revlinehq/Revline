@@ -11,6 +11,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { MediaAsset, formatTime } from '@/lib/editor/types';
 import { LARGE_UPLOAD_BYTES } from '@/lib/editor/limits';
+import { hiddenFromLibrary } from '@/lib/editor/library-visibility';
 import './footage-panel.css';
 import { VideoImportProgress, type VideoImportState } from './video-link-import';
 import { MediaThumbnail } from './media-thumbnail';
@@ -32,7 +33,8 @@ export function FootagePanel({assets,onUpload,onImportLink,onAdd,upload,videoImp
   const [open,setOpen]=useState(true);
   const [kind,setKind]=useState<'all'|MediaAsset['kind']>('all');
   const extractedAudio=new Set(assets.flatMap(asset=>asset.kind==='video'&&asset.audioAssetId?[asset.audioAssetId]:[]));
-  const originals=assets.filter(asset=>asset.kind!=='audio'||!extractedAudio.has(asset._id));
+  // Audio the editor made by itself stays on the timeline only, unless the user saved it.
+  const originals=assets.filter(asset=>!hiddenFromLibrary(asset,extractedAudio.has(asset._id)));
   const sources=originals.filter(asset=>(kind==='all'||asset.kind===kind)&&asset.fileName.toLowerCase().includes(search.trim().toLowerCase()));
   const used=new Set(usedAssetIds);
   return <div className="footage-content footage-content-inspector footage-content-library">

@@ -219,6 +219,9 @@ export const assetFields = {
   waveform: v.optional(waveformValidator),
   // JSON recipe of an assistant-generated sound effect; editSound re-renders from it.
   soundRecipe: v.optional(v.string()),
+  // Audio made automatically (catalog sound, generated sound, audio extracted from a video): it stays usable on the
+  // timeline but is left out of the Media tab and the Library until the user saves it (false).
+  libraryHidden: v.optional(v.boolean()),
   // A background-removed copy (VP9 with alpha) of cutoutOf on the same source timeline;
   // frames before cutoutStart are transparent padding.
   cutoutOf: v.optional(v.id('assets')), cutoutStart: v.optional(v.number()),
@@ -291,7 +294,7 @@ export const sharedAssetFields = {
   fileName:v.string(),contentType:v.string(),size:v.number(),kind:assetKind,
   duration:v.optional(v.number()),width:v.optional(v.number()),height:v.optional(v.number()),
   audioAssetId:v.optional(v.id('assets')),audioExtracted:v.optional(v.boolean()),
-  waveform:v.optional(waveformValidator),thumbnailStorageId:v.optional(v.id('_storage')),
+  waveform:v.optional(waveformValidator),thumbnailStorageId:v.optional(v.id('_storage')),libraryHidden:v.optional(v.boolean()),
 };
 export const publicMediaAsset = v.object({
   previewSize:previewFields.previewSize,previewWidth:previewFields.previewWidth,previewHeight:previewFields.previewHeight,previewFps:previewFields.previewFps,previewVersion:previewFields.previewVersion,

@@ -554,14 +554,15 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
   await consumeAudioRequest(ctx,args.ownerId);
   return null;
 }});
-/** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. */
-export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg')))},returns:assetDocument,handler:async(ctx,args)=>{
+/** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. It stays
+ * out of the Media tab and the Library unless the user asked to save it there. */
+export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg'))),saveToLibrary:v.optional(v.boolean())},returns:assetDocument,handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
   if(!args.r2Key.startsWith(projectMediaPrefix(args.ownerId,args.projectId)))throw new ConvexError('Generated sound key is outside this project');
   const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
   validateWaveform(args.waveform);
-  const id=await ctx.db.insert('assets',{ownerId:args.ownerId,projectId:args.projectId,kind:'audio',fileName:args.fileName,r2Key:args.r2Key,contentType:args.contentType??'audio/wav',size:args.size,duration:args.duration,waveform:args.waveform,...(args.recipe?{soundRecipe:args.recipe}:{}),createdAt:Date.now()});
+  const id=await ctx.db.insert('assets',{ownerId:args.ownerId,projectId:args.projectId,kind:'audio',fileName:args.fileName,r2Key:args.r2Key,contentType:args.contentType??'audio/wav',size:args.size,duration:args.duration,waveform:args.waveform,...(args.recipe?{soundRecipe:args.recipe}:{}),libraryHidden:!args.saveToLibrary,createdAt:Date.now()});
   // A music bed knows its beats exactly, and narration its words: they are saved as its analysis, like measured ones.
   const asset=args.beats||args.transcript?await storeAnalysis(ctx,(await ctx.db.get(id))!,{...(args.beats?{beats:args.beats}:{}),...(args.transcript?{transcript:args.transcript}:{})}):(await ctx.db.get(id))!;
   await recordAssetStorage(ctx,asset);

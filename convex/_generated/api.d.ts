@@ -25,6 +25,7 @@ import type * as assistantMessages from "../assistantMessages.js";
 import type * as assistantPosting from "../assistantPosting.js";
 import type * as assistantTurnRecovery from "../assistantTurnRecovery.js";
 import type * as assistantWorkflow from "../assistantWorkflow.js";
+import type * as audioLibraryMigration from "../audioLibraryMigration.js";
 import type * as billing from "../billing.js";
 import type * as briefs from "../briefs.js";
 import type * as campaigns from "../campaigns.js";
@@ -184,6 +185,7 @@ declare const fullApi: ApiFromModules<{
   assistantPosting: typeof assistantPosting;
   assistantTurnRecovery: typeof assistantTurnRecovery;
   assistantWorkflow: typeof assistantWorkflow;
+  audioLibraryMigration: typeof audioLibraryMigration;
   billing: typeof billing;
   briefs: typeof briefs;
   campaigns: typeof campaigns;
