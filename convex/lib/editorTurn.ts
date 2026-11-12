@@ -26,6 +26,7 @@ import { CostHistoryWriter, costHistoryRecord } from '../../lib/ai/cost-history'
 import { editorRepairContext, modelTimeline, EDITOR_CONTEXT_NOTICE, EDITOR_CONTEXT_BOUNDARY } from "../../lib/ai/editor-context";
 import { assistantFailureReason, providerErrorText, providerFailureCode, MODEL_SILENCE_LIMITS } from "../../lib/ai/assistant-error";
 import { runFailure, runFailureOf, type RunFailureCode } from "../../lib/ai/run-failure";
+import { describeRunFailure, legacyRunFailure } from "../../lib/ai/failure-text";
 import { activeOpenAIKey, editorOpenAI } from "../../lib/ai/openai-keys";
 import { anthropic } from "@ai-sdk/anthropic";
 import { assertEditorModelConfigured, validatePinnedClaudeModel, editorProviderOptions, editorMaxOutputTokens, editorToolChoice, type ClaudeModelSelection } from "../../lib/ai/claude-model";
@@ -312,11 +313,11 @@ For edit requests, use one brief initial sentence stating the requested action, 
     catch (saveError) { cause = cause instanceof LaneFinishError?new LaneFinishError(`${cause.message} Partial save also failed: ${saveError instanceof Error?saveError.message:String(saveError)}`):saveError; }
     costLog.finish(cause instanceof IncompleteEditError ? cause.reason : cause instanceof AssistantTokenBudgetError ? 'token_budget' : cause instanceof AssistantToolRetryError ? 'repeated_tool_failure' : 'provider_or_tool_error', progress(), !(cause instanceof IncompleteEditError));
     // The code goes beside the sentence; the sentence stays plain words, because iOS and older chats show it as it is.
-    const coded = runFailureOf(cause);
-    // Uncoded: an error raised outside the run's own code paths (an SDK, a library). A crash in our code is internal;
-    // anything else stays uncoded and the chat reads its text as it did before codes.
-    const errorCode: RunFailureCode | undefined = coded?.code ?? providerFailureCode(cause) ?? (cause instanceof TypeError || cause instanceof ReferenceError || cause instanceof RangeError || cause instanceof SyntaxError ? 'internal' : undefined);
-    const failureReason = (cause instanceof IncompleteEditError || cause instanceof AssistantTokenBudgetError || cause instanceof AssistantToolRetryError || cause instanceof AssistantRenderReviewError || cause instanceof AssistantRefusalError || cause instanceof AnalysisStepError || cause instanceof LaneFinishError) ? cause.message : coded ? coded.message : cause instanceof Error && /timeline changed elsewhere|Source trim|Clip timing|Clip media|replacement was not saved|requested changes were not saved|Inspect the current timeline|^(?:OpenAI editing requires OPENAI_API_KEY in this Convex environment\.|Revline editing supports GPT-)/.test(cause.message) ? cause.message : assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.";
+    // Every failure the run raises carries a code and a sentence written for the user (lib/ai/run-failure). A provider's
+    // error is coded by its status and worded by assistant-error; text from a backend one release behind is read the old
+    // way (lib/ai/failure-text). The sentence stays plain words, because iOS and older chats show it as it is.
+    const described = describeRunFailure(cause), errorCode = turnFailureCode(cause);
+    const failureReason = described?.message || (assistantFailureReason(cause, selectedProvider) ?? providerErrorText(cause, selectedProvider) ?? "The assistant could not finish this request. Check the model configuration and try again.");
     console.error(`[ai-error] ${JSON.stringify({ runId: args.runId, provider: selectedProvider, reason: failureReason.slice(0, 400) })}`);
     const reason = partialSaved ? `${failureReason.replace(/\s*The pending replacement was not saved\./g, '')} The latest valid partial edit was saved as revision ${session?.revision}. Continue the unfinished part from the current timeline.` : failureReason;
     const edits = progress().savedEdits;
@@ -378,9 +379,17 @@ function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boo
   return `${name} is not available in this step. Continue with the tools provided.`;
 }
 
-/** Configuration, exhausted credit and explicit budgets need a user/backend change. */
+/** A repair pass can fix what failed for now (a conflict, a service that did not answer, input the model can correct).
+ * A limit, a refusal or a lost lock needs the user or the backend to change something first. */
 function repairable(error:unknown) {
-  if(error instanceof LaneFinishError||error instanceof AssistantTokenBudgetError||error instanceof AssistantToolRetryError||error instanceof AssistantRefusalError)return false;
-  const detail=assistantFailureReason(error)??(error instanceof Error?error.message:'');
-  return !/credits.*exhausted|billing|authentication failed|cannot access the selected model|requires .*API_KEY|token budget/i.test(detail);
+  // A pass that ran out of steps or output is this loop's own limit: the next pass continues the same request.
+  if(error instanceof IncompleteEditError)return true;
+  const code=turnFailureCode(error);
+  return code!=='limit'&&code!=='refused'&&code!=='locked';
+}
+
+/** What kind of failure ended a pass or the turn: the code it carries, a provider's status, or what text stored before
+ * codes shows. A crash in our own code is internal; any other uncoded error (an SDK's, a library's) stays uncoded. */
+function turnFailureCode(error:unknown):RunFailureCode|undefined {
+  return runFailureOf(error)?.code??providerFailureCode(error)??legacyRunFailure(error)?.code??(error instanceof TypeError||error instanceof ReferenceError||error instanceof RangeError||error instanceof SyntaxError?'internal':undefined);
 }

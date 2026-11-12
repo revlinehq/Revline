@@ -3,9 +3,11 @@ import { normalizeTimeline, type Timeline } from '../../lib/editor/types';
 import { rebaseNonDestructiveEdit } from './editSessionRebase';
 import { applyTimelineEdit } from '../../lib/editor/timeline-sync';
 import { runFailure, type RunFailureCode } from '../../lib/ai/run-failure';
+import { describeRunFailure } from '../../lib/ai/failure-text';
 import { isApprovalRejection, isOverlapPlacementRejection, type TimelineGestureRejection } from '../../lib/editor/timeline-edit-errors';
 
-const isTimelineConflict = (error: unknown) => /timeline changed elsewhere/i.test(error instanceof Error ? error.message : String(error));
+/** The timeline moved underneath the session: its code, or for a backend one release behind, its stored sentence. */
+const isTimelineConflict = (error: unknown) => describeRunFailure(error)?.code === 'conflict';
 export class IncompleteEditError extends Error {
   /** Step and output limits are limits; a model that stopped early did not answer in full. */
   get failureCode(): RunFailureCode { return this.reason === 'incomplete' ? 'unavailable' : 'limit'; }
