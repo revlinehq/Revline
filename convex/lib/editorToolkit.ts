@@ -724,7 +724,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     let started = false;
     while (Date.now() < deadline) {
       if (abortSignal.aborted) { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error('Stopped.'); }
-      const state = await ctx.runMutation(internal.mcp.takeFrames, { ownerId: run.ownerId, snapshotId });
+      // Poll with a query: inside an editing tool every mutation stores a save receipt. Only the discard below writes.
+      const state = await ctx.runQuery(internal.mcp.frames, { ownerId: run.ownerId, snapshotId });
       if (state.started) started = true;
       if (state.status === 'failed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); throw new Error(`Frames could not be rendered: ${state.error ?? 'unknown error'}`); }
       if (state.status === 'completed') { await ctx.runMutation(internal.mcp.discardFrames, { snapshotId }); return { revision: state.revision as number, ...(state.atRevision !== undefined ? { atRevision: state.atRevision as number } : {}), resolution:resolution??720, frames: (await snapshotFrames(state)).map(frame => ({ ...frame, time: Math.round(frame.time * 1000) / 1000 })) }; }
@@ -928,7 +929,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
           if (prepared.cachedResult) { results.push({ timelineId, ...prepared.cachedResult, reused: true }); return; }
           const snapshotId=await ctx.runMutation(internal.mcp.requestFrames,{ownerId:run.ownerId,projectId:run.projectId,...(editSession.staged?{runId:run.runId}:{}),timelineId,times:[],clipCheck:prepared.request});
           try {
-            while(true){abortSignal.throwIfAborted();const checked=await ctx.runMutation(internal.mcp.takeFrames,{ownerId:run.ownerId,snapshotId});
+            while(true){abortSignal.throwIfAborted();const checked=await ctx.runQuery(internal.mcp.frames,{ownerId:run.ownerId,snapshotId});
               if(checked.status==='failed')throw new AnalysisStepError(checked.error??'Clip check failed.');
               if(checked.status==='completed'){if(!checked.clipCheck)throw new Error('Clip check completed without data.');const result=clipCheckResult.parse(JSON.parse(checked.clipCheck));results.push({timelineId,...result});if(checked.frames?.[0])images.push({label:`${timelineId}: sampled framing only`,data:checked.frames[0].image,mimeType:'image/jpeg'});break;}
               await new Promise(resolve=>setTimeout(resolve,1000));
@@ -1358,7 +1359,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const deadline=Date.now()+540_000;
         while(true){
           abortSignal.throwIfAborted();
-          const state=await ctx.runMutation(internal.mcp.takeFrames,{ownerId:run.ownerId,snapshotId});
+          const state=await ctx.runQuery(internal.mcp.frames,{ownerId:run.ownerId,snapshotId});
           if(state.status==='failed')throw new AnalysisStepError(state.error??'Loudness normalization failed.');
           if(state.status==='completed'){
             const result=state.normalization;

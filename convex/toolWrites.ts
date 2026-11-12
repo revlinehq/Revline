@@ -14,6 +14,7 @@ import {FastFrameReview, fastReelFrameMoments, readFastFrameTimes, fastFrameEvid
 import {laneChecks, taskCheckLevel} from '../lib/ai/lanes/checks';
 
 // Only tool-layer mutations are reachable through the runner's transactional bridge.
+// mcp:takeFrames and referenceReads:take are no longer polled (queries are); they stay for runner images still deployed.
 const mutations = new Set([
   'aiCosts:record',
   'assistant:apply', 'assistant:undoLatestEdit', 'assistant:createRunTimeline', 'assistant:openRunTimeline',

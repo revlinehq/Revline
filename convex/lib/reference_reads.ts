@@ -102,7 +102,8 @@ export async function runLooksRead(ctx: ActionCtx, ownerId: string, projectId: I
   try {
     while (Date.now() < deadline) {
       if (signal?.aborted) throw new Error('Stopped.');
-      const state = await ctx.runMutation(internal.referenceReads.take, { ownerId, readId });
+      // A query, not take: a poll inside an editing tool must not store a save receipt. The discard below cleans up once.
+      const state = await ctx.runQuery(internal.referenceReads.get, { ownerId, readId });
       if (state.status === 'failed') throwReadFailure(state.error, 'The frames could not be measured');
       if (state.status === 'completed') return read((state.resultStorageId ? await ctx.runAction(internal.mediaTaskResults.consumeRead, { ownerId, readId }) : state.result) as ReadResult);
       await new Promise(resolve => setTimeout(resolve, 1500));
