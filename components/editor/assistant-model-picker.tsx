@@ -25,8 +25,8 @@ export function AssistantModelPicker({ model, models, onModel, effort, efforts, 
 }) {
   return <DropdownMenu>
     <DropdownMenuTrigger asChild>
-      <InputGroupButton size="sm" className="assistant-model-picker min-w-0 gap-1.5 px-2 text-[13px] font-normal text-neutral-400 hover:bg-[#363636] hover:text-neutral-100 focus-visible:ring-0 focus-visible:outline-none data-[state=open]:bg-[#363636] data-[state=open]:text-neutral-100" aria-label={`AI model: ${editorModelLabel(model)}, ${EDITOR_EFFORT_LABELS[effort]} effort`} disabled={disabled}>
-        <ProviderLogo id={model}/><span className="truncate">{editorModelLabel(model)}</span><span className="shrink-0 text-neutral-500">· {EDITOR_EFFORT_LABELS[effort]}</span><ChevronDown className="size-3 shrink-0"/>
+      <InputGroupButton size="sm" className="assistant-model-picker min-w-0 shrink gap-1.5 px-2 text-[13px] font-normal text-neutral-400 hover:bg-[#363636] hover:text-neutral-100 focus-visible:ring-0 focus-visible:outline-none data-[state=open]:bg-[#363636] data-[state=open]:text-neutral-100" aria-label={`AI model: ${editorModelLabel(model)}, ${EDITOR_EFFORT_LABELS[effort]} effort`} disabled={disabled}>
+        <ProviderLogo id={model}/><span className="truncate">{editorModelLabel(model)}</span><span className="shrink-0 text-neutral-500 @max-[18rem]/composer-actions:hidden">· {EDITOR_EFFORT_LABELS[effort]}</span><ChevronDown className="size-3 shrink-0"/>
       </InputGroupButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="start" side="top" sideOffset={6} className="min-w-44 border border-[#363636] bg-[#2a2a2a] text-neutral-200 ring-0" aria-label="AI model and effort">
