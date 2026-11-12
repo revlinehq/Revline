@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { useEffect, useEffectEvent, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
 import { ChevronLeft, ChevronRight, Clapperboard, Download, FolderInput, Pencil, Play, Trash2 } from 'lucide-react';
@@ -21,15 +21,22 @@ type SheetProps = {
 /** One file in a shadcn Sheet over the page (from the right; from the bottom on a phone): preview, name, facts, projects and actions. */
 export function LibrarySheet({ file, position, count, folderName, onClose, onStep, ...actions }: SheetProps) {
   const mobile = useIsMobile();
-  // Arrow keys step through the files, except where they already mean something: a text field or a player's controls.
-  function onKeyDown(event: KeyboardEvent) {
-    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' || event.altKey || event.metaKey || event.ctrlKey) return;
-    if ((event.target as HTMLElement).closest('input, textarea, video, audio')) return;
-    event.preventDefault();
-    onStep(event.key === 'ArrowLeft' ? -1 : 1);
-  }
-  return <Sheet open={!!file} onOpenChange={open => { if (!open) onClose(); }}>
-    <SheetContent side={mobile ? 'bottom' : 'right'} className="library-sheet" onKeyDown={onKeyDown}>
+  // Arrow keys step through the files, except where they already mean something: a text field, a player's controls or a dialog on top.
+  // Listened for on the window, so stepping onto the last file (which disables › and drops its focus) keeps the keys working.
+  const open = !!file, step = useEffectEvent(onStep);
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' || event.altKey || event.metaKey || event.ctrlKey || event.defaultPrevented) return;
+      if (event.target instanceof Element && event.target.closest('input, textarea, video, audio, [data-slot=dialog-content]')) return;
+      event.preventDefault();
+      step(event.key === 'ArrowLeft' ? -1 : 1);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open]);
+  return <Sheet open={open} onOpenChange={next => { if (!next) onClose(); }}>
+    <SheetContent side={mobile ? 'bottom' : 'right'} className="library-sheet">
       {file && <>
         <div className="library-sheet-head">
           <Button variant="ghost" size="icon" className="dash-more" aria-label="Previous file" disabled={position <= 0} onClick={() => onStep(-1)}><ChevronLeft /></Button>
