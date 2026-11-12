@@ -1,0 +1,35 @@
+/* Body of an Add media modal (components/media/add-media-upload.tsx). Dashboard tokens first, then the editor's,
+   then neutral greys, so it fits either surface. Static: no transitions, no focus rings; hover marks what is interactive. */
+.add-media-upload {
+  --amu-text: var(--dash-text, var(--ws-text, #ededed));
+  --amu-muted: var(--dash-muted, var(--ws-muted, #8f8f8f));
+  --amu-border: var(--dash-border, var(--ws-artifact-border, #333));
+  --amu-well: var(--dash-page, var(--ws-bg, #161616));
+  --amu-pill: var(--dash-pill, var(--ws-surface, #2a2a2a));
+  --amu-raised: var(--dash-card, var(--ws-hover, #222));
+  display: flex; flex-direction: column; gap: 12px; min-width: 0; color: var(--amu-text); font-size: 14px;
+}
+.add-media-upload-tabs { gap: 12px; }
+.add-media-upload .add-media-upload-pages { display: flex; width: 100%; height: 36px; padding: 3px; border-radius: var(--radius-md, 8px); background: var(--amu-pill); }
+.add-media-upload-pages [data-slot=tabs-trigger] { height: 100%; border: 0; border-radius: 6px; color: var(--amu-muted); font-size: 13px; transition: none; }
+.add-media-upload-pages [data-slot=tabs-trigger]:hover { background: none; color: var(--amu-text); }
+.add-media-upload-pages [data-slot=tabs-trigger][data-state=active] { background: var(--amu-raised); color: var(--amu-text); }
+.add-media-upload-pages svg { width: 14px; height: 14px; }
+.add-media-upload-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 200px; padding: 24px; border: 1px dashed var(--amu-border); border-radius: 12px; background: var(--amu-well); color: var(--amu-text); font: inherit; cursor: pointer; }
+.add-media-upload-drop:hover, .add-media-upload-drop[data-dragging] { border-color: var(--amu-muted); background: var(--amu-pill); }
+.add-media-upload-drop:disabled { opacity: .5; cursor: default; }
+.add-media-upload-drop svg { width: 24px; height: 24px; margin-bottom: 4px; color: var(--amu-muted); }
+.add-media-upload-drop strong { font-size: 14px; font-weight: 500; }
+.add-media-upload-drop span { color: var(--amu-muted); font-size: 13px; }
+.add-media-upload-drop small { margin-top: 8px; color: var(--amu-muted); font-size: 12px; }
+.add-media-upload-link { display: flex; flex-direction: column; gap: 10px; }
+.add-media-upload-label { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.add-media-upload-label svg { width: 14px; height: 14px; }
+.add-media-upload-field { display: flex; gap: 8px; min-width: 0; }
+.add-media-upload-field [data-slot=input] { flex: 1; min-width: 0; height: 36px; border-color: var(--amu-border); border-radius: var(--radius-md, 8px); background: var(--amu-well); font-size: 14px; }
+.add-media-upload-field [data-slot=input]::placeholder { color: var(--amu-muted); }
+.add-media-upload-field [data-slot=button] { flex: none; min-width: 76px; height: 36px; transition: none; }
+.add-media-upload-note { margin: 0; color: var(--amu-muted); font-size: 13px; line-height: 1.5; }
+.add-media-upload-error { margin: 0; color: #d98a76; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
+.add-media-upload :is(button, input, [data-slot=button], [data-slot=input], [data-slot=tabs-trigger]):focus-visible { outline: none; box-shadow: none; }
+.add-media-upload [data-slot=button]:active { transform: none; }

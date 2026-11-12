@@ -249,28 +249,10 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
   .library-empty { min-height: 320px; }
 }
 
-/* Add media: Upload and Paste a link pages. */
+/* Add media dialog: its body is components/media/add-media-upload. */
 .library-add-media[data-slot=dialog-content] { width: 480px; }
-.library-add-media-tabs { gap: 12px; }
-.library-add-media .library-add-media-pages { display: flex; width: 100%; height: 36px; padding: 3px; border-radius: var(--radius-md); background: var(--dash-pill); }
-.library-add-media-pages [data-slot=tabs-trigger] { height: 100%; border: 0; border-radius: 6px; color: var(--dash-muted); font-size: 13px; transition: none; }
-.library-add-media-pages [data-slot=tabs-trigger]:hover { background: none; color: var(--dash-text); }
-.library-add-media-pages [data-slot=tabs-trigger][data-state=active] { background: var(--dash-card); color: var(--dash-text); }
-.library-add-media-pages [data-slot=tabs-trigger]:focus-visible { outline: none; box-shadow: none; }
-.library-add-media-pages svg { width: 14px; height: 14px; }
-.library-add-media-drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 200px; padding: 24px; border: 1px dashed var(--dash-border); border-radius: 12px; background: var(--dash-page); color: var(--dash-text); font: inherit; cursor: pointer; }
-.library-add-media-drop:hover, .library-add-media-drop[data-dragging] { border-color: var(--dash-muted); background: var(--dash-pill); }
-.library-add-media-drop:focus-visible { outline: none; }
-.library-add-media-drop svg { width: 24px; height: 24px; margin-bottom: 4px; color: var(--dash-muted); }
-.library-add-media-drop strong { font-size: 14px; font-weight: 500; }
-.library-add-media-drop span { color: var(--dash-muted); font-size: 13px; }
-.library-add-media-drop small { margin-top: 8px; color: var(--dash-muted); font-size: 12px; }
-.library-add-media-link { gap: 10px; }
-.library-add-media-field { display: flex; gap: 8px; min-width: 0; }
-.library-add-media-field [data-slot=input] { flex: 1; min-width: 0; }
-.library-add-media-field [data-slot=button] { flex: none; min-width: 76px; height: 36px; }
+.library-link-imports { display: flex; flex-direction: column; gap: 8px; }
 .library-link-import { padding: 12px 14px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); }
 .library-link-import .video-import-progress { margin: 0; }
-.library-link-imports { display: flex; flex-direction: column; gap: 8px; }
 .library-link-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .library-link-failed span { flex: 1 1 240px; }
