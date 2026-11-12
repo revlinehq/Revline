@@ -24,3 +24,17 @@
 .plan-dialog .plan-card{box-shadow:0 24px 60px #0000004d}
 .plan-picker-message{margin:12px 0 0;text-align:center;color:var(--ws-muted);font-size:13px;line-height:1.5}
 .plan-picker-error{color:#b43a42}
+
+/* A plan limit above the upgrade cards, and the meters on Settings → Plan and in the editor. */
+.plan-dialog-notice{display:flex;flex-direction:column;gap:6px;margin:0 0 16px;padding:18px 20px;border:1px solid var(--ws-border);border-radius:14px;background:var(--ws-bg);color:var(--ws-text)}
+.plan-dialog-notice h2{margin:0;font-size:16px;font-weight:500;line-height:1.4}
+.plan-dialog-notice p{margin:0;color:var(--ws-muted);font-size:13px;line-height:1.5}
+.plan-meter{display:flex;flex-direction:column;gap:6px;width:min(280px,100%)}
+.plan-meter-label{display:flex;justify-content:space-between;gap:12px;font-size:13px;line-height:1.5}
+.plan-meter-label small{color:var(--ws-muted);font-size:12px}
+.plan-meter[data-level=warning] [data-slot=progress-indicator]{background:#e0a33a}
+.plan-meter[data-level=full] [data-slot=progress-indicator]{background:#e5534b}
+.ai-usage-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 12px;border-bottom:1px solid var(--ws-border,#3a3a3a);background:#2a2a2a;color:#e8e8e8;font-size:13px;line-height:1.5}
+.ai-usage-banner p{margin:0}
+.plan-meter [data-slot=progress-indicator]{transition:none}
+.manual-composer-dock .ai-usage-banner{margin:0 0 8px;border:1px solid #3a3a3a;border-radius:10px}

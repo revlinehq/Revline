@@ -7,8 +7,8 @@ import { useAction, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
 import { PLANS, type PlanTier } from '@/lib/billing/plan';
 import { usePlanStatus } from './use-plan-status';
-import { PlanPicker } from './plan-picker';
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
+import { UpgradeDialog } from './plan-limit-dialog';
+import { PlanUsageRows, usePlanUsage } from './plan-usage';
 import { SettingsBody, SettingsCard, SettingsRow } from '@/components/dashboard/settings-card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
@@ -18,6 +18,7 @@ export type CheckoutReturn = 'success' | 'canceled' | undefined;
 export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutReturn }) {
   const { isAuthenticated, isLoading } = useConvexAuth();
   const status = usePlanStatus();
+  const usage = usePlanUsage();
   const portal = useAction(api.billing.createPortal);
   const [busy, setBusy] = useState(false);
   const [plansOpen, setPlansOpen] = useState(false);
@@ -65,11 +66,13 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
       : subscription === 'apple' ? <>
         <SettingsRow label="Plan">{`Revline ${plan.name}`}</SettingsRow>
         <SettingsRow label="Billing">App Store subscription</SettingsRow>
+        {usage && <PlanUsageRows usage={usage} />}
         <SettingsBody><p>Your membership is active on the web and in the iOS app. Manage your plan, renewal, or cancellation in the App Store.</p></SettingsBody>
       </> : <>
         <SettingsRow label="Plan">{status.subscribed || status.complimentary ? `Revline ${plan.name}` : 'No plan yet'}</SettingsRow>
         <SettingsRow label="Price">{status.complimentary ? 'Complimentary membership' : status.subscribed ? `$${plan.monthlyPrice} per month · ${plan.currency}` : `From $${PLANS.starter.monthlyPrice} per month · ${PLANS.starter.currency}`}</SettingsRow>
         <SettingsRow label="Status">{status.complimentary ? status.complimentaryExpiresAt ? `Free access until ${new Date(status.complimentaryExpiresAt).toLocaleDateString()}` : 'Free access forever' : status.subscribed ? 'Your current plan' : 'No active plan'}</SettingsRow>
+        {usage && (status.subscribed || status.complimentary) && <PlanUsageRows usage={usage} />}
         {(changing || checkoutReturn || !status.complimentary || error) && <SettingsBody>
           {changing && <p role="status">Moving you to {PLANS[changingTo!].name}. This takes a few seconds…</p>}
           {checkoutReturn && <p role="status">{checkoutReturn === 'success' ? status.subscribed ? 'Your membership is ready. You can start editing.' : 'Checkout completed. Waiting for Stripe to confirm your membership…' : 'Checkout was canceled. Your membership has not changed.'}</p>}
@@ -78,13 +81,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
             : `Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice}${status.trialEligible ? ` after a ${PLANS.pro.trialDays}-day free trial` : ''}, and Studio $${PLANS.studio.monthlyPrice} a month. Cancel anytime.`}</p>}
           {error && <p className="dash-error" role="alert">{error}</p>}
         </SettingsBody>}
-        <Dialog open={offerPlans && plansOpen} onOpenChange={setPlansOpen}>
-          <DialogContent className="plan-dialog">
-            <DialogTitle className="sr-only">Revline plans</DialogTitle>
-            <DialogDescription className="sr-only">Starter, Pro and Studio: what each includes, and how to get it.</DialogDescription>
-            <PlanPicker status={status} onChanged={next => { setChangingTo(next); setPlansOpen(false); }} />
-          </DialogContent>
-        </Dialog>
+        <UpgradeDialog open={offerPlans && plansOpen} onOpenChange={setPlansOpen} status={status} onChanged={setChangingTo} />
       </>}
   </SettingsCard>;
 }
