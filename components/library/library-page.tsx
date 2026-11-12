@@ -26,6 +26,8 @@ import { FileRowsSkeleton, FileTilesSkeleton, FolderTilesSkeleton } from './libr
 import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
 import { LibraryUsage } from './library-usage';
 import { useLibraryUpload, type UploadRow } from './use-library-upload';
+import { LibraryLinkImports } from './library-link-imports';
+import { AddMediaDialog } from './library-add-media';
 import './library.css';
 
 type Sort = 'newest' | 'oldest' | 'largest';
@@ -150,7 +152,8 @@ export function LibraryPage() {
   // Phone: New folder and Upload sit in the navbar.
   const [navbar, setNavbar] = useState<HTMLElement | null>(null);
   useEffect(() => setNavbar(document.getElementById('dash-navbar-page')), []);
-  const pick = () => fileInput.current?.click();
+  const [adding, setAdding] = useState(false), importLink = useMutation(api.library.importLink);
+  const pick = () => setAdding(true);
   const newFolder = () => setDialog({ kind: 'folder' });
 
   const folderMenu = (folder: LibraryFolder) => <FolderMenu name={folder.name} onRename={() => setRenaming(folder.id)} onMove={() => setDialog({ kind: 'move', fileIds: [], folderIds: [folder.id], from: folder.parentId })} onDelete={() => setDialog({ kind: 'deleteFolder', folder })} />;
@@ -190,6 +193,8 @@ export function LibraryPage() {
     {(error || uploads.error) && <p className="dash-error" role="alert">{error || uploads.error}</p>}
     {cleanupProjects.length > 0 && cleanup !== 'complete' && <p className="library-status" role={cleanup === 'failed' ? 'alert' : 'status'}>{cleanup === 'failed' ? 'Project cleanup stopped. Retry to finish removing its files.' : 'Finishing project cleanup…'}{cleanup === 'failed' && <Button variant="soft" size="sm" disabled={retrying} onClick={() => void retryCleanup()}>{retrying ? 'Retrying…' : 'Retry cleanup'}</Button>}</p>}
     {uploads.rows.length > 0 && <UploadRows rows={uploads.rows} onCancel={uploads.cancel} onRetry={uploads.retry} />}
+    <LibraryLinkImports onUpload={() => fileInput.current?.click()} />
+    {adding && <AddMediaDialog place={here} onClose={() => setAdding(false)} onUpload={files => uploads.enqueue(files, folderId)} onImportLink={async url => { await importLink({ url, ...(folderId ? { folderId } : {}) }); }} />}
 
     <div className="library-body" aria-busy={loading}>
       {empty ? <div className="library-empty">
