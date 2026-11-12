@@ -9,7 +9,8 @@ import { MediaThumbnail } from './media-thumbnail';
 import type { MediaAsset } from '@/lib/editor/types';
 import './media-import-dialog.css';
 
-export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo, disabled=false, projectMedia=[], onPickProjectMedia }: {
+export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo, disabled=false, projectMedia=[], onPickProjectMedia, focusLink=false }: {
+  /** Opens with the cursor in the video-link field (the Media panel's Import link). */ focusLink?:boolean;
   open:boolean; onOpenChange:(open:boolean)=>void; onUpload:(files:File[])=>void;
   onImportVideo?:(url:string)=>Promise<void>; disabled?:boolean;
   /** Media already in the project that can go out with the message instead of uploading it again. */
@@ -24,7 +25,7 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
     setDragging(false);onOpenChange(false);onUpload(files);
   }
   return <Dialog open={open} onOpenChange={value=>{if(!starting){setDragging(false);onOpenChange(value);}}}>
-    <DialogContent className="media-import-dialog" onDragEnter={event=>{
+    <DialogContent className="media-import-dialog" onOpenAutoFocus={event=>{if(!focusLink)return;const field=document.querySelector<HTMLInputElement>('.media-import-dialog .video-link-import input');if(field){event.preventDefault();field.focus();}}} onDragEnter={event=>{
       if(event.dataTransfer.types.includes('Files'))event.stopPropagation();
     }} onDragOver={event=>{
       if(!event.dataTransfer.types.includes('Files'))return;
