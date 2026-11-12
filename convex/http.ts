@@ -33,7 +33,7 @@ async function syncSubscription(ctx: HttpCtx, stripe: Stripe, stripeSubscription
 }
 const ENDED = ['canceled', 'incomplete_expired'];
 /** A disputed charge ends every Revline subscription of that customer now; a fully refunded subscription invoice
- *  ends that subscription now. Both read current Stripe state, so a redelivered event finds nothing left to cancel;
+ *  ends that subscription now when it was the latest invoice. Both read current Stripe state, so a redelivered event finds nothing left to cancel;
  *  the cancel itself carries an idempotency key per event and subscription. */
 async function revokeForChargeback(ctx: HttpCtx, stripe: Stripe, event: Stripe.Event) {
   const ids = new Set<string>();
@@ -56,6 +56,9 @@ async function revokeForChargeback(ctx: HttpCtx, stripe: Stripe, event: Stripe.E
       const ref = invoice.parent?.subscription_details?.subscription;
       if (!ref) continue;
       const sub = typeof ref === 'string' ? await stripe.subscriptions.retrieve(ref) : ref;
+      // Only the invoice for the period being paid for: refunding an old period (goodwill) leaves the current one alone.
+      const latest = typeof sub.latest_invoice === 'string' ? sub.latest_invoice : sub.latest_invoice?.id;
+      if (latest !== invoice.id) continue;
       if (!ENDED.includes(sub.status) && isEditorSubscription(fromStripeSubscription(sub))) ids.add(sub.id);
     }
   }
@@ -120,8 +123,8 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
       if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
         await syncSubscription(ctx, stripe, (event.data.object as Stripe.Subscription).id, event.id);
       } else {
-        if (event.type === 'charge.dispute.created' || event.type === 'charge.refunded') await revokeForChargeback(ctx, stripe, event);
         await processEvent(ctx, components.stripe, event, stripe);
+        if (event.type === 'charge.dispute.created' || event.type === 'charge.refunded') await revokeForChargeback(ctx, stripe, event);
       }
     } catch {
       // No Stripe payloads, customer details or signing errors in public output.
