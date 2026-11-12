@@ -47,7 +47,7 @@ export async function recordIncident(ctx: MutationCtx, input: Infer<typeof incid
     samples: [...(existing?.samples ?? []).slice(-3), sample],
   };
   const generation = (existing?.generation ?? 0) + (opens ? 1 : 0);
-  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}), ...(client ? { needsTriage: true } : {}) }));
+  const id = existing?._id ?? await ctx.db.insert('incidents', tableRow<'incidents'>()({ ...value, status: 'open', delivery: input.kind === 'agent-limitation' || client ? 'finished' : 'pending', generation, ...(agentFiled ? { issueAttempts: 0 } : {}), ...(client ? { needsTriage: true } : {}) }));
   // A new occurrence gives an exhausted issue delivery a fresh budget; issue bodies are bounded now.
   const issueRetry = agentFiled && (existing?.issueAttempts ?? 0) >= 5 ? { issueAttempts: 0, issueNextAttempt: undefined } : {};
   if (existing) await ctx.db.patch(id, tablePatch<'incidents'>()({ ...value, ...issueRetry, ...(opens ? { status: 'open', delivery: 'pending', generation, claimToken: undefined, claimedAt: undefined, prUrl: undefined, deliveryError: undefined } : {}) }));

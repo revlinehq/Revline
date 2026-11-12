@@ -1,5 +1,6 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v, ConvexError } from 'convex/values';
+import { internal } from './_generated/api';
 import { internalMutation, internalQuery, mutation, query, type MutationCtx } from './_generated/server';
 import { incidentArgs, incidentDeployment, incidentFingerprint, recordIncident } from './lib/incidents';
 import { z } from 'zod';
@@ -86,7 +87,7 @@ const CLIENT_KINDS = new Set(['user-failure', 'preview-error', 'turn-failure', '
 const CLIENT_MESSAGE_LIMIT = 500;
 const CLIENT_STACK_LIMIT = 2000;
 // Any signed-in account can call this with free text, so its rows never reach the autonomous fixer on their own:
-// they wait for triage, earn no priority, never re-open a resolved incident and never merge into a server-filed row.
+// they wait for triage (out of the delivery queue), earn no priority, never re-open a resolved incident and never merge into a server-filed row.
 export const reportClient = mutation({
   args: { source: v.string(), kind: v.string(), message: v.string(), stack: v.optional(v.string()), context: v.any(), projectId: v.optional(v.string()), runId: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -216,5 +217,6 @@ export const triageClient = mutation({ args: identity, handler: async (ctx, args
   const row = await ctx.db.get(args.id);
   if (!row?.needsTriage || row.status === 'resolved' || row.generation !== args.generation) return false;
   await ctx.db.patch(row._id, { needsTriage: false, delivery: 'pending', claimToken: undefined });
+  if (process.env.INCIDENT_WEBHOOK_URL) await ctx.scheduler.runAfter(0, internal.incidentDelivery.webhook, { id: row._id, generation: row.generation });
   return true;
 } });
