@@ -1,0 +1,14 @@
+/* The tab sits just left of the media panel, over the stage's right edge; its flared top and bottom curve into that edge. */
+.media-tab{position:absolute;top:50%;left:-30px;z-index:15;display:block;width:30px;height:116px;padding:0;border:0;background:none;transform:translateY(-50%);cursor:pointer;color:var(--ed-text-2,var(--ws-muted,#858585))}
+.media-tab-shape{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.media-tab-shape>path:first-child{fill:var(--ed-panel,var(--ws-surface,#fff));transition:fill 120ms}
+/* A tall, shallow chevron: points left to open the panel, flips to point right to close it. */
+.media-tab-arrow{position:absolute;left:11px;top:44px;width:10px;height:28px;fill:none;stroke:currentColor;stroke-width:1.6px;stroke-linecap:round;stroke-linejoin:round;transition:transform 300ms cubic-bezier(.32,.72,0,1)}
+.media-tab[data-open] .media-tab-arrow{transform:scaleX(-1)}
+.media-tab-edge{fill:none;stroke:var(--ws-artifact-border,#2d2d2d);stroke-width:1px;vector-effect:non-scaling-stroke}
+/* Open, the tab becomes the panel's own edge: panel colour, the divider traced around its curves, covering the divider line. */
+.media-tab[data-open] .media-tab-shape>path:first-child{fill:var(--ws-bg,#101010)}
+.media-tab:hover{color:var(--ed-text,var(--ws-text,#292929))}
+.media-tab:hover .media-tab-shape>path:first-child{fill:var(--ed-surface,var(--ws-hover,#f4f4f4))}
+.editor-app .media-tab:focus-visible{outline:none}
+.media-tab:focus-visible .media-tab-shape>path:first-child{stroke:var(--revline-accent,#8b5cf6);stroke-width:1.5px}
