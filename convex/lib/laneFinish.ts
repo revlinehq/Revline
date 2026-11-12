@@ -22,6 +22,7 @@ import { fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-
 import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
+import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
 import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
 import { MAX_SHEET_FRAMES } from '../../lib/ai/frame-sampling';
@@ -35,6 +36,13 @@ export class FramesUnavailableError extends Error {}
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
   return new LaneFinishError(`The ${lane} task stopped because its finish check kept failing with nothing fixed in between: ${failures}`);
+}
+/** What an agent does once its task is closed. An MCP agent's job can outlive one task (many clips), so it names
+ * the call that continues; an in-app request ends and the user sends the next one. */
+export function exhaustedNext(overMcp: boolean) {
+  return overMcp
+    ? 'Stop editing this task: finish and the editing tools are closed for it and it stays unfinished. Report these failures honestly. To continue other work, call startTask for a new task; finish is available on every task.'
+    : 'Stop. finish kept failing, so finish and the editing tools are now closed for this request. Report these failures honestly; this task is unfinished.';
 }
 type Render = (
   times: number[],
@@ -97,6 +105,10 @@ export async function finishLane(
     failures.push(...looks.failures);
     warnings.push(...looks.warnings);
   }
+  // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
+  // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.
+  const cutRead = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId);
+  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys((cutRead.output as { accepted?: Record<string, string> }).accepted ?? {}), !!task.script));
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;

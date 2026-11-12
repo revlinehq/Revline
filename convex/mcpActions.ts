@@ -2,6 +2,7 @@
 import { retryAbortedTransaction } from './lib/retry_aborted_transaction';
 import { safely } from './lib/safely';
 import { snapshotFrames } from '../lib/ai/snapshot-frames';
+import { argumentKey } from '../lib/ai/step-timing';
 import { MAX_SHEET_FRAMES, evenly } from '../lib/ai/frame-sampling';
 import { LANES, laneToolAllowed, laneToolError, capabilityTools, toolCapabilities } from '../lib/ai/lanes';
 import { checkInstructions, requestChecks, taskCheckLevel } from '../lib/ai/lanes/checks';
@@ -42,7 +43,7 @@ const PROJECT_TOOLS = {
   renameProject: { description: 'Rename a project.', inputSchema: z.object({ projectId: projectIdField, title: z.string().min(1).max(120) }) },
   duplicateProject: { description: 'Copy a whole project (every timeline tab and its media) into a new project, e.g. to try another version without touching the original. Returns the new projectId.', inputSchema: z.object({ projectId: projectIdField, title: z.string().min(1).max(120).optional() }) },
   deleteProject: { description: 'Permanently delete a project with its timelines, chat and exports. Only when the user explicitly asks to delete it; confirm must be true. Not possible during an edit or render.', inputSchema: z.object({ projectId: projectIdField, confirm: z.literal(true) }) },
-  importVideoLink: { description: 'Import a video from a link (YouTube and other supported sites) into a project, or into a new project when projectId is omitted. Any length imports. When only part of a long video is needed (a moment from a podcast, a talk, a stream recording), pass start and end in SOURCE seconds of the original video and only that part is downloaded, which is much faster; pad the range a few seconds on each side, then trim to the exact words after transcribing. The imported file starts at 0 at the range start. Returns a taskId to poll with getMediaTask.', inputSchema: z.object({ url: z.string().url(), projectId: projectIdField.optional(), start: z.coerce.number().min(0).optional().describe('SOURCE second of the original video to start from; needs end.'), end: z.coerce.number().positive().optional().describe('SOURCE second to stop at, after start.') }) },
+  importVideoLink: { description: 'Import a video from a link into a project, or into a new project when projectId is omitted. Supported: YouTube, Twitch (a VOD at twitch.tv/videos/<id>, also while its broadcast is still live, or a clip link), Kick recordings, X posts, Dailymotion, Streamable, Loom, or a direct link to a video file (Instagram, Facebook, TikTok, Vimeo and Rumble refuse server downloads: ask for the file). One import brings in at most 3 hours. For anything longer (a multi-hour stream VOD), or when only part is needed, pass start and end in SOURCE seconds of the original video: only that part is downloaded, which is much faster, and several ranges import as separate sources. Pad a range a few seconds on each side, then trim to the exact words after transcribing. The imported file starts at 0 at the range start; only a Twitch range longer than 3 minutes starts on the keyframe before it, up to 2 seconds early, so take exact times from its transcript. A live channel link, a private, subscriber-only or signed-in video cannot be imported: say so and ask for the file (uploadMedia). Returns a taskId to poll with getMediaTask; a failed task says why and what to do instead.', inputSchema: z.object({ url: z.string().url(), projectId: projectIdField.optional(), start: z.coerce.number().min(0).optional().describe('SOURCE second of the original video to start from; needs end.'), end: z.coerce.number().positive().optional().describe('SOURCE second to stop at, after start.') }) },
   uploadMedia: { description: 'Upload a local video, image or audio file into a project. No file metadata is required. Returns a shell script that reads size, dimensions and duration itself, uploads the file, and prints the arguments for finishUpload. Run it with sh on the machine holding the file (Node 22+ and ffprobe required), then pass its JSON to finishUpload. Upload access lasts one hour. Callers that already know all metadata may still supply it; that legacy script prints a parts array instead.', inputSchema: z.object({ projectId: projectIdField, filePath: z.string().min(1).describe('Local path of the file, used only to write the upload script.'), fileName: z.string().min(1).max(255), contentType: z.string().regex(/^(?:(video|image|audio)\/[\w.+-]+|model\/gltf-binary)$/).describe('MIME type, e.g. video/mp4, video/quicktime, image/png, audio/mpeg.'), size: z.number().int().positive().optional().describe('Optional known byte size. Omit metadata to let the upload script read it.'), width: z.number().int().positive().optional(), height: z.number().int().positive().optional(), duration: z.number().positive().optional() }) },
   copyMedia: { description: 'Copy media you already have in another of your Revline projects into this project, without uploading it again. Find the source assetIds with getProject on the other project. Only your own projects; returns the new assetId for each, to place with addMedia.', inputSchema: z.object({ projectId: projectIdField.describe('The project to copy the media into.'), assetIds: z.array(z.string().min(1)).min(1).max(20).describe('Asset IDs from another of your projects (getProject lists them).') }) },
   finishUpload: { description: 'Finish an uploadMedia upload with the uploadId and parts from the JSON its script printed. Optional projectId must match the upload’s project. Adds the file to the project media and starts processing; place it on the timeline with addMedia.', inputSchema: z.object({ projectId: projectIdField.optional(), uploadId: z.string().min(1), parts: z.array(z.object({ partNumber: z.number().int().positive(), etag: z.string().min(1) })).min(1) }) },
@@ -77,6 +78,9 @@ function editorTools(ctx: ActionCtx, options: Parameters<typeof createEditorTool
   return { toolkit, tools: Object.fromEntries(Object.entries(toolkit.tools).filter(([name]) => toolBehavior(name)?.mcp !== 'hidden' && name!=='switchLane')) as unknown as Record<string, EditorTool> };
 }
 
+// The MCP catalog drops hidden tools and switchLane. finish ends every task, so it must never be one of them: checked
+// when the module loads, so such a change fails the deploy (issue #357).
+if (toolBehavior('finish')?.mcp === 'hidden') throw new Error('finish must stay in the MCP tool list: every task ends with it.');
 const catalogOptions = (): Parameters<typeof createEditorToolkit>[1] => ({
   run: { projectId: 'catalog' as Id<'projects'>, ownerId: 'catalog', runId: 'catalog' },
   project: { timeline: { clips: [], fps: 60, aspectRatio: 'landscape' }, revision: 0, aspectRatio: 'landscape' } as unknown as Doc<'projects'>,
@@ -120,7 +124,7 @@ function toolFailureMessage(text: string): string {
 export const callTool = internalAction({ args: { ownerId: v.string(), agentName: v.optional(v.string()), agentClientId:v.optional(v.id('mcpConnections')), connectionId:v.optional(v.string()), name: v.string(), arguments: v.any() }, returns: callResult, handler: async (ctx, args): Promise<CallResult> => {
   const startedAt=Date.now();
   // The task whose working badge this call raised, and the task this call ends. Settled in finally, so thrown failures count.
-  let busyTask: string | undefined, endedTask: string | undefined;
+  let busyTask: string | undefined, endedTask: string | undefined, timedTask: string | undefined;
   try {
   const input = args.arguments && typeof args.arguments === 'object' ? args.arguments as Record<string, unknown> : {};
   const projectTool=args.name in PROJECT_TOOLS;
@@ -136,6 +140,7 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   }) as Doc<'mcpLaneSessions'>|null;
   // finish always ends the task's live session, passed or not; its result still records the attempt honestly, and any
   // later call on the task reopens it (touchTaskAgent) so the agent can fix the failures and finish again.
+  if(session)timedTask=session.taskId;
   if(session&&args.name==='finish')endedTask=session.taskId;
   if(taskScoped&&input.taskId&&!session)return result('Task not found for this owner and project. Use the taskId and projectId returned by startTask.',true);
   // Only an explicit task ID may supply omitted targets. A connection's last
@@ -218,6 +223,9 @@ export const callTool = internalAction({ args: { ownerId: v.string(), agentName:
   } catch (error) { await ctx.runMutation(internal.incidents.reportMcp, { ownerId: args.ownerId, projectId, toolName: args.name, message: message(error), stack: error instanceof Error ? error.stack : undefined }).catch(() => {}); return result(message(error), true); }
   } catch(error){return result(message(error),true);}
   finally{
+    // Where an MCP task's time went: the tool name and how long the call took, nothing of what was asked (lib/ai/step-timing.ts).
+    timedTask??=busyTask??endedTask;
+    if(timedTask&&/^[A-Za-z]{1,48}$/.test(args.name))await ctx.runMutation(internal.runTimings.record,{runId:timedTask,source:'mcp',steps:[{step:0,kind:'tool',name:args.name,at:startedAt,ms:Date.now()-startedAt,key:argumentKey(args.arguments)}]}).catch(()=>null);
     if(endedTask)await ctx.runMutation(internal.mcpConnections.endTask,{ownerId:args.ownerId,taskId:endedTask}).catch(()=>null);
     else if(busyTask)await ctx.runMutation(internal.mcpConnections.settleTaskAgent,{ownerId:args.ownerId,taskId:busyTask,startedAt}).catch(()=>null);
   }

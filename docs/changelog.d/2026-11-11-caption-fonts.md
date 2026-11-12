@@ -1,0 +1,1 @@
+- Text fonts: Bangers, Outfit, Rubik, Figtree and more Poppins weights join the one font list every caption, title, tool and renderer reads; new captions and titles default to Montserrat Bold instead of Space Grotesk. Why: the founder asked for better fonts as global defaults, ahead of caption presets.

@@ -18,6 +18,7 @@ export type TextLookId = typeof TEXT_LOOKS[number]['id'];
 export function textLookPatch(clip: Clip, id: TextLookId): Partial<Clip> {
   if (clip.kind !== 'caption' && clip.kind !== 'graphic') throw new Error('Select text before applying a look.');
   const look: TextLook = TEXT_LOOKS.find(item => item.id === id)!;
-  return { textGradient:undefined, color: look.color, background: look.background, fontSize: look.fontSize, blendMode: look.blendMode, textStyle: { ...look.style } };
+  // A look replaces the whole appearance, a caption preset's word styling included.
+  return { textGradient:undefined, captionPreset:undefined, color: look.color, background: look.background, fontSize: look.fontSize, blendMode: look.blendMode, textStyle: { ...look.style } };
 }
 

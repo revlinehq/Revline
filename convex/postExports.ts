@@ -7,10 +7,9 @@ import { activeTabOf, storedTabTimeline, tabsOf } from './timelineTabs';
 import { exportsFull, startRenderFor } from './renders';
 import { internal } from './_generated/api';
 import { hasUltraPlan } from './lib/billing_access';
-import { accountPicture, accountState, batchText, createBatchFor, projectCover } from './posting';
+import { accountPicture, accountState, batchText, createBatchFor, projectCover, requirePosting } from './posting';
 import { postingPlatform } from './postingTables';
 import { pendingPostStatus } from './postingTables';
-import { platformLive } from '../lib/posting/server';
 import { shapeProblems } from '../lib/posting/precheck';
 import { dimensions, timelineDuration } from '../lib/editor/types';
 
@@ -30,7 +29,8 @@ function sameVersion(job: Doc<'renderJobs'>, project: Doc<'projects'>, timelineI
  * dialog's defaults. No new preference is stored. 4K stays with the Ultra plan.
  */
 function exportSettings(jobs: Doc<'renderJobs'>[], fps: number, ultra: boolean) {
-  const last = jobs.find(job => job.status === 'completed' && job.sourceClipId === undefined && job.resolution !== undefined && (job.quality === 'standard' || job.quality === 'high'));
+  // A one-off setting the user asked the assistant for is never taken as their choice.
+  const last = jobs.find(job => job.status === 'completed' && job.sourceClipId === undefined && !job.settingsOverride && job.resolution !== undefined && (job.quality === 'standard' || job.quality === 'high'));
   const resolution = last?.resolution ?? 1080;
   return { resolution: resolution === 2160 && !ultra ? 1080 : resolution, fps: last?.fps ?? (fps === 24 || fps === 30 ? fps : 60), quality: last?.quality ?? 'standard' };
 }
@@ -39,22 +39,24 @@ async function targetsProblem(ctx: QueryCtx | MutationCtx, ownerId: string, acco
   for (const accountId of accountIds) {
     const account = await ctx.db.get(accountId);
     if (!account || account.ownerId !== ownerId || account.status === 'disconnected') return 'An account is no longer connected.';
-    if (!platformLive(account.platform)) return 'This platform is coming soon.';
     if (accountState(account).status !== 'connected') return `Reconnect @${account.username} before posting to it.`;
   }
   return null;
 }
 
-/** What posting a timeline tab would export: the settings, and whether a finished or running export of this exact version already exists. */
-export async function exportPlan(ctx: QueryCtx | MutationCtx, ownerId: string, project: Doc<'projects'>, timelineId: string) {
+export type ExportSettings = { resolution: number; fps: number; quality: string };
+/** What posting or exporting a timeline tab would render: the settings, and whether a finished or running export of this exact version already exists. */
+export async function exportPlan(ctx: QueryCtx | MutationCtx, ownerId: string, project: Doc<'projects'>, timelineId: string, requested: Partial<ExportSettings> = {}) {
   const jobs = await ctx.db.query('renderJobs').withIndex('by_ownerId_projectId', q => q.eq('ownerId', ownerId).eq('projectId', project._id)).order('desc').take(50);
-  const ultra = await hasUltraPlan(ctx, ownerId), settings = exportSettings(jobs, project.timeline?.fps ?? 30, ultra);
+  const ultra = await hasUltraPlan(ctx, ownerId), existing = exportSettings(jobs, project.timeline?.fps ?? 30, ultra);
+  // A setting asked for in this request applies to this export only; `existing` stays what the user chose before.
+  const settings: ExportSettings = { ...existing, ...requested };
   // Only an export made with the settings this post would use counts: a draft or a smaller render is not what the user means to publish.
   const usable = (job: Doc<'renderJobs'>) => sameVersion(job, project, timelineId) && job.resolution === settings.resolution && job.fps === settings.fps && job.quality === settings.quality;
   // A finished export of this exact version is posted as it is; one still rendering is waited for instead of doubled.
   const ready = jobs.find(job => job.status === 'completed' && (job.outputR2Key || job.outputStorageId) && usable(job));
   const running = ready ? undefined : jobs.find(job => (job.status === 'queued' || job.status === 'rendering') && usable(job));
-  return { settings, ultra, ready, running };
+  return { settings, existing, ultra, ready, running };
 }
 
 export type PendingInput = {
@@ -71,6 +73,8 @@ export async function startPendingFor(ctx: MutationCtx, ownerId: string, args: P
     const existing = await pendingForKey(ctx, ownerId, args.idempotencyKey);
     if (existing) return existing._id;
   }
+  // Refused before anything is exported. A post already waiting for its export is not: it becomes a scheduled post that waits.
+  requirePosting();
   if (!args.accountIds.length) throw new ConvexError('Pick at least one account.');
   if (args.accountIds.length > TARGET_LIMIT || new Set(args.accountIds).size !== args.accountIds.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
   const { caption, title } = batchText(args, now);

@@ -6,7 +6,7 @@ import { snapTimelineToFrames } from '../../editor/frame-grid';
 import type { LanguageModelMiddleware } from 'ai';
 /** Failed finish checks that repaired nothing: the same failures again, or no timeline change in between. */
 export const MAX_FINISH_ATTEMPTS = 3;
-/** Every failed finish check of one request, progress or not: the hard stop for a task that never converges. */
+/** Every failed finish check since the task last passed, progress or not: the hard stop for a task that never converges. */
 export const MAX_FINISH_CHECKS = 8;
 /**
  * The frame budget of finish. Everything a check can read from the timeline is read from it: gaps, overlaps,

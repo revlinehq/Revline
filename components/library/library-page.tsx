@@ -20,7 +20,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { uploadActivityLabel } from '@/lib/editor/upload-source';
 import { userError } from '@/lib/user-error';
 import { KIND_LABELS, formatBytes, formatDuration, plural, shortDate } from './format';
-import { LibraryDetails } from './library-details';
+import { LibrarySheet } from './library-sheet';
 import { AddToProjectDialog, DeleteFilesDialog, DeleteFolderDialog, MoveDialog, NewFolderDialog } from './library-dialogs';
 import { FileRowsSkeleton, FileTilesSkeleton, FolderTilesSkeleton } from './library-skeleton';
 import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
@@ -90,7 +90,7 @@ export function LibraryPage() {
   const here = path?.at(-1)?.name ?? 'the Library';
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set()), [activeId, setActiveId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<null | { kind: 'folder' } | { kind: 'move'; fileIds: Id<'storageObjects'>[]; folderIds: FolderId[]; from?: FolderId | null } | { kind: 'project' } | { kind: 'delete' } | { kind: 'deleteFolder'; folder: LibraryFolder }>(null);
+  const [dialog, setDialog] = useState<null | { kind: 'folder' } | { kind: 'move'; fileIds: Id<'storageObjects'>[]; folderIds: FolderId[]; from?: FolderId | null } | { kind: 'project'; files: LibraryFile[] } | { kind: 'delete'; files: LibraryFile[] } | { kind: 'deleteFolder'; folder: LibraryFolder }>(null);
   const [renaming, setRenaming] = useState<FolderId | null>(null), [error, setError] = useState('');
   const chosen = results.filter(file => selected.has(file.id)), active = results.find(file => file.id === activeId) ?? null;
   const clear = useCallback(() => { setSelected(new Set()); setActiveId(null); }, []);
@@ -99,11 +99,12 @@ export function LibraryPage() {
   function toggle(file: LibraryFile) {
     setSelected(current => { const next = new Set(current); if (next.has(file.id)) next.delete(file.id); else if (next.size < MAX_SELECTED) next.add(file.id); return next; });
   }
+  // A plain click opens the file's sheet; with Cmd, Ctrl or Shift it adds the file to the selection instead.
   function open(file: LibraryFile, additive: boolean) {
-    setActiveId(file.id);
-    if (additive) setSelected(current => current.has(file.id) || current.size >= MAX_SELECTED ? current : new Set([...current, file.id]));
-    else setSelected(new Set([file.id]));
+    if (additive) toggle(file); else setActiveId(file.id);
   }
+  const activeIndex = active ? results.indexOf(active) : -1;
+  const step = (offset: -1 | 1) => { const next = results[activeIndex + offset]; if (next) setActiveId(next.id); };
 
   const move = useMutation(api.library.move), renameFolder = useMutation(api.library.renameFolder), starters = useMutation(api.library.createStarterFolders), downloadUrl = useAction(api.library.downloadUrl);
   const uploads = useLibraryUpload(), fileInput = useRef<HTMLInputElement>(null);
@@ -115,13 +116,13 @@ export function LibraryPage() {
     void move({ fileIds: payload.files, folderIds, ...(target ? { targetFolderId: target } : {}) }).then(clear, report('Could not move this. Please retry.'));
   };
   const dragPayload = (file: LibraryFile): DragPayload => ({ files: selected.has(file.id) ? chosen.map(item => item.id) : [file.id], folders: [] });
-  async function download() {
+  async function download(files: LibraryFile[]) {
     setError('');
-    for (const file of chosen) {
+    for (const file of files) {
       try { const link = document.createElement('a'); link.href = await downloadUrl({ fileId: file.id }); link.download = file.fileName; link.rel = 'noopener'; document.body.appendChild(link); link.click(); link.remove(); }
       catch (reason) { report(`Could not download ${file.fileName}. Please retry.`)(reason); return; }
       // Browsers drop downloads started in the same instant.
-      if (chosen.length > 1) await new Promise(resolve => setTimeout(resolve, 600));
+      if (files.length > 1) await new Promise(resolve => setTimeout(resolve, 600));
     }
   }
   function saveFolderName(folder: LibraryFolder, name: string) { setRenaming(null); setError(''); void renameFolder({ folderId: folder.id, name }).catch(report('Could not rename this folder. Please retry.')); }
@@ -158,7 +159,7 @@ export function LibraryPage() {
   const blockedDelete = chosen.find(file => !file.canDelete);
   const parentOf = (folder: LibraryFolder) => folder.parentId ? folderNames.get(folder.parentId) ?? 'its parent folder' : 'the Library';
 
-  return <main className="dash-content library-page" data-details={active ? '' : undefined} {...pageDrop}>
+  return <main className="dash-content library-page" {...pageDrop}>
     <h1 className="sr-only">Library</h1>
     <Input ref={fileInput} type="file" accept="video/*,audio/*,image/*" multiple className="library-file-input" tabIndex={-1} aria-label={`Choose files to upload to ${here}`} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; uploads.enqueue(files, folderId); }} />
     {navbar && createPortal(<><Button variant="soft" size="icon" aria-label="New folder" onClick={newFolder}><FolderPlus /></Button><Button variant="primary" size="icon" aria-label="Upload" onClick={pick}><Upload /></Button></>, navbar)}
@@ -231,17 +232,19 @@ export function LibraryPage() {
     {chosen.length > 0 && <div className="library-bar" role="toolbar" aria-label="Selected files">
       <strong>{chosen.length} selected</strong>
       <Button variant="ghost" onClick={() => setDialog({ kind: 'move', fileIds: chosen.map(file => file.id), folderIds: [], ...(term ? {} : { from: folderId ?? null }) })}><FolderInput aria-hidden="true" /><span>Move to</span></Button>
-      <Button variant="ghost" onClick={() => setDialog({ kind: 'project' })}><Clapperboard aria-hidden="true" /><span>Add to project</span></Button>
-      <Button variant="ghost" onClick={() => void download()}><Download aria-hidden="true" /><span>Download</span></Button>
-      <Button variant="ghost" disabled={!!blockedDelete} title={blockedDelete ? `${blockedDelete.fileName}: ${blockedDelete.protectedReason ?? 'cannot be deleted right now'}` : undefined} onClick={() => setDialog({ kind: 'delete' })}><Trash2 aria-hidden="true" /><span>Delete</span></Button>
+      <Button variant="ghost" onClick={() => setDialog({ kind: 'project', files: chosen })}><Clapperboard aria-hidden="true" /><span>Add to project</span></Button>
+      <Button variant="ghost" onClick={() => void download(chosen)}><Download aria-hidden="true" /><span>Download</span></Button>
+      <Button variant="ghost" disabled={!!blockedDelete} title={blockedDelete ? `${blockedDelete.fileName}: ${blockedDelete.protectedReason ?? 'cannot be deleted right now'}` : undefined} onClick={() => setDialog({ kind: 'delete', files: chosen })}><Trash2 aria-hidden="true" /><span>Delete</span></Button>
       <Button variant="ghost" size="icon" aria-label="Clear the selection" onClick={clear}><X /></Button>
     </div>}
-    {active && <LibraryDetails file={active} selectedCount={chosen.length} folderName={active.folderId ? folderNames.get(active.folderId) ?? 'Library' : 'Library'} onClose={() => setActiveId(null)} />}
+    <LibrarySheet file={active} position={activeIndex} count={results.length} folderName={active?.folderId ? folderNames.get(active.folderId) ?? 'Library' : 'Library'} onClose={() => setActiveId(null)} onStep={step}
+      onAddToProject={() => active && setDialog({ kind: 'project', files: [active] })} onDownload={() => active && void download([active])} onDelete={() => active && setDialog({ kind: 'delete', files: [active] })}
+      onMove={() => active && setDialog({ kind: 'move', fileIds: [active.id], folderIds: [], from: active.folderId ?? null })} />
 
     {dialog?.kind === 'folder' && <NewFolderDialog parentId={folderId} parentName={here} onClose={() => setDialog(null)} />}
     {dialog?.kind === 'move' && <MoveDialog tree={tree ?? []} fileIds={dialog.fileIds} folderIds={dialog.folderIds} current={dialog.from} onClose={() => setDialog(null)} onMoved={clear} />}
-    {dialog?.kind === 'project' && <AddToProjectDialog files={chosen} onClose={() => setDialog(null)} />}
-    {dialog?.kind === 'delete' && <DeleteFilesDialog files={chosen} onClose={() => setDialog(null)} onDeleted={projects => { setDeleting(current => [...new Set([...current, ...projects])]); clear(); }} />}
+    {dialog?.kind === 'project' && <AddToProjectDialog files={dialog.files} onClose={() => setDialog(null)} />}
+    {dialog?.kind === 'delete' && <DeleteFilesDialog files={dialog.files} onClose={() => setDialog(null)} onDeleted={projects => { setDeleting(current => [...new Set([...current, ...projects])]); clear(); }} />}
     {dialog?.kind === 'deleteFolder' && <DeleteFolderDialog folder={dialog.folder} parentName={parentOf(dialog.folder)} onClose={() => setDialog(null)} />}
   </main>;
 }

@@ -36,7 +36,7 @@ export const laneResultValidator = v.object({
   checkKey: v.optional(v.string()),
   motionCheck: v.optional(v.string()),
   warnings: v.optional(v.array(v.string())),
-  /** Failed checks of this request so far, including the ones that made progress. */
+  /** Failed checks since the task last passed, including the ones that made progress. */
   checks: v.optional(v.number()),
   healed: v.optional(v.array(v.string())),
   fixes: v.optional(v.array(v.string())),

@@ -11,7 +11,7 @@ const isCubicBezier = (easing: unknown): easing is CubicBezier => Array.isArray(
 export const isMotionEasing = (easing: unknown): easing is MotionEasing => MOTION_EASINGS.includes(easing as NamedMotionEasing) || isCubicBezier(easing);
 
 /** y for a given x on a cubic-bézier curve: Newton steps on x(t), bisection fallback. */
-function cubicBezierAt([x1, y1, x2, y2]: CubicBezier, x: number) {
+export function cubicBezierAt([x1, y1, x2, y2]: CubicBezier, x: number) {
   const bez = (t: number, a: number, b: number) => 3 * a * t * (1 - t) ** 2 + 3 * b * t * t * (1 - t) + t ** 3;
   const slope = (t: number, a: number, b: number) => 3 * a * (1 - t) ** 2 + 6 * (b - a) * t * (1 - t) + 3 * (1 - b) * t * t;
   let t = x;

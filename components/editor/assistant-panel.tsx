@@ -1,13 +1,15 @@
 'use client';
-import { ThinkingBlock, ToolChain } from './tool-chain';
+import { RunSteps, RunThought } from './run-activity';
+import { turnActivity } from './assistant-run';
 import { ChoiceCard, choiceOf } from './choice-card';
 import { PostConfirmCard, postProposalOf } from './post-confirm-card';
+import { ExportConfirmCard, exportProposalOf } from './export-confirm-card';
 import { reportClientIncident } from '@/lib/incident-client';
 import { userError } from '@/lib/user-error';
 import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactNode } from 'react';
-import { Check, ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
+import { ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
 import { EDITOR_EFFORT_LABELS, editorModelLabel } from './assistant-model-picker';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
@@ -164,7 +166,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
       const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
-      return {...group,comparison,...presentation};
+      return {...group,comparison,...presentation,run:turnActivity(presentation.replies,group.id===turnId&&waiting)};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);
   const reportedFailures=useRef(new Set<string>());
@@ -232,6 +234,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
         const editing = group.id === turnId && waiting;
         const cards = group.cards;
         const requestMessage=groupMessages.find(message=>message.role==='user');
+        const run=group.run;
         // As in shadcn Chat: each person's message is its own anchored item; the reply is the item after it.
         return <Fragment key={turnKey(group.id)}>
           {groupMessages.filter(message => message.role === 'user').map(message => <MessageScrollerItem key={turnKey(message.id)} messageId={turnKey(message.id)} scrollAnchor data-message-id={message.id} data-message-status={message.status}>
@@ -239,20 +242,23 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
           </MessageScrollerItem>)}
           {(replies.length > 0 || editing || cards.length > 0) && <MessageScrollerItem messageId={`${turnKey(group.id)}-reply`} data-turn-id={group.id}>
             <Message><MessageContent className="gap-3">
-              {replies.map(message => <Fragment key={message.id}>
-                {message.blocks ? message.blocks.map((block, index) => block.type === 'tools' ? <ToolChain key={`tools-${index}`} steps={block.steps} active={editing}/> : block.type === 'thinking' ? <ThinkingBlock key={`thinking-${index}`} text={block.text} active={editing && message.status === 'streaming' && index === message.blocks!.length - 1}/> : <AssistantResponseText key={`text-${index}`} text={block.text} streaming={message.status === 'streaming' && index === message.blocks!.length - 1} />) : <>{message.text && <AssistantResponseText text={message.text} streaming={message.status === 'streaming'} />}{!!message.steps?.length && <ToolChain steps={message.steps} active={editing}/>}</>}
-                {message.tools?.map((tool, i) => <div className="tool-result" key={`${tool}-${i}`}><Check size={12} />{tool}</div>)}
-                {(message.steps ?? []).flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={step.id ?? step.name} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
-                {(message.steps ?? []).flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={step.id ?? proposalId} proposalId={proposalId} disabled={running || sending}/>] : []; })}
-                {message.id === demoNoteMessageId && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-              </Fragment>)}
+              {/* One Thought for all of the run's reasoning and one list of its steps, both collapsed; the reply follows. */}
+              <RunThought entries={run.thought} latest={run.latestThought} active={editing}/>
+              <RunSteps steps={run.steps} active={editing}/>
+              {run.reply.map(text => <AssistantResponseText key={text.key} text={text.text} streaming={text.streaming}/>)}
+              {/* Cards that need the user stay open: they are part of the reply, not of the run. */}
+              {run.steps.flatMap(step => { const ask = choiceOf(step); return ask ? [<ChoiceCard key={`ask-${step.key}`} question={ask.question} choices={ask.choices} disabled={running || sending || !!pendingReply} onChoose={group === groups.at(-1) && !running ? reply => void sendRequest(reply) : undefined}/>] : []; })}
+              {run.steps.flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={`post-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
+              {run.steps.flatMap(step => { const proposalId = exportProposalOf(step); return proposalId ? [<ExportConfirmCard key={`export-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
+              {replies.some(message => message.id === demoNoteMessageId) && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
               {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
               {requestMessage?.turnModel && <p className="assistant-turn-model text-[11px] text-neutral-500" data-turn-model={requestMessage.turnModel} data-turn-effort={requestMessage.turnEffort}>{editorModelLabel(requestMessage.turnModel)}{requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}</p>}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
                 {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
               </div>)}</div>}
-              {(()=>{const now=liveActivity(replies);return <AssistantReplyHeader loading active={editing} label={stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&now.label==='Working'?'Resuming…':now.label} detail={editing&&budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:now.detail} startedAt={activityStartedAt}/>;})()}
+              {/* The Thought and step rows already say what the run is doing; this line is for stopping, resuming, the budget, or a run that has shown nothing yet. */}
+              {(()=>{const now=liveActivity(replies),label=stopState==='stopping'?'Stopping…':resumingTurnId===group.id||requestMessage?.turnResuming&&now.label==='Working'?'Resuming…':now.label,budget=budgetUsed!==undefined&&budgetUsed>=.7?`Near this request's limit · ${Math.round(budgetUsed*100)}% used`:undefined;return <AssistantReplyHeader loading active={editing&&(label==='Stopping…'||label==='Resuming…'||!!budget||!run.steps.length&&!run.thought.length&&!run.reply.length)} label={label} detail={budget??now.detail} startedAt={activityStartedAt}/>;})()}
             </MessageContent></Message>
           </MessageScrollerItem>}
         </Fragment>;

@@ -91,3 +91,15 @@ The sign-in form shows a recovery message if Clerk initialization or an authenti
 The reported composer mismatch showed old server HTML (`New video` with the previous punctuation) against a new client bundle. The label in source is static. Restarting `npm run dev` with a fresh generated `.next/dev` cache restored matching output; no hydration suppression was added. Reload an already-open stale local tab once after restarting.
 
 References: [Sentry Next.js setup](https://docs.sentry.io/platforms/javascript/guides/nextjs/manual-setup/), [PostHog Next.js setup](https://posthog.com/docs/libraries/next-js), [Clerk webhooks](https://clerk.com/docs/guides/development/webhooks/overview).
+
+## Where assistant runs spend their time
+
+Every in-app turn and every MCP task records one row in `assistantRunTimings` (`convex/runTimings.ts`): for each model call and tool call, its name, start, duration and token counts, and for an in-app tool call whether it failed (MCP rows carry no failure flag). A tool call also stores a short hash of its arguments so an identical repeat can be counted. No prompt, argument, result or owner is stored, and rows expire after 30 days.
+
+```sh
+npm run incidents:speed -- --env prod --from 2026-11-01 --to 2026-11-11   # slowest tools, repeated calls, median run per lane
+npm run incidents:speed -- --env dev --runs                                # adds one step table per run
+npm run incidents:speed -- --env isolated --json                           # this worktree's isolated backend
+```
+
+"other" in the lane table is wall time outside model calls and tool calls: round trips between steps, queueing and saves (for MCP runs it is the external agent's own thinking). Not built yet: filing a run far slower than its lane's norm as a slow-run incident.

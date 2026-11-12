@@ -154,32 +154,43 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
 .library-bar [data-slot=button] svg { width: 16px; height: 16px; }
 
 /* Details for one file, beside the list. */
-.library-details { position: fixed; top: var(--dash-navbar-height); right: 0; bottom: 0; z-index: 20; display: flex; flex-direction: column; gap: 14px; width: 320px; padding: 14px 20px 24px; overflow-y: auto; border-left: 1px solid var(--dash-divider); background: var(--dash-page); }
-.library-details-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; color: var(--dash-muted); font-size: 13px; }
-.library-details-preview { position: relative; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; border-radius: 10px; background: var(--dash-card); aspect-ratio: 16 / 9; }
-.library-details-preview :is(video, .library-file-thumb) { width: 100%; height: 100%; border-radius: 0; object-fit: contain; }
-.library-details-preview audio { width: calc(100% - 20px); }
-.library-details-play[data-slot=button] { position: absolute; width: 40px; height: 40px; border-radius: 9999px; background: #000000A6; color: #fff; }
-.library-details-play[data-slot=button]:hover { background: #000000D9; }
-.library-details-name { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px 0 12px; border: 1px solid var(--dash-border); border-radius: 10px; background: var(--dash-card); }
-.library-details-name strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
-.library-details-name .library-rename { flex: 1; margin-left: -6px; }
-.library-details-facts { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 0; }
-.library-details-facts div { display: flex; gap: 12px; }
-.library-details-facts dt { flex: 0 0 96px; color: var(--dash-muted); }
-.library-details-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
-.library-details-used { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--dash-divider); }
-.library-details-used h3 { margin: 0; color: var(--dash-muted); font-size: 13px; font-weight: 400; }
-.library-details-used ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
-.library-details-used a { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--dash-text); text-decoration: none; }
-.library-details-used a:hover { color: #fff; text-decoration: underline; }
-.library-details-used a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.library-details-used svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
-.library-details-used p { margin: 0; color: var(--dash-muted); font-size: 13px; }
-/* The panel lies over the page's right edge, so opening it never resizes or moves a tile or a row; only the selection bar steps aside to stay clear of it. */
-@media (min-width: 1280px) {
-  .library-page[data-details] .library-bar { left: calc(50% + var(--dash-sidebar-offset) / 2 - 160px); }
-}
+/* One file's sheet (shadcn Sheet, portalled to <body>): over the page from the right, from the bottom on a phone. The grid underneath never moves. */
+.library-sheet[data-slot=sheet-content] { gap: 14px; padding: 14px 20px 24px; overflow-y: auto; overscroll-behavior: contain; border-color: var(--dash-divider); background: var(--dash-page); color: var(--dash-text); box-shadow: none; font-family: var(--font-inter), sans-serif; font-size: 14px; }
+.library-sheet[data-side=right] { width: 380px; max-width: 100vw; }
+.library-sheet[data-side=bottom] { max-height: 88dvh; padding-bottom: calc(24px + env(safe-area-inset-bottom)); border-radius: 16px 16px 0 0; }
+.library-sheet :is([data-slot=button], [data-slot=input], button, a):focus-visible { outline: none; box-shadow: none; }
+.library-sheet [data-slot=input]:focus-visible { border-color: var(--input); }
+.library-sheet [data-slot=button] { transition: none; }
+.library-sheet [data-slot=button]:active { transform: none; }
+.library-sheet-head { display: flex; align-items: center; gap: 2px; min-height: 32px; padding-right: 40px; color: var(--dash-muted); font-size: 13px; }
+.library-sheet-head span { margin-left: 8px; }
+.library-sheet-body { display: flex; flex-direction: column; gap: 14px; }
+.library-sheet-preview { position: relative; display: grid; place-items: center; flex-shrink: 0; overflow: hidden; border-radius: 10px; background: var(--dash-card); aspect-ratio: 16 / 9; }
+.library-sheet-preview :is(video, .library-file-thumb) { width: 100%; height: 100%; border-radius: 0; object-fit: contain; }
+.library-sheet-preview .library-file-thumb img { object-fit: contain; }
+/* Sized from the file's own ratio, never cropped: as wide as the sheet, narrower when a tall file would pass the height cap. */
+.library-sheet-preview[data-sized] { --preview-max-height: min(400px, 46dvh); align-self: center; width: min(100%, calc(var(--preview-max-height) * var(--preview-ratio))); aspect-ratio: var(--preview-ratio); }
+.library-sheet[data-side=bottom] .library-sheet-preview[data-sized] { --preview-max-height: min(360px, 38dvh); }
+.library-sheet-preview audio { width: calc(100% - 20px); }
+.library-sheet-play[data-slot=button] { position: absolute; width: 40px; height: 40px; border-radius: 9999px; background: #000000A6; color: #fff; }
+.library-sheet-play[data-slot=button]:hover { background: #000000D9; }
+.library-sheet-name { display: flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 4px 0 12px; border: 1px solid var(--dash-border); border-radius: 10px; background: var(--dash-card); }
+.library-sheet-name strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.library-sheet-name .library-rename { flex: 1; margin-left: -6px; }
+.library-sheet-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.library-sheet-actions [data-slot=button] { justify-content: flex-start; }
+.library-sheet-facts { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 0; }
+.library-sheet-facts div { display: flex; gap: 12px; }
+.library-sheet-facts dt { flex: 0 0 96px; color: var(--dash-muted); }
+.library-sheet-facts dd { min-width: 0; margin: 0; overflow-wrap: anywhere; }
+.library-sheet-used { display: flex; flex-direction: column; gap: 8px; padding-top: 16px; border-top: 1px solid var(--dash-divider); }
+.library-sheet-used h3 { margin: 0; color: var(--dash-muted); font-size: 13px; font-weight: 400; }
+.library-sheet-used ul { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.library-sheet-used a { display: flex; align-items: center; gap: 10px; min-width: 0; color: var(--dash-text); text-decoration: none; }
+.library-sheet-used a:hover { color: #fff; text-decoration: underline; }
+.library-sheet-used a span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.library-sheet-used svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
+.library-sheet-used p { margin: 0; color: var(--dash-muted); font-size: 13px; }
 
 /* Dialogs (portalled to <body>, under the shell's colour mapping). */
 .library-dialog[data-slot=dialog-content] { display: flex; flex-direction: column; gap: 12px; width: 400px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid var(--dash-border); border-radius: 16px; background: var(--dash-card); color: var(--dash-text); box-shadow: none; animation: none; font-family: var(--font-inter), sans-serif; font-size: 14px; }
@@ -213,9 +224,6 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
 .library-unfinished strong { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .library-unfinished small { display: block; margin-top: 2px; color: var(--dash-muted); font-size: 12px; }
 
-@media (max-width: 1279px) {
-  .library-details { z-index: 40; width: min(360px, 100vw); }
-}
 @media (max-width: 900px) {
   .library-folders, .library-files { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .library-col-duration, .library-col-used { display: none; }
@@ -238,6 +246,5 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
   .library-bar { bottom: 12px; left: 50%; padding-left: 12px; }
   .library-bar [data-slot=button]:not([data-size=icon]) { width: 36px; padding: 0; }
   .library-bar [data-slot=button] span { display: none; }
-  .library-details { top: 0; width: 100vw; border-left: 0; }
   .library-empty { min-height: 320px; }
 }

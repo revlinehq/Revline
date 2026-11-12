@@ -2,6 +2,8 @@ import { canChooseReasoningEffort, hasPaidModelAccess, productionOffer, requireE
 import { freeEditorModel, offeredEditorModel, withPlanReasoning } from '../lib/ai/claude-model';
 import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
 import { refusalReason } from '../lib/ai/failure-text';
+import { stepTimingValidator } from './lib/step_timing_validator';
+import { appendRunTimings } from './runTimings';
 import { ConvexError, v, type ObjectType } from "convex/values";
 import { internal } from "./_generated/api";
 import {
@@ -226,10 +228,17 @@ export const checkpoint = internalMutation({
     segment: v.number(),
     savedEdits: v.number(),
     pendingFastFrames: v.array(v.number()),
+    // This step's model and tool timings, saved in the same round trip (lib/ai/step-timing.ts).
+    timings: v.optional(v.object({ lane: v.optional(v.string()), model: v.optional(v.string()), effort: v.optional(v.string()), steps: v.array(stepTimingValidator) })),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     const turn = await turnForRun(ctx, args.runId);
+    if (args.timings && turn && turn.projectId === args.projectId && turn.args.ownerId === args.ownerId) {
+      const { steps, ...facts } = args.timings;
+      // A timing row is never worth losing the step's checkpoint for.
+      try { await appendRunTimings(ctx, { runId: args.runId, source: 'editor', ...facts }, steps); } catch { /* The report misses this step. */ }
+    }
     if (
       turn &&
       turn.projectId === args.projectId &&

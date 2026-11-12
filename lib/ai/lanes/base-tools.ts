@@ -4,6 +4,10 @@ import { tools as clipTools } from './clip/tools';
 export const POSTING_TOOLS = ['listConnectedAccounts', 'postVideo', 'schedulePost', 'listPosts', 'getPost', 'cancelScheduledPost', 'reschedulePost'] as const;
 /** The two that send something outside Revline: each needs the user's confirmation. */
 export const POST_SENDING_TOOLS: readonly string[] = ['postVideo', 'schedulePost'];
+/** Tools still callable after a request's edits passed finish, so "edit it, then export" works in one message. */
+export const AFTER_FINISH_TOOLS: ReadonlySet<string> = new Set(['exportVideo', 'listExports', 'getExport']);
+/** Tools whose result can be a card the user must press; a card ends the turn. */
+export const CONFIRMATION_CARD_TOOLS: readonly string[] = [...POST_SENDING_TOOLS, 'exportVideo'];
 
 // Shared editing operations are available before choosing an optional style.
 export const BASE_TOOLS = [
@@ -51,6 +55,7 @@ export const BASE_TOOLS = [
   'addSubtitlesFromTranscript',
   'retainSourceRanges',
   'cleanSpeech',
+  'readCutScript',
   'setSplitEdits',
   'split',
   'trim',

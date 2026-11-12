@@ -30,6 +30,8 @@ const TURN_FUNCTIONS = new Set([
   'icons:find', 'referenceReads:discard', 'referenceReads:get', 'referenceReads:request', 'referenceReads:take',
   // Found by scripts/run-path-check.mjs: the face-measurement read asks what the processor can do, and a source read that outlasts one call is resumed by id.
   'mediaProcessor:capabilities', 'referenceReads:resumeFrames',
+  // The assistant's listExports and getExport tools (found by the same check after they merged).
+  'mcp:listExports', 'mcp:exportJob',
 ]);
 /** What streamText and saveMessage use: the chat's messages, its stream deltas and message files. */
 const AGENT_FUNCTIONS = new Set(['files/addFile', 'files/get', 'files/useExistingFile', 'messages/addMessages', 'messages/finalizeMessage', 'messages/getMessagesByIds', 'messages/listMessagesByThreadId', 'messages/updateMessage', 'streams/abort', 'streams/addDelta', 'streams/create', 'streams/finish', 'threads/getThread']);

@@ -29,6 +29,7 @@ import { projectMediaPrefix } from './lib/media_storage';
 import { writeProject,readProject,projectIdentity,projectRun,projectRunContext,runPayload,writeRunState } from './lib/project_data';
 import { importVideoFor } from './mediaTasks';
 import { startRenderFor } from './renders';
+import { proposeExportFor } from './assistantExports';
 import { activeTabOf, createTabFor, listTabsFor, openTabFor, storedTabTimeline, tabsOf } from './timelineTabs';
 import { canChooseReasoningEffort, hasPaidModelAccess, productionDefaultModel, productionOffer, requireEditorAccess } from './lib/billing_access';
 import { abortStream, createThread, listStreams, listUIMessages, saveMessage, syncStreams, vPaginationResult, vStreamArgs } from "@convex-dev/agent";
@@ -448,6 +449,12 @@ export const exportRunVideo = internalMutation({ args: { ...runArgs, timelineId:
   await requireActiveRun(ctx, args);
   const jobId = await startRenderFor(ctx, args.ownerId, { projectId: args.projectId, timelineId: args.timelineId, resolution: args.resolution, fps: args.fps, quality: args.quality });
   return { jobId };
+}});
+
+/** The in-app assistant's exportVideo: a confirmation card, never a render (convex/assistantExports.ts). */
+export const proposeRunExport = internalMutation({ args: { ...runArgs, timelineId: v.optional(v.string()), resolution: v.optional(v.number()), fps: v.optional(v.number()), quality: v.optional(v.string()) }, returns: v.any(), handler: async (ctx, { runId, ownerId, projectId, ...request }) => {
+  await requireActiveRun(ctx, { projectId, ownerId, runId });
+  return proposeExportFor(ctx, ownerId, { projectId, ...request });
 }});
 
 export const beginEditing = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {

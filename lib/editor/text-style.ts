@@ -1,4 +1,4 @@
-import { isTextFont, textFont, textFontWeight, type TextFontId } from './text-fonts';
+import { DEFAULT_TEXT_FONT, isTextFont, textFont, textFontWeight, type TextFontId } from './text-fonts';
 
 export type TextTypography = {
   fontWeight?: number; italic?: boolean; letterSpacing?: number; lineHeight?: number;
@@ -12,11 +12,13 @@ export type TextAppearance = TextTypography & {
 export const DEFAULT_TEXT_APPEARANCE: Readonly<TextAppearance> = {
   strokeWidth: 0, strokeColor: '#000000', shadowBlur: 0, shadowX: 0, shadowY: 0, shadowColor: '#000000', glowBlur: 0, glowColor: '#FFFFFF',
 };
-/** Creation-only defaults: existing clips retain their saved appearance. */
+/** Creation-only defaults: existing clips retain their saved appearance (a clip saved without a font keeps Space Grotesk). */
 export const DEFAULT_CAPTION_STYLE = {
-  fontSize: 52, color: '#F4F4F0', background: 'transparent', x: .5, y: .78, animation: 'none',
+  fontSize: 52, fontFamily: DEFAULT_TEXT_FONT, color: '#F4F4F0', background: 'transparent', x: .5, y: .78, animation: 'none',
   textStyle: { ...DEFAULT_TEXT_APPEARANCE, strokeWidth: 1.5, shadowBlur: 3, shadowY: 1, shadowColor: '#000000B3' },
 } as const;
+/** A new text graphic (title or header): Montserrat Bold. */
+export const DEFAULT_GRAPHIC_STYLE = { fontSize: 92, fontFamily: DEFAULT_TEXT_FONT, color: '#F4F4F0', background: 'transparent', x: .5, y: .5, animation: 'none' } as const;
 /** Clip-lane captions: uppercase Montserrat Black, white with a black outline (stroke paints behind the fill, so 11 px
  * shows about 0.08 em at 68 px), no background, words popping in as spoken with the active word in green. */
 export const CLIPPER_CAPTION_STYLE = {

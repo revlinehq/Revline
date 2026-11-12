@@ -4,16 +4,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { applyQuickLayout, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
+import { appliedCaptionPreset, applyQuickCaptionPreset, applyQuickLayout, captionPresetTargets, captionTimingSources, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import { userError } from '@/lib/user-error';
+import type { CaptionPresetId } from '@/lib/editor/caption-presets';
+import { CaptionPresetPicker } from './caption-preset-picker';
 import { useEditorStore, useEditorState } from './editor-state';
 import './effects-panel.css';
 
 const HOOK_TYPING_PAUSE_MS = 400;
 
 /**
- * The media panel's Effects tab: one-click changes to the open timeline, top to bottom. Subtitles on/off, blur
+ * The media panel's Effects tab: one-click changes to the open timeline, top to bottom. Subtitles on/off, a caption preset, blur
  * background or tight crop, and a hook line. Each change goes through `onChange`, the editor's normal edit path,
  * so it saves, shows live and undoes like any other edit. A further effect is one more `effect-row` below these.
  */
@@ -27,6 +29,10 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
   const [captioning, setCaptioning] = useState(false);
   const subtitles = useMemo(() => subtitleState(timeline, assets, history), [timeline, assets, history]);
   const layout = useMemo(() => layoutState(timeline, assets), [timeline, assets]);
+  const selectedIds = useEditorState(state => state.selectedIds), selectedId = useEditorState(state => state.selectedId);
+  const presetTargets = useMemo(() => captionPresetTargets(timeline, selectedIds?.length ? selectedIds : selectedId ? [selectedId] : []), [timeline, selectedIds, selectedId]);
+  const presetApplied = useMemo(() => appliedCaptionPreset(timeline, presetTargets), [timeline, presetTargets]);
+  const [styling, setStyling] = useState(false);
   const current = () => store.getState().timeline;
   const attempt = (edit: () => Timeline, fallback: string) => { try { const next = edit(); if (next !== current()) onChange(next); } catch (error) { onError(userError(error, fallback)); } };
 
@@ -43,6 +49,20 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
       if (!current().clips.some(clip => clip.kind === 'caption')) onChange(subtitlesFromTranscripts(current(), sources, store.getState().history, () => crypto.randomUUID()));
     } catch (error) { onError(userError(error, 'Could not add subtitles.')); }
     finally { setCaptioning(false); }
+  };
+
+  // A preset times each word from the transcript beneath it, so captions without word timings load the transcripts first.
+  const choosePreset = async (id: CaptionPresetId) => {
+    if (locked || styling || !presetTargets.length) return;
+    setStyling(true);
+    try {
+      // Only footage under captions without word timings, and only sources with a transcript.
+      const spoken = new Set(spokenAssetIds(current(), assets)), ids = captionTimingSources(current(), presetTargets).filter(id => spoken.has(id));
+      const sources = onLoadAsset ? await Promise.all(ids.map(onLoadAsset)) : assets.filter(asset => ids.includes(asset._id));
+      const targets = presetTargets.filter(target => current().clips.some(clip => clip.id === target));
+      if (targets.length) onChange(applyQuickCaptionPreset(current(), id, targets, sources));
+    } catch (error) { onError(userError(error, 'Could not apply the caption preset.')); }
+    finally { setStyling(false); }
   };
 
   // The field shows what is typed; the timeline follows after a short pause, on Enter and on leaving the field.
@@ -77,6 +97,11 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
         <Switch id="effect-subtitles" className="effect-switch" checked={subtitles.on} disabled={locked || captioning || !!subtitles.disabled} onCheckedChange={on => void setSubtitles(on)}/>
       </div>
       {subtitles.disabled && <p className="effect-hint">{subtitles.disabled}</p>}
+    </section>
+    <section className="effect-row">
+      <span className="effect-label" id="effect-caption-presets-label">Caption presets</span>
+      <CaptionPresetPicker value={presetApplied} disabled={locked || styling || !presetTargets.length} onChoose={id => void choosePreset(id)}/>
+      <p className="effect-hint">{!presetTargets.length ? 'Turn on subtitles to style them' : presetTargets.length < timeline.clips.filter(clip => clip.kind === 'caption').length ? `Applies to the ${presetTargets.length === 1 ? 'selected caption' : `${presetTargets.length} selected captions`}` : 'Applies to every caption'}</p>
     </section>
     <section className="effect-row">
       <span className="effect-label" id="effect-layout-label">Layout</span>

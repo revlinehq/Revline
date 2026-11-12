@@ -3,7 +3,11 @@ import { applyMirrorBlurLayout, foldMirrorBlurStacks, stackedMirrorCopies, stack
 import { patchClip, placeOnFreeLayer } from './operations';
 import { playbackRateOf } from './playback-rate';
 import { DEFAULT_TEXT_APPEARANCE } from './text-style';
+import { DEFAULT_TEXT_FONT } from './text-fonts';
 import { captionSpeech, sourceCaptions } from './transcript-captions';
+import { applyCaptionPreset } from './caption-editing';
+export { captionTimingSources } from './caption-editing';
+import type { CaptionPresetId } from './caption-presets';
 import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
 
 /**
@@ -123,7 +127,7 @@ export const HOOK_CLIP_ID = 'hook-title';
 export const HOOK_SECONDS = 4;
 export const HOOK_MAX_LENGTH = 120;
 const HOOK_STYLE = {
-  fontSize: 76, color: '#FFFFFF', background: 'transparent', x: .5, y: .17, animation: 'none',
+  fontSize: 76, fontFamily: DEFAULT_TEXT_FONT, color: '#FFFFFF', background: 'transparent', x: .5, y: .17, animation: 'none',
   textStyle: { ...DEFAULT_TEXT_APPEARANCE, fontWeight: 700, strokeWidth: 10, shadowBlur: 6, shadowY: 3, shadowColor: '#00000099' },
 } as const;
 const hookClip = (timeline: Timeline) => timeline.clips.find(clip => clip.id === HOOK_CLIP_ID && clip.kind === 'graphic');
@@ -136,4 +140,27 @@ export function setHook(timeline: Timeline, text: string): Timeline {
   if (timeline.clips.some(clip => clip.id === HOOK_CLIP_ID)) throw new Error('Another clip already uses the hook title’s place. Remove it first.');
   const length = timelineDuration(timeline);
   return placeOnFreeLayer(timeline, { id: HOOK_CLIP_ID, kind: 'graphic', start: 0, duration: length > 0 ? Math.min(HOOK_SECONDS, length) : HOOK_SECONDS, sourceStart: 0, text: line, ...HOOK_STYLE });
+}
+
+// Caption presets. The Effects tab applies one to the selected captions, or to every caption.
+
+/** The captions a preset applies to: the selected ones when the selection holds captions, otherwise all. */
+export function captionPresetTargets(timeline: Timeline, selectedIds: readonly string[]): string[] {
+  const captions = timeline.clips.filter(isCaption), selected = captions.filter(clip => selectedIds.includes(clip.id));
+  return (selected.length ? selected : captions).map(clip => clip.id);
+}
+/** The preset every target shows; undefined when none is applied or they differ. */
+export function appliedCaptionPreset(timeline: Timeline, targetIds: readonly string[]): CaptionPresetId | undefined {
+  const ids = new Set(targetIds.map(id => { const clip = timeline.clips.find(item => item.id === id); return clip?.textTemplate?.preset === 'karaoke' ? clip.captionPreset?.id : undefined; }));
+  return ids.size === 1 ? [...ids][0] : undefined;
+}
+/** Apply a preset; `sources` are spoken assets with their analysis loaded, read for captions without word timings. */
+export function applyQuickCaptionPreset(timeline: Timeline, id: CaptionPresetId, targetIds: string[], sources: readonly MediaAsset[] = []): Timeline {
+  const speech = new Map<string, NonNullable<ReturnType<typeof captionSpeech>>>();
+  for (const asset of sources) {
+    const raw = asset.analysis?.transcript && readTranscript(asset.analysis.transcript);
+    const saved = raw && captionSpeech({ ...asset.analysis, transcript: raw });
+    if (saved) speech.set(asset._id, saved);
+  }
+  return applyCaptionPreset(timeline, id, targetIds, speech);
 }

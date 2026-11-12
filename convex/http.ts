@@ -10,7 +10,6 @@ import { prepare as prepareMcpUpload } from './mcpUploads';
 import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { registerMcpBridgeRoutes } from './mcpBridgeHttp';
 import { registerAppleBillingRoutes } from './appleBillingHttp';
-import { registerPostingCallbackRoutes } from './postingCallbacks';
 import { discordWebhookUrl } from './lib/discord_alert';
 const http = httpRouter();
 http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
@@ -20,7 +19,6 @@ http.route({ path: '/mcp/upload', method: 'POST', handler: prepareMcpUpload });
 registerAgentRunnerRoutes(http);
 registerMcpBridgeRoutes(http);
 registerAppleBillingRoutes(http);
-registerPostingCallbackRoutes(http);
 const headers = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "POST, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Content-Type": "application/json" };
 // A shared timeline's link preview image (Open Graph / X card), 1200x630 JPEG.
 http.route({ path: "/share-card", method: "GET", handler: httpAction(async (ctx, request) => {
