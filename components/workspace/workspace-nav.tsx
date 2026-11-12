@@ -127,13 +127,13 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
     if (!onRename || !newTitle.trim() || newTitle.trim().length > 120 || renameBusy) return;
     setRenameBusy(true); setRenameError('');
     try { await onRename(newTitle.trim()); setRenameOpen(false); }
-    catch (reason) { setRenameError(userError(reason, 'Could not rename this chat.')); }
+    catch (reason) { setRenameError(userError(reason, 'Could not rename this project.')); }
     finally { setRenameBusy(false); }
   }
   async function copyChatId() {
     if (!chatId) return;
     try { await navigator.clipboard.writeText(chatId); setCopiedId(true); setCopyError(''); }
-    catch { setCopyError('Could not copy the chat ID.'); }
+    catch { setCopyError('Could not copy the project ID.'); }
   }
   // The link opens the start page at once. The previous import is dropped in memory first; its stored copy is cleared behind the navigation.
   function newWorkspace(event: MouseEvent<HTMLAnchorElement>) {
@@ -144,17 +144,17 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
     <Link href={homeHref} onClick={homeHref === NEW_PROJECT_PATH ? newWorkspace : undefined} className="workspace-nav-brand" aria-label="Revline home"><Brand /></Link>
     <span className="workspace-nav-divider" aria-hidden="true" />
     {settingsPage ? <Breadcrumb className="workspace-breadcrumb"><BreadcrumbList><BreadcrumbItem><BreadcrumbLink asChild><Link href="/chats">Workspace</Link></BreadcrumbLink></BreadcrumbItem><BreadcrumbSeparator /><BreadcrumbItem><BreadcrumbPage>{title}</BreadcrumbPage></BreadcrumbItem></BreadcrumbList></Breadcrumb> : <>
-    <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><Button ref={historyTrigger} variant="ghost" size="md" className="workspace-chat-trigger" aria-label="Open chat menu"><span>{title}</span><ChevronDown size={13} /></Button></DropdownMenuTrigger>
+    <DropdownMenu onOpenChange={open => { setHistoryOpen(open); if (open) { setCopiedId(false); setCopyError(''); } }}><DropdownMenuTrigger asChild><Button ref={historyTrigger} variant="ghost" size="md" className="workspace-chat-trigger" aria-label="Open project menu"><span>{title}</span><ChevronDown size={13} /></Button></DropdownMenuTrigger>
       <DropdownMenuContent align="start" sideOffset={10} className="workspace-menu workspace-history-menu" onCloseAutoFocus={event => { if (renameOpen) event.preventDefault(); }}>
         <DropdownMenuItem asChild className="workspace-menu-item"><Link href={NEW_PROJECT_PATH} onClick={newWorkspace}><Plus size={16} />{NEW_WORKSPACE_LABEL}</Link></DropdownMenuItem>
-        {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename chat</DropdownMenuItem>}
-        {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Chat ID copied' : 'Copy chat ID'}</DropdownMenuItem>}
+        {onRename && <DropdownMenuItem className="workspace-menu-item" onSelect={() => { setNewTitle(title); setRenameError(''); setRenameOpen(true); }}><Pencil size={15} />Rename project</DropdownMenuItem>}
+        {chatId && <DropdownMenuItem className="workspace-menu-item" onSelect={event => { event.preventDefault(); void copyChatId(); }}>{copiedId ? <Check size={15} /> : <Copy size={15} />}{copiedId ? 'Project ID copied' : 'Copy project ID'}</DropdownMenuItem>}
         {copyError && <p className="workspace-inline-error" role="alert">{copyError}</p>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
-        <DropdownMenuLabel className="workspace-menu-label">Recent chats</DropdownMenuLabel>
-        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading chats…</div> : chats.length ? <div className="workspace-menu-chats">{chats.map(chat => { const agent = chat.agent && (chat.agent.running || chat.agent.until > clock) ? chat.agent : null; return <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong className={chat.running || agent ? 'shimmer' : undefined}>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>; })}</div> : <div className="workspace-menu-empty">Your chats will appear here.</div>}
+        <DropdownMenuLabel className="workspace-menu-label">Recent projects</DropdownMenuLabel>
+        {loading ? <div className="workspace-menu-empty"><LoaderCircle size={14} className="animate-spin" />Loading projects…</div> : chats.length ? <div className="workspace-menu-chats">{chats.map(chat => { const agent = chat.agent && (chat.agent.running || chat.agent.until > clock) ? chat.agent : null; return <DropdownMenuItem key={chat.id} asChild className="workspace-menu-chat"><Link href={`/editor/${chat.id}`}><ProjectCover url={chat.coverUrl} kind={chat.coverKind}/><span className="workspace-menu-chat-details"><strong className={chat.running || agent ? 'shimmer' : undefined}>{chat.title}</strong><small>{chatRecency(chat.updatedAt)}</small></span>{pathname === `/editor/${chat.id}` && <Check size={14} />}</Link></DropdownMenuItem>; })}</div> : <div className="workspace-menu-empty">Your projects will appear here.</div>}
         <DropdownMenuSeparator className="workspace-menu-divider" />
-        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all chats</Link></DropdownMenuItem>
+        <DropdownMenuItem asChild className="workspace-menu-item"><Link href="/chats" aria-current={active === 'chats' ? 'page' : undefined}><History size={15} />See all projects</Link></DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu></>}
     {editorControls}
@@ -171,5 +171,5 @@ const WorkspaceTopBar = memo(function WorkspaceTopBar({ title = NEW_WORKSPACE_LA
       {accountError && <p className="workspace-inline-error" role="alert">{accountError}</p>}
       <WorkspaceAccountLink />
     </div>
-  </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename chat</DialogTitle><DialogDescription>Give this conversation a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Chat name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
+  </header><Dialog open={renameOpen} onOpenChange={open => { if (!renameBusy) setRenameOpen(open); }}><DialogContent className="workspace-dialog" onCloseAutoFocus={event => { event.preventDefault(); historyTrigger.current?.focus(); }}><DialogTitle>Rename project</DialogTitle><DialogDescription>Give this project a name you can find later.</DialogDescription><form onSubmit={event => { event.preventDefault(); void rename(); }}><label className="workspace-form-field">Project name<Input autoFocus value={newTitle} maxLength={120} onChange={event => setNewTitle(event.target.value)} /></label>{renameError && <p className="workspace-inline-error" role="alert">{renameError}</p>}<div className="workspace-dialog-actions"><Button variant="outline" size="md" type="button" onClick={() => setRenameOpen(false)} disabled={renameBusy}>Cancel</Button><PrimaryButton type="submit" disabled={renameBusy || !newTitle.trim()}>{renameBusy && <LoaderCircle size={14} className="animate-spin" />}Save name</PrimaryButton></div></form></DialogContent></Dialog></>;
 });

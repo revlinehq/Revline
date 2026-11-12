@@ -51,7 +51,7 @@ export function NewProjectPageSkeleton() {
 
 export function ChatsPageSkeleton() {
   return <div className="workspace-page workspace-history-page"><main className="workspace-history-content">
-    <div className="workspace-page-heading"><h1>Your chats</h1><p>Continue where you left off, or start something new.</p></div>
+    <div className="workspace-page-heading"><h1>Your projects</h1><p>Continue where you left off, or start something new.</p></div>
     <div className="workspace-history-tools"><Skeleton className="h-8 flex-1" /><Skeleton className="h-8 w-36" /></div>
     <ChatRowsSkeleton />
   </main></div>;
