@@ -72,6 +72,7 @@ import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_editorTurn from "../lib/editorTurn.js";
 import type * as lib_editor_command from "../lib/editor_command.js";
 import type * as lib_effect_plan from "../lib/effect_plan.js";
+import type * as lib_exact from "../lib/exact.js";
 import type * as lib_gemini_billing from "../lib/gemini_billing.js";
 import type * as lib_incidents from "../lib/incidents.js";
 import type * as lib_inspectTimeline from "../lib/inspectTimeline.js";
@@ -230,6 +231,7 @@ declare const fullApi: ApiFromModules<{
   "lib/editorTurn": typeof lib_editorTurn;
   "lib/editor_command": typeof lib_editor_command;
   "lib/effect_plan": typeof lib_effect_plan;
+  "lib/exact": typeof lib_exact;
   "lib/gemini_billing": typeof lib_gemini_billing;
   "lib/incidents": typeof lib_incidents;
   "lib/inspectTimeline": typeof lib_inspectTimeline;

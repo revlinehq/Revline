@@ -77,14 +77,22 @@ export class EditorTurn extends Agent<Env> {
       const claim = await ctx.runMutation(internal.agentRunner.claim, { ...run, claimId });
       if (!claim) return;
       if (claim.attempt >= claim.maxAttempts) throw new Error(`The turn was interrupted ${claim.attempt} times.`);
-      const beat = setInterval(() => { void ctx.runMutation(internal.agentRunner.heartbeat, run).catch(() => {}); }, HEARTBEAT_MS);
+      // Stop reaches the turn two ways, so it does not poll: /runs/stop cancels this fiber at once, and a heartbeat that
+      // finds the run no longer active (stopped, replaced or ended elsewhere) aborts it within 30 seconds. Writes after
+      // Stop are refused in Convex either way.
+      const ended = new AbortController();
+      const endTurn = () => ended.abort(fiber.signal.reason);
+      if (fiber.signal.aborted) endTurn(); else fiber.signal.addEventListener('abort', endTurn, { once: true });
+      // A refused heartbeat (401/403) means Convex no longer holds this run for the runner: it ended too.
+      const over = () => ended.abort(new Error('The run is no longer active.'));
+      const beat = setInterval(() => { void ctx.runMutation(internal.agentRunner.heartbeat, run).then(active => { if (active === false) over(); }, error => { if (/answered 40[13]\b/.test(error instanceof Error ? error.message : '')) over(); }); }, HEARTBEAT_MS);
       try {
         await runEditorTurn(ctx, { ...args, ...(claim.attempt ? { continuation: { segment: claim.attempt, savedEdits: checkpoint.savedEdits, pendingFastFrames: checkpoint.pendingFastFrames } } : {}) }, {
-          signal: fiber.signal,
+          signal: ended.signal, pollActive: false,
           // savedEdits already counts the edits saved before this attempt.
           onStepFinished: progress => fiber.stash({ ...checkpoint, steps: checkpoint.steps + progress.steps, savedEdits: progress.savedEdits, pendingFastFrames: progress.pendingFastFrames }),
         });
-      } finally { clearInterval(beat); }
+      } finally { clearInterval(beat); fiber.signal.removeEventListener('abort', endTurn); }
       await ctx.runMutation(internal.agentRunner.release, run).catch(() => {});
     } catch (error) {
       // The turn reports its own failures; this is the bridge or the runner itself failing.

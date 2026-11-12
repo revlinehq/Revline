@@ -34,7 +34,7 @@ export const start = internalAction({ args: assistantRunArgs, returns: v.null(),
   return null;
 }});
 
-/** Stop pressed: the turn would notice within two seconds anyway, this ends its model call at once. */
+/** Stop pressed: this ends the runner's turn at once. A runner the request misses notices at its next heartbeat (30 s). */
 export const stop = internalAction({ args: { runId: v.string() }, returns: v.null(), handler: async (_ctx, { runId }) => {
   await callRunner('/runs/stop', JSON.stringify({ runId })).catch(error => console.warn(`[agent-runner] ${JSON.stringify({ event: 'stop-failed', runId, error: error instanceof Error ? error.message : 'unknown' })}`));
   return null;
@@ -63,10 +63,16 @@ export const useNonce = internalMutation({ args: { nonce: v.string() }, returns:
   return true;
 }});
 
-/** For the bridge (agentRunnerHttp.ts): whether a run is still on the runner, and who claimed it. */
-export const turnState = internalQuery({ args: { runId: v.string() }, returns: v.union(v.null(), v.object({ ownerId: v.string(), projectId: v.string(), claimId: v.optional(v.string()), storageIds: v.array(v.string()) })), handler: async (ctx, { runId }) => {
-  const row = await turnRow(ctx, runId);
-  return row ? { ownerId: row.ownerId, projectId: row.projectId, ...(row.claimId ? { claimId: row.claimId } : {}), storageIds: row.storageIds ?? [] } : null;
+/** For the bridge (agentRunnerHttp.ts): the run a signed request acts for, in one transaction. The run must still be
+ * on the runner with this owner and project, and claimed by the request's attempt unless the request is that claim.
+ * Its nonce is spent last, so only an otherwise valid request uses it up and a replay is refused. Null otherwise. */
+export const authorize = internalMutation({ args: { runId: v.string(), ownerId: v.string(), projectId: v.string(), claimId: v.optional(v.string()), claiming: v.boolean(), nonce: v.string() }, returns: v.union(v.null(), v.object({ storageIds: v.array(v.string()) })), handler: async (ctx, args) => {
+  const row = await turnRow(ctx, args.runId);
+  if (!row || row.ownerId !== args.ownerId || row.projectId !== args.projectId) return null;
+  if (!args.claiming && (!row.claimId || row.claimId !== args.claimId)) return null;
+  if (await ctx.db.query('agentRunnerNonces').withIndex('by_nonce', q => q.eq('nonce', args.nonce)).first()) return null;
+  await ctx.db.insert('agentRunnerNonces', { nonce: args.nonce, expiresAt: Date.now() + 2 * RUNNER_REQUEST_WINDOW_MS });
+  return { storageIds: row.storageIds ?? [] };
 }});
 
 export const grantStorage = internalMutation({ args: { runId: v.string(), storageIds: v.array(v.string()) }, returns: v.null(), handler: async (ctx, args) => {

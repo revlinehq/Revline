@@ -10,7 +10,7 @@ import { verifyRunToken, verifyRunnerRequest, type RunScope } from './lib/runner
 // the attempt that claimed the run, and must belong to a run the runner is still working on. Its owner, project, run and chat ids must be
 // that run's, and only the functions a turn uses are reachable.
 const TURN_FUNCTIONS = new Set([
-  'lanes:loadCapability','lanes:requireFinish','lanes:forRun','lanes:begin','lanes:task','lanes:switchLane','lanes:baseline','lanes:evidence','lanes:saveScript','lanes:validate','lanes:timelines','lanes:recordFinish','lanes:clipQa',
+  'lanes:loadCapability','lanes:requireFinish','lanes:forRun','lanes:begin','lanes:task','lanes:taskFields','lanes:switchLane','lanes:baseline','lanes:evidence','lanes:saveScript','lanes:validate','lanes:timelines','lanes:recordFinish','lanes:clipQa',
   'clipping:begin', 'clipping:review', 'clipping:prepareCheck', 'clipping:checkTranscript', 'clipping:selectChecks', 'clipping:reserveVisual', 'clipping:recordVisual', 'clipping:completionState', 'clipping:runStarted',
   'assistantTurnRecovery:advance','assistantTurnRecovery:checkpoint','assistantTurnRecovery:draft','assistantTurnRecovery:interrupted',
   'toolWrites:run', 'toolWrites:receipt',
@@ -60,11 +60,10 @@ async function authorizedRun(ctx: ActionCtx, request: Request, body: ArrayBuffer
   try { scope = JSON.parse(request.headers.get('x-runner-scope') ?? ''); } catch { return null; }
   if (![scope?.runId, scope?.ownerId, scope?.projectId, scope?.threadId].every(id => typeof id === 'string' && id.length > 0 && id.length <= 200)) return null;
   if (!await verifyRunToken(process.env.AGENT_RUNNER_RUN_KEY, scope, request.headers.get('x-runner-token') ?? '')) return null;
-  const turn = await ctx.runQuery(internal.agentRunner.turnState, { runId: scope.runId });
-  if (!turn || turn.ownerId !== scope.ownerId || turn.projectId !== scope.projectId) return null;
-  if (!claiming && (!turn.claimId || turn.claimId !== request.headers.get('x-runner-claim'))) return null;
-  // Last, so only an otherwise valid request spends its nonce: a replay is refused here.
-  if (!await ctx.runMutation(internal.agentRunner.useNonce, { nonce })) return null;
+  // One transaction checks the run and its claim, then spends the nonce: one function run per call, not two.
+  const claimId = request.headers.get('x-runner-claim');
+  const turn = await ctx.runMutation(internal.agentRunner.authorize, { runId: scope.runId, ownerId: scope.ownerId, projectId: scope.projectId, ...(claimId ? { claimId } : {}), claiming, nonce });
+  if (!turn) return null;
   return { ...scope, storageIds: turn.storageIds };
 }
 

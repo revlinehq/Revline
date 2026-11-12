@@ -5,6 +5,7 @@ import {
   mutation,
   query,
   type MutationCtx,
+  type QueryCtx,
 } from './_generated/server';
 import {
   laneValidator,
@@ -163,21 +164,37 @@ export const forTab = internalQuery({
       : null;
   },
 });
+/** This owner's task row in this project, or null when there is none; another owner's or project's row throws. */
+async function ownTask(ctx: QueryCtx, args: { ownerId: string; projectId: Id<'projects'>; taskId: string }) {
+  await projectIdentity(ctx, args.projectId, args.ownerId);
+  const row = await ctx.db
+    .query('editingLaneTasks')
+    .withIndex('by_task', (q) => q.eq('taskId', args.taskId))
+    .unique();
+  if (row && (row.projectId !== args.projectId || row.ownerId !== args.ownerId))
+    throw new ConvexError('Task not found.');
+  return row;
+}
 export const task = internalQuery({
   args: taskScope,
   returns: v.any(),
-  handler: async (ctx, args) => {
-    await projectIdentity(ctx, args.projectId, args.ownerId);
-    const row = await ctx.db
-      .query('editingLaneTasks')
-      .withIndex('by_task', (q) => q.eq('taskId', args.taskId))
-      .unique();
-    if (
-      row &&
-      (row.projectId !== args.projectId || row.ownerId !== args.ownerId)
-    )
-      throw new ConvexError('Task not found.');
-    return row;
+  handler: (ctx, args) => ownTask(ctx, args),
+});
+/** The task for a tool call: its small fields, the tabs that have a baseline, and only the evidence of the named
+ * checks. The full row carries up to 650 KB of evidence, which only finish and the checks themselves need. */
+export const taskFields = internalQuery({
+  args: { ...taskScope, evidenceTools: v.array(v.string()) },
+  returns: v.any(),
+  handler: async (ctx, { evidenceTools, ...args }) => {
+    const row = await ownTask(ctx, args);
+    if (!row) return null;
+    const { evidence, baselines, ...fields } = row;
+    const wanted = new Set(evidenceTools);
+    return {
+      ...fields,
+      baselineTimelineIds: baselines.map((item) => item.timelineId),
+      evidence: evidence.filter((item) => wanted.has(item.tool)),
+    };
   },
 });
 export const begin = internalMutation({
