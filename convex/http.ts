@@ -11,7 +11,60 @@ import { registerAgentRunnerRoutes } from './agentRunnerHttp';
 import { registerMcpBridgeRoutes } from './mcpBridgeHttp';
 import { registerAppleBillingRoutes } from './appleBillingHttp';
 import { discordWebhookUrl } from './lib/discord_alert';
-import { fromStripeSubscription } from './lib/billing_access';
+import { fromStripeSubscription, isEditorSubscription } from './lib/billing_access';
+type HttpCtx = Parameters<Parameters<typeof httpAction>[0]>[0];
+/** Reconcile CURRENT Stripe state, never an old event snapshot. The sync token also prevents concurrent reads from
+ *  applying in reverse order, and an event already applied to this subscription is skipped. */
+async function syncSubscription(ctx: HttpCtx, stripe: Stripe, stripeSubscriptionId: string, eventId: string) {
+  const token = await ctx.runMutation(internal.billing.beginSubscriptionSync, { stripeSubscriptionId, eventId });
+  if (token === null) return;
+  const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+  const item = subscription.items.data[0];
+  if (subscription.id !== stripeSubscriptionId) throw new Error('Invalid subscription response');
+  await ctx.runMutation(internal.billing.applySubscriptionSync, {
+    stripeSubscriptionId, eventId, token,
+    stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
+    status: subscription.status, currentPeriodEnd: item?.current_period_end ?? 0,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+    cancelAt: subscription.cancel_at ?? undefined, quantity: item?.quantity ?? 1,
+    // The price's lookup key names the plan, so a price changed in the portal or dashboard still reads right.
+    ...fromStripeSubscription(subscription),
+  });
+}
+const ENDED = ['canceled', 'incomplete_expired'];
+/** A disputed charge ends every Revline subscription of that customer now; a fully refunded subscription invoice
+ *  ends that subscription now. Both read current Stripe state, so a redelivered event finds nothing left to cancel;
+ *  the cancel itself carries an idempotency key per event and subscription. */
+async function revokeForChargeback(ctx: HttpCtx, stripe: Stripe, event: Stripe.Event) {
+  const ids = new Set<string>();
+  if (event.type === 'charge.dispute.created') {
+    const { charge: chargeRef } = event.data.object as Stripe.Dispute;
+    const charge = await stripe.charges.retrieve(typeof chargeRef === 'string' ? chargeRef : chargeRef.id);
+    const customer = typeof charge.customer === 'string' ? charge.customer : charge.customer?.id;
+    if (!customer) return;
+    const remote = await stripe.subscriptions.list({ customer, status: 'all', limit: 100 });
+    for (const sub of remote.data) if (!ENDED.includes(sub.status) && isEditorSubscription(fromStripeSubscription(sub))) ids.add(sub.id);
+  } else {
+    const charge = await stripe.charges.retrieve((event.data.object as Stripe.Charge).id);
+    if (!charge.refunded || charge.amount_refunded < charge.amount) return;
+    const paymentIntent = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
+    if (!paymentIntent) return;
+    const payments = await stripe.invoicePayments.list({ payment: { type: 'payment_intent', payment_intent: paymentIntent }, expand: ['data.invoice'], limit: 10 });
+    for (const payment of payments.data) {
+      const invoice = payment.invoice;
+      if (typeof invoice === 'string' || invoice.deleted) continue;
+      const ref = invoice.parent?.subscription_details?.subscription;
+      if (!ref) continue;
+      const sub = typeof ref === 'string' ? await stripe.subscriptions.retrieve(ref) : ref;
+      if (!ENDED.includes(sub.status) && isEditorSubscription(fromStripeSubscription(sub))) ids.add(sub.id);
+    }
+  }
+  for (const id of ids) {
+    await stripe.subscriptions.cancel(id, { prorate: false }, { idempotencyKey: `revline-revoke:${event.id}:${id}` });
+    console.info('Stripe subscription ended after a chargeback', { eventId: event.id, type: event.type });
+    await syncSubscription(ctx, stripe, id, event.id);
+  }
+}
 const http = httpRouter();
 http.route({ path: '/pixel-track', method: 'GET', handler: servePixelTrack });
 registerAlertWebhooks(http);
@@ -65,25 +118,9 @@ if (process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET) {
     }
     try {
       if (['customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted'].includes(event.type)) {
-        const stripeSubscriptionId = (event.data.object as Stripe.Subscription).id;
-        const token = await ctx.runMutation(internal.billing.beginSubscriptionSync, { stripeSubscriptionId, eventId: event.id });
-        if (token !== null) {
-          // Reconcile CURRENT Stripe state, never an old event snapshot. The sync
-          // token also prevents concurrent reads from applying in reverse order.
-          const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
-          const item = subscription.items.data[0];
-          if (subscription.id !== stripeSubscriptionId) throw new Error('Invalid subscription response');
-          await ctx.runMutation(internal.billing.applySubscriptionSync, {
-            stripeSubscriptionId, eventId: event.id, token,
-            stripeCustomerId: typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id,
-            status: subscription.status, currentPeriodEnd: item?.current_period_end ?? 0,
-            cancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
-            cancelAt: subscription.cancel_at ?? undefined, quantity: item?.quantity ?? 1,
-            // The price's lookup key names the plan, so a price changed in the portal or dashboard still reads right.
-            ...fromStripeSubscription(subscription),
-          });
-        }
+        await syncSubscription(ctx, stripe, (event.data.object as Stripe.Subscription).id, event.id);
       } else {
+        if (event.type === 'charge.dispute.created' || event.type === 'charge.refunded') await revokeForChargeback(ctx, stripe, event);
         await processEvent(ctx, components.stripe, event, stripe);
       }
     } catch {
