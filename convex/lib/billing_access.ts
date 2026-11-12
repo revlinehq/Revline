@@ -99,15 +99,22 @@ export async function requireMcpAccess(ctx: QueryCtx | MutationCtx, ownerId: str
   }
 }
 
-/** Model upgrades require a current paid term or an operator-granted Ultra plan; trials and other
- * complimentary access only grant editing. Deployments without billing (development, agent
+/** A Stripe free trial with no paid term beside it: it gets Starter's models (see productionOffer), not its plan's. */
+async function onTrialOnly(ctx: QueryCtx | MutationCtx, ownerId: string) {
+  if (!billingEnabled() || !billingConfigured()) return false;
+  const subs = (await editorSubscriptions(ctx, ownerId)).filter(sub => subscriptionTier(sub) !== null);
+  return subs.some(sub => sub.status === 'trialing' && hasEditorAccess(sub)) && !subs.some(hasPaidEditorSubscriptionTerm);
+}
+
+/** Model upgrades require a current paid term, a Stripe free trial (held to Starter's models) or an operator-granted
+ * Ultra plan; other complimentary access only grants editing. Deployments without billing (development, agent
  * worktrees, self-hosted) meter no one, so every account keeps the configured models there. */
 export async function hasPaidModelAccess(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled()) return true;
   if (await hasPaidAppleModelAccess(ctx, ownerId)) return true;
   if ((await activeComplimentaryEntitlement(ctx, ownerId))?.plan === 'ultra') return true;
   if (!billingConfigured()) return false;
-  return (await editorSubscriptions(ctx, ownerId)).some(sub => hasPaidEditorSubscriptionTerm(sub) && subscriptionTier(sub) !== null);
+  return (await editorSubscriptions(ctx, ownerId)).some(sub => (hasPaidEditorSubscriptionTerm(sub) || sub.status === 'trialing' && hasEditorAccess(sub)) && subscriptionTier(sub) !== null);
 }
 
 /** Production, or a development deployment set to behave like it (EDITOR_PRODUCTION_OFFER=true), limits paid
@@ -118,13 +125,14 @@ export const usesProductionOffer = () => incidentDeployment() === 'prod' || proc
 export const productionDefaultModel = () => usesProductionOffer() ? offeredEditorModel(productionEditorOffer('pro')) : null;
 
 /** The models and efforts this paid account may pick, by plan; null where no offer applies (the deployment's own
- * switches decide). Starter is held to PRODUCTION_EDITOR_OFFER.starter on every billed deployment; Pro and Studio
+ * switches decide). Starter and a free trial are held to PRODUCTION_EDITOR_OFFER.starter on every billed deployment; Pro and Studio
  * get theirs in production. A request, saved choice or queued pin outside it runs on its default. Free accounts keep their own model. */
 export async function productionOffer(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<EditorOffer | null> {
   // A deployment without billing meters no one, so there every account gets the Ultra list (as with canChooseReasoningEffort).
   if (!billingEnabled()) return usesProductionOffer() ? productionEditorOffer('ultra') : null;
   const tier = await activePlanTier(ctx, ownerId);
-  if (tier === 'starter') return productionEditorOffer('starter');
+  // A free trial runs Starter's models until its first paid term, whatever plan it trials.
+  if (tier === 'starter' || await onTrialOnly(ctx, ownerId)) return productionEditorOffer('starter');
   return usesProductionOffer() ? productionEditorOffer(tier === 'studio' ? 'ultra' : 'pro') : null;
 }
 
