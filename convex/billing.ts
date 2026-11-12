@@ -5,7 +5,7 @@ import { components, internal } from "./_generated/api";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
 import { PLANS, PLAN_RANK, type PlanTier } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
-import { activePlanTier, billingConfigured, billingEnabled, editorSubscriptions, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription, pinnedPriceId, subscriptionTier } from './lib/billing_access';
+import { activePlanTier, billingConfigured, billingEnabled, editorSubscriptions, fromStripeSubscription, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription, pinnedPriceId, subscriptionTier } from './lib/billing_access';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
 
 function ready() { return billingEnabled() && billingConfigured(); }
@@ -77,13 +77,14 @@ export const applySubscriptionSync = internalMutation({
     return true;
   },
 });
-/** The plan's Stripe price: the active price with the plan's lookup key, or STRIPE_<TIER>_PRICE_ID when no price
- *  carries it. Either way it must be the plan's monthly USD amount. */
+/** The plan's Stripe price: the active price with the plan's lookup key, else STRIPE_<TIER>_PRICE_ID. Only a price
+ *  for the plan's monthly USD amount is used. */
 async function planPrice(client: Stripe, tier: PlanTier) {
   const plan = PLANS[tier], pinned = pinnedPriceId(tier);
-  const price = (await client.prices.list({ lookup_keys: [plan.lookupKey], active: true, limit: 1 })).data[0] ?? (pinned ? await client.prices.retrieve(pinned) : undefined);
-  if (!price) throw new ConvexError(`${plan.name} is not available yet.`);
-  if (!price.active || price.currency !== 'usd' || price.unit_amount !== plan.monthlyPrice * 100 || price.recurring?.interval !== 'month' || price.recurring.interval_count !== 1) throw new ConvexError('Billing price does not match the plan.');
+  const fits = (price?: Stripe.Price) => !!price && price.active && price.currency === 'usd' && price.unit_amount === plan.monthlyPrice * 100 && price.recurring?.interval === 'month' && price.recurring.interval_count === 1;
+  const [byKey, byId] = await Promise.all([client.prices.list({ lookup_keys: [plan.lookupKey], active: true, limit: 1 }).then(list => list.data[0]), pinned ? client.prices.retrieve(pinned).catch(() => undefined) : undefined]);
+  const price = [byKey, byId].find(fits);
+  if (!price) throw new ConvexError(byKey || byId ? 'Billing price does not match the plan.' : `${plan.name} is not available yet.`);
   return price.id;
 }
 const planArg = v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"), v.literal("ultra"));
@@ -105,7 +106,7 @@ export const createCheckout = action({ args: { plan: planArg }, returns: v.objec
   // Also check Stripe directly so delayed webhooks cannot create duplicate subscriptions or trials.
   const remote = await client.subscriptions.list({ customer: customer.customerId, status: 'all', limit: 100 });
   if (remote.has_more) throw new ConvexError('Please manage your existing subscriptions in billing.');
-  const editor = remote.data.filter(sub => isEditorSubscription({ priceId: sub.items.data[0]?.price.id ?? '', metadata: sub.metadata }));
+  const editor = remote.data.filter(sub => isEditorSubscription(fromStripeSubscription(sub)));
   if (editor.some(sub => !['canceled', 'incomplete_expired'].includes(sub.status))) throw new ConvexError('You already have a subscription. Manage it in billing.');
   // Only plans with trialDays (Pro) start with a trial.
   const reservationArgs = { ownerId: identity.subject, priceId, origin, trialEligible: PLANS[tier].trialDays > 0 && subscriptions.length === 0 && editor.length === 0 };
@@ -155,10 +156,10 @@ async function changeSubscriptionPlan(ctx: ActionCtx, tier: PlanTier) {
   const client = new Stripe(process.env.STRIPE_SECRET_KEY!);
   const priceId = await planPrice(client, tier);
   const remote = await client.subscriptions.list({ customer: customer.stripeCustomerId, status: 'all', limit: 100 });
-  const current = remote.data.filter(sub => ['active', 'trialing'].includes(sub.status) && isEditorSubscription({ priceId: sub.items.data[0]?.price.id ?? '', metadata: sub.metadata }));
+  const current = remote.data.filter(sub => ['active', 'trialing'].includes(sub.status) && isEditorSubscription(fromStripeSubscription(sub)));
   if (current.length !== 1 || current[0].items.data.length !== 1) throw new ConvexError('Please manage your subscription in billing.');
   const [subscription] = current, [item] = subscription.items.data;
-  const from = subscriptionTier({ priceId: item.price.id, metadata: subscription.metadata });
+  const from = subscriptionTier(fromStripeSubscription(subscription));
   if (item.price.id === priceId && from === tier) return null;
   const upgrade = PLAN_RANK[tier] > PLAN_RANK[from];
   try {

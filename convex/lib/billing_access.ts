@@ -1,4 +1,4 @@
-import { PLAN_RANK, PLAN_TIERS, isPlanTier, type PlanTier } from '../../lib/billing/plan';
+import { PLAN_RANK, PLAN_TIERS, isPlanTier, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
 import { editorEffortChoiceAllowed, offeredEditorModel, productionEditorOffer, type EditorOffer } from '../../lib/ai/claude-model';
 import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
@@ -16,15 +16,21 @@ export const pinnedPriceId = (tier: PlanTier) => process.env[PRICE_ENV[tier]]?.t
 /** The retired Ultra price, if a deployment still names it: such a subscription is treated as Studio. */
 const legacyUltraPrice = () => process.env.STRIPE_ULTRA_PRICE_ID?.trim() || undefined;
 type SubscriptionLike = { priceId: string; metadata?: Record<string, unknown> };
-export const isEditorSubscription = (sub: SubscriptionLike) => sub.metadata?.app === 'revline-editor' || isPlanTier(sub.metadata?.plan) || PLAN_TIERS.some(tier => pinnedPriceId(tier) === sub.priceId) || (!!legacyUltraPrice() && sub.priceId === legacyUltraPrice());
-/** Which plan a subscription is on. The webhook writes `plan` from the price's lookup key on every sync
- *  (convex/http.ts), so it follows price changes made anywhere; checkout and changePlan write it too.
- *  Without it, a named price ID decides, and a subscription from before plans had names is Pro. */
+export const isEditorSubscription = (sub: SubscriptionLike) => sub.metadata?.app === 'revline-editor' || PLAN_TIERS.some(tier => pinnedPriceId(tier) === sub.priceId) || (!!legacyUltraPrice() && sub.priceId === legacyUltraPrice());
+/** A Stripe subscription as Revline reads it. A price with a Revline lookup key names the plan (and marks the
+ *  subscription as Revline's), overriding metadata that checkout wrote, so a price changed in the Stripe portal or
+ *  dashboard reads right. The webhook stores this form; checkout and changePlan read live Stripe through it too. */
+export function fromStripeSubscription(sub: { metadata: Record<string, string>; items: { data: Array<{ price: { id: string; lookup_key: string | null } }> } }) {
+  const price = sub.items.data[0]?.price, plan = tierForLookupKey(price?.lookup_key);
+  return { priceId: price?.id ?? '', metadata: { ...sub.metadata, ...(plan ? { plan, app: 'revline-editor' } : {}) } };
+}
+/** Which plan a subscription is on: a named price ID first, then the plan in its metadata (from the lookup key,
+ *  see fromStripeSubscription, or from checkout). A subscription from before plans had names is Pro. */
 export function subscriptionTier(sub: SubscriptionLike): PlanTier {
-  if (isPlanTier(sub.metadata?.plan)) return sub.metadata.plan;
   const pinned = PLAN_TIERS.find(tier => pinnedPriceId(tier) === sub.priceId);
   if (pinned) return pinned;
-  return legacyUltraPrice() && sub.priceId === legacyUltraPrice() ? 'studio' : 'pro';
+  if (legacyUltraPrice() && sub.priceId === legacyUltraPrice()) return 'studio';
+  return isPlanTier(sub.metadata?.plan) ? sub.metadata.plan : 'pro';
 }
 export const hasPaidEditorSubscriptionTerm = (sub: { status: string; currentPeriodEnd: number }) => sub.status === 'active' && sub.currentPeriodEnd > Date.now() / 1000;
 export const hasEditorAccess = (sub: { status: string; currentPeriodEnd: number }) => (sub.status === 'active' || sub.status === 'trialing') && sub.currentPeriodEnd > Date.now() / 1000;
