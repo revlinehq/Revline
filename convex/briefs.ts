@@ -1,4 +1,5 @@
 import { ConvexError, v } from 'convex/values';
+import { runFailure } from '../lib/ai/run-failure';
 import { runArgs } from './lib/active_run';
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from './_generated/server';
 import type { Id } from './_generated/dataModel';
@@ -15,7 +16,7 @@ export const BRIEF_RULES = 40, BRIEF_RULE_LENGTH = 300, BRIEF_WORDS_LENGTH = 600
 async function requireRun(ctx: QueryCtx | MutationCtx, args: { projectId: Id<'projects'>; ownerId: string; runId: string }, reading = false) {
   const run = await projectRun(ctx, args.projectId, args.ownerId);
   if (reading && args.runId.startsWith(READ_ONLY_RUN_PREFIX)) return;
-  if (run.aiRunId !== args.runId || !run.aiRunning) throw new ConvexError('AI run is no longer active');
+  if (run.aiRunId !== args.runId || !run.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
 }
 const row = (ctx: QueryCtx, projectId: Id<'projects'>) => ctx.db.query('projectBriefs').withIndex('by_project', q => q.eq('projectId', projectId)).unique();
 

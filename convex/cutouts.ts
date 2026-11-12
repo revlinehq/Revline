@@ -1,4 +1,5 @@
 import { subjectSelectionValidator } from './lib/pixel_track_validator';
+import { runFailure } from '../lib/ai/run-failure';
 import { subjectSelection, subjectSelectionKey, type PixelTrackRequest } from '../lib/media-analysis/pixel-track';
 import { ConvexError, v } from 'convex/values';
 import { internalMutation, mutation, query, type MutationCtx } from './_generated/server';
@@ -72,7 +73,7 @@ const estimate = (seconds: number, fps = 30) => Math.max(.01, Math.round(Math.ce
 
 export const startFromRun = internalMutation({ args: { projectId: v.id('projects'), ownerId: v.string(), runId: v.string(), clipId: v.string(), mode: v.optional(cutoutMode), selection: v.optional(subjectSelectionValidator) }, returns: v.object({ cutoutId: v.id('cutouts'), estimatedUsd: v.number(), alreadyRunning: v.boolean(), reused: v.boolean() }), handler: async (ctx, args) => {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
+  if (!project || project.ownerId !== args.ownerId || project.aiRunId !== args.runId || !project.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
   return startCutoutFor(ctx, args.ownerId, args.projectId, args.clipId, args.mode, undefined, args.selection);
 }});
 
