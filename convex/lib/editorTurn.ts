@@ -14,7 +14,7 @@ import { mergeToolInputDeltas } from '../../lib/ai/stream-deltas';
 import {assistantRunArgs,MAX_REPAIR_PASSES} from './assistant_run';
 import { type EffectPlan } from '../../lib/ai/edit-plan';
 import { SPEECH_EDIT_ORDER, WRITING_STYLE_RULES, editorDisclosureRules } from "../../lib/ai/editor-style";
-import { NoSuchToolError, wrapLanguageModel } from "ai";
+import { NoSuchToolError, wrapLanguageModel, type ModelMessage } from "ai";
 import { openAIEditorImages } from "../../lib/ai/openai-editor-images";
 import { leadingSystemMessages } from "../../lib/ai/leading-system-messages";
 import { openAITokenCounter } from '../../lib/ai/openai-token-count';
@@ -110,6 +110,17 @@ export async function runEditorTurn(ctx: ActionCtx, args: EditorTurnArgs, hooks:
     const draft=args.continuation?await ctx.runQuery(internal.assistantTurnRecovery.draft,run):null;
     const toolkit = createEditorToolkit(ctx, { run, project, assets, recovering, inspectFirst: recovery !== undefined, segment,lane:initialLane,scriptFirst:reelRequest,taskId:args.runId,agent:selection.modelId,finishRequired:laneTask.required,laneChosen:true,capabilities:laneTask.capabilities,draft:draft?.timeline, checkLevel, pendingFastFrames: args.continuation?.pendingFastFrames, initialPlans: args.continuation && laneChecks(initialLane, checkLevel).fullTools ? await ctx.runQuery(internal.compositionReview.readPlan, run) : [], selectedClipIds: args.selectedClipIds ?? (args.selectedClipId ? [args.selectedClipId] : []), playhead: args.playhead, publication: { threadId: args.threadId, promptMessageId: args.promptMessageId }, abortSignal });
     const { tools, editSession } = toolkit;
+    // After a passed finish the tool list stays in the request: tools head the cached prefix (and Claude's thinking is
+    // bound to it), and dropping them made the closing step rewrite the whole cache. An editing tool called then is not
+    // run; exportVideo and its reads stay open. The answer is not a failure, so it cannot reopen a checked request.
+    for (const [name, tool] of Object.entries(tools) as [string, { execute?: (...args: never[]) => Promise<unknown> }][]) {
+      const execute = tool.execute;
+      if (!execute || AFTER_FINISH_TOOLS.has(name)) continue;
+      tool.execute = async function (this: unknown, ...args: never[]) {
+        if (toolkit.laneFinished()) return { notRun: true, message: withheldToolGuidance(name, toolkit.lane(), { finished: true, allowed: true }) };
+        return execute.apply(this ?? tool, args);
+      };
+    }
     session = editSession;
     const { provider, modelId } = selection;
     const enforceTokenBudget=editorTokenBudgetEnabled();
@@ -202,13 +213,19 @@ For edit requests, use one brief initial sentence stating the requested action, 
             // and withholding finish for it left the turn with no way to end. A passed check supersedes those steps.
             // Export stays open after a passed finish: "edit it, then export it" exports the checked edit. exportVideo only
             // leaves a card in the editor; the user's press on it is the confirmation (convex/assistantExports.ts).
-            const activeTools=toolkit.laneFinished()?toolkit.availableToolNames().filter(name=>AFTER_FINISH_TOOLS.has(name)):toolkit.availableToolNames().filter(name=>toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name));
+            const finished=toolkit.laneFinished();
+            const activeTools=toolkit.availableToolNames().filter(name=>toolkit.recipe().fullTools||!FULL_CHECK_TOOLS.has(name));
             const failed=toolkit.laneFailure();
             if(failed?.exhausted)throw exhaustedLaneError(failed.lane,failed.failures.join(' '));
-            const mustCallTool=toolkit.requiresFinish()&&!toolkit.laneFinished();
+            const mustCallTool=toolkit.requiresFinish()&&!finished;
             // Claude is never forced to call a tool: Sonnet 5.5 and Opus 5.5 answer a forced tool_choice with a 400, and Haiku 5.5
             // accepts it but skips thinking on that step. The reply gate withholds early text and the repair pass asks for finish.
-            return {activeTools,toolChoice:editorToolChoice(provider,mustCallTool),messages:[...laneHistory(messages,toolkit.lane()),{role:'system',content:`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${mustCallTool&&provider==='anthropic'?'\nThis request has edits that finish has not passed yet. Call a tool in this step: continue the edit, or call finish. A text reply is withheld until finish passes.':''}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`}]};
+            const content=`${laneInstructions(toolkit.lane())}\n${checkInstructions(toolkit.lane(),toolkit.checkLevel())}${mustCallTool&&provider==='anthropic'?'\nThis request has edits that finish has not passed yet. Call a tool in this step: continue the edit, or call finish. A text reply is withheld until finish passes.':''}${finished?'\nfinish passed: this request is checked. Reply to the user now with what changed. Do not call editing tools; exportVideo, listExports and getExport stay open for an export the user asked for.':''}${unresolved?`\nEarlier steps in this request failed and were not corrected. Retry each one the request still needs while its tools are available. A step you replaced with another approach needs no retry: call finish, whose checks run on the current timeline, and state in the reply anything requested that could not be done. ${completionRepairFeedback(openEdits,'stop')}`:''}`;
+            // The returned messages carry into later steps (AI SDK 7), so each step's note stays where it was sent and the
+            // history only grows. On Claude it is turn-scoped: a tool-result message counts as the next user message, so
+            // earlier copies stay in the prefix but render nothing, and the model reads only the newest one.
+            const note:ModelMessage={role:'system',content,...(provider==='anthropic'?{providerOptions:{anthropic:{clearAt:'next_user_message'}}}:{})};
+            return {activeTools,toolChoice:editorToolChoice(provider,mustCallTool),messages:[...laneHistory(messages,toolkit.lane()),note]};
           },
           ...(repairFeedback ? {
             stopWhen: [({steps: current}) => current.length >= 8 || hasRepeatedToolFailures([...steps, ...current]) || hasStalledReads([...steps, ...current])],
@@ -340,7 +357,7 @@ function unfinishedSummary(steps: readonly { content: readonly unknown[] }[], ch
 }
 /** Why a known tool is not callable in this step, and the call that makes it so. */
 function withheldToolGuidance(name: string, lane: LaneId, state: { finished: boolean; allowed: boolean }) {
-  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed (exportVideo stays open). Reply to the user now; further edits need a new request.`;
+  if (state.finished) return `${name} was not run: this request's finish check passed and its tools are closed (exportVideo, listExports and getExport stay open). Reply to the user now; further edits need a new request.`;
   if (!state.allowed) return laneToolError(lane, name);
   if (FULL_CHECK_TOOLS.has(name)) return fullCheckRefusal(lane, name);
   return `${name} is not available in this step. Continue with the tools provided.`;
