@@ -1,12 +1,16 @@
 // How many social accounts one Revline user may connect per platform, by plan. The one place to change it.
 // Post Bridge bills Revline for every connected account (15 on its $39 plan, 99 on its $99 plan, then $1 each),
 // so the cap is enforced on the server (convex/postingBridge.ts) and applies to accounts connected through it.
+import { POSTING_ACCOUNTS } from '../billing/plan';
+
 export const ACCOUNT_CAPS = {
   /** No active Revline plan: nothing can be exported or posted, so no account slot is spent. */
   none: 0,
+  starter: POSTING_ACCOUNTS.starter,
   /** Pro, including its free trial and complimentary access. */
-  paid: 3,
-  ultra: 3,
+  paid: POSTING_ACCOUNTS.pro,
+  /** Studio, and the Ultra entitlement it grants. */
+  ultra: POSTING_ACCOUNTS.studio,
 } as const;
 export type AccountPlan = keyof typeof ACCOUNT_CAPS;
 
