@@ -58,13 +58,21 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
   return !!await activeComplimentaryEntitlement(ctx, ownerId);
 }
 
-/** The plan this owner is on now, or null without one. App Store and operator grants are Pro, or Studio
- *  when they carry the Ultra entitlement; Stripe subscriptions give their plan. The highest of them counts. */
-export async function activePlanTier(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<PlanTier | null> {
+/** The plan this owner is on now, or null without one, and when its billing period ends (for a Stripe
+ *  subscription: its current period; an App Store grant: its access end; operator grants have none). App Store and
+ *  operator grants are Pro, or Studio when they carry the Ultra entitlement; Stripe subscriptions give their plan.
+ *  The highest of them counts. */
+export async function activePlan(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<{ tier: PlanTier; periodEnd?: number } | null> {
   const apple = await activeAppleEntitlement(ctx, ownerId), complimentary = await activeComplimentaryEntitlement(ctx, ownerId);
-  if (apple?.plan === 'ultra' || complimentary?.plan === 'ultra') return 'studio';
-  const stripe = billingEnabled() && billingConfigured() ? (await editorSubscriptions(ctx, ownerId)).filter(grantsPlan).map(sub => subscriptionTier(sub)!) : [];
-  return highest([...stripe, ...(apple || complimentary ? ['pro' as const] : [])]);
+  const grants: { tier: PlanTier; periodEnd?: number }[] = [];
+  if (apple) grants.push({ tier: apple.plan === 'ultra' ? 'studio' : 'pro', periodEnd: apple.accessUntil });
+  if (complimentary) grants.push({ tier: complimentary.plan === 'ultra' ? 'studio' : 'pro' });
+  if (billingEnabled() && billingConfigured()) for (const sub of (await editorSubscriptions(ctx, ownerId)).filter(grantsPlan)) grants.push({ tier: subscriptionTier(sub)!, periodEnd: sub.currentPeriodEnd * 1000 });
+  const tier = highest(grants.map(grant => grant.tier));
+  return tier ? grants.find(grant => grant.tier === tier && grant.periodEnd !== undefined) ?? { tier } : null;
+}
+export async function activePlanTier(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<PlanTier | null> {
+  return (await activePlan(ctx, ownerId))?.tier ?? null;
 }
 
 /** Studio grants the Ultra entitlement (4K, the faster export lane, model and effort choice). It comes from an

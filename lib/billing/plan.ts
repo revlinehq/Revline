@@ -9,6 +9,28 @@ type Plan = { name: string; tagline: string; monthlyPrice: number; currency: 'US
 /** How many social accounts each plan may connect per platform (lib/posting/account-caps.ts enforces it). */
 export const POSTING_ACCOUNTS: Record<PlanTier, number> = { starter: 1, pro: 3, studio: 5 };
 
+/** Decimal gigabytes, as the Library meter shows sizes. */
+export const GB = 1_000_000_000;
+/**
+ * What each plan may use. The one place to change the numbers; the server enforces them
+ * (convex/lib/plan_limits.ts) and the cards and meters read them.
+ * - storageBytes: Library and project media an account may hold. A new upload or import that would pass it is
+ *   refused with `storage_full`; files already stored are never removed.
+ * - aiMonthlyUsd / aiDailyUsd: model cost an account may spend per Stripe billing period and per UTC day (null: no
+ *   daily cap). Internal only: people see a percentage, never dollars. At the limit new assistant turns and MCP model
+ *   tools are refused with `usage_limit`.
+ */
+export const PLAN_LIMITS: Record<PlanTier, { storageBytes: number; aiMonthlyUsd: number; aiDailyUsd: number | null }> = {
+  starter: { storageBytes: 10 * GB, aiMonthlyUsd: 5, aiDailyUsd: 1 },
+  pro: { storageBytes: 50 * GB, aiMonthlyUsd: 15, aiDailyUsd: 2.5 },
+  studio: { storageBytes: 500 * GB, aiMonthlyUsd: 40, aiDailyUsd: null },
+};
+/** Share of the monthly AI usage at which the editor starts warning. */
+export const AI_USAGE_WARNING = 0.8;
+const storageLine = (tier: PlanTier) => `${PLAN_LIMITS[tier].storageBytes / GB} GB storage`;
+/** "3× Starter's AI usage": plans compare their allowance without naming its cost. */
+const aiUsageLine = (tier: PlanTier) => `${Math.round(PLAN_LIMITS[tier].aiMonthlyUsd / PLAN_LIMITS.starter.aiMonthlyUsd)}× the AI usage of Starter`;
+
 export const PLANS: Record<PlanTier, Plan> = {
   starter: {
     name: 'Starter', tagline: 'For your first clips and reels.', monthlyPrice: 15, currency: 'USD', lookupKey: 'revline_starter_monthly', trialDays: 0,
@@ -18,6 +40,8 @@ export const PLANS: Record<PlanTier, Plan> = {
       'Export in 9:16, 1:1 and 16:9',
       '1080p export, no watermark',
       `Post to ${POSTING_ACCOUNTS.starter} account per platform`,
+      'Monthly AI usage included',
+      storageLine('starter'),
     ],
   },
   pro: {
@@ -25,9 +49,9 @@ export const PLANS: Record<PlanTier, Plan> = {
     lead: 'Everything in Starter, plus',
     features: [
       'Edit from Claude, Codex or Cursor with MCP',
-      'Unlimited MCP calls',
       `Post to ${POSTING_ACCOUNTS.pro} accounts per platform`,
-      'Unlimited projects, 50 GB storage',
+      aiUsageLine('pro'),
+      storageLine('pro'),
     ],
   },
   studio: {
@@ -39,7 +63,8 @@ export const PLANS: Record<PlanTier, Plan> = {
       '4K export',
       'Faster, parallel exports',
       `Post to ${POSTING_ACCOUNTS.studio} accounts per platform`,
-      '500 GB storage',
+      aiUsageLine('studio'),
+      storageLine('studio'),
     ],
   },
 };
