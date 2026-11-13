@@ -183,8 +183,22 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       } else if (!rendered && !decision.eligible) logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
       // Only the browser renderer reads the HTML composition.
       if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,timeline,assets,assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
-      if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
-      else if (!rendered) {
+      if (!rendered && distributed) {
+        // A chunk machine that cannot start, a failed chunk or a failed join draws the export on this machine instead
+        // of failing it. The plan copies the composition, so it is still intact here.
+        try {
+          await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
+          rendered = true;
+        } catch (error) {
+          if (signal.aborted) throw error;
+          console.warn(`Media task ${task.taskId}: distributed export failed; rendering on this machine.`, error instanceof Error ? error.message : error);
+          await rm(output, { force: true });
+          renderer = `browser:local:processor-${MEDIA_PROCESSOR_VERSION}`;
+          latest = undefined; sample = undefined;
+          base = Math.max(base, reported); span = Math.max(1, 95 - base);
+        }
+      }
+      if (!rendered) {
         // A stalled browser render is stopped by the watchdog in runRenderWorker and drawn once more from the
         // start; a second stall fails the export with a plain message instead of hanging behind its lease.
         for (let attempt = 1; ; attempt++) {

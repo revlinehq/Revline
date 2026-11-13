@@ -1,0 +1,1 @@
+- Exports: a distributed (chunked) export that fails now renders on its own machine instead of failing; a GPU export's SwiftShader retry no longer deadlocks on the FFmpeg wrapper. Why: preparing parallel exports for production; chunk joins were verified frame-exact.
