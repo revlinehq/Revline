@@ -24,6 +24,8 @@ type FootageProcessingCardProps = {
   total: number;
   percent: number;
   activity?: string;
+  /** Shown in the small line while a worker is slow to start. */
+  note?: string;
   error?: string;
   onRetry: () => void;
   onReset: () => void;
@@ -43,7 +45,7 @@ const phaseLabels: Record<FootageProcessingPhase, string> = {
   error: 'Your upload needs attention',
 };
 
-export function FootageProcessingCard({ progressKey, files, phase, index, total, percent, activity: stageActivity, error, onRetry, onReset, onOpen }: FootageProcessingCardProps) {
+export function FootageProcessingCard({ progressKey, files, phase, index, total, percent, activity: stageActivity, note, error, onRetry, onReset, onOpen }: FootageProcessingCardProps) {
   const fileTotal = total > 0 ? total : files.length;
   const fileIndex = Math.min(Math.max(1, index), Math.max(1, fileTotal));
   const file = files[fileIndex - 1] ?? files[0];
@@ -52,7 +54,7 @@ export function FootageProcessingCard({ progressKey, files, phase, index, total,
   const transferring = ['connecting', 'preparing', 'reading', 'uploading'].includes(phase);
   const label = stageActivity || (phase === 'uploading' ? 'Uploading footage…' : phaseLabels[phase] + '…');
 
-  const activity = fileTotal > 1 ? `Clip ${fileIndex} of ${fileTotal}` : undefined;
+  const activity = note ?? (fileTotal > 1 ? `Clip ${fileIndex} of ${fileTotal}` : undefined);
   return <FootagePreparation progressKey={progressKey} progress={progress} thumbnail={file?.thumbnail || (file?.kind === 'image' ? file.url : undefined)} fileName={file?.name} activity={activity} label={label} detail={transferring?'Sending your files to your project.':undefined} error={failed ? error || 'Your footage could not be prepared. Retry without choosing the files again.' : undefined}>
     {failed && <div className="footage-processing-actions">
       <PrimaryButton type="button" size="compact" onClick={onRetry}><RotateCcw size={13} aria-hidden="true"/>Retry</PrimaryButton>

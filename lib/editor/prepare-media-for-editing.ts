@@ -2,15 +2,16 @@ import type { Id } from '@/convex/_generated/dataModel';
 import type { ConvexReactClient } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { api } from '@/convex/_generated/api';
-import { mediaTaskActivityLabel } from '@/lib/media-analysis/activity';
+import { mediaTaskActivityLabel, SLOW_START_LABEL, SLOW_START_MS } from '@/lib/media-analysis/activity';
 import { preparedFootageProgress } from './footage-progress';
 import type { MediaAsset } from './types';
 
 type MediaClient = Pick<ConvexReactClient, 'mutation' | 'query'>;
 type PreparationKind = 'extract' | 'waveform' | 'transcribe';
 type TaskState = FunctionReturnType<typeof api.mediaTasks.get>;
-type PreparationTask = { taskId: Id<'mediaTasks'>; completed: boolean; state?: TaskState };
-export type EditingPreparationActivity = { phase: 'processing' | 'watching' | 'listening'; activity: string; percent: number };
+type PreparationTask = { taskId: Id<'mediaTasks'>; completed: boolean; state?: TaskState; queuedSince?: number };
+/** `note` is set only while a task waits unusually long for a worker to start. */
+export type EditingPreparationActivity = { phase: 'processing' | 'watching' | 'listening'; activity: string; percent: number; note?: string };
 
 const taskOrder: PreparationKind[] = ['extract', 'waveform', 'transcribe'];
 const phases: Record<PreparationKind, EditingPreparationActivity['phase']> = { extract: 'processing', waveform: 'processing', transcribe: 'listening' };
@@ -76,16 +77,18 @@ export async function prepareMediaForEditing(
         throw new Error(`${state.error?.trim() || `${labels[kind].replace(/…$/, '')} ${state.status}.`} Retry to prepare this media again.`);
       }
       task.state = state;
+      task.queuedSince = state.status === 'queued' ? task.queuedSince ?? Date.now() : undefined;
       if (state.status === 'completed') { task.completed = true; completed = true; }
     }
     if (completed) {
       asset = await readAsset();
       continue;
     }
-    const kind = active[0], state = tasks.get(kind)!.state!;
-    const activity = state.status === 'retrying' ? 'Retrying media preparation…' : state.activity || kind === 'transcribe' ? mediaTaskActivityLabel({...state,kind}) : state.status === 'queued' ? `Queued · ${labels[kind]}` : labels[kind];
-    const next = { phase: phases[kind], activity, percent };
-    if (next.phase !== previous?.phase || next.activity !== previous?.activity || next.percent !== previous?.percent) { onActivity?.(next); previous = next; }
+    const kind = active[0], { state, queuedSince } = tasks.get(kind)!;
+    const activity = state!.status === 'retrying' ? 'Retrying media preparation…' : state!.activity || kind === 'transcribe' ? mediaTaskActivityLabel({...state!,kind}) : labels[kind];
+    const note = queuedSince !== undefined && Date.now() - queuedSince > SLOW_START_MS ? SLOW_START_LABEL : undefined;
+    const next: EditingPreparationActivity = { phase: phases[kind], activity, percent, ...(note ? { note } : {}) };
+    if (next.phase !== previous?.phase || next.activity !== previous?.activity || next.percent !== previous?.percent || next.note !== previous?.note) { onActivity?.(next); previous = next; }
     await bounded(() => new Promise<void>(resolve => setTimeout(resolve, 1000)));
   }
 }
