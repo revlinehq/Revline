@@ -28,6 +28,8 @@ function redactedMessage(value: unknown, fallback: string) {
   return text.replace(/\b(?:https?|blob|data):[^\s"'<>]+/gi, '[media source]').slice(0, 500);
 }
 
+const REFRESH_TIMEOUT_MS = 15_000;
+
 /** Own the lifetime of every native loading, readiness and recovery operation. */
 export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
   const { document, transport, readTime } = options;
@@ -40,6 +42,18 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
   const error = (message: string) => { if (!disposed) options.onError(redactedMessage(message, 'Could not load this media.')); };
   let rangeWaiting=false;
   const refreshedUrls=new Map<string,string>();
+  // The runtime suspends its AudioContext while paused. A context that cannot
+  // resume (an audio device lost during sleep, a stalled resume) freezes the
+  // transport clock, so the session keeps a handle on every context it sees.
+  const contexts=new Set<AudioContext>();
+  const audioPrototype=(document.defaultView as (Window&typeof globalThis)|null)?.AudioContext?.prototype;
+  const nativeAudio=audioPrototype?{suspend:audioPrototype.suspend,resume:audioPrototype.resume}:null;
+  if(audioPrototype&&nativeAudio){
+    audioPrototype.suspend=function(this:AudioContext){contexts.add(this);return nativeAudio.suspend.call(this);};
+    audioPrototype.resume=function(this:AudioContext){contexts.add(this);return nativeAudio.resume.call(this);};
+  }
+  /** Resume inside the Play gesture, before the runtime's own async wake. */
+  const wakeAudio=()=>{for(const context of contexts){if(context.state==='closed')contexts.delete(context);else if(context.state!=='running')void context.resume().catch(()=>{});}};
   const guard = guardPreviewBuffering(document, transport, readTime,
     options.onDiagnostic ? () => { if (!disposed) options.onDiagnostic?.('active media buffering exceeded 2s'); } : undefined,
     waiting => { if (!disposed) options.onWaiting(waiting||rangeWaiting); });
@@ -84,7 +98,11 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
     if (existing?.stamp===generation) return existing.promise;
     const url = previewSourceAt(asset,sourceTime).url;
     if (url?.startsWith('blob:') || !options.refreshMedia) return Promise.resolve(url);
-    const request = Promise.resolve().then(() => options.refreshMedia!([assetId])).then(patches => {
+    // A refresh sent while the backend connection is down after a long idle
+    // can stay pending; bound it so stall recovery can try again.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new DOMException('Refreshing the source took too long.', 'TimeoutError')), REFRESH_TIMEOUT_MS); });
+    const request = Promise.race([Promise.resolve().then(() => options.refreshMedia!([assetId])), timeout]).finally(() => clearTimeout(timer)).then(patches => {
       const patch = patches.find(patch => patch._id === assetId);
       // Playback refresh authorizes the derivative first when one exists.
       if(!asset||!patch)return url;
@@ -130,12 +148,14 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       if (disposed || lifetime.signal.aborted || request.controller.signal.aborted) return;
       const name = cause && typeof cause === 'object' && 'name' in cause ? String(cause.name) : 'UnknownError';
       if (quiet) console.warn('[Revline playback recovery]', JSON.stringify({ reason: 'source reload failed', id: media.dataset.sourceClip, readyState: media.readyState, networkState: media.networkState, seeking: media.seeking, errorType: /^[A-Za-z]+Error$/.test(name) ? name : 'UnknownError' }));
+      // A slow refresh is transient: the stall watcher or the Play watchdog retries it.
+      if (name === 'TimeoutError') { console.warn('[Revline playback recovery]', JSON.stringify({ reason: 'source refresh timed out', id: media.dataset.sourceClip })); return; }
       if (name === 'NotAllowedError') { guard.pause(); error('The media has recovered. Press play to resume.'); }
       else if (!quiet || media.error) error('This source is unavailable. Reimport the clip or reload the project.');
     } finally {
       lifetime.signal.removeEventListener('abort', stopped);
-      if (recoveries.get(media) === request) recoveries.delete(media);
-      attempted.delete(media);
+      // A revived element may already run a newer recovery; leave its markers.
+      if (recoveries.get(media) === request) { recoveries.delete(media); attempted.delete(media); }
     }
   }
   const mediaError = (event: Event) => { void recover(event.target as HTMLMediaElement); };
@@ -170,7 +190,25 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       try { waiting.signal.throwIfAborted(); await waitForPreviewMedia(document, time, waiting.signal, onThumbnail, onSlow ?? options.onSlowLoad); }
       finally { signal.removeEventListener('abort', aborted); lifetime.signal.removeEventListener('abort', aborted); }
     },
-    play() { if (!disposed) guard.play(); },
+    play() { if (!disposed) { wakeAudio(); guard.play(); } },
+    /** Recover a Play that made no progress: wake audio, re-sign and reload
+     * every active source that has failed, emptied or lost its data, then
+     * re-enter the readiness gate at the current position. */
+    revive() {
+      if (disposed) return;
+      wakeAudio();
+      const time = readTime();
+      for (const media of document.querySelectorAll<HTMLMediaElement>('video[data-start],audio[data-start]')) {
+        const start = Number(media.dataset.start), end = Number(media.dataset.end ?? start + Number(media.dataset.duration));
+        if (time < start || time >= end || media.hasAttribute('data-preview-pending') || media.tagName === 'AUDIO' && Number(media.dataset.volume ?? 1) === 0) continue;
+        if (!media.error && media.networkState !== media.NETWORK_NO_SOURCE && media.readyState >= media.HAVE_CURRENT_DATA) continue;
+        // Request a newly signed URL even when an earlier refresh is still pending.
+        const assetId = timeline.clips.find(clip => clip.id === media.dataset.sourceClip)?.assetId;
+        if (assetId) refreshes.delete(assetId);
+        recoveries.get(media)?.controller.abort(); attempted.delete(media); void recover(media, true);
+      }
+      guard.resync(() => transport.seek(time));
+    },
     pause() { if (!disposed) guard.pause(); },
     seek(time: number) { if (!disposed) { guard.cancel(); selectSources(time); transport.seek(time); } },
     resync(seek: () => void = () => transport.seek(readTime())) { if (!disposed) guard.resync(seek); },
@@ -181,6 +219,8 @@ export function createPreviewMediaSession(options: PreviewMediaSessionOptions) {
       disposed = true; lifetime.abort(); clearInterval(sourceTimer);stopStalls(); stopWarmup(); guard.dispose();
       document.removeEventListener('error', mediaError, true);
       document.defaultView?.removeEventListener('revline-effects-error', effectsError);
+      if (audioPrototype && nativeAudio) { audioPrototype.suspend = nativeAudio.suspend; audioPrototype.resume = nativeAudio.resume; }
+      contexts.clear();
       refreshes.clear(); recovered.clear();refreshedUrls.clear();
     },
   };
