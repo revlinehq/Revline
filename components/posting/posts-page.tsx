@@ -1,9 +1,8 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useConvexAuth, useMutation, useQuery } from 'convex/react';
-import type { FunctionReturnType } from 'convex/server';
-import { CircleAlert, CircleCheck, Clock, Ellipsis, Loader, Plus, Send } from 'lucide-react';
+import { CircleAlert, Ellipsis, Loader, Plus } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
@@ -18,43 +17,11 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { AccountAvatar } from './account-avatar';
 import { PostDialog } from './post-dialog';
 import { postTime } from './post-time';
+import { describe, type ClipPost, type Exporting, type Row } from './post-rows';
+import { PostsCalendar, PostsHeader, PostsWeekSkeleton, mondayOf, type PostsView } from './posts-calendar';
 import './posting.css';
 
-type Clip = FunctionReturnType<typeof api.posting.clipPosts>[number];
-type ClipPost = Clip['posts'][number];
-type Exporting = FunctionReturnType<typeof api.postExports.exporting>[number];
 const SHOWN_ACCOUNTS = 4;
-
-/** Still waiting for a time the user picked that has not come yet; nothing has been sent. */
-const waiting = (post: ClipPost, now: number) => post.status === 'scheduled' && post.attempts === 0 && post.scheduledAt !== null && post.scheduledAt > now;
-/** Why a post failed: what the platform or Revline recorded, shortened to a few words when it is an expired sign-in. */
-function reason(post: ClipPost) {
-  if (post.accountStatus === 'needs_reconnect' && (!post.error || /reconnect|expired/i.test(post.error))) return `${PLATFORM_NAMES[post.platform]} sign-in expired`;
-  return post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post`;
-}
-
-/** One clip as one row: which section it belongs to, when, one status word, and what can be done about it. */
-function describe(clip: Clip, off: boolean) {
-  const { posts } = clip, now = Date.now();
-  // Posting is not set up on the server: a post that has not gone out stays queued and reads "Waiting"; the line above the list says why.
-  const held = off && posts.some(post => post.status === 'scheduled' || post.status === 'processing');
-  const failed = posts.filter(post => post.status === 'failed'), published = posts.filter(post => post.status === 'published'), queued = posts.filter(post => waiting(post, now));
-  const scheduled = queued.length > 0;
-  const time = scheduled ? Math.min(...queued.map(post => post.scheduledAt!)) : Math.max(...posts.map(post => post.publishedAt ?? post.scheduledAt ?? clip.createdAt));
-  const counted = published.filter(post => post.views !== null);
-  return {
-    // A held post waits with the scheduled ones.
-    clip, scheduled: scheduled || held, time, failed, published,
-    status: failed.length ? `${failed.length} of ${posts.length} failed` : scheduled ? 'Scheduled' : published.length === posts.length ? 'Posted' : held ? 'Waiting' : 'Posting',
-    icon: failed.length ? CircleAlert : scheduled || held ? Clock : published.length === posts.length ? CircleCheck : Send,
-    reasons: [...new Set(failed.map(reason))],
-    views: counted.length ? counted.reduce((sum, post) => sum + post.views!, 0) : null,
-    retryable: failed.filter(post => post.accountStatus === 'connected'),
-    reconnect: failed.some(post => post.accountStatus === 'needs_reconnect'),
-    cancellable: posts.filter(post => post.status === 'scheduled'),
-  };
-}
-type Row = ReturnType<typeof describe>;
 
 /** A section of post rows, still, while the posts load. */
 export function PostsSkeleton() {
@@ -72,47 +39,57 @@ export function PostsSkeleton() {
   </section>;
 }
 
-/** Every clip Revline is about to post or has posted: one row per clip, however many accounts it went to. */
+/** Every clip Revline is about to post or has posted: a week calendar with each post a card on its day, or the list of rows. */
 export function PostsPage() {
   const { isAuthenticated } = useConvexAuth();
   const clips = useQuery(api.posting.clipPosts, isAuthenticated ? {} : 'skip');
   const exporting = useQuery(api.postExports.exporting, isAuthenticated ? {} : 'skip');
+  const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip'), off = !!platforms && !platforms.some(entry => entry.live);
-  const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel), cancelExporting = useMutation(api.postExports.cancel);
+  const retry = useMutation(api.posting.retry), cancel = useMutation(api.posting.cancel), reschedule = useMutation(api.posting.reschedule), cancelExporting = useMutation(api.postExports.cancel);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
-  const [composing, setComposing] = useState(false);
-  async function run(row: Row, posts: ClipPost[], action: typeof retry, fallback: string) {
+  const [view, setView] = useState<PostsView>('week'), [week, setWeek] = useState<number | null>(null);
+  // The week is the viewer's own, so it is set in the browser: a server in another time zone would render a different one.
+  useEffect(() => setWeek(previous => previous ?? mondayOf(Date.now())), []);
+  /** The Post dialog is open; `at` is the day "Post here" picked. */
+  const [composing, setComposing] = useState<{ at?: number } | null>(null);
+  async function run(row: Row, posts: ClipPost[], action: (post: ClipPost) => Promise<unknown>, fallback: string) {
     if (busy) return;
     setBusy(row.clip.batchId); setError('');
-    const results = await Promise.allSettled(posts.map(post => action({ postId: post.id })));
+    const results = await Promise.allSettled(posts.map(action));
     const failure = results.find(result => result.status === 'rejected');
     if (failure) setError(userError(failure.reason, fallback));
     setBusy(null);
   }
+  const onRetry = (row: Row) => void run(row, row.retryable, post => retry({ postId: post.id }), 'Could not retry this post.');
+  const onCancel = (row: Row) => void run(row, row.cancellable, post => cancel({ postId: post.id }), 'Could not cancel this post.');
+  const onReschedule = (row: Row, scheduledAt: number) => void run(row, row.queued, post => reschedule({ postId: post.id, scheduledAt }), 'Could not move this post.');
+  const onCancelExporting = (clip: Exporting) => { setError(''); void cancelExporting({ pendingId: clip.id }).catch(reason => setError(userError(reason, 'Could not cancel this post.'))); };
   const rows = clips?.map(clip => describe(clip, off)) ?? [];
   const sections = [
     { name: 'Scheduled', rows: rows.filter(row => row.scheduled).sort((a, b) => a.time - b.time) },
     { name: 'Posted', rows: rows.filter(row => !row.scheduled).sort((a, b) => b.time - a.time) },
   ].filter(section => section.rows.length);
-  const newPost = <Button variant="primary" onClick={() => setComposing(true)}><Plus aria-hidden="true" />New post</Button>;
   return <>
-    <main className="dash-content posts-page">
-      <h1 className="sr-only">Posts</h1>
+    <main className="dash-content posts-page" data-view={view}>
+      <PostsHeader view={view} week={week} accounts={accounts} onView={setView} onWeek={setWeek} onNew={() => setComposing({})} />
       {off && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
       {error && <p className="dash-error" role="alert">{error}</p>}
-      {!clips ? <PostsSkeleton />
-        : !sections.length && !exporting?.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p><div className="posts-empty-action">{newPost}</div></div>
+      {view === 'week' ? !clips || !exporting || week === null ? <PostsWeekSkeleton />
+        : <PostsCalendar week={week} rows={rows} exporting={exporting} busy={!!busy} onRetry={onRetry} onCancel={onCancel} onReschedule={onReschedule}
+          onCancelExporting={onCancelExporting} onPostHere={at => setComposing({ at })} />
+        : !clips ? <PostsSkeleton />
+        : !sections.length && !exporting?.length ? <div className="dash-empty"><h2>No posts yet</h2><p>Clips you post or schedule show here.</p></div>
         : <>{!!exporting?.length && <section className="posts-section" aria-label="Exporting">
-          <div className="posts-section-head"><h2>Exporting</h2><span>{exporting.length}</span>{newPost}</div>
-          <Card variant="dash" className="posts-list"><ul>{exporting.map(clip => <ExportingRow key={clip.id} clip={clip} busy={!!busy}
-            onCancel={() => { setError(''); void cancelExporting({ pendingId: clip.id }).catch(reason => setError(userError(reason, 'Could not cancel this post.'))); }} />)}</ul></Card>
-        </section>}{sections.map((section, index) => <section key={section.name} className="posts-section" aria-label={section.name}>
-          <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span>{index === 0 && !exporting?.length && newPost}</div>
+          <div className="posts-section-head"><h2>Exporting</h2><span>{exporting.length}</span></div>
+          <Card variant="dash" className="posts-list"><ul>{exporting.map(clip => <ExportingRow key={clip.id} clip={clip} busy={!!busy} onCancel={() => onCancelExporting(clip)} />)}</ul></Card>
+        </section>}{sections.map(section => <section key={section.name} className="posts-section" aria-label={section.name}>
+          <div className="posts-section-head"><h2>{section.name}</h2><span>{section.rows.length}</span></div>
           <Card variant="dash" className="posts-list"><ul>{section.rows.map(row => <PostRow key={row.clip.batchId} row={row} busy={!!busy}
-            onRetry={() => void run(row, row.retryable, retry, 'Could not retry this post.')} onCancel={() => void run(row, row.cancellable, cancel, 'Could not cancel this post.')} />)}</ul></Card>
+            onRetry={() => onRetry(row)} onCancel={() => onCancel(row)} />)}</ul></Card>
         </section>)}</>}
     </main>
-    {composing && <PostDialog onPostsPage onClose={() => setComposing(false)} />}
+    {composing && <PostDialog onPostsPage scheduleAt={composing.at} onClose={() => setComposing(null)} />}
   </>;
 }
 

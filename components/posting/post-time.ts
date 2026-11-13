@@ -1,4 +1,6 @@
 const DAY = 86400_000;
+/** `datetime-local` wants local time without a zone. */
+export function localInputValue(time: number) { const date = new Date(time - new Date(time).getTimezoneOffset() * 60_000); return date.toISOString().slice(0, 16); }
 const clock = (time: number) => new Date(time).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
 /** Whole calendar days from today to `time`, in the viewer's time zone: 1 is tomorrow, -2 is the day before yesterday. */
 function daysFromToday(time: number, now: number) {

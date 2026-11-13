@@ -322,6 +322,11 @@ export async function reschedulePostFor(ctx: MutationCtx, ownerId: string, postI
   scheduleTime(scheduledAt, now);
   await ctx.db.patch(postId, { scheduledAt, dueAt: scheduledAt, updatedAt: now });
 }
+/** Move a post that has not been sent to another time: Reschedule on the Posts page calendar. */
+export const reschedule = mutation({
+  args: { postId: v.id('postingPosts'), scheduledAt: v.number() }, returns: v.null(),
+  handler: async (ctx, { postId, scheduledAt }) => { await reschedulePostFor(ctx, await requireOwner(ctx), postId, scheduledAt); return null; },
+});
 /** A time a post can be scheduled for: after now and within the horizon. */
 export function scheduleTime(scheduledAt: number, now: number) {
   if (!Number.isFinite(scheduledAt) || scheduledAt <= now) throw new ConvexError('Pick a time in the future.');
