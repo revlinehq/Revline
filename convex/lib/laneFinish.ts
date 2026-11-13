@@ -89,7 +89,7 @@ export async function finishLane(
   const reel = task.lane === 'reel';
   // After the last round of cuts (CUT_READ_ROUNDS) the agent reports what is left; only spots at the cuts still fail.
   const cutOutput = cutRead?.output as { accepted?: Record<string, string>; rounds?: number; heardCut?: string } | undefined;
-  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys(cutOutput?.accepted ?? {}), !!task.script, reel && (cutOutput?.rounds ?? 0) < CUT_READ_ROUNDS));
+  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys(cutOutput?.accepted ?? {}), !!task.script, reel && touched.footage && (cutOutput?.rounds ?? 0) < CUT_READ_ROUNDS));
   // A planned reel's cut is done when the agent read its final prose and said what the viewer hears (heard).
   const cutNow = reel && task.script && touched.footage ? cutScript(timeline, assets) : undefined;
   if (cutNow?.words.length && cutOutput?.heardCut !== cutSignature(cutNow))
