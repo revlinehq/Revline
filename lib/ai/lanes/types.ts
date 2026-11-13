@@ -28,10 +28,9 @@ export type CheckLevel = 'standard' | 'final';
 /** What a lane checks while editing and at finish. */
 export type CheckRecipe = {
   /**
-   * changes: finish draws a few frames of what changed (cuts, overlays, one caption sample), on a hard budget.
-   * sample: saved-data checks; finish draws at most three frames on a plain reel timeline.
-   * data: saved-data delivery checks (finishClipping).
-   * Every recipe except data and sample also renders each changed range at finish.
+   * How changed spots are tracked. finish renders no frames in any recipe: it checks timeline data and the user
+   * reviews the result.
+   * changes: changed spots are tracked. sample: sampled reel spots are tracked. data: saved-data delivery checks (finishClipping).
    */
   frames: 'changes' | 'sample' | 'data';
   /** Pacing, sound-sync and effect-review tools. */
