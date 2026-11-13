@@ -2,7 +2,7 @@
    :root, so the dialog looks the same when the editor opens it outside the dashboard shell. */
 @import '../dashboard/dash-list.css';
 
-/* ---- Posts page header: title, week navigation, Week/List switch, New post, and the accounts being posted to. */
+/* ---- Posts page header: title, week navigation, New post, and the accounts being posted to. */
 .posts-head { display: flex; flex-direction: column; gap: 14px; }
 .posts-head-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; min-height: 36px; }
 .posts-head h1 { margin: 0; color: var(--dash-text); font-size: 22px; font-weight: 600; letter-spacing: -.3px; line-height: 1.2; }
@@ -13,10 +13,7 @@
 .posts-week-nav [data-slot=button][data-variant=ghost]:hover { background: var(--dash-pill); color: var(--dash-text); }
 .posts-page [data-slot=button].posts-today { height: 26px; padding: 0 9px; border-radius: 6px; background: var(--dash-pill); color: #fff; font-size: 12px; font-weight: 400; }
 .posts-page [data-slot=button].posts-today:hover { background: var(--dash-pill-hover); }
-.posts-view[data-slot=toggle-group][data-segmented] { height: 34px; margin-left: auto; padding: 2px; gap: 2px; border-radius: 8px; background: var(--dash-card); }
-.posts-view[data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item] { height: 30px; padding: 0 12px; border-radius: 7px; color: #9A9A9A; font-size: 13px; }
-.posts-view[data-slot=toggle-group][data-segmented] [data-slot=toggle-group-item][data-state=on] { background: var(--dash-pill); color: #fff; }
-.posts-page [data-slot=button][data-variant=primary].posts-new { height: 36px; padding: 0 14px; gap: 7px; border-radius: 8px; font-size: 13px; }
+.posts-page [data-slot=button][data-variant=primary].posts-new { margin-left: auto; height: 36px; padding: 0 14px; gap: 7px; border-radius: 8px; font-size: 13px; }
 .posts-page [data-slot=button][data-variant=primary].posts-new svg { width: 14px; height: 14px; }
 .posts-accounts-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .posts-accounts-label { color: #666; font-size: 12px; }
@@ -32,7 +29,7 @@
 .posts-chip[data-state=expired] [data-slot=button].posts-chip-action:hover { background: #4A3617; }
 
 /* ---- Week view: the calendar is the whole page, wider than the content column. */
-.dash-main > .posts-page[data-view=week] { min-height: calc(100dvh - var(--dash-navbar-height)); padding-inline: var(--dash-gutter); padding-block: 24px; gap: 16px; }
+.dash-main > .posts-page { display: flex; flex-direction: column; min-height: calc(100dvh - var(--dash-navbar-height)); padding-inline: var(--dash-gutter); padding-block: 24px; gap: 16px; }
 /* The week fills the height left under the header; a busy day grows past it and the page scrolls. */
 .posts-week { position: relative; display: flex; flex: 1; flex-direction: column; }
 .posts-week-grid { display: grid; flex: 1; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
@@ -95,53 +92,10 @@
   .posts-day-head, .posts-post-here { grid-column: 1 / -1; }
   .posts-week-note { position: static; width: auto; margin-top: 12px; transform: none; }
   .posts-week { display: flex; flex-direction: column-reverse; }
-  .posts-view[data-slot=toggle-group][data-segmented] { margin-left: 0; }
   .posts-week-nav { padding-left: 0; }
   .posts-head-row h1 { flex-basis: 100%; }
 }
 @media (max-width: 900px) and (hover: hover) { .posts-day:not(:hover) .posts-post-here { visibility: visible; } }
-/* The list view keeps the content column; its header sits above the sections. */
-.posts-page[data-view=list] .posts-head { margin-bottom: 2px; }
-
-/* ---- Posts page: two sections, one row per clip. */
-.posts-page { display: flex; flex-direction: column; gap: 26px; }
-.posts-section { display: flex; flex-direction: column; gap: 8px; container-type: inline-size; }
-.posts-section-head { display: flex; align-items: center; gap: 10px; min-height: 36px; padding: 0 4px; }
-.posts-section-head h2 { margin: 0; font-size: 15px; font-weight: 500; }
-.posts-section-head > span { color: var(--dash-muted); font-size: 14px; }
-.posts-section-head [data-slot=button] { margin-left: auto; }
-.posts-list[data-slot=card] { gap: 0; padding: 0; }
-.posts-list ul { margin: 0; padding: 0; list-style: none; }
-/* Every row uses the same fixed tracks, so the columns line up across the Scheduled and Posted cards. */
-.posts-row { display: grid; grid-template-columns: 30px minmax(0, 2.3fr) minmax(104px, .9fr) minmax(128px, 1.05fr) minmax(150px, 1.35fr) minmax(88px, .75fr) 100px; align-items: center; column-gap: 14px; min-height: 72px; padding: 10px 12px 10px 16px; font-size: 14px; }
-.posts-row + .posts-row { border-top: 1px solid var(--dash-divider); }
-.posts-thumb .workspace-chat-cover { display: grid; place-items: center; width: 30px; height: 52px; overflow: hidden; border-radius: 5px; background: var(--dash-pill); color: var(--dash-muted); }
-.posts-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; }
-.posts-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 15px; }
-/* The caption shortens; the tag saying the assistant made the post always stays whole. */
-.posts-caption:has(.posts-by) { display: flex; align-items: center; gap: 8px; }
-.posts-caption:has(.posts-by) > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.posts-by { flex-shrink: 0; }
-.posts-accounts { display: flex; align-items: center; min-width: 0; }
-.posts-accounts .account-avatar + .account-avatar { margin-left: -4px; }
-.posts-accounts .account-avatar [data-slot=avatar] { width: 28px; height: 28px; box-shadow: 0 0 0 2px var(--dash-card); }
-.posts-accounts .account-avatar [data-slot=avatar-fallback] { font-size: 10px; }
-.posts-accounts-more { margin-left: 8px; color: var(--dash-muted); font-size: 13px; }
-.posts-time { color: var(--dash-muted); white-space: nowrap; }
-.posts-status { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.posts-status > span { display: inline-flex; align-items: center; gap: 7px; color: var(--dash-text); white-space: nowrap; }
-.posts-status svg { width: 15px; height: 15px; flex-shrink: 0; color: var(--dash-muted); }
-.posts-status small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-muted); font-size: 13px; }
-.posts-views { color: var(--dash-text); white-space: nowrap; }
-.posts-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
-/* A narrow list (a phone, or a small window beside the sidebar) stacks each row into three lines. */
-@container (max-width: 860px) {
-  .posts-row { grid-template-columns: 30px minmax(0, 1fr) auto; grid-template-areas: "thumb caption actions" "thumb accounts time" "thumb status views"; column-gap: 12px; row-gap: 6px; padding: 12px 10px 12px 14px; }
-  .posts-thumb { grid-area: thumb; align-self: start; } .posts-caption { grid-area: caption; } .posts-accounts { grid-area: accounts; } .posts-time { grid-area: time; }
-  .posts-status { grid-area: status; align-self: start; } .posts-views { grid-area: views; } .posts-actions { grid-area: actions; min-height: 32px; }
-  .posts-time, .posts-views { justify-self: end; font-size: 13px; }
-  .posts-status small { white-space: normal; }
-}
 
 /* ---- Post dialog. It carries its own shadcn colour mapping: the editor is not under `dash-theme`. */
 .post-dialog[data-slot=dialog-content] {

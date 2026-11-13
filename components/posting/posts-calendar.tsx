@@ -10,7 +10,6 @@ import { ProjectCover } from '@/components/workspace/project-cover';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Segmented } from '@/components/ui/segmented';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -19,8 +18,6 @@ import { localInputValue } from './post-time';
 import type { ClipPost, Exporting, Row } from './post-rows';
 
 type Account = FunctionReturnType<typeof api.posting.accounts>[number];
-export type PostsView = 'week' | 'list';
-const VIEWS = [{ value: 'week', label: 'Week' }, { value: 'list', label: 'List' }] as const;
 
 // ---------------------------------------------------------------- days and weeks, in the viewer's time zone
 
@@ -47,20 +44,19 @@ function postHereTime(day: number) {
 
 // ---------------------------------------------------------------- header and accounts
 
-/** The page title, week navigation, Week/List switch, New post, and the accounts the posts go to. */
-export function PostsHeader({ view, week, accounts, onView, onWeek, onNew }: {
-  view: PostsView; week: number | null; accounts: Account[] | undefined; onView: (view: PostsView) => void; onWeek: (week: number) => void; onNew: () => void;
+/** The page title, week navigation, New post, and the accounts the posts go to. */
+export function PostsHeader({ week, accounts, onWeek, onNew }: {
+  week: number | null; accounts: Account[] | undefined; onWeek: (week: number) => void; onNew: () => void;
 }) {
   return <div className="posts-head">
     <div className="posts-head-row">
       <h1>Posts</h1>
-      {view === 'week' && week !== null && <div className="posts-week-nav">
+      {week !== null && <div className="posts-week-nav">
         <Button variant="ghost" size="icon-sm" aria-label="Previous week" onClick={() => onWeek(addDays(week, -7))}><ChevronLeft /></Button>
         <span>{weekRange(week)}</span>
         <Button variant="ghost" size="icon-sm" aria-label="Next week" onClick={() => onWeek(addDays(week, 7))}><ChevronRight /></Button>
         <Button variant="secondary" size="xs" className="posts-today" onClick={() => onWeek(mondayOf(Date.now()))}>Today</Button>
       </div>}
-      <Segmented className="posts-view" aria-label="View" value={view} onValueChange={onView} options={VIEWS} />
       <Button variant="primary" className="posts-new" onClick={onNew}><Plus aria-hidden="true" />New post</Button>
     </div>
     {accounts && <div className="posts-accounts-row">
@@ -130,7 +126,7 @@ export function PostsCalendar({ week, rows, exporting, ...actions }: { week: num
 /** The page header's rows, still, until the page takes over: the same heights, so nothing moves. */
 export function PostsHeaderSkeleton() {
   return <div className="posts-head">
-    <div className="posts-head-row"><h1>Posts</h1><Skeleton className="ml-auto h-[34px] w-[110px] rounded-[8px]" /><Skeleton className="h-9 w-[106px] rounded-[8px]" /></div>
+    <div className="posts-head-row"><h1>Posts</h1><Skeleton className="ml-auto h-9 w-[106px] rounded-[8px]" /></div>
     <div className="posts-accounts-row"><Skeleton className="h-8 w-[360px] max-w-full rounded-[8px]" /></div>
   </div>;
 }

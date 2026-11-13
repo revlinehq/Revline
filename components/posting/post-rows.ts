@@ -1,5 +1,4 @@
 import type { FunctionReturnType } from 'convex/server';
-import { CircleAlert, CircleCheck, Clock, Send } from 'lucide-react';
 import type { api } from '@/convex/_generated/api';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 
@@ -15,7 +14,7 @@ export function reason(post: ClipPost) {
   return post.error ?? `${PLATFORM_NAMES[post.platform]} did not accept this post`;
 }
 
-/** One clip as one row (or calendar card): which section it belongs to, when, one status word, and what can be done about it. */
+/** One clip as a calendar card: when it goes out or went out, which of its posts failed or wait, and what can be done about them. */
 export function describe(clip: Clip, off: boolean) {
   const { posts } = clip, now = Date.now();
   // Posting is not set up on the server: a post that has not gone out stays queued and reads "Waiting"; the line above the list says why.
@@ -23,14 +22,10 @@ export function describe(clip: Clip, off: boolean) {
   const failed = posts.filter(post => post.status === 'failed'), published = posts.filter(post => post.status === 'published'), queued = posts.filter(post => waiting(post, now));
   const scheduled = queued.length > 0;
   const time = scheduled ? Math.min(...queued.map(post => post.scheduledAt!)) : Math.max(...posts.map(post => post.publishedAt ?? post.scheduledAt ?? clip.createdAt));
-  const counted = published.filter(post => post.views !== null);
   return {
     // A held post waits with the scheduled ones.
     clip, scheduled: scheduled || held, time, failed, published, queued,
-    status: failed.length ? `${failed.length} of ${posts.length} failed` : scheduled ? 'Scheduled' : published.length === posts.length ? 'Posted' : held ? 'Waiting' : 'Posting',
-    icon: failed.length ? CircleAlert : scheduled || held ? Clock : published.length === posts.length ? CircleCheck : Send,
     reasons: [...new Set(failed.map(reason))],
-    views: counted.length ? counted.reduce((sum, post) => sum + post.views!, 0) : null,
     retryable: failed.filter(post => post.accountStatus === 'connected'),
     reconnect: failed.some(post => post.accountStatus === 'needs_reconnect'),
     cancellable: posts.filter(post => post.status === 'scheduled'),

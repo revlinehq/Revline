@@ -24,7 +24,7 @@ export function StatsPageSkeleton() {
 }
 
 export function PostsPageSkeleton() {
-  return <main className="dash-content posts-page" data-view="week"><PostsHeaderSkeleton /><PostsWeekSkeleton /></main>;
+  return <main className="dash-content posts-page"><PostsHeaderSkeleton /><PostsWeekSkeleton /></main>;
 }
 
 export function AccountsPageSkeleton() {
