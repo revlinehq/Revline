@@ -1,34 +1,30 @@
-/* Sized in container units of the 9:16 frame, so the mock scales with the preview exactly. */
-.safe-area-overlay{position:absolute;inset:0;z-index:30;pointer-events:none;container-type:size;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;text-shadow:0 .2cqw .6cqw #0009}
-.safe-area-overlay svg{width:6.6cqw;height:6.6cqw;stroke-width:1.9;filter:drop-shadow(0 .2cqw .5cqw #0008)}
-.safe-area-shade{position:absolute;left:0;right:0}
-.safe-area-shade-top{top:0;height:12cqh;background:linear-gradient(#0000004d,transparent)}
-.safe-area-shade-bottom{bottom:0;height:34cqh;background:linear-gradient(transparent,#00000073)}
-.safe-area-topbar{position:absolute;top:3.4cqh;left:4.5cqw;right:4.5cqw;display:flex;align-items:center;justify-content:space-between;font-size:5.4cqw}
-.safe-area-topbar strong{font-weight:700}
-.safe-area-actions{position:absolute;right:2.8cqw;bottom:12.5cqh;display:flex;flex-direction:column;align-items:center;gap:2.1cqh}
-.safe-area-action{display:flex;flex-direction:column;align-items:center;gap:.5cqh;font-size:3cqw;font-weight:600}
-.safe-area-audio-tile{width:7cqw;height:7cqw;border:.5cqw solid #fff;border-radius:1.6cqw;background:#ffffff40}
-.safe-area-meta{position:absolute;left:4cqw;bottom:9.5cqh;width:72cqw;display:flex;flex-direction:column;gap:1cqh;font-size:3.6cqw}
-.safe-area-meta p{margin:0;line-height:1.3}
-.safe-area-user{display:flex;align-items:center;gap:2.2cqw;font-size:3.8cqw}
-.safe-area-avatar{width:7.4cqw;height:7.4cqw;border-radius:50%;background:#ffffff59;border:.4cqw solid #fff}
-.safe-area-follow{padding:.4cqh 2.4cqw;border:.3cqw solid #ffffffcc;border-radius:1.6cqw;font-size:3.2cqw;font-weight:600}
-.safe-area-music{display:flex;align-items:center;gap:1.6cqw;font-size:3.2cqw}
-.safe-area-music svg{width:3.6cqw;height:3.6cqw}
-.safe-area-nav{position:absolute;left:0;right:0;bottom:0;height:7.5cqh;display:flex;align-items:center;justify-content:space-around;background:#000000d9}
-.safe-area-nav svg{width:6.2cqw;height:6.2cqw}
-/* TikTok specifics */
-.safe-area-tiktok-tabs{justify-content:center;gap:5cqw}
-.safe-area-tiktok-tabs span{opacity:.75}
-.safe-area-tiktok-tabs strong{border-bottom:.6cqw solid #fff;padding-bottom:.6cqh}
-.safe-area-tiktok-tabs svg{position:absolute;right:0}
-.safe-area-live{position:absolute;left:0;font-size:3.4cqw;font-weight:700;opacity:.9}
-.safe-area-tiktok-actions{bottom:17cqh;gap:2.4cqh}
-.safe-area-avatar-large{width:11cqw;height:11cqw}
-.safe-area-plus{display:grid;place-items:center;width:4.6cqw;height:4.6cqw;margin-top:-2.4cqw;border-radius:50%;background:#fe2c55}
-.safe-area-plus svg{width:3.4cqw;height:3.4cqw;filter:none}
-.safe-area-disc{width:10cqw;height:10cqw;border-radius:50%;background:radial-gradient(circle,#ffffff80 0 22%,#222 24% 100%);border:1.8cqw solid #2a2a2a}
-.safe-area-overlay[data-platform=tiktok] .safe-area-meta{bottom:9cqh}
-.safe-area-create{display:grid;place-items:center;width:11cqw;height:7cqw;border-radius:2cqw;background:#fff;box-shadow:-.8cqw 0 #25f4ee,.8cqw 0 #fe2c55}
-.safe-area-create svg{color:#000;filter:none}
+/* Laid out in design pixels of a 1080×1920 frame: --u is one of them at the preview's size, so the mock
+   scales with preview zoom exactly. The app's interface is white at about 90%; nothing here moves. */
+.safe-area-overlay{position:absolute;inset:0;z-index:30;pointer-events:none;container-type:size;overflow:hidden;--u:calc(100cqw / 1080);color:#ffffffe6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,sans-serif;line-height:1}
+/* --u holds container units, so it resolves on the overlay's children (whose container is the 9:16 frame), never on the overlay itself. */
+.safe-area-overlay>*{text-shadow:0 0 calc(6 * var(--u)) #00000059}
+.safe-area-overlay>*,.safe-area-tabbar>*,.safe-area-zone>*{position:absolute}
+.safe-area-user{display:flex;align-items:center;gap:calc(20 * var(--u))}
+.safe-area-text{white-space:nowrap}
+.safe-area-count,.safe-area-tab-label{text-align:center}
+.safe-area-line{overflow:hidden;text-overflow:ellipsis}
+.safe-area-dim{color:#ffffffa6}
+.safe-area-caption{white-space:normal;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.safe-area-icon{display:grid;place-items:center}
+.safe-area-icon svg{width:100%;height:100%;stroke-width:1.9;filter:drop-shadow(0 0 calc(4 * var(--u)) #0000004d)}
+.safe-area-tile{border-style:solid;border-color:currentColor;background:#ffffff26}
+.safe-area-avatar{border-radius:50%;border-style:solid;border-color:currentColor;background:#d9d9d9}
+.safe-area-follow{display:flex;align-items:center;border-style:solid;border-color:currentColor}
+.safe-area-fill{background:currentColor}
+.safe-area-badge{display:grid;place-items:center;border-radius:50%;background:#fff;color:#000}
+.safe-area-badge svg{stroke-width:2.5}
+.safe-area-disc{border-radius:50%;border-style:solid;border-color:#2a2a2a;background:#555}
+.safe-area-tabbar{background:#000000e6}
+.safe-area-create{display:grid;place-items:center;background:#fff;color:#000}
+.safe-area-create svg{stroke-width:2.5}
+/* Covered areas, outlined like the design's overlay sheet. */
+.safe-area-zone{border:1px solid #ffffff59}
+.safe-area-overlay .safe-area-zone-label{padding:calc(6 * var(--u)) calc(12 * var(--u));border-radius:calc(8 * var(--u));background:#000000a6;color:#ffffffd9;font-size:calc(22 * var(--u));font-weight:500;white-space:nowrap;text-shadow:none}
+.safe-area-zone-label[data-at=below]{left:calc(12 * var(--u));top:calc(100% + 12 * var(--u))}
+.safe-area-zone-label[data-at=left]{right:calc(100% + 8 * var(--u));top:0}
+.safe-area-zone-label[data-at=above]{left:calc(12 * var(--u));bottom:calc(100% + 12 * var(--u))}
