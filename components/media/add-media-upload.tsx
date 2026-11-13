@@ -6,13 +6,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useVideoLinkImport } from '@/components/editor/video-link-import';
+import { YOUTUBE_ONLY_LINK, parseVideoLink } from '@/lib/editor/video-link';
 import './add-media-upload.css';
 
 type Page = 'upload' | 'link';
 const hasFiles = (event: DragEvent) => event.dataTransfer.types.includes('Files');
 
 /** The body of an "Add media" modal: a drop zone with a file picker, and a field that imports a video link
- *  (YouTube, TikTok, Instagram…) through the regular link importer, with its error messages. No dialog chrome, so any
+ *  (YouTube only) through the regular link importer, with its error messages. No dialog chrome, so any
  *  Add media modal can hold it: the Library's shows it as two pages (`layout="pages"`), and a modal whose own nav already
  *  says "Upload" can show the drop zone above the link field (`layout="stacked"`). Styled with the dashboard tokens,
  *  falling back to the editor's. The caller decides where files and links go:
@@ -30,7 +31,10 @@ export function AddMediaUpload({ onUpload, onImportLink, onDone, onBusyChange, l
 }) {
   const id = useId(), input = useRef<HTMLInputElement>(null);
   const [page, setPage] = useState<Page>('upload'), [dragging, setDragging] = useState(false);
-  const link = useVideoLinkImport(async url => { await onImportLink(url); onDone?.(); }, disabled);
+  const link = useVideoLinkImport(async url => {
+    if (parseVideoLink(url).kind !== 'youtube') throw new Error(YOUTUBE_ONLY_LINK);
+    await onImportLink(url); onDone?.();
+  }, disabled);
   const busy = disabled || link.busy;
   useEffect(() => { onBusyChange?.(link.busy); }, [link.busy, onBusyChange]);
   function attach(files: File[]) { setDragging(false); if (busy || !files.length) return; onDone?.(); onUpload(files); }
@@ -41,7 +45,7 @@ export function AddMediaUpload({ onUpload, onImportLink, onDone, onBusyChange, l
   const form = <form className="add-media-upload-link" onSubmit={event => { event.preventDefault(); void link.submit(); }}>
     <label htmlFor={id} className={layout === 'pages' ? 'sr-only' : 'add-media-upload-label'}>{layout === 'pages' ? 'Video link' : <><Link2 aria-hidden="true" />Paste a video link</>}</label>
     <div className="add-media-upload-field">
-      <Input id={id} type="url" required autoFocus={layout === 'pages'} maxLength={2048} placeholder="Paste a YouTube, TikTok or Instagram link" autoComplete="off" spellCheck={false} value={link.url} disabled={busy} aria-invalid={!!link.error} aria-describedby={link.error ? `${id}-error` : undefined} onChange={event => link.change(event.target.value)} />
+      <Input id={id} type="url" required autoFocus={layout === 'pages'} maxLength={2048} placeholder="Paste a YouTube link" autoComplete="off" spellCheck={false} value={link.url} disabled={busy} aria-invalid={!!link.error} aria-describedby={link.error ? `${id}-error` : undefined} onChange={event => link.change(event.target.value)} />
       <Button type="submit" variant="primary" disabled={busy || !link.url.trim()}>{link.busy ? <LoaderCircle className="animate-spin" aria-label="Starting import" /> : 'Import'}</Button>
     </div>
     {link.error && <p id={`${id}-error`} className="add-media-upload-error" role="alert">{link.error}</p>}

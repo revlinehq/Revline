@@ -269,8 +269,8 @@ const IMPORT_STRATEGIES: ImportStrategy[] = [
     youtubeOnly: true,
   },
 ];
-/** Hosting addresses are refused by YouTube ("Sign in to confirm you're not a bot"), and Instagram and TikTok
- * answer them with empty or blocked responses, whichever client asks. A residential proxy is the route that works
+/** Hosting addresses are refused by YouTube ("Sign in to confirm you're not a bot"), whichever client asks.
+ * A residential proxy is the route that works
  * from a datacenter; with VIDEO_IMPORT_PROXY set, one direct attempt is followed by these through the proxy. */
 const PROXY_STRATEGIES: ImportStrategy[] = [
   { name: "proxy", fragments: "4", args: [], proxy: true },
@@ -410,8 +410,7 @@ function youtubeArguments(
   const filters = range
     ? [
         "--match-filters",
-        // Instagram posts may not report a length.
-        `duration ${/(^|\.)instagram\.com$/.test(new URL(link.url).hostname) ? ">?" : ">"} ${range.start} & !is_live`,
+        `duration > ${range.start} & !is_live`,
         "--match-filters",
         `duration >= ${range.end} & is_live`,
       ]
