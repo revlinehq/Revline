@@ -4,7 +4,8 @@ import { useEffect, useLayoutEffect, useRef } from 'react';
 import { formatTime } from '@/lib/editor/types';
 import { usePausedPlaybackTime } from './editor-state';
 
-export function EditorPlaybackTime(props: React.ComponentProps<typeof PlaybackTime>) {
+/** Paused values come from the editor store, so callers pass no `time`. */
+export function EditorPlaybackTime(props: Omit<React.ComponentProps<typeof PlaybackTime>, 'time'>) {
   const time = usePausedPlaybackTime();
   return <PlaybackTime {...props} time={time}/>;
 }
