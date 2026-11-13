@@ -4,17 +4,33 @@ import { internal } from './_generated/api';
 import { processorBackend } from './lib/processor_backend';
 import { requireMediaWorker } from './lib/media_task_auth';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
-import { workerCapacity } from '../lib/worker-capacity.mjs';
-import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwaySlot, railwayActive, deployRailwaySlot, reapRailwayServices, railwayDeployments, railwayDeploymentCommit, railwayGoodDeployments, railwayBootCrashed } from '../lib/railway-workers.mjs';
+import { workerCapacity, alwaysOnProcessors } from '../lib/worker-capacity.mjs';
+import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwaySlot, railwayActive, deployRailwaySlot, reapRailwayServices, railwayDeployments, railwayDeploymentCommit, railwayGoodDeployments, railwayBootCrashed, railwayInstance, railwayWarmSlots } from '../lib/railway-workers.mjs';
 
 // The existing lock table is a dispatch mutex, independent of the hosting provider.
 const lockName = 'railway';
+/** The processor slots this deployment keeps running while idle (MEDIA_PROCESSOR_ALWAYS_ON). None while claims are
+ *  paused, so a release can drain them, or while processing does not run on Railway. */
+function warmSlots() {
+  try {
+    if (!process.env.RAILWAY_WORKERS_JSON || process.env.RAILWAY_WORKERS_PAUSED === 'true' || processorBackend() !== 'railway') return [];
+    return railwayWarmSlots(railwayConfig(process.env.RAILWAY_WORKERS_JSON), alwaysOnProcessors());
+  } catch (error) {
+    // A bad setting must not stop workers from signing in or dispatch from starting cold slots: nothing stays warm.
+    console.error(`No processor stays running while idle: ${error instanceof Error ? error.message : 'invalid setting'}`);
+    return [];
+  }
+}
 // imageSlots: this backend's dispatcher starts permanent slots that run a pinned registry image (lib/railway-workers.mjs).
 // Releases switch slots to the staged image only when it is true; an older backend would hold dispatch for them.
 export const contract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number(), processorBackend: v.string(), renderProvider: v.string(), paused: v.boolean(), imageSlots: v.optional(v.boolean()) }), handler: (_ctx, args) => {
   requireMediaWorker(args.workerSecret);
   return { processorVersion: MEDIA_PROCESSOR_VERSION, processorBackend: processorBackend(), renderProvider: process.env.RENDER_PROVIDER || '', paused: process.env.RAILWAY_WORKERS_PAUSED === 'true', imageSlots: true };
 } });
+/** Whether this Railway processor slot stays running while idle. Its own function, so a worker that reaches a backend
+ *  released before it (no such function) just sleeps as before. A worker asks at boot and about once a minute idle. */
+export const alwaysOn = query({ args: { workerSecret: v.string(), serviceId: v.string() }, returns: v.boolean(), handler: (_ctx, args) =>
+  requireMediaWorker(args.workerSecret) === 'processor' && warmSlots().includes(args.serviceId) });
 export const releaseEvidence = query({
   args: { workerSecret: v.string(), projectId: v.id('projects'), processorTaskId: v.id('mediaTasks'), exportTaskId: v.id('mediaTasks'), ultraTaskId: v.id('mediaTasks'), distributedTaskId: v.optional(v.id('mediaTasks')) },
   returns: v.object({ checkedAt: v.number(), processorCommit: v.string(), exportsCommit: v.string(), processorImage: v.string(), exportsImage: v.string() }),
@@ -133,34 +149,41 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       if (fallbacks.length) return fallbacks.slice(0, 3);
       return hold === 'expired' && latest.status === 'CRASHED' ? [latest] : null;
     };
+    /** Start a stopped slot. Never a chosen commit: the slot's own latest build (Railway autodeploys main), unless that
+     *  build crashed on boot. Whether it started. */
+    const startSlot = async (instance: Instance, lane: string) => {
+      const start = await startableBuilds(instance, lane);
+      if (start === null) return false;
+      if (!await ctx.runMutation(internal.railwayWorkers.reserveStart, { serviceId: instance.serviceId })) return false;
+      // A lost acknowledgement is reconciled from latestDeployment next time.
+      if (!start) { await deployRailwaySlot({ ...target, serviceId: instance.serviceId }); return true; }
+      for (const deployment of start) {
+        try { await deployRailwaySlot({ ...target, serviceId: instance.serviceId, deployment }); return true; }
+        catch (error) { if (error instanceof RailwayRateLimitError) throw error; console.error(`Railway ${lane} slot ${instance.serviceId}: earlier build ${deployment.id} could not be redeployed; trying the next.`); }
+      }
+      return false;
+    };
+    // Always-on processor slots (MEDIA_PROCESSOR_ALWAYS_ON) come first in the manifest. They are started whenever they
+    // are down, demand or not (this runs every minute), and claim new work themselves; an idle running one counts as
+    // free capacity below, so another slot is cold-started only while every running worker is busy.
+    const warm = warmSlots();
     for (const pool of pools) {
-      if (!pool.enabled || pool.demand.waiting === 0) continue;
+      const alwaysOn = pool.name === 'processor' ? pool.ids.filter(id => warm.includes(id)) : [];
+      if (!pool.enabled || (pool.demand.waiting === 0 && !alwaysOn.length)) continue;
       if (pool.ids.length > pool.max) throw new Error('Railway pool exceeds the existing capacity setting; dispatch held.');
       const instances = [];
-      for (const serviceId of pool.ids) {
+      for (const serviceId of pool.demand.waiting ? pool.ids : alwaysOn) {
         if (Date.now() >= deadline) return null;
+        // With nothing queued, a running always-on slot costs one read, not the full settings check.
+        if (!pool.demand.waiting && railwayActive(await railwayInstance({ ...target, serviceId }))) continue;
         instances.push(await verifyRailwaySlot({ ...target, serviceId, image: pool.image }));
       }
       const active = instances.filter(railwayActive).length;
       let needed = Math.max(0, pool.demand.waiting - Math.max(0, active - pool.demand.running));
       for (const instance of instances) {
-        if (needed === 0 || Date.now() >= deadline) break;
-        if (railwayActive(instance)) continue;
-        // Never a chosen commit: the slot's own latest build (Railway autodeploys main), unless that build crashed on boot.
-        const start = await startableBuilds(instance, pool.name);
-        if (start === null) continue;
-        if (!await ctx.runMutation(internal.railwayWorkers.reserveStart, { serviceId: instance.serviceId })) continue;
-        // A lost acknowledgement is reconciled from latestDeployment next time.
-        if (!start) await deployRailwaySlot({ ...target, serviceId: instance.serviceId });
-        else {
-          let started = false;
-          for (const deployment of start) {
-            try { await deployRailwaySlot({ ...target, serviceId: instance.serviceId, deployment }); started = true; break; }
-            catch (error) { if (error instanceof RailwayRateLimitError) throw error; console.error(`Railway ${pool.name} slot ${instance.serviceId}: earlier build ${deployment.id} could not be redeployed; trying the next.`); }
-          }
-          if (!started) continue;
-        }
-        needed--;
+        if (Date.now() >= deadline) break;
+        if (railwayActive(instance) || (needed === 0 && !alwaysOn.includes(instance.serviceId))) continue;
+        if (await startSlot(instance, pool.name)) needed = Math.max(0, needed - 1);
       }
     }
   } catch (error) {

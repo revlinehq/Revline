@@ -28,10 +28,18 @@ if (!Number.isFinite(deadlineMs) || deadlineMs < 60_000 || deadlineMs > 2 * 3600
 
 const shutdown = new AbortController();
 const client = new ConvexHttpClient(convexUrl, { fetch: (input, init) => fetch(input, { ...init, signal: AbortSignal.any([shutdown.signal, AbortSignal.timeout(25_000), ...(init?.signal ? [init.signal] : [])]) }) });
-if (process.env.RAILWAY_SERVICE_ID) {
+const serviceId = process.env.RAILWAY_SERVICE_ID;
+// An always-on processor slot (MEDIA_PROCESSOR_ALWAYS_ON in Convex) does not exit when idle. Convex says which slot is
+// one, at boot and about once a minute while idle, so turning the setting off or pausing claims lets it sleep. A backend
+// released before railwayWorkers:alwaysOn existed refuses the call: the worker sleeps as before.
+const askAlwaysOn = () => serviceId && process.env.MEDIA_RENDERS_ONLY !== 'true'
+  ? client.query(api.railwayWorkers.alwaysOn, { workerSecret, serviceId }) : Promise.resolve(false);
+let alwaysOn = false;
+if (serviceId) {
   const contract = await client.query(api.railwayWorkers.contract, { workerSecret });
   if (contract.processorVersion > MEDIA_PROCESSOR_VERSION) throw new Error('Railway image is older than the queue contract.');
-  console.log(JSON.stringify({ event: 'railway-queue-verified', processorVersion: MEDIA_PROCESSOR_VERSION }));
+  alwaysOn = await askAlwaysOn().catch(() => false);
+  console.log(JSON.stringify({ event: 'railway-queue-verified', processorVersion: MEDIA_PROCESSOR_VERSION, alwaysOn }));
 }
 const subscriptions = new ConvexClient(convexUrl);
 let draining = false;
@@ -59,9 +67,22 @@ process.on('SIGTERM', () => {
   if (process.env.RAILWAY_SERVICE_ID) { draining = true; worker.wake(); }
   else shutdown.abort();
 });
+let askedAt = 0, asking = false;
 const idleTimer = setInterval(() => {
   const { activeTasks, ready, lastWorkAt } = worker.state;
-  if (activeTasks === 0 && (draining || (!ready && Date.now() - lastWorkAt >= idleMs))) shutdown.abort();
+  if (activeTasks !== 0) return;
+  if (draining) { shutdown.abort(); return; }
+  if (ready || Date.now() - lastWorkAt < idleMs) return;
+  if (!alwaysOn) { shutdown.abort(); return; }
+  // Idle and always-on: stay up, asking about once a minute whether this slot still should. A failed read keeps it up;
+  // a "no" lets the next tick exit.
+  if (asking || Date.now() - askedAt < Math.min(idleMs, 60_000)) return;
+  asking = true; askedAt = Date.now();
+  void askAlwaysOn().then(answer => {
+    if (answer) return;
+    alwaysOn = false;
+    console.log(JSON.stringify({ event: 'media-always-on-ended', timestamp: new Date().toISOString() }));
+  }).catch(() => {}).finally(() => { asking = false; });
 }, Math.min(10_000, idleMs));
 
 async function main() {

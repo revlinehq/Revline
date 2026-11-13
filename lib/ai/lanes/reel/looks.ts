@@ -1,4 +1,4 @@
-import { LOOKS_UNMEASURED, TRANSIENT_FLAGS, describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
+import { TRANSIENT_FLAGS, describeFlags, lookBaseline, sampleFlags, type EyeFlag, type EyesPolicy, type LookSample } from '../../eyes';
 import { playbackRateOf, sourceEndOf } from '../../../editor/playback-rate';
 import type { Clip, Timeline } from '../../../editor/types';
 import type { Transcript } from '../../../media-analysis/transcript';
@@ -140,18 +140,5 @@ export function brollRuns(samples: LookSample[], shotCuts: number[] = [], minimu
 export type SpotRecord = { id: string; side: 'in' | 'out'; assetId: string; source: number; timeline: number; first: boolean; last: boolean; status: 'clean' | 'flagged' | 'accepted' | 'unverified'; seen: string[]; moveTo?: number };
 export type SpotsEvidence = { cutKey: string; spots: SpotRecord[]; accepted: { assetId: string; side: 'in' | 'out'; source: number; seen: string }[]; rounds: Record<string, number>; framesUsed: number; unavailable?: string };
 
-/** Finish: the first and last frame of the reel must be clean or looked at; other flagged edges are reported. */
-export function reelLookCheck(timeline: Timeline, policy: EyesPolicy | undefined, evidence: SpotsEvidence | undefined, required: boolean): { failures: string[]; warnings: string[] } {
-  if (!policy || policy.status !== 'enforced' || !required) return { failures: [], warnings: [] };
-  if (!evidence || evidence.cutKey !== cutKey(timeline)) return { failures: ['The reel’s cut edges were not checked for awkward looks, or the cut changed since they were. Call checkSpots: it measures the first frame, the last frame and every speech edge.'], warnings: [] };
-  if (evidence.unavailable) return { failures: [], warnings: [`Awkward looks: ${LOOKS_UNMEASURED} (${evidence.unavailable})`] };
-  const open = evidence.spots.filter(spot => spot.status === 'flagged' || spot.status === 'unverified');
-  const say = (spot: SpotRecord) => `${spot.first ? 'First frame' : spot.last ? 'Last frame' : `Cut ${spot.side === 'in' ? 'into' : 'out of'} a line`} at ${spot.timeline.toFixed(2)} s (source ${spot.source.toFixed(2)} s, spot ${spot.id}): ${spot.seen.join(', ') || 'flagged'}`;
-  const fails = policy.failsFinish === 'first-and-last-frame' ? open.filter(spot => spot.first || spot.last) : [];
-  return {
-    failures: fails.map(spot => `${say(spot)}. Look at it with checkSpots, then move the edge to the clean frame or accept it with what you saw.`),
-    warnings: open.filter(spot => !fails.includes(spot)).map(spot => `${say(spot)}. Not reviewed.`),
-  };
-}
 
 export type { EyeFlag };
