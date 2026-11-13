@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
-import { createPortal } from 'react-dom';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
@@ -9,6 +8,7 @@ import { useAction, useConvexAuth, useMutation, usePaginatedQuery, useQuery } fr
 import { ChevronDown, Clapperboard, Download, Folder, FolderInput, FolderPlus, LayoutGrid, List, Search, Trash2, Upload, X } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { DashboardMenuButton } from '@/components/dashboard/dashboard-navbar';
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from '@/components/ui/breadcrumb';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -197,9 +197,6 @@ export function LibraryPage() {
   const retryDeletion = useMutation(api.projects.retryDeletion);
   async function retryCleanup() { if (retrying) return; setRetrying(true); try { await retryDeletion({ projectIds: cleanupProjects }); } catch (reason) { report('Cleanup could not finish. Please retry.')(reason); } finally { setRetrying(false); } }
 
-  // Phone: New folder and Upload sit in the navbar.
-  const [navbar, setNavbar] = useState<HTMLElement | null>(null);
-  useEffect(() => setNavbar(document.getElementById('dash-navbar-page')), []);
   const [adding, setAdding] = useState(false), importLink = useMutation(api.library.importLink);
   const pick = () => setAdding(true);
   const newFolder = () => setDialog({ kind: 'folder' });
@@ -213,9 +210,9 @@ export function LibraryPage() {
   return <main className="dash-content library-page" {...pageDrop}>
     <h1 className="sr-only">Library</h1>
     <Input ref={fileInput} type="file" accept="video/*,audio/*,image/*" multiple className="library-file-input" tabIndex={-1} aria-label={`Choose files to upload to ${here}`} onChange={event => { const files = Array.from(event.target.files ?? []); event.target.value = ''; uploads.enqueue(files, folderId); }} />
-    {navbar && createPortal(<><Button variant="soft" size="icon" aria-label="New folder" onClick={newFolder}><FolderPlus /></Button><Button variant="primary" size="icon" aria-label="Upload" onClick={pick}><Upload /></Button></>, navbar)}
 
     <div className="library-head">
+      <DashboardMenuButton />
       <Breadcrumb className="library-crumbs"><BreadcrumbList>
         <Crumb name="Library" current={!requested} onDropItems={moveTo(undefined)} onWarm={warm(undefined)} />
         {(path ?? []).map((step, index, all) => <span key={step.id} className="library-crumb-step"><BreadcrumbSeparator /><Crumb id={step.id} name={step.name} current={index === all.length - 1} onDropItems={moveTo(step.id)} onWarm={warm(step.id)} /></span>)}
@@ -235,6 +232,8 @@ export function LibraryPage() {
       <Segmented className="library-view" aria-label="View" value={view} onValueChange={setView} options={VIEWS} />
       <Button variant="soft" className="library-desktop-action" onClick={newFolder}><FolderPlus aria-hidden="true" />New folder</Button>
       <Button variant="primary" className="library-desktop-action" onClick={pick}><Upload aria-hidden="true" />Upload</Button>
+      <Button variant="soft" size="icon" className="library-phone-action" aria-label="New folder" onClick={newFolder}><FolderPlus /></Button>
+      <Button variant="primary" size="icon" className="library-phone-action" aria-label="Upload" onClick={pick}><Upload /></Button>
     </div>
 
     {(error || uploads.error) && <p className="dash-error" role="alert">{error || uploads.error}</p>}

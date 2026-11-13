@@ -29,7 +29,7 @@
 .posts-chip[data-state=expired] [data-slot=button].posts-chip-action:hover { background: #4A3617; }
 
 /* ---- Week view: the calendar is the whole page, wider than the content column. */
-.dash-main > .posts-page { display: flex; flex-direction: column; min-height: calc(100dvh - var(--dash-navbar-height)); padding-inline: var(--dash-gutter); padding-block: 24px; gap: 16px; }
+.dash-main > .posts-page { display: flex; flex-direction: column; min-height: 100dvh; padding-inline: var(--dash-gutter); padding-block: 24px; gap: 16px; }
 /* The week fills the height left under the header; a busy day grows past it and the page scrolls. */
 .posts-week { position: relative; display: flex; flex: 1; flex-direction: column; }
 .posts-week-grid { display: grid; flex: 1; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
@@ -95,6 +95,8 @@
   .posts-week-nav { padding-left: 0; }
   .posts-head-row h1 { flex-basis: 100%; }
 }
+/* A phone: the menu button and the title share the first line. */
+@media (max-width: 767px) { .posts-head-row h1 { flex-basis: calc(100% - 46px); } }
 @media (max-width: 900px) and (hover: hover) { .posts-day:not(:hover) .posts-post-here { visibility: visible; } }
 
 /* ---- Post dialog. It carries its own shadcn colour mapping: the editor is not under `dash-theme`. */

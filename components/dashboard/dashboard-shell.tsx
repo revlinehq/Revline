@@ -10,7 +10,7 @@ import { startNewWorkspace } from '@/components/workspace/start-new-workspace';
 import { NEW_PROJECT_PATH, SIGNED_IN_HOME_PATH, sidebarCookieCollapsed } from '@/lib/workspace-routes';
 import { DashboardShellContext } from './shell-context';
 import { DashboardNavbar } from './dashboard-navbar';
-import { DASHBOARD_NAV, activeDashboardItem, type DashboardNavItem } from './dashboard-nav';
+import { DASHBOARD_NAV, activeDashboardItem, dashboardShowsNavbar, type DashboardNavItem } from './dashboard-nav';
 import './dashboard.css';
 
 const NAV_ITEMS = DASHBOARD_NAV.flatMap(group => group.items);
@@ -70,7 +70,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </SidebarContent>
       </Sidebar>
       <SidebarInset className="dash-main">
-        <DashboardNavbar />
+        {dashboardShowsNavbar(pathname) && <DashboardNavbar />}
         {children}
       </SidebarInset>
     </SidebarProvider>
