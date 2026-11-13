@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { internalQuery, query } from './_generated/server';
 import { requireOwner } from './lib/auth';
 import { aiUsageRefusal, aiUsageState, storageState } from './lib/plan_limits';
-import { activePlan, billingEnabled } from './lib/billing_access';
+import { billingEnabled, limitsPlan } from './lib/billing_access';
 
 const tier = v.union(v.literal('starter'), v.literal('pro'), v.literal('studio'));
 /** The signed-in owner's plan meters: storage against the plan's limit, and AI usage as a share of the period's
@@ -11,15 +11,18 @@ export const status = query({
   args: {},
   returns: v.object({
     tier: v.union(tier, v.null()),
+    /** A free trial: the meters run against the trial's limits until the first payment, and no upgrade raises them. */
+    trial: v.optional(v.boolean()),
     storage: v.object({ usedBytes: v.number(), reservedBytes: v.number(), limitBytes: v.union(v.number(), v.null()) }),
     ai: v.union(v.null(), v.object({ used: v.number(), today: v.union(v.number(), v.null()), blocked: v.union(v.literal('month'), v.literal('day'), v.null()), resetsAt: v.number(), dayResetsAt: v.number() })),
   }),
   handler: async (ctx) => {
     const ownerId = await requireOwner(ctx);
-    const plan = billingEnabled() ? await activePlan(ctx, ownerId) : null;
-    const { usedBytes, reservedBytes, limitBytes } = await storageState(ctx, ownerId, plan?.tier ?? null);
+    // A free trial's meters run against its trial limits; `tier` stays the plan being trialed.
+    const plan = billingEnabled() ? await limitsPlan(ctx, ownerId) : null;
+    const { usedBytes, reservedBytes, limitBytes } = await storageState(ctx, ownerId, plan);
     const ai = await aiUsageState(ctx, ownerId, plan);
-    return { tier: plan?.tier ?? null, storage: { usedBytes, reservedBytes, limitBytes }, ai: ai && { used: ai.used, today: ai.today, blocked: ai.blocked, resetsAt: ai.resetsAt, dayResetsAt: ai.dayResetsAt } };
+    return { tier: plan?.trialOf ?? plan?.tier ?? null, ...(plan?.trialOf ? { trial: true } : {}), storage: { usedBytes, reservedBytes, limitBytes }, ai: ai && { used: ai.used, today: ai.today, blocked: ai.blocked, resetsAt: ai.resetsAt, dayResetsAt: ai.dayResetsAt } };
   },
 });
 

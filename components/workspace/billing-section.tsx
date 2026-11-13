@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAction, useConvexAuth } from 'convex/react';
 import { api } from '@/convex/_generated/api';
-import { PLANS, type PlanTier } from '@/lib/billing/plan';
+import { PLANS, TRIAL_DAYS, type PlanTier } from '@/lib/billing/plan';
 import { usePlanStatus } from './use-plan-status';
 import { UpgradeDialog } from './plan-limit-dialog';
 import { PlanUsageRows, usePlanUsage } from './plan-usage';
@@ -84,7 +84,7 @@ export function BillingSection({ checkoutReturn }: { checkoutReturn?: CheckoutRe
           {checkoutReturn && <p role="status">{checkoutReturn === 'success' ? status.subscribed ? 'Your membership is ready. You can start editing.' : 'Checkout completed. Waiting for Stripe to confirm your membership…' : 'Checkout was canceled. Your membership has not changed.'}</p>}
           {!status.complimentary && <p>{status.subscribed
             ? 'Change your plan here. Manage your payment method, invoices and cancellation securely through Stripe.'
-            : `Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice}${status.trialEligible ? ` after a ${PLANS.pro.trialDays}-day free trial` : ''}, and Studio $${PLANS.studio.monthlyPrice} a month. Cancel anytime.`}</p>}
+            : `Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice} and Studio $${PLANS.studio.monthlyPrice} a month${status.trialEligible ? `, each after a ${TRIAL_DAYS}-day free trial` : ''}. Cancel anytime.`}</p>}
           {error && <p className="dash-error" role="alert">{error}</p>}
         </SettingsBody>}
         <UpgradeDialog open={offerPlans && plansOpen} onOpenChange={setPlansOpen} status={status} onChanged={setChangingTo} />

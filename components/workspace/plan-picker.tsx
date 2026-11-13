@@ -5,7 +5,7 @@ import { useRef, useState } from 'react';
 import { useAction } from 'convex/react';
 import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
-import { PLANS, PLAN_RANK, PLAN_TIERS, type PlanTier } from '@/lib/billing/plan';
+import { PLANS, PLAN_RANK, PLAN_TIERS, TRIAL_DAYS, type PlanTier } from '@/lib/billing/plan';
 import { Button } from '@/components/ui/button';
 import { PlanCard, PlanGrid } from './plan-card';
 import { PrimaryButton } from './primary-button';
@@ -22,6 +22,7 @@ export function PlanPicker({ status, onChanged }: { status: PlanStatus; onChange
   const inFlight = useRef(false);
   const current = status.subscribed ? status.tier ?? 'pro' : null;
   const trial = status.trialEligible && !status.subscribed;
+  const trialing = status.subscriptionDates?.trialEnd !== undefined;
 
   async function choose(tier: PlanTier) {
     if (!status.configured || inFlight.current) return;
@@ -43,15 +44,15 @@ export function PlanPicker({ status, onChanged }: { status: PlanStatus; onChange
 
   const label = (tier: PlanTier) => {
     const name = PLANS[tier].name;
-    if (!current) return tier === 'pro' && trial ? `Start ${PLANS.pro.trialDays}-day free trial` : `Get ${name}`;
+    if (!current) return trial ? `Start ${TRIAL_DAYS}-day free trial` : `Get ${name}`;
     if (confirming === tier) return `Confirm ${PLAN_RANK[tier] > PLAN_RANK[current] ? 'upgrade' : 'change'}`;
     return PLAN_RANK[tier] > PLAN_RANK[current] ? `Upgrade to ${name}` : `Switch to ${name}`;
   };
   const note = (tier: PlanTier) => {
-    if (current && confirming === tier) return PLAN_RANK[tier] > PLAN_RANK[current]
-      ? 'You’ll be charged the prorated difference today, and any remaining trial ends.'
-      : `Unused time is credited to your next invoice. If you’re on a free trial, it ends now and ${PLANS[tier].name} is billed today.`;
-    if (!current && tier === 'pro' && trial) return `${PLANS.pro.trialDays} days free, then $${PLANS.pro.monthlyPrice}/month`;
+    if (current && confirming === tier) return trialing
+      ? `Your free trial continues with its trial limits. ${PLANS[tier].name} and its full limits start at $${PLANS[tier].monthlyPrice}/month when it ends.`
+      : PLAN_RANK[tier] > PLAN_RANK[current] ? 'You’ll be charged the prorated difference today.' : 'Unused time is credited to your next invoice.';
+    if (!current && trial) return `${TRIAL_DAYS} days free, then $${PLANS[tier].monthlyPrice}/month`;
     return !current ? 'Cancel anytime' : undefined;
   };
 

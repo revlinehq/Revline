@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useAction } from 'convex/react';
 import { LoaderCircle } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
+import { TRIAL_DAYS } from '@/lib/billing/plan';
 import { PrimaryButton } from './primary-button';
 import { usePlanStatus } from './use-plan-status';
 import { PlanPicker } from './plan-picker';
@@ -72,7 +73,7 @@ export function EditorAccessGate({ children, loading, checkoutPending = false }:
     <main className="editor-access-main" data-plans>
       <header className="editor-access-intro">
         <h1>Choose your plan</h1>
-        <p>Pick a plan to start editing. Cancel anytime.</p>
+        <p>{status.trialEligible ? `Every plan starts with a ${TRIAL_DAYS}-day free trial. Cancel anytime.` : 'Pick a plan to start editing. Cancel anytime.'}</p>
       </header>
       <PlanPicker status={status} />
     </main>

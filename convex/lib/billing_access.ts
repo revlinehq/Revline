@@ -1,4 +1,4 @@
-import { PLAN_RANK, PLAN_TIERS, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
+import { PLAN_RANK, PLAN_TIERS, TRIAL_LIMITS_TIER, tierForLookupKey, type PlanTier } from '../../lib/billing/plan';
 import { editorEffortChoiceAllowed, offeredEditorModel, productionEditorOffer, type EditorOffer } from '../../lib/ai/claude-model';
 import { incidentDeployment } from './incidents';
 import { ConvexError } from 'convex/values';
@@ -63,13 +63,21 @@ export async function hasComplimentaryEditorAccess(ctx: QueryCtx | MutationCtx, 
  *  operator grants are Pro, or Studio when they carry the Ultra entitlement; Stripe subscriptions give their plan.
  *  The highest of them counts. */
 export async function activePlan(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<{ tier: PlanTier; periodEnd?: number } | null> {
+  return (await planGrants(ctx, ownerId)).plan;
+}
+/** activePlan, plus whether a Stripe free trial is the only thing granting it: no App Store or operator grant, and no
+ *  paid Stripe term beside the trial. Reads the subscriptions once. */
+async function planGrants(ctx: QueryCtx | MutationCtx, ownerId: string) {
   const apple = await activeAppleEntitlement(ctx, ownerId), complimentary = await activeComplimentaryEntitlement(ctx, ownerId);
   const grants: { tier: PlanTier; periodEnd?: number }[] = [];
   if (apple) grants.push({ tier: apple.plan === 'ultra' ? 'studio' : 'pro', periodEnd: apple.accessUntil });
   if (complimentary) grants.push({ tier: complimentary.plan === 'ultra' ? 'studio' : 'pro' });
-  if (billingEnabled() && billingConfigured()) for (const sub of (await editorSubscriptions(ctx, ownerId)).filter(grantsPlan)) grants.push({ tier: subscriptionTier(sub)!, periodEnd: sub.currentPeriodEnd * 1000 });
+  const subs = billingEnabled() && billingConfigured() ? (await editorSubscriptions(ctx, ownerId)).filter(grantsPlan) : [];
+  for (const sub of subs) grants.push({ tier: subscriptionTier(sub)!, periodEnd: sub.currentPeriodEnd * 1000 });
   const tier = highest(grants.map(grant => grant.tier));
-  return tier ? grants.find(grant => grant.tier === tier && grant.periodEnd !== undefined) ?? { tier } : null;
+  const plan = tier ? grants.find(grant => grant.tier === tier && grant.periodEnd !== undefined) ?? { tier } : null;
+  const trialOnly = !apple && !complimentary && subs.some(sub => sub.status === 'trialing') && !subs.some(hasPaidEditorSubscriptionTerm);
+  return { plan, trialOnly };
 }
 export async function activePlanTier(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<PlanTier | null> {
   return (await activePlan(ctx, ownerId))?.tier ?? null;
@@ -104,6 +112,14 @@ async function onTrialOnly(ctx: QueryCtx | MutationCtx, ownerId: string) {
   if (!billingEnabled() || !billingConfigured()) return false;
   const subs = (await editorSubscriptions(ctx, ownerId)).filter(sub => subscriptionTier(sub) !== null);
   return subs.some(sub => sub.status === 'trialing' && hasEditorAccess(sub)) && !subs.some(hasPaidEditorSubscriptionTerm);
+}
+
+/** The plan whose limits (storage, AI allowance) this owner gets: activePlan, except that a Stripe free trial with no
+ *  paid term beside it gets TRIAL_LIMITS_TIER's, whatever plan it trials, until its first payment succeeds (Stripe
+ *  then moves it to active). `trialOf` names the plan being trialed; periodEnd stays the trial's end. */
+export async function limitsPlan(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<{ tier: PlanTier; periodEnd?: number; trialOf?: PlanTier } | null> {
+  const { plan, trialOnly } = await planGrants(ctx, ownerId);
+  return plan && trialOnly ? { ...plan, tier: TRIAL_LIMITS_TIER, trialOf: plan.tier } : plan;
 }
 
 /** Model upgrades require a current paid term, a Stripe free trial (held to Starter's models) or an operator-granted
