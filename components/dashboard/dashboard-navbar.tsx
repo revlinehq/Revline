@@ -7,7 +7,7 @@ import { dashboardPageTitle } from './dashboard-nav';
 
 /**
  * The 56px top bar of the signed-in shell, rendered once by DashboardShell on every page but those listed in
- * dashboard-nav.ts (Posts, Library), which open the menu from their own header row instead: page name on the left,
+ * dashboard-nav.ts (Posts), which opens the menu from its own header row instead: page name on the left,
  * account avatar on the right, opening the profile menu (storage, Settings).
  * The name is a label, not a heading: each page keeps its own <h1>. Its contents sit in the same centred
  * column as the page below (dashboard.css `--dash-column-pad`); the background and border run full width.
@@ -18,7 +18,8 @@ export function DashboardNavbar() {
   return <header className="dash-navbar">
     <SidebarTrigger className="dash-navbar-menu" aria-label="Open the menu" />
     <span className="dash-navbar-title">{dashboardPageTitle(pathname)}</span>
-    <div className="dash-navbar-actions"><WorkspaceAccountMenu /></div>
+    {/* A page may put its own actions here (createPortal); the Library shows New folder and Upload on a phone. */}
+    <div className="dash-navbar-actions"><div id="dash-navbar-page" className="dash-navbar-page" /><WorkspaceAccountMenu /></div>
   </header>;
 }
 

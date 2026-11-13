@@ -1,0 +1,1 @@
+- Dashboard: the Library shows the top navbar again, with its phone New folder and Upload back in it; Posts stays without it. Why: the founder wanted the bar back on the Library.

@@ -27,7 +27,7 @@ export function activeDashboardItem(pathname: string | null) {
 }
 
 /** Pages that carry their own header row in place of the navbar: the phone menu button sits in it (DashboardMenuButton). */
-const PAGES_WITHOUT_NAVBAR = ['/posts', '/library'];
+const PAGES_WITHOUT_NAVBAR = ['/posts'];
 
 export function dashboardShowsNavbar(pathname: string | null) {
   return !pathname || !PAGES_WITHOUT_NAVBAR.some(prefix => under(pathname, prefix));
