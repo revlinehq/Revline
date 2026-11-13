@@ -58,3 +58,4 @@ Reply: "Removed 74 pauses and 3 filler words, 12.4 s, and added captions."
 - speech: transcript reading, speech cuts and cleanup, J/L cuts, and when to look at the picture.
 - text-styling: caption and title defaults, styling tools, placement, and the full text catalog.
 - layers-and-effects: tracks and layers, b-roll, undo and revisions, speed, and effect planning rules. Transitions: the `transitions` skill.
+- effect-tools: exact controls, ranges and examples for the motion, camera, effect, layout and tracking tools.
