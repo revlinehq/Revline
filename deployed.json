@@ -10,9 +10,9 @@
       "version": "03441599-a2d8-4e94-8e2b-dbdbc36c5caa"
     },
     "frontend": {
-      "commit": "2faca5409ba5ee7160e9a8baa709109c91e0cc06",
-      "at": "2026-11-13T20:56:24.049Z",
-      "version": "6fc4ce75-e741-467a-8d2c-87ec20b4a6eb"
+      "commit": "4e775650fbfd04e5af584c9d10b0505e26e1d5f9",
+      "at": "2026-11-13T21:00:40.598Z",
+      "version": "5181c928-b3bd-403c-9ba5-ef5706cf5af5"
     },
     "agent": {
       "commit": "066de867fecb662b21801599f82e11fc98aa81ef",
@@ -26,7 +26,7 @@
     },
     "processor": {
       "commit": "ad3e63ffe6adc604697d3e7575b66b3ead39735d",
-      "at": "2026-11-13T20:56:08.603Z",
+      "at": "2026-11-13T21:00:23.987Z",
       "note": "read from Railway (GitHub autodeploy)"
     },
     "exports": {
