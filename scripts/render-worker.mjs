@@ -42,7 +42,10 @@ try {
     configureRenderFfmpeg(directory, sized);
     const producerConfig = resolveConfig({ concurrency: sized.workers, ...lowMemory, frameDataUriCacheBytesLimitMb: 128, forceScreenshot, ...gpu });
     const job = createRenderJob({ producerConfig, fps: settings.fps, quality: settings.quality, workers: sized.workers, strictness: 'strict', logger: createConsoleLogger(['debug', 'info', 'warn', 'error'].includes(process.env.REVLINE_RENDER_LOG_LEVEL) ? process.env.REVLINE_RENDER_LOG_LEVEL : 'error') });
-    try { await executeRenderJob(job, directory, output, progress => report({ type: 'progress', progress: progressOf(progress.progress) }), controller.signal); }
+    // The stage and its frame counts (capture or encode) travel with each report: the parent logs them and
+    // stops a render whose frame count stops moving (lib/server/render-worker.ts).
+    const onProgress = state => report({ type: 'progress', progress: progressOf(state.progress), stage: String(state.currentStage ?? '').slice(0, 120), step: state.stageProgress ? { code: String(state.stageProgress.code ?? ''), done: Number(state.stageProgress.done) || 0, total: Number(state.stageProgress.total) || 0 } : undefined });
+    try { await executeRenderJob(job, directory, output, onProgress, controller.signal); }
     catch (error) { throw job.error && !controller.signal.aborted ? new Error(job.error, { cause: error }) : error; }
     if (job.status !== 'complete') throw new Error(job.error || 'The render did not finish.');
     return job;

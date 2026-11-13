@@ -4,6 +4,9 @@ import puppeteer from 'puppeteer';
 
 execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' });
 execFileSync('ffprobe', ['-version'], { stdio: 'ignore' });
+// libwebp's anim_dump and webpmux turn animated WebP into export video (lib/server/export-images.ts).
+execFileSync('webpmux', ['-version'], { stdio: 'ignore' });
+execFileSync('anim_dump', ['-version'], { stdio: 'ignore' });
 execFileSync('flock', ['--version'], { stdio: 'ignore' });
 if (!existsSync('lib/render-resources.mjs') || !existsSync('scripts/render-ffmpeg.sh')) throw new Error('Bounded render FFmpeg launcher is missing.');
 // Exercise the packaged TypeScript import graph without claiming work or calling
