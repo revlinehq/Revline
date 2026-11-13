@@ -104,7 +104,8 @@ export function PostDialog({ jobId, timeline, fileId, onPostsPage = false, sched
   // The first thing still missing for a TikTok account; the post buttons stay off until there is none.
   /** Posting is not set up on the server: the accounts are listed but none can be picked, and the line beside the buttons says why. */
   const off = !!platforms && !live.size;
-  const blocked = off ? POSTING_NOT_SET_UP : stored?.problem || (onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '');
+  // A Library video is sent as it is stored, so a picked platform that would refuse it blocks the buttons too.
+  const blocked = off ? POSTING_NOT_SET_UP : stored?.problem || picked.map(account => stored?.platformProblems[account.platform]).find(Boolean) || (onTikTok.map(account => tiktokProblem(account.username, creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE, clip?.durationSeconds ?? null)).find(Boolean) ?? '');
   /** A picked time makes this a scheduled post; without one it goes out now. */
   const schedule = !!when;
   async function submit() {

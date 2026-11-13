@@ -12,6 +12,7 @@ import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, POSTING_NOT_SET_UP, TITLE_LIMIT } from '../lib/posting/limits';
 import { postingReady } from '../lib/posting/server';
+import { fileProblem } from '../lib/posting/precheck';
 import { accountAllowance as ownerAllowance, accountLimit as ownerAccountLimit } from './postingBridge';
 import { atLimit, limitMessage } from '../lib/posting/account-caps';
 import { TIKTOK_VISIBILITY_NAMES, VISIBILITY_OPTIONS, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
@@ -193,9 +194,14 @@ async function postableExport(ctx: QueryCtx | MutationCtx, ownerId: string, jobI
   return { job, error: '' };
 }
 
-/** The video types a Library file can be posted as, by extension: what Post Bridge receives it as. */
-const POSTABLE_VIDEO_TYPES: Readonly<Record<string, 'video/mp4' | 'video/quicktime'>> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime' };
-const postableType = (fileName: string) => POSTABLE_VIDEO_TYPES[fileName.split('.').at(-1)?.toLowerCase() ?? ''];
+/** The timeline an export was rendered from: its length and shape. */
+async function exportTimeline(ctx: QueryCtx | MutationCtx, job: Doc<'renderJobs'>) {
+  return (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
+}
+
+/** The video types a Library file can be posted as: what Post Bridge receives it as. The type stored at upload comes first, then the extension. */
+const POSTABLE_VIDEO_TYPES: Readonly<Record<string, 'video/mp4' | 'video/quicktime'>> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime', 'video/mp4': 'video/mp4', 'video/quicktime': 'video/quicktime' };
+const postableType = (fileName: string, stored?: string) => (stored ? POSTABLE_VIDEO_TYPES[stored] : undefined) ?? POSTABLE_VIDEO_TYPES[fileName.split('.').at(-1)?.toLowerCase() ?? ''];
 /**
  * A video from the Library a post sends as it is stored (no export), with the length and size the platforms check, or
  * the reason it cannot be posted. An export in the Library is posted through its export instead (`postableExport`).
@@ -204,13 +210,18 @@ async function postableFile(ctx: QueryCtx | MutationCtx, ownerId: string, fileId
   const row = await ctx.db.get(fileId);
   if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) return { file: null, error: 'The video was deleted from the Library before it could be posted.' };
   if (row.kind !== 'video') return { file: null, error: 'Only a video can be posted.' };
-  const contentType = postableType(row.fileName);
+  const refs = await ownedObjectReferences(ctx, ownerId, row), library = refs.library?.ownerId === ownerId ? refs.library : null;
+  const contentType = postableType(row.fileName, library?.contentType);
   if (!contentType) return { file: null, error: 'Only MP4 and MOV videos can be posted. Add this one to a project and export it, then post the export.' };
-  const refs = await ownedObjectReferences(ctx, ownerId, row);
-  const durationSeconds = refs.library?.duration ?? refs.attachments.find(asset => asset.kind === 'video' && asset.duration)?.duration;
-  const sized = refs.library?.width && refs.library.height ? refs.library : refs.attachments.find(asset => asset.kind === 'video' && asset.width && asset.height);
+  const durationSeconds = library?.duration ?? refs.attachments.find(asset => asset.kind === 'video' && asset.duration)?.duration;
+  const sized = library?.width && library.height ? library : refs.attachments.find(asset => asset.kind === 'video' && asset.width && asset.height);
   if (!durationSeconds || !sized?.width || !sized.height) return { file: null, error: 'Revline has not measured this video yet. Add it to a project once, then post it.' };
   return { file: { row, contentType, durationSeconds, width: sized.width, height: sized.height }, error: '' };
+}
+
+/** What one platform would refuse about a stored video, worded for the Library: it is not an export. */
+function storedProblem(platform: Doc<'postingPosts'>['platform'], file: NonNullable<Awaited<ReturnType<typeof postableFile>>['file']>) {
+  return fileProblem(platform, { ...file, videoBytes: file.row.size })?.replace(/this clip exports at/g, 'this video is').replace(/this clip/g, 'this video').replace(/Export at a lower quality and try again\.|Export the video again, then post it\./g, 'Add it to a project and export it, then post the export.') ?? '';
 }
 
 /**
@@ -297,6 +308,9 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   for (const target of args.targets) {
     const { account, caption: own, title: ownTitle, choices } = await checkTarget(ctx, ownerId, target), postTitle = ownTitle ?? title;
     if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
+    // A stored video is checked against each platform now, not days later when it is due: an export was made to fit, a raw file may not be.
+    const refused = source.file && storedProblem(account.platform, source.file);
+    if (refused) throw new ConvexError(refused);
     const postId = await ctx.db.insert('postingPosts', {
       ownerId, batchId, accountId: account._id, platform: account.platform, ...source.post, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
       ...choices, status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
@@ -312,13 +326,13 @@ async function batchSource(ctx: MutationCtx, ownerId: string, args: Pick<BatchIn
   if (args.fileId && !args.jobId) {
     const { file, error } = await postableFile(ctx, ownerId, args.fileId);
     if (!file) throw new ConvexError(error);
-    return { batch: { fileId: file.row._id, exportLabel: file.row.fileName.replace(/\.[^.]+$/, '') }, post: { fileId: file.row._id } };
+    return { file, batch: { fileId: file.row._id, exportLabel: file.row.fileName.replace(/\.[^.]+$/, '') }, post: { fileId: file.row._id } };
   }
   if (!args.jobId || args.fileId) throw new ConvexError('Pick one video to post.');
   const found = await postableExport(ctx, ownerId, args.jobId);
   if (!found.job) throw new ConvexError(found.error);
   const project = await ctx.db.get(found.job.projectId);
-  return { batch: { jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, '') }, post: { jobId: found.job._id } };
+  return { file: null, batch: { jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, '') }, post: { jobId: found.job._id } };
 }
 
 /**
@@ -508,7 +522,7 @@ export const clip = query({
     const ownerId = await requireOwner(ctx), { job } = await postableExport(ctx, ownerId, jobId);
     if (!job) return null;
     const { title, coverUrl, coverKind } = await projectCover(ctx, job.projectId);
-    const timeline = (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
+    const timeline = await exportTimeline(ctx, job);
     const link = await ctx.db.query('projectCampaigns').withIndex('by_project', q => q.eq('projectId', job.projectId)).unique();
     const campaign = link?.campaignId ? await ctx.db.get(link.campaignId) : null;
     return {
@@ -521,19 +535,22 @@ export const clip = query({
 /** One Library file as the Post dialog shows it, with the reason it cannot be posted (empty when it can). Null when it is gone. */
 export const libraryClip = query({
   args: { fileId: v.id('storageObjects') },
-  returns: v.union(v.null(), v.object({ label: v.string(), durationSeconds: v.union(v.number(), v.null()), ...cover, problem: v.string() })),
+  returns: v.union(v.null(), v.object({ label: v.string(), durationSeconds: v.union(v.number(), v.null()), ...cover, problem: v.string(),
+    /** What each platform would refuse about this video as it is stored (empty when it takes it): an export was made to fit already. */
+    platformProblems: v.object({ instagram: v.string(), tiktok: v.string(), youtube: v.string() }) })),
   handler: async (ctx, { fileId }) => {
     const ownerId = await requireOwner(ctx), row = await ctx.db.get(fileId);
     if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) return null;
     const label = row.fileName.replace(/\.[^.]+$/, '');
     if (row.kind === 'export') {
       const { job, error } = row.jobId ? await postableExport(ctx, ownerId, row.jobId) : { job: null, error: 'This export can no longer be posted.' };
-      const timeline = job ? (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined : undefined;
+      const timeline = job ? await exportTimeline(ctx, job) : undefined;
       const { coverUrl, coverKind } = job ? await projectCover(ctx, job.projectId) : { coverUrl: null, coverKind: null };
-      return { label, durationSeconds: timeline ? timelineDuration(timeline) : null, coverUrl, coverKind, problem: error };
+      return { label, durationSeconds: timeline ? timelineDuration(timeline) : null, coverUrl, coverKind, problem: error, platformProblems: { instagram: '', tiktok: '', youtube: '' } };
     }
     const { file, error } = await postableFile(ctx, ownerId, fileId);
-    return { label, durationSeconds: file?.durationSeconds ?? null, ...await fileCover(ctx, ownerId, fileId), problem: error };
+    const platformProblems = { instagram: file ? storedProblem('instagram', file) : '', tiktok: file ? storedProblem('tiktok', file) : '', youtube: file ? storedProblem('youtube', file) : '' };
+    return { label, durationSeconds: file?.durationSeconds ?? null, ...await fileCover(ctx, ownerId, fileId), problem: error, platformProblems };
   },
 });
 
@@ -670,7 +687,7 @@ async function postMedia(ctx: MutationCtx, post: Doc<'postingPosts'>): Promise<{
   const found = await postableExport(ctx, post.ownerId, post.jobId);
   if (!found.job) return { error: found.error };
   const { job } = found;
-  const timeline = (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
+  const timeline = await exportTimeline(ctx, job);
   const videoUrl = await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }, true).catch(() => null);
   if (!timeline || !videoUrl) return { error: 'The export file could not be read. Export the video again, then post it.' };
   const size = job.outputSize ?? (job.outputStorageId ? (await ctx.db.system.get(job.outputStorageId))?.size : undefined) ?? 0;

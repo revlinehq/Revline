@@ -2,8 +2,8 @@
 // decides when this runs (convex/posting.ts), so every post is created to publish at once: Post Bridge never holds a
 // scheduled post of ours, and cancelling or moving one stays a change to Revline's own row.
 import { PostingError, type PostingPlatform, type PublishCheck, type PublishInput } from '../adapter';
-import { REEL_LIMITS, VIDEO_LIMITS, titleFromCaption } from '../platform-limits';
-import { shapeProblems, textProblems } from '../precheck';
+import { titleFromCaption } from '../platform-limits';
+import { fileProblem, shapeProblems, textProblems } from '../precheck';
 import { createPost, createUpload, getPostStatus, postResults } from './client';
 
 /** Post Bridge takes uploads up to this size on its signed upload address; a larger export is handed over as a link it downloads. */
@@ -45,11 +45,7 @@ async function media(apiKey: string, input: PublishInput): Promise<{ mediaId: st
  * file's size known, so a post that cannot go out is refused before anything is uploaded and with a reason the user can act on.
  */
 function assertPostable(platform: PostingPlatform, input: PublishInput): void {
-  const megabytes = (bytes: number) => Math.round(bytes / 1024 / 1024);
-  const problem = shapeProblems(platform, input)[0] ?? textProblems(platform, input)[0]
-    ?? (!(input.videoBytes > 0) ? 'The video file is empty or its size is unknown. Export the video again, then post it.' : undefined)
-    ?? (platform === 'instagram' && input.videoBytes > REEL_LIMITS.maxBytes ? `Instagram Reels can be at most ${megabytes(REEL_LIMITS.maxBytes)} MB. Export at a lower quality and try again.` : undefined)
-    ?? (platform === 'tiktok' && input.videoBytes > VIDEO_LIMITS.maxBytes ? 'The video is larger than 4 GB, the most TikTok accepts.' : undefined);
+  const problem = shapeProblems(platform, input)[0] ?? textProblems(platform, input)[0] ?? fileProblem(platform, input);
   if (problem) throw new PostingError(problem, false, 'not_postable');
 }
 // < and > are the only characters YouTube refuses in titles and descriptions. Captions use them ("<3", "->"), so the
