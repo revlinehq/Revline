@@ -65,11 +65,12 @@ export async function prepareComposition(directory:string,timeline:Timeline,asse
     const sourceExtension=extname(asset.fileName).toLowerCase();
     const extension=/^\.(mp4|mov|webm|m4v|mp3|wav|m4a|ogg|flac|aac|aiff|png|jpg|jpeg|webp|gif|avif|glb|gltf)$/.test(sourceExtension)?sourceExtension:asset.kind==='video'?'.mp4':asset.kind==='audio'?'.audio':'.image';
     const name=`asset-${index}${extension}`;
-    // Reuse only immutable media identified by a fresh, authorized task snapshot.
+    // Reuse only immutable media identified by a fresh, authorized task snapshot. Large R2 sources
+    // download as three ranges at once: a cold 435 MiB source took 15.4 s as one stream.
     // The existing bounded cache isolates backend, owner and immutable source bytes and keeps
     // active files alive through hard links when an older entry is evicted.
     const identity=asset.projectId&&asset.contentType?mediaSourceCacheIdentity(convexUrl,asset.projectId,{...asset,contentType:asset.contentType}):undefined;
-    await reuseMediaFile({identity,variant:'source-v1',target:join(directory,name),signal:sourceSignal,expectedBytes:asset.size},()=>downloadOwnedMedia(asset.url!,join(directory,name),new URL(convexUrl).origin,asset.size,sourceSignal));
+    await reuseMediaFile({identity,variant:'source-v1',target:join(directory,name),signal:sourceSignal,expectedBytes:asset.size},()=>downloadOwnedMedia(asset.url!,join(directory,name),new URL(convexUrl).origin,asset.size,sourceSignal,{concurrency:3}));
     let decoded=false;
     if(asset.kind==='audio'){
       const output=join(directory,`asset-${index}-decoded.wav`);
