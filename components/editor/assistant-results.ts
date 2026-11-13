@@ -4,6 +4,7 @@ import { describeRunFailure } from '@/lib/ai/failure-text';
 import type { RunFailureCode } from '@/lib/ai/run-failure';
 import type { TimelinePublicationReceipt } from '@/lib/ai/publication-receipt';
 import { unresolvedToolFailureIds } from '@/lib/ai/tool-failures';
+import { isStepOrderGuard } from '@/lib/ai/tool-guards';
 import { READ_ONLY_TOOLS } from '@/lib/ai/read-only-tools';
 import { SAVED_ELSEWHERE, hasSaveEvidence, toolSaveReceipt, needsSaveConfirmation } from '@/lib/ai/save-confirmation';
 import { mediaErrorMessage } from '@/lib/media-analysis/errors';
@@ -54,6 +55,8 @@ export function chatMessageFromUI(message:{id:string;key?:string;threadId?:strin
   const blocks:ChatBlock[]=[];
   for(const part of message.parts){
     const step=chatToolFromPart(part),last=blocks.at(-1);
+    // A step-order guard (lib/ai/tool-guards) is the agent's own order of work, not a failed step: it is not shown.
+    if(step?.state==='error'&&isStepOrderGuard(stepError(part)))continue;
     if(step){if(last?.type==='tools')last.steps.push(step);else blocks.push({type:'tools',steps:[step]});continue;}
     // Claude's summarized thinking, kept in order so the chat can fold it into a Thinking row.
     if(record(part)?.type==='reasoning'){const thought=String(record(part)?.text??'').trim();if(thought){if(last?.type==='thinking')last.text+=`\n\n${thought}`;else blocks.push({type:'thinking',text:thought});}continue;}
@@ -104,6 +107,12 @@ function unpack(value: unknown): { output?: Record<string, unknown>; error?: str
 }
 
 const receiptCode = (output?: Record<string, unknown>) => { const receipt = toolSaveReceipt(output); return receipt && 'code' in receipt ? receipt.code : undefined; };
+
+/** A failed tool part's raw error text, before it is reworded for the chat. */
+function stepError(value: unknown) {
+  const part = record(value);
+  return String(part?.errorText || unpack(part?.output).error || '');
+}
 
 /** Stored Agent error-text results can arrive as output-available; that is not success. */
 function chatToolFromPart(value: unknown): ChatTool | null {

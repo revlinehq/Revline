@@ -1,4 +1,5 @@
 import { processorCan } from './processor_capabilities';
+import { stepOrderGuard } from '../../lib/ai/tool-guards';
 import { retryAbortedTransaction } from './retry_aborted_transaction';
 import { materializeTranscript, type Transcript } from '../../lib/media-analysis/transcript';
 import { forEachLimited } from '../../lib/server/run-limited';
@@ -139,7 +140,7 @@ type EditorToolkitOptions = {
   project: Doc<'projects'>;
   /** Shared with the caller; analysis and generated sounds update it in place. */
   assets: Doc<'assets'>[];
-  /** A recovering run must inspect the timeline before its first edit. */
+  /** A run resumed after an interruption: its first edit re-reads the saved timeline. */
   recovering: boolean;
   /** Narrows that rule: false for a continuation of the same run, whose draft and clip ids are its own. Default: recovering. */
   inspectFirst?: boolean;
@@ -239,8 +240,8 @@ function soundReport(result: SoundResult, check: boolean) {
 
 export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOptions) {
   const { run, project, assets, recovering, abortSignal } = options;
-  // Only a run picked up after a crash must look before it edits: a write may or may not have landed. A continuation
-  // of the same run works on its own draft, so its clip ids are current and no re-read is asked for.
+  // Only a run picked up after a crash must re-read before it edits: a write may or may not have landed. A continuation
+  // of the same run works on its own draft, so its clip ids are current and no re-read is needed.
   const inspectFirst = options.inspectFirst ?? recovering;
   // The task row is read once per model step and shared by that step's tools (readTask below). Any write through this
   // toolkit can change the row (toolWrites:run updates its frame evidence), so a write drops the shared read.
@@ -388,9 +389,26 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   // Every assistant and MCP timeline write passes here, so this is where cuts land on the frame grid
   // (lib/editor/frame-grid.ts): edges on frames, shared boundaries rounded once, sub-frame gaps closed.
   const onFrameGrid = (timeline: Timeline, previous?: Timeline) => snapTimelineToFrames(timeline, assetId => assets.find(asset => asset._id === assetId)?.duration, previous);
+  /** The saved timeline and project media now, as inspectTimeline reads them. */
+  const readSavedTimeline = async () => {
+    const current = await ctx.runQuery(internal.assistant.getRun, run);
+    assets.splice(0,assets.length,...current.assets.map(asset=>{const previous=assets.find(item=>item._id===asset._id);return previous?.analysis&&previous.analysisId===asset.analysisId&&previous.analysisUpdatedAt===asset.analysisUpdatedAt?{...asset,analysis:previous.analysis}:asset;}));
+    return { timeline: current.project.timeline ?? { clips: [], fps: 60, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
+  };
+  // A run picked up after an interruption must not edit a timeline it read before the interrupted write landed. The
+  // first edit re-reads the saved timeline itself (the same read as inspectTimeline) instead of refusing and asking the
+  // model for a round trip; a staged draft that no longer matches the saved revision still fails as a conflict.
+  let refreshing: Promise<void> | undefined;
+  const refreshAfterRecovery = () => {
+    if (!inspectFirst || inspected) return Promise.resolve();
+    const read = refreshing ??= editSession.inspect(readSavedTimeline).then(() => { inspected = true; });
+    read.catch(() => { if (refreshing === read) refreshing = undefined; });
+    return read;
+  };
   const checkpoint = async (edit: (timeline: Timeline) => Timeline) => {
     let healed: FrameGridHeal[] = [], holes: FootageGap[] = [], emojiText = false;
-    const result = await editSession.checkpoint(timeline => { if (inspectFirst && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit: call inspectTimeline once, then repeat this call. One successful inspectTimeline clears this for the rest of the request.');
+    await refreshAfterRecovery();
+    const result = await editSession.checkpoint(timeline => {
     const grid = onFrameGrid(edit(timeline), timeline); healed = grid.healed;
     // The edit that opens a hole says so in its own result, not three finish checks later.
     holes = newPictureGaps(timeline, grid.timeline);
@@ -942,7 +960,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         const checkedIds=new Set<string>(state.tabs?state.tabs.filter((tab:{checked:boolean})=>tab.checked).map((tab:{timelineId:string})=>tab.timelineId):[]);
         const requestedIds:string[]=[...new Set<string>(input.timelineIds??(state.tabs?state.tabs.map((tab:{timelineId:string})=>tab.timelineId):[]))];
         const reusedTimelineIds=requestedIds.filter(id=>checkedIds.has(id)),ids=requestedIds.filter(id=>!checkedIds.has(id));
-        if(!ids.length){if(state.tabs?.length)return {results:[],images:[],alreadyChecked:true,reusedTimelineIds,next:'Accepted tabs pass the current saved-data checks and any explicitly requested QA. Call finishClipping; repair any accounting errors it reports.'};throw new Error('Build accepted clip tabs before checkClip.');}
+        if(!ids.length){if(state.tabs?.length)return {results:[],images:[],alreadyChecked:true,reusedTimelineIds,next:'Accepted tabs pass the current saved-data checks and any explicitly requested QA. Call finishClipping; repair any accounting errors it reports.'};throw stepOrderGuard('Build accepted clip tabs before checkClip.');}
         const results:unknown[]=[],images:{label:string;data:string;mimeType:string}[]=[];
         await forEachLimited(ids,2,async(timelineId)=>{
           const prepared=await ctx.runQuery(internal.clipping.prepareCheck,{...clippingRun,timelineId,...(input.acceptedFindings?{acceptedFindings:input.acceptedFindings}:{})});
@@ -976,13 +994,13 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     discoverCapabilities: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.discoverCapabilities, description: 'Find relevant optional workflows or supporting skills by the needed action. Returns a short matching index, never full skill text. Shared edits need no discovery.', inputSchema: z.object({ query: z.string().trim().min(3).max(200) }), execute: async (_ctx, {query}) => ({ matches: discoverCapabilities(query), next: 'Use loadCapability for a supporting workflow or readSkill for a skill. Change the primary style only if the deliverable changes.' }) }),
     loadCapability: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.loadCapability, description: 'Load supporting tools and a small skill index by a discovered workflow or skill name, without changing the primary style, task, clip delivery, finish checks or user decisions. Read only the needed skill pages afterward.', inputSchema: z.object({ name: z.string().trim().min(1).max(80) }), execute: async (_ctx, {name}) => ({ ...await loadCapability(name), primaryWorkflow: lane, next: 'Supporting capability loaded. Read needed skills; preserve the primary deliverable and finish it.' }) }),
     switchLane:createTool({metadata:EDITOR_TOOL_DEFINITIONS.switchLane,description:'Optionally change the primary workflow when the deliverable changes. Shared edits need no style selection. For supporting skills/tools use loadCapability instead, preserving the primary deliverable and finish checks.',inputSchema:z.object({lane:z.enum(LANE_IDS),reason:z.string().trim().min(5).max(300),taskType:z.enum(['edit','question'])}),execute:async(_ctx,input)=>{
-      if(!taskId)throw new Error('Start a task first with startTask.');
+      if(!taskId)throw stepOrderGuard('Start a task first with startTask.');
       await laneCtx.runMutation(internal.lanes.switchLane,{...taskScope,timelineId,...input});
       lane=input.lane;laneChosen=true;finishRequired ||= input.taskType==='edit';requiredPersisted=finishRequired;finishResult=undefined;
       return {lane,instructions:laneInstructions(lane),checks:checkInstructions(lane,checkLevel),tools:availableToolNames()};
     }}),
     finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. One result lists EVERY problem with exact times and clip ids, and fixes names the single call that repairs each kind (closeGaps with no arguments closes every gap at once): make those calls, then call finish again. Gaps and overlaps shorter than a frame are closed by the check itself and reported in healed. finish draws the few frames it needs and returns them with a passed result (look at them before you reply); it never asks you to fetch frames. Checking again after a repair is progress; a check that fails the same way three times with nothing fixed ends the request, so report its output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
-      if(!taskId)throw new Error('Start a task first with startTask.');
+      if(!taskId)throw stepOrderGuard('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
       // An earlier failed step left the draft guarded. Revalidate the last good draft so a passed check can save it.
       await editSession.confirmRepairs();
@@ -1181,7 +1199,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     }}),
     setBlendMode:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.setBlendMode,description:"Set the requested supported blend mode on exact footage/text clip IDs, preserving all other controls. Apply both sides of an existing transition atomically when changing their common blend; unequal transition blends are refused. Audio and FX clips cannot receive blend modes.",inputSchema:z.object({clipIds:clipIdsInput,blendMode:z.enum(BLEND_MODES)}),execute:async(_ctx,{clipIds,blendMode})=>checkpoint(t=>setClipBlendMode(t,clipIds,blendMode))}),
     undoLatestEdit:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.undoLatestEdit,description:"Undo the latest actually saved edit first, only before this turn has applied or staged any changes. Uses saved history, never a guessed replacement/source extension. Returns undone:false when there is no saved edit. Refreshes the working timeline; subsequent changes can be saved together as a new undo group. Inspect the restored clips before choosing targets. To go back to a known-good version of one clip (or a whole tab) from further back, use listRevisions and restoreClip (or restoreTimeline), not chains of undo: undo steps also take back later edits you may want to keep. Redo, playback and the clipboard live in the browser; no tool can reach them.",inputSchema:z.object({}),execute:async()=>{
-      if (inspectFirst && !inspected) throw new Error('Inspect the current timeline before continuing the saved edit: call inspectTimeline once, then repeat this call. One successful inspectTimeline clears this for the rest of the request.');
+      await refreshAfterRecovery();
       let undone=false;
       const snapshot=await editSession.inspect(async()=>{
         if(editSession.savedEdits||editSession.staged)throw new Error('Undo the latest saved edit before making changes in this turn.');
@@ -1257,11 +1275,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       return { ...saved, unapproved: true, clipId };
     } }),
     inspectTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.inspectTimeline, description: "Read this active project's current working timeline (the open timeline tab, named in openTimeline) and saved revision. If staged is true, this is a private replacement draft that has not been published yet. Expose each labeled layer with its group and number: FX effects-only, V video/image/text/solid-color, A audio. Timeline clips include their kind and track. Report visual coverage gaps, overlaps within the same group/layer, missing media references and effective text animation labels. Higher stacked layers are intentional and are not overlap errors. This tool does not change the timeline or create an undo entry. An animation field of none can still have motion keyframes or a text template: report the effective names from summary.textAnimations.", inputSchema: z.object({}), execute: async () => {
-      const snapshot = await editSession.inspect(async () => {
-        const current = await ctx.runQuery(internal.assistant.getRun, run);
-        assets.splice(0,assets.length,...current.assets.map(asset=>{const previous=assets.find(item=>item._id===asset._id);return previous?.analysis&&previous.analysisId===asset.analysisId&&previous.analysisUpdatedAt===asset.analysisUpdatedAt?{...asset,analysis:previous.analysis}:asset;}));
-        return { timeline: current.project.timeline ?? { clips: [], fps: 60, aspectRatio: current.project.aspectRatio }, revision: current.project.revision ?? 0 };
-      });
+      const snapshot = await editSession.inspect(readSavedTimeline);
       inspected = true;
       const captionedAssetIds=assets.filter(asset=>{
         const speech=captionSpeech(asset.analysis);
@@ -1282,7 +1296,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const { scene: _scene, ...plain } = clip;
       return { clip: _scene ? { ...plain, unsupported: 'Scene clips are no longer supported: they do not render or export. Delete this clip.' } : clip, ...(isApproved(clip) ? { approved: approvedWork({ ...editSession.timeline, clips: [clip] })[0], approvedRule: APPROVED_RULE } : {}), ...(soundRecipe ? { soundRecipe: JSON.parse(soundRecipe) } : {}), revision: editSession.revision, staged: editSession.staged };
     } }),
-    detectFacecam:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.detectFacecam,description:'Detect the webcam OVERLAY panel and gameplay regions using local MediaPipe faces and temporally stable OpenCV rectangle edges in the media processor. No Gemini key is required. Returns normalized x/y/w/h rectangles, source sample times, confidence and explicit creator-only/gameplay-only/uncertain outcomes. Reuses saved source analysis. If no clear panel is found, use followSubject mode face or retain a wider view. Use applyLayout detectedRegions:true for automatic creator-top/gameplay-bottom crops; inspect layout changes between samples.',inputSchema:z.object({assetId:z.string()}),execute:async(_ctx,{assetId})=>{if(lane==='clip'){const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun});if(!('found' in state)||state.required&&state.accepted===0)throw new Error('Complete findHighlights and planClips before facecam framing. This reuses the discovered source instead of downloading it twice in parallel.');}const asset=await analyze(assetId,'facecam');return {assetId:asset._id,...asset.analysis?.facecam,...(asset.analysis?.facecam?.samples.some(s=>s.kind==='uncertain')?{fallback:'Use followSubject mode face for uncertain layouts; keep a wider frame if no face is visible.'}:{})};}}),
+    detectFacecam:createTool({ metadata: EDITOR_TOOL_DEFINITIONS.detectFacecam,description:'Detect the webcam OVERLAY panel and gameplay regions using local MediaPipe faces and temporally stable OpenCV rectangle edges in the media processor. No Gemini key is required. Returns normalized x/y/w/h rectangles, source sample times, confidence and explicit creator-only/gameplay-only/uncertain outcomes. Reuses saved source analysis. If no clear panel is found, use followSubject mode face or retain a wider view. Use applyLayout detectedRegions:true for automatic creator-top/gameplay-bottom crops; inspect layout changes between samples.',inputSchema:z.object({assetId:z.string()}),execute:async(_ctx,{assetId})=>{if(lane==='clip'){const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun});if(!('found' in state)||state.required&&state.accepted===0)throw stepOrderGuard('Complete findHighlights and planClips before facecam framing. This reuses the discovered source instead of downloading it twice in parallel.');}const asset=await analyze(assetId,'facecam');return {assetId:asset._id,...asset.analysis?.facecam,...(asset.analysis?.facecam?.samples.some(s=>s.kind==='uncertain')?{fallback:'Use followSubject mode face for uncertain layouts; keep a wider frame if no face is visible.'}:{})};}}),
     analyzeMedia: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.analyzeMedia, description: "Start durable analysis of this project's uploaded media by mode: word-timed transcription with audio energy, shots (local scene cuts, no Gemini), a Gemini video overview, music beats, face track (faces only; other objects use trackPoints), facecam regions, or speakers (diarized speakers with face positions). Saved results are usable at once: reuse them. Overviews are optional and run only for footage with little speech; a skipped or failed one returns unavailable: continue with the transcript and readFrames without waiting, retrying or reporting a provider error. For a specific visual question use inspectVideo. Shot cuts can miss dissolves and do not identify impacts.", inputSchema: z.object({ assetId: z.string(), mode: z.enum(["transcribe", "understand", "shots", "beats", "track", "facecam", "speakers"]),start:z.number().min(0).optional(),end:z.number().positive().optional() }).refine(i=>(i.start===undefined&&i.end===undefined)||(i.mode==='speakers'&&i.start!==undefined&&i.end!==undefined&&i.end>i.start&&i.end-i.start<=120),{message:'Source start/end windows are for speaker analysis, up to 120 seconds.'}), execute: async (_ctx, input) => {
       return reportAnalysisFailure(async () => {
       const asset = input.mode === 'understand' ? await loadAsset(input.assetId) : await analyze(input.assetId, input.mode,false,input.start!==undefined&&input.end!==undefined?{start:input.start,end:input.end}:undefined);
@@ -1699,7 +1713,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         next: `Understand the piece, then call planScript with about (one line) and beats covering every script line from L${opening.n} to L${closing.n} in order: role hook, point, tangent, payoff or cta, and priority 1 (must keep) to 3 (first to drop). ${target?.max !== undefined && estimate.seconds > target.max ? `It is ${(estimate.seconds - target.max).toFixed(1)} s over the requested length: mark whole tangents and weaker points keep:false, never the opening or the payoff. ` : 'Keep every beat unless the user asked for a shorter cut. '}In the same step, tell the user the restatement in one line (adjust it if you choose differently). Do not cut before planScript returns its ranges.`, images };
     }, toModelOutput: (ctx, options) => labeledImages(ctx, options.output) }),
     planScript: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.planScript, description: "Reel lane, after readScript and before any cut, b-roll, image or overlay: save your plan of the take and get the exact ranges to keep. about: one line on what it says. beats: the script in order, each {role, from, to, priority} over readScript line numbers, covering every line; chatter and earlier takes inside a beat drop out (keepLines forces one back). For a requested length set keep:false on whole lower-priority beats, never the opening, the payoff or part of a sentence. Start on the opening line and end on the closing line unless the user asked otherwise (openingReason, endingReason quote it). Returns saved:false with the problems, or the SOURCE ranges to pass unchanged to retainSourceRanges with tightenSilence:true.", inputSchema: z.object({ clipId: z.string().min(1).max(100), about: z.string().trim().min(3).max(240), beats: z.array(z.object({ role: z.enum(BEAT_ROLES), from: z.number().int().min(1), to: z.number().int().min(1), priority: z.union([z.literal(1), z.literal(2), z.literal(3)]), keep: z.boolean().optional() }).strict()).min(1).max(40), opening: z.number().int().min(1).optional().describe('Line the reel starts on, when it is not the suggested opening: the user-chosen one of two openings.'), openingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to start somewhere other than the script opening: their words.'), endingReason: z.string().trim().min(3).max(200).optional().describe('Only when the user asked to end before the script closing line: their words.'), keepLines: z.array(z.number().int().min(1)).max(40).optional() }).strict(), execute: async (_ctx, input) => {
-      if (!taskId) throw new Error('Start a task first with startTask.');
+      if (!taskId) throw stepOrderGuard('Start a task first with startTask.');
       const speech = await speechEvidence(input.clipId), transcript = speech.evidence.analysis?.transcript;
       if (!transcript?.words.length) throw new Error('This clip has no saved transcript with spoken words to plan from.');
       const spans = retainedSpans(speech), outline = scriptOutline(transcript, spans);
@@ -1800,7 +1814,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     checkSpots: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.checkSpots, description: "Reel eyes for the cut, after the speech cut and before captions: measures the speaker at the first frame, last frame and every cut edge (no face, head turn, eyes down, closed or off camera, reach, movement) on the media worker. Clean edges cost nothing; each flagged spot returns measurements with SOURCE times, the nearest clean frame inside its pause and one 3-frame strip, within the frame budget. Call again with decisions: {spot, action:'move'} (to the suggested frame, or `to` in SOURCE seconds; later clips ripple) or {spot, action:'accept', seen}; more:[spot] once per spot for 5 more frames. When the budget runs out, apply the suggestions and list the unseen spots. finish fails on an unreviewed flagged first or last frame.", inputSchema: z.object({ decisions: z.array(z.object({ spot: z.string().min(3).max(140), action: z.enum(['move', 'accept']), to: z.number().min(0).optional().describe('SOURCE seconds to move the edge to; defaults to the suggested clean frame.'), seen: z.string().trim().min(3).max(200).optional().describe('What the frames show, in a few words. Required to accept.') }).strict()).max(40).optional(), more: z.array(z.string().min(3).max(140)).max(6).optional() }).strict(), execute: async (_ctx, input) => {
       const policy = LANES[lane].eyes;
       if (!policy || policy.status !== 'enforced') throw new Error(`checkSpots is not part of the ${lane} lane’s checks. It works in the reel lane.`);
-      if (!taskId) throw new Error('Start a task first with startTask.');
+      if (!taskId) throw stepOrderGuard('Start a task first with startTask.');
       await editSession.wait();
       const task = await readTask(['checkSpots']);
       if (task?.script) savedScript = task.script as SavedScript;
@@ -2257,7 +2271,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     })}),
     addTimedEffect: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.addTimedEffect, description: `Add an independent FX clip for an explicit effect request or authorized creative styling: ${OFFERED_TIMED_EFFECT_PRESETS.map(preset=>EFFECT_CATALOG[preset].label).join(', ')}. solid-color adds a normal V color layer instead (below footage for a background, above it for an overlay). start (default the playhead) and duration are timeline seconds; controls must match the preset (zoom for the Zoom family, punch, flash, shake, solidColor), and omitted ones keep their values. One planId maps to one FX clip with the same start and full duration. Footage fades are configureVisualFade, sound fades configureAudio and a cut between neighbours addTransition, never a fade FX. Controls and examples: readSkill footage-editing page effect-tools.`, inputSchema: z.object({ planId:z.string().optional(),preset:z.enum(OFFERED_TIMED_EFFECT_PRESETS),start:z.number().min(0).optional(),duration:z.number().positive().optional(),aboveClipId:z.string().optional(),solidColor:solidColorInput.optional(),zoom:zoomInput.optional(),...pulseInputs }).strict().refine(input=>!input.zoom||isZoomPreset(input.preset),{message:'Zoom controls belong to Zoom FX.'}).refine(input=>!input.solidColor||input.preset==='solid-color',{message:'Solid color controls belong to solid-color FX.'}).refine(input=>!input.flash||input.preset==='flash',{message:'Flash controls require flash FX.'}).refine(input=>!input.shake||input.preset==='shake',{message:'Shake controls require shake FX.'}).refine(input=>!input.punch||input.preset==='punch',{message:'Controls must match the requested effect preset.'}), execute:async(_ctx,input)=>checkpoint(t=>{
       const start=input.start??options.playhead??0,plan=effectPlans.find(plan=>(!input.planId||plan.id===input.planId)&&plan.kind==='timed'&&plan.effect===input.preset&&Math.abs(plan.start-start)<1/t.fps);
-      if(!plan&&!options.planlessEffects&&recipe().fullTools&&laneToolAllowed(lane,'planEffects',[...capabilities]))throw new Error('Record this effect with planEffects before adding it.');
+      if(!plan&&!options.planlessEffects&&recipe().fullTools&&laneToolAllowed(lane,'planEffects',[...capabilities]))throw stepOrderGuard('Record this effect with planEffects before adding it.');
       if(plan&&Math.abs((input.duration??plan.duration)-plan.duration)>1/t.fps)throw new Error('Match the timed plan duration to this one FX clip. Plan each separate pulse with its own ID and range.');
       const duration=input.duration??plan?.duration;if(duration===undefined)throw new Error('Give the effect a duration in seconds.');
       const id=crypto.randomUUID();if(plan)planBindings.set(plan.id,id);
