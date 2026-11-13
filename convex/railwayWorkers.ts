@@ -5,7 +5,7 @@ import { processorBackend } from './lib/processor_backend';
 import { requireMediaWorker } from './lib/media_task_auth';
 import { MEDIA_PROCESSOR_VERSION } from '../lib/media-analysis/processor-version';
 import { workerCapacity } from '../lib/worker-capacity.mjs';
-import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwaySlot, railwayActive, deployRailwaySlot, reapRailwayServices } from '../lib/railway-workers.mjs';
+import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwaySlot, railwayActive, deployRailwaySlot, reapRailwayServices, railwayDeployments, railwayDeploymentCommit, railwayGoodDeployments, railwayBootCrashed } from '../lib/railway-workers.mjs';
 
 // The existing lock table is a dispatch mutex, independent of the hosting provider.
 const lockName = 'railway';
@@ -36,7 +36,7 @@ export const releaseEvidence = query({
       const job = await ctx.db.get(task.renderJobId);
       if (!job || job.status !== 'completed' || (index === 1 ? (job.resolution ?? 1080) >= 2160 : index === 2 && (job.resolution ?? 1080) < 2160)) throw new Error('Staging evidence must include completed standard and Ultra exports.');
     }
-    return { checkedAt: Date.now(), processorCommit: config.processorCommit, exportsCommit: config.exportsCommit, processorImage: config.processorImage, exportsImage: config.exportsImage };
+    return { checkedAt: Date.now(), processorCommit: config.processorCommit ?? '', exportsCommit: config.exportsCommit ?? '', processorImage: config.processorImage ?? '', exportsImage: config.exportsImage ?? '' };
   },
 });
 export const acquireDispatch = internalMutation({ args: {}, returns: v.boolean(), handler: async ctx => {
@@ -75,6 +75,19 @@ export const reserveStart = internalMutation({ args: { serviceId: v.string() }, 
   return true;
 } });
 
+// A build that crashed on boot is not started again for this long; the slot falls back to its previous build meanwhile.
+const BOOT_CRASH_HOLD_MS = 30 * 60_000;
+/** 'held': this lane's build crashed on boot within the hold. 'first' / 'expired': it did not, or the hold ran out; the
+ *  hold starts (again) now. The existing lock table keeps one row per lane and crashed build. */
+export const holdBootCrash = internalMutation({ args: { lane: v.string(), build: v.string() }, returns: v.union(v.literal('held'), v.literal('first'), v.literal('expired')), handler: async (ctx, args) => {
+  const name = `railway-boot-crash:${args.lane}:${args.build}`;
+  const row = await ctx.db.query('flyDispatchLocks').withIndex('by_name', q => q.eq('name', name)).unique();
+  if (row && row.lockedUntil > Date.now()) return 'held';
+  const fields = { lockedUntil: Date.now() + BOOT_CRASH_HOLD_MS, pending: false };
+  if (row) await ctx.db.patch(row._id, fields); else await ctx.db.insert('flyDispatchLocks', { name, ...fields });
+  return row ? 'expired' : 'first';
+} });
+
 /** One preconfigured service per slot. Never resize, kill busy workers or create an unbounded pool. */
 export const dispatch = internalAction({ args: {}, returns: v.null(), handler: async ctx => {
   if (!process.env.RAILWAY_WORKERS_JSON || !await ctx.runMutation(internal.railwayWorkers.acquireDispatch, {})) return null;
@@ -89,11 +102,37 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
     const exports = await ctx.runQuery(internal.queueDemand.exportDemand, {});
     const capacity = workerCapacity();
     const pools = [
-      { ids: config.processorServices, max: capacity.processor, image: config.processorImage, enabled: processorBackend() === 'railway', demand: processor },
-      { ids: config.standardServices, max: capacity.standard, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.standard },
-      { ids: config.ultraServices, max: capacity.ultra, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.ultra },
+      { name: 'processor', ids: config.processorServices, max: capacity.processor, image: config.processorImage, enabled: processorBackend() === 'railway', demand: processor },
+      { name: 'standard', ids: config.standardServices, max: capacity.standard, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.standard },
+      { name: 'ultra', ids: config.ultraServices, max: capacity.ultra, image: config.exportsImage, enabled: process.env.RENDER_PROVIDER === 'railway', demand: exports.ultra },
     ];
     const deadline = Date.now() + 5 * 60_000;
+    type Instance = Awaited<ReturnType<typeof verifyRailwaySlot>>;
+    type Deployment = NonNullable<Instance['latestDeployment']>;
+    // One hold decision per lane and crashed build per dispatch, so many slots on one bad build cost one incident.
+    const holds = new Map<string, 'held' | 'first' | 'expired'>();
+    /** undefined: start the latest build as usual. Deployments: start the first of these earlier builds that Railway
+     *  accepts instead. null: start nothing. A latest build that failed, or crashed before its worker came up, is held
+     *  for BOOT_CRASH_HOLD_MS per lane and reported; meanwhile the slot runs the newest earlier build that ran. With
+     *  none, the crashed build is retried once per hold. */
+    const startableBuilds = async (instance: Instance, lane: string): Promise<Deployment[] | null | undefined> => {
+      const latest = instance.latestDeployment;
+      if (!latest || (latest.status !== 'CRASHED' && latest.status !== 'FAILED')) return undefined;
+      if (latest.status === 'CRASHED' && !await railwayBootCrashed({ token, deploymentId: latest.id })) return undefined;
+      const build = railwayDeploymentCommit(latest) ?? latest.id;
+      const key = `${lane}:${build}`;
+      const first = !holds.has(key);
+      const hold = holds.get(key) ?? await ctx.runMutation(internal.railwayWorkers.holdBootCrash, { lane, build });
+      holds.set(key, hold === 'held' ? 'held' : hold);
+      const fallbacks = railwayGoodDeployments(await railwayDeployments({ ...target, serviceId: instance.serviceId }), deployment => deployment.id === latest.id || (railwayDeploymentCommit(deployment) ?? deployment.id) === build);
+      if (first && hold !== 'held') {
+        const message = `Railway ${lane} build ${build.slice(0, 12)} ${latest.status === 'FAILED' ? 'failed to build or deploy' : 'crashed on boot'}; not started again for ${BOOT_CRASH_HOLD_MS / 60_000} min. ${fallbacks.length ? `Running the previous build ${(railwayDeploymentCommit(fallbacks[0]) ?? fallbacks[0].id).slice(0, 12)} meanwhile.` : 'No earlier build ran: the lane waits.'}`;
+        console.error(message);
+        await ctx.runMutation(internal.incidents.reportIncident, { source: 'railway', kind: 'worker-boot-crash', message, context: { location: 'convex/railwayWorkers:dispatch', taskKind: lane, event: 'boot-crash' }, deployment: 'server' }).catch(() => undefined);
+      }
+      if (fallbacks.length) return fallbacks.slice(0, 3);
+      return hold === 'expired' && latest.status === 'CRASHED' ? [latest] : null;
+    };
     for (const pool of pools) {
       if (!pool.enabled || pool.demand.waiting === 0) continue;
       if (pool.ids.length > pool.max) throw new Error('Railway pool exceeds the existing capacity setting; dispatch held.');
@@ -107,9 +146,20 @@ export const dispatch = internalAction({ args: {}, returns: v.null(), handler: a
       for (const instance of instances) {
         if (needed === 0 || Date.now() >= deadline) break;
         if (railwayActive(instance)) continue;
+        // Never a chosen commit: the slot's own latest build (Railway autodeploys main), unless that build crashed on boot.
+        const start = await startableBuilds(instance, pool.name);
+        if (start === null) continue;
         if (!await ctx.runMutation(internal.railwayWorkers.reserveStart, { serviceId: instance.serviceId })) continue;
         // A lost acknowledgement is reconciled from latestDeployment next time.
-        await deployRailwaySlot({ ...target, serviceId: instance.serviceId });
+        if (!start) await deployRailwaySlot({ ...target, serviceId: instance.serviceId });
+        else {
+          let started = false;
+          for (const deployment of start) {
+            try { await deployRailwaySlot({ ...target, serviceId: instance.serviceId, deployment }); started = true; break; }
+            catch (error) { if (error instanceof RailwayRateLimitError) throw error; console.error(`Railway ${pool.name} slot ${instance.serviceId}: earlier build ${deployment.id} could not be redeployed; trying the next.`); }
+          }
+          if (!started) continue;
+        }
         needed--;
       }
     }

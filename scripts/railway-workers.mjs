@@ -1,4 +1,8 @@
 // Explicit operator commands. Nothing in this file runs during install, build or a PR.
+// Permanent slots deploy from GitHub main (Railway autodeploy) and no release stages them. `stage` remains for one
+// thing: rolling a lane back to a pinned registry image (docs/releases.md, Rollback). `stage-repository` and `verify`
+// ran preflights on permanent slots and are retired: a preflight deployment left on a slot was what a later start
+// redeployed, and it exited at once instead of serving.
 import { readFile, writeFile, appendFile, mkdir, rm } from 'node:fs/promises';
 import { hostname, userInfo } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -38,6 +42,9 @@ let config = railwayConfig(await readFile(configPath, 'utf8'));
 if (config.environment !== values.environment) throw new Error('Explicit environment and manifest differ.');
 const deployment = { dev: 'majestic-alpaca-541', staging: 'striped-starling-234', production: 'different-gnu-398' }[config.environment];
 const kinds = values.kind === 'all' ? ['processor', 'exports'] : [values.kind];
+if (['stage-repository', 'verify'].includes(operation)) throw new Error(`${operation} is retired: permanent slots deploy from GitHub main. See docs/releases.md (Railway).`);
+// A pinned-image operation needs the pins of every kind it touches.
+if (['preflight', 'stage', 'check', 'cutover', 'resume'].includes(operation)) for (const kind of kinds) if (!config[`${kind}Image`] || !config[`${kind}Commit`]) throw new Error(`${operation} --kind ${kind} needs ${kind}Image and ${kind}Commit pinned in ${values.config}.`);
 const selectedPools = () => [
   ...(kinds.includes('processor') ? [{ name: 'processor', ids: config.processorServices, image: config.processorImage }] : []),
   ...(kinds.includes('exports') ? [{ name: 'standard', ids: config.standardServices, image: config.exportsImage }, { name: 'ultra', ids: config.ultraServices, image: config.exportsImage }] : []),
@@ -56,7 +63,7 @@ if (values.apply) {
   const gitDir = execFileSync('git', ['rev-parse', '--git-dir'], { encoding: 'utf8' }).trim();
   const mainPush = process.env.GITHUB_EVENT_NAME === 'push' && process.env.GITHUB_REF === 'refs/heads/main' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   const stagingCi = config.environment === 'staging' && process.env.GITHUB_ACTIONS === 'true' && process.env.GITHUB_WORKFLOW === 'Railway staging' && isRevlineRepository(process.env.GITHUB_REPOSITORY) && process.env.GITHUB_SHA === execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() && gitDir === '.git';
-  const railwayOnly = ['build', 'preflight', 'stage-repository'].includes(operation);
+  const railwayOnly = ['build', 'preflight'].includes(operation);
   const stagingOperator = config.environment === 'staging' && ['stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status'].includes(operation) && selectedPools().every(pool => pool.ids.length === 1);
   if ((railwayOnly || stagingCi || stagingOperator) && !mainPush && branch !== 'main') {
     const pr = JSON.parse(execFileSync('gh', ['pr', 'view', '--repo', REPOSITORY, '--json', 'headRefOid,headRefName,state'], { encoding: 'utf8' }));
@@ -74,7 +81,7 @@ if (founderBypass) {
   await mkdir(resolve('.data/railway'), { recursive: true });
   await appendFile(log, JSON.stringify(entry) + '\n', { mode: 0o600 });
   console.log(`\n*** FOUNDER BYPASS: staging promotion receipt NOT checked for this production stage. Reason: ${founderBypass}. Logged to ${log}. ***\n`);
-} else if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds, recorded: true });
+} else if (config.environment === 'production' && ['stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds, recorded: true });
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
 const env = { ...process.env, ...settings };
 mask(env);
@@ -107,12 +114,9 @@ if (!token && ['stage', 'check'].includes(operation)) throw new Error(`RAILWAY_A
 const target = () => ({ token, config });
 const registryCredentials = { username: settings.RAILWAY_REGISTRY_USERNAME, password: settings.RAILWAY_REGISTRY_PASSWORD };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
-if (operation === 'preflight' || operation === 'stage-repository') {
+if (operation === 'preflight') {
   await verifyRailwayTarget(target());
-  if (operation === 'stage-repository') {
-    if (selectedPools().some(pool => pool.ids.length !== 1)) throw new Error('Pre-merge repository staging requires exactly one existing capped service per selected lane.');
-    for (const pool of selectedPools()) await preflight(pool.name === 'processor' ? 'processor' : 'exports', pool.ids[0]);
-  } else for (const kind of kinds) await preflight(kind);
+  for (const kind of kinds) await preflight(kind);
   console.log('Railway-only runtime preflight complete. No Convex access, queue credentials, staging receipt or routing changes.');
   process.exit(0);
 }
@@ -141,7 +145,7 @@ const expectManifest = async (expected, what) => {
   const raw = await liveManifest();
   let live = null;
   try { live = railwayConfig(raw); } catch { live = null; }
-  const describe = manifest => manifest ? `processor ${manifest.processorCommit.slice(0, 7)} ${manifest.processorImage.split('@')[1]?.slice(7, 19)}, exports ${manifest.exportsCommit.slice(0, 7)} ${manifest.exportsImage.split('@')[1]?.slice(7, 19)}` : 'unreadable';
+  const describe = manifest => manifest ? `processor ${manifest.processorCommit?.slice(0, 7)} ${manifest.processorImage?.split('@')[1]?.slice(7, 19)}, exports ${manifest.exportsCommit?.slice(0, 7)} ${manifest.exportsImage?.split('@')[1]?.slice(7, 19)}` : 'unreadable';
   if (!live || JSON.stringify(live) !== JSON.stringify(railwayConfig(expected))) throw new Error(`${deployment} RAILWAY_WORKERS_JSON read back after it was ${what} is ${describe(live)}; expected ${describe(railwayConfig(expected))}.`);
   console.log(`${deployment} RAILWAY_WORKERS_JSON ${what} and read back: ${describe(live)}.`);
 };
@@ -222,13 +226,6 @@ if (operation === 'status') {
       await writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
     }
   }
-} else if (operation === 'verify') {
-  if (!values.apply) throw new Error('Runtime verification creates temporary preflight services; use --apply after authorization. Use status for read-only inspection.');
-  for (const pool of selectedPools()) for (const serviceId of pool.ids) await preflight(pool.name === 'processor' ? 'processor' : 'exports', serviceId);
-  // Only distributed chunks pull immutable registry images. The permanent
-  // services run the repository builds just verified above.
-  if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
-  for (const pool of selectedPools()) for (const serviceId of pool.ids) await verifyRailwaySlot({ ...target(), serviceId, image: pool.image });
 } else if (operation === 'stage' || operation === 'check') {
   // ---- 1. Every check, before any claim pause or slot change ----
   // Anything a release can be missing (a key, the project token, registry access, an image) fails here, while
@@ -266,8 +263,10 @@ if (operation === 'status') {
   // credentials exist. Otherwise the slots keep building the commit from the repository, as before.
   const hasRegistry = !!(settings.RAILWAY_REGISTRY_USERNAME && settings.RAILWAY_REGISTRY_PASSWORD);
   if (!hasRegistry && (settings.RAILWAY_REGISTRY_USERNAME || settings.RAILWAY_REGISTRY_PASSWORD)) throw new Error('Set both RAILWAY_REGISTRY_USERNAME and RAILWAY_REGISTRY_PASSWORD, or neither.');
+  // Only pinned registry images are staged; a repository slot switched to one stops following main until its source is
+  // set back to the repository in Railway (docs/releases.md, Rollback).
   const imageSlots = contract.imageSlots === true && hasRegistry;
-  if (!imageSlots) console.log(`Slots build ${kinds.join(' and ')} from the repository (slow path): ${contract.imageSlots !== true ? `${deployment} predates image slots; release its Convex functions once` : `no RAILWAY_REGISTRY_USERNAME/RAILWAY_REGISTRY_PASSWORD in ${values['env-file']}`}.`);
+  if (!imageSlots) throw new Error(`A pinned-image stage needs ${contract.imageSlots !== true ? `${deployment}'s Convex to report image slots` : `RAILWAY_REGISTRY_USERNAME/RAILWAY_REGISTRY_PASSWORD in ${values['env-file']}`}. Otherwise roll back in Railway: redeploy an earlier deployment of the slot, or revert on main.`);
   // The manifest this deployment runs now is the restore point if anything fails after the pause.
   let previous = null;
   try { previous = remote.RAILWAY_WORKERS_JSON ? railwayConfig(remote.RAILWAY_WORKERS_JSON) : null; } catch { previous = null; }
@@ -278,18 +277,18 @@ if (operation === 'status') {
     if (remote.RAILWAY_WORKERS_JSON && !previous) throw new Error(`${deployment}'s live RAILWAY_WORKERS_JSON cannot be read for this environment; a ${kinds[0]} stage cannot tell what the other kind runs. Stage --kind all.`);
     if (previous) {
       const other = kinds[0] === 'processor' ? 'exports' : 'processor';
-      if (config[`${other}Commit`] !== previous[`${other}Commit`] || config[`${other}Image`] !== previous[`${other}Image`]) console.log(`Keeping the live ${other} entry ${previous[`${other}Commit`].slice(0, 7)} (${values.config} has ${config[`${other}Commit`].slice(0, 7)}; a ${kinds[0]} stage does not change it).`);
+      if (config[`${other}Commit`] !== previous[`${other}Commit`] || config[`${other}Image`] !== previous[`${other}Image`]) console.log(`Keeping the live ${other} entry ${previous[`${other}Commit`]?.slice(0, 7)} (${values.config} has ${config[`${other}Commit`]?.slice(0, 7)}; a ${kinds[0]} stage does not change it).`);
       config = withKinds(previous, config, kinds);
     }
   }
+  // The previous manifest is a restore point only when it pins every staged kind; slots that follow main have no pin.
+  const restorable = !!previous && kinds.every(kind => previous[`${kind}Image`] && previous[`${kind}Commit`]);
   const slots = [];
   for (const pool of selectedPools()) for (const serviceId of pool.ids) {
     const instance = await railwayInstance({ ...target(), serviceId });
-    const current = railwaySlotSource(instance);
     if (instance.source?.repo && !isRevlineRepository(instance.source.repo)) throw new Error(`Railway slot ${serviceId} builds another repository.`);
-    if (!imageSlots && current !== 'repository') throw new Error(`Railway slot ${serviceId} does not build ${REPOSITORY} and this release cannot switch it to an image; release ${deployment}'s Convex functions and set the registry credentials first.`);
     const priorPool = previous && (pool.name === 'processor' ? previous.processorServices : pool.name === 'standard' ? previous.standardServices : previous.ultraServices);
-    const restore = priorPool?.includes(serviceId) ? {
+    const restore = restorable && priorPool?.includes(serviceId) ? {
       image: pool.name === 'processor' ? previous.processorImage : previous.exportsImage, variables: slotVariables(previous, pool.name),
       commit: pool.name === 'processor' ? previous.processorCommit : previous.exportsCommit,
       deployment: instance.latestDeployment && ['SUCCESS', 'SLEEPING'].includes(instance.latestDeployment.status) ? instance.latestDeployment : null,
@@ -306,8 +305,8 @@ if (operation === 'status') {
       catch (error) { throw new Error(`${role === 'staged' ? 'Staged' : 'Restore (previous release)'} image check failed: ${error instanceof Error ? error.message : error}`); }
     }
   }
-  if (!previous) console.log('No previous manifest on this deployment: a failure after the pause cannot be restored automatically and leaves claims paused.');
-  console.log(`Checks passed for ${slots.length} slot(s): variables and keys present, project token valid, ${hasRegistry ? 'staged and restore images pullable with the registry credentials, ' : ''}restore point ${previous ? `${previous.processorCommit.slice(0, 7)} ready` : 'missing'}.`);
+  if (!restorable) console.log(`No pinned previous manifest for ${kinds.join(' and ')} on this deployment: a failure after the pause cannot be restored automatically and leaves claims paused (restore in the Railway dashboard).`);
+  console.log(`Checks passed for ${slots.length} slot(s): variables and keys present, project token valid, ${hasRegistry ? 'staged and restore images pullable with the registry credentials, ' : ''}restore point ${restorable ? 'ready' : 'missing'}.`);
   // Pipes are asynchronous on macOS: flush before exiting so release:prod sees the whole report.
   if (operation === 'check') { await new Promise(done => process.stdout.write('', done)); process.exit(0); }
 
@@ -329,8 +328,8 @@ if (operation === 'status') {
       if (paused) { await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused)); await dispatch(); console.error('No slot had changed: claims resumed.'); }
       return;
     }
-    if (!previous) { console.error('No previous manifest to restore; claims stay PAUSED. Restore by hand (docs/releases.md, Rollback).'); return; }
-    console.error(`Restoring the slots to ${previous.processorCommit.slice(0, 7)} (the manifest that ran before) and resuming claims.`);
+    if (!restorable) { console.error('No pinned previous manifest to restore; claims stay PAUSED. Restore by hand (docs/releases.md, Rollback).'); return; }
+    console.error(`Restoring the slots to ${previous.processorCommit?.slice(0, 7)} (the manifest that ran before) and resuming claims.`);
     try {
       await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
       paused = true;
@@ -348,7 +347,7 @@ if (operation === 'status') {
         if (!source) throw lastError;
         // Redeploying the build that ran before reuses its image; a new deployment of that commit would rebuild it.
         if (source === 'repository' && slot.restore.deployment?.meta?.commitHash === slot.restore.commit) await railway({ token, query: 'mutation($id: String!) { deploymentRedeploy(id: $id, usePreviousImageTag: true) { id } }', variables: { id: slot.restore.deployment.id } });
-        console.error(`  ${slot.pool} ${slot.serviceId}: restored (${source === 'image' ? slot.restore.image : `repository build ${slot.restore.commit.slice(0, 7)}`}).`);
+        console.error(`  ${slot.pool} ${slot.serviceId}: restored (${source === 'image' ? slot.restore.image : `repository build ${slot.restore.commit?.slice(0, 7)}`}).`);
       }
       // Only a manifest this stage wrote is put back, and it is read back before claims resume.
       if (manifestWritten) { await setEnv('RAILWAY_WORKERS_JSON', remote.RAILWAY_WORKERS_JSON); await expectManifest(previous, 'restored'); }
@@ -361,15 +360,6 @@ if (operation === 'status') {
     }
   };
   try {
-    if (!imageSlots) {
-      for (const slot of slots) {
-        // A busy slot fails here with nothing changed, so nothing is paused or restored for it.
-        if (railwayActive(await railwayInstance({ ...target(), serviceId: slot.serviceId }))) throw new Error(`Railway slot ${slot.serviceId} is busy; nothing was changed. Run the release again when it is idle.`);
-        changed = true;
-        await preflight(slot.pool === 'processor' ? 'processor' : 'exports', slot.serviceId);
-      }
-      if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
-    }
     await unchangedManifest();
     paused = true;
     await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
@@ -385,7 +375,7 @@ if (operation === 'status') {
     // Boot every lane production runs on Railway the way the dispatcher will start it, with the manifest just written,
     // while the backend forbids claims: a slot whose build or image differs from the manifest fails here, not on the
     // next upload. Each consumer authenticates and exits at idle before the hold is released. A lane this stage did not
-    // change is never waited for: while one of its slots still finishes a task, its last deployment is compared instead.
+    // change is never waited for while one of its slots still finishes a task.
     const staged = new Set(selectedPools().map(pool => pool.name));
     const lanes = [
       { name: 'processor', ids: config.processorServices, on: contract.processorBackend === 'railway' },
@@ -395,14 +385,7 @@ if (operation === 'status') {
     for (const lane of lanes) {
       const serviceId = lane.ids[0];
       const instance = staged.has(lane.name) ? null : await railwayInstance({ ...target(), serviceId });
-      if (instance && railwayActive(instance)) {
-        const image = lane.name === 'processor' ? config.processorImage : config.exportsImage, commit = lane.name === 'processor' ? config.processorCommit : config.exportsCommit;
-        const source = railwaySlotSource(instance);
-        const matches = source === 'image' ? instance.source?.image === image : source === 'repository' && instance.latestDeployment?.meta?.commitHash === commit;
-        if (!matches) throw new Error(`Railway ${lane.name} slot ${serviceId} runs ${source === 'image' ? instance.source?.image : `build ${instance.latestDeployment?.meta?.commitHash?.slice(0, 7) ?? 'unknown'}`}, not ${source === 'image' ? image : commit.slice(0, 7)} from the manifest just written; its next start would fail.`);
-        console.log(`Railway ${lane.name} slot ${serviceId} is finishing a task; its deployment matches the manifest (${source === 'image' ? image : commit.slice(0, 7)}).`);
-        continue;
-      }
+      if (instance && railwayActive(instance)) { console.log(`Railway ${lane.name} slot ${serviceId} is finishing a task; not booted (this stage did not change it).`); continue; }
       booted.push(lane);
       await verifyQueueConnection(serviceId, lane.name);
     }

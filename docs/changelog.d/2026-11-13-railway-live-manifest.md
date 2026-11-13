@@ -1,1 +1,0 @@
-- Railway: a processor or exports stage changes only its own entry of the live Convex manifest, reads it back, and boots every routed lane before resuming claims. Restores reuse recorded staging proof. Why: on 2026-11-13 the exports stage wrote back an old processor commit, and every upload and import failed for about 9 hours.
