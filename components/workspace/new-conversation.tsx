@@ -25,7 +25,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipTrigger, TooltipContent } from '@/components/ui/tooltip';
-import { isVideoLinkOnly } from '@/lib/editor/video-link';
+import { isVideoLinkOnly, parseVideoLink } from '@/lib/editor/video-link';
+
+/** A link sent in the prompt is imported before its project is made. Not when the assistant has to read the request
+ *  to import it: a /command, a time range, or a Twitch or Kick recording that may be longer than one import. */
+function promptLink(prompt: string) {
+  if (prompt.startsWith('/') || /\b\d{1,2}:\d{2}\b/.test(prompt)) return undefined;
+  const link = prompt.split(/\s+/).find(isVideoLinkOnly);
+  const kind = link ? parseVideoLink(link).kind : undefined;
+  return kind === 'twitch' || kind === 'kick' ? undefined : link;
+}
 import { ComposerLinkShelf, type LinkImportProgress } from './composer-link-shelf';
 import { importErrorMessage } from '@/components/editor/video-link-import';
 import { normalizeMediaFile } from '@/lib/editor/media-file';
@@ -90,6 +99,9 @@ export function NewConversation() {
   const cloudMedia = useQuery(api.assets.selected, isAuthenticated && cloudIds.length ? { assetIds: cloudIds } : 'skip');
   const [processing, setProcessing] = useState<Processing | null>(null);
   const [error, setError] = useState('');
+  const [linkFailure, setLinkFailure] = useState('');
+  /** The prompt as sent while its link imports, restored if the import is cancelled. */
+  const promptImport = useRef<string | null>(null);
   const [startingBlank, setStartingBlank] = useState(false);
   const [draft, setDraft] = useState('');
   const [aspectRatio, setAspectRatio] = useState<AspectRatio>('landscape');
@@ -290,7 +302,7 @@ export function NewConversation() {
     setFiles([]); setCloudIds([]); setProcessing(null); setError(''); setStartingBlank(false);
     if (linkImport) void cancelLinkImport();
     discardHolders(Object.values(linkHolders)); setLinkHolders({});
-    setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
+    setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' })); setLinkFailure('');
     brief.current = ''; setDraft(''); setAspectRatio('landscape');
     try { clearNewProjectDraft(); } catch { /* The current selection is cleared in memory. */ }
     void stashFiles([]);
@@ -303,6 +315,7 @@ export function NewConversation() {
     setLinkShelf(shelf => ({ open: true, prefill, focusKey: shelf.focusKey + 1 }));
   }
   function closeLinkShelf() {
+    setLinkFailure('');
     // A pasted link the user dismissed pastes as plain text next time.
     declinedLink.current = linkShelf.prefill;
     setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
@@ -328,7 +341,7 @@ export function NewConversation() {
   }
   /** Runs the whole import in place. Resolves once the video is attached; nothing navigates. */
   async function importLink(url: string) {
-    setLinkImporting(true);
+    setLinkImporting(true); setLinkFailure('');
     try {
       setLinkImport(await importVideo({ url, sourcesOnly: true }));
       await new Promise<void>((resolve, reject) => { linkSettle.current = { resolve, reject }; });
@@ -342,6 +355,9 @@ export function NewConversation() {
   async function cancelLinkImport() {
     if (!linkImport) return;
     const { taskId, projectId } = linkImport;
+    // A link taken out of the prompt goes back into it.
+    if (promptImport.current) changeDraft(promptImport.current);
+    promptImport.current = null;
     stopWaitingToSend(); endLinkImport();
     setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
     try { await cancelMediaTask({ taskId }); } catch { /* The holder is removed either way. */ }
@@ -365,6 +381,8 @@ export function NewConversation() {
   useEffect(() => {
     // Wait for the imported video's details as well, so the edit starts with it.
     if (!sendAfterImport || linkImporting || cloudIds.length && cloudMedia === undefined) return;
+    // The import it waited for failed: nothing to send, and no project is made.
+    if (!hasMedia) { stopWaitingToSend(); return; }
     // The send button stays busy until the edit has started or reported its error.
     const done = sendWaiter.current; sendWaiter.current = null;
     setSendAfterImport(false);
@@ -384,8 +402,24 @@ export function NewConversation() {
     await send();
   }
   async function send() {
-    if (hasMedia) { await processFootage(); return; }
     const prompt = brief.current.trim();
+    // After a failed in-prompt import, Send retries the link the shelf kept.
+    const link = promptLink(prompt) ?? (linkFailure && linkShelf.open && !prompt.startsWith('/') ? linkShelf.prefill : undefined);
+    if (link && !startingBlank && !linkImporting) {
+      // The video comes in first and the project is made from it, so a refused link leaves no empty project
+      // behind, and the link is not the project's title or a request to import it again.
+      setError(''); promptImport.current = prompt.includes(link) ? prompt : `${prompt} ${link}`.trim();
+      changeDraft(prompt.replace(link, ' ').replace(/\s+/g, ' ').trim());
+      // The shelf shows the import's progress and cancel, and keeps the link for a retry if it fails.
+      openLinkShelf(link); setSendAfterImport(true);
+      // A failure shows in the shelf, which keeps the link for a retry; the rest of the prompt stays in the box.
+      try { await importLink(link); } catch (cause) {
+        stopWaitingToSend();
+        setLinkFailure(userError(cause, 'Could not import this video link.'));
+      } finally { promptImport.current = null; }
+      return;
+    }
+    if (hasMedia) { await processFootage(); return; }
     if (startingBlank || !prompt) return;
     setStartingBlank(true); setError('');
     try {
@@ -422,7 +456,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} actions={composerControls.actions} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} running={linkImporting} failure={linkFailure} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} actions={composerControls.actions} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));
