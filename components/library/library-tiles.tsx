@@ -7,13 +7,14 @@ import { AudioLines, Box, Clapperboard, Download, Ellipsis, Folder, ImageIcon, V
 import type { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
+import { VideoFrame } from '@/components/media/video-frame';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { formatBytes, formatDuration, plural, shortDate } from './format';
 
 export type LibraryFile = FunctionReturnType<typeof api.library.files>['page'][number];
-export type LibraryFolder = FunctionReturnType<typeof api.library.folderTree>[number] & { thumbnails?: string[] };
+export type LibraryFolder = FunctionReturnType<typeof api.library.folderTree>[number] & { thumbnails?: { url: string; video: boolean }[] };
 export type FolderId = Id<'storageFolders'>;
 /** What a drag inside the page carries. Only its presence is readable while dragging; the IDs arrive on drop. */
 export const LIBRARY_DRAG = 'application/x-revline-library';
@@ -87,7 +88,7 @@ export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDr
   const body = <>
     <span className="library-folder-top">
       <Folder className="library-folder-icon" aria-hidden="true" />
-      <span className="library-folder-stack" aria-hidden="true">{thumbnails.map(url => <img key={url} src={url} alt="" loading="lazy" decoding="async" draggable={false} />)}{Array.from({ length: blanks }, (_, index) => <i key={index} />)}</span>
+      <span className="library-folder-stack" aria-hidden="true">{thumbnails.map(({ url, video }) => video ? <VideoFrame key={url} src={url} /> : <img key={url} src={url} alt="" loading="lazy" decoding="async" draggable={false} />)}{Array.from({ length: blanks }, (_, index) => <i key={index} />)}</span>
     </span>
     {renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <strong title={folder.name}>{folder.name}</strong>}
     <small>{folderMeta(folder)}</small>
@@ -98,11 +99,12 @@ export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDr
   </div>;
 }
 
-/** The picture of a file: its thumbnail, its waveform, or its type icon; with the duration in a corner. */
+/** The picture of a file: its thumbnail, its first frame, its waveform, or its type icon; with the duration in a corner. */
 export function FileThumb({ file, badge = true, onImageSize }: { file: LibraryFile; badge?: boolean; onImageSize?: (width: number, height: number) => void }) {
   const Icon = KIND_ICONS[file.kind];
   return <span className="library-file-thumb" data-kind={file.kind} data-wave={file.waveform ? '' : undefined}>
     {file.thumbnailUrl ? <img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false} onLoad={onImageSize && (event => onImageSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight))} />
+      : file.videoUrl ? <VideoFrame key={file.videoUrl} src={file.videoUrl} fallback={<Icon aria-hidden="true" />} onSize={onImageSize} />
       : file.waveform ? <span className="library-wave" aria-hidden="true">{file.waveform.map((value, index) => <i key={index} style={{ height: `${Math.max(6, value * 100)}%` }} />)}</span>
       : <Icon aria-hidden="true" />}
     {badge && file.duration !== null && <span className="library-file-duration">{formatDuration(file.duration)}</span>}
