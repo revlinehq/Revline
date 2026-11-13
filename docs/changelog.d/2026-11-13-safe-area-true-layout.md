@@ -1,0 +1,1 @@
+- Editor: the TikTok and Reels safe-area preview draws each app's interface at its real positions on a 1080×1920 frame, with the covered areas outlined. Why: the founder wanted to see exactly what covers text and faces, matching the safe-area design.
