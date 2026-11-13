@@ -16,6 +16,7 @@ import { audioNormalizationKey, timelineNormalizationKey } from '../../lib/edito
 import { HIGHLIGHT_SIGNALS_ONLY, readHighlights, sourceType, semanticMoment } from '../../lib/media-analysis/highlights';
 import { clipCheckResult } from '../../lib/media-analysis/clip-check';
 import { completionRepairFeedback } from '../../lib/ai/tool-failures';
+import { runFailure, type RunFailureCode } from '../../lib/ai/run-failure';
 import { CHOICE_TEXT, fitChoiceText, shortenedNote } from '../../lib/ai/choice-text';
 import { LIMITATION_CATEGORIES, LIMITATION_IMPACTS } from '../../lib/incidents';
 import { BOUNDED_READ_REFUSAL, FULL_CHECK_TOOLS, changedFrameLimit, checkInstructions, fullCheckRefusal, laneChecks, tracksChangedFrames } from '../../lib/ai/lanes/checks';
@@ -122,14 +123,15 @@ import { cutsGiven } from '../../lib/ai/lanes/clip/check';
 import { aspectRatio as aspectRatioValidator } from '../schema';
 import type { ActionCtx } from "../_generated/server";
 
-export class AnalysisStepError extends Error {}
+/** An analysis or review step that did not finish: the service it needed did not answer in time or at all. */
+export class AnalysisStepError extends Error { readonly failureCode: RunFailureCode = 'unavailable'; }
 /** A rendered bed's energy, measured as the worker measures a song, so analyzeMusic keeps its exact beat grid. */
 const bedEnergy = (samples: readonly ArrayLike<number>[]) => { const energy = musicEnergy(), interleaved = new Float32Array(samples[0].length * 2); for (let i = 0; i < samples[0].length; i++) { interleaved[2 * i] = samples[0][i]; interleaved[2 * i + 1] = samples[1]?.[i] ?? samples[0][i]; } energy.push(interleaved); return energy.finish(); };
 /** Export settings, shared by the in-app and MCP exportVideo tools; startRenderFor checks the plan allows them. */
 export const EXPORT_SETTINGS_INPUT = { resolution: z.union([z.literal(720), z.literal(1080), z.literal(2160)]).optional(), fps: z.union([z.literal(24), z.literal(30), z.literal(60)]).optional(), quality: z.enum(['draft', 'standard', 'high']).optional() };
 async function reportAnalysisFailure<T>(work: () => Promise<T>) {
   try { return await work(); }
-  catch (error) { if (error instanceof AnalysisStepError) return { success: false as const, error: error.message.slice(0, 1000) }; throw error; }
+  catch (error) { if (error instanceof AnalysisStepError) return { success: false as const, error: error.message.slice(0, 1000), errorCode: error.failureCode }; throw error; }
 }
 
 type EditorToolkitOptions = {
@@ -375,7 +377,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const editSession = new EditSession(project.timeline ?? { clips: [], fps: 60, aspectRatio: project.aspectRatio }, project.revision ?? 0, {
     apply: (timeline, expectedRevision,publication) => receipts.commit(() => ctx.runMutation(internal.assistant.apply, { ...run, timeline, expectedRevision,...(publication?{stagedPublication:true}:{}),...(publication&&options.publication?{publication:options.publication}:{}), ...editingTools(publication) })),
     validate: (timeline, expectedRevision) => ctx.runMutation(internal.assistant.previewDraft, { ...run, timeline, expectedRevision }),
-    refresh: async () => { return await ctx.runQuery(internal.assistant.getRunTimeline,run); },
     beforeChange: beginEditing,
   }, abortSignal);
   if(options.draft){const before=editSession.timeline;editSession.restoreDraft(options.draft);receipts.restoredDraft();if(tracksChanges())fastReview.changed(before,options.draft);}
@@ -1066,7 +1067,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
     listTimelines: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.listTimelines, description: "List this project's timeline tabs, each a separate video sharing the project's sources. Editing tools act on the open tab.", inputSchema: z.object({}), execute: async () => ctx.runQuery(internal.assistant.listRunTimelines, run) }),
     createTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.createTimeline, description: "Create and open a blank timeline tab or duplicate the open tab. For clipping, use blank, the source aspect unless reframing was requested, and the clip's title. Publishes the current draft first; finish clipping directly after building accepted tabs; scoped heavy QA is optional. Never call alongside edits in parallel.", inputSchema: z.object({ from: z.enum(['blank', 'duplicate']), name: z.string().trim().min(1).max(60).optional(), aspectRatio: z.enum(['landscape', 'vertical', 'square']).optional() }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.createRunTimeline, { ...run, expectedRevision, ...input })) }),
     openTimeline: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.openTimeline, description: "Open an existing timeline tab by id from listTimelines. Publishes the current draft first; finish clipping directly after building accepted tabs; scoped heavy QA is optional. Changes the editor tab the user sees. Never call alongside edits in parallel.", inputSchema: z.object({ timelineId: z.string().min(1) }), execute: async (_ctx, input) => switchTimeline(expectedRevision => ctx.runMutation(internal.assistant.openRunTimeline, { ...run, expectedRevision, ...input })) }),
-    importVideoLink: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.importVideoLink, description: "Import a video link into this project's Sources, off the timeline. Supported: YouTube, Twitch VODs (twitch.tv/videos/<id>, also while live) and clips, Kick recordings, X posts, Dailymotion, Streamable, Loom, and direct video file links. Instagram, Facebook, TikTok, Vimeo, Rumble, live channel links and private or signed-in videos cannot be imported: say so and ask for the file. At most 3 hours per import: for a longer video, or only a part, pass start/end in SOURCE seconds padded a few seconds (the file starts at 0 there; a Twitch range over 3 minutes may start up to 2 s early, so take exact times from its transcript). Returns taskId: poll getMediaTask until completed, then inspectTimeline. Reuse existing imports on retries.", inputSchema: z.object({ url: z.string().url(), start: z.number().min(0).optional(), end: z.number().positive().optional() }), execute: async (_ctx, input) => ctx.runMutation(internal.assistant.importRunVideo, { ...run, ...input }) }),
+    importVideoLink: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.importVideoLink, description: "Import a video link into this project's Sources, off the timeline. Supported: YouTube, Twitch VODs (twitch.tv/videos/<id>, also while live) and clips, TikTok videos, Instagram reels and video posts, Kick recordings, X posts, Dailymotion, Streamable, Loom, and direct video file links. Facebook, Vimeo, Rumble, live channel links and private or signed-in videos cannot be imported: say so and ask for the file. At most 3 hours per import: for a longer video, or only a part, pass start/end in SOURCE seconds padded a few seconds (the file starts at 0 there; a Twitch range over 3 minutes may start up to 2 s early, so take exact times from its transcript). Returns taskId: poll getMediaTask until completed, then inspectTimeline. Reuse existing imports on retries.", inputSchema: z.object({ url: z.string().url(), start: z.number().min(0).optional(), end: z.number().positive().optional() }), execute: async (_ctx, input) => ctx.runMutation(internal.assistant.importRunVideo, { ...run, ...input }) }),
     getMediaTask: createTool({ metadata: EDITOR_TOOL_DEFINITIONS.getMediaTask, description: "Wait up to 30 seconds for an import, then return its status and resulting source assetId. Reuse the taskId while pending; wait for completed before analysis, then inspectTimeline to refresh media.", inputSchema: z.object({ taskId: z.string().min(1) }), execute: async (_ctx, { taskId }) => {
       const deadline=Date.now()+30_000;
       for(;;){
@@ -2301,6 +2302,8 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if(at<clip.start||at>=clip.start+clip.duration)throw new Error('Choose a subject seed time inside the clip.');
       const sourceTime=sourceTimeAt(clip,at);
       const result = await ctx.runMutation(internal.cutouts.startFromRun, { ...run, clipId, ...(mode ? { mode } : {}), ...(seed?{selection:{time:sourceTime,seed:resolveSubjectSeed(seed,clip.assetId,sourceTime)}}:{}) });
+      // A reused cut-out goes on through this run's edit session, so a staged draft keeps it.
+      if (result.reused && result.outputAssetId) { const outputAssetId = result.outputAssetId; await checkpoint(t => ({ ...t, clips: t.clips.map(item => item.id === clipId ? { ...item, assetId: outputAssetId } : item) })); }
       return result.reused ? { applied: true, reusedExistingCutOut: true, estimatedUsd: 0, note: 'An existing cut-out of this footage was applied; the background is already removed. Visuals belong on a lower V layer.' } : { started: !result.alreadyRunning, alreadyRunning: result.alreadyRunning, estimatedUsd: result.estimatedUsd, note: 'Background removal is processing; the clip switches to the cut-out automatically when it finishes. Visuals belong on a lower V layer.' };
     } }),
   };
@@ -2359,7 +2362,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       if (!overrideApproved && appliedLater.has(name) && typeof input.clipId === 'string') {
         await editSession.wait();
         const clip = editSession.timeline.clips.find(item => item.id === input.clipId);
-        if (clip && isApproved(clip)) throw new Error(approvalRefusal([{ clipId: clip.id, name: clip.scene?.title || clip.kind, what: 'replace its media', note: clip.approval?.note ?? clip.approvedSections?.[0]?.note }]));
+        if (clip && isApproved(clip)) throw runFailure('refused', approvalRefusal([{ clipId: clip.id, name: clip.scene?.title || clip.kind, what: 'replace its media', note: clip.approval?.note ?? clip.approvedSections?.[0]?.note }]));
       }
       if (!overrideApproved) return execute.apply(this ?? tool, args);
       approvalOverride.active++; approvalOverride.reason = overrideReason!;

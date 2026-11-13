@@ -40,6 +40,22 @@ export async function accountCap(ctx: QueryCtx | MutationCtx, ownerId: string): 
 }
 /** An account that takes one of the owner's slots: connected through Post Bridge and not disconnected. */
 export const holdsSlot = (account: Doc<'postingAccounts'>) => account.provider === 'postbridge' && account.status !== 'disconnected';
+/**
+ * The accounts beyond the plan's per-platform cap, after a downgrade or a lapsed plan: on each platform the oldest
+ * connections (by `connectedAt`) keep the plan's slots and the rest cannot be posted to. Nothing is disconnected,
+ * so upgrading or disconnecting another account makes one postable again. Post Bridge bills per connected account.
+ */
+export async function overCapAccounts(ctx: QueryCtx | MutationCtx, ownerId: string, rows?: Doc<'postingAccounts'>[]): Promise<Set<Id<'postingAccounts'>>> {
+  const cap = await accountCap(ctx, ownerId), over = new Set<Id<'postingAccounts'>>();
+  const held = (rows ?? await ownerAccounts(ctx, ownerId)).filter(holdsSlot);
+  for (const platform of new Set(held.map(row => row.platform))) {
+    const own = held.filter(row => row.platform === platform).sort((a, b) => (a.connectedAt ?? a.createdAt) - (b.connectedAt ?? b.createdAt) || a._creationTime - b._creationTime);
+    for (const row of own.slice(cap)) over.add(row._id);
+  }
+  return over;
+}
+/** What a post to an account over the plan's cap says. */
+export const overCapMessage = (username: string, platform: PostingPlatform) => `@${username} is over your plan's limit of ${PLATFORM_NAMES[platform]} accounts. Upgrade your plan, or disconnect another ${PLATFORM_NAMES[platform]} account, to post to it.`;
 const ownerAccounts = (ctx: QueryCtx | MutationCtx, ownerId: string) => ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
 export const ownerRef = async (ctx: QueryCtx | MutationCtx, ownerId: string) => (await ctx.db.query('postingConnectRefs').withIndex('by_owner', q => q.eq('ownerId', ownerId)).first())?.ref ?? null;
 

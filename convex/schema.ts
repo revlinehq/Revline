@@ -28,6 +28,7 @@ import { alertFields } from './lib/discord_alert';
 import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
 import { toolWriteReceipt } from './lib/tool_write_receipt';
 import { assistantRunArgs, assistantRecoveryValidator } from './lib/assistant_run';
+import { runFailureCodeValidator } from '../lib/ai/run-failure';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -311,11 +312,15 @@ export default defineSchema({
     count: v.number(), firstSeen: v.number(), lastSeen: v.number(), priority: v.number(), generation: v.number(),
     status: v.union(v.literal('open'), v.literal('pr_open'), v.literal('resolved')),
     delivery: v.union(v.literal('pending'), v.literal('claimed'), v.literal('finished'), v.literal('failed')),
-    issueDelivery: v.optional(v.union(v.literal('claimed'), v.literal('finished'), v.literal('failed'))), issueClaimToken: v.optional(v.string()), issueClaimedAt: v.optional(v.number()), issueDeliveredCount: v.optional(v.number()), issueDispatchReady: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
+    issueDelivery: v.optional(v.union(v.literal('claimed'), v.literal('finished'), v.literal('failed'))), issueClaimToken: v.optional(v.string()), issueClaimedAt: v.optional(v.number()), issueDeliveredCount: v.optional(v.number()), issueDispatchReady: v.optional(v.boolean()),
+    // A browser-filed report: free text from any signed-in account. It waits here until an operator triages it (incidents:triageClient).
+    needsTriage: v.optional(v.boolean()), issueUrl: v.optional(v.string()), issueAttempts: v.optional(v.number()), issueNextAttempt: v.optional(v.number()),
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
   }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
-  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean(),
+  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),
+    // What kind of failure `error` is (lib/ai/run-failure); absent on turns that failed before codes and on uncoded failures.
+    errorCode:v.optional(runFailureCodeValidator),resuming:v.boolean(),
     // Copied from the turn: what its latest run resolved at inference time; absent until that run records it and on older turns.
     model:v.optional(v.string()),effort:v.optional(v.string())}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   // Where each run's time went (lib/ai/step-timing.ts): names, times and token counts only, no user content, no owner.
@@ -326,6 +331,7 @@ export default defineSchema({
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
     pendingFastFrames:v.array(v.number()),feedback:v.optional(v.string()),
     status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
+    errorCode:v.optional(runFailureCodeValidator),
     // The API model id and effort the latest run resolved at inference time (assistant.recordEffort); args.pinnedModel is what was asked.
     model:v.optional(v.string()),effort:v.optional(v.string()),
     // The timeline revision when the request ended (finish or Stop): the next requests' history line names it.
@@ -406,6 +412,10 @@ export default defineSchema({
    * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
   storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()) })
     .index('by_owner_parent',['ownerId','parentId']),
+  /** Video links imported from the Library. Each runs as a `sourcesOnly` import in a holding project of its own; when it
+   * ends, `library.settleLinkImport` keeps the video as a Library file in `folderId` and removes the holder. */
+  libraryLinkImports: defineTable({ ownerId:v.string(), taskId:v.id('mediaTasks'), projectId:v.id('projects'), folderId:v.optional(v.id('storageFolders')), createdAt:v.number() })
+    .index('by_task',['taskId']).index('by_owner_created',['ownerId','createdAt']),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
   appleBillingAccounts: defineTable({ ownerId: v.string(), appAccountToken: v.string(), createdAt: v.number() }).index('by_owner', ['ownerId']).index('by_token', ['appAccountToken']),
@@ -418,7 +428,10 @@ export default defineSchema({
     superwallSequence: v.optional(v.number()), source: v.union(v.literal('apple'), v.literal('superwall')), updatedAt: v.number(),
   }).index('by_transaction', ['transactionId']).index('by_original', ['originalTransactionId']).index('by_owner_access', ['ownerId', 'accessUntil']),
   appleBillingEvents: defineTable({ source: v.union(v.literal('apple'), v.literal('superwall')), eventId: v.string(), transactionId: v.string(), receivedAt: v.number() }).index('by_source_event', ['source', 'eventId']),
-  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,openTimelineId:v.optional(v.string()),tabCount:v.optional(v.number()),chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),cardTitle:v.optional(v.string()),cardImage:v.optional(v.string()),cardStorageId:v.optional(v.id('_storage')),cardUpdatedAt:v.optional(v.number()),createdAt:v.number(),updatedAt:v.number()}).index('by_project',['projectId']),
+  timelineShares:defineTable({projectId:v.id('projects'),ownerId:v.string(),title:v.string(),timeline:timelineValidator,openTimelineId:v.optional(v.string()),tabCount:v.optional(v.number()),chat:v.optional(v.array(sharedChatMessage)),published:v.boolean(),cardTitle:v.optional(v.string()),cardImage:v.optional(v.string()),cardStorageId:v.optional(v.id('_storage')),cardUpdatedAt:v.optional(v.number()),createdAt:v.number(),updatedAt:v.number(),
+    // The link's secret: `/editor/showcase/<id>.<token>`. Absent on links sent before tokens (they open by id), and
+    // `openById` keeps such a link working after its owner updates it, until sharing is turned off.
+    token:v.optional(v.string()),openById:v.optional(v.boolean())}).index('by_project',['projectId']),
   // Extra tabs of a multi-tab share; the share row keeps the first tab as `timeline` for older links.
   shareTimelines:defineTable({shareId:v.id('timelineShares'),timelineId:v.string(),name:v.string(),position:v.number(),timeline:timelineValidator}).index('by_share',['shareId','position']),
   shareAssets:defineTable({shareId:v.id('timelineShares'),...sharedAssetFields}).index('by_share',['shareId']).index('by_storageId',['storageId']).index('by_r2Key',['r2Key']).index('by_previewR2Key',['previewR2Key']).index('by_owner_previewR2Key',['ownerId','previewR2Key']).index('by_thumbnailStorageId',['thumbnailStorageId']).index('by_owner_r2Key',['ownerId','r2Key']).index('by_owner_storageId',['ownerId','storageId']).index('by_owner_thumbnail',['ownerId','thumbnailStorageId']),

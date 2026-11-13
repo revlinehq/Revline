@@ -67,7 +67,6 @@ import type * as lib_cutout_effect_validator from "../lib/cutout_effect_validato
 import type * as lib_direct_upload from "../lib/direct_upload.js";
 import type * as lib_discord_alert from "../lib/discord_alert.js";
 import type * as lib_editSession from "../lib/editSession.js";
-import type * as lib_editSessionRebase from "../lib/editSessionRebase.js";
 import type * as lib_edit_mode from "../lib/edit_mode.js";
 import type * as lib_editorToolkit from "../lib/editorToolkit.js";
 import type * as lib_editorTurn from "../lib/editorTurn.js";
@@ -107,6 +106,7 @@ import type * as lib_runner_turns from "../lib/runner_turns.js";
 import type * as lib_safely from "../lib/safely.js";
 import type * as lib_save_incidents from "../lib/save_incidents.js";
 import type * as lib_share_chat from "../lib/share_chat.js";
+import type * as lib_share_token from "../lib/share_token.js";
 import type * as lib_shared_media from "../lib/shared_media.js";
 import type * as lib_sound_validator from "../lib/sound_validator.js";
 import type * as lib_step_timing_validator from "../lib/step_timing_validator.js";
@@ -229,7 +229,6 @@ declare const fullApi: ApiFromModules<{
   "lib/direct_upload": typeof lib_direct_upload;
   "lib/discord_alert": typeof lib_discord_alert;
   "lib/editSession": typeof lib_editSession;
-  "lib/editSessionRebase": typeof lib_editSessionRebase;
   "lib/edit_mode": typeof lib_edit_mode;
   "lib/editorToolkit": typeof lib_editorToolkit;
   "lib/editorTurn": typeof lib_editorTurn;
@@ -269,6 +268,7 @@ declare const fullApi: ApiFromModules<{
   "lib/safely": typeof lib_safely;
   "lib/save_incidents": typeof lib_save_incidents;
   "lib/share_chat": typeof lib_share_chat;
+  "lib/share_token": typeof lib_share_token;
   "lib/shared_media": typeof lib_shared_media;
   "lib/sound_validator": typeof lib_sound_validator;
   "lib/step_timing_validator": typeof lib_step_timing_validator;

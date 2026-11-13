@@ -36,23 +36,33 @@ export function PostButton({ jobId, size = 'default', className }: { jobId: stri
   </>;
 }
 
+/** A timeline tab in the editor, posted through the export-then-post flow (convex/postExports.ts). */
+export type PostTimeline = {
+  projectId: Id<'projects'>; timelineId: string; name: string; durationSeconds: number; coverUrl: string | null;
+  /** Waits for the editor's pending saves, so the export is the version on screen. */
+  onBeforePost: () => Promise<void>;
+};
+
 /**
  * Post one clip (a finished export) to connected accounts, now or at a picked time. Without `jobId` the dialog
- * offers the owner's recent finished exports to choose from. `onPostsPage`: the new row is already in view behind
- * the dialog, so it closes on success instead of pointing at the Posts page.
+ * offers the owner's recent finished exports to choose from. With `timeline` it posts that editor tab instead:
+ * Revline exports it first (or reuses a finished export of the same version), then posts. `onPostsPage`: the new
+ * row is already in view behind the dialog, so it closes on success instead of pointing at the Posts page.
  */
-export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; onPostsPage?: boolean; onClose: () => void }) {
+export function PostDialog({ jobId, timeline, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; timeline?: PostTimeline; onPostsPage?: boolean; onClose: () => void }) {
   const { isAuthenticated } = useConvexAuth();
-  const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId ? {} : 'skip');
+  const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId && !timeline ? {} : 'skip');
   const [choice, setChoice] = useState<Id<'renderJobs'> | null>(null);
   // The newest export is offered first, then stays put: an export finishing while the dialog is open must not swap the clip under the caption.
   const newest = finished?.[0]?.jobId;
   useEffect(() => { if (newest) setChoice(previous => previous ?? newest); }, [newest]);
   const current = jobId ?? choice ?? undefined;
-  const clip = useQuery(api.posting.clip, isAuthenticated && current ? { jobId: current } : 'skip');
+  const exported = useQuery(api.posting.clip, isAuthenticated && current ? { jobId: current } : 'skip');
+  /** What is posted: the export, or the timeline tab that is exported first. */
+  const clip = timeline ? { label: timeline.name, durationSeconds: timeline.durationSeconds, coverUrl: timeline.coverUrl, coverKind: timeline.coverUrl ? 'image' as const : null } : exported;
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
-  const createBatch = useMutation(api.posting.createBatch), readCreator = useAction(api.postingActions.tiktokCreator);
+  const createBatch = useMutation(api.posting.createBatch), startPost = useMutation(api.postExports.start), readCreator = useAction(api.postingActions.tiktokCreator);
   const [creators, setCreators] = useState<Record<string, TikTokCreator>>({}), [tiktok, setTiktok] = useState<Record<string, TikTokChoice>>({});
   /** The latest creator-info request per picked TikTok account: an answer to an older one is dropped. */
   const asked = useRef(new Map<string, number>());
@@ -60,10 +70,10 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
   const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [perAccount, setPerAccount] = useState(false);
   const [when, setWhen] = useState('');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const [sent, setSent] = useState<{ count: number; scheduledAt?: number; tiktok: boolean } | null>(null);
+  const [sent, setSent] = useState<{ count: number; scheduledAt?: number; tiktok: boolean; exporting: boolean } | null>(null);
   const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));
   // Only accounts that can post right now can be picked, so the buttons never promise more posts than they send.
-  const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
+  const usable = accounts?.filter(account => account.status === 'connected' && !account.overLimit && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
   const onTikTok = picked.filter(account => account.platform === 'tiktok'), tiktokIds = onTikTok.map(account => account.id).join(' ');
@@ -97,21 +107,25 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
         accountId: account.id, ...(overrides[account.id]?.trim() ? { caption: overrides[account.id] } : {}),
         ...(account.platform === 'tiktok' ? tiktokTarget(creators[account.id], tiktok[account.id] ?? NO_TIKTOK_CHOICE) : {}),
       }));
-      await createBatch({ jobId: clip.jobId, caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), targets });
+      const text = { caption, ...(titled && title.trim() ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}) };
+      if (timeline) {
+        await timeline.onBeforePost();
+        await startPost({ projectId: timeline.projectId, timelineId: timeline.timelineId, ...text, accountIds: targets.map(target => target.accountId), targets });
+      } else if ('jobId' in clip) await createBatch({ jobId: clip.jobId, ...text, targets });
       if (onPostsPage) onClose();
-      else setSent({ count: targets.length, scheduledAt, tiktok: onTikTok.length > 0 });
+      else setSent({ count: targets.length, scheduledAt, tiktok: onTikTok.length > 0, exporting: !!timeline });
     } catch (reason) { setError(userError(reason, schedule ? 'Could not schedule this clip.' : 'Could not post this clip.')); }
     finally { setBusy(false); }
   }
   const label = clip?.label ?? finished?.find(entry => entry.jobId === current)?.label;
   const detail = clip && clip.durationSeconds !== null ? clipLength(clip.durationSeconds) : '';
-  const missing = jobId ? clip === null : finished !== undefined && !finished.length;
+  const missing = jobId ? clip === null : !timeline && finished !== undefined && !finished.length;
   return <Dialog open onOpenChange={open => { if (!open && !busy) onClose(); }}><DialogContent className="post-dialog">
     <div className="post-dialog-head"><DialogTitle>{sent ? sent.scheduledAt ? 'Scheduled' : 'Posting now' : 'Post clip'}</DialogTitle></div>
     <DialogDescription className="sr-only">Send this clip to your connected accounts, now or at a time you pick.</DialogDescription>
     {sent ? <>
       <div className="post-dialog-done">
-        <p>{sent.scheduledAt ? `Scheduled for ${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `Posting to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} Follow it on the Posts page.</p>
+        <p>{sent.exporting ? 'Exporting this video, then ' : ''}{sent.scheduledAt ? `${sent.exporting ? 'scheduling' : 'Scheduled'} for ${postTime(sent.scheduledAt)} · ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.` : `${sent.exporting ? 'posting' : 'Posting'} to ${sent.count} ${sent.count === 1 ? 'account' : 'accounts'}.`} {sent.exporting ? 'Follow it beside Post at the top of the editor, or on the Posts page.' : 'Follow it on the Posts page.'}</p>
         {sent.tiktok && <p>TikTok can take a few minutes to process a video before it shows on the profile.</p>}
       </div>
       <div className="post-dialog-foot"><Button variant="soft" onClick={onClose}>Done</Button><Button asChild variant="primary"><Link href="/posts">View posts</Link></Button></div>
@@ -138,10 +152,10 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
               return <div key={entry.platform} className="post-platform">
                 <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span></div>
                 {own.map(account => {
-                  const expired = account.status !== 'connected', disabled = expired || !entry.live;
+                  const expired = account.status !== 'connected', disabled = expired || !!account.overLimit || !entry.live;
                   return <label key={account.id} className="post-account" data-disabled={disabled || undefined}>
                     <Checkbox disabled={disabled} checked={!disabled && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Reconnect needed</small>}
+                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired ? <small>Reconnect needed</small> : account.overLimit && <small>Over your plan's limit</small>}
                   </label>;
                 })}
                 {!own.length && <p className="post-note">No accounts connected yet.</p>}
@@ -183,7 +197,7 @@ export function PostDialog({ jobId, onPostsPage = false, onClose }: { jobId?: Id
       </div>
       <div className="post-dialog-foot">
         {onTikTok.length > 0 && <TikTokConsent branded={onTikTok.some(account => tiktok[account.id]?.disclose && tiktok[account.id]?.branded)} />}
-        {error ? <p className="dash-error" role="alert">{error}</p> : blocked && <p className="post-note post-blocked" role="status">{blocked}</p>}
+        {error ? <p className="dash-error" role="alert">{error}</p> : blocked ? <p className="post-note post-blocked" role="status">{blocked}</p> : timeline && <p className="post-note post-blocked">Revline exports this video first, then {schedule ? 'schedules' : 'posts'} it.</p>}
         {/* A disabled button shows no hint of its own, so the reason sits on the wrapper as well as in the line beside it. */}
         <span className="post-dialog-actions" title={blocked || undefined}>
           <Button variant="primary" disabled={busy || !picked.length || !clip || !!blocked} onClick={() => void submit()}>{schedule ? busy ? 'Scheduling…' : 'Schedule' : busy ? 'Posting…' : 'Post now'}</Button>

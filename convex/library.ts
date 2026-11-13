@@ -10,7 +10,10 @@ import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ownedObjectReferences, recordAssetStorage } from './lib/storage_accounting';
 import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, liveFolderId, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
-import { copyMediaFor } from './projects';
+import { beginProjectDeletion, copyMediaFor } from './projects';
+import { importVideoFor } from './mediaTasks';
+import { cancelMediaTask } from './lib/media_queue';
+import { tableRow } from './lib/exact';
 import { attachLibraryUpload, describe, listingReads, storageItem } from './storage';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 
@@ -182,6 +185,73 @@ export const move = mutation({ args: { fileIds: v.array(v.id('storageObjects')),
   }
   for (const [id, from] of left) await adjustFolderTotals(ctx, id, -from.files, -from.bytes);
   await adjustFolderTotals(ctx, target, files, bytes);
+  return null;
+} });
+const linkImportState = v.object({ taskId: v.id('mediaTasks'), status: v.string(), progress: v.number(), attempt: v.number(), error: v.optional(v.string()) });
+/** Saves a video link (YouTube, TikTok, Instagram…) into the Library, in `folderId` when given. Imports always run in a
+ * project, so this one runs in a holding project of its own; `settleLinkImport` files it and removes the holder. */
+export const importLink = mutation({ args: { url: v.string(), folderId: v.optional(folderId) }, returns: v.id('mediaTasks'), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx);
+  const folder = args.folderId ? (await ownedFolder(ctx, ownerId, args.folderId))._id : undefined;
+  const { taskId, projectId } = await importVideoFor(ctx, ownerId, { url: args.url, sourcesOnly: true });
+  if (!await ctx.db.query('libraryLinkImports').withIndex('by_task', q => q.eq('taskId', taskId)).first())
+    await ctx.db.insert('libraryLinkImports', { ownerId, taskId, projectId, createdAt: Date.now(), ...(folder ? { folderId: folder } : {}) });
+  // A link this holder already had finishes at once, without a status change to report it.
+  if ((await ctx.db.get(taskId))?.status === 'completed') await ctx.scheduler.runAfter(0, internal.library.settleLinkImport, { taskId });
+  return taskId;
+} });
+/** Link imports still running, or failed and not yet dismissed, newest first. */
+export const linkImports = query({ args: {}, returns: v.array(linkImportState), handler: async ctx => {
+  const ownerId = await requireOwner(ctx);
+  const rows = await ctx.db.query('libraryLinkImports').withIndex('by_owner_created', q => q.eq('ownerId', ownerId)).order('desc').take(20);
+  const states = await Promise.all(rows.map(async row => {
+    const task = await ctx.db.get(row.taskId);
+    if (!task || task.ownerId !== ownerId || task.status === 'completed' || task.status === 'cancelled') return null;
+    const progress = (await ctx.db.query('mediaTaskProgress').withIndex('by_task', q => q.eq('taskId', task._id)).unique())?.progress ?? task.progress;
+    return { taskId: task._id, status: task.status, progress, attempt: task.attempt, ...(task.error ? { error: task.error } : {}) };
+  }));
+  return states.filter(state => state !== null);
+} });
+/** Removes a failed (or still running) link import and its holding project. */
+export const dismissLinkImport = mutation({ args: { taskId: v.id('mediaTasks') }, returns: v.null(), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), row = await ctx.db.query('libraryLinkImports').withIndex('by_task', q => q.eq('taskId', args.taskId)).first();
+  if (!row || row.ownerId !== ownerId) return null;
+  await ctx.db.delete(row._id);
+  await cancelMediaTask(ctx, args.taskId);
+  await removeHolder(ctx, row);
+  return null;
+} });
+/** Only the import's own holder goes: titled as `importVideoFor` names it, holding nothing but this video and its audio. */
+async function removeHolder(ctx: MutationCtx, row: Doc<'libraryLinkImports'>, keep?: Doc<'assets'>) {
+  const project = await ctx.db.get(row.projectId);
+  if (!project || project.ownerId !== row.ownerId || project.deleting || project.title !== 'Video import') return;
+  const assets = await ctx.db.query('assets').withIndex('by_ownerId_projectId', q => q.eq('ownerId', row.ownerId).eq('projectId', project._id)).take(10);
+  if (assets.every(item => keep && (item._id === keep._id || item._id === keep.audioAssetId))) await beginProjectDeletion(ctx, row.ownerId, project);
+}
+/** Runs when a Library link import ends. Completed: the video is held the way a Library upload is (a completed
+ * `cloudMedia` row), filed in its folder (or the nearest live parent), and the holder removed. Cancelled: the holder is
+ * removed. Failed: kept, so the Library shows why until it is dismissed. */
+export const settleLinkImport = internalMutation({ args: { taskId: v.id('mediaTasks') }, returns: v.null(), handler: async (ctx, args) => {
+  const row = await ctx.db.query('libraryLinkImports').withIndex('by_task', q => q.eq('taskId', args.taskId)).first(), task = await ctx.db.get(args.taskId);
+  if (!row) return null;
+  if (!task || task.status === 'cancelled') { await ctx.db.delete(row._id); await removeHolder(ctx, row); return null; }
+  if (task.status !== 'completed') return null;
+  await ctx.db.delete(row._id);
+  const ownerId = row.ownerId, asset = task.outputAssetId ? await ctx.db.get(task.outputAssetId) : null;
+  if (!asset || asset.ownerId !== ownerId || asset.projectId !== row.projectId || asset.kind !== 'video' || !asset.r2Key) return null;
+  const now = Date.now(), r2Key = asset.r2Key;
+  if (!await ctx.db.query('cloudMedia').withIndex('by_r2Key', q => q.eq('r2Key', r2Key)).first())
+    await ctx.db.insert('cloudMedia', tableRow<'cloudMedia'>()({ ownerId, r2Key, uploadId: `import:${task._id}`, fileName: asset.fileName, contentType: asset.contentType || 'video/mp4', kind: 'video', size: asset.size ?? 0, partSize: 0,
+      ...(asset.duration !== undefined ? { duration: asset.duration } : {}), ...(asset.width !== undefined ? { width: asset.width } : {}), ...(asset.height !== undefined ? { height: asset.height } : {}),
+      createdAt: now, activeAt: now, expiresAt: now, completed: true, direct: true }));
+  const file = await ctx.db.query('storageObjects').withIndex('by_owner_key', q => q.eq('ownerId', ownerId).eq('objectKey', `r2:${r2Key}`)).unique();
+  const target = await liveFolderId(ctx, ownerId, row.folderId);
+  if (file && !file.pending && !file.auxiliary && file.folderId !== target) {
+    await adjustFolderTotals(ctx, file.folderId, -1, -file.size);
+    await ctx.db.patch(file._id, { folderId: target });
+    await adjustFolderTotals(ctx, target, 1, file.size);
+  }
+  await removeHolder(ctx, row, asset);
   return null;
 } });
 /** Moves up to `DRAIN_BATCH` files out of a folder into `parentId`. True when none are left. The parent's totals

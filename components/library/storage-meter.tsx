@@ -1,50 +1,63 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useAction, useQuery } from 'convex/react';
+import Link from 'next/link';
+import { useAction, useConvexAuth, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
-import { LoaderCircle, Upload } from 'lucide-react';
+import { ChevronDown, LoaderCircle, Upload } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
+import { AI_USAGE_WARNING } from '@/lib/billing/plan';
 import { Button } from '@/components/ui/button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Progress } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
+import { usePlanUsage } from '@/components/workspace/plan-usage';
+import { usePlanStatus } from '@/components/workspace/use-plan-status';
+import { canUpgrade, meterLevel } from '@/components/workspace/plan-limit-dialog';
 import { userError } from '@/lib/user-error';
 import { formatBytes } from './format';
-import { usePlanUsage } from '@/components/workspace/plan-usage';
+import './library.css';
 
-type Summary = FunctionReturnType<typeof api.storage.summary>;
 type Unfinished = FunctionReturnType<typeof api.cloudMedia.unfinished>[number];
 const KINDS = [['videoBytes', 'Video'], ['audioBytes', 'Audio'], ['imageBytes', 'Images'], ['modelBytes', 'Models'], ['exportBytes', 'Exports']] as const;
 /** Parts are up to 95 MB, so only a long silence suggests a closed tab rather than a slow link. */
 const QUIET_MS = 30 * 60_000;
 function elapsed(ms: number) { const minutes = Math.floor(ms / 60_000); if (minutes < 1) return 'under a minute'; if (minutes < 60) return `${minutes} min`; const hours = Math.floor(minutes / 60); return hours < 24 ? `${hours} h` : `${Math.floor(hours / 24)} d`; }
 
-/** The quiet meter beside the page name: what is stored against the plan's storage limit (convex/lib/plan_limits.ts
- * refuses uploads past it), split by kind. Without a limit (billing off) the bar splits what is used. */
-export function LibraryUsage({ summary }: { summary?: Summary }) {
-  const [review, setReview] = useState(false);
-  const limit = usePlanUsage()?.storage.limitBytes ?? null;
-  if (!summary?.ready) return <div className="library-usage" aria-busy="true"><Skeleton className="h-1 w-[84px]" /><Skeleton className="h-3 w-20" /></div>;
-  const scale = limit ?? summary.usedBytes, used = limit === null ? `${formatBytes(summary.usedBytes)} used` : `${formatBytes(summary.usedBytes)} of ${formatBytes(limit)}`;
-  return <>
-    <Popover>
-      <PopoverTrigger asChild><Button variant="ghost" className="library-usage" aria-label={`${used}. Show storage by kind`}>
-        <span className="library-meter" aria-hidden="true">{KINDS.map(([field]) => <i key={field} data-kind={field} style={{ width: `${scale > 0 ? Math.min(100, summary[field] / scale * 100) : 0}%` }} />)}</span>
-        <span>{used}</span>
-      </Button></PopoverTrigger>
-      <PopoverContent align="end" className="library-usage-panel">
-        <strong>{used}</strong>
-        {limit !== null && summary.usedBytes + summary.reservedBytes >= limit && <p>Your storage is full. Delete files or upgrade your plan to upload more. Nothing stored is removed.</p>}
-        <ul>{KINDS.map(([field, label]) => <li key={field}><i data-kind={field} />{label}<span>{formatBytes(summary[field])}</span></li>)}</ul>
-        {summary.reservedBytes > 0 && <p>{formatBytes(summary.reservedBytes)} reserved for uploads in progress. <Button variant="soft" size="sm" onClick={() => setReview(true)}>Review</Button></p>}
-      </PopoverContent>
-    </Popover>
-    {review && <UnfinishedUploads onClose={() => setReview(false)} />}
-  </>;
+/** Storage in the profile menu: what is stored (with uploads still reserving room) against the plan's limit, as
+ *  Settings → Plan counts it (convex/lib/plan_limits.ts refuses uploads past it). Without a limit (billing off, or
+ *  no plan) the bar splits what is used by kind. Opening it lists each kind; from 80% it offers an upgrade. */
+export function StorageMeter({ onNavigate, onReview }: { onNavigate: () => void; onReview: () => void }) {
+  const { isAuthenticated } = useConvexAuth();
+  const usage = usePlanUsage(), status = usePlanStatus();
+  const summary = useQuery(api.storage.summary, isAuthenticated ? {} : 'skip');
+  if (!usage) return <div className="storage-meter" aria-busy="true"><Skeleton className="h-4 w-32" /><Skeleton className="h-1 w-full" /></div>;
+  const { usedBytes, reservedBytes, limitBytes: limit } = usage.storage, stored = usedBytes + reservedBytes;
+  const share = limit ? stored / limit : 0, level = limit === null ? undefined : meterLevel(share, AI_USAGE_WARNING);
+  const label = limit === null ? `${formatBytes(stored)} used` : `${formatBytes(stored)} of ${formatBytes(limit)}`;
+  const upgrade = level !== undefined && canUpgrade(status);
+  const kinds = summary?.ready ? summary : null;
+  return <div className="storage-meter plan-meter" data-level={level}>
+    <Collapsible>
+      <CollapsibleTrigger asChild><Button variant="ghost" className="storage-meter-toggle" aria-label={`Storage: ${label}. Show storage by kind`}>
+        <span className="plan-meter-label"><span>Storage</span><small>{label}</small><ChevronDown aria-hidden="true" /></span>
+        {limit !== null
+          ? <Progress value={Math.min(100, Math.round(share * 100))} aria-hidden="true" />
+          : <span className="library-meter" aria-hidden="true">{KINDS.map(([field]) => <i key={field} data-kind={field} style={{ width: `${kinds && kinds.usedBytes > 0 ? kinds[field] / kinds.usedBytes * 100 : 0}%` }} />)}</span>}
+      </Button></CollapsibleTrigger>
+      <CollapsibleContent>
+        <ul className="storage-meter-kinds">{KINDS.map(([field, name]) => <li key={field}><i data-kind={field} />{name}<span>{kinds ? formatBytes(kinds[field]) : '…'}</span></li>)}</ul>
+      </CollapsibleContent>
+    </Collapsible>
+    {level === 'full' && <p>Your storage is full. Delete files or upgrade your plan to upload more. Nothing stored is removed.</p>}
+    {reservedBytes > 0 && <p>{formatBytes(reservedBytes)} reserved for uploads in progress. <Button variant="link" size="sm" className="storage-meter-link" onClick={onReview}>Review</Button></p>}
+    {upgrade && <Button asChild variant="link" size="sm" className="storage-meter-link"><Link href="/profile#billing" onClick={onNavigate}>Upgrade</Link></Button>}
+  </div>;
 }
 
-function UnfinishedUploads({ onClose }: { onClose: () => void }) {
+/** Uploads still reserving room, with a way to cancel them. Rendered outside the menu, which closes when it opens. */
+export function UnfinishedUploads({ onClose }: { onClose: () => void }) {
   const uploads = useQuery(api.cloudMedia.unfinished, {}), abort = useAction(api.cloudMedia.abort);
   const [cancelling, setCancelling] = useState<ReadonlySet<string>>(() => new Set()), [error, setError] = useState(''), [now] = useState(() => Date.now());
   const count = uploads?.length ?? 0;

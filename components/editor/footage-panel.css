@@ -1,5 +1,4 @@
 .footage-content-inspector{gap:0}
-.source-filters{display:flex;flex-direction:column;gap:8px;margin-bottom:16px}
 
 
 .source-no-results{font-size:12px;color:var(--ws-muted);padding:12px 0}
@@ -36,7 +35,6 @@
 .preview-inspector .footage-content-library{min-width:0;gap:12px}
 .preview-inspector .footage-content-library button.source-import-files{display:flex;align-items:center;justify-content:center;gap:6px;flex-shrink:0;width:100%;height:34px;background:var(--revline-accent);border-color:transparent;color:#fff}
 .preview-inspector .footage-content-library button.source-import-files:hover:not(:disabled){background:var(--revline-accent)}
-.footage-content-library .source-filters{gap:6px;margin:0}
 
 
 .footage-content-library .footage-empty{padding:18px 0}
@@ -44,14 +42,14 @@
 
 .preview-inspector .inspector-media-content{display:flex;flex-direction:column;overflow:hidden;scrollbar-gutter:auto}
 .inspector-media-content>.footage-content-library{height:100%;min-height:0}
-.footage-content-library>.source-filters,.footage-content-library>.upload-status{flex-shrink:0}
 
 
 .preview-inspector-sheet .preview-inspector{flex:1;min-height:0;height:auto}
-.upload-status small{display:block;margin-top:4px}
-.upload-status .upload-cancel{margin-top:8px}
 
-/* Side panel library: a three-column grid of thumbnails. Names live in the tooltip and accessible label. */
+/* Side panel library: a three-column grid of thumbnails. Names live in the tooltip and accessible label; each tile
+   carries its own state: upload progress, processing, failed with Retry. */
+.footage-content-library>*{flex-shrink:0}
+.source-note{margin:0;font-size:11px;line-height:1.5;color:var(--ws-muted)}
 .footage-content-library>.source-media-grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));align-content:start;gap:6px;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ws-text) 30%,var(--ws-bg)) transparent}
 .source-tile{aspect-ratio:1}
 .footage-content-inspector .source-tile-card{position:relative;display:block;width:100%;height:100%;overflow:hidden;border-radius:6px;background:var(--ws-input)}
@@ -67,6 +65,17 @@
 .footage-content-library .source-tile .source-asset-menu{position:absolute;top:4px;right:4px;background:#000000a6;color:#fff;opacity:0;transition:opacity 120ms}
 .source-tile:is(:hover,:focus-within) .source-asset-menu,.source-tile .source-asset-menu[data-state=open]{opacity:1}
 .footage-content-library .source-tile .source-asset-menu:hover{background:#000000d9;color:#fff}
-.source-asset>[data-slot=progress]{height:2px;margin-top:5px}
-.source-asset>[data-slot=progress] [data-slot=progress-indicator]{background:var(--revline-accent)}
-.upload-status>[data-slot=progress]{height:2px}
+
+
+.footage-content-library>.source-media-grid{flex-shrink:1}
+.source-tile-icon{position:absolute;inset:0;display:grid;place-items:center;color:var(--ws-muted)}
+.source-tile-icon svg{width:18px;height:18px}
+.source-tile[data-state=waiting] .source-tile-icon{opacity:.5}
+.source-tile[data-state=failed] .media-thumbnail,.source-tile[data-state=failed] .source-tile-icon{opacity:.4}
+.source-tile-failed{position:absolute;left:4px;bottom:4px;display:inline-flex;align-items:center;gap:3px;padding:1px 5px;border-radius:4px;background:#000000b3;color:#ff8a80;font:500 10px/14px var(--font-geist,var(--font-inter)),sans-serif}
+.footage-content-library .source-tile [data-slot=button].source-tile-retry{position:absolute;right:4px;bottom:4px;width:24px;height:24px;padding:0;border:0;border-radius:6px;background:#2a2a2a;color:#fff}
+.footage-content-library .source-tile [data-slot=button].source-tile-retry:hover:not(:disabled){background:#333}
+.source-tile-progress{position:absolute;left:0;right:0;bottom:0;pointer-events:none}
+.source-tile-progress[data-slot=progress],.source-tile-progress [data-slot=progress]{height:2px;border-radius:0 0 6px 6px}
+.source-tile-progress [data-slot=progress-indicator]{background:var(--revline-accent)}
+.source-tile:not([data-state=ready]) .source-asset-menu{opacity:1}

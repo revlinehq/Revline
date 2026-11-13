@@ -1,4 +1,6 @@
 import { patchTurn } from './lib/assistant_turn_data';
+import { runFailure, runFailureOf } from '../lib/ai/run-failure';
+import { TIMELINE_CONFLICT, TIMELINE_LOCKED } from '../lib/editor/timeline-sync';
 import { makeFunctionReference } from 'convex/server';
 import { ConvexError, v, convexToJson, jsonToConvex, type Infer } from 'convex/values';
 import {internal} from './_generated/api';
@@ -52,7 +54,7 @@ export const run = internalMutation({
       throw new ConvexError('This write already committed. Read its receipt instead of repeating it.');
     }
     const turn=await turnForRun(ctx,args.runId);
-    if(turn&&(turn.status!=='running'||turn.segment!==(args.segment??0)))throw new ConvexError('This editing attempt has been replaced.');
+    if(turn&&(turn.status!=='running'||turn.segment!==(args.segment??0)))throw runFailure('locked', 'This editing attempt has been replaced.');
     for (const key of ['projectId', 'ownerId', 'runId'] as const) {
       if (args.input[key] !== undefined && args.input[key] !== args[key]) throw new ConvexError('The tool mutation belongs to another run.');
     }
@@ -69,7 +71,11 @@ export const run = internalMutation({
       // The reason as the mutation wrote it; the raw text (transport prefixes, stack frame) is logged, not handed to the model or the chat.
       const raw = error instanceof Error ? error.message : String(error);
       console.warn(`[tool-write-failed] ${JSON.stringify({ runId: args.runId, tool: args.toolName, function: args.functionName, error: raw.slice(0, 600) })}`);
-      throw new ConvexError({ kind: 'tool-write-failed', message: (plainFailureText(error instanceof ConvexError && typeof error.data === 'string' ? error.data : raw) || raw).slice(0, 1000) });
+      // The code the mutation raised. Shared timeline code that also serves the user's editor raises its conflict and
+      // lock as these exact sentences; any other uncoded refusal stays uncoded and is read by its text.
+      const data = error instanceof ConvexError ? error.data : undefined;
+      const code = runFailureOf(error)?.code ?? (data === TIMELINE_CONFLICT ? 'conflict' : data === TIMELINE_LOCKED ? 'locked' : undefined);
+      throw new ConvexError({ kind: 'tool-write-failed', ...(code ? { code } : {}), message: (plainFailureText(error instanceof ConvexError && typeof error.data === 'string' ? error.data : raw) || raw).slice(0, 1000) });
     }
     const afterProject=await ctx.db.get(args.projectId),after=afterProject?.revision??before;
     const declared = definition.writes?.includes(args.functionName);

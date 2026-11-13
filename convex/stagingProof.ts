@@ -15,7 +15,7 @@ import { startRenderFor } from './renders';
 // This is a service identity, not a user. The owner below is a fixed string no Clerk subject can equal (those are
 // `user_…`), it is never an argument, it owns one fixture project that needs no uploaded media, and every function
 // here refuses to run anywhere but the isolated staging deployment. No function takes an ownerId or a subject.
-const SERVICE_OWNER = 'service:railway-proof';
+const SERVICE_OWNER = 'service_railway-proof'; // R2 keys allow only [A-Za-z0-9_-] in the owner segment; a colon made the media Worker refuse frame-cache writes (403).
 const FIXTURE_TITLE = 'Railway promotion proof';
 
 function requireStaging() {
