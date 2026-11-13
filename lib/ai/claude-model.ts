@@ -12,11 +12,13 @@ export const CLAUDE_EDIT_MODELS = [
 // https://developers.openai.com/api/docs/models/gpt-6.1-sol
 // https://developers.openai.com/api/docs/models/gpt-6-astra
 // https://openai.com/index/introducing-gpt-6-1-terra/ (verified 2026-10-27)
+// https://developers.openai.com/api/docs/models/gpt-6-luna (verified 2026-11-13)
 // Above 272K input tokens the full request uses 2x input/cache and 1.5x output.
 export const OPENAI_EDIT_MODELS = [
   { id: 'gpt-6.1-sol', label: 'GPT-6.1 Sol', modelId: 'gpt-6.1-sol', pricing: { input: 2, cacheRead: .10, cacheWrite: 2.50, output: 10 } },
   { id: 'gpt-6-astra', label: 'GPT-6 Astra', modelId: 'gpt-6-astra', pricing: { input: 10, cacheRead: 1, cacheWrite: 12.50, output: 50 } },
   { id: 'gpt-6.1-terra', label: 'GPT-6.1 Terra', modelId: 'gpt-6.1-terra', pricing: { input: 1, cacheRead: .05, cacheWrite: 1.25, output: 5 } },
+  { id: 'gpt-6-luna', label: 'GPT-6 Luna', modelId: 'gpt-6-luna', pricing: { input: .10, cacheRead: .01, cacheWrite: .125, output: .50 } },
   // No longer offered (Terra replaced it); kept so past costs and stale queued requests still resolve.
   // Cheaper agent model (third-party price trackers, Oct 2026); cache rates assume Sol's ratios.
   // Rejects prompt_cache_options; reasoning modes are GPT-6 only.
@@ -31,7 +33,7 @@ export function isRetiredEditorModelChoice(choice: unknown): choice is typeof RE
 
 type ModelPolicyEnvironment = Readonly<Record<string, string | undefined>>;
 /** The GPT editing models, always offered; running them needs OPENAI_API_KEY. */
-export const OPENAI_EDIT_CHOICES = [OPENAI_EDIT_MODELS[0].id, OPENAI_EDIT_MODELS[1].id, OPENAI_EDIT_MODELS[2].id] as const;
+export const OPENAI_EDIT_CHOICES = [OPENAI_EDIT_MODELS[0].id, OPENAI_EDIT_MODELS[1].id, OPENAI_EDIT_MODELS[2].id, OPENAI_EDIT_MODELS[3].id] as const;
 /** The model editing uses when neither the request nor EDITOR_DEFAULT_MODEL names one: GPT-6.1 Sol. */
 export const DEFAULT_EDITOR_MODEL = OPENAI_EDIT_MODELS[0].id;
 /** The model free accounts edit with: GPT-6.1 Terra. */
@@ -141,7 +143,7 @@ export type EditorOffer = { models: readonly ClaudeModelChoice[]; efforts: reado
 export const editorModelProviderKey = (choice: ClaudeModelChoice) => OPENAI_EDIT_MODELS.some(model => model.id === choice) ? 'OPENAI_API_KEY' : 'ANTHROPIC_API_KEY';
 
 /** Every model the picker had before production was pinned, cheapest first per provider, at every effort they take. */
-const ALL_EDITOR_CHOICES = { models: ['haiku', 'sonnet', 'opus', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra'], efforts: EDITOR_REASONING_EFFORTS } as const;
+const ALL_EDITOR_CHOICES = { models: ['haiku', 'sonnet', 'opus', 'gpt-6-luna', 'gpt-6.1-terra', 'gpt-6.1-sol', 'gpt-6-astra'], efforts: EDITOR_REASONING_EFFORTS } as const;
 
 /**
  * What a paid account may pick in production, per plan. This is the one place that widens or narrows it;
@@ -150,7 +152,7 @@ const ALL_EDITOR_CHOICES = { models: ['haiku', 'sonnet', 'opus', 'gpt-6.1-terra'
  * so no account's cost changes until it picks something else. To give Pro the same list: `pro: ALL_EDITOR_CHOICES`.
  *
  * What a turn can cost, per token against the default, Haiku 5.5 ($0.10 in / $0.50 out per 1M tokens):
- * 'gpt-6.1-terra' 10x ($1 / $5), 'sonnet' and 'gpt-6.1-sol' 20x ($2 / $10), 'opus' 40x ($4 / $20),
+ * 'gpt-6-luna' 1x ($0.10 / $0.50; 2x input, 1.5x output above 272K), 'gpt-6.1-terra' 10x ($1 / $5), 'sonnet' and 'gpt-6.1-sol' 20x ($2 / $10), 'opus' 40x ($4 / $20),
  * 'gpt-6-astra' 100x ($10 / $50). 'high' and 'xhigh' keep the token price and spend more thinking and
  * output tokens per turn. Haiku 5.5 itself bills 5x ($0.50 / $2.50) on a prompt above 100K tokens, where these
  * ratios shrink fivefold. The per-request token ceilings (lib/ai/token-budget.ts) count tokens, not dollars.
