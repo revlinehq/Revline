@@ -29,7 +29,6 @@
 .add-media-upload-field [data-slot=input] { flex: 1; min-width: 0; height: 36px; border-color: var(--amu-border); border-radius: var(--radius-md, 8px); background: var(--amu-well); font-size: 14px; }
 .add-media-upload-field [data-slot=input]::placeholder { color: var(--amu-muted); }
 .add-media-upload-field [data-slot=button] { flex: none; min-width: 76px; height: 36px; transition: none; }
-.add-media-upload-note { margin: 0; color: var(--amu-muted); font-size: 13px; line-height: 1.5; }
 .add-media-upload-error { margin: 0; color: #d98a76; font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }
 .add-media-upload :is(button, input, [data-slot=button], [data-slot=input], [data-slot=tabs-trigger]):focus-visible { outline: none; box-shadow: none; }
 .add-media-upload [data-slot=button]:active { transform: none; }
