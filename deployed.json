@@ -1,8 +1,8 @@
 {
   "targets": {
     "convex": {
-      "commit": "b3cfb138a7daecaf3856c3c048cb29658affa847",
-      "at": "2026-11-13T17:52:38.112Z"
+      "commit": "c15be81c9aa48c23a136b521b61f4fd6dc359f13",
+      "at": "2026-11-13T18:03:46.468Z"
     },
     "media": {
       "commit": "b3cfb138a7daecaf3856c3c048cb29658affa847",
@@ -10,28 +10,28 @@
       "version": "03441599-a2d8-4e94-8e2b-dbdbc36c5caa"
     },
     "frontend": {
-      "commit": "b3cfb138a7daecaf3856c3c048cb29658affa847",
-      "at": "2026-11-13T17:52:58.451Z",
-      "version": "80f258a3-4136-416f-81c1-87ac538d125e"
+      "commit": "c15be81c9aa48c23a136b521b61f4fd6dc359f13",
+      "at": "2026-11-13T18:04:01.704Z",
+      "version": "9cc6a171-f661-45f2-b1d2-295d65ce3212"
     },
     "agent": {
-      "commit": "b3cfb138a7daecaf3856c3c048cb29658affa847",
-      "at": "2026-11-13T17:53:13.679Z",
-      "version": "ebd18541-42ae-4e57-96ef-c0f730866abe"
+      "commit": "c15be81c9aa48c23a136b521b61f4fd6dc359f13",
+      "at": "2026-11-13T18:04:16.224Z",
+      "version": "bad11b00-f5a9-44da-a21a-a8e1127c826a"
     },
     "mcp": {
-      "commit": "14c72adc69a2f81ca577f7b71b795269de02358e",
-      "at": "2026-11-12T19:36:27.344Z",
-      "note": "recorded by hand with release:status --set"
+      "commit": "c15be81c9aa48c23a136b521b61f4fd6dc359f13",
+      "at": "2026-11-13T18:04:25.138Z",
+      "version": "9a440054-32c4-4043-8059-53e08360c300"
     },
     "processor": {
       "commit": "7796b071139a63f8126ca28e4448097f109016d5",
-      "at": "2026-11-13T17:51:58.282Z",
+      "at": "2026-11-13T18:03:11.627Z",
       "note": "read from Railway (GitHub autodeploy)"
     },
     "exports": {
       "commit": "7796b071139a63f8126ca28e4448097f109016d5",
-      "at": "2026-11-13T17:53:16.479Z",
+      "at": "2026-11-13T18:04:27.896Z",
       "note": "read from Railway (GitHub autodeploy)"
     }
   }
