@@ -2,10 +2,10 @@ import { readTranscript } from '../media-analysis/transcript';
 import { applyMirrorBlurLayout, foldMirrorBlurStacks, stackedMirrorCopies, stackedMirrorCopyIds } from './mirror-blur-layout';
 import { patchClip, placeOnFreeLayer } from './operations';
 import { playbackRateOf } from './playback-rate';
-import { DEFAULT_TEXT_APPEARANCE } from './text-style';
-import { DEFAULT_TEXT_FONT } from './text-fonts';
+import { DEFAULT_TEXT_APPEARANCE, textStyle } from './text-style';
+import { DEFAULT_TEXT_FONT, UNSET_TEXT_FONT, type TextFontId } from './text-fonts';
 import { captionSpeech, sourceCaptions } from './transcript-captions';
-import { applyCaptionPreset } from './caption-editing';
+import { applyCaptionPreset, patchTextStyles } from './caption-editing';
 export { captionTimingSources } from './caption-editing';
 import type { CaptionPresetId } from './caption-presets';
 import { DEFAULT_TRANSFORM, dimensions, timelineDuration, type Clip, type MediaAsset, type Timeline } from './types';
@@ -163,4 +163,23 @@ export function applyQuickCaptionPreset(timeline: Timeline, id: CaptionPresetId,
     if (saved) speech.set(asset._id, saved);
   }
   return applyCaptionPreset(timeline, id, targetIds, speech);
+}
+
+// Font and size. The same fields and patch the assistant's styleTextClip/styleCaptions write, so preview and export match.
+
+export const TEXT_SIZE_MIN = 8, TEXT_SIZE_MAX = 300;
+/** The hook title's id while it exists, for the font and size controls. */
+export const hookClipIds = (timeline: Timeline) => hookClip(timeline) ? [HOOK_CLIP_ID] : [];
+/** The font and size every target shows (undefined font when they differ); size is the first target's, in 1080-based units. */
+export function textFontState(timeline: Timeline, targetIds: readonly string[]): { font?: TextFontId; size?: number } {
+  const clips = targetIds.flatMap(id => timeline.clips.filter(clip => clip.id === id && (clip.kind === 'caption' || clip.kind === 'graphic')));
+  if (!clips.length) return {};
+  const fonts = new Set(clips.map(clip => clip.fontFamily ?? UNSET_TEXT_FONT));
+  return { font: fonts.size === 1 ? [...fonts][0] : undefined, size: Math.round(textStyle(clips[0]).fontSize) };
+}
+/** Set the font or size on caption and text-graphic targets; each keeps its words, timing, preset and look. */
+export function setTextFont(timeline: Timeline, targetIds: string[], changes: { fontFamily?: TextFontId; fontSize?: number }): Timeline {
+  const fontSize = changes.fontSize === undefined ? undefined : Math.round(Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, changes.fontSize)));
+  const targets = targetIds.filter(id => { const clip = timeline.clips.find(item => item.id === id); return !!clip && (changes.fontFamily !== undefined && clip.fontFamily !== changes.fontFamily || fontSize !== undefined && clip.fontSize !== fontSize); });
+  return targets.length ? patchTextStyles(timeline, { ...(changes.fontFamily ? { fontFamily: changes.fontFamily } : {}), ...(fontSize !== undefined ? { fontSize } : {}) }, targets) : timeline;
 }

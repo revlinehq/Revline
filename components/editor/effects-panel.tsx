@@ -4,11 +4,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { appliedCaptionPreset, applyQuickCaptionPreset, applyQuickLayout, captionPresetTargets, captionTimingSources, HOOK_MAX_LENGTH, hookText, layoutState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
+import { appliedCaptionPreset, applyQuickCaptionPreset, applyQuickLayout, captionPresetTargets, captionTimingSources, HOOK_MAX_LENGTH, hookClipIds, hookText, layoutState, setTextFont, textFontState, removeSubtitles, savedSubtitles, setHook, spokenAssetIds, subtitleState, subtitlesFromTranscripts} from '@/lib/editor/quick-controls';
 import type { MediaAsset, Timeline } from '@/lib/editor/types';
 import { userError } from '@/lib/user-error';
 import type { CaptionPresetId } from '@/lib/editor/caption-presets';
 import { CaptionPresetPicker } from './caption-preset-picker';
+import { EffectTextFont } from './effect-text-font';
+import type { TextFontId } from '@/lib/editor/text-fonts';
 import { useEditorStore, useEditorState } from './editor-state';
 import './effects-panel.css';
 
@@ -89,6 +91,14 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
     pending.current = setTimeout(() => commitHook(text), HOOK_TYPING_PAUSE_MS);
   };
 
+  // Font and size: one undo step for a font choice, one for a whole slider drag or typed number.
+  const hookIds = useMemo(() => hookClipIds(timeline), [timeline]);
+  const captionFont = useMemo(() => textFontState(timeline, presetTargets), [timeline, presetTargets]);
+  const hookFont = useMemo(() => textFontState(timeline, hookIds), [timeline, hookIds]);
+  const chooseFont = (targets: string[], fontFamily: TextFontId) => { if (locked) return; store.getState().endUndoGroup(); attempt(() => setTextFont(current(), targets, { fontFamily }), 'Could not change the font.'); };
+  const resize = (scope: string, targets: string[], fontSize: number) => { if (locked) return; store.getState().beginUndoGroup(`effect-size-${scope}`); attempt(() => setTextFont(current(), targets, { fontSize }), 'Could not change the size.'); };
+  const endResize = () => store.getState().endUndoGroup();
+
   const empty = !timeline.clips.length;
   return <div className="effects-panel">
     <section className="effect-row">
@@ -102,6 +112,8 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
       <span className="effect-label" id="effect-caption-presets-label">Caption presets</span>
       <CaptionPresetPicker value={presetApplied} disabled={locked || styling || !presetTargets.length} onChoose={id => void choosePreset(id)}/>
       <p className="effect-hint">{!presetTargets.length ? 'Turn on subtitles to style them' : presetTargets.length < timeline.clips.filter(clip => clip.kind === 'caption').length ? `Applies to the ${presetTargets.length === 1 ? 'selected caption' : `${presetTargets.length} selected captions`}` : 'Applies to every caption'}</p>
+      {presetTargets.length > 0 && <EffectTextFont id="effect-caption" font={captionFont.font} size={captionFont.size} disabled={locked || styling}
+        onFont={font => chooseFont(presetTargets, font)} onSize={size => resize('caption', presetTargets, size)} onSizeEnd={endResize}/>}
     </section>
     <section className="effect-row">
       <span className="effect-label" id="effect-layout-label">Layout</span>
@@ -117,6 +129,8 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
         onChange={event => typeHook(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') commitHook(draft); }}
         onBlur={() => { commitHook(draft); store.getState().endUndoGroup(); }}/>
+      {hookIds.length > 0 && <EffectTextFont id="effect-hook" font={hookFont.font} size={hookFont.size} disabled={locked}
+        onFont={font => chooseFont(hookIds, font)} onSize={size => resize('hook', hookIds, size)} onSizeEnd={endResize}/>}
     </section>
   </div>;
 }
