@@ -71,7 +71,8 @@ export async function describe(ctx:QueryCtx|MutationCtx,row:Doc<'storageObjects'
   if(sized?.width&&sized.height){result.width=sized.width;result.height=sized.height;}
   if(row.kind==='audio')result.peaks=refs.attachments.find(asset=>asset.waveform)?.waveform??null;
   // Listing previews reuse the editor's small JPEG thumbnail; an image falls back to itself.
-  const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId:undefined;
+  // A video only the Library holds has the poster its tile saved (library.saveThumbnail).
+  const thumbnail=row.kind==='video'||row.kind==='image'?refs.attachments.find(asset=>asset.thumbnailStorageId)?.thumbnailStorageId??(refs.library?.ownerId===row.ownerId?refs.library.thumbnailStorageId:undefined):undefined;
   result.thumbnailUrl=thumbnail?await ctx.storage.getUrl(thumbnail):row.kind==='image'?await mediaUrl(ctx,row):null;
   if(refs.tooMany){result.protectedReason='Remove this media from its workspaces first';return result;}
   // Deleting media also deletes the projects whose edit uses it and any shared timeline pinning it.
@@ -156,7 +157,11 @@ export const remove=mutation({args:{fileIds:v.array(v.id('storageObjects')),conf
     if(row.kind==='export')await removeOwnedExport(ctx,ownerId,row.jobId!);
     else {
       const refs=await ownedObjectReferences(ctx,ownerId,row);
-      if(refs.library?.ownerId===ownerId)await ctx.db.delete(refs.library._id);
+      if(refs.library?.ownerId===ownerId){
+        await ctx.db.delete(refs.library._id);
+        const poster=refs.library.thumbnailStorageId;
+        if(poster){await releaseMediaObjects(ctx,{thumbnailStorageId:poster});await releaseAccountStorage(ctx,ownerId,{storageId:poster},true);}
+      }
       for(const asset of refs.attachments){
         const project=await ctx.db.get(asset.projectId);
         if(project&&project.ownerId!==ownerId)throw new ConvexError('Project not found');
