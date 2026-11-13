@@ -29,3 +29,4 @@ lines stay as the record.
 - `schema:comparisonContinuations`: only `compareReference` used it; the tool is deleted in the same change.
 - `projects:get`: clips may now name four more text fonts (`bangers`, `outfit`, `rubik`, `figtree`); the iOS `TimelineClip` (mobile/Revline/Editor/ProjectDocument.swift) never decodes `fontFamily`, so installed builds ignore it.
 - `timelineTabs:snapshots`: the same four new `fontFamily` values; the iOS `TimelineSnapshot` decodes clips with that same `TimelineClip`, which has no `fontFamily`.
+- `assistant:status`: `allowedModels` and `defaultModelChoice` may now be `"gpt-6-luna"`; iOS `AssistantStatus` (mobile/Revline/Chat/AssistantStatus.swift) decodes both as plain `String`s and never reads them (the app always pins GPT-6.1 Terra at Medium), so installed builds are unaffected.
