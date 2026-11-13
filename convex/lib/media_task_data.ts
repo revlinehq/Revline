@@ -76,6 +76,10 @@ export async function patchMediaTask(ctx: MutationCtx, task: Doc<'mediaTasks'>, 
     else if (slot) await ctx.db.delete(slot._id);
   }
   await syncMediaTask(ctx, { ...task, ...patch });
+  // A Library link import that has ended is filed in the Library (or its holder removed) whichever page is open.
+  if (task.kind === 'import' && task.sourcesOnly && patch.status && patch.status !== task.status && (patch.status === 'completed' || patch.status === 'failed' || patch.status === 'cancelled')
+    && await ctx.db.query('libraryLinkImports').withIndex('by_task', q => q.eq('taskId', task._id)).first())
+    await ctx.scheduler.runAfter(0, internal.library.settleLinkImport, { taskId: task._id });
 }
 
 export async function deleteMediaTask(ctx: MutationCtx, taskId: Id<'mediaTasks'>) {

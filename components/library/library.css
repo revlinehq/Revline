@@ -248,3 +248,11 @@ button.library-usage:hover { background: none; color: var(--dash-text); }
   .library-bar [data-slot=button] span { display: none; }
   .library-empty { min-height: 320px; }
 }
+
+/* Add media dialog: its body is components/media/add-media-upload. */
+.library-add-media[data-slot=dialog-content] { width: 480px; }
+.library-link-imports { display: flex; flex-direction: column; gap: 8px; }
+.library-link-import { padding: 12px 14px; border: 1px solid var(--dash-border); border-radius: 12px; background: var(--dash-card); }
+.library-link-import .video-import-progress { margin: 0; }
+.library-link-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.library-link-failed span { flex: 1 1 240px; }
