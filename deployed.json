@@ -26,12 +26,14 @@
       "note": "recorded by hand with release:status --set"
     },
     "processor": {
-      "commit": "40a877bff523e9412928a1924734b197b0fa8bac",
-      "at": "2026-11-13T04:19:00.060Z"
+      "commit": "7796b071139a63f8126ca28e4448097f109016d5",
+      "at": "2026-11-13T17:42:18.693Z",
+      "note": "recorded by hand with release:status --set"
     },
     "exports": {
-      "commit": "40a877bff523e9412928a1924734b197b0fa8bac",
-      "at": "2026-11-13T04:27:57.961Z"
+      "commit": "7796b071139a63f8126ca28e4448097f109016d5",
+      "at": "2026-11-13T17:42:18.725Z",
+      "note": "recorded by hand with release:status --set"
     }
   }
 }
