@@ -146,13 +146,28 @@ export function PostsWeekSkeleton() {
 }
 
 type Tone = 'posted' | 'scheduled' | 'failed';
-/** The card's thumbnail with the time it goes out or went out over it. */
-function Thumb({ coverUrl, coverKind, time, tone }: { coverUrl: string | null; coverKind: 'video' | 'image' | null; time: number; tone: Tone }) {
-  return <div className="posts-card-thumb">
+/** Where the thumbnail goes: the live post (a menu when it went out on several accounts), or the clip in the editor. */
+type ThumbTarget = { live: ClipPost[]; projectId: string };
+/** The card's thumbnail with the time it goes out or went out over it; the whole thumbnail is a link. */
+function Thumb({ coverUrl, coverKind, time, tone, target }: { coverUrl: string | null; coverKind: 'video' | 'image' | null; time: number; tone: Tone; target: ThumbTarget }) {
+  const inside = <>
     <ProjectCover url={coverUrl} kind={coverKind} />
     {/* A posted card shows only its time; a dot marks a scheduled or failed one. */}
     <span className="posts-card-time">{tone !== 'posted' && <span className="posts-dot" data-tone={tone} aria-hidden="true" />}{clock(time)}</span>
-  </div>;
+  </>;
+  const { live } = target;
+  if (live.length === 1) return <a className="posts-card-thumb" href={live[0].url!} target="_blank" rel="noopener noreferrer" aria-label={`View on ${PLATFORM_NAMES[live[0].platform]}`}>{inside}</a>;
+  if (live.length > 1) return <DropdownMenu>
+    <DropdownMenuTrigger asChild><button type="button" className="posts-card-thumb" aria-label="View the post">{inside}</button></DropdownMenuTrigger>
+    <ViewMenu live={live} />
+  </DropdownMenu>;
+  return <Link className="posts-card-thumb" href={`/editor/${target.projectId}`} aria-label="Open in the editor">{inside}</Link>;
+}
+/** "View on TikTok · @handle", one item per live post. */
+function ViewMenu({ live }: { live: ClipPost[] }) {
+  return <DropdownMenuContent align="start" className="dash-menu">
+    {live.map(post => <DropdownMenuItem key={post.id} asChild><a href={post.url!} target="_blank" rel="noopener noreferrer">View on {PLATFORM_NAMES[post.platform]} · @{post.username}</a></DropdownMenuItem>)}
+  </DropdownMenuContent>;
 }
 
 /** One platform line: what happened to the post on that account. */
@@ -188,15 +203,9 @@ function PostCard({ row, busy, onRetry, onCancel, onReschedule }: { row: Row } &
     {row.queued.length > 0 && <Reschedule time={row.time} busy={busy} onSave={time => onReschedule(row, time)} />}
     <IconAction label="Cancel post" disabled={busy} onClick={() => onCancel(row)}><X /></IconAction>
   </>;
-  else if (live.length === 1) actions = <Button asChild variant="secondary" size="sm" className="posts-card-action"><a href={live[0].url!} target="_blank" rel="noopener noreferrer">View</a></Button>;
-  else if (live.length > 1) actions = <DropdownMenu>
-    <DropdownMenuTrigger asChild><Button variant="secondary" size="sm" className="posts-card-action">View</Button></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="dash-menu">
-      {live.map(post => <DropdownMenuItem key={post.id} asChild><a href={post.url!} target="_blank" rel="noopener noreferrer">View on {PLATFORM_NAMES[post.platform]} · @{post.username}</a></DropdownMenuItem>)}
-    </DropdownMenuContent>
-  </DropdownMenu>;
+  // A posted card has no buttons: its thumbnail opens the live post.
   return <article className="posts-card" data-failed={failed || undefined}>
-    <Thumb coverUrl={clip.coverUrl} coverKind={clip.coverKind} time={row.time} tone={tone} />
+    <Thumb coverUrl={clip.coverUrl} coverKind={clip.coverKind} time={row.time} tone={tone} target={{ live, projectId: clip.projectId }} />
     <p className="posts-card-caption" title={text}>{text}</p>
     <ul className="posts-card-platforms">{clip.posts.map(post => {
       const state = platformState(post, held);
@@ -238,7 +247,7 @@ function ExportingCard({ clip, busy, onCancelExporting }: { clip: Exporting } & 
   const platforms = [...new Set(clip.accounts.map(account => account.platform))] as PostingPlatform[];
   const state = failed ? 'Export failed' : clip.progress ? `Exporting ${Math.round(clip.progress)}%` : 'Exporting';
   return <article className="posts-card" data-failed={failed || undefined}>
-    <Thumb coverUrl={clip.coverUrl} coverKind={clip.coverKind} time={clip.scheduledAt ?? clip.createdAt} tone={failed ? 'failed' : 'scheduled'} />
+    <Thumb coverUrl={clip.coverUrl} coverKind={clip.coverKind} time={clip.scheduledAt ?? clip.createdAt} tone={failed ? 'failed' : 'scheduled'} target={{ live: [], projectId: clip.projectId }} />
     <p className="posts-card-caption" title={text}>{text}</p>
     <ul className="posts-card-platforms">{platforms.map(platform => <li key={platform}>
       <PlatformIcon platform={platform} labelled /><span data-tone={failed ? 'failed' : 'muted'}>{state}</span>

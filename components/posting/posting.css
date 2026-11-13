@@ -51,7 +51,10 @@
 
 .posts-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; padding: 7px; border: 1px solid #FFFFFF0A; border-radius: 9px; background: var(--dash-card); }
 .posts-card[data-failed] { border-color: #E9A23B66; }
-.posts-card-thumb { position: relative; height: 92px; overflow: hidden; border-radius: 6px; background: var(--dash-pill); }
+.posts-card-thumb { position: relative; display: block; width: 100%; padding: 0; border: 0; outline: none; cursor: pointer; color: inherit; font: inherit; text-align: left; height: 92px; overflow: hidden; border-radius: 6px; background: var(--dash-pill); }
+/* The whole thumbnail is a link: a faint light layer over it on hover. */
+.posts-card-thumb::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.posts-card-thumb:hover::after { background: #FFFFFF14; }
 .posts-card-thumb .workspace-chat-cover { display: grid; place-items: center; width: 100%; height: 100%; color: var(--dash-muted); }
 .posts-card-thumb :is(img, video) { width: 100%; height: 100%; object-fit: cover; object-position: center; }
 .posts-card-time { position: absolute; top: 5px; left: 5px; display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 6px; border-radius: 5px; background: #000000B8; color: #fff; font-size: 11px; font-weight: 500; white-space: nowrap; }
