@@ -277,7 +277,7 @@ export type MediaAsset = {
   derivedOf?: string; derivedStart?: number; derivation?: 'freeze' | 'slowmo' | 'upscale' | 'parallax';
   analysisKinds?: string[];
   footageProgress?: number;
-  preparation?: {status:'processing'|'failed';message:string};
+  preparation?: {status:'processing'|'failed';message:string;/** The media task that Retry starts again. */task?:'transcribe'|'extract'};
   waveform?: AudioWaveform;
   analysis?: {
     highlights?: string;
