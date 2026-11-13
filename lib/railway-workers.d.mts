@@ -1,13 +1,13 @@
 export type RailwayConfig = {
   environment: 'dev' | 'staging' | 'production'; projectId: string; environmentId: string; convexUrl: string;
   region: 'us-east4-eqdc4a' | 'us-west2' | 'europe-west4-drams3a' | 'asia-southeast1-eqsg3a';
-  processorImage: string; exportsImage: string; processorCommit: string; exportsCommit: string;
+  processorImage?: string; exportsImage?: string; processorCommit?: string; exportsCommit?: string;
   processorServices: string[]; standardServices: string[]; ultraServices: string[]; distributedExports: boolean;
   artifactBucket?: string; artifactEndpoint?: string;
 };
 type Target = { token: string; config: RailwayConfig };
 type Slot = Target & { serviceId: string };
-type Deployment = { id: string; status: string; deploymentStopped: boolean };
+export type Deployment = { id: string; status: string; deploymentStopped: boolean; meta: ({ commitHash?: string } & Record<string, unknown>) | null; createdAt?: string };
 type Instance = {
   serviceId: string; serviceName: string; numReplicas: number | null; region: string | null;
   startCommand: string | null;
@@ -24,9 +24,14 @@ export function railway(args: { token: string; query: string; variables?: Record
 export function verifyRailwayTarget(args: Target): Promise<void>;
 export function railwayInstance(args: Slot): Promise<Instance>;
 export function railwayActive(instance: Instance): boolean;
-export function verifyRailwaySlot(args: Slot & { image: string }): Promise<Instance>;
-export function configureRailwaySlot(args: Slot & { image: string; variables: Record<string, string>; registryCredentials?: { username: string; password: string } }): Promise<void>;
-export function deployRailwaySlot(args: Slot): Promise<string>;
+export function verifyRailwaySlot(args: Slot & { image?: string }): Promise<Instance>;
+export function configureRailwaySlot(args: Slot & { image?: string; variables: Record<string, string>; registryCredentials?: { username: string; password: string } }): Promise<void>;
+export function deployRailwaySlot(args: Slot & { deployment?: Deployment | null }): Promise<string>;
+export function railwayDeployments(args: Slot & { first?: number }): Promise<Deployment[]>;
+export function railwayDeploymentCommit(deployment: Deployment | null | undefined): string | null;
+export function railwayGoodDeployments(deployments: Deployment[], skip?: (deployment: Deployment) => boolean): Deployment[];
+export function railwayGoodDeployment(deployments: Deployment[], skip?: (deployment: Deployment) => boolean): Deployment | null;
+export function railwayBootCrashed(args: { token: string; deploymentId: string }): Promise<boolean>;
 export function createRailwayService(args: Target & { name: string }): Promise<string>;
 export function deleteRailwayService(args: Slot): Promise<void>;
 export function reapRailwayServices(args: Target): Promise<void>;

@@ -16,6 +16,7 @@ import { cancelMediaTask } from './lib/media_queue';
 import { tableRow } from './lib/exact';
 import { attachLibraryUpload, describe, listingReads, storageItem } from './storage';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
+import { YOUTUBE_ONLY_LINK, parseVideoLink } from '../lib/editor/video-link';
 import { POSTER_MAX_BYTES } from '../lib/editor/poster-frame';
 
 const folderId = v.id('storageFolders');
@@ -210,10 +211,13 @@ export const move = mutation({ args: { fileIds: v.array(v.id('storageObjects')),
   return null;
 } });
 const linkImportState = v.object({ taskId: v.id('mediaTasks'), status: v.string(), progress: v.number(), attempt: v.number(), error: v.optional(v.string()) });
-/** Saves a video link (YouTube, TikTok, Instagram…) into the Library, in `folderId` when given. Imports always run in a
+/** Saves a YouTube link into the Library, in `folderId` when given. Imports always run in a
  * project, so this one runs in a holding project of its own; `settleLinkImport` files it and removes the holder. */
 export const importLink = mutation({ args: { url: v.string(), folderId: v.optional(folderId) }, returns: v.id('mediaTasks'), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
+  let kind: string | undefined;
+  try { kind = parseVideoLink(args.url).kind; } catch { /* importVideoFor refuses it with its own message. */ }
+  if (kind && kind !== 'youtube') throw new ConvexError(YOUTUBE_ONLY_LINK);
   const folder = args.folderId ? (await ownedFolder(ctx, ownerId, args.folderId))._id : undefined;
   const { taskId, projectId } = await importVideoFor(ctx, ownerId, { url: args.url, sourcesOnly: true });
   if (!await ctx.db.query('libraryLinkImports').withIndex('by_task', q => q.eq('taskId', taskId)).first())

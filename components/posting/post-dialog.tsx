@@ -19,12 +19,10 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { AccountAvatar, PlatformIcon } from './account-avatar';
-import { postTime } from './post-time';
+import { localInputValue, postTime } from './post-time';
 import { NO_TIKTOK_CHOICE, TikTokConsent, TikTokPostSettings, tiktokProblem, tiktokTarget, type TikTokChoice, type TikTokCreator } from './tiktok-post-settings';
 import './posting.css';
 
-/** `datetime-local` wants local time without a zone. */
-function localInputValue(time: number) { const date = new Date(time - new Date(time).getTimezoneOffset() * 60_000); return date.toISOString().slice(0, 16); }
 function clipLength(seconds: number) { const total = Math.round(seconds); return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`; }
 
 /** "Post" on a finished export: opens the dialog that sends it to connected accounts, now or on a schedule. */
@@ -48,8 +46,9 @@ export type PostTimeline = {
  * offers the owner's recent finished exports to choose from. With `timeline` it posts that editor tab instead:
  * Revline exports it first (or reuses a finished export of the same version), then posts. `onPostsPage`: the new
  * row is already in view behind the dialog, so it closes on success instead of pointing at the Posts page.
+ * `scheduleAt` fills the schedule in: "Post here" on a calendar day.
  */
-export function PostDialog({ jobId, timeline, onPostsPage = false, onClose }: { jobId?: Id<'renderJobs'>; timeline?: PostTimeline; onPostsPage?: boolean; onClose: () => void }) {
+export function PostDialog({ jobId, timeline, onPostsPage = false, scheduleAt, onClose }: { jobId?: Id<'renderJobs'>; timeline?: PostTimeline; onPostsPage?: boolean; scheduleAt?: number; onClose: () => void }) {
   const { isAuthenticated } = useConvexAuth();
   const finished = useQuery(api.posting.finishedClips, isAuthenticated && !jobId && !timeline ? {} : 'skip');
   const [choice, setChoice] = useState<Id<'renderJobs'> | null>(null);
@@ -68,7 +67,7 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, onClose }: { 
   const asked = useRef(new Map<string, number>());
   const [caption, setCaption] = useState(''), [title, setTitle] = useState('');
   const [chosen, setChosen] = useState<Set<string>>(() => new Set()), [overrides, setOverrides] = useState<Record<string, string>>({}), [perAccount, setPerAccount] = useState(false);
-  const [when, setWhen] = useState('');
+  const [when, setWhen] = useState(() => scheduleAt ? localInputValue(scheduleAt) : '');
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [sent, setSent] = useState<{ count: number; scheduledAt?: number; tiktok: boolean; exporting: boolean } | null>(null);
   const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));

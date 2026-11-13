@@ -6,21 +6,18 @@ on:
 permissions:
   contents: read
   pull-requests: read
-  packages: write
 concurrency:
   group: revline-railway-staging
   cancel-in-progress: false
 jobs:
+  # Railway staging slots deploy themselves from GitHub main (Railway autodeploy), like production; this workflow no
+  # longer builds images or stages them. It keeps the persistent staging Convex backend on main.
   stage:
     if: github.repository_id == '1412697447'
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 30
     env:
-      GH_TOKEN: ${{ github.token }}
       CONVEX_DEPLOY_KEY: ${{ secrets.RAILWAY_STAGING_CONVEX_DEPLOY_KEY }}
-      RAILWAY_STAGING_API_TOKEN: ${{ secrets.RAILWAY_STAGING_API_TOKEN }}
-      RAILWAY_REGISTRY_PASSWORD: ${{ secrets.RAILWAY_STAGING_REGISTRY_PASSWORD }}
-      RAILWAY_REGISTRY_USERNAME: ${{ vars.RAILWAY_STAGING_REGISTRY_USERNAME }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
@@ -31,65 +28,5 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - uses: docker/setup-buildx-action@v3
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ github.token }}
-      - name: Resolve the canonical image registry
-        run: node --input-type=module -e "import { IMAGE_REGISTRY, REPOSITORY } from './lib/repository.mjs'; console.log('IMAGE_REGISTRY=' + IMAGE_REGISTRY + '\nIMAGE_SOURCE=https://github.com/' + REPOSITORY);" >> "$GITHUB_ENV"
-      - name: Prepare credential-free image context
-        run: node media-processor/prepare-context.mjs
-      - uses: docker/build-push-action@v6
-        id: processor
-        with:
-          context: .wrangler/media-processor-build
-          file: .wrangler/media-processor-build/media-processor/Dockerfile
-          target: railway-processor
-          cache-from: type=gha,scope=railway-processor
-          cache-to: type=gha,mode=max,scope=railway-processor
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.IMAGE_REGISTRY }}/revline-railway-processor:${{ github.sha }}
-          build-args: REVLINE_BUILD_COMMIT=${{ github.sha }}
-          labels: org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
-      - uses: docker/build-push-action@v6
-        id: exports
-        with:
-          context: .wrangler/media-processor-build
-          file: .wrangler/media-processor-build/media-processor/Dockerfile
-          target: railway-exports
-          cache-from: type=gha,scope=railway-exports
-          cache-to: type=gha,mode=max,scope=railway-exports
-          platforms: linux/amd64
-          push: true
-          tags: ${{ env.IMAGE_REGISTRY }}/revline-railway-exports:${{ github.sha }}
-          build-args: REVLINE_BUILD_COMMIT=${{ github.sha }}
-          labels: org.opencontainers.image.source=${{ env.IMAGE_SOURCE }}
-      - name: Write explicit staging target
-        env:
-          PROCESSOR_DIGEST: ${{ steps.processor.outputs.digest }}
-          EXPORTS_DIGEST: ${{ steps.exports.outputs.digest }}
-        run: |
-          node --input-type=module <<'JS'
-          import { mkdir, writeFile } from 'node:fs/promises';
-          await mkdir('.data/railway', { recursive: true });
-          const config = { environment: 'staging', projectId: '759ce3c9-db81-4ade-ae3b-2c21070f7442', environmentId: 'dde1b6c2-9225-46d3-ae43-c20fd2456d3b', convexUrl: 'https://striped-starling-234.convex.cloud', region: 'us-east4-eqdc4a', processorImage: `${process.env.IMAGE_REGISTRY}/revline-railway-processor@${process.env.PROCESSOR_DIGEST}`, exportsImage: `${process.env.IMAGE_REGISTRY}/revline-railway-exports@${process.env.EXPORTS_DIGEST}`, processorCommit: process.env.GITHUB_SHA, exportsCommit: process.env.GITHUB_SHA, processorServices: ['bbd89acf-f3cf-47eb-93be-4c1aec4052fa'], standardServices: ['6d54efb4-cc27-4ccf-ab6f-3b3edd679285'], ultraServices: ['601a3ccc-0fcb-4f63-aa43-3cfa251ff8da'], distributedExports: false };
-          await writeFile('.data/railway/staging.json', JSON.stringify(config, null, 2));
-          await writeFile('.data/railway/staging.env', Object.entries({ CONVEX_DEPLOYMENT: 'prod:striped-starling-234', NEXT_PUBLIC_CONVEX_URL: config.convexUrl, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY, RAILWAY_API_TOKEN: process.env.RAILWAY_STAGING_API_TOKEN, RAILWAY_REGISTRY_USERNAME: process.env.RAILWAY_REGISTRY_USERNAME || 'zuraHQ', RAILWAY_REGISTRY_PASSWORD: process.env.RAILWAY_REGISTRY_PASSWORD }).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join('\n') + '\n', { mode: 0o600 });
-          JS
       - name: Deploy only the persistent staging backend
         run: npx convex deploy --yes
-      # stage checks every setting and registry access first, runtime-checks each image on a temporary service, then
-      # points the slots at the digests built above (no Railway build), authenticates them with claims paused and
-      # restores the previous images on failure. The separate repository-build step took 11 to 17 minutes.
-      - name: Stage the built images with claims paused
-        run: node scripts/railway-workers.mjs stage --environment staging --config .data/railway/staging.json --env-file .data/railway/staging.env --kind all --apply
-      - uses: actions/upload-artifact@v4
-        with:
-          name: railway-staging-manifest
-          path: |
-            .data/railway/staging.json
-            .data/railway/staging.json.verified.json
-          if-no-files-found: error

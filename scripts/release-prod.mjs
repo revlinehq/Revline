@@ -5,10 +5,11 @@
 // main with REVLINE_RELEASE_CI=1: Convex and the Cloudflare Workers only, credentials from the GitHub `production`
 // environment instead of the Mac (see "CI mode" below and docs/releases.md).
 // Flags: --base <commit> (comparison commit for targets with no recorded release), --only <target,…>,
-//   --auto-rollback (roll Workers back when verification fails), --founder-bypass "<reason>" (Railway
-//   promotion without a staging receipt, logged by scripts/railway-workers.mjs), --no-changelog.
+//   --auto-rollback (roll Workers back when verification fails), --no-changelog. (--founder-bypass is accepted and
+//   ignored: Railway is no longer promoted from staging.)
 // It only orders and records: the planner (release-plan.mjs), the verifiers (release-verify.mjs), the
-// agent settings sync, the Railway release (release-railway.mjs) and the Worker configs are the existing ones.
+// agent settings sync and the Worker configs. Railway deploys itself from GitHub main; this command only reads which
+// commit it runs (release-railway.mjs) and holds Convex while a raised processor contract is not running yet.
 // Production only. The development deployment (majestic-alpaca-541) is never touched.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -35,15 +36,15 @@ const WORKERS = {
 };
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const sha = git('rev-parse', 'HEAD');
-// CI mode: the GitHub release workflow on a hosted runner. It releases only Convex and the Cloudflare Workers: Railway
-// deploys itself from GitHub, and the incident listener lives on the Mac. Everything else is this same command.
+// CI mode: the GitHub release workflow on a hosted runner. It deploys Convex and the Cloudflare Workers and, like the
+// Mac, only reads which commit Railway runs (Railway deploys itself from GitHub main). The incident listener lives on
+// the Mac. Everything else is this same command.
 const ci = process.env.REVLINE_RELEASE_CI === '1';
-const CI_TARGETS = ['convex', 'media', 'frontend', 'agent', 'mcp'];
+const CI_TARGETS = ['processor', 'convex', 'media', 'frontend', 'agent', 'mcp', 'exports'];
 const only = flags.only ? flags.only.split(',').map(name => name.trim()).filter(Boolean) : ci ? CI_TARGETS : TARGETS;
 for (const name of only) if (!TARGETS.includes(name)) throw new Error(`--only takes ${TARGETS.join(', ')}; got "${name}".`);
-if (ci) for (const name of only) if (!CI_TARGETS.includes(name)) throw new Error(`The release workflow releases only ${CI_TARGETS.join(', ')}; "${name}" is released from the Mac (or, for Railway, by Railway itself).`);
-// The same rule railway-workers.mjs applies, checked before anything is deployed.
-const founderBypass = flags['founder-bypass'] !== undefined ? (await import('./railway-promotion.mjs')).founderBypassReason(flags['founder-bypass']) : undefined;
+if (ci) for (const name of only) if (!CI_TARGETS.includes(name)) throw new Error(`The release workflow runs only ${CI_TARGETS.join(', ')}; "${name}" is released from the Mac.`);
+if (flags['founder-bypass'] !== undefined) console.log('--founder-bypass ignored: Railway deploys from GitHub main and is not promoted from staging.');
 
 const productionFile = resolve(process.env.REVLINE_PRODUCTION_ENV_FILE || '.env.production.local');
 // railway-workers.mjs reads the Railway token and registry credentials from its own env file when one is kept.
@@ -91,7 +92,7 @@ for (const target of TARGETS) {
   // The listener checkout follows main: it is updated whenever it is behind the release commit.
   if (target === 'incident-listener') changed = old !== sha;
   else { const service = planFor(old).services[SERVICE[target]]; changed = service.changed; files = service.files; }
-  rows.set(target, { old, changed, files, selected: only.includes(target), result: !only.includes(target) ? (ci && !flags.only ? `skipped: ${['processor', 'exports'].includes(target) ? 'Railway deploys itself' : 'released from the Mac'}` : 'skipped: not in --only') : changed ? (dry ? 'would release' : 'pending') : 'unchanged' });
+  rows.set(target, { old, changed, files, selected: only.includes(target), result: !only.includes(target) ? (ci && !flags.only ? 'skipped: released from the Mac' : 'skipped: not in --only') : changed ? (dry ? 'would release' : 'pending') : 'unchanged' });
 }
 const want = target => rows.get(target).selected && rows.get(target).changed;
 const setResult = (target, result) => { rows.get(target).result = result; };
@@ -132,11 +133,11 @@ async function localRefusals() {
   return reasons;
 }
 
-const proofScript = 'scripts/railway-proof.mjs', compatScript = 'scripts/compat-check.mjs', changelogScript = 'scripts/changelog.mjs';
+const compatScript = 'scripts/compat-check.mjs', changelogScript = 'scripts/changelog.mjs';
 
 if (dry) {
   const refusals = await localRefusals();
-  console.log(`Target: PRODUCTION (Convex ${DEPLOYMENT}, Cloudflare Workers${ci ? '; CI mode, Railway deploys itself' : ', Railway'}). Dry run: no deploys, no credentials used.`);
+  console.log(`Target: PRODUCTION (Convex ${DEPLOYMENT}, Cloudflare Workers${ci ? '; CI mode' : ''}; Railway deploys itself and is only read). Dry run: no deploys, no credentials used.`);
   console.log(`Release commit: ${sha} (${git('log', '-1', '--format=%s')})`);
   console.log(sharedError ? `Shared release state not read: ${sharedError}` : `Shared release state: ${shared ? `origin ${STATE_BRANCH} ${short(shared.commit)}` : `origin has no ${STATE_BRANCH} branch yet`}, merged with ${stateFile()}.`);
   console.log(state ? `Deployed commits: ${stateFile()}${shared ? ` and origin ${STATE_BRANCH}` : ''}` : `No release state at ${stateFile()}; ${baseCommit ? `comparing every target with --base ${short(baseCommit)}` : 'no --base given, so every target counts as changed (full release)'}.`);
@@ -148,17 +149,15 @@ if (dry) {
     console.log(`  ${target}: ${row.changed ? `${row.files.length || 'all'} file(s)${row.files.length ? `: ${row.files.slice(0, 6).join(', ')}${row.files.length > 6 ? ', …' : ''}` : ' (no recorded release)'}` : 'none'}`);
   }
   const steps = [];
-  steps.push(ci ? `Guard: GitHub release workflow on main, ${productionFile} targeting prod:${DEPLOYMENT} with its production deploy key, clean, HEAD = origin/main (an older commit exits 0: the newer run releases it)` : `Guard: macOS, ${productionFile} targeting prod:${DEPLOYMENT}, on main, clean, HEAD = origin/main; take ${lockFile}`);
+  steps.push(ci ? `Guard: GitHub release workflow on main, ${productionFile} targeting prod:${DEPLOYMENT} with its production deploy key, clean, HEAD = origin/main or behind it (a commit behind still releases, unless production already runs a newer one)` : `Guard: macOS, ${productionFile} targeting prod:${DEPLOYMENT}, on main, clean, HEAD = origin/main; take ${lockFile}`);
   steps.push(oldest ? `Pre-flight: node ${compatScript} --base ${short(oldest)} --head ${short(sha)}` : 'Pre-flight: compatibility check skipped (no deployed commit recorded; pass --base)');
   const typechecks = ['typecheck', ...(want('agent') ? ['agent-runner:install', 'typecheck:agent-runner'] : []), ...(want('mcp') ? ['mcp:install', 'typecheck:mcp'] : []), ...(want('processor') || want('exports') ? ['typecheck:processor-edge'] : [])];
   steps.push(`Pre-flight: ${typechecks.map(name => `npm run ${name}`).join(', ')}`);
   if (want('frontend')) steps.push('Pre-flight: npm run build:cloudflare (the only frontend build; the deploy step uploads it)');
-  if (want('processor') || want('exports')) steps.push(`Pre-flight: scripts/railway-workers.mjs check for each Railway target production routes to Railway (${railwayFile}): every slot variable and key (DEEPGRAM_API_KEY and the rest), the project token, and registry access to the digests staging built for ${short(sha)}. Read-only`);
-  if (want('processor')) steps.push(`Railway processor image first, if production routes processing to Railway: ${flags['founder-bypass'] ? 'founder bypass (logged), no staging receipt' : `node ${proofScript} --check, then --commit ${short(sha)}: reuses .data/railway/promotion.json ("reusing proof receipt <id>") when it proved this commit and these digests in the last 24 h and still verifies, otherwise runs the three staging proof jobs`}. Then stage with --image-first: checks again, runtime-checks the staged digest on a temporary service, pauses claims, drains, points the slots at the digest (no build; a repository build only until production Convex reports image slots and registry credentials are set), verifies the queue connection, resumes claims. Any failure after the pause restores the previous images and resumes claims. Without the one-time staging setup: "Railway not promoted", the release continues${contractRaised() ? ' EXCEPT that this range raises the processor contract, so Convex and everything after it are held' : ''}`);
-  if (want('convex') && !want('processor') && deployedOf('processor') !== sha && contractRaised()) steps.push(`HOLD: this range raises the processor contract and the processor is not recorded at ${short(sha)}, so Convex and everything after it stop here until the processor runs this commit and is recorded (release:status --set processor=${short(sha)} --push)`);
+  if (want('processor')) steps.push(`Railway processor, if production routes processing to Railway: Railway deploys it from GitHub main by itself; read the commit each slot runs and record it${contractRaised() ? '. This range raises the processor contract: Convex and everything after it are held until the processor runs this commit' : ''}`);
   if (want('convex')) steps.push(`Convex: convex deploy --yes --typecheck enable --env-file <production file> --message ${short(sha)} (waits for index backfill and schema validation), then verify the processor contract`);
   for (const target of ['media', 'frontend', 'agent', 'mcp']) if (want(target)) steps.push(`${TARGET_NOTES[target]}: record the serving version${target === 'agent' ? ', sync settings from Convex (sync-agent-runner-env.mjs production)' : ''}, wrangler deploy --config ${WORKERS[target]}, verify 100% traffic${target === 'frontend' ? ' and the live build ID' : ''}`);
-  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: same staging receipt (no second proof), the same checked stage with automatic restore, verify slots');
+  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: deployed from GitHub main by Railway; read the commit each slot runs, verify slot settings, record it');
   steps.push('Post-deploy: health endpoints (frontend origins, agent runner /health, media Worker refusal, MCP OAuth discovery) and a 30 s read of production Convex logs for argument-validation errors, missing functions, worker auth failures and unknown modes');
   if (want('incident-listener')) steps.push(`Incident listener: if ~/Library/LaunchAgents/${LISTENER}.plist exists, fast-forward its checkout to ${short(sha)}, npm ci when the lockfile changed, launchctl kickstart, confirm running`);
   if (!flags['no-changelog']) steps.push(`Changelog: node ${changelogScript} build, commit docs/changelog.md and docs/changelog.d to main with [skip ci]`);
@@ -223,7 +222,7 @@ const npm = name => command('npm', ['run', name], { env });
 const step = name => console.log(`\n== ${name} ==`);
 const startedAt = Date.now();
 const rollbacks = [];
-let failure = null, railwayPending = false, proof = null, setupStatus = null, deployStartedAt = startedAt, verified = true;
+let failure = null, deployStartedAt = startedAt, verified = true;
 const record = (target, extra = {}) => recordTarget(target, { commit: sha, at: new Date().toISOString(), ...extra });
 
 async function worker(target, before) {
@@ -239,28 +238,33 @@ async function worker(target, before) {
   setResult(target, 'released');
 }
 
+/** Whether this checkout has `commit`; Railway may already run a main commit fetched after this release started. */
+function haveCommit(commit) {
+  const has = () => { try { execFileSync('git', ['cat-file', '-e', `${commit}^{commit}`], { stdio: 'ignore' }); return true; } catch { return false; } };
+  if (!commit || has()) return !!commit;
+  try { execFileSync('git', ['fetch', '--quiet', 'origin', 'main'], { stdio: 'ignore' }); } catch { /* offline: unknown */ }
+  return has();
+}
+/** Whether `commit` is this release's commit or a later one. */
+function includesRelease(commit) {
+  if (!haveCommit(commit)) return false;
+  try { execFileSync('git', ['merge-base', '--is-ancestor', sha, commit], { stdio: 'ignore' }); return true; } catch { return false; }
+}
+// A Railway lane not (yet) at this commit: the release still finishes, but the changelog waits for a run where it is.
+let railwayBehind = false;
+
+/** Railway deploys the slots from GitHub main; read and record what they run. Returns the running commit or null. */
 async function railway(kind, remote) {
   const routed = remote[kind === 'processor' ? 'MEDIA_PROCESSOR_BACKEND' : 'RENDER_PROVIDER'] === 'railway';
-  if (!routed) { setResult(kind, `skipped: production does not route ${kind === 'processor' ? 'processing' : 'exports'} to Railway`); return true; }
-  const bypass = founderBypass;
-  let receipt = {};
-  if (!bypass) {
-    // Exit 3 is "the one-time setup does not exist". Any other failure (staging unreachable, a refused key) stops
-    // the release here: skipping the processor on a transient error would break the processor-first order.
-    const check = existsSync(proofScript) ? (setupStatus ??= spawnSync(process.execPath, [proofScript, '--check'], { env, stdio: 'inherit' }).status) : 3;
-    if (check === 3) { railwayPending = true; setResult(kind, 'not promoted: run the one-time staging setup (docs/releases.md)'); return false; }
-    if (check !== 0) throw new Error(`${proofScript} --check failed (exit ${check}); the staging setup could not be checked.`);
-    // One set of staging proof jobs covers both roles of a release.
-    proof ??= JSON.parse((await node([proofScript, '--commit', sha])).split('\n').at(-1));
-    receipt = { REVLINE_RAILWAY_STAGING_RECEIPT: resolve(proof.receipt), REVLINE_RAILWAY_STAGING_ENV_FILE: resolve(proof.stagingEnvFile) };
-  }
-  const old = rows.get(kind).old;
-  rollbacks.push({ target: kind, text: `Railway ${kind}: a stage that fails after pausing claims restores the previous images and resumes claims by itself (its output above says whether it did). To undo a stage that succeeded: promote the previous release ${short(old)} again through staging (node ${proofScript} --commit ${old ?? '<previous commit>'}, then scripts/railway-workers.mjs stage; docs/railway-worker-migration.md, "Manual release").` });
-  await releaseRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, env: { ...env, GITHUB_SHA: sha, ...receipt }, dry: false, ...(bypass ? { founderBypass: bypass } : {}) });
-  await verifyRailway({ deployment: DEPLOYMENT, kind, values: await remoteEnv(DEPLOYMENT, convexEnv) });
-  await record(kind);
-  setResult(kind, bypass ? 'released (founder bypass, logged)' : 'released');
-  return true;
+  if (!routed) { setResult(kind, `skipped: production does not route ${kind === 'processor' ? 'processing' : 'exports'} to Railway`); return null; }
+  const running = await releaseRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, dry: false });
+  await verifyRailway({ deployment: DEPLOYMENT, kind, values: remote });
+  rollbacks.push({ target: kind, text: `Railway ${kind}: deployed from GitHub main by Railway. To roll back: redeploy an earlier deployment of each slot in the Railway dashboard (or revert on main); docs/releases.md, Rollback.` });
+  const current = includesRelease(running);
+  if (running && haveCommit(running)) await record(kind, { commit: running, note: 'read from Railway (GitHub autodeploy)' });
+  if (!current) railwayBehind = true;
+  setResult(kind, !running ? 'slots run different or unknown commits (see above)' : current ? `running ${short(running)} (Railway autodeploy)` : `running ${short(running)}, not this commit yet: Railway builds main by itself (npm run release:status); a failed or crashing build shows there`);
+  return running;
 }
 
 async function incidentListener() {
@@ -308,27 +312,19 @@ try {
   if (want('agent')) { await npm('agent-runner:install'); await npm('typecheck:agent-runner'); }
   if (want('mcp')) { await npm('mcp:install'); await npm('typecheck:mcp'); }
   if (want('processor') || want('exports')) await npm('typecheck:processor-edge');
-  // Every Railway value and credential (keys, project token, registry access to the staged digests) before the
-  // staging proof, so a missing one stops here instead of after claims are paused.
-  // Skipped when the one-time staging setup is missing: those targets are then reported "not promoted" as before.
-  const railwaySetup = () => founderBypass ? 0 : !existsSync(proofScript) ? 3 : (setupStatus ??= spawnSync(process.execPath, [proofScript, '--check'], { env, stdio: 'ignore' }).status);
-  for (const kind of ['processor', 'exports']) {
-    if (!want(kind) || remote[kind === 'processor' ? 'MEDIA_PROCESSOR_BACKEND' : 'RENDER_PROVIDER'] !== 'railway' || railwaySetup() === 3) continue;
-    step(`Pre-flight: Railway ${kind} settings`);
-    const { checkRailway } = await import('./release-railway.mjs');
-    await checkRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, env: { ...env, GITHUB_SHA: sha } });
-  }
   if (want('frontend')) { step('Pre-flight: build the frontend once'); await npm('build:cloudflare'); }
 
   deployStartedAt = Date.now();
-  if (want('processor')) await attempt('processor', 'Railway processor image', () => railway('processor', remote));
+  let processorRunning = null;
+  if (want('processor')) await attempt('processor', 'Railway processor (GitHub autodeploy)', async () => { processorRunning = await railway('processor', await remoteEnv(DEPLOYMENT, convexEnv)); });
   // A raised contract means the new Convex code queues work only the new processor can claim. Whatever the reason
   // the processor is not at this commit (not promoted, not routed to Railway, left out with --only), Convex waits.
-  const processorAt = (await readState())?.targets?.processor?.commit ?? baseCommit;
-  if (want('convex') && processorAt !== sha && contractRaised(processorAt)) {
+  // What Railway runs now, not what was recorded; a processor already past this commit counts as at it.
+  const processorAt = processorRunning ?? (await readState())?.targets?.processor?.commit ?? baseCommit;
+  if (want('convex') && !includesRelease(processorAt) && (!haveCommit(processorAt) || contractRaised(processorAt))) {
     current = 'convex';
     for (const target of ['convex', 'media', 'frontend', 'agent', 'mcp', 'exports', 'incident-listener']) if (want(target)) setResult(target, 'held: processor contract raised but the processor is not at this commit');
-    throw new Error(`This range raises the media processor contract (${CONTRACT_FILE}) and the production processor is not at ${short(sha)}. Nothing else was deployed. Release the processor first (Railway: see docs/releases.md; another host: through its own release), record it with release:status --set processor=${short(sha)} --push if it was released outside this command (Railway's own GitHub deploy, for example), then run release:prod or the Release production workflow again.`);
+    throw new Error(`This range raises the media processor contract (${CONTRACT_FILE}) and the production processor is not at ${short(sha)}. Nothing else was deployed. Railway builds main by itself: wait until npm run release:status shows the processor at ${short(sha)} or later (a failed or crashing build shows there too), then run release:prod again (in CI: run the Release production workflow again).`);
   }
   // `convex deploy` returns only after the backend finished wait_for_schema: new indexes are backfilled and existing
   // documents validated against the schema before the functions are switched (convex/src/cli/lib/deploy2.ts,
@@ -345,7 +341,7 @@ try {
   if (want('frontend')) await attempt('frontend', 'Frontend Worker', () => worker('frontend'));
   if (want('agent')) await attempt('agent', 'Agent runner Worker', () => worker('agent', () => node(['scripts/sync-agent-runner-env.mjs', 'production'], { env: convexEnv })));
   if (want('mcp')) await attempt('mcp', 'MCP Worker', () => worker('mcp'));
-  if (want('exports')) await attempt('exports', 'Railway export workers', () => railway('exports', remote));
+  if (want('exports')) await attempt('exports', 'Railway export workers', async () => railway('exports', await remoteEnv(DEPLOYMENT, convexEnv)));
 
   await attempt('verification', 'Post-deploy verification', async () => {
     const problems = await verifyHealth(await remoteEnv(DEPLOYMENT, convexEnv));
@@ -366,15 +362,14 @@ try {
   for (const target of TARGETS) if (rows.get(target).result === 'pending') setResult(target, `not released: stopped at ${current}`);
 }
 
-// Only after a complete release: the changelog commit has no "Railway staging" run of its own, so a release that
-// still has Railway targets pending must stay on the commit staging has staged.
-if (!failure && !railwayPending && !flags['no-changelog'] && existsSync(changelogScript)) {
+// Only after a complete release.
+if (!failure && !railwayBehind && !flags['no-changelog'] && existsSync(changelogScript)) {
   step('Changelog');
   try {
     await node([changelogScript, 'build']);
     if (git('status', '--porcelain', '--', 'docs/changelog.md', 'docs/changelog.d')) {
       await command('git', ['add', '--', 'docs/changelog.md', 'docs/changelog.d'], { env });
-      // [skip ci]: a docs-only commit must not restage Railway staging or start another main release.
+      // [skip ci]: a docs-only commit must not start another main release.
       await command('git', ['commit', '-m', `Changelog: release ${short(sha)} [skip ci]`, '--', 'docs/changelog.md', 'docs/changelog.d'], { env });
       await command('git', ['push', 'origin', 'HEAD:main'], { env });
       console.log('Changelog assembled, committed and pushed to main.');
@@ -413,6 +408,6 @@ if (failure) {
 try { console.log(`\nShared release state, origin ${STATE_BRANCH}: ${await publishState(`release ${short(sha)}${failure ? ` (stopped at ${failure.at})` : ''}${ci ? ` by workflow run ${process.env.GITHUB_RUN_ID}` : ''}`)}.`); }
 catch (error) { console.error(`${ci ? '::warning::' : ''}Shared release state not published (${redact(error.message)}). Publish it with npm run release:status -- --push.`); }
 printTable();
-if (railwayPending) console.log('\nRailway not promoted: run the one-time staging setup (docs/releases.md), then run release:prod again on this same commit; only the Railway targets remain. The changelog is assembled once they are released.');
-console.log(failure ? `\nRelease ${short(sha)} FAILED. State: ${stateFile()}` : `\nRelease ${short(sha)} ${railwayPending ? 'done except Railway' : 'verified'}. State: ${stateFile()} (npm run release:status).`);
+if (railwayBehind && !failure) console.log('\nRailway does not run this commit on every lane yet; the changelog is assembled by the next release:prod after it does.');
+console.log(failure ? `\nRelease ${short(sha)} FAILED. State: ${stateFile()}` : `\nRelease ${short(sha)} verified${railwayBehind ? ' except Railway (not at this commit yet)' : ''}. State: ${stateFile()} (npm run release:status).`);
 process.exit(failure ? 1 : 0);

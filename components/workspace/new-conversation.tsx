@@ -64,7 +64,6 @@ export function NewConversation() {
   useEffect(preloadEditor, []);
   const picker=useRef<HTMLInputElement>(null);
   const [linkShelf, setLinkShelf] = useState({ open: false, prefill: '', focusKey: 0 });
-  const declinedLink = useRef('');
   const focusLinkAfterMenu = useRef(false);
   const importVideo = useMutation(api.mediaTasks.importVideo);
   const cancelMediaTask = useMutation(api.mediaTasks.cancel);
@@ -316,17 +315,7 @@ export function NewConversation() {
   }
   function closeLinkShelf() {
     setLinkFailure('');
-    // A pasted link the user dismissed pastes as plain text next time.
-    declinedLink.current = linkShelf.prefill;
     setLinkShelf(shelf => ({ ...shelf, open: false, prefill: '' }));
-  }
-  /** A lone video link pasted into the empty prompt opens the link shelf with it. */
-  function pasteLink(text: string) {
-    const link = text.trim();
-    if (draft || !draftReady || busy || linkImporting || !isVideoLinkOnly(link)) return false;
-    if (link === declinedLink.current) { declinedLink.current = ''; return false; }
-    openLinkShelf(link);
-    return true;
   }
   function keepLinkHolders(holders: Record<string, Id<'projects'>>) {
     setLinkHolders(holders);
@@ -456,7 +445,7 @@ export function NewConversation() {
       <Button type="button" variant="ghost" className="new-conversation-action" disabled={!draftReady || busy} onClick={() => picker.current?.click()}><Plus aria-hidden="true"/><span>Upload footage</span></Button>
     </section>}>
         <div className="new-conversation-entry" data-dragging={dragging || undefined} aria-busy={busy}>
-          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} running={linkImporting} failure={linkFailure} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} onPasteText={pasteLink} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} actions={composerControls.actions} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
+          <EditComposer footer={<ComposerLinkShelf open={linkShelf.open} prefill={linkShelf.prefill} focusKey={linkShelf.focusKey} disabled={!draftReady || busy} running={linkImporting} failure={linkFailure} progress={linkProgress} onImport={importLink} onCancel={() => void cancelLinkImport()} onClose={closeLinkShelf}/>} footerOpen={linkShelf.open} slashCommands value={draft} onChange={changeDraft} onSubmit={submit} onAttach={() => picker.current?.click()} attachments={processingFiles} onRemoveAttachment={removeAttachment} disabled={!draftReady || busy} submitDisabled={!settings} actions={composerControls.actions} attachmentLimit={200} attachControl={<DropdownMenu><Tooltip><TooltipTrigger asChild><DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-sm" className="composer-add" aria-label="Add footage" disabled={!draftReady || busy}><Plus /></Button></DropdownMenuTrigger></TooltipTrigger><TooltipContent>Add footage</TooltipContent></Tooltip><DropdownMenuContent align="start" className="border-[#363636] bg-[#222] text-neutral-200" onCloseAutoFocus={event => {
               // The menu traps focus until it has closed, so the link field takes focus here instead of the + button.
               if (!focusLinkAfterMenu.current) return;
               focusLinkAfterMenu.current = false; event.preventDefault(); setLinkShelf(shelf => ({ ...shelf, focusKey: shelf.focusKey + 1 }));
