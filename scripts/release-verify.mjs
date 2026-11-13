@@ -4,8 +4,16 @@ import { spawn } from 'node:child_process';
 import { command, mask, redact } from './release-command.mjs';
 
 export const convexArgs = ['node_modules/convex/bin/main.js'];
+/** How a Convex CLI call names the deployment. On the Mac: `--deployment <name>` with the signed-in CLI. In the release
+ *  workflow there is no sign-in, only the production deploy key in `env.CONVEX_DEPLOY_KEY`; the CLI refuses
+ *  `--deployment` next to a key, and the key itself selects the deployment, so it must name exactly this one. */
+export function deploymentArgs(deployment, env) {
+  if (!env.CONVEX_DEPLOY_KEY) return ['--deployment', deployment];
+  if (!env.CONVEX_DEPLOY_KEY.startsWith(`prod:${deployment}|`)) throw new Error(`CONVEX_DEPLOY_KEY is not a production deploy key for ${deployment}.`);
+  return [];
+}
 export async function remoteEnv(deployment, env) {
-  const values = parseEnv(await command(process.execPath, [...convexArgs, 'env', 'list', '--deployment', deployment], { env, quiet: true }));
+  const values = parseEnv(await command(process.execPath, [...convexArgs, 'env', 'list', ...deploymentArgs(deployment, env)], { env, quiet: true }));
   mask(values);
   return values;
 }
@@ -88,7 +96,7 @@ export const RELEASE_LOG_PATTERNS = [
  * redacted and shortened. */
 export function scanConvexLogs(deployment, env, { since = 0, seconds = 30, history = 500 } = {}) {
   return new Promise((accept, reject) => {
-    const child = spawn(process.execPath, [...convexArgs, 'logs', '--deployment', deployment, '--history', String(history), '--jsonl'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(process.execPath, [...convexArgs, 'logs', ...deploymentArgs(deployment, env), '--history', String(history), '--jsonl'], { env, stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '', errors = '';
     child.stdout.on('data', chunk => { output += chunk; });
     child.stderr.on('data', chunk => { errors += chunk; });

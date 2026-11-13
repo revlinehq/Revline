@@ -1,0 +1,145 @@
+name: Release production
+# Every push to main releases production with the same command the Mac runs by hand (`npm run release:prod`), in CI
+# mode: Convex different-gnu-398 first, then only the Cloudflare Workers whose code changed (media, frontend, agent
+# runner, MCP), then the post-deploy checks. Railway deploys its workers itself from GitHub; this workflow never
+# touches Railway. Setup, secrets and the manual fallback: docs/releases.md, "Automatic release on merge".
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Print the plan only (no credentials used, nothing deployed)'
+        type: boolean
+        default: true
+      base:
+        description: 'Bootstrap only: comparison commit for targets with no recorded release'
+        type: string
+        default: ''
+permissions:
+  contents: read
+jobs:
+  gates:
+    # Forks and other branches never release.
+    if: github.repository_id == '1412697447' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # The release gates of every pull request, again on what actually landed. A failure here skips the release.
+      - name: Changelog entries are fragments
+        run: node scripts/changelog.mjs check
+      - name: Compatibility with what is already shipped
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # The pushed range. release:prod checks again from the oldest commit still deployed before it deploys.
+          if [ -n "$BEFORE" ] && [ "$BEFORE" != 0000000000000000000000000000000000000000 ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            base="$BEFORE"
+          else
+            base="$(git rev-parse HEAD~1)"
+          fi
+          node scripts/compat-check.mjs --base "$base"
+      - name: Assistant run path
+        run: node scripts/run-path-check.mjs
+
+  release:
+    needs: gates
+    if: github.repository_id == '1412697447' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # Secrets live only in this environment; restrict it to the main branch (docs/releases.md).
+    environment: production
+    permissions:
+      # The changelog commit to main and the shared release state on the release-state branch, as on the Mac.
+      contents: write
+    # One release at a time. A running release is never cancelled; a newer push replaces a release still waiting,
+    # and that newer release includes the older commits (each target is compared with its own deployed commit).
+    # A dispatched dry run gets its own group, so it never replaces a waiting real release.
+    concurrency:
+      group: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && format('revline-production-dry-run-{0}', github.run_id) || 'revline-production-release' }}
+      cancel-in-progress: false
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      REVLINE_RELEASE_CI: '1'
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '' }}
+      BASE: ${{ inputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Commit identity and release files outside the checkout
+        run: |
+          echo "REVLINE_PRODUCTION_ENV_FILE=$RUNNER_TEMP/production.env" >> "$GITHUB_ENV"
+          echo "REVLINE_RELEASE_STATE=$RUNNER_TEMP/deployed.json" >> "$GITHUB_ENV"
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email '41898282+github-actions[bot]@users.noreply.github.com'
+      - name: Production Convex target
+        if: env.DRY_RUN != '1'
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
+        run: |
+          # Outside the checkout, so Vite never loads it. Only the production key for different-gnu-398 is accepted.
+          case "$CONVEX_DEPLOY_KEY" in
+            'prod:different-gnu-398|'*) ;;
+            *) echo '::error::The production environment secret CONVEX_DEPLOY_KEY is missing or is not the production deploy key of different-gnu-398.'; exit 1 ;;
+          esac
+          umask 077
+          {
+            echo 'CONVEX_DEPLOYMENT=prod:different-gnu-398'
+            echo 'NEXT_PUBLIC_CONVEX_URL=https://different-gnu-398.convex.cloud'
+            printf 'CONVEX_DEPLOY_KEY=%s\n' "$CONVEX_DEPLOY_KEY"
+          } > "$REVLINE_PRODUCTION_ENV_FILE"
+      - name: Release
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          # Public frontend settings that are not committed in wrangler.jsonc (same values as the Mac's
+          # .env.production.local). An unset one builds the frontend without it, as on a Mac file without it.
+          NEXT_PUBLIC_SENTRY_DSN: ${{ vars.NEXT_PUBLIC_SENTRY_DSN }}
+          NEXT_PUBLIC_POSTHOG_KEY: ${{ vars.NEXT_PUBLIC_POSTHOG_KEY }}
+          NEXT_PUBLIC_POSTHOG_HOST: ${{ vars.NEXT_PUBLIC_POSTHOG_HOST }}
+          NEXT_PUBLIC_TELEMETRY_ENABLED: ${{ vars.NEXT_PUBLIC_TELEMETRY_ENABLED }}
+          NEXT_PUBLIC_MCP_ORIGIN: ${{ vars.NEXT_PUBLIC_MCP_ORIGIN }}
+        run: |
+          set -o pipefail
+          # An empty variable would override a committed value with nothing.
+          for name in NEXT_PUBLIC_SENTRY_DSN NEXT_PUBLIC_POSTHOG_KEY NEXT_PUBLIC_POSTHOG_HOST NEXT_PUBLIC_TELEMETRY_ENABLED NEXT_PUBLIC_MCP_ORIGIN; do
+            if [ -z "${!name}" ]; then unset "$name"; fi
+          done
+          args=()
+          if [ "$DRY_RUN" = 1 ]; then args+=(--dry-run); fi
+          if [ -n "$BASE" ]; then args+=(--base "$BASE"); fi
+          node scripts/release-prod.mjs "${args[@]}" 2>&1 | tee "$RUNNER_TEMP/release.log"
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '## Production release'
+            echo '```'
+            if [ -f "$RUNNER_TEMP/release.log" ]; then sed -n '/^Production release /,$p' "$RUNNER_TEMP/release.log" | tail -n 40; else echo 'The release did not start.'; fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Report a failed release on the commit
+        if: failure() && env.DRY_RUN != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          failed="$(grep -m1 '^RELEASE FAILED' "$RUNNER_TEMP/release.log" 2>/dev/null || echo 'Release stopped before the release command finished.')"
+          body="Production release failed. $failed Nothing is rolled back automatically; the run log lists the rollback commands. $url"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/comments" -f body="$body" >/dev/null
