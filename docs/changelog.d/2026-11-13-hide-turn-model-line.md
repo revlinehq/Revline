@@ -1,0 +1,1 @@
+- Assistant: replies no longer show the model and effort line (such as "GPT-6 Luna · Medium") under each answer; the composer picker still shows the chosen model. Why: the founder asked to stop showing it in the chat.

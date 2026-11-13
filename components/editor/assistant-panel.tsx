@@ -12,7 +12,6 @@ import { NEW_PROJECT_PATH } from '@/lib/workspace-routes';
 import { Fragment, memo, useCallback, useState, useEffect, useLayoutEffect, useMemo, useRef, type ComponentProps, type ReactNode } from 'react';
 import { ArrowUpRight, Lightbulb, RotateCcw, X } from 'lucide-react';
 import { useAssistantComposerControls, type ComposerSettings } from './assistant-composer-controls';
-import { EDITOR_EFFORT_LABELS, editorModelLabel } from './assistant-model-picker';
 import type { ClaudeModelChoice, EditorReasoningEffort, EditorSpeedMode } from '@/lib/ai/claude-model';
 import { EditComposer } from '@/components/workspace/edit-composer';
 import type { ComposerAttachment } from '@/lib/editor/composer-media';
@@ -260,8 +259,6 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
               {run.steps.flatMap(step => { const proposalId = postProposalOf(step); return proposalId ? [<PostConfirmCard key={`post-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
               {run.steps.flatMap(step => { const proposalId = exportProposalOf(step); return proposalId ? [<ExportConfirmCard key={`export-${step.key}`} proposalId={proposalId} disabled={running || sending}/>] : []; })}
               {replies.some(message => message.id === demoNoteMessageId) && <div className="assistant-demo-note">Sample conversation. Explore the timeline, or <a href={NEW_PROJECT_PATH}>start your own project</a>.</div>}
-              {/* The model and effort the server recorded for this turn's run, not what the composer asked for. */}
-              {requestMessage?.turnModel && <p className="assistant-turn-model text-[11px] text-neutral-500" data-turn-model={requestMessage.turnModel} data-turn-effort={requestMessage.turnEffort}>{editorModelLabel(requestMessage.turnModel)}{requestMessage.turnEffort && requestMessage.turnEffort in EDITOR_EFFORT_LABELS ? ` · ${EDITOR_EFFORT_LABELS[requestMessage.turnEffort as keyof typeof EDITOR_EFFORT_LABELS]}` : ''}</p>}
               {cards.some(card=>card.state!=='done'&&card.state!=='running') && <div className="assistant-result-cards" aria-label="Edit results">{cards.filter(card=>card.state!=='done'&&card.state!=='running').map(card => <div key={card.key} className={`assistant-result-card result-${card.state}${card.staged ? ' result-prepared' : ''}`}>
                 <AssistantActivity label={card.title} detail={card.detail} state={card.state==='running'?'working':card.state==='error'?'error':'ready'}/>
                 {card.key==='turn-failure' && group.id===retryTurnId && requestMessage?.text.trim() && !waiting && !demo && onRetry && <Button type="button" variant="outline" size="sm" disabled={composerBusy || !configured || sending || !!pendingReply} onClick={() => requestMessage&&void retryRequest(requestMessage)}><RotateCcw aria-hidden="true"/>Retry unfinished steps</Button>}
