@@ -9,9 +9,11 @@ import { RailwayRateLimitError, railwayConfig, verifyRailwayTarget, verifyRailwa
 
 // The existing lock table is a dispatch mutex, independent of the hosting provider.
 const lockName = 'railway';
-export const contract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number(), processorBackend: v.string(), renderProvider: v.string(), paused: v.boolean() }), handler: (_ctx, args) => {
+// imageSlots: this backend's dispatcher starts permanent slots that run a pinned registry image (lib/railway-workers.mjs).
+// Releases switch slots to the staged image only when it is true; an older backend would hold dispatch for them.
+export const contract = query({ args: { workerSecret: v.string() }, returns: v.object({ processorVersion: v.number(), processorBackend: v.string(), renderProvider: v.string(), paused: v.boolean(), imageSlots: v.optional(v.boolean()) }), handler: (_ctx, args) => {
   requireMediaWorker(args.workerSecret);
-  return { processorVersion: MEDIA_PROCESSOR_VERSION, processorBackend: processorBackend(), renderProvider: process.env.RENDER_PROVIDER || '', paused: process.env.RAILWAY_WORKERS_PAUSED === 'true' };
+  return { processorVersion: MEDIA_PROCESSOR_VERSION, processorBackend: processorBackend(), renderProvider: process.env.RENDER_PROVIDER || '', paused: process.env.RAILWAY_WORKERS_PAUSED === 'true', imageSlots: true };
 } });
 export const releaseEvidence = query({
   args: { workerSecret: v.string(), projectId: v.id('projects'), processorTaskId: v.id('mediaTasks'), exportTaskId: v.id('mediaTasks'), ultraTaskId: v.id('mediaTasks'), distributedTaskId: v.optional(v.id('mediaTasks')) },

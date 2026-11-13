@@ -78,8 +78,8 @@ The older `deploy-main.yml` workflow (self-hosted PC runner) is unchanged and st
 When a verification fails, `release:prod` prints the exact rollback commands for what that run deployed and exits non-zero. It rolls nothing back by itself.
 
 - **Workers:** `npx wrangler rollback <previous-version-id> --config <config>`. `--auto-rollback` runs these and corrects the state file, for the Worker whose own check failed, or for every Worker of the run when the post-deploy verification failed. A later unrelated failure leaves healthy Workers serving.
-- **Convex:** manual, a redeploy of the previous commit from a detached worktree (commands printed). Schema and data written since are not undone, which is why the schema gate only lets additive changes through.
-- **Railway:** manual: promote the previous release again through staging.
+- **Convex:** manual, a redeploy of the previous commit from a detached worktree (commands printed). Once slots run images, a Convex commit from before `imageSlots` holds Railway dispatch (its dispatcher accepts only repository slots): roll Convex back no further than this change, or restage the slots from the repository first. Schema and data written since are not undone, which is why the schema gate only lets additive changes through.
+- **Railway:** a `stage` that fails after pausing claims restores the previous images and resumes claims by itself (below). To undo a stage that succeeded: promote the previous release again through staging.
 
 ## Railway
 
@@ -87,7 +87,35 @@ Production Railway is staged only with a staging promotion receipt: proof that a
 
 `node scripts/railway-proof.mjs --commit <main sha>` takes the staging manifest of that commit (artifact of its `Railway staging` workflow run), starts the three jobs on staging, waits, finds the Railway deployment that completed each, writes `.data/railway/promotion.json` and verifies it the way production will. `release:prod` calls it when the setup exists and otherwise reports `Railway not promoted: run the one-time staging setup` and continues with the other targets; run it again on the same commit once the setup exists. A staging error that is not a missing setup stops the release. If the range raises the processor contract (`lib/media-analysis/processor-version.ts`) and the production processor is not at the release commit, for any reason, Convex and everything after it are held.
 
-The commit's `Railway staging` run must be green first; it starts on every push to `main` and takes about 30 to 40 minutes.
+The commit's `Railway staging` run must be green first; it starts on every push to `main`. The image builds hit the GitHub Actions layer cache (seconds when the Dockerfile layers are unchanged); the run used to spend 11 to 17 minutes rebuilding each slot from the repository on Railway, which image slots remove. A push that lands while another run is going waits for it (`concurrency`, not cancelled, so staging is never left paused).
+
+### Production runs the digest staging proved
+
+The `Railway staging` workflow builds `ghcr.io/revlinehq/revline-railway-processor@sha256:…` and `…-exports@sha256:…`, points the staging slots at those digests (Railway service source = Docker image, no Railway build) and the proof runs its jobs on them. Production `stage` points the production slots at the same digests, taken from the receipt: nothing is built from the repository.
+
+Slots switch per environment with `serviceInstanceUpdate(serviceId, environmentId, input: { source: { image }, registryCredentials: { username, password } })` (never `serviceConnect`, which changes the service in every environment). A slot that still reports its repository afterwards fails the slot check and is restored. Proof evidence for an image deployment is the image itself plus the runtime log: `railway-runtime-verified` reports the commit baked into the image (the runtime refuses to start on any other) and the digest.
+
+Image slots need two things; until both exist, `stage` keeps building the commit from the repository (slow path) and says why:
+
+1. **Production Convex reports image slots** (`railwayWorkers:contract` returns `imageSlots: true`). The dispatcher that starts slots lives in Convex, and an older one holds dispatch for an image slot. The first release of this change therefore stages the processor from the repository one last time, then deploys Convex; exports, staged after Convex, already switch.
+2. **Registry credentials** in the Railway production env file (`.data/railway/production.env`, or `.env.production.local` when that file does not exist), mode 600:
+   ```
+   RAILWAY_REGISTRY_USERNAME=<GitHub user that owns the token>
+   RAILWAY_REGISTRY_PASSWORD=<classic GitHub token, read:packages only>
+   ```
+   The GHCR packages are private (an anonymous pull gets 403). Use a classic personal access token with only `read:packages`, from an account that can read the `revlinehq` packages (and `zurahq`, for digests pinned before the transfer). Railway stores it on each slot as the private registry credential. Staging uses the repository secret `RAILWAY_STAGING_REGISTRY_PASSWORD` (username from the repository variable `RAILWAY_STAGING_REGISTRY_USERNAME`, default `zuraHQ`).
+
+### Order of a production `stage` and automatic restore
+
+1. **Checks, while production still runs and claims:** the project token, every slot variable (`RENDER_WORKER_SECRET`, `MEDIA_WORKER_SECRET_EXPORTS`, `MEDIA_WORKER_URL`, `DEEPGRAM_API_KEY`, `FAL_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, …), every slot readable and in the Revline namespace, and a GHCR pull check of the staged digests and of the previous release's digests with the registry credentials. `release:prod` also runs these (`railway-workers.mjs check`, read-only) in its pre-flight, before the staging proof.
+2. **Runtime check of each staged image on a temporary service** (no slot touched).
+3. Pause claims, drain, point the slots at the digests, set the manifest, verify each lane's queue connection with claims paused, resume claims.
+
+Any failure in step 3 restores every slot to the manifest that ran before (its previous image, or its previous repository build redeployed without a rebuild), restores the manifest and token in Convex and resumes claims. If the restore itself fails, claims stay paused and the output says so. A stage with no previous manifest on the deployment cannot restore and says so before pausing.
+
+### Retrying a release
+
+A retry of the same commit reuses the proof receipt instead of rerunning the jobs: it prints `reusing proof receipt <id>` when `.data/railway/promotion.json` proved the same commit and the same image digests (the newest successful staging build of that commit), is less than 24 hours old, and still passes the full live check production runs. A different commit or digest, an older receipt, or a receipt that no longer verifies reruns the proof. `node scripts/railway-proof.mjs --commit <sha> --fresh` forces a new one.
 
 ### The staging service identity
 
@@ -109,7 +137,7 @@ The jobs run as `service_railway-proof` (`convex/stagingProof.ts`). This is not 
 4. `gh` signed in on the Mac with Actions read access (it downloads the staging manifest artifact).
 5. `node scripts/railway-proof.mjs --check` must exit 0. The fixture project and its staging entitlement are created by the first proof run.
 
-Receipts stop verifying after about 7 days, when finished media tasks are pruned; the proof is rerun per release anyway.
+Receipts are reused for 24 hours (above) and stop verifying after about 7 days, when finished media tasks are pruned.
 
 ### Founder bypass
 

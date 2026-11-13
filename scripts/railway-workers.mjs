@@ -13,7 +13,7 @@ import { workerCapacity } from '../lib/worker-capacity.mjs';
 import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
 import { verifyStagingPromotion, founderBypassReason } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
-import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
+import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, railwaySlotSource, verifyRegistryPull, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
@@ -22,7 +22,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'artifact-prefix': { type: 'string' }, 'staging-receipt': { type: 'string' }, 'staging-env-file': { type: 'string' }, 'founder-bypass': { type: 'string' },
 } });
 const [operation] = positionals;
-const operations = ['plan', 'build', 'preflight', 'stage-repository', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
+const operations = ['plan', 'check', 'build', 'preflight', 'stage-repository', 'provision', 'stage', 'verify', 'cutover', 'rollback', 'pause', 'resume', 'status', 'reap', 'reap-artifacts'];
 if (positionals.length !== 1 || !operations.includes(operation) || !values.config || !['dev', 'staging', 'production'].includes(values.environment) || !['all', 'processor', 'exports'].includes(values.kind)) throw new Error(`Usage: node scripts/railway-workers.mjs <${operations.join('|')}> --environment <dev|staging|production> --config <json> [--env-file <selected env>] [--kind processor|exports|all] [--artifact-prefix <attempt prefix>] [--founder-bypass "<reason>" (production stage only)] [--apply]`);
 if (values['image-first'] && (operation !== 'stage' || values.kind !== 'processor')) throw new Error('--image-first is only for staging a processor before its immediately following Convex release.');
 // A founder-approved exception to the staging receipt, for one production `stage` run. It is never implied:
@@ -44,7 +44,7 @@ const selectedPools = () => [
 ];
 const hash = () => createHash('sha256').update(JSON.stringify(config)).digest('hex');
 console.log(`Target: Railway ${config.environment}, project ${config.projectId}, environment ${config.environmentId}; Convex ${deployment}. Permanent service CPU and memory limits are managed in the Railway dashboard.`);
-if (operation === 'plan' || (!values.apply && operation !== 'status')) {
+if (operation === 'plan' || (!values.apply && !['status', 'check'].includes(operation))) {
   console.log(JSON.stringify({ operation, kinds, config, effect: 'No API calls, image builds, resources or environments changed. Pass --apply only after migration authorization.' }, null, 2));
   process.exit(0);
 }
@@ -103,6 +103,7 @@ if (operation === 'build') {
 
 if (settings.CONVEX_DEPLOYMENT !== `${config.environment === 'dev' ? 'dev' : 'prod'}:${deployment}` || settings.NEXT_PUBLIC_CONVEX_URL !== config.convexUrl) throw new Error('Use a separate environment file for the exact selected Convex deployment.');
 const token = settings.RAILWAY_API_TOKEN;
+if (!token && ['stage', 'check'].includes(operation)) throw new Error(`RAILWAY_API_TOKEN (the ${config.environment} environment project token) is not set in ${values['env-file']}.`);
 const target = () => ({ token, config });
 const registryCredentials = { username: settings.RAILWAY_REGISTRY_USERNAME, password: settings.RAILWAY_REGISTRY_PASSWORD };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -127,13 +128,15 @@ const setEnv = (name, value) => convex(['env', 'set', name], value);
 const client = new ConvexHttpClient(config.convexUrl);
 const contract = await client.query(makeFunctionReference('railwayWorkers:contract'), { workerSecret: remote.RENDER_WORKER_SECRET });
 const sourceVersion = Number(/MEDIA_PROCESSOR_VERSION\s*=\s*(\d+)/.exec(await readFile('lib/media-analysis/processor-version.ts', 'utf8'))?.[1]);
+// `check` runs before this release's Convex deploy, so only a processor older than the backend's contract fails it.
+if (operation === 'check' && contract.processorVersion > sourceVersion) throw new Error('Production Convex expects a newer processor contract than this commit.');
 if (['stage', 'verify', 'cutover'].includes(operation) && (values['image-first'] ? contract.processorVersion > sourceVersion : contract.processorVersion !== sourceVersion)) throw new Error('Deploy the matching Convex worker contract before cutover.');
 const dispatch = () => convex(['run', 'railwayWorkers:dispatch', '{}']);
 const caps = workerCapacity(remote);
 for (const pool of selectedPools()) if (!Number.isInteger(caps[pool.name]) || pool.ids.length > caps[pool.name]) throw new Error(`${pool.name}: Railway pool exceeds the configured worker capacity; review capacity separately.`);
 
-async function waitStopped() {
-  const deadline = Date.now() + 50 * 60_000;
+async function waitStopped(limitMs = 50 * 60_000) {
+  const deadline = Date.now() + limitMs;
   while (true) {
     let busy = false;
     for (const { ids } of selectedPools()) for (const serviceId of ids) if (railwayActive(await railwayInstance({ ...target(), serviceId }))) busy = true;
@@ -147,7 +150,9 @@ async function preflight(kind, existingServiceId) {
   const image = kind === 'processor' ? config.processorImage : config.exportsImage;
   const serviceId = existingServiceId || await createRailwayService({ ...target(), name: `preflight-${{ production: 'p', staging: 's', dev: 'd' }[config.environment]}-${Date.now()}-${randomUUID().slice(0, 6)}` });
   try {
-    await configureRailwaySlot({ ...target(), serviceId, image, registryCredentials, variables: {
+    // A permanent slot is checked with the source it already has; a temporary service always runs the image.
+    const source = existingServiceId && railwaySlotSource(await railwayInstance({ ...target(), serviceId })) === 'image' ? 'image' : undefined;
+    await configureRailwaySlot({ ...target(), serviceId, image, registryCredentials, source, variables: {
       ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
       MEDIA_WORKER_CONCURRENCY: '1', REVLINE_RAILWAY_MODE: 'preflight', REVLINE_RAILWAY_IMAGE: image,
     } });
@@ -201,7 +206,10 @@ if (operation === 'status') {
   // services run the repository builds just verified above.
   if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
   for (const pool of selectedPools()) for (const serviceId of pool.ids) await verifyRailwaySlot({ ...target(), serviceId, image: pool.image });
-} else if (operation === 'stage') {
+} else if (operation === 'stage' || operation === 'check') {
+  // ---- 1. Every check, before any claim pause or slot change ----
+  // Anything a release can be missing (a key, the project token, registry access, an image) fails here, while
+  // production still runs and claims. `check` stops after this block; release:prod runs it before the staging proof.
   const artifactVariables = {};
   const maxChunks = z.coerce.number().int().min(2).max(16).parse(settings.REVLINE_EXPORT_MAX_CHUNKS ?? 8);
   if (kinds.includes('exports') && config.distributedExports) {
@@ -212,37 +220,136 @@ if (operation === 'status') {
     if (settings.AWS_REGION) artifactVariables.AWS_REGION = settings.AWS_REGION;
     if (settings.BUCKET_NAME !== config.artifactBucket || settings.AWS_ENDPOINT_URL_S3 !== config.artifactEndpoint) throw new Error('Artifact credentials/endpoint do not match the selected environment manifest.');
   }
-  for (const pool of selectedPools()) for (const serviceId of pool.ids) await preflight(pool.name === 'processor' ? 'processor' : 'exports', serviceId);
-  if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
-  await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
-  await waitStopped();
-  for (const pool of selectedPools()) for (const serviceId of pool.ids) {
-    const exportsOnly = pool.name !== 'processor';
+  /** The variables one slot of `manifest` runs with. Throws on a missing value. */
+  const slotVariables = (manifest, poolName) => {
+    const exportsOnly = poolName !== 'processor';
     const secret = remote[exportsOnly ? 'MEDIA_WORKER_SECRET_EXPORTS' : 'RENDER_WORKER_SECRET'];
-    if (!secret || !remote.MEDIA_WORKER_URL) throw new Error('Selected deployment lacks worker/media credentials.');
+    if (!secret || !remote.MEDIA_WORKER_URL) throw new Error(`Selected deployment lacks ${!secret ? (exportsOnly ? 'MEDIA_WORKER_SECRET_EXPORTS' : 'RENDER_WORKER_SECRET') : 'MEDIA_WORKER_URL'}.`);
     const variables = {
-      ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
-      RENDER_WORKER_SECRET: secret, MEDIA_WORKER_URL: remote.MEDIA_WORKER_URL, REVLINE_RAILWAY_IMAGE: pool.image,
+      ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: manifest.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(manifest),
+      RENDER_WORKER_SECRET: secret, MEDIA_WORKER_URL: remote.MEDIA_WORKER_URL, REVLINE_RAILWAY_IMAGE: exportsOnly ? manifest.exportsImage : manifest.processorImage,
       MEDIA_WORKER_CONCURRENCY: '1', MEDIA_WORKER_IDLE_MS: '60000', MEDIA_TASK_DEADLINE_MS: String(45 * 60_000),
-      ...(exportsOnly ? { MEDIA_RENDERS_ONLY: 'true', ...(pool.name === 'ultra' ? { MEDIA_LANE: 'ultra' } : {}) } : { MEDIA_PROCESSOR_BACKEND: 'railway' }),
-      ...(exportsOnly && config.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(maxChunks), PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
+      ...(exportsOnly ? { MEDIA_RENDERS_ONLY: 'true', ...(poolName === 'ultra' ? { MEDIA_LANE: 'ultra' } : {}) } : { MEDIA_PROCESSOR_BACKEND: 'railway' }),
+      ...(exportsOnly && manifest.distributedExports ? { ...artifactVariables, RAILWAY_API_TOKEN: token, RAILWAY_REGISTRY_USERNAME: settings.RAILWAY_REGISTRY_USERNAME, RAILWAY_REGISTRY_PASSWORD: settings.RAILWAY_REGISTRY_PASSWORD, REVLINE_DISTRIBUTED_EXPORT: 'true', REVLINE_EXPORT_MAX_CHUNKS: String(maxChunks), PRODUCER_FORCE_SCREENSHOT: 'false', REVLINE_RENDER_LOG_LEVEL: 'info' } : {}),
     };
     if (!exportsOnly) for (const name of ['DEEPGRAM_API_KEY', 'FAL_KEY', 'GOOGLE_GENERATIVE_AI_API_KEY', 'GEMINI_VIDEO_MODEL', 'GEMINI_FRAME_MODEL', 'MEDIA_VISION_GEMINI_FALLBACK', 'VIDEO_IMPORT_PROXY']) {
       const value = settings[name] || remote[name];
       if (value) variables[name] = value;
-      else if (name.endsWith('_KEY')) throw new Error(`Selected environment lacks ${name}.`);
+      else if (name.endsWith('_KEY')) throw new Error(`Selected environment lacks ${name} (set it in ${values['env-file'] ?? 'the Railway env file'} or the deployment's Convex environment).`);
     }
-    await configureRailwaySlot({ ...target(), serviceId, image: pool.image, variables });
+    return variables;
+  };
+  // Staged images replace repository builds once the backend's dispatcher can start image slots and the registry
+  // credentials exist. Otherwise the slots keep building the commit from the repository, as before.
+  const hasRegistry = !!(settings.RAILWAY_REGISTRY_USERNAME && settings.RAILWAY_REGISTRY_PASSWORD);
+  if (!hasRegistry && (settings.RAILWAY_REGISTRY_USERNAME || settings.RAILWAY_REGISTRY_PASSWORD)) throw new Error('Set both RAILWAY_REGISTRY_USERNAME and RAILWAY_REGISTRY_PASSWORD, or neither.');
+  const imageSlots = contract.imageSlots === true && hasRegistry;
+  if (!imageSlots) console.log(`Slots build ${kinds.join(' and ')} from the repository (slow path): ${contract.imageSlots !== true ? `${deployment} predates image slots; release its Convex functions once` : `no RAILWAY_REGISTRY_USERNAME/RAILWAY_REGISTRY_PASSWORD in ${values['env-file']}`}.`);
+  // The manifest this deployment runs now is the restore point if anything fails after the pause.
+  let previous = null;
+  try { previous = remote.RAILWAY_WORKERS_JSON ? railwayConfig(remote.RAILWAY_WORKERS_JSON) : null; } catch { previous = null; }
+  if (previous && (previous.environment !== config.environment || previous.environmentId !== config.environmentId)) previous = null;
+  const slots = [];
+  for (const pool of selectedPools()) for (const serviceId of pool.ids) {
+    const instance = await railwayInstance({ ...target(), serviceId });
+    const current = railwaySlotSource(instance);
+    if (instance.source?.repo && !isRevlineRepository(instance.source.repo)) throw new Error(`Railway slot ${serviceId} builds another repository.`);
+    if (!imageSlots && current !== 'repository') throw new Error(`Railway slot ${serviceId} does not build ${REPOSITORY} and this release cannot switch it to an image; release ${deployment}'s Convex functions and set the registry credentials first.`);
+    const priorPool = previous && (pool.name === 'processor' ? previous.processorServices : pool.name === 'standard' ? previous.standardServices : previous.ultraServices);
+    const restore = priorPool?.includes(serviceId) ? {
+      image: pool.name === 'processor' ? previous.processorImage : previous.exportsImage, variables: slotVariables(previous, pool.name),
+      commit: pool.name === 'processor' ? previous.processorCommit : previous.exportsCommit,
+      deployment: instance.latestDeployment && ['SUCCESS', 'SLEEPING'].includes(instance.latestDeployment.status) ? instance.latestDeployment : null,
+    } : null;
+    slots.push({ pool: pool.name, serviceId, image: pool.image, variables: slotVariables(config, pool.name), restore });
   }
-  await setEnv('RAILWAY_API_TOKEN', token);
-  await setEnv('RAILWAY_WORKERS_JSON', JSON.stringify(config));
-  // Verify the real consumer/credentials of each lane while the backend forbids
-  // claims, then let it exit at idle before releasing the hold.
-  for (const pool of selectedPools()) if (pool.ids[0]) await verifyQueueConnection(pool.ids[0]);
+  if (hasRegistry) {
+    // The registry check Railway will make, from here, in seconds: the new digests and the restore digests. It runs
+    // whenever credentials exist, so a release:prod pre-flight made before Convex reports image slots checks them too.
+    const images = new Map(selectedPools().map(pool => [pool.image, 'staged']));
+    for (const slot of slots) if (slot.restore && !images.has(slot.restore.image)) images.set(slot.restore.image, 'restore');
+    for (const [image, role] of images) {
+      try { await verifyRegistryPull({ image, registryCredentials }); }
+      catch (error) { throw new Error(`${role === 'staged' ? 'Staged' : 'Restore (previous release)'} image check failed: ${error instanceof Error ? error.message : error}`); }
+    }
+  }
+  if (!previous) console.log('No previous manifest on this deployment: a failure after the pause cannot be restored automatically and leaves claims paused.');
+  console.log(`Checks passed for ${slots.length} slot(s): variables and keys present, project token valid, ${hasRegistry ? 'staged and restore images pullable with the registry credentials, ' : ''}restore point ${previous ? `${previous.processorCommit.slice(0, 7)} ready` : 'missing'}.`);
+  // Pipes are asynchronous on macOS: flush before exiting so release:prod sees the whole report.
+  if (operation === 'check') { await new Promise(done => process.stdout.write('', done)); process.exit(0); }
+
+  // ---- 2. Runtime check of the image, before any slot changes ----
+  // Image slots: one temporary service per image proves Railway pulls it and the runtime starts. Repository slots
+  // still build in place (inside the restore scope below), as before.
+  if (imageSlots) await Promise.all(kinds.map(kind => preflight(kind)));
+
+  // ---- 3. Pause, drain, switch, verify the queue connection, resume. Any failure restores the previous images. ----
+  let changed = false, paused = false;
+  /** Put every slot back on the manifest that ran before this stage and resume claims. */
+  const restore = async cause => {
+    console.error(`\nStage failed: ${cause instanceof Error ? cause.message : cause}`);
+    if (!changed) {
+      if (paused) { await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused)); await dispatch(); console.error('No slot had changed: claims resumed.'); }
+      return;
+    }
+    if (!previous) { console.error('No previous manifest to restore; claims stay PAUSED. Restore by hand (docs/releases.md, Rollback).'); return; }
+    console.error(`Restoring the slots to ${previous.processorCommit.slice(0, 7)} (the manifest that ran before) and resuming claims.`);
+    try {
+      await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
+      paused = true;
+      await waitStopped(20 * 60_000);
+      for (const slot of slots) {
+        if (!slot.restore) { console.error(`  ${slot.serviceId}: not in the previous manifest; left as it is (dispatch does not start it).`); continue; }
+        // Each slot keeps the source it has now: one that never switched to an image goes back to its repository build.
+        // A slot reporting both (a switch Railway half-applied) is tried as an image, then as its repository build.
+        const kind = railwaySlotSource(await railwayInstance({ ...target(), serviceId: slot.serviceId }));
+        let source = null, lastError;
+        for (const candidate of kind === 'repository' ? ['repository'] : kind === 'image' ? ['image'] : ['image', 'repository']) {
+          try { await configureRailwaySlot({ ...target(), config: previous, serviceId: slot.serviceId, image: slot.restore.image, variables: slot.restore.variables, registryCredentials, source: candidate }); source = candidate; break; }
+          catch (error) { lastError = error; }
+        }
+        if (!source) throw lastError;
+        // Redeploying the build that ran before reuses its image; a new deployment of that commit would rebuild it.
+        if (source === 'repository' && slot.restore.deployment?.meta?.commitHash === slot.restore.commit) await railway({ token, query: 'mutation($id: String!) { deploymentRedeploy(id: $id, usePreviousImageTag: true) { id } }', variables: { id: slot.restore.deployment.id } });
+        console.error(`  ${slot.pool} ${slot.serviceId}: restored (${source === 'image' ? slot.restore.image : `repository build ${slot.restore.commit.slice(0, 7)}`}).`);
+      }
+      await setEnv('RAILWAY_WORKERS_JSON', remote.RAILWAY_WORKERS_JSON);
+      if (remote.RAILWAY_API_TOKEN) await setEnv('RAILWAY_API_TOKEN', remote.RAILWAY_API_TOKEN);
+      await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused));
+      await dispatch();
+      console.error(`Restored: slots and ${deployment} back on the previous manifest; claims ${contract.paused ? 'stay paused as they were' : 'resumed'}.`);
+    } catch (error) {
+      console.error(`AUTOMATIC RESTORE FAILED: ${error instanceof Error ? error.message : error}. Claims stay PAUSED; restore by hand (docs/releases.md, Rollback).`);
+    }
+  };
+  try {
+    if (!imageSlots) {
+      for (const slot of slots) {
+        // A busy slot fails here with nothing changed, so nothing is paused or restored for it.
+        if (railwayActive(await railwayInstance({ ...target(), serviceId: slot.serviceId }))) throw new Error(`Railway slot ${slot.serviceId} is busy; nothing was changed. Run the release again when it is idle.`);
+        changed = true;
+        await preflight(slot.pool === 'processor' ? 'processor' : 'exports', slot.serviceId);
+      }
+      if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
+    }
+    paused = true;
+    await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
+    await waitStopped();
+    changed = true;
+    for (const slot of slots) await configureRailwaySlot({ ...target(), serviceId: slot.serviceId, image: slot.image, variables: slot.variables, registryCredentials, source: imageSlots ? 'image' : 'repository' });
+    await setEnv('RAILWAY_API_TOKEN', token);
+    await setEnv('RAILWAY_WORKERS_JSON', JSON.stringify(config));
+    // Verify the real consumer/credentials of each lane while the backend forbids
+    // claims, then let it exit at idle before releasing the hold.
+    for (const pool of selectedPools()) if (pool.ids[0]) await verifyQueueConnection(pool.ids[0]);
+  } catch (error) {
+    await restore(error).catch(failure => console.error(`AUTOMATIC RESTORE FAILED: ${failure instanceof Error ? failure.message : failure}. Claims may stay PAUSED; restore by hand (docs/releases.md, Rollback).`));
+    throw error;
+  }
   await writeFile(`${configPath}.verified.json`, JSON.stringify({ hash: hash(), kinds, at: new Date().toISOString() }) + '\n', { mode: 0o600 });
   await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused));
   await dispatch();
-  console.log('Railway artifacts staged and runtime verified. Processor backend and export provider unchanged.');
+  console.log(`Railway ${imageSlots ? 'staged images' : 'repository builds'} staged and runtime verified; claims resumed. Processor backend and export provider unchanged.`);
 } else if (operation === 'cutover') {
   if ((kinds.includes('processor') && contract.processorBackend === 'railway') || (kinds.includes('exports') && contract.renderProvider === 'railway')) throw new Error('A selected role already uses Railway. Use stage for releases; cut over only unmigrated roles.');
     const receipt = z.object({ hash: z.string(), kinds: z.array(z.enum(['processor', 'exports'])), at: z.string().datetime() }).parse(JSON.parse(await readFile(`${configPath}.verified.json`, 'utf8')));

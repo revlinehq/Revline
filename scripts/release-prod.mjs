@@ -128,10 +128,11 @@ if (dry) {
   const typechecks = ['typecheck', ...(want('agent') ? ['agent-runner:install', 'typecheck:agent-runner'] : []), ...(want('mcp') ? ['mcp:install', 'typecheck:mcp'] : []), ...(want('processor') || want('exports') ? ['typecheck:processor-edge'] : [])];
   steps.push(`Pre-flight: ${typechecks.map(name => `npm run ${name}`).join(', ')}`);
   if (want('frontend')) steps.push('Pre-flight: npm run build:cloudflare (the only frontend build; the deploy step uploads it)');
-  if (want('processor')) steps.push(`Railway processor image first, if production routes processing to Railway: ${flags['founder-bypass'] ? 'founder bypass (logged), no staging receipt' : `node ${proofScript} --check, then --commit ${short(sha)} (three staging proof jobs)`}, then stage with --image-first. Without the one-time staging setup: "Railway not promoted", the release continues${contractRaised() ? ' EXCEPT that this range raises the processor contract, so Convex and everything after it are held' : ''}`);
+  if (want('processor') || want('exports')) steps.push(`Pre-flight: scripts/railway-workers.mjs check for each Railway target production routes to Railway (${railwayFile}): every slot variable and key (DEEPGRAM_API_KEY and the rest), the project token, and registry access to the digests staging built for ${short(sha)}. Read-only`);
+  if (want('processor')) steps.push(`Railway processor image first, if production routes processing to Railway: ${flags['founder-bypass'] ? 'founder bypass (logged), no staging receipt' : `node ${proofScript} --check, then --commit ${short(sha)}: reuses .data/railway/promotion.json ("reusing proof receipt <id>") when it proved this commit and these digests in the last 24 h and still verifies, otherwise runs the three staging proof jobs`}. Then stage with --image-first: checks again, runtime-checks the staged digest on a temporary service, pauses claims, drains, points the slots at the digest (no build; a repository build only until production Convex reports image slots and registry credentials are set), verifies the queue connection, resumes claims. Any failure after the pause restores the previous images and resumes claims. Without the one-time staging setup: "Railway not promoted", the release continues${contractRaised() ? ' EXCEPT that this range raises the processor contract, so Convex and everything after it are held' : ''}`);
   if (want('convex')) steps.push(`Convex: convex deploy --yes --typecheck enable --env-file <production file> --message ${short(sha)} (waits for index backfill and schema validation), then verify the processor contract`);
   for (const target of ['media', 'frontend', 'agent', 'mcp']) if (want(target)) steps.push(`${TARGET_NOTES[target]}: record the serving version${target === 'agent' ? ', sync settings from Convex (sync-agent-runner-env.mjs production)' : ''}, wrangler deploy --config ${WORKERS[target]}, verify 100% traffic${target === 'frontend' ? ' and the live build ID' : ''}`);
-  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: same staging receipt, stage, verify slots');
+  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: same staging receipt (no second proof), the same checked stage with automatic restore, verify slots');
   steps.push('Post-deploy: health endpoints (frontend origins, agent runner /health, media Worker refusal, MCP OAuth discovery) and a 30 s read of production Convex logs for argument-validation errors, missing functions, worker auth failures and unknown modes');
   if (want('incident-listener')) steps.push(`Incident listener: if ~/Library/LaunchAgents/${LISTENER}.plist exists, fast-forward its checkout to ${short(sha)}, npm ci when the lockfile changed, launchctl kickstart, confirm running`);
   if (!flags['no-changelog']) steps.push(`Changelog: node ${changelogScript} build, commit docs/changelog.md and docs/changelog.d to main with [skip ci]`);
@@ -175,7 +176,7 @@ const npm = name => command('npm', ['run', name], { env });
 const step = name => console.log(`\n== ${name} ==`);
 const startedAt = Date.now();
 const rollbacks = [];
-let failure = null, railwayPending = false, proof = null, deployStartedAt = startedAt, verified = true;
+let failure = null, railwayPending = false, proof = null, setupStatus = null, deployStartedAt = startedAt, verified = true;
 const record = (target, extra = {}) => recordTarget(target, { commit: sha, at: new Date().toISOString(), ...extra });
 
 async function worker(target, before) {
@@ -199,7 +200,7 @@ async function railway(kind, remote) {
   if (!bypass) {
     // Exit 3 is "the one-time setup does not exist". Any other failure (staging unreachable, a refused key) stops
     // the release here: skipping the processor on a transient error would break the processor-first order.
-    const check = existsSync(proofScript) ? spawnSync(process.execPath, [proofScript, '--check'], { env, stdio: 'inherit' }).status : 3;
+    const check = existsSync(proofScript) ? (setupStatus ??= spawnSync(process.execPath, [proofScript, '--check'], { env, stdio: 'inherit' }).status) : 3;
     if (check === 3) { railwayPending = true; setResult(kind, 'not promoted: run the one-time staging setup (docs/releases.md)'); return false; }
     if (check !== 0) throw new Error(`${proofScript} --check failed (exit ${check}); the staging setup could not be checked.`);
     // One set of staging proof jobs covers both roles of a release.
@@ -207,7 +208,7 @@ async function railway(kind, remote) {
     receipt = { REVLINE_RAILWAY_STAGING_RECEIPT: resolve(proof.receipt), REVLINE_RAILWAY_STAGING_ENV_FILE: resolve(proof.stagingEnvFile) };
   }
   const old = rows.get(kind).old;
-  rollbacks.push({ target: kind, text: `Railway ${kind}: manual. Promote the previous release ${short(old)} again through staging (node ${proofScript} --commit ${old ?? '<previous commit>'}, then scripts/railway-workers.mjs stage; docs/railway-worker-migration.md, "Manual release").` });
+  rollbacks.push({ target: kind, text: `Railway ${kind}: a stage that fails after pausing claims restores the previous images and resumes claims by itself (its output above says whether it did). To undo a stage that succeeded: promote the previous release ${short(old)} again through staging (node ${proofScript} --commit ${old ?? '<previous commit>'}, then scripts/railway-workers.mjs stage; docs/railway-worker-migration.md, "Manual release").` });
   await releaseRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, env: { ...env, GITHUB_SHA: sha, ...receipt }, dry: false, ...(bypass ? { founderBypass: bypass } : {}) });
   await verifyRailway({ deployment: DEPLOYMENT, kind, values: await remoteEnv(DEPLOYMENT, env) });
   await record(kind);
@@ -260,6 +261,16 @@ try {
   if (want('agent')) { await npm('agent-runner:install'); await npm('typecheck:agent-runner'); }
   if (want('mcp')) { await npm('mcp:install'); await npm('typecheck:mcp'); }
   if (want('processor') || want('exports')) await npm('typecheck:processor-edge');
+  // Every Railway value and credential (keys, project token, registry access to the staged digests) before the
+  // staging proof, so a missing one stops here instead of after claims are paused.
+  // Skipped when the one-time staging setup is missing: those targets are then reported "not promoted" as before.
+  const railwaySetup = () => founderBypass ? 0 : !existsSync(proofScript) ? 3 : (setupStatus ??= spawnSync(process.execPath, [proofScript, '--check'], { env, stdio: 'ignore' }).status);
+  for (const kind of ['processor', 'exports']) {
+    if (!want(kind) || remote[kind === 'processor' ? 'MEDIA_PROCESSOR_BACKEND' : 'RENDER_PROVIDER'] !== 'railway' || railwaySetup() === 3) continue;
+    step(`Pre-flight: Railway ${kind} settings`);
+    const { checkRailway } = await import('./release-railway.mjs');
+    await checkRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, env: { ...env, GITHUB_SHA: sha } });
+  }
   if (want('frontend')) { step('Pre-flight: build the frontend once'); await npm('build:cloudflare'); }
 
   deployStartedAt = Date.now();
@@ -278,7 +289,7 @@ try {
   if (want('convex')) await attempt('convex', `Convex ${DEPLOYMENT}`, async () => {
     const old = rows.get('convex').old;
     await node([...convexArgs, 'deploy', '--yes', '--message', sha, '--env-file', productionFile, '--typecheck', 'enable']);
-    rollbacks.push({ target: 'convex', text: `Convex: manual (a redeploy of the previous commit; schema and data written since are not undone).\n    git worktree add --detach ../revline-rollback ${old ?? '<previous commit>'} && cd ../revline-rollback && npm ci\n    node ${CONVEX} deploy --yes --typecheck enable --env-file ${productionFile} --message "rollback to ${short(old)}"\n    cd - && git worktree remove ../revline-rollback` });
+    rollbacks.push({ target: 'convex', text: `Convex: manual (a redeploy of the previous commit; schema and data written since are not undone; never to a commit before Railway image slots while slots run images, docs/releases.md Rollback).\n    git worktree add --detach ../revline-rollback ${old ?? '<previous commit>'} && cd ../revline-rollback && npm ci\n    node ${CONVEX} deploy --yes --typecheck enable --env-file ${productionFile} --message "rollback to ${short(old)}"\n    cd - && git worktree remove ../revline-rollback` });
     await verifyConvex(DEPLOYMENT, env);
     await record('convex');
     setResult('convex', 'released');

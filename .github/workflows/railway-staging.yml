@@ -20,6 +20,7 @@ jobs:
       CONVEX_DEPLOY_KEY: ${{ secrets.RAILWAY_STAGING_CONVEX_DEPLOY_KEY }}
       RAILWAY_STAGING_API_TOKEN: ${{ secrets.RAILWAY_STAGING_API_TOKEN }}
       RAILWAY_REGISTRY_PASSWORD: ${{ secrets.RAILWAY_STAGING_REGISTRY_PASSWORD }}
+      RAILWAY_REGISTRY_USERNAME: ${{ vars.RAILWAY_STAGING_REGISTRY_USERNAME }}
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
       - uses: actions/checkout@v4
@@ -76,13 +77,14 @@ jobs:
           await mkdir('.data/railway', { recursive: true });
           const config = { environment: 'staging', projectId: '759ce3c9-db81-4ade-ae3b-2c21070f7442', environmentId: 'dde1b6c2-9225-46d3-ae43-c20fd2456d3b', convexUrl: 'https://striped-starling-234.convex.cloud', region: 'us-east4-eqdc4a', processorImage: `${process.env.IMAGE_REGISTRY}/revline-railway-processor@${process.env.PROCESSOR_DIGEST}`, exportsImage: `${process.env.IMAGE_REGISTRY}/revline-railway-exports@${process.env.EXPORTS_DIGEST}`, processorCommit: process.env.GITHUB_SHA, exportsCommit: process.env.GITHUB_SHA, processorServices: ['bbd89acf-f3cf-47eb-93be-4c1aec4052fa'], standardServices: ['6d54efb4-cc27-4ccf-ab6f-3b3edd679285'], ultraServices: ['601a3ccc-0fcb-4f63-aa43-3cfa251ff8da'], distributedExports: false };
           await writeFile('.data/railway/staging.json', JSON.stringify(config, null, 2));
-          await writeFile('.data/railway/staging.env', Object.entries({ CONVEX_DEPLOYMENT: 'prod:striped-starling-234', NEXT_PUBLIC_CONVEX_URL: config.convexUrl, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY, RAILWAY_API_TOKEN: process.env.RAILWAY_STAGING_API_TOKEN, RAILWAY_REGISTRY_USERNAME: 'zuraHQ', RAILWAY_REGISTRY_PASSWORD: process.env.RAILWAY_REGISTRY_PASSWORD }).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join('\n') + '\n', { mode: 0o600 });
+          await writeFile('.data/railway/staging.env', Object.entries({ CONVEX_DEPLOYMENT: 'prod:striped-starling-234', NEXT_PUBLIC_CONVEX_URL: config.convexUrl, CONVEX_DEPLOY_KEY: process.env.CONVEX_DEPLOY_KEY, RAILWAY_API_TOKEN: process.env.RAILWAY_STAGING_API_TOKEN, RAILWAY_REGISTRY_USERNAME: process.env.RAILWAY_REGISTRY_USERNAME || 'zuraHQ', RAILWAY_REGISTRY_PASSWORD: process.env.RAILWAY_REGISTRY_PASSWORD }).map(([key, value]) => `${key}=${JSON.stringify(value)}`).join('\n') + '\n', { mode: 0o600 });
           JS
       - name: Deploy only the persistent staging backend
         run: npx convex deploy --yes
-      - name: Validate repository builds without queue credentials
-        run: node scripts/railway-workers.mjs stage-repository --environment staging --config .data/railway/staging.json --env-file .data/railway/staging.env --kind all --apply
-      - name: Authenticate staged consumers with claims paused
+      # stage checks every setting and registry access first, runtime-checks each image on a temporary service, then
+      # points the slots at the digests built above (no Railway build), authenticates them with claims paused and
+      # restores the previous images on failure. The separate repository-build step took 11 to 17 minutes.
+      - name: Stage the built images with claims paused
         run: node scripts/railway-workers.mjs stage --environment staging --config .data/railway/staging.json --env-file .data/railway/staging.env --kind all --apply
       - uses: actions/upload-artifact@v4
         with:
