@@ -115,6 +115,11 @@
 .library-file-thumb { position: relative; display: grid; place-items: center; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; border-radius: 10px; background: var(--dash-card); color: #5C5C5C; }
 .library-file-thumb > svg { width: 20px; height: 20px; }
 .library-file-thumb img { width: 100%; height: 100%; object-fit: cover; }
+.library-file-media { position: relative; display: block; }
+/* A hovered video tile plays over its picture, under the duration, once its first frame is on screen. */
+.library-hover-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; border-radius: 10px; visibility: hidden; pointer-events: none; }
+.library-file-media .library-file-duration { z-index: 1; }
+.library-hover-video[data-playing] { visibility: visible; }
 .library-file-thumb[data-wave] { background: #12372E; }
 .library-wave { display: flex; align-items: center; gap: 2px; width: 84%; height: 62%; }
 .library-wave i { flex: 1; min-width: 1px; border-radius: 1px; background: #4FC7A6; }

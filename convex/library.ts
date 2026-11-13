@@ -7,7 +7,7 @@ import type { Doc, Id } from './_generated/dataModel';
 import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
-import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
+import { hasPreview, mediaDownloadUrl, mediaUrl } from './lib/media_storage';
 import { ownedObjectReferences, recordAssetStorage, recordStorageObject } from './lib/storage_accounting';
 import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, liveFolderId, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
 import { beginProjectDeletion, copyMediaFor } from './projects';
@@ -46,12 +46,16 @@ function waveformBars(waveform: Doc<'assets'>['waveform'] | null) {
   }
   return bars.map(value => Math.round(value / maximum * 100) / 100);
 }
+/** Up to `limit` editor assets made from one stored file. Exports are never attached to a project. */
+async function fileAttachments(ctx: QueryCtx, row: Doc<'storageObjects'>, limit: number) {
+  return row.kind === 'export' ? [] : row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(limit)
+    : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(limit) : [];
+}
 /** The small picture a folder tile shows for one file: the editor's thumbnail, the image itself, or, for a video
  * that only the Library holds (no project made a poster for it), the video, whose first frame the tile draws. */
 async function tileThumbnail(ctx: QueryCtx, row: Doc<'storageObjects'>) {
   if (row.kind !== 'video' && row.kind !== 'image' && row.kind !== 'export') return null;
-  const attachments = row.kind === 'export' ? [] : row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(3)
-    : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(3) : [];
+  const attachments = await fileAttachments(ctx, row, 3);
   const posters = attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId;
   const library = !posters && row.kind === 'video' && row.r2Key ? await ctx.db.query('cloudMedia').withIndex('by_r2Key', q => q.eq('r2Key', row.r2Key!)).first() : null;
   const thumbnail = posters ?? (library?.ownerId === row.ownerId ? library.thumbnailStorageId : undefined);
@@ -121,6 +125,15 @@ export const previewUrl = query({ args: { fileId: v.id('storageObjects') }, retu
   const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.fileId);
   if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary || row.kind === 'model') return null;
   return mediaUrl(ctx, row);
+} });
+
+/** The lightest link a grid tile can play while hovered: the playback preview an editor project made for the file,
+ * otherwise the file itself. Null for anything but a video or export the caller owns. */
+export const hoverVideoUrl = query({ args: { fileId: v.id('storageObjects') }, returns: v.union(v.string(), v.null()), handler: async (ctx, args) => {
+  const ownerId = await requireOwner(ctx), row = await ctx.db.get(args.fileId);
+  if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary || (row.kind !== 'video' && row.kind !== 'export')) return null;
+  const preview = (await fileAttachments(ctx, row, 10)).find(hasPreview)?.previewR2Key;
+  return preview ? mediaUrl(ctx, { r2Key: preview }) : mediaUrl(ctx, row);
 } });
 
 // ── Folders ─────────────────────────────────────────────────────────────────────────────────────────────────
