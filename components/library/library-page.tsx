@@ -3,7 +3,7 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import { createPortal } from 'react-dom';
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { useAction, useConvexAuth, useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { ChevronDown, Clapperboard, Download, Folder, FolderInput, FolderPlus, LayoutGrid, List, Search, Trash2, Upload, X } from 'lucide-react';
@@ -22,9 +22,11 @@ import { userError } from '@/lib/user-error';
 import { KIND_LABELS, formatBytes, formatDuration, plural, shortDate } from './format';
 import { LibrarySheet } from './library-sheet';
 import { AddToProjectDialog, DeleteFilesDialog, DeleteFolderDialog, MoveDialog, NewFolderDialog } from './library-dialogs';
-import { FileRowsSkeleton, FileTilesSkeleton, FolderTilesSkeleton } from './library-skeleton';
-import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
+import { useSlowWait } from './library-loading';
+import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, openFolder, openFolderLink, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
 import { useLibraryUpload, type UploadRow } from './use-library-upload';
+import { LibraryLinkImports } from './library-link-imports';
+import { AddMediaDialog } from './library-add-media';
 import './library.css';
 
 type Sort = 'newest' | 'oldest' | 'largest';
@@ -34,6 +36,7 @@ const VIEWS = [{ value: 'grid', label: <LayoutGrid aria-label="Grid view" /> }, 
 /** Delete and Add to project take 20 files a call, so a selection holds that many. */
 const MAX_SELECTED = 20;
 const PAGE = 24;
+const FIRST_PAGE = { numItems: PAGE, cursor: null };
 const viewKey = (userId: string) => `revline:library-view:${userId}`;
 
 /** Grid or list, remembered per signed-in user on this browser. */
@@ -42,6 +45,25 @@ function useLibraryView() {
   useEffect(() => { if (!user) return; try { if (localStorage.getItem(viewKey(user.id)) === 'list') setView('list'); } catch { /* Stays on the grid. */ } }, [user]);
   const choose = useCallback((next: View) => { setView(next); if (user) try { localStorage.setItem(viewKey(user.id), next); } catch { /* Kept for this visit only. */ } }, [user]);
   return [view, choose] as const;
+}
+
+/** The open folder's breadcrumb from the folders already loaded, or undefined when they do not hold all of it. */
+function pathFromTree(tree: LibraryFolder[], id: string) {
+  const byId = new Map<string, LibraryFolder>(tree.map(folder => [folder.id, folder])), path: { id: FolderId; name: string }[] = [];
+  for (let folder = byId.get(id); folder; folder = folder.parentId ? byId.get(folder.parentId) : undefined) {
+    path.unshift({ id: folder.id, name: folder.name });
+    if (!folder.parentId) return path;
+    if (path.length > tree.length) return undefined;
+  }
+  return undefined;
+}
+
+/** Subscribes to a folder's subfolders and first page of files before it is opened, so opening it reads them from
+ *  the client's cache instead of waiting. The arguments match what the page asks for when the folder is open. */
+function PrefetchFolder({ folderId, sort }: { folderId?: FolderId; sort: Sort }) {
+  useQuery(api.library.folders, folderId ? { parentId: folderId } : {});
+  useQuery(api.library.files, { sort, unused: false, ...(folderId ? { folderId } : {}), paginationOpts: FIRST_PAGE });
+  return null;
 }
 
 function UploadRows({ rows, onCancel, onRetry }: { rows: UploadRow[]; onCancel: (id: string) => void; onRetry: (id: string) => void }) {
@@ -60,37 +82,67 @@ function UploadRows({ rows, onCancel, onRetry }: { rows: UploadRow[]; onCancel: 
 }
 
 /** A breadcrumb step that also takes dropped items, to move them up. */
-function Crumb({ id, name, current, onDropItems }: { id?: FolderId; name: string; current: boolean; onDropItems: (payload: DragPayload) => void }) {
+function Crumb({ id, name, current, onDropItems, onWarm }: { id?: FolderId; name: string; current: boolean; onDropItems: (payload: DragPayload) => void; onWarm: () => void }) {
   const { over, handlers } = useDropTarget(onDropItems);
-  return <BreadcrumbItem data-drop={over || undefined} {...(current ? {} : handlers)}>{current ? <BreadcrumbPage>{name}</BreadcrumbPage> : <BreadcrumbLink asChild><Link href={folderHref(id)}>{name}</Link></BreadcrumbLink>}</BreadcrumbItem>;
+  return <BreadcrumbItem data-drop={over || undefined} {...(current ? {} : handlers)}>{current ? <BreadcrumbPage>{name}</BreadcrumbPage> : <BreadcrumbLink asChild><Link href={folderHref(id)} onClick={openFolderLink(id)} onPointerEnter={onWarm} onFocus={onWarm}>{name}</Link></BreadcrumbLink>}</BreadcrumbItem>;
 }
 
 export function LibraryPage() {
-  const router = useRouter(), { isAuthenticated } = useConvexAuth();
+  const { isAuthenticated } = useConvexAuth();
   const requested = useSearchParams().get('folder') ?? '';
-  const path = useQuery(api.library.folderPath, isAuthenticated && requested ? { folderId: requested } : 'skip');
+  const tree = useQuery(api.library.folderTree, isAuthenticated ? {} : 'skip');
+  // A folder opened from the page is already in the loaded tree, so its path needs no round trip; a pasted link asks the server.
+  const knownPath = useMemo(() => tree && requested ? pathFromTree(tree, requested) : undefined, [tree, requested]);
+  const fetchedPath = useQuery(api.library.folderPath, isAuthenticated && requested && !knownPath ? { folderId: requested } : 'skip');
+  const path = requested ? knownPath ?? fetchedPath : undefined;
   const folderId = path?.at(-1)?.id, resolving = !!requested && path === undefined;
   // A folder that is gone (deleted, or never this account's) opens the Library root instead.
-  useEffect(() => { if (requested && path === null) router.replace('/library'); }, [requested, path, router]);
+  useEffect(() => { if (requested && path === null) openFolder(null, true); }, [requested, path]);
 
   const [view, setView] = useLibraryView();
   const [search, setSearch] = useState(''), [sort, setSort] = useState<Sort>('newest'), [unused, setUnused] = useState(false);
   const term = useDeferredValue(search.trim()), ready = isAuthenticated && !resolving && !(requested && !folderId);
-  const tree = useQuery(api.library.folderTree, isAuthenticated ? {} : 'skip');
   const children = useQuery(api.library.folders, ready && !term ? (folderId ? { parentId: folderId } : {}) : 'skip');
-  const { results, status, loadMore } = usePaginatedQuery(api.library.files, ready ? { sort, unused, ...(term ? { search: term } : folderId ? { folderId } : {}) } : 'skip', { initialNumItems: PAGE });
+  const listArgs = ready ? { sort, unused, ...(term ? { search: term } : folderId ? { folderId } : {}) } : 'skip';
+  const { results, status, loadMore } = usePaginatedQuery(api.library.files, listArgs, { initialNumItems: PAGE });
+  // The paginated list keys its first page by a fresh ID, so it never reuses a prefetch. This plain query has the same
+  // arguments as PrefetchFolder's and answers from the cache while that first page loads.
+  const prefetched = useQuery(api.library.files, listArgs !== 'skip' && !term && !unused && status === 'LoadingFirstPage' ? { ...listArgs, paginationOpts: FIRST_PAGE } : 'skip');
+  const early = status === 'LoadingFirstPage' ? prefetched : undefined;
   // The unused filter drops rows after each page is read, so a page can come back empty while more remain.
   const scanning = unused && results.length === 0 && status === 'CanLoadMore';
   useEffect(() => { if (scanning) loadMore(PAGE); }, [scanning, loadMore]);
-  const loading = !ready || status === 'LoadingFirstPage' || scanning || (unused && !results.length && status === 'LoadingMore');
+  const loading = !ready || (status === 'LoadingFirstPage' && !early) || scanning || (unused && !results.length && status === 'LoadingMore');
+  const files = early ? early.page : results, moreFiles = early ? !early.isDone : status === 'CanLoadMore';
   const folders: LibraryFolder[] | undefined = term ? tree?.filter(folder => folder.name.toLocaleLowerCase().includes(term.toLocaleLowerCase())) : children;
+  // While the next folder loads, the last one stays on screen for a moment instead of a grid of placeholders.
+  // Past that moment one quiet "Loading…" line takes its place; a cold load shows nothing until then.
+  const busy = loading || folders === undefined;
+  // Only a folder change keeps the last view: a new search, sort or filter must not show rows that do not match it.
+  const listKey = `${term}|${sort}|${unused}`;
+  const listing = useMemo(() => folders === undefined ? null : { folders, files, more: moreFiles, view: listKey }, [folders, files, moreFiles, listKey]);
+  const [kept, setKept] = useState<typeof listing>(null);
+  useEffect(() => { if (!busy) setKept(listing); }, [busy, listing]);
+  const slow = useSlowWait(busy);
+  const shown = !busy ? listing : slow || !kept || kept.view !== listKey || (!kept.files.length && !kept.folders.length) ? null : kept;
+  // The kept view is only a picture of the last folder: its tiles cannot be opened or selected until the new one arrives.
+  const stale = !!shown && shown !== listing;
+  // Folders to have ready before they are opened: the one under the pointer, the parent and the Library root that the
+  // breadcrumb returns to, and the folder just left, for Back. The open folder stays in the set until its own first page
+  // has loaded, so its prefetch is not dropped before the page's subscription takes over.
+  const [hovered, setHovered] = useState<FolderId | 'root' | null>(null);
+  const current = ready ? folderId ?? 'root' : null, [visit, setVisit] = useState<{ at: FolderId | 'root' | null; left: FolderId | 'root' | null }>({ at: null, left: null });
+  if (current && current !== visit.at) setVisit({ at: current, left: visit.at });
+  const parent = path ? path.at(-2)?.id ?? 'root' : null;
+  const prefetch = !current || term || unused ? [] : [...new Set([hovered, parent, 'root' as const, visit.left])].filter((id): id is FolderId | 'root' => id !== null && (id !== current || status === 'LoadingFirstPage'));
+  const warm = (id: FolderId | undefined) => () => setHovered(id ?? 'root'), cool = () => setHovered(null);
   const folderNames = useMemo(() => new Map((tree ?? []).map(folder => [folder.id, folder.name])), [tree]);
   const here = path?.at(-1)?.name ?? 'the Library';
 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set()), [activeId, setActiveId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<null | { kind: 'folder' } | { kind: 'move'; fileIds: Id<'storageObjects'>[]; folderIds: FolderId[]; from?: FolderId | null } | { kind: 'project'; files: LibraryFile[] } | { kind: 'delete'; files: LibraryFile[] } | { kind: 'deleteFolder'; folder: LibraryFolder }>(null);
   const [renaming, setRenaming] = useState<FolderId | null>(null), [error, setError] = useState('');
-  const chosen = results.filter(file => selected.has(file.id)), active = results.find(file => file.id === activeId) ?? null;
+  const chosen = files.filter(file => selected.has(file.id)), active = files.find(file => file.id === activeId) ?? null;
   const clear = useCallback(() => { setSelected(new Set()); setActiveId(null); }, []);
   // A selection belongs to the list it was made in.
   useEffect(clear, [folderId, term, sort, unused, clear]);
@@ -101,8 +153,8 @@ export function LibraryPage() {
   function open(file: LibraryFile, additive: boolean) {
     if (additive) toggle(file); else setActiveId(file.id);
   }
-  const activeIndex = active ? results.indexOf(active) : -1;
-  const step = (offset: -1 | 1) => { const next = results[activeIndex + offset]; if (next) setActiveId(next.id); };
+  const activeIndex = active ? files.indexOf(active) : -1;
+  const step = (offset: -1 | 1) => { const next = files[activeIndex + offset]; if (next) setActiveId(next.id); };
 
   const move = useMutation(api.library.move), renameFolder = useMutation(api.library.renameFolder), starters = useMutation(api.library.createStarterFolders), downloadUrl = useAction(api.library.downloadUrl);
   const uploads = useLibraryUpload(), fileInput = useRef<HTMLInputElement>(null);
@@ -148,11 +200,12 @@ export function LibraryPage() {
   // Phone: New folder and Upload sit in the navbar.
   const [navbar, setNavbar] = useState<HTMLElement | null>(null);
   useEffect(() => setNavbar(document.getElementById('dash-navbar-page')), []);
-  const pick = () => fileInput.current?.click();
+  const [adding, setAdding] = useState(false), importLink = useMutation(api.library.importLink);
+  const pick = () => setAdding(true);
   const newFolder = () => setDialog({ kind: 'folder' });
 
   const folderMenu = (folder: LibraryFolder) => <FolderMenu name={folder.name} onRename={() => setRenaming(folder.id)} onMove={() => setDialog({ kind: 'move', fileIds: [], folderIds: [folder.id], from: folder.parentId })} onDelete={() => setDialog({ kind: 'deleteFolder', folder })} />;
-  const empty = !loading && !results.length && !folders?.length;
+  const empty = !busy && !files.length && !folders?.length;
   const filesTitle = term ? 'Files' : !folderId && sort === 'newest' && !unused ? 'Recent files' : unused ? 'Unused files' : 'Files';
   const blockedDelete = chosen.find(file => !file.canDelete);
   const parentOf = (folder: LibraryFolder) => folder.parentId ? folderNames.get(folder.parentId) ?? 'its parent folder' : 'the Library';
@@ -164,8 +217,8 @@ export function LibraryPage() {
 
     <div className="library-head">
       <Breadcrumb className="library-crumbs"><BreadcrumbList>
-        <Crumb name="Library" current={!requested} onDropItems={moveTo(undefined)} />
-        {(path ?? []).map((step, index, all) => <span key={step.id} className="library-crumb-step"><BreadcrumbSeparator /><Crumb id={step.id} name={step.name} current={index === all.length - 1} onDropItems={moveTo(step.id)} /></span>)}
+        <Crumb name="Library" current={!requested} onDropItems={moveTo(undefined)} onWarm={warm(undefined)} />
+        {(path ?? []).map((step, index, all) => <span key={step.id} className="library-crumb-step"><BreadcrumbSeparator /><Crumb id={step.id} name={step.name} current={index === all.length - 1} onDropItems={moveTo(step.id)} onWarm={warm(step.id)} /></span>)}
       </BreadcrumbList></Breadcrumb>
     </div>
 
@@ -187,31 +240,34 @@ export function LibraryPage() {
     {(error || uploads.error) && <p className="dash-error" role="alert">{error || uploads.error}</p>}
     {cleanupProjects.length > 0 && cleanup !== 'complete' && <p className="library-status" role={cleanup === 'failed' ? 'alert' : 'status'}>{cleanup === 'failed' ? 'Project cleanup stopped. Retry to finish removing its files.' : 'Finishing project cleanup…'}{cleanup === 'failed' && <Button variant="soft" size="sm" disabled={retrying} onClick={() => void retryCleanup()}>{retrying ? 'Retrying…' : 'Retry cleanup'}</Button>}</p>}
     {uploads.rows.length > 0 && <UploadRows rows={uploads.rows} onCancel={uploads.cancel} onRetry={uploads.retry} />}
+    <LibraryLinkImports onUpload={() => fileInput.current?.click()} />
+    {adding && <AddMediaDialog place={here} onClose={() => setAdding(false)} onUpload={files => uploads.enqueue(files, folderId)} onImportLink={async url => { await importLink({ url, ...(folderId ? { folderId } : {}) }); }} />}
 
-    <div className="library-body" aria-busy={loading}>
+    <div className="library-body" aria-busy={busy} inert={stale}>
+      {prefetch.map(id => <PrefetchFolder key={id} folderId={id === 'root' ? undefined : id} sort={sort} />)}
       {empty ? <div className="library-empty">
         <Folder aria-hidden="true" />
         <h2>{term ? `Nothing matches “${term}”` : unused ? 'No unused files here' : folderId ? 'This folder is empty' : 'Your Library is empty'}</h2>
         <p>{term ? 'Search looks through every folder.' : unused ? 'Every file in this folder is used by a project.' : 'Drop files here, or upload from your computer.'}</p>
         {!term && !unused && <div className="library-empty-actions"><Button variant="primary" onClick={pick}><Upload aria-hidden="true" />Upload</Button>
           {!folderId && <Button variant="soft" title="Raw footage, Exports, Audio, Images" onClick={() => { setError(''); void starters({}).catch(report('Could not create the folders. Please retry.')); }}><FolderPlus aria-hidden="true" />Create starter folders</Button>}</div>}
-      </div> : view === 'grid' ? <>
-        {(folders === undefined ? !term : folders.length > 0) && <section aria-label="Folders">
-          <div className="library-section-head"><h2>Folders</h2>{folders && <span>{folders.length}</span>}</div>
-          {folders ? <div className="library-folders">{folders.map(folder => <FolderTile key={folder.id} folder={folder} renaming={renaming === folder.id} onRename={name => saveFolderName(folder, name)} onRenameEnd={() => setRenaming(null)} menu={folderMenu(folder)} onDropItems={moveTo(folder.id)} onDropFiles={files => uploads.enqueue(files, folder.id)} />)}</div> : <FolderTilesSkeleton />}
+      </div> : !shown ? slow && <p className="library-loading" role="status">Loading…</p> : view === 'grid' ? <>
+        {shown.folders.length > 0 && <section aria-label="Folders">
+          <div className="library-section-head"><h2>Folders</h2><span>{shown.folders.length}</span></div>
+          <div className="library-folders">{shown.folders.map(folder => <FolderTile key={folder.id} folder={folder} renaming={renaming === folder.id} onRename={name => saveFolderName(folder, name)} onRenameEnd={() => setRenaming(null)} menu={folderMenu(folder)} onDropItems={moveTo(folder.id)} onDropFiles={dropped => uploads.enqueue(dropped, folder.id)} onWarm={warm(folder.id)} onCool={cool} />)}</div>
         </section>}
-        {(loading || results.length > 0) && <section aria-label={filesTitle}>
-          <div className="library-section-head"><h2>{filesTitle}</h2>{!loading && <span>{results.length}{status === 'CanLoadMore' ? '+' : ''}</span>}</div>
-          {loading ? <FileTilesSkeleton /> : <div className="library-files">{results.map(file => <FileTile key={file.id} file={file} selected={selected.has(file.id)} active={activeId === file.id} onOpen={additive => open(file, additive)} onToggle={() => toggle(file)} dragPayload={() => dragPayload(file)} />)}</div>}
+        {shown.files.length > 0 && <section aria-label={filesTitle}>
+          <div className="library-section-head"><h2>{filesTitle}</h2><span>{shown.files.length}{shown.more ? '+' : ''}</span></div>
+          <div className="library-files">{shown.files.map(file => <FileTile key={file.id} file={file} selected={selected.has(file.id)} active={activeId === file.id} onOpen={additive => open(file, additive)} onToggle={() => toggle(file)} dragPayload={() => dragPayload(file)} />)}</div>
         </section>}
-      </> : loading && !folders?.length ? <FileRowsSkeleton /> : <div className="library-table-card"><Table className="library-table">
+      </> : <div className="library-table-card"><Table className="library-table">
         <TableHeader><TableRow>
-          <TableHead className="library-col-check"><Checkbox aria-label="Select the files shown" disabled={!results.length} checked={results.length > 0 && results.slice(0, MAX_SELECTED).every(file => selected.has(file.id))} onCheckedChange={value => setSelected(value === true ? new Set(results.slice(0, MAX_SELECTED).map(file => file.id)) : new Set())} /></TableHead>
+          <TableHead className="library-col-check"><Checkbox aria-label="Select the files shown" disabled={!files.length} checked={files.length > 0 && files.slice(0, MAX_SELECTED).every(file => selected.has(file.id))} onCheckedChange={value => setSelected(value === true ? new Set(files.slice(0, MAX_SELECTED).map(file => file.id)) : new Set())} /></TableHead>
           <TableHead>Name</TableHead><TableHead className="library-col-type">Type</TableHead><TableHead className="library-col-size">Size</TableHead><TableHead className="library-col-duration">Duration</TableHead><TableHead className="library-col-used">Used in</TableHead><TableHead className="library-col-date">Modified</TableHead><TableHead className="library-col-more"><span className="sr-only">Actions</span></TableHead>
         </TableRow></TableHeader>
         <TableBody>
-          {folders?.map(folder => <FolderRow key={folder.id} folder={folder} renaming={renaming === folder.id} onRename={name => saveFolderName(folder, name)} onRenameEnd={() => setRenaming(null)} menu={folderMenu(folder)} onOpen={() => router.push(folderHref(folder.id))} onDropItems={moveTo(folder.id)} onDropFiles={files => uploads.enqueue(files, folder.id)} />)}
-          {results.map(file => <TableRow key={file.id} className="library-row" data-selected={selected.has(file.id) || undefined} data-active={activeId === file.id || undefined} draggable
+          {shown.folders.map(folder => <FolderRow key={folder.id} folder={folder} renaming={renaming === folder.id} onRename={name => saveFolderName(folder, name)} onRenameEnd={() => setRenaming(null)} menu={folderMenu(folder)} onOpen={() => openFolder(folder.id)} onDropItems={moveTo(folder.id)} onDropFiles={dropped => uploads.enqueue(dropped, folder.id)} onWarm={warm(folder.id)} onCool={cool} />)}
+          {shown.files.map(file => <TableRow key={file.id} className="library-row" data-selected={selected.has(file.id) || undefined} data-active={activeId === file.id || undefined} draggable
             onDragStart={event => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload(file))); event.dataTransfer.effectAllowed = 'move'; }} onClick={event => open(file, event.metaKey || event.ctrlKey || event.shiftKey)}>
             <TableCell className="library-col-check" onClick={event => event.stopPropagation()}><Checkbox aria-label={`Select ${file.fileName}`} checked={selected.has(file.id)} onCheckedChange={() => toggle(file)} /></TableCell>
             <TableCell><span className="library-row-name"><FileThumb file={file} badge={false} /><Button variant="ghost" title={file.fileName}>{file.fileName}</Button></span></TableCell>
@@ -234,7 +290,7 @@ export function LibraryPage() {
       <Button variant="ghost" disabled={!!blockedDelete} title={blockedDelete ? `${blockedDelete.fileName}: ${blockedDelete.protectedReason ?? 'cannot be deleted right now'}` : undefined} onClick={() => setDialog({ kind: 'delete', files: chosen })}><Trash2 aria-hidden="true" /><span>Delete</span></Button>
       <Button variant="ghost" size="icon" aria-label="Clear the selection" onClick={clear}><X /></Button>
     </div>}
-    <LibrarySheet file={active} position={activeIndex} count={results.length} folderName={active?.folderId ? folderNames.get(active.folderId) ?? 'Library' : 'Library'} onClose={() => setActiveId(null)} onStep={step}
+    <LibrarySheet file={active} position={activeIndex} count={files.length} folderName={active?.folderId ? folderNames.get(active.folderId) ?? 'Library' : 'Library'} onClose={() => setActiveId(null)} onStep={step}
       onAddToProject={() => active && setDialog({ kind: 'project', files: [active] })} onDownload={() => active && void download([active])} onDelete={() => active && setDialog({ kind: 'delete', files: [active] })}
       onMove={() => active && setDialog({ kind: 'move', fileIds: [active.id], folderIds: [], from: active.folderId ?? null })} />
 
@@ -246,13 +302,13 @@ export function LibraryPage() {
   </main>;
 }
 
-type FolderRowProps = { folder: LibraryFolder; renaming: boolean; onRename: (name: string) => void; onRenameEnd: () => void; menu: React.ReactNode; onOpen: () => void; onDropItems: (payload: DragPayload) => void; onDropFiles: (files: File[]) => void };
-function FolderRow({ folder, renaming, onRename, onRenameEnd, menu, onOpen, onDropItems, onDropFiles }: FolderRowProps) {
+type FolderRowProps = { folder: LibraryFolder; renaming: boolean; onRename: (name: string) => void; onRenameEnd: () => void; menu: React.ReactNode; onOpen: () => void; onDropItems: (payload: DragPayload) => void; onDropFiles: (files: File[]) => void; onWarm: () => void; onCool: () => void };
+function FolderRow({ folder, renaming, onRename, onRenameEnd, menu, onOpen, onDropItems, onDropFiles, onWarm, onCool }: FolderRowProps) {
   const { over, handlers } = useDropTarget(onDropItems, onDropFiles);
-  return <TableRow className="library-row" data-drop={over || undefined} draggable={!renaming} onClick={() => { if (!renaming) onOpen(); }} {...handlers}
+  return <TableRow className="library-row" data-drop={over || undefined} draggable={!renaming} onClick={() => { if (!renaming) onOpen(); }} onPointerEnter={onWarm} onPointerLeave={onCool} onFocus={onWarm} onBlur={onCool} {...handlers}
     onDragStart={event => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify({ files: [], folders: [folder.id] } satisfies DragPayload)); event.dataTransfer.effectAllowed = 'move'; }}>
     <TableCell className="library-col-check" />
-    <TableCell><span className="library-row-name"><span className="library-file-thumb" data-kind="folder"><Folder aria-hidden="true" /></span>{renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <Link href={folderHref(folder.id)} title={folder.name} onClick={event => event.stopPropagation()}>{folder.name}</Link>}</span></TableCell>
+    <TableCell><span className="library-row-name"><span className="library-file-thumb" data-kind="folder"><Folder aria-hidden="true" /></span>{renaming ? <RenameInput value={folder.name} label={`Rename ${folder.name}`} onSubmit={onRename} onCancel={onRenameEnd} /> : <Link href={folderHref(folder.id)} title={folder.name} onClick={event => { event.stopPropagation(); openFolderLink(folder.id)(event); }}>{folder.name}</Link>}</span></TableCell>
     <TableCell className="library-col-type">Folder</TableCell><TableCell className="library-col-size">{formatBytes(folder.totalBytes)}</TableCell><TableCell className="library-col-duration" />
     <TableCell className="library-col-used">{folderMeta(folder).split(' · ')[0]}</TableCell><TableCell className="library-col-date">{shortDate(folder.updatedAt)}</TableCell>
     <TableCell className="library-col-more" onClick={event => event.stopPropagation()}>{!renaming && menu}</TableCell>

@@ -1,0 +1,1 @@
+- Library: opening a folder no longer flashes a grid of skeleton cards; folders open in place, near ones are loaded ahead, and a slow load shows one quiet "Loading…" line after 300 ms. Why: the founder found the skeletons on every folder visit annoying.

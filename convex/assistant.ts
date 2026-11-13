@@ -125,9 +125,8 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const settings = await editorComposerSettings(ctx, ownerId);
   const ready=!settings.paidModelAccess ? configured(false) : args.clientPlatform==='ios'?mobileConfigured(true):configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
-  // Run-scoped analysis remains evidence of the editing workflow while the
-  // model plans its next step; a plain reply never acquires this workflow lock.
-  const workflowActive=await editingWorkflowActive(ctx,project,requests.length>0);
+  // The timeline is locked for the whole run, planning included.
+  const workflowActive=await editingWorkflowActive(ctx,project);
   // The row outlives its run so the development effort switcher can show the last pick.
   const budgetRow=await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;

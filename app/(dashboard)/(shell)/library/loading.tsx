@@ -1,3 +1,3 @@
-import { LibrarySkeleton } from '@/components/library/library-skeleton';
+import { LibraryPageLoading } from '@/components/library/library-loading';
 
-export default function Loading() { return <LibrarySkeleton />; }
+export default function Loading() { return <LibraryPageLoading />; }
