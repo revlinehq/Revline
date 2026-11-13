@@ -31,11 +31,10 @@ A good edit changes only the requested range, keeps everything around it in sync
 - Story restructuring checks every changed spot. An explicit whole-video review is a full double-check.
 
 ### Local and full checks
-- **Local checks:** call finish. It verifies gaps, overlaps, lengths, linked audio and captions from timeline data, draws the few frames it needs itself (new cuts, new overlays, one caption sample) and returns them. Use getFrames only for a spot that looks wrong; never a frame per change or per caption.
-- When a spot does need a closer look with getFrames, scan sparse, then zoom: `range` samples about one frame a second, `around` shows a few consecutive frames at one moment. Never read consecutive frames to watch a clip; the transcript and saved analysis say where to look.
+- **Local checks:** call finish. It verifies gaps, overlaps, lengths, linked audio and captions from timeline data and renders no frames. Once it passes, reply: the user reviews the result, so never fetch frames to verify an edit.
+- When the user asks about a spot and it needs a look with getFrames, scan sparse, then zoom: `range` samples about one frame a second, `around` shows a few consecutive frames at one moment. Never read consecutive frames to watch a clip; the transcript and saved analysis say where to look.
 - Local checks skip full sweeps, repeated finishing passes and checkPacing.
-- **Full checks:** finish draws up to 8 frames of what changed; add checkPacing or checkSound where motion, timing or sound changed.
-- The frames finish returns are the rendered check for visual changes in every lane.
+- **Full checks:** finish checks the same timeline data; run checkPacing or checkSound only for a concern the user named.
 - Reuse loaded skills and project context.
 
 ### Footage and captions

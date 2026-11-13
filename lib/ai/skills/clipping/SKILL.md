@@ -8,7 +8,7 @@ A good batch is a few distinct, self-contained shorts, each opening on its hook 
 Each short lives in its own titled tab of one shared project, keeps the source framing and audio, and is closed out with cheap data checks rather than heavy QA.
 
 ## Two paths
-- The user gave the source ranges ("cut 50–71 s and 88–104 s into clips"): the moments are already chosen. Do not call findHighlights, planClips or finishClipping, and do not wait for source analysis. Read page batching, build one tab per range (createTimeline, then addMedia with that range), then call finish. finish checks each new tab's length (15–60 s), its source footage and the first and last frames of every cut for a stray frame of a neighbouring shot.
+- The user gave the source ranges ("cut 50–71 s and 88–104 s into clips"): the moments are already chosen. Do not call findHighlights, planClips or finishClipping, and do not wait for source analysis. Read page batching, build one tab per range (createTimeline, then addMedia with that range), then call finish. finish checks each new tab's length (15–60 s) and its source footage from timeline data.
 - The user asked Revline to choose ("clip this", "find the best moments", /clip): follow the workflow below. Its plan and analysis stay required.
 
 ## Workflow

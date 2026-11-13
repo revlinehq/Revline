@@ -5,7 +5,7 @@ import { forEachLimited } from '../../lib/server/run-limited';
 import { LANES, capabilityExists, capabilitySummary, discoverCapabilities, laneToolAllowed, laneToolError, laneSkill, laneInstructions, type LaneId } from '../../lib/ai/lanes';
 import { LANE_IDS } from '../../lib/ai/lanes/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
-import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS, type FinishLookSpot } from '../../lib/ai/lanes/task';
+import { laneBaseline, MAX_FINISH_ATTEMPTS, MAX_FINISH_CHECKS } from '../../lib/ai/lanes/task';
 import { exhaustedLaneError, exhaustedNext, finishLane, FramesUnavailableError, type FinishResult } from './laneFinish';
 import { safely } from './safely';
 import type { EditorRun, LaneTaskFields } from './run_types';
@@ -118,7 +118,6 @@ import { BEAT_ANALYSIS_ENGINE } from '../../lib/media-analysis/beat-map';
 import { barsForLength, musicStructure, nearestDownbeat } from '../../lib/media-analysis/music-structure';
 import { musicEnergy } from '../../lib/media-analysis/sound';
 import { runLooksRead } from './reference_reads';
-import { checkClipEdges } from '../../lib/ai/lanes/clip/edges';
 import { cutsGiven } from '../../lib/ai/lanes/clip/check';
 import { aspectRatio as aspectRatioValidator } from '../schema';
 import type { ActionCtx } from "../_generated/server";
@@ -207,8 +206,6 @@ const POST_INPUT = {
 /** Shown with approved work in inspectTimeline and inspectClip. */
 const APPROVED_RULE = 'Approved clips are signed off by the user. Every editing tool refuses to change them. Edit around them; change one only when the user names it, by passing overrideApproved: true with overrideReason quoting the user. Say in the reply that approved work was changed.';
 /** Tools that never change clips, so they take no approved-work override. */
-/** How long finish waits for the cut-edge frames of a range-cut clip before reporting them unmeasured. */
-const CLIP_EDGE_WAIT_MS = 120_000;
 // What a small model still owes after the cut reads clean; it tends to stop at the first thing that works.
 const REST_OF_EDIT = 'Now do the rest of the request in order: the opening clip if it names one, then every image, b-roll and overlay it names at the timeline times of their words (find the phrase in lines above), then finish. The edit is not done while something the request names is missing.';
 /** Tools a task closed by failed finish checks still answers: its final result, and the agent's own reports. */
@@ -301,7 +298,6 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
   const tracksChanges = () => tracksChangedFrames(recipe());
   const fastReview = new FastFrameReview(options.pendingFastFrames, () => changedFrameLimit(recipe()));
   /** Frames the current finish call drew for its own check; a passed result hands them to the model as its look. */
-  let finishLook: { time: number; image: string }[] = [], finishSheets: string[] = [], finishSpots: FinishLookSpot[] = [];
   const readTool = async (name: ReadToolName, input: object) => {
     const result = await runRead(ctx, run.ownerId, run.projectId, name, input, abortSignal);
     if ('status' in result) {
@@ -968,7 +964,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await editSession.wait();await selectClipQa();
       // Cuts at source ranges the request named have no plan to close out: finish runs their cheap checks.
       const clipTask=await readTask();
-      if(clipTask&&cutsGiven(clipTask,await ctx.runQuery(internal.clipping.runStarted,clippingRun)))return {required:false,passed:true,rangeCuts:true,errors:[],next:'No clip plan applies: this task cut source ranges it was given and ran neither findHighlights nor planClips. Call finish now. It checks each new tab’s length (15–60 s), its source footage and the first and last frames of every cut for a stray frame of a neighbouring shot.'};
+      if(clipTask&&cutsGiven(clipTask,await ctx.runQuery(internal.clipping.runStarted,clippingRun)))return {required:false,passed:true,rangeCuts:true,errors:[],next:'No clip plan applies: this task cut source ranges it was given and ran neither findHighlights nor planClips. Call finish now. It checks each new tab’s length (15–60 s) and its source footage from timeline data.'};
       const state=await ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId:clippingTimelineId});
       if(!state.passed)throw new Error(`Clipping delivery is incomplete: ${JSON.stringify(state.errors)}`);
       return state;
@@ -981,7 +977,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       lane=input.lane;laneChosen=true;finishRequired ||= input.taskType==='edit';requiredPersisted=finishRequired;finishResult=undefined;
       return {lane,instructions:laneInstructions(lane),checks:checkInstructions(lane,checkLevel),tools:availableToolNames()};
     }}),
-    finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s real completion checks. Takes no claimed scores or counts. Call before the final reply. One result lists EVERY problem with exact times and clip ids, and fixes names the single call that repairs each kind (closeGaps with no arguments closes every gap at once): make those calls, then call finish again. Gaps and overlaps shorter than a frame are closed by the check itself and reported in healed. finish draws the few frames it needs and returns them with a passed result (look at them before you reply); it never asks you to fetch frames. Checking again after a repair is progress; a check that fails the same way three times with nothing fixed ends the request, so report its output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
+    finish:createTool({metadata:EDITOR_TOOL_DEFINITIONS.finish,description:'Run this lane’s completion checks on the saved timeline data (gaps, overlaps, missing media, lengths, captions). Takes no claimed scores or counts. Call once after the edit, before the final reply. It renders no frames and needs none: the user reviews the result, so do not look at frames to verify an edit. One result lists EVERY problem with exact times and clip ids, and fixes names the single call that repairs each kind (closeGaps with no arguments closes every gap at once): make those calls, then call finish again. Gaps and overlaps shorter than a frame are closed by the check itself and reported in healed. A check that fails the same way three times with nothing fixed ends the request, so report its output honestly.',inputSchema:z.object({}).strict(),execute:async()=>{
       if(!taskId)throw new Error('Start a task first with startTask.');
       await editSession.wait();await ensureBaseline();
       // An earlier failed step left the draft guarded. Revalidate the last good draft so a passed check can save it.
@@ -993,27 +989,21 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       }
       if(lane==='reel'){const planned=(await readTask())?.script as SavedScript|undefined;if(planned&&assets.some(asset=>asset._id===planned.assetId))await loadAsset(planned.assetId);}
       if(lane==='clip')await selectClipQa();
-      // Unviewed changed frames keep the task open the same way in the app and over MCP. The refusal spends no finish attempt.
       // Rounding artefacts are closed here, inside the check: a gap or overlap shorter than a frame is never a failure.
       let healed:string[]=[];
       // Only a private draft is touched (it joins the draft, under the tool that staged it); a saved timeline is never
       // written by a check, and a gap shorter than a frame there is not a failure either.
       if(editSession.staged)try{let closed:FrameGridHeal[]=[];await editSession.checkpoint(t=>{const grid=onFrameGrid(t);closed=grid.healed;return grid.timeline;});const note=healedNote(closed);if(note)healed=[note];}
       catch(error){if(abortSignal.aborted)throw error;}
-      // finish looks for itself: on a hard budget it draws a few frames of what this request changed (new cuts, new
-      // overlays, one caption sample) and returns them with the result. It never sends the model to fetch frames.
-      finishLook=[];finishSheets=[];finishSpots=[];
+      // finish checks timeline data only: no frames are rendered or measured and nothing is handed back to look at.
+      // The edit is saved the moment the data checks pass; the user reviews the result.
       const frameTask=recipe().frames==='sample'?await readTask():null;
       const durableFrames=frameTask?readFastFrameTimes(frameTask.evidence,timelineId,await timelineHistoryKey(editSession.timeline)):undefined;
       if(cutRead||(await readTask())?.evidence.some(item=>item.tool==='readCutScript'&&item.timelineId===timelineId))await loadSavedSpeech();
-      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,healed,looked:spots=>{finishSpots=spots;},...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),clipEdges:async tabs=>{
-        // A busy media queue must not hold finish: past the wait the edges are reported unmeasured and finish goes on.
-        const edges=await checkClipEdges(tabs,(assetId,times)=>{let timer:ReturnType<typeof setTimeout>|undefined;return Promise.race([runLooksRead(ctx,run.ownerId,run.projectId,assetId,times,undefined,abortSignal).then(read=>read.samples),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error('the media worker took longer than two minutes')),CLIP_EDGE_WAIT_MS);})]).finally(()=>clearTimeout(timer));});
-        abortSignal.throwIfAborted();return edges;
-      },render:async(times,revision,target)=>{const result=await renderSheet(times,revision,target);if((!target||target===timelineId)&&revision===undefined){fastReview.reviewed(result.frames.map(frame=>frame.time),editSession.timeline);finishLook.push(...result.frames);if('sheet' in result&&result.sheet)finishSheets.push(result.sheet);}return result;},staged:editSession.staged});
+      const check=()=>finishLane(laneCtx,{run,taskId,timelineId,timeline:editSession.timeline,assets,healed,...(durableFrames!==undefined?{fastFrameTimes:fastReview.times()}:{}),clipping:()=>ctx.runQuery(internal.clipping.completionState,{...clippingRun,timeline:editSession.timeline,timelineId}),staged:editSession.staged});
       finishResult=await check();
-      // The look covers what this request changed: the queue of changed spots is settled with it.
-      if(finishLook.length||finishResult.passed)fastReview.restore([]);
+      // A passed check settles the queue of changed spots.
+      if(finishResult.passed)fastReview.restore([]);
       if(finishResult.passed){
         try{
           await editSession.publish();
@@ -2323,20 +2313,11 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       try {
         const output = await execute.apply(this ?? tool, args) as { staged?: unknown } | undefined;
         if (output?.staged === true) stagedTools.add(name);
-        // A passed finish returns the frames it drew, so the look needs no further call.
-        if (name === 'finish' && finishLook.length && (output as { passed?: boolean } | undefined)?.passed) {
-          // One contact sheet when the media worker draws sheets; separate frames from an older worker.
-          const drawn = finishLook.splice(0), sheets = finishSheets.splice(0), frames = drawn.filter(frame => frame.image).slice(0, 8);
-          const why = (time: number) => finishSpots.find(spot => Math.abs(spot.time - time) < .5 / editSession.timeline.fps)?.why ?? 'changed spot';
-          const named = drawn.map(frame => `${frame.time.toFixed(2)} s: ${why(frame.time)}`).join(', ');
-          return { ...output, framesShown: `finish drew ${drawn.length} frame${drawn.length === 1 ? '' : 's'} of what this request changed (${named})${sheets.length ? ', as one contact sheet with the time under each tile' : ''}; ${sheets.length + frames.length === 1 ? 'it follows' : 'they follow'}. That is the whole frame check: captions, gaps, overlaps and timing were verified from timeline data. Look before you reply; call getFrames only for a spot that looks wrong.`, images: [...sheets.map(sheet => ({ label: `Contact sheet: ${named}`, data: sheet, mimeType: 'image/jpeg' })), ...frames.map(frame => ({ label: `${frame.time.toFixed(2)} s (${why(frame.time)})`, data: frame.image, mimeType: 'image/jpeg' }))] };
-        }
         if (tracksChanges() && name !== 'createTimeline' && name !== 'openTimeline' && before !== editSession.timeline) {
           const moments = recipe().frames === 'sample' ? fastReelFrameMoments(name, before, editSession.timeline) : speechCutMoments(name, before, editSession.timeline);
           // Putting an old timeline on the frame grid moves edges by a fraction of a frame and draws the same picture:
           // only what this call changed beyond that is queued for a look.
           fastReview.changed(snapTimelineToFrames(before).timeline, editSession.timeline, moments);
-          // No list of changed spots is handed back: finish draws the few frames it needs itself.
           return output;
         }
         return output;

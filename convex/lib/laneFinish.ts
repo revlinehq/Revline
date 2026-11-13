@@ -4,34 +4,23 @@ import type { ActionCtx } from '../_generated/server';
 import { internal } from '../_generated/api';
 import type { Doc } from '../_generated/dataModel';
 import { LANES, type LaneId } from '../../lib/ai/lanes';
-import {
-  finishFrameBudget,
-  finishLookSpots,
-  touchedKinds,
-  FINISH_FRAMES_PER_TASK,
-  type FinishLookSpot,
-  LaneFinishError,
-  MAX_FINISH_ATTEMPTS,
-} from '../../lib/ai/lanes/task';
+import { touchedKinds, LaneFinishError, MAX_FINISH_ATTEMPTS } from '../../lib/ai/lanes/task';
 import { footageGaps } from '../../lib/editor/frame-grid';
 import { mainFootageTrack } from '../../lib/editor/shot-edits';
 import { layerGroup, trackOf } from '../../lib/editor/types';
 import { timelineHistoryKey } from '../../lib/editor/timeline-history-key';
 import type { Timeline } from '../../lib/editor/types';
-import { fastFrameEvidence, isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
+import { isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
-import { reelLookCheck, type SpotsEvidence } from '../../lib/ai/lanes/reel/looks';
 import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
-import { MAX_SHEET_FRAMES } from '../../lib/ai/frame-sampling';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
 export type FinishResult = NonNullable<LaneTask['result']>;
-/** The frames could not be drawn in time (a busy or slow media worker). That says nothing about the edit, so finish
- * reports it and goes on: it is never a failed check and spends no attempt. */
+/** The frames could not be drawn in time (a busy or slow media worker). That says nothing about the edit. */
 export class FramesUnavailableError extends Error {}
 /** The turn ends here: the lane used up its finish attempts. */
 export function exhaustedLaneError(lane: string, failures: string) {
@@ -44,13 +33,8 @@ export function exhaustedNext(overMcp: boolean) {
     ? 'Stop editing this task: finish and the editing tools are closed for it and it stays unfinished. Report these failures honestly. To continue other work, call startTask for a new task; finish is available on every task.'
     : 'Stop. finish kept failing, so finish and the editing tools are now closed for this request. Report these failures honestly; this task is unfinished.';
 }
-type Render = (
-  times: number[],
-  revision?: number,
-  timelineId?: string,
-) => Promise<{ revision: number; sheet?: string; frames: { time: number; image: string }[] }>;
-
-/** Executes real checks; finish takes no model-provided scores, counts or acceptance flags. */
+/** Executes real checks; finish takes no model-provided scores, counts or acceptance flags. finish reads timeline
+ * data only: it never renders or measures frames and never asks the model to look. The user reviews the result. */
 export async function finishLane(
   ctx: ActionCtx,
   options: {
@@ -59,12 +43,9 @@ export async function finishLane(
     timelineId: string;
     timeline: Timeline;
     assets: Doc<'assets'>[];
-    render: Render;
     staged: boolean;
     /** The reel lane's pending sampled frames, passed only for its standard (sample) recipe. */
     fastFrameTimes?: number[];
-    /** Told which frames finish drew for the current tab, and why, so the caller can hand them back as its look. */
-    looked?: (spots: FinishLookSpot[]) => void;
     /** What the frame grid closed just before this check (sub-frame gaps and overlaps): reported, never a failure. */
     healed?: string[];
     clipping?: () => Promise<{
@@ -73,8 +54,6 @@ export async function finishLane(
       errors: string[];
       finalMessage?: string;
     }>;
-    /** Reads the frames at each cut edge of the tabs a range-cut clip task built (lib/ai/lanes/clip/edges). */
-    clipEdges?: (tabs: { label: string; timeline: Timeline }[]) => Promise<{ failures: string[]; warnings: string[] }>;
   },
 ): Promise<FinishResult> {
   const { run, taskId, timelineId, timeline, assets } = options,
@@ -100,10 +79,6 @@ export async function finishLane(
   if (task.lane === 'reel' && touched.footage) {
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
     failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
-    // Eyes: the first and last frame must be clean or looked at; other flagged edges are reported.
-    const looks = reelLookCheck(timeline, LANES.reel.eyes, [...task.evidence].reverse().find(item => item.tool === 'checkSpots' && item.timelineId === timelineId)?.output as SpotsEvidence | undefined, !!task.script);
-    failures.push(...looks.failures);
-    warnings.push(...looks.warnings);
   }
   // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
   // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.
@@ -133,10 +108,9 @@ export async function finishLane(
     !clipRun;
   // Cuts made at source ranges the request named: nobody asked Revline to choose the moments and the task started no
   // clipping run, so there is no plan or whole-source analysis to hold the tabs to. The cheap checks below run instead:
-  // timeline data, the 15-60 s clip length, populated source footage and a look at every cut edge.
+  // timeline data, the 15-60 s clip length and populated source footage.
   const rangeCuts = !clipFollowUp && cutsGiven(task, clipRun);
   const cheapClip = clipFollowUp || rangeCuts;
-  const builtTabs: { label: string; timeline: Timeline }[] = [];
   // Range cuts are judged on the tabs the task built or changed. When it changed none (a task restarted on a tab an
   // earlier task built), the tab finish was called on is checked as it stands.
   const builtAny = rangeCuts && (await Promise.all(checked.map(async (tab) => {
@@ -160,7 +134,6 @@ export async function finishLane(
       prefix =
         tab.timelineId === timelineId ? '' : `Timeline ${tab.timelineId}: `;
     const newClipTab = rangeCuts && !task.initialTabIds.includes(tab.timelineId);
-    if (rangeCuts) builtTabs.push({ label: prefix, timeline: tab.timeline });
     if (newClipTab && summary.clipCount && !tab.timeline.clips.some((clip) => clip.kind === 'video'))
       failures.push(`${prefix}A clip needs populated source footage; this tab has no video.`);
     if (
@@ -237,40 +210,6 @@ export async function finishLane(
       if (newClipTab) failures.push(`${prefix}This clip is ${summary.duration.toFixed(2)}s; a clip must be 15–60 s. Lengthen or shorten its source range, or tell the user the range they gave is outside the clip length.`);
       else warnings.push(`${prefix}This short is now ${summary.duration.toFixed(2)}s, outside the 15–60 s clip length.`);
     }
-    // Clip-lane checks never render frames. Other lanes render a few, on a hard budget (lib/ai/lanes/task.ts): the
-    // frames only confirm that what this request changed draws. Gaps, overlaps, slivers, lengths, linked audio and
-    // every caption check are read from the timeline data, never from pixels, and nothing is asked of the caller.
-    if (!cheapClip && !failures.length && summary.clipCount && summary.duration > 0) {
-      const looked = [...task.evidence].reverse().find((item) => item.tool === 'finishLook' && item.timelineId === tab.timelineId)?.output as { used?: number; seen?: string[] } | undefined;
-      const used = looked?.used ?? 0, seen = looked?.seen ?? [];
-      const budget = Math.max(0, Math.min(finishFrameBudget(task.lane, taskCheckLevel(task)), FINISH_FRAMES_PER_TASK - used));
-      const plan = await finishLookSpots(tab.timeline, baseline, budget, new Set(seen));
-      const times = plan.spots.map((spot) => spot.time);
-      if (!times.length && plan.keys.length === 0 && used >= FINISH_FRAMES_PER_TASK) warnings.push(`${prefix}This request has used its ${FINISH_FRAMES_PER_TASK} finish frames; this check passed on timeline data alone.`);
-      if (times.length) try {
-        // One call, one contact sheet: the budget never exceeds a sheet.
-        for (let index = 0; index < times.length; index += MAX_SHEET_FRAMES) {
-          const batch = times.slice(index, index + MAX_SHEET_FRAMES),
-            rendered = await options.render(batch, undefined, tab.timelineId);
-          if (
-            rendered.frames.length !== batch.length ||
-            (!rendered.sheet && rendered.frames.some((frame) => !frame.image))
-          )
-            throw new Error('Changed-range rendering returned missing frames.');
-        }
-        if (tab.timelineId === timelineId) options.looked?.(plan.spots);
-        // What was looked at is recorded, so a later finish of this request draws only what changed after it.
-        await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: { tool: 'finishLook', timelineId: tab.timelineId, fingerprint: '', input: {}, output: { used: used + times.length, seen: [...seen, ...plan.keys].slice(-600) } } });
-        if (options.fastFrameTimes !== undefined && tab.timelineId === timelineId) await ctx.runMutation(internal.lanes.evidence, { ...scope, evidence: fastFrameEvidence(tab.timelineId, key, []) });
-      } catch (error) {
-        // "Could not look" is not "looked and found a problem": only a render that ran and failed is a failed check.
-        // A final check was asked to look, so there it still fails.
-        if (error instanceof FramesUnavailableError && taskCheckLevel(task) !== 'final') warnings.push(`${prefix}The changed frames were not drawn (${error.message}) This check passed on timeline data alone; say the result was not looked at.`);
-        else failures.push(
-          `${prefix}Changed ranges did not render: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      }
-    }
     // Captions are checked from data: timing, overlap, reading speed, line length, position and style. Advice only:
     // it comes back with a pass and spends no attempt. (The reel lane's word and sync check above is the blocking one.)
     if (task.lane !== 'clip' && (tab.timelineId !== timelineId || touched.captions)) warnings.push(...captionAdvice(tab.timeline).map((line) => prefix + line));
@@ -287,17 +226,8 @@ export async function finishLane(
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
     }
   }
-  if (rangeCuts) {
-    // The first and last frames of each cut, read from the source: a stray frame of the neighbouring shot fails here.
-    // It runs beside any failure above, so one finish reports everything there is to repair.
-    if (options.clipEdges && builtTabs.length) {
-      const edges = await options.clipEdges(builtTabs);
-      failures.push(...edges.failures);
-      warnings.push(...edges.warnings);
-    }
-    // The final level's decode-health check is a checkClip receipt against a registered plan; range cuts have none.
-    if (taskCheckLevel(task) === 'final') warnings.push('Decode health of the source was not checked: that check needs a registered clip plan, and these clips were cut at given source ranges.');
-  }
+  // The final level's decode-health check is a checkClip receipt against a registered plan; range cuts have none.
+  if (rangeCuts && taskCheckLevel(task) === 'final') warnings.push('Decode health of the source was not checked: that check needs a registered clip plan, and these clips were cut at given source ranges.');
   if (task.lane === 'clip' && !cheapClip) {
     // The stable task key spans separate MCP calls; the upstream ledger verifies every actual tab.
     failures.push(

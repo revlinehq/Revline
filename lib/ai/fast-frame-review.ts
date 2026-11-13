@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { LaneEvidence } from './lanes/types';
 import { equalTimelineValue } from '../editor/timeline-equality';
 import { renderedFrameTime, timelineDuration, type Timeline } from '../editor/types';
-import { MAX_SHEET_FRAMES, evenly } from './frame-sampling';
+import { evenly } from './frame-sampling';
 
 const frameReview = z.object({ pendingFrameTimes: z.array(z.number().nonnegative()) });
 export function readFastFrameTimes(evidence: LaneEvidence[], timelineId: string, fingerprint: string) {
@@ -116,13 +116,6 @@ export class FastFrameReview {
 
   /** To the millisecond: a frame time such as 42.43333333333 is noise in the model's context on every read. */
   times() { return [...new Set([...this.pending].map(time => Math.round(time * 1000) / 1000))].sort((a, b) => a - b); }
-
-  feedback() {
-    const all = this.times(), times = this.sample();
-    if (!times.length) return undefined;
-    const spread = times.length < all.length ? ` These are ${times.length} evenly spaced of ${all.length} changed frames; they cover this check.` : '';
-    return `This lane requires rendered checks before completion. Call getFrames with times ${JSON.stringify(times)}${times.length > MAX_SHEET_FRAMES ? `, up to ${MAX_SHEET_FRAMES} per call` : ' in one call'}: each call returns one contact sheet of the changed spots (a cut edge is the frame before it and the frame after).${spread} Look at it, then finish. Do not render the frames in between, sweep the whole video or repeat a check.`;
-  }
 
   /** What the model is asked to look at: every pending time, or at a standard check an evenly spaced sheet of them. */
   sample() { const all = this.times(), limit = this.limit(); return limit === undefined ? all : evenly(all, limit); }
