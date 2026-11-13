@@ -78,7 +78,8 @@ export async function finishLane(
   if (task.lane === 'reel' && (touched.footage || touched.captions)) failures.push(...reelCaptionFailures(timeline, assets));
   if (task.lane === 'reel' && touched.footage) {
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
-    failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
+    const read = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId)?.output as { cutAway?: { assetId: string; start: number; end: number }[] } | undefined;
+    failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined, read?.cutAway));
   }
   // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
   // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.

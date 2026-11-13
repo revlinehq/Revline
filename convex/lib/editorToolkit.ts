@@ -1765,12 +1765,12 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       await editSession.wait();
       if (input.heard && (input.remove?.length || input.drop?.length)) throw new Error('heard is the verdict on the cut as it is now: cut first, read the new prose, then pass heard alone.');
       await loadSavedSpeech();
-      let removed: string[] | undefined, result: Awaited<ReturnType<typeof checkpoint>> | undefined;
+      let removed: string[] | undefined, result: Awaited<ReturnType<typeof checkpoint>> | undefined, cutAway: { assetId: string; start: number; end: number }[] = [];
       const read = cutScript(editSession.timeline, assets, { maxPause: input.maxPause });
       // The last read of this cut: its accepted flags, and how many rounds of cutting it has had. A cut another tool changed
       // since is a new cut and starts again at round 0.
       const priorEntry = [...(await readTask())?.evidence ?? []].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId);
-      const priorRead = priorEntry?.output as { accepted?: Record<string, string>; rounds?: number; heard?: string; heardCut?: string } | undefined, unchanged = priorEntry?.fingerprint === await timelineHistoryKey(editSession.timeline);
+      const priorRead = priorEntry?.output as { accepted?: Record<string, string>; rounds?: number; heard?: string; heardCut?: string; cutAway?: { assetId: string; start: number; end: number }[] } | undefined, unchanged = priorEntry?.fingerprint === await timelineHistoryKey(editSession.timeline);
       if ((input.drop?.length || input.heard) && taskId && !unchanged) throw new Error('Sentence numbers and heard belong to a read of the cut as it is now, and the cut changed since the last read (or it was never read). Call readCutScript {} and read its prose first.');
       // Checked before anything is cut, so a refused call changes nothing.
       const unknown = (input.accept ?? []).filter(item => !read.flags.some(flag => flag.id === item.id));
@@ -1783,6 +1783,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
         // One cut per source: what is retained now, minus every flagged range. Measured edges stay exact.
         result = await checkpoint(t => {
           let next = t; const done = new Set<string>();
+          cutAway = [];
           for (const cut of targets.flatMap(flag => flag.remove!)) {
             if (done.has(cut.clipId)) continue;
             const clip = find(next, cut.clipId);
@@ -1791,6 +1792,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
             const windows = retainedSourceWindows(next, cut.clipId), ids = new Set(windows.map(window => window.clipId));
             const cuts = targets.flatMap(flag => flag.remove!).filter(item => ids.has(item.clipId)).map(item => { const window = windows.find(piece => piece.clipId === item.clipId)!; return { start: Math.max(window.start, item.start), end: Math.min(window.end, item.end) }; }).sort((a, b) => a.start - b.start);
             ids.forEach(id => done.add(id));
+            cutAway.push(...cuts.filter(item => item.end > item.start).map(item => ({ assetId: clip.assetId ?? "", start: Math.round(item.start * 1000) / 1000, end: Math.round(item.end * 1000) / 1000 })));
             const ranges = windows.flatMap(window => keptRanges(window.start, window.end, cuts.map(item => ({ kind: 'restart' as const, start: item.start, end: item.end, confidence: 1, detail: '' })))).filter(range => range.end - range.start >= .08);
             if (!ranges.length) throw new Error('Removing these would leave nothing of that clip. Remove fewer flags or delete the clip.');
             if (ranges.length > 100) throw new Error(`This take is in ${windows.length} pieces, more than one change can rebuild. Trim the flagged piece instead: ${targets.map(flag => flag.id).join(', ')}.`);
@@ -1807,7 +1809,7 @@ export function createEditorToolkit(ctx: ActionCtx, options: EditorToolkitOption
       const prior = priorRead?.accepted ?? {}, rounds = (unchanged ? priorRead?.rounds ?? 0 : 0) + (removed ? 1 : 0), stop = rounds >= CUT_READ_ROUNDS;
       // Reasons stay with their ids across re-reads; an id whose flag is gone is dropped.
       const accepted = Object.fromEntries(Object.entries({ ...prior, ...Object.fromEntries((input.accept ?? []).map(item => [item.id, item.reason])) }).filter(([id]) => script.flags.some(flag => flag.id === id)));
-      if (taskId) await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'readCutScript', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { accepted, rounds, ...(input.heard ? { heard: input.heard, heardCut: cutSignature(script) } : priorRead?.heardCut ? { heard: priorRead.heard, heardCut: priorRead.heardCut } : {}) } } });
+      if (taskId) await laneCtx.runMutation(internal.lanes.evidence, { ...taskScope, evidence: { tool: 'readCutScript', timelineId, fingerprint: await timelineHistoryKey(editSession.timeline), input: {}, output: { accepted, rounds, ...(cutAway.length || priorRead?.cutAway?.length ? { cutAway: [...priorRead?.cutAway ?? [], ...cutAway].slice(-60) } : {}), ...(input.heard ? { heard: input.heard, heardCut: cutSignature(script) } : priorRead?.heardCut ? { heard: priorRead.heard, heardCut: priorRead.heardCut } : {}) } } });
       cutRead = true;
       const kept = Object.keys(accepted), open = script.flags.filter(flag => !kept.includes(flag.id)), failing = open.filter(flag => cutFlagFails(flag, [], lane === 'reel' && !stop) && !(task?.script && flag.kind === 'mid-sentence' && flag.atCut)), speech = open.filter(flag => CUT_FAILING_KINDS.includes(flag.kind));
       const time = (value: number) => Math.round(value * 100) / 100;
