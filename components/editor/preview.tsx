@@ -53,6 +53,7 @@ function openingAssets(cache:ReturnType<typeof createPreviewSourceCache>,assets:
   return Promise.race([local,fallback]).finally(()=>clearTimeout(timer));
 }
 function frameTime(player:HyperframesPlayer|null,fallback:number){const frame=player?.iframeElement?.contentWindow as CompositionWindow|null;return frame?.__timelines?.revline?.time()??player?.currentTime??fallback;}
+const PLAY_CHECK_MS=1500,PLAY_BUFFER_GRACE_MS=12_000;
 export type PreviewHandle = { play():void; pause():void; seek(time:number):void; currentTime():number; mute(value:boolean):void; clipVolume(id:string,volume:number|null):void; clipEffects(id:string,patch:Partial<Clip>|null):void; resetCrop():void; finishCrop(cancel?:boolean):void; retry():void };
 export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for vertical frames. */safeArea?:SafeAreaPlatform|null;controls?:boolean;timeline:Timeline;assets:MediaAsset[];time:number;onTime:(time:number)=>void;onPlaying:(playing:boolean)=>void;onError:(error:string)=>void;muted:boolean;onMutedChange?:(muted:boolean)=>void;selectedClip?:Clip;onRefreshMedia?:RefreshPlaybackMedia;onPlaybackAssets?:(assets:MediaAsset[])=>void;onVisualChange?:(patch:Partial<Clip>)=>void;onSelectClip?:(id:string|null)=>void;onClipChange?:(id:string,patch:Partial<Clip>)=>void;onEditText?:(id:string)=>void;onEditClip?:(id:string)=>void;cropping?:boolean;onCropCommit?:(id:string,crop:SourceCrop)=>void;onCropCancel?:()=>void;debugId?:string;onReady?:()=>void;onThumbnail?:(url:string)=>void;onSlowLoad?:()=>void}>(function Preview({safeArea,controls=true,timeline,assets,time,onTime,onPlaying,onError,muted,onMutedChange,selectedClip:inputSelectedClip,onRefreshMedia,onPlaybackAssets,onVisualChange,onSelectClip,onClipChange,onEditText,onEditClip,cropping=false,onCropCommit,onCropCancel,debugId,onReady,onThumbnail,onSlowLoad},ref) {
   const committedTimeline=timeline;
@@ -209,8 +210,37 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
     const width=Number(composition.dataset.width),height=Number(composition.dataset.height);
     frame.style.left=`${(transform.x-.5)*width}px`;frame.style.top=`${(transform.y-.5)*height}px`;frame.style.transform=`rotate(${transform.rotation}deg) scale(${transform.scale})`;frame.style.opacity=String(transform.opacity);
   }
-  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{seekOwned.current=false;if(mediaSession.current){mediaSession.current.play();callbacks.current.onPlaying(mediaSession.current.isPlaying());}else player.current?.play();},pause:()=>{if(mediaSession.current)mediaSession.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
-    seekPosition.current=t;seekRequest.current++;seekOwned.current=true;if(mediaSession.current)mediaSession.current.seek(t);else player.current?.seek(t);setSelectionVisible(selectionAt(t));
+  // After a long idle, Play can leave the clock frozen (an AudioContext that
+  // will not resume, an unloaded or expired source, a hold that never
+  // releases). Recover in place: first revive the session's audio and
+  // sources, then rebuild the player at the same position, as a reload would.
+  const playWatch=useRef<ReturnType<typeof setTimeout>|undefined>(undefined);
+  // Set while a watchdog rebuild is pending, so the replacement keeps watching.
+  const rebuiltForPlay=useRef(false);
+  const stopPlayWatch=()=>{clearTimeout(playWatch.current);playWatch.current=undefined;rebuiltForPlay.current=false;};
+  useEffect(()=>stopPlayWatch,[]);
+  function watchPlayback(rebuilt=false){
+    stopPlayWatch();
+    const p=player.current,session=mediaSession.current;if(!p||!session)return;
+    let start=playbackTime(p),buffered=0,revived=false;
+    const again=(delay:number)=>{playWatch.current=setTimeout(check,delay);};
+    const check=():void=>{
+      playWatch.current=undefined;
+      if(player.current!==p||mediaSession.current!==session||!session.isPlaying()||playbackTime(p)>start+.05)return;
+      // A hidden tab stops the frame clock by design; judge progress once it is visible again.
+      if(document.visibilityState==='hidden'){start=playbackTime(p);buffered=0;again(PLAY_CHECK_MS);return;}
+      // Slow footage may buffer for a while; only a hold this long counts as stuck.
+      if(session.isBuffering()&&buffered<PLAY_BUFFER_GRACE_MS){buffered+=PLAY_CHECK_MS;again(PLAY_CHECK_MS);return;}
+      const step=!revived?'revive media':rebuilt?'give up':'rebuild player';
+      console.warn('[Revline playback recovery]',JSON.stringify({reason:'play made no progress',chatId:debugId,step,time:playbackTime(p),buffering:session.isBuffering()}));
+      if(!revived){revived=true;session.revive();start=playbackTime(p);buffered=0;again(PLAY_CHECK_MS*2);return;}
+      if(rebuilt){session.pause();callbacks.current.onPlaying(false);callbacks.current.onError('Playback could not start. Press play to try again, or reload the page.');return;}
+      rebuiltForPlay.current=true;setReloadRevision(value=>value+1);
+    };
+    again(PLAY_CHECK_MS);
+  }
+  useImperativeHandle(ref,()=>({retry:()=>setReloadRevision(value=>value+1),play:()=>{seekOwned.current=false;if(mediaSession.current){mediaSession.current.play();callbacks.current.onPlaying(mediaSession.current.isPlaying());watchPlayback();}else player.current?.play();},pause:()=>{stopPlayWatch();if(mediaSession.current)mediaSession.current.pause();else player.current?.pause();callbacks.current.onPlaying(false);},seek:(t)=>{
+    stopPlayWatch();seekPosition.current=t;seekRequest.current++;seekOwned.current=true;if(mediaSession.current)mediaSession.current.seek(t);else player.current?.seek(t);setSelectionVisible(selectionAt(t));
     // HyperFrames seek lands paused without emitting a pause event.
     callbacks.current.onPlaying(false);
   },currentTime:()=>playbackTime(player.current),mute:(v)=>{if(player.current)player.current.muted=v;},clipVolume:(id,volume)=>{
@@ -291,7 +321,9 @@ export const Preview = forwardRef<PreviewHandle,{/** Platform UI overlay for ver
             player.current=p;mediaSession.current=session;disposeDisplayed.current=disposePlayer;
             p.muted=mutedRef.current;p.style.zIndex='3';previous?.();
             renderedTimeline.current=current;renderedAssets.current=playbackAssets;renderedContentKey.current=contentKey;
-            setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setBuffering(false);callbacks.current.onReady?.();setRevision(value=>value+1);setPlayerVersion(value=>value+1);if(resume)session.play();
+            setSelectionVisible(selectionAt(seekPosition.current));callbacks.current.onTime(seekPosition.current);setReady(true);setBuffering(false);callbacks.current.onReady?.();setRevision(value=>value+1);setPlayerVersion(value=>value+1);
+            const rebuilt=rebuiltForPlay.current;rebuiltForPlay.current=false;
+            if(resume){session.play();if(rebuilt)watchPlayback(true);}
           });});
         })().catch(error=>{if(!cancelled&&!preparation.signal.aborted)callbacks.current.onError(userError(error,'The footage could not load.'));});
       };

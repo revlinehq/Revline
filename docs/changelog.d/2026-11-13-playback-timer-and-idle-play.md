@@ -1,0 +1,2 @@
+- Editor: the playback timer follows the playhead while paused (ruler clicks, scrubs, frame steps). Why: it only updated once playback started.
+- Editor: Play recovers on its own after a long idle (wakes audio, re-signs stuck sources, rebuilds the player in place). Why: play did nothing until a page reload.
