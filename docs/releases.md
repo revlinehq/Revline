@@ -5,8 +5,7 @@ How merged work reaches production: what a pull request must pass, the one relea
 ```mermaid
 flowchart LR
   PR[Pull request] -->|CI: typecheck, build, compat check, changelog fragment| Main[main]
-  Main -->|Railway GitHub autodeploy| Railway[Railway processor and export slots, staging and production]
-  Main -->|Railway staging workflow| Staging[Staging Convex backend]
+  Main -->|Railway GitHub autodeploy| Railway[Railway processor and export slots, production]
   Main -->|npm run release:prod on the Mac| Plan[Plan per target]
   Railway -->|running commit, read live| Plan
   Plan --> Prod[Convex, Workers]
@@ -69,7 +68,7 @@ What it does, in order, each target only when its inputs changed since that targ
 
 It ends with one table: target, old → new commit, result. Each released target is written to `.data/production-releases/deployed.json` as it succeeds, so a failed run is continued by running the command again.
 
-Flags: `--only <target,…>`, `--base <commit>` (comparison commit when nothing is recorded), `--auto-rollback`, `--no-changelog` (`--founder-bypass` is accepted and ignored). Targets: `processor`, `convex`, `media`, `frontend`, `agent`, `mcp`, `exports`, `incident-listener`.
+Flags: `--only <target,…>`, `--base <commit>` (comparison commit when nothing is recorded), `--auto-rollback`, `--no-changelog`. Targets: `processor`, `convex`, `media`, `frontend`, `agent`, `mcp`, `exports`, `incident-listener`.
 
 **First run on the Mac:** record what production runs now, once: `npm run release:status -- --set all=<commit on production>`. Without it every target counts as changed and the compat check is skipped.
 
@@ -85,7 +84,7 @@ When a verification fails, `release:prod` prints the exact rollback commands for
 
 ## Railway
 
-The processor slot and the standard and Ultra export slots deploy themselves from GitHub `main`, in staging and in production. Each Railway service tracks `revlinehq/Revline` on branch `main` with automatic deploys; every merge builds `media-processor/Dockerfile` (target from the slot's `REVLINE_FINAL_TARGET` variable) and starts it. Railway, not a manifest, decides which commit runs. No release, workflow or Convex manifest picks a build.
+The processor slot and the standard and Ultra export slots deploy themselves from GitHub `main` in production. There is no staging environment: a build that crashes before `media-ready` is held and the previous build keeps running (below). Each Railway service tracks `revlinehq/Revline` on branch `main` with automatic deploys; every merge builds `media-processor/Dockerfile` (target from the slot's `REVLINE_FINAL_TARGET` variable) and starts it. Railway, not a manifest, decides which commit runs. No release, workflow or Convex manifest picks a build.
 
 ```mermaid
 flowchart LR
@@ -113,7 +112,7 @@ flowchart LR
 
 ### Pinned-image rollback
 
-`scripts/railway-workers.mjs stage --kind <kind>` with a manifest that pins `<kind>Image` and `<kind>Commit` points a lane's slots at a registry image. It pauses claims, switches the slots, writes only that kind's entry of the live `RAILWAY_WORKERS_JSON` and reads it back, boots every routed lane, then resumes claims; any failure restores the previous state. A slot switched to an image stops following `main` until its source is set back to the repository in Railway. Production stages still need a staging receipt or a `.data/railway/promotion-ledger.json` record of that commit and digest. `stage-repository` and `verify` (preflights on permanent slots) are retired. The `Railway staging` workflow now only deploys the staging Convex backend, so `railway-proof.mjs` has no fresh staging images to prove.
+`scripts/railway-workers.mjs stage --kind <kind>` with a manifest that pins `<kind>Image` and `<kind>Commit` points a lane's slots at a registry image. It pauses claims, switches the slots, writes only that kind's entry of the live `RAILWAY_WORKERS_JSON` and reads it back, boots every routed lane, then resumes claims; any failure restores the previous state. A slot switched to an image stops following `main` until its source is set back to the repository in Railway. A production stage is a rollback, so it only accepts a commit production already ran: one recorded in `.data/railway/promotion-ledger.json` by an earlier production stage, or one a production slot of that lane has a Railway deployment of (SUCCESS, SLEEPING or REMOVED). The runtime preflight then checks the image reports exactly that commit and digest before any slot changes. Ship anything new through `main`. `stage-repository` and `verify` (preflights on permanent slots) are retired.
 
 ## Incident listener
 

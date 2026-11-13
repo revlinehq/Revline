@@ -5,8 +5,7 @@
 // main with REVLINE_RELEASE_CI=1: Convex and the Cloudflare Workers only, credentials from the GitHub `production`
 // environment instead of the Mac (see "CI mode" below and docs/releases.md).
 // Flags: --base <commit> (comparison commit for targets with no recorded release), --only <target,…>,
-//   --auto-rollback (roll Workers back when verification fails), --no-changelog. (--founder-bypass is accepted and
-//   ignored: Railway is no longer promoted from staging.)
+//   --auto-rollback (roll Workers back when verification fails), --no-changelog.
 // It only orders and records: the planner (release-plan.mjs), the verifiers (release-verify.mjs), the
 // agent settings sync and the Worker configs. Railway deploys itself from GitHub main; this command only reads which
 // commit it runs (release-railway.mjs) and holds Convex while a raised processor contract is not running yet.
@@ -22,7 +21,7 @@ import { STATE_BRANCH, TARGETS, TARGET_NOTES, fetchSharedState, mergeStates, pub
 
 const { values: flags } = parseArgs({ options: {
   'dry-run': { type: 'boolean' }, base: { type: 'string' }, only: { type: 'string' }, 'auto-rollback': { type: 'boolean' },
-  'founder-bypass': { type: 'string' }, 'no-changelog': { type: 'boolean' },
+  'no-changelog': { type: 'boolean' },
 } });
 const dry = !!flags['dry-run'];
 const DEPLOYMENT = 'different-gnu-398';
@@ -44,7 +43,6 @@ const CI_TARGETS = ['processor', 'convex', 'media', 'frontend', 'agent', 'mcp', 
 const only = flags.only ? flags.only.split(',').map(name => name.trim()).filter(Boolean) : ci ? CI_TARGETS : TARGETS;
 for (const name of only) if (!TARGETS.includes(name)) throw new Error(`--only takes ${TARGETS.join(', ')}; got "${name}".`);
 if (ci) for (const name of only) if (!CI_TARGETS.includes(name)) throw new Error(`The release workflow runs only ${CI_TARGETS.join(', ')}; "${name}" is released from the Mac.`);
-if (flags['founder-bypass'] !== undefined) console.log('--founder-bypass ignored: Railway deploys from GitHub main and is not promoted from staging.');
 
 const productionFile = resolve(process.env.REVLINE_PRODUCTION_ENV_FILE || '.env.production.local');
 // railway-workers.mjs reads the Railway token and registry credentials from its own env file when one is kept.

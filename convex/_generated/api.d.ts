@@ -152,7 +152,6 @@ import type * as renderSnapshotMigration from "../renderSnapshotMigration.js";
 import type * as renders from "../renders.js";
 import type * as runTimings from "../runTimings.js";
 import type * as saveIncidents from "../saveIncidents.js";
-import type * as stagingProof from "../stagingProof.js";
 import type * as storage from "../storage.js";
 import type * as storageMigration from "../storageMigration.js";
 import type * as superwallBilling from "../superwallBilling.js";
@@ -314,7 +313,6 @@ declare const fullApi: ApiFromModules<{
   renders: typeof renders;
   runTimings: typeof runTimings;
   saveIncidents: typeof saveIncidents;
-  stagingProof: typeof stagingProof;
   storage: typeof storage;
   storageMigration: typeof storageMigration;
   superwallBilling: typeof superwallBilling;
