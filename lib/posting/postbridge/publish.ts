@@ -21,7 +21,7 @@ async function upload(uploadUrl: string, input: PublishInput): Promise<void> {
     const file = await fetch(input.videoUrl, { signal: abort.signal });
     const bytes = Number(file.headers.get('content-length'));
     if (!file.ok || !file.body || !(bytes > 0)) throw new Error('The export could not be read from storage.');
-    const sent = await fetch(uploadUrl, { method: 'PUT', signal: abort.signal, headers: { 'Content-Type': 'video/mp4', 'Content-Length': String(bytes) }, body: file.body, duplex: 'half' } as RequestInit);
+    const sent = await fetch(uploadUrl, { method: 'PUT', signal: abort.signal, headers: { 'Content-Type': input.contentType ?? 'video/mp4', 'Content-Length': String(bytes) }, body: file.body, duplex: 'half' } as RequestInit);
     if (!sent.ok) throw new Error(`The upload was refused (${sent.status}).`);
   } finally { clearTimeout(timer); }
 }
@@ -30,7 +30,7 @@ async function upload(uploadUrl: string, input: PublishInput): Promise<void> {
 async function media(apiKey: string, input: PublishInput): Promise<{ mediaId: string } | { url: string }> {
   if (input.videoBytes > 0 && input.videoBytes <= UPLOAD_MAX_BYTES) {
     try {
-      const { mediaId, uploadUrl } = await createUpload(apiKey, { name: 'video.mp4', mimeType: 'video/mp4', bytes: input.videoBytes });
+      const { mediaId, uploadUrl } = await createUpload(apiKey, { name: input.contentType === 'video/quicktime' ? 'video.mov' : 'video.mp4', mimeType: input.contentType ?? 'video/mp4', bytes: input.videoBytes });
       await upload(uploadUrl, input);
       return { mediaId };
     } catch (error) {

@@ -2,7 +2,9 @@
 import type { TikTokPostSettings } from './platform-limits';
 
 export type PostingPlatform = 'instagram' | 'tiktok' | 'youtube';
-export type PublishInput = { videoUrl: string; videoBytes: number; durationSeconds: number; width: number; height: number; title?: string; caption: string;
+export type PublishInput = { videoUrl: string; videoBytes: number;
+  /** The file's type when it is not MP4: a Library video posted as it is stored (MOV). */
+  contentType?: 'video/mp4' | 'video/quicktime'; durationSeconds: number; width: number; height: number; title?: string; caption: string;
   /** What the user chose for a TikTok post: who can view it, and its interaction and disclosure settings. */
   tiktok?: TikTokPostSettings;
 };

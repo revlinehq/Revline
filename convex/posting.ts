@@ -5,6 +5,7 @@ import { internalMutation, internalQuery, mutation, query, type MutationCtx, typ
 import { requireOwner } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { mediaUrl } from './lib/media_storage';
+import { ownedObjectReferences } from './lib/storage_accounting';
 import { exportFileName } from './renders';
 import { accountStatus, postingPlatform, postStatus, postVisibility, tiktokChoices, tiktokVisibility, youtubeVisibility } from './postingTables';
 import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types';
@@ -192,6 +193,26 @@ async function postableExport(ctx: QueryCtx | MutationCtx, ownerId: string, jobI
   return { job, error: '' };
 }
 
+/** The video types a Library file can be posted as, by extension: what Post Bridge receives it as. */
+const POSTABLE_VIDEO_TYPES: Readonly<Record<string, 'video/mp4' | 'video/quicktime'>> = { mp4: 'video/mp4', m4v: 'video/mp4', mov: 'video/quicktime' };
+const postableType = (fileName: string) => POSTABLE_VIDEO_TYPES[fileName.split('.').at(-1)?.toLowerCase() ?? ''];
+/**
+ * A video from the Library a post sends as it is stored (no export), with the length and size the platforms check, or
+ * the reason it cannot be posted. An export in the Library is posted through its export instead (`postableExport`).
+ */
+async function postableFile(ctx: QueryCtx | MutationCtx, ownerId: string, fileId: Id<'storageObjects'>) {
+  const row = await ctx.db.get(fileId);
+  if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) return { file: null, error: 'The video was deleted from the Library before it could be posted.' };
+  if (row.kind !== 'video') return { file: null, error: 'Only a video can be posted.' };
+  const contentType = postableType(row.fileName);
+  if (!contentType) return { file: null, error: 'Only MP4 and MOV videos can be posted. Add this one to a project and export it, then post the export.' };
+  const refs = await ownedObjectReferences(ctx, ownerId, row);
+  const durationSeconds = refs.library?.duration ?? refs.attachments.find(asset => asset.kind === 'video' && asset.duration)?.duration;
+  const sized = refs.library?.width && refs.library.height ? refs.library : refs.attachments.find(asset => asset.kind === 'video' && asset.width && asset.height);
+  if (!durationSeconds || !sized?.width || !sized.height) return { file: null, error: 'Revline has not measured this video yet. Add it to a project once, then post it.' };
+  return { file: { row, contentType, durationSeconds, width: sized.width, height: sized.height }, error: '' };
+}
+
 /**
  * Post one finished export to several accounts, now or at `scheduledAt`. One post per target account, grouped by the
  * returned batch. "Now" is the scheduled path with the time set to now.
@@ -209,7 +230,8 @@ export const createBatch = mutation({
   handler: async (ctx, args) => { const ownerId = await requireOwner(ctx); requirePosting(); return createBatchFor(ctx, ownerId, args); },
 });
 export type BatchInput = {
-  jobId: Id<'renderJobs'>; caption: string; title?: string; scheduledAt?: number; campaignId?: string;
+  /** What is posted: a finished export, or a Library video (`fileId`) sent as it is stored. */
+  jobId?: Id<'renderJobs'>; fileId?: Id<'storageObjects'>; caption: string; title?: string; scheduledAt?: number; campaignId?: string;
   targets: { accountId: Id<'postingAccounts'>; caption?: string; title?: string; visibility?: Doc<'postingPosts'>['visibility']; tiktok?: Doc<'postingPosts'>['tiktok'] }[];
   /** Set when the assistant or an MCP agent made this post, so the Posts page can say so. */
   createdBy?: 'assistant'; agentName?: string;
@@ -265,12 +287,10 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   if (!args.targets.length) throw new ConvexError('Pick at least one account.');
   if (args.targets.length > TARGET_LIMIT || new Set(args.targets.map(target => target.accountId)).size !== args.targets.length) throw new ConvexError(`Pick up to ${TARGET_LIMIT} different accounts.`);
   const { caption, title } = batchText(args, now);
-  const found = await postableExport(ctx, ownerId, args.jobId);
-  if (!found.job) throw new ConvexError(found.error);
-  const project = await ctx.db.get(found.job.projectId);
+  const source = await batchSource(ctx, ownerId, args);
   const scheduledAt = args.scheduledAt !== undefined && args.scheduledAt > now ? args.scheduledAt : undefined, dueAt = scheduledAt ?? now;
   const batchId = await ctx.db.insert('postingBatches', {
-    ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
+    ownerId, ...source.batch,
     caption, ...(title ? { title } : {}), ...(scheduledAt ? { scheduledAt } : {}), ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now,
     ...(args.createdBy ? { createdBy: args.createdBy } : {}), ...(args.agentName ? { agentName: args.agentName } : {}),
   });
@@ -278,7 +298,7 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
     const { account, caption: own, title: ownTitle, choices } = await checkTarget(ctx, ownerId, target), postTitle = ownTitle ?? title;
     if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
     const postId = await ctx.db.insert('postingPosts', {
-      ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
+      ownerId, batchId, accountId: account._id, platform: account.platform, ...source.post, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
       ...choices, status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
     });
     // "Post now" does not wait for the next scheduler tick.
@@ -286,6 +306,37 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   }
   return batchId;
 }
+
+/** What one batch sends, as its batch row and each post row name it. Exactly one of `jobId` and `fileId`. */
+async function batchSource(ctx: MutationCtx, ownerId: string, args: Pick<BatchInput, 'jobId' | 'fileId'>) {
+  if (args.fileId && !args.jobId) {
+    const { file, error } = await postableFile(ctx, ownerId, args.fileId);
+    if (!file) throw new ConvexError(error);
+    return { batch: { fileId: file.row._id, exportLabel: file.row.fileName.replace(/\.[^.]+$/, '') }, post: { fileId: file.row._id } };
+  }
+  if (!args.jobId || args.fileId) throw new ConvexError('Pick one video to post.');
+  const found = await postableExport(ctx, ownerId, args.jobId);
+  if (!found.job) throw new ConvexError(found.error);
+  const project = await ctx.db.get(found.job.projectId);
+  return { batch: { jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, '') }, post: { jobId: found.job._id } };
+}
+
+/**
+ * Post a file from the Library, now or at `scheduledAt`, with the same targets as `createBatch`. A video is sent as
+ * it is stored, with no export; an export in the Library is posted through its export.
+ */
+export const createFileBatch = mutation({
+  args: {
+    fileId: v.id('storageObjects'), caption: v.string(), title: v.optional(v.string()), scheduledAt: v.optional(v.number()),
+    targets: v.array(v.object({ accountId: v.id('postingAccounts'), caption: v.optional(v.string()), title: v.optional(v.string()), visibility: v.optional(postVisibility), tiktok: v.optional(tiktokChoices) })),
+  },
+  returns: v.id('postingBatches'),
+  handler: async (ctx, { fileId, ...args }) => {
+    const ownerId = await requireOwner(ctx); requirePosting();
+    const row = await ctx.db.get(fileId);
+    return createBatchFor(ctx, ownerId, { ...args, ...(row?.kind === 'export' && row.ownerId === ownerId && row.jobId ? { jobId: row.jobId } : { fileId }) });
+  },
+});
 
 /** Try a failed post again from a clean attempt count. */
 export const retry = mutation({
@@ -389,6 +440,18 @@ export async function projectCover(ctx: QueryCtx, projectId: Id<'projects'>) {
   return { title: row?.title, coverUrl, coverKind: !row || !coverUrl ? null : row.coverKind === 'video' && row.coverR2Key ? 'video' as const : 'image' as const };
 }
 
+/** A Library video's cover: the poster a project or the Library saved for it, else the video itself (its first frame). */
+async function fileCover(ctx: QueryCtx, ownerId: string, fileId: Id<'storageObjects'> | undefined): Promise<{ coverUrl: string | null; coverKind: 'image' | 'video' | null }> {
+  const row = fileId ? await ctx.db.get(fileId) : null;
+  if (!row || row.ownerId !== ownerId) return { coverUrl: null, coverKind: null };
+  const refs = await ownedObjectReferences(ctx, ownerId, row);
+  const poster = refs.attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId ?? (refs.library?.ownerId === ownerId ? refs.library.thumbnailStorageId : undefined);
+  const posterUrl = poster ? await ctx.storage.getUrl(poster) : null;
+  if (posterUrl) return { coverUrl: posterUrl, coverKind: 'image' as const };
+  const videoUrl = await mediaUrl(ctx, row);
+  return { coverUrl: videoUrl, coverKind: videoUrl ? 'video' as const : null };
+}
+
 const clipPost = v.object({
   id: v.id('postingPosts'), platform: postingPlatform, username: v.string(), avatarUrl: v.union(v.string(), v.null()),
   /** The account's state now: a failed post can only be retried while its account is `connected`. */
@@ -402,7 +465,7 @@ const POSTS_WINDOW = 200;
  */
 export const clipPosts = query({
   args: {},
-  returns: v.array(v.object({ batchId: v.id('postingBatches'), projectId: v.id('projects'), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), byAssistant: v.boolean(), posts: v.array(clipPost) })),
+  returns: v.array(v.object({ batchId: v.id('postingBatches'), projectId: v.union(v.id('projects'), v.null()), label: v.string(), caption: v.string(), ...cover, campaignId: v.union(v.string(), v.null()), createdAt: v.number(), byAssistant: v.boolean(), posts: v.array(clipPost) })),
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
     // One indexed read, as `posts` does; a clip's posts are created together, so they sit next to each other in it.
@@ -411,12 +474,14 @@ export const clipPosts = query({
     for (const row of rows) groups.set(row.batchId, [...groups.get(row.batchId) ?? [], row]);
     // The oldest clip in a full window may have posts beyond it; it is left out rather than shown with accounts missing.
     if (rows.length === POSTS_WINDOW) groups.delete(rows[rows.length - 1].batchId);
-    const accountsById = new Map<string, Doc<'postingAccounts'> | null>(), pictures = new Map<string, string | null>(), covers = new Map<string, Awaited<ReturnType<typeof projectCover>>>();
+    const accountsById = new Map<string, Doc<'postingAccounts'> | null>(), pictures = new Map<string, string | null>(), covers = new Map<string, Awaited<ReturnType<typeof fileCover>>>();
     const clips = [];
     for (const [batchId, group] of groups) {
       const batch = await ctx.db.get(batchId);
       if (!batch) continue;
-      if (!covers.has(batch.projectId)) covers.set(batch.projectId, await projectCover(ctx, batch.projectId));
+      // A Library video has no project: its own poster is the cover.
+      const coverKey = batch.projectId ?? batch.fileId ?? batchId;
+      if (!covers.has(coverKey)) covers.set(coverKey, batch.projectId ? await projectCover(ctx, batch.projectId) : await fileCover(ctx, ownerId, batch.fileId));
       const posts = [];
       // Back in the order the accounts were picked.
       for (const row of group.reverse()) {
@@ -428,8 +493,8 @@ export const clipPosts = query({
           status: row.status, error: optional(row.error), attempts: row.attempts, scheduledAt: optional(row.scheduledAt), url: optional(row.url), publishedAt: optional(row.publishedAt), views: optional(row.views),
         });
       }
-      const { coverUrl, coverKind } = covers.get(batch.projectId)!;
-      clips.push({ batchId, projectId: batch.projectId, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, byAssistant: batch.createdBy === 'assistant', posts });
+      const { coverUrl, coverKind } = covers.get(coverKey)!;
+      clips.push({ batchId, projectId: batch.projectId ?? null, label: batch.exportLabel, caption: batch.caption, coverUrl, coverKind, campaignId: optional(batch.campaignId), createdAt: batch.createdAt, byAssistant: batch.createdBy === 'assistant', posts });
     }
     return clips;
   },
@@ -450,6 +515,25 @@ export const clip = query({
       jobId: job._id, label: exportFileName(title ?? (await ctx.db.get(job.projectId))?.title ?? 'Video', job.label).replace(/\.mp4$/, ''),
       durationSeconds: timeline ? timelineDuration(timeline) : null, coverUrl, coverKind, campaign: campaign ? { id: campaign._id, name: campaign.name } : null,
     };
+  },
+});
+
+/** One Library file as the Post dialog shows it, with the reason it cannot be posted (empty when it can). Null when it is gone. */
+export const libraryClip = query({
+  args: { fileId: v.id('storageObjects') },
+  returns: v.union(v.null(), v.object({ label: v.string(), durationSeconds: v.union(v.number(), v.null()), ...cover, problem: v.string() })),
+  handler: async (ctx, { fileId }) => {
+    const ownerId = await requireOwner(ctx), row = await ctx.db.get(fileId);
+    if (!row || row.ownerId !== ownerId || row.pending || row.auxiliary) return null;
+    const label = row.fileName.replace(/\.[^.]+$/, '');
+    if (row.kind === 'export') {
+      const { job, error } = row.jobId ? await postableExport(ctx, ownerId, row.jobId) : { job: null, error: 'This export can no longer be posted.' };
+      const timeline = job ? (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined : undefined;
+      const { coverUrl, coverKind } = job ? await projectCover(ctx, job.projectId) : { coverUrl: null, coverKind: null };
+      return { label, durationSeconds: timeline ? timelineDuration(timeline) : null, coverUrl, coverKind, problem: error };
+    }
+    const { file, error } = await postableFile(ctx, ownerId, fileId);
+    return { label, durationSeconds: file?.durationSeconds ?? null, ...await fileCover(ctx, ownerId, fileId), problem: error };
   },
 });
 
@@ -537,7 +621,7 @@ export const claim = internalMutation({
   args: { postId: v.id('postingPosts') },
   returns: v.union(v.null(), v.object({
     accountId: v.id('postingAccounts'), platform: postingPlatform,
-    input: v.object({ videoUrl: v.string(), videoBytes: v.number(), durationSeconds: v.number(), width: v.number(), height: v.number(), title: v.optional(v.string()), caption: v.string(),
+    input: v.object({ videoUrl: v.string(), videoBytes: v.number(), contentType: v.optional(v.union(v.literal('video/mp4'), v.literal('video/quicktime'))), durationSeconds: v.number(), width: v.number(), height: v.number(), title: v.optional(v.string()), caption: v.string(),
       tiktok: v.optional(v.object({ privacyLevel: v.optional(tiktokVisibility), ...tiktokChoices.fields })),
     }),
   })),
@@ -557,24 +641,41 @@ export const claim = internalMutation({
     // A post made while another visibility could be set (before Post Bridge) is not sent with a different one.
     const allowed: readonly string[] = post.platform === 'youtube' ? VISIBILITY_OPTIONS.youtube : VISIBILITY_OPTIONS.tiktok;
     if (post.platform !== 'instagram' && post.visibility !== undefined && !allowed.includes(post.visibility)) return fail(`This post was set to a visibility ${PLATFORM_NAMES[post.platform]} posts from Revline cannot have right now. Post the clip again.`);
-    const found = await postableExport(ctx, post.ownerId, post.jobId);
-    if (!found.job) return fail(found.error);
-    const { job } = found;
-    const timeline = (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
-    // A signed link the platform can pull the file from: valid for 7 days from now, far longer than any platform takes.
-    // A post that cannot be prepared fails here instead of throwing, so it never stays due and blocks the queue.
-    const videoUrl = await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }, true).catch(() => null);
-    if (!timeline || !videoUrl) return fail('The export file could not be read. Export the video again, then post it.');
-    const size = job.outputSize ?? (job.outputStorageId ? (await ctx.db.system.get(job.outputStorageId))?.size : undefined) ?? 0;
+    const media = await postMedia(ctx, post);
+    if ('error' in media) return fail(media.error);
     // The stored TikTok choice in the shape the publish call reads. Without one the post is "Only me".
     const choices = post.platform === 'tiktok' && (post.visibility || post.tiktok) ? { tiktok: { ...(isTikTokVisibility(post.visibility) ? { privacyLevel: post.visibility } : {}), ...post.tiktok } } : {};
     await ctx.db.patch(postId, { status: 'posting', attempts: post.attempts + 1, claimedAt: now, dueAt: now, error: undefined, provider: 'postbridge', updatedAt: now });
     return {
       accountId: post.accountId, platform: post.platform,
-      input: { videoUrl, videoBytes: size, durationSeconds: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, job.resolution ?? 1080), ...(post.title ? { title: post.title } : {}), caption: post.caption, ...choices },
+      input: { ...media, ...(post.title ? { title: post.title } : {}), caption: post.caption, ...choices },
     };
   },
 });
+
+/**
+ * The file one post sends and what the platforms check it against: the export, or the Library video as it is stored.
+ * A signed link the platform can pull the file from is valid for 7 days from now, far longer than any platform takes.
+ * A post that cannot be prepared gets a reason instead of throwing, so it never stays due and blocks the queue.
+ */
+async function postMedia(ctx: MutationCtx, post: Doc<'postingPosts'>): Promise<{ error: string } | { videoUrl: string; videoBytes: number; contentType?: 'video/mp4' | 'video/quicktime'; durationSeconds: number; width: number; height: number }> {
+  if (post.fileId) {
+    const { file, error } = await postableFile(ctx, post.ownerId, post.fileId);
+    if (!file) return { error };
+    const videoUrl = await mediaUrl(ctx, file.row, true).catch(() => null);
+    if (!videoUrl) return { error: 'The video could not be read from the Library. Upload it again, then post it.' };
+    return { videoUrl, videoBytes: file.row.size, contentType: file.contentType, durationSeconds: file.durationSeconds, width: file.width, height: file.height };
+  }
+  if (!post.jobId) return { error: 'This post has no video. Post the clip again.' };
+  const found = await postableExport(ctx, post.ownerId, post.jobId);
+  if (!found.job) return { error: found.error };
+  const { job } = found;
+  const timeline = (job.timeline ?? (await ctx.db.query('renderSnapshots').withIndex('by_job', q => q.eq('jobId', job._id)).first())?.timeline) as Timeline | undefined;
+  const videoUrl = await mediaUrl(ctx, { storageId: job.outputStorageId, r2Key: job.outputR2Key }, true).catch(() => null);
+  if (!timeline || !videoUrl) return { error: 'The export file could not be read. Export the video again, then post it.' };
+  const size = job.outputSize ?? (job.outputStorageId ? (await ctx.db.system.get(job.outputStorageId))?.size : undefined) ?? 0;
+  return { videoUrl, videoBytes: size, durationSeconds: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, job.resolution ?? 1080) };
+}
 
 const outcome = v.union(
   v.object({ status: v.literal('published'), platformPostId: v.string(), url: v.string(), providerResultId: v.optional(v.string()) }),

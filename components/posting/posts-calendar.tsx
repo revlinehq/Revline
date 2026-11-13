@@ -144,8 +144,8 @@ export function PostsWeekSkeleton() {
 }
 
 type Tone = 'posted' | 'scheduled' | 'failed';
-/** Where the thumbnail goes: the live post (a menu when it went out on several accounts), or the clip in the editor. */
-type ThumbTarget = { live: ClipPost[]; projectId: string };
+/** Where the thumbnail goes: the live post (a menu when it went out on several accounts), or the clip in the editor. A Library video has no project: it opens the Library. */
+type ThumbTarget = { live: ClipPost[]; projectId: string | null };
 /** The card's thumbnail with the time it goes out or went out over it; the whole thumbnail is a link. */
 function Thumb({ coverUrl, coverKind, time, tone, target }: { coverUrl: string | null; coverKind: 'video' | 'image' | null; time: number; tone: Tone; target: ThumbTarget }) {
   const inside = <>
@@ -159,7 +159,8 @@ function Thumb({ coverUrl, coverKind, time, tone, target }: { coverUrl: string |
     <DropdownMenuTrigger asChild><button type="button" className="posts-card-thumb" aria-label="View the post">{inside}</button></DropdownMenuTrigger>
     <ViewMenu live={live} />
   </DropdownMenu>;
-  return <Link className="posts-card-thumb" href={`/editor/${target.projectId}`} aria-label="Open in the editor">{inside}</Link>;
+  return target.projectId ? <Link className="posts-card-thumb" href={`/editor/${target.projectId}`} aria-label="Open in the editor">{inside}</Link>
+    : <Link className="posts-card-thumb" href="/library" aria-label="Open the Library">{inside}</Link>;
 }
 /** "View on TikTok · @handle", one item per live post. */
 function ViewMenu({ live }: { live: ClipPost[] }) {

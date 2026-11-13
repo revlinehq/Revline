@@ -281,7 +281,8 @@ async function postView(ctx: QueryCtx, post: Doc<'postingPosts'>) {
   const account = await ctx.db.get(post.accountId), batch = await ctx.db.get(post.batchId), now = Date.now();
   const waiting = notSent(post) && post.scheduledAt !== undefined && post.scheduledAt > now;
   let outdated: string | undefined;
-  if (waiting && batch) {
+  // A Library video is sent as it is stored, so only an export can fall behind its project.
+  if (waiting && batch?.projectId && post.jobId) {
     // A scheduled post sends the version that was exported when it was confirmed. An edit made since does not change it.
     const job = await ctx.db.get(post.jobId), project = await ctx.db.get(batch.projectId);
     if (job && project && (job.sourceRevision ?? -1) !== (project.revision ?? 0) && job.sourceTimelineId) {
