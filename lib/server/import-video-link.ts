@@ -27,6 +27,7 @@ import {
   type VideoLink,
 } from "../editor/video-link";
 import { AnalysisError, isMediaDiskFull } from "../media-analysis/errors";
+import { importProxyUrl } from "./import-proxy-bridge";
 import { videoImporterPath } from "./worker-tool-path";
 import { z } from "zod";
 
@@ -384,10 +385,9 @@ function redactProxy(text: string) {
     .sort((a, b) => b.length - a.length)
     .reduce((value, secret) => value.replaceAll(secret, "[proxy]"), text);
 }
-const proxyArguments = (strategy: ImportStrategy) =>
-  strategy.proxy && process.env.VIDEO_IMPORT_PROXY
-    ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
-    : [];
+/** `proxy` is importProxyUrl(): an https:// VIDEO_IMPORT_PROXY arrives as its local plain-HTTP bridge. */
+const proxyArguments = (strategy: ImportStrategy, proxy: string | undefined) =>
+  strategy.proxy && proxy ? ["--proxy", proxy] : [];
 /** yt-dlp prints this before its filters run, so a filtered-out video still says why. */
 const META = "REVLINE_META";
 /** With a range, only that window downloads, cut on exact frames. A whole video is limited to
@@ -398,6 +398,7 @@ function youtubeArguments(
   maxBytes: number,
   range: ImportRange | undefined,
   strategy: ImportStrategy,
+  proxy: string | undefined,
 ) {
   const window = range
     ? [
@@ -442,7 +443,7 @@ function youtubeArguments(
     ...filters,
     ...window,
     ...strategy.args,
-    ...proxyArguments(strategy),
+    ...proxyArguments(strategy, proxy),
     "--js-runtimes",
     `node:${process.execPath}`,
     // Twitch clip renditions carry their audio; at equal size prefer H.264 so nothing re-encodes.
@@ -514,7 +515,11 @@ function downloadYoutube(
 /** A Twitch VOD is read without yt-dlp's downloader: ffmpeg cannot seek into a long playlist of fMP4
  * segments (it crawls from the start and writes an empty file), so the importer asks yt-dlp only where
  * the playlist is, then hands ffmpeg a playlist holding just the segments the range needs. */
-function twitchVodArguments(link: VideoLink, strategy: ImportStrategy) {
+function twitchVodArguments(
+  link: VideoLink,
+  strategy: ImportStrategy,
+  proxy: string | undefined,
+) {
   return [
     "--ignore-config",
     "--no-plugin-dirs",
@@ -527,7 +532,7 @@ function twitchVodArguments(link: VideoLink, strategy: ImportStrategy) {
     "--extractor-retries",
     "2",
     ...strategy.args,
-    ...proxyArguments(strategy),
+    ...proxyArguments(strategy, proxy),
     "--simulate",
     "-f",
     "b[height<=1080]/b",
@@ -808,11 +813,13 @@ export async function importVideoLink(
     const refusals: string[] = [];
     for (const strategy of strategies) {
       try {
+        // Started only when a proxy attempt is reached, so the direct attempt never waits on it.
+        const proxy = strategy.proxy ? await importProxyUrl() : undefined;
         const stdout = await downloadYoutube(
           executable,
           vod
-            ? twitchVodArguments(link, strategy)
-            : youtubeArguments(link, source, maxBytes, range, strategy),
+            ? twitchVodArguments(link, strategy, proxy)
+            : youtubeArguments(link, source, maxBytes, range, strategy, proxy),
           signal,
           pythonPath,
         );
