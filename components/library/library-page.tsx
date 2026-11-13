@@ -24,7 +24,6 @@ import { LibrarySheet } from './library-sheet';
 import { AddToProjectDialog, DeleteFilesDialog, DeleteFolderDialog, MoveDialog, NewFolderDialog } from './library-dialogs';
 import { useSlowWait } from './library-loading';
 import { FileThumb, FileTile, FolderMenu, FolderTile, LIBRARY_DRAG, RenameInput, folderHref, folderMeta, openFolder, openFolderLink, useDropTarget, type DragPayload, type FolderId, type LibraryFile, type LibraryFolder } from './library-tiles';
-import { LibraryUsage } from './library-usage';
 import { useLibraryUpload, type UploadRow } from './use-library-upload';
 import { LibraryLinkImports } from './library-link-imports';
 import { AddMediaDialog } from './library-add-media';
@@ -103,7 +102,6 @@ export function LibraryPage() {
   const [view, setView] = useLibraryView();
   const [search, setSearch] = useState(''), [sort, setSort] = useState<Sort>('newest'), [unused, setUnused] = useState(false);
   const term = useDeferredValue(search.trim()), ready = isAuthenticated && !resolving && !(requested && !folderId);
-  const summary = useQuery(api.storage.summary, isAuthenticated ? {} : 'skip');
   const children = useQuery(api.library.folders, ready && !term ? (folderId ? { parentId: folderId } : {}) : 'skip');
   const listArgs = ready ? { sort, unused, ...(term ? { search: term } : folderId ? { folderId } : {}) } : 'skip';
   const { results, status, loadMore } = usePaginatedQuery(api.library.files, listArgs, { initialNumItems: PAGE });
@@ -222,7 +220,6 @@ export function LibraryPage() {
         <Crumb name="Library" current={!requested} onDropItems={moveTo(undefined)} onWarm={warm(undefined)} />
         {(path ?? []).map((step, index, all) => <span key={step.id} className="library-crumb-step"><BreadcrumbSeparator /><Crumb id={step.id} name={step.name} current={index === all.length - 1} onDropItems={moveTo(step.id)} onWarm={warm(step.id)} /></span>)}
       </BreadcrumbList></Breadcrumb>
-      <LibraryUsage summary={summary} />
     </div>
 
     <div className="library-toolbar">
