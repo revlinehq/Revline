@@ -1,0 +1,1 @@
+- Library: video tiles play muted while the mouse rests on them, loading the video only on hover and preferring the editor preview over the original. Why: the founder asked for hover playback in the Library.

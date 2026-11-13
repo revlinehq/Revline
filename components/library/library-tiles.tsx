@@ -11,6 +11,7 @@ import { VideoFrame } from '@/components/media/video-frame';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
+import { useHoverVideo } from './hover-video';
 import { formatBytes, formatDuration, plural, shortDate } from './format';
 
 export type LibraryFile = FunctionReturnType<typeof api.library.files>['page'][number];
@@ -114,10 +115,11 @@ export const usedIn = (file: LibraryFile) => file.workspaces.length ? `In ${plur
 
 type FileProps = { file: LibraryFile; selected: boolean; active: boolean; onOpen: (additive: boolean) => void; onToggle: () => void; dragPayload: () => DragPayload };
 export function FileTile({ file, selected, active, onOpen, onToggle, dragPayload }: FileProps) {
-  return <div className="library-file" data-selected={selected || undefined} data-active={active || undefined} draggable
-    onDragStart={event => { event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload())); event.dataTransfer.effectAllowed = 'move'; }}>
+  const hover = useHoverVideo(file.id, file.kind === 'video' || file.kind === 'export', file.videoUrl);
+  return <div className="library-file" data-selected={selected || undefined} data-active={active || undefined} draggable {...hover.handlers}
+    onDragStart={event => { hover.stop(); event.dataTransfer.setData(LIBRARY_DRAG, JSON.stringify(dragPayload())); event.dataTransfer.effectAllowed = 'move'; }}>
     <Button variant="ghost" className="library-file-hit" aria-label={`Details for ${file.fileName}`} aria-pressed={active} onClick={event => onOpen(event.metaKey || event.ctrlKey || event.shiftKey)}>
-      <FileThumb file={file} />
+      <span className="library-file-media"><FileThumb file={file} />{hover.video}</span>
       <strong title={file.fileName}>{file.fileName}</strong>
       <small>{formatBytes(file.size)} · {shortDate(file.createdAt)}</small>
       {file.workspaces.length > 0 && <small className="library-file-used"><Clapperboard aria-hidden="true" />{usedIn(file)}</small>}
