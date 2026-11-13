@@ -1,29 +1,24 @@
-// How many social accounts one Revline user may connect per platform, by plan. The one place to change it.
+// How many social accounts one Revline user may connect, in total across every platform, by plan
+// (POSTING_ACCOUNTS in lib/billing/plan.ts). Safe to import in the browser.
 // Post Bridge bills Revline for every connected account (15 on its $39 plan, 99 on its $99 plan, then $1 each),
-// so the cap is enforced on the server (convex/postingBridge.ts) and applies to accounts connected through it.
-import { POSTING_ACCOUNTS } from '../billing/plan';
+// so the limit is enforced on the server (convex/postingBridge.ts) when an account is connected. An owner above it
+// after a downgrade keeps every account they have, connected and postable; only new connections are refused.
+import { POSTING_ACCOUNTS, type PlanTier } from '../billing/plan';
 
-export const ACCOUNT_CAPS = {
-  /** No active Revline plan: nothing can be exported or posted, so no account slot is spent. */
-  none: 0,
-  starter: POSTING_ACCOUNTS.starter,
-  /** Pro, including its free trial and complimentary access. */
-  paid: POSTING_ACCOUNTS.pro,
-  /** Studio, and the Ultra entitlement it grants. */
-  ultra: POSTING_ACCOUNTS.studio,
-} as const;
-export type AccountPlan = keyof typeof ACCOUNT_CAPS;
+/** How many accounts may be connected in total; null: no limit. */
+export type AccountLimit = number | null;
 
-/** What the user reads when a platform is at its cap. */
-export function capMessage(platformName: string, cap: number) {
-  return cap > 0
-    ? `You have connected ${cap} of ${cap} ${platformName} accounts, the most your plan includes. Disconnect one to connect another.`
-    : 'Connecting accounts is part of a Revline plan. Start your plan, then connect your accounts.';
-}
+/** The limit for a plan's limits tier (a free trial: its trial tier). No plan: nothing can be connected. */
+export const accountLimitFor = (tier: PlanTier | null): AccountLimit => tier ? POSTING_ACCOUNTS[tier] : 0;
+/** No new account can be connected. */
+export const atLimit = (connected: number, limit: AccountLimit) => limit !== null && connected >= limit;
 
-/** What the user reads when a platform has more accounts than the plan includes (after a downgrade or lapse). */
-export function overCapNote(platformName: string, cap: number) {
-  return cap > 0
-    ? `Your plan posts to ${cap} ${platformName} ${cap === 1 ? 'account' : 'accounts'}: the ${cap === 1 ? 'one' : 'ones'} you connected first. Upgrade to post to the others, or disconnect one.`
-    : 'Posting is part of a Revline plan. Start your plan to post to these accounts.';
+/** "1 of 2 connected", or "3 connected · Unlimited" without a limit. */
+export const connectedCount = (connected: number, limit: AccountLimit) => limit === null ? `${connected} connected · Unlimited` : `${connected} of ${limit} connected`;
+
+/** What the user reads when connecting another account is refused, at or above the limit. */
+export function limitMessage(limit: AccountLimit) {
+  return limit === 0
+    ? 'Connecting accounts is part of a Revline plan. Start your plan, then connect your accounts.'
+    : `Your plan allows ${limit} connected ${limit === 1 ? 'account' : 'accounts'}. Disconnect one or upgrade.`;
 }

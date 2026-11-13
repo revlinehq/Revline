@@ -73,7 +73,7 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, onClose }: { 
   const [sent, setSent] = useState<{ count: number; scheduledAt?: number; tiktok: boolean; exporting: boolean } | null>(null);
   const live = new Set(platforms?.filter(entry => entry.live).map(entry => entry.platform));
   // Only accounts that can post right now can be picked, so the buttons never promise more posts than they send.
-  const usable = accounts?.filter(account => account.status === 'connected' && !account.overLimit && live.has(account.platform)) ?? [];
+  const usable = accounts?.filter(account => account.status === 'connected' && live.has(account.platform)) ?? [];
   const picked = usable.filter(account => chosen.has(account.id));
   const custom = picked.filter(account => overrides[account.id]?.trim()).length, titled = picked.some(account => account.platform === 'youtube');
   const onTikTok = picked.filter(account => account.platform === 'tiktok'), tiktokIds = onTikTok.map(account => account.id).join(' ');
@@ -152,10 +152,10 @@ export function PostDialog({ jobId, timeline, onPostsPage = false, onClose }: { 
               return <div key={entry.platform} className="post-platform">
                 <div className="post-platform-head"><PlatformIcon platform={entry.platform} /><span>{PLATFORM_NAMES[entry.platform]}</span></div>
                 {own.map(account => {
-                  const expired = account.status !== 'connected', disabled = expired || !!account.overLimit || !entry.live;
+                  const expired = account.status !== 'connected', disabled = expired || !entry.live;
                   return <label key={account.id} className="post-account" data-disabled={disabled || undefined}>
                     <Checkbox disabled={disabled} checked={!disabled && chosen.has(account.id)} onCheckedChange={checked => setChosen(previous => { const next = new Set(previous); if (checked === true) next.add(account.id); else next.delete(account.id); return next; })} />
-                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired ? <small>Reconnect needed</small> : account.overLimit && <small>Over your plan's limit</small>}
+                    <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} /><span className="post-account-name">@{account.username}</span>{expired && <small>Reconnect needed</small>}
                   </label>;
                 })}
                 {!own.length && <p className="post-note">No accounts connected yet.</p>}

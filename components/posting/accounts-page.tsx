@@ -1,13 +1,12 @@
 'use client';
 import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAction, useConvexAuth, useMutation, useQuery } from 'convex/react';
 import { CircleAlert, CircleCheck, Ellipsis } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import type { PostingPlatform } from '@/lib/posting/adapter';
-import { capMessage, overCapNote } from '@/lib/posting/account-caps';
+import { atLimit, connectedCount, limitMessage } from '@/lib/posting/account-caps';
 import { POSTING_NOT_SET_UP } from '@/lib/posting/limits';
 import { PLATFORM_NAMES } from '@/lib/posting/platform-names';
 import { userError } from '@/lib/user-error';
@@ -46,7 +45,7 @@ function ConnectedNote({ onError }: { onError: (message: string) => void }) {
       const result = status === 'connected' && !first.connected.length && !first.overLimit ? await wait(4000).then(() => sync({ afterLink: true })) : first;
       if (!current || !status) return;
       if (status !== 'connected') onError(/cancel|denied/i.test(params.get('reason') ?? '') ? 'The connection was cancelled.' : 'This account was not connected. Please try again.');
-      else if (result.overLimit) onError(capMessage(platform ?? 'social', result.cap));
+      else if (result.overLimit) onError(limitMessage(result.cap));
       // What the server found decides the message, never the address alone.
       else if (result.connected.length) setNote(`Your ${platform ?? 'social'} account @${result.connected[0]} is connected.`);
       else onError('The account has not shown up yet. Reload this page in a moment.');
@@ -62,7 +61,9 @@ export function AccountsPage() {
   const { isAuthenticated } = useConvexAuth();
   const platforms = useQuery(api.posting.platforms, isAuthenticated ? {} : 'skip');
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
-  const limit = useQuery(api.posting.accountLimit, isAuthenticated ? {} : 'skip');
+  const allowance = useQuery(api.posting.accountAllowance, isAuthenticated ? {} : 'skip');
+  // The limit counts every platform together. At or above it (after a downgrade) nothing new connects; what is connected stays and keeps posting.
+  const full = !!allowance && atLimit(allowance.connected, allowance.limit);
   const startConnect = useAction(api.postingActions.startConnect), disconnect = useMutation(api.posting.disconnect);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   /** Connecting and reconnecting are the same round trip: the platform's consent screen, then back here. `accountId`: the account being reconnected. */
@@ -82,14 +83,13 @@ export function AccountsPage() {
   }
   return <main className="dash-content"><div className="dash-column">
     <h1 className="sr-only">Connected accounts</h1>
-    <p className="dash-column-note">Revline posts your clips to the accounts you connect here.</p>
+    <p className="dash-column-note">Revline posts your clips to the accounts you connect here.{allowance && ` ${connectedCount(allowance.connected, allowance.limit)}.`}</p>
+    {allowance && full && platforms?.some(entry => entry.live) && <p className="dash-column-note" role="note">{limitMessage(allowance.limit)}</p>}
     {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}
     {!platforms || !accounts ? <AccountsSkeleton /> : platforms.map(({ platform, live }) => {
       const name = PLATFORM_NAMES[platform], own = accounts.filter(account => account.platform === platform);
-      // At the plan's cap for this platform: nothing more can be connected until one is disconnected.
-      const full = !!limit?.full.includes(platform);
       return <Card key={platform} variant="dash" role="region" aria-label={name} className="dash-list">
         <div className="dash-list-head">
           <PlatformIcon platform={platform} /><h2>{name}</h2>
@@ -99,23 +99,17 @@ export function AccountsPage() {
         {own.map(account => <div key={account.id} className="dash-list-row">
           <AccountAvatar username={account.username} avatarUrl={account.avatarUrl} />
           <span className="dash-list-row-name">@{account.username}{account.status === 'needs_reconnect' && account.error && !/expired/i.test(account.error) && <small>{account.error}</small>}</span>
-          {account.overLimit
-            ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />Over your plan's limit</span>
-            : account.status === 'needs_reconnect'
+          {account.status === 'needs_reconnect'
             ? <span className="dash-list-state" data-attention=""><CircleAlert aria-hidden="true" />{/expired/i.test(account.error ?? 'expired') ? 'Sign-in expired' : 'Reconnect needed'}</span>
             : <span className="dash-list-state"><CircleCheck aria-hidden="true" />Connected</span>}
           {/* Signing in again renews this account in place: new tokens, name and picture. It is the main action only when the sign-in is broken. */}
-          {/* Beyond the plan's cap after a downgrade or lapse: still connected, never removed for them, but not postable until they upgrade or disconnect another. */}
-          {account.overLimit
-            ? <Button asChild variant="primary" size="sm" className="dash-reconnect" aria-label={`Upgrade your plan to post to @${account.username}`}><Link href="/billing">Upgrade</Link></Button>
-            : <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>}
+          <Button variant={account.status === 'needs_reconnect' && live ? 'primary' : 'ghost'} size="sm" className="dash-reconnect" disabled={!live || !!busy} aria-label={`Reconnect @${account.username}`} onClick={() => void connect(platform, account.id)}>Reconnect</Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="dash-more" aria-label={`More for @${account.username}`}><Ellipsis /></Button></DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="dash-menu"><DropdownMenuItem disabled={!!busy} onSelect={() => void remove(account.id)}>Disconnect</DropdownMenuItem></DropdownMenuContent>
           </DropdownMenu>
         </div>)}
         {!own.length && <div className="dash-list-row dash-list-note">No accounts connected yet.</div>}
-        {live && full && <div className="dash-list-row dash-list-note" role="note">{own.some(account => account.overLimit) ? overCapNote(name, limit!.perPlatform) : capMessage(name, limit!.perPlatform)}</div>}
       </Card>;
     })}
   </div></main>;

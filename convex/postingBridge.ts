@@ -3,9 +3,10 @@ import { internal } from './_generated/api';
 import type { Doc, Id } from './_generated/dataModel';
 import { internalMutation, internalQuery, type ActionCtx, type MutationCtx, type QueryCtx } from './_generated/server';
 import { requireOwner } from './lib/auth';
-import { activePlanTier, billingEnabled } from './lib/billing_access';
+import { billingEnabled, limitsPlan } from './lib/billing_access';
 import { accountStatus, postingPlatform } from './postingTables';
-import { ACCOUNT_CAPS, capMessage } from '../lib/posting/account-caps';
+import { accountLimitFor, atLimit, limitMessage, type AccountLimit } from '../lib/posting/account-caps';
+import { POSTING_ACCOUNTS } from '../lib/billing/plan';
 import { PostingError, type PostingPlatform, type PublishCheck, type PublishInput } from '../lib/posting/adapter';
 import { downloadAvatar } from '../lib/posting/avatar';
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
@@ -32,37 +33,23 @@ const TAKEN = 'This account was connected to another Revline account. Reconnect 
 const isPlatform = (value: string): value is PostingPlatform => (POSTING_PLATFORMS as readonly string[]).includes(value);
 export const failure = (error: unknown, fallback: string) => error instanceof PostingError ? error.message : fallback;
 
-/** How many accounts this owner may connect per platform (lib/posting/account-caps.ts). A deployment without billing meters no one. */
-export async function accountCap(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<number> {
-  if (!billingEnabled()) return ACCOUNT_CAPS.paid;
-  const tier = await activePlanTier(ctx, ownerId);
-  return tier === 'studio' ? ACCOUNT_CAPS.ultra : tier === 'starter' ? ACCOUNT_CAPS.starter : tier ? ACCOUNT_CAPS.paid : ACCOUNT_CAPS.none;
+/**
+ * How many accounts this owner may connect in total, across platforms (lib/posting/account-caps.ts); null: no limit.
+ * A free trial gets its trial tier's until the first payment. A deployment without billing meters no one (Pro's).
+ */
+export async function accountLimit(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<AccountLimit> {
+  if (!billingEnabled()) return POSTING_ACCOUNTS.pro;
+  return accountLimitFor((await limitsPlan(ctx, ownerId))?.tier ?? null);
 }
 /** An account that takes one of the owner's slots: connected through Post Bridge and not disconnected. */
 export const holdsSlot = (account: Doc<'postingAccounts'>) => account.provider === 'postbridge' && account.status !== 'disconnected';
-/**
- * The accounts beyond the plan's per-platform cap, after a downgrade or a lapsed plan: on each platform the oldest
- * connections (by `connectedAt`) keep the plan's slots and the rest cannot be posted to. Nothing is disconnected,
- * so upgrading or disconnecting another account makes one postable again. Post Bridge bills per connected account.
- */
-export async function overCapAccounts(ctx: QueryCtx | MutationCtx, ownerId: string, rows?: Doc<'postingAccounts'>[]): Promise<Set<Id<'postingAccounts'>>> {
-  const cap = await accountCap(ctx, ownerId), over = new Set<Id<'postingAccounts'>>();
-  const held = (rows ?? await ownerAccounts(ctx, ownerId)).filter(holdsSlot);
-  for (const platform of new Set(held.map(row => row.platform))) {
-    const own = held.filter(row => row.platform === platform).sort((a, b) => (a.connectedAt ?? a.createdAt) - (b.connectedAt ?? b.createdAt) || a._creationTime - b._creationTime);
-    for (const row of own.slice(cap)) over.add(row._id);
-  }
-  return over;
-}
-/** What a post to an account over the plan's cap says. */
-export const overCapMessage = (username: string, platform: PostingPlatform) => `@${username} is over your plan's limit of ${PLATFORM_NAMES[platform]} accounts. Upgrade your plan, or disconnect another ${PLATFORM_NAMES[platform]} account, to post to it.`;
 const ownerAccounts = (ctx: QueryCtx | MutationCtx, ownerId: string) => ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
 export const ownerRef = async (ctx: QueryCtx | MutationCtx, ownerId: string) => (await ctx.db.query('postingConnectRefs').withIndex('by_owner', q => q.eq('ownerId', ownerId)).first())?.ref ?? null;
 
 // ---------------------------------------------------------------- connect
 
 /**
- * Begin connecting: checks the signed-in owner, the platform and the owner's cap, and returns the reference their
+ * Begin connecting: checks the signed-in owner, the platform and the owner's account limit, and returns the reference their
  * accounts are tagged with (created on first use). `accountId`: an account of theirs being reconnected, which takes no new slot.
  */
 export const begin = internalMutation({
@@ -70,9 +57,10 @@ export const begin = internalMutation({
   handler: async (ctx, { platform, accountId }) => {
     const ownerId = await requireOwner(ctx);
     if (!postBridgeKey()) throw new ConvexError(POSTING_NOT_SET_UP);
-    const accounts = await ownerAccounts(ctx, ownerId), cap = await accountCap(ctx, ownerId);
+    const accounts = await ownerAccounts(ctx, ownerId), limit = await accountLimit(ctx, ownerId);
     const renewing = accountId !== undefined && accounts.some(account => account._id === accountId && account.platform === platform && holdsSlot(account));
-    if (!renewing && accounts.filter(account => account.platform === platform && holdsSlot(account)).length >= cap) throw new ConvexError(capMessage(PLATFORM_NAMES[platform], cap));
+    // The limit counts every platform together. Above it after a downgrade, nothing new is connected; nothing is removed.
+    if (!renewing && atLimit(accounts.filter(holdsSlot).length, limit)) throw new ConvexError(limitMessage(limit));
     const existing = await ownerRef(ctx, ownerId);
     if (existing) return existing;
     const ref = Array.from(crypto.getRandomValues(new Uint8Array(24)), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -122,23 +110,24 @@ const listed = v.object({
 });
 /**
  * Store what Post Bridge lists under the owner's reference. An account already stored is refreshed; a new one is
- * added while the owner is under their cap, and returned in `over` otherwise so the caller removes it at Post
+ * added while the owner is under their account limit (all platforms together), and returned in `over` otherwise so the caller removes it at Post
  * Bridge. With a `complete` listing, a stored account that is no longer listed needs reconnecting. `listedAt`: when
  * the listing was asked for, so an account disconnected since then is not brought back by it.
  * `connected` are the handles this sync connected or renewed.
  */
 export const applySync = internalMutation({
   args: { ownerId: v.string(), ref: v.string(), complete: v.boolean(), listedAt: v.number(), accounts: v.array(listed) },
-  returns: v.object({ connected: v.array(v.string()), over: v.array(v.number()), cap: v.number() }),
+  returns: v.object({ connected: v.array(v.string()), over: v.array(v.number()), cap: v.union(v.number(), v.null()) }),
   handler: async (ctx, { ownerId, ref, complete, listedAt, accounts }) => {
     const drop = async () => { for (const account of accounts) if (account.avatarStorageId) await ctx.storage.delete(account.avatarStorageId); };
     // The reference must be this owner's: the listing was filtered by it.
     const refRow = await ctx.db.query('postingConnectRefs').withIndex('by_owner', q => q.eq('ownerId', ownerId)).first();
     if (refRow?.ref !== ref) { await drop(); throw new ConvexError('Account not found'); }
-    const now = Date.now(), cap = await accountCap(ctx, ownerId), rows = await ownerAccounts(ctx, ownerId);
+    const now = Date.now(), cap = await accountLimit(ctx, ownerId), rows = await ownerAccounts(ctx, ownerId);
     await ctx.db.patch(refRow._id, { syncedAt: now });
-    const slots = new Map<PostingPlatform, number>(), present = new Set(accounts.map(account => account.id));
-    for (const row of rows) if (holdsSlot(row)) slots.set(row.platform, (slots.get(row.platform) ?? 0) + 1);
+    // Slots are counted across every platform together. Accounts already held keep theirs, even above the limit.
+    const present = new Set(accounts.map(account => account.id));
+    let slots = rows.filter(holdsSlot).length;
     const connected: string[] = [], over: number[] = [], used = new Set<Id<'postingAccounts'>>();
     for (const incoming of accounts) {
       const unused = async () => { if (incoming.avatarStorageId) await ctx.storage.delete(incoming.avatarStorageId); };
@@ -155,8 +144,8 @@ export const applySync = internalMutation({
       // Revline's own platform apps) or disconnected since, or one that needs reconnecting and came back under a new Post Bridge id.
       row ??= rows.find(candidate => sameHandle(candidate) && (!holdsSlot(candidate) || candidate.status === 'needs_reconnect' && (candidate.providerAccountId === undefined || !present.has(candidate.providerAccountId)))) ?? null;
       const held = !!row && holdsSlot(row);
-      if (!held && (slots.get(incoming.platform) ?? 0) >= cap) { over.push(incoming.id); await unused(); continue; }
-      if (!held) slots.set(incoming.platform, (slots.get(incoming.platform) ?? 0) + 1);
+      if (!held && atLimit(slots, cap)) { over.push(incoming.id); await unused(); continue; }
+      if (!held) slots += 1;
       const renewed = !held || row!.providerAccountId !== incoming.id || (incoming.linkedAt ?? 0) > (row!.connectedAt ?? row!.createdAt);
       if (renewed) connected.push(incoming.username);
       const fields = {
@@ -182,7 +171,7 @@ export const applySync = internalMutation({
  * (`afterLink`) and whenever Connected accounts opens (Post Bridge has no webhooks). Nothing in the return address
  * is trusted: the accounts are the ones Post Bridge lists under the owner's own reference.
  */
-export async function syncAccounts(ctx: ActionCtx, afterLink: boolean): Promise<{ connected: string[]; overLimit: number; cap: number }> {
+export async function syncAccounts(ctx: ActionCtx, afterLink: boolean): Promise<{ connected: string[]; overLimit: number; cap: AccountLimit }> {
   const key = postBridgeKey(), nothing = { connected: [], overLimit: 0, cap: 0 };
   if (!key) return nothing;
   const state = await ctx.runQuery(internal.postingBridge.syncState, {}), listedAt = Date.now();
