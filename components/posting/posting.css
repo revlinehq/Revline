@@ -59,10 +59,11 @@
 .posts-dot[data-tone=scheduled] { background: #B793F5; }
 .posts-dot[data-tone=failed] { background: #E9A23B; }
 .posts-card-caption { margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--dash-text); font-size: 12px; font-weight: 500; line-height: 16px; }
-.posts-card-platforms { display: flex; flex-direction: column; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.posts-card-platforms li { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 11px; }
-.posts-card-platforms svg { width: 11px; height: 11px; flex-shrink: 0; color: #C4C4C4; }
-.posts-card-platforms li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Every platform on one line, "[logo] Scheduled | [logo] Posted"; what does not fit the card ends in an ellipsis. */
+.posts-card-platforms { margin: 0; padding: 0; overflow: hidden; list-style: none; font-size: 11px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+.posts-card-platforms li { display: inline; }
+.posts-card-platforms li + li::before { content: '|'; margin: 0 6px; color: #666; }
+.posts-card-platforms svg { display: inline-block; width: 11px; height: 11px; margin-right: 5px; vertical-align: -1.5px; color: #C4C4C4; }
 .posts-card-platforms [data-tone=posted] { color: #8FD9B3; }
 .posts-card-platforms [data-tone=muted] { color: #9A9A9A; }
 .posts-card-platforms [data-tone=failed] { color: #F2C27A; }
