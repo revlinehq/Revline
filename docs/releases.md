@@ -108,7 +108,21 @@ flowchart LR
 
 **Always-on processor.** `MEDIA_PROCESSOR_ALWAYS_ON` (Convex, a count, default 0) keeps the first that many `processorServices` running while idle, so an upload or import is claimed at once instead of waiting for a container to boot. The dispatcher starts those slots whenever they are down (its cron runs every minute), demand or not, through the same boot-crash hold; a running idle one counts as free capacity, so the other processor slots are cold-started only while it is busy. The worker asks Convex (`railwayWorkers:alwaysOn` with its service id) at boot and about once a minute while idle whether it is one, so setting the count to 0, or pausing claims for a stage, lets it exit within about a minute. A backend without that function answers no, and the worker sleeps as before. Other processor slots and all export slots exit when idle as before. An always-on slot restarts on failure (`ON_FAILURE`, 3 retries per deployment); after that its deployment stays CRASHED and the hold above decides what runs.
 
-**Slot settings** (per service and environment; `verifyRailwaySlot` checks the first five on every dispatch): one replica in the pinned region, start command `sh media-processor/railway-entry.sh`, restart policy `NEVER` (always-on processor slots: `ON_FAILURE` with 3 max retries; any processor slot may have either, so turning the setting off never trips the check), sleep off, no health check. In addition: source `revlinehq/Revline`, branch `main`, automatic deploys on, Dockerfile path `media-processor/Dockerfile`, variable `REVLINE_FINAL_TARGET` (`railway-processor` or `railway-exports`), draining 3000 s, overlap 0, and no `REVLINE_BUILD_COMMIT` variable (it would be passed to the build as an argument).
+**Slot settings** (per service and environment; `verifyRailwaySlot` checks the first five on every dispatch): one replica in the pinned region, start command `sh media-processor/railway-entry.sh`, restart policy `NEVER` (always-on processor slots: `ON_FAILURE` with 3 max retries; any processor slot may have either, so turning the setting off never trips the check), sleep off, no health check. In addition: source `revlinehq/Revline` (the Railway GitHub app installed on `revlinehq`), branch `main`, automatic deploys on, "Wait for CI" off, no watch paths, no root directory, Dockerfile path `media-processor/Dockerfile`, variable `REVLINE_FINAL_TARGET` (`railway-processor` or `railway-exports`), draining 3000 s, overlap 0, and no `REVLINE_BUILD_COMMIT` variable (it would be passed to the build as an argument).
+
+### When main does not deploy
+
+Railway builds a push only when its GitHub app delivers it, to a trigger on exactly `revlinehq/Revline` and `main`. Nothing else deploys the slots, so a broken link leaves every slot on its old build without any error. That happened from the repository transfer (2026-11-05) on: `revlinehq` has no Railway GitHub app installation, so Railway never received a push, and the release Mac built the slots by hand.
+
+`release:prod` (and the `Release production` workflow) now checks every slot after reading it and names the broken link. The other targets still release, then the run fails with `RELEASE FAILED at railway-autodeploy` and the findings. `npm run release:status` prints the same findings under the Railway table. The check is read-only; a setting the token cannot read is reported as a note, not a failure.
+
+| Finding | Fix (Railway or GitHub, by the founder) |
+| --- | --- |
+| Railway never acted on main | Install the Railway GitHub app on the `revlinehq` organization with access to `Revline` (GitHub → Settings → GitHub Apps, or Railway → Account → GitHub) |
+| Builds the repository's old name, or the trigger watches another repository | Per slot: Settings → Source → disconnect, then connect `revlinehq/Revline` (production environment only) |
+| Trigger watches a branch other than `main`, or no trigger | Per slot: Settings → Source → branch `main`, automatic deploys on |
+| "Wait for CI" on | Per slot: turn it off. The `blacksmith-sh` app opens a check suite on every `main` commit that never completes, and the dispatcher counts a `WAITING` deployment as running |
+| Watch paths or a root directory | Per slot: clear them. Every slot builds `media-processor/Dockerfile` from the repository root, and its inputs are spread across the repository |
 
 ### Pinned-image rollback
 

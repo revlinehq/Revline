@@ -140,7 +140,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
  *  sign-in on this machine (as release:prod does); never another session's deployment selection or key. */
 async function liveRailway() {
   const { remoteEnv } = await import('./release-verify.mjs');
-  const { railwayRunning, runningCommit } = await import('./release-railway.mjs');
+  const { railwayRunning, runningCommit, railwayAutodeployCheck, latestDeployableMain } = await import('./release-railway.mjs');
   const env = { ...process.env };
   for (const name of ['CONVEX_DEPLOY_KEY', 'CONVEX_DEPLOYMENT', 'NEXT_PUBLIC_CONVEX_URL', 'RAILWAY_API_TOKEN']) delete env[name];
   const values = await remoteEnv('different-gnu-398', env);
@@ -151,7 +151,16 @@ async function liveRailway() {
     const slots = await railwayRunning({ values, kind });
     kinds[kind] = { commit: runningCommit(slots), slots };
   }
-  return { kinds };
+  // Whether main reaches the slots at all: the GitHub app, the trigger's repository and branch, Wait for CI, watch paths.
+  const target = latestDeployableMain();
+  const autodeploy = { target: target?.commit ?? null, problems: [], notes: [] };
+  try {
+    for (const kind of Object.keys(kinds)) {
+      const found = await railwayAutodeployCheck({ values, kind, target });
+      autodeploy.problems.push(...found.problems); autodeploy.notes.push(...found.notes);
+    }
+  } catch (error) { autodeploy.error = error instanceof Error ? error.message.split('\n')[0] : String(error); }
+  return { kinds, autodeploy };
 }
 
 function printLive(live) {
@@ -167,5 +176,12 @@ function printLive(live) {
   const rows = Object.values(live.kinds).flatMap(({ slots }) => slots.map(slot => [slot.lane, slot.serviceName, short(slot.commit) + (slot.commit ? '' : slot.image ? ` (${slot.image.split('@')[1]?.slice(0, 19) ?? 'image'})` : ''), `${short(slot.latestCommit)} ${slot.latestStatus ?? 'none'}`, slot.source, againstMain(slot.commit)]));
   console.log(`Railway production (live; main ${main ? short(main) : 'unknown'} as of the last fetch):\n`);
   console.log(rows.length ? table(['lane', 'service', 'running', 'latest deployment', 'source', 'against main'], rows) : 'No lane routed to Railway.');
+  const autodeploy = live.autodeploy;
+  if (autodeploy?.error) console.log(`\nAutodeploy: not checked (${autodeploy.error}).`);
+  else if (autodeploy && rows.length) {
+    if (autodeploy.problems.length) console.log(`\nGitHub main does not reach these slots by itself (docs/releases.md, Railway, "When main does not deploy"):\n${autodeploy.problems.map(line => `  ${line}`).join('\n')}`);
+    if (autodeploy.notes.length) console.log(`\nAutodeploy notes:\n${autodeploy.notes.map(line => `  ${line}`).join('\n')}`);
+    if (!autodeploy.problems.length && !autodeploy.notes.length) console.log(autodeploy.target ? `\nAutodeploy: every slot has a deployment of main ${short(autodeploy.target)} or later, from a trigger on main.` : '\nAutodeploy: settings look right; no origin/main to judge deployments against (fetch origin).');
+  }
   console.log('');
 }

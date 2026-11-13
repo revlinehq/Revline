@@ -214,7 +214,7 @@ if (state) await writeState(state);
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => process.exit(130));
 
 const { convexArgs, remoteEnv, verifyConvex, verifyWorker, verifyFrontend, servingVersion, verifyHealth, scanConvexLogs } = await import('./release-verify.mjs');
-const { releaseRailway, verifyRailway } = await import('./release-railway.mjs');
+const { releaseRailway, verifyRailway, railwayAutodeployCheck } = await import('./release-railway.mjs');
 const node = (args, options) => command(process.execPath, args, { env, ...options });
 const npm = name => command('npm', ['run', name], { env });
 const step = name => console.log(`\n== ${name} ==`);
@@ -250,6 +250,9 @@ function includesRelease(commit) {
 }
 // A Railway lane not (yet) at this commit: the release still finishes, but the changelog waits for a run where it is.
 let railwayBehind = false;
+// Why GitHub main does not reach a Railway slot (railwayAutodeployCheck). Everything else is still released; the run then
+// fails, so a broken autodeploy is a red run and a commit comment instead of a lane that silently stays behind.
+const autodeployBroken = [];
 
 /** Railway deploys the slots from GitHub main; read and record what they run. Returns the running commit or null. */
 async function railway(kind, remote) {
@@ -261,6 +264,16 @@ async function railway(kind, remote) {
   const current = includesRelease(running);
   if (running && haveCommit(running)) await record(kind, { commit: running, note: 'read from Railway (GitHub autodeploy)' });
   if (!current) railwayBehind = true;
+  // The commit reached GitHub no later than this run started (a merge can carry an older commit time).
+  const pushedAt = Math.max(Number(git('show', '-s', '--format=%ct', sha)) * 1000, startedAt);
+  // A check that cannot run must not stop the release (the processor step comes before Convex).
+  try {
+    const found = await railwayAutodeployCheck({ values: remote, kind, target: { commit: sha, pushedAt } });
+    for (const line of found.notes) console.log(line);
+    for (const line of found.problems) console.log(`AUTODEPLOY BROKEN: ${line}`);
+    autodeployBroken.push(...found.problems);
+  }
+  catch (error) { console.log(`${ci ? '::warning::' : ''}Railway ${kind}: autodeploy check not run (${redact(error instanceof Error ? error.message : String(error))}).`); }
   setResult(kind, !running ? 'slots run different or unknown commits (see above)' : current ? `running ${short(running)} (Railway autodeploy)` : `running ${short(running)}, not this commit yet: Railway builds main by itself (npm run release:status); a failed or crashing build shows there`);
   return running;
 }
@@ -361,7 +374,7 @@ try {
 }
 
 // Only after a complete release.
-if (!failure && !railwayBehind && !flags['no-changelog'] && existsSync(changelogScript)) {
+if (!failure && !railwayBehind && !autodeployBroken.length && !flags['no-changelog'] && existsSync(changelogScript)) {
   step('Changelog');
   try {
     await node([changelogScript, 'build']);
@@ -407,5 +420,10 @@ try { console.log(`\nShared release state, origin ${STATE_BRANCH}: ${await publi
 catch (error) { console.error(`${ci ? '::warning::' : ''}Shared release state not published (${redact(error.message)}). Publish it with npm run release:status -- --push.`); }
 printTable();
 if (railwayBehind && !failure) console.log('\nRailway does not run this commit on every lane yet; the changelog is assembled by the next release:prod after it does.');
-console.log(failure ? `\nRelease ${short(sha)} FAILED. State: ${stateFile()}` : `\nRelease ${short(sha)} verified${railwayBehind ? ' except Railway (not at this commit yet)' : ''}. State: ${stateFile()} (npm run release:status).`);
-process.exit(failure ? 1 : 0);
+if (autodeployBroken.length && !failure) {
+  // The line the workflow quotes in its commit comment. Nothing to roll back: the other targets released normally.
+  console.error(`\nRELEASE FAILED at railway-autodeploy: Railway does not deploy main by itself (${autodeployBroken.length} finding${autodeployBroken.length === 1 ? '' : 's'}; the other targets released). Fix the Railway or GitHub setting named below (docs/releases.md, Railway, "When main does not deploy"):`);
+  for (const line of autodeployBroken) console.error(`  ${line}`);
+}
+console.log(failure ? `\nRelease ${short(sha)} FAILED. State: ${stateFile()}` : autodeployBroken.length ? `\nRelease ${short(sha)} FAILED at railway-autodeploy (the other targets released and verified; the changelog waits). State: ${stateFile()}` : `\nRelease ${short(sha)} verified${railwayBehind ? ' except Railway (not at this commit yet)' : ''}. State: ${stateFile()} (npm run release:status).`);
+process.exit(failure || autodeployBroken.length ? 1 : 0);
