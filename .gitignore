@@ -23,8 +23,6 @@ next-env.d.ts
 .DS_Store
 
 
-/public/prototype/
-
 # Local agent notes, captured logs and signing material
 .context/
 notes/

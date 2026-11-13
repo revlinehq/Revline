@@ -8,7 +8,6 @@ import { ConvexReactClient } from "convex/react";
 import { ConvexProviderWithClerk } from "convex/react-clerk";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { WorkspaceThemeProvider } from '@/components/workspace/theme-provider';
-import { usePathname } from 'next/navigation';
 import { UserSync } from '@/components/user-sync';
 import { PlanLimitDialog } from '@/components/workspace/plan-limit-dialog';
 import { notifyPlanLimit, planLimitOf } from '@/lib/billing/limit-events';
@@ -33,11 +32,10 @@ convex.action = async (ref, ...args) => {
 if (typeof window !== 'undefined') installUncaughtIncidentHandlers();
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  const prototype = usePathname() === '/prototype';
   return (
     <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
-      {!prototype && <UserSync />}
-      {!prototype && <PlanLimitDialog />}
+      <UserSync />
+      <PlanLimitDialog />
       <WorkspaceThemeProvider><TooltipProvider>{children}</TooltipProvider></WorkspaceThemeProvider>
     </ConvexProviderWithClerk>
   );
