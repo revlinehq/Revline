@@ -83,8 +83,13 @@ export type PlainExportDecision = { eligible: true; plan: PlainExportPlan } | { 
 
 /** The encoder opens every sounding clip at once (footage is chunked). Larger mixes keep the browser path. */
 const PLAIN_EXPORT_MAX_AUDIO_TRACKS = 64;
-/** Each static text or image is captured in one bounded browser session; more keep the browser path. */
-export const PLAIN_EXPORT_MAX_OVERLAYS = 12;
+/**
+ * Static text and images are rasterized in bounded capture batches (plain-export-overlays.ts), so a
+ * captioned reel, one caption clip per phrase, stays on the fast path. Larger counts keep the browser path.
+ */
+export const PLAIN_EXPORT_MAX_OVERLAYS = 360;
+/** Overlays one segment's encode may show: each is a full-frame input to its FFmpeg graph. */
+export const PLAIN_EXPORT_MAX_SEGMENT_OVERLAYS = 24;
 /** Distinct decoded sources one stack may open at once (a producer holds them all). */
 export const PLAIN_EXPORT_MAX_STACK_SOURCES = 8;
 /**
@@ -481,7 +486,15 @@ export function plainExportPlan(timeline: Timeline, assets: MediaAsset[], resolu
     const alpha = overlayAlpha(clip, kind, first, Math.min(end, frames), fps, projectFps, width, height, resolution);
     return [{ clipId: clip.id, kind, ...kind === 'image' ? { assetId: clip.assetId! } : {}, first, end: Math.min(end, frames), look: look(clip), ...alpha ? { alpha } : {} }];
   });
-  return { eligible: true, plan: { width, height, fps, duration, frames, video: splitLongSegments(video, fps), overlays: placed, audio } };
+  // Each segment's encode opens every overlay it shows as a full-frame input; bound that per segment.
+  const pieces = splitLongSegments(video, fps);
+  let start = 0;
+  for (const segment of pieces) {
+    const shown = placed.filter(overlay => overlay.first < start + segment.frames && overlay.end > start).length;
+    if (shown > PLAIN_EXPORT_MAX_SEGMENT_OVERLAYS) return no(`more than ${PLAIN_EXPORT_MAX_SEGMENT_OVERLAYS} text and image clips within one ${PLAIN_EXPORT_MAX_PIECE_SECONDS} s piece`);
+    start += segment.frames;
+  }
+  return { eligible: true, plan: { width, height, fps, duration, frames, video: pieces, overlays: placed, audio } };
 }
 
 /** Layers showing the same source frames at the same output frames decode once and are split. */
@@ -492,12 +505,13 @@ export function samplingKey(layer: PlainLayer) {
 /**
  * Cut footage segments longer than PLAIN_EXPORT_MAX_PIECE_SECONDS into equal pieces so they encode
  * on several cores at once. A piece shows the same frames as its part of the whole: its sampling phase
- * advances by the frames before it, so the frame, hold and fade maths are unchanged. Crossfade stacks stay whole.
+ * advances by the frames before it, so the frame, hold and fade maths are unchanged. Gaps are cut the same way, so
+ * captions over a long gap stay a few per encode. Crossfade stacks stay whole.
  */
 export function splitLongSegments(video: PlainVideoSegment[], fps: number): PlainVideoSegment[] {
   const maximum = Math.round(PLAIN_EXPORT_MAX_PIECE_SECONDS * fps);
   return video.flatMap(segment => {
-    if (segment.kind === 'gap' || (segment.kind === 'stack' && segment.transition) || segment.frames <= maximum) return [segment];
+    if ((segment.kind === 'stack' && segment.transition) || segment.frames <= maximum) return [segment];
     const pieces = Math.ceil(segment.frames / maximum), result: PlainVideoSegment[] = [];
     let rest = segment;
     for (let piece = 1; piece < pieces; piece++) {
