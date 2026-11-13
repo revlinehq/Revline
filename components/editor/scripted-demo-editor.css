@@ -1,7 +1,0 @@
-.scripted-editor-demo{height:100dvh;min-height:0;display:flex;flex-direction:column;background:var(--ws-bg)}
-.scripted-editor-demo>.editor-app{flex:1;min-height:0}
-.scripted-editor-demo[data-building] .timeline-clip{animation:demo-block-arrive .55s cubic-bezier(.2,0,0,1) both}
-.scripted-editor-demo[data-building] .timeline-track{pointer-events:none}
-.scripted-editor-demo .composer-attachments{padding-top:8px}
-@keyframes demo-block-arrive{from{opacity:0;transform:translateY(5px);filter:blur(1.5px)}to{opacity:1;transform:none;filter:none}}
-@media(prefers-reduced-motion:reduce){.scripted-editor-demo[data-building] .timeline-clip{animation:none}}
