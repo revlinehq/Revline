@@ -10,7 +10,7 @@ import { userError } from '@/lib/user-error';
 
 type LinkImport = FunctionReturnType<typeof api.library.linkImports>[number];
 
-/** yt-dlp's wording when a site only shows the video to a signed-in viewer (Instagram does this for most posts). */
+/** yt-dlp's wording when a site only shows the video to a signed-in viewer. */
 const SIGNED_IN_ONLY = /empty media response|--cookies|login required|log in to|logged.in/i;
 const failureText = (error?: string) => SIGNED_IN_ONLY.test(error ?? '')
   ? 'This site only shows the video to signed-in viewers, so it cannot be saved from a link. Download it and upload the file instead.'
