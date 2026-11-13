@@ -73,7 +73,7 @@ export function PostsHeader({ view, week, accounts, onView, onWeek, onNew }: {
         </span>];
         return own.map(account => account.status === 'connected'
           ? <span key={account.id} className="posts-chip" data-state="connected" title={`@${account.username} on ${PLATFORM_NAMES[platform]}`}>
-            <PlatformIcon platform={platform} /><span className="posts-chip-name">@{account.username}</span><span className="posts-chip-dot" aria-label="Connected" />
+            <PlatformIcon platform={platform} /><span className="posts-chip-name">@{account.username}</span>
           </span>
           : <span key={account.id} className="posts-chip" data-state="expired" title={`@${account.username} on ${PLATFORM_NAMES[platform]}: sign-in expired`}>
             <PlatformIcon platform={platform} /><span className="posts-chip-name">@{account.username}</span>
@@ -150,7 +150,8 @@ type Tone = 'posted' | 'scheduled' | 'failed';
 function Thumb({ coverUrl, coverKind, time, tone }: { coverUrl: string | null; coverKind: 'video' | 'image' | null; time: number; tone: Tone }) {
   return <div className="posts-card-thumb">
     <ProjectCover url={coverUrl} kind={coverKind} />
-    <span className="posts-card-time"><span className="posts-dot" data-tone={tone} aria-hidden="true" />{clock(time)}</span>
+    {/* A posted card shows only its time; a dot marks a scheduled or failed one. */}
+    <span className="posts-card-time">{tone !== 'posted' && <span className="posts-dot" data-tone={tone} aria-hidden="true" />}{clock(time)}</span>
   </div>;
 }
 
