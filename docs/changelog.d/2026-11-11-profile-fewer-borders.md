@@ -1,1 +1,0 @@
-- Settings: fewer borders on the Settings page and the account menu; cards are marked by their surface, with one hairline under each card's title. Why: the founder found the profile UI had too many borders.

@@ -1,1 +1,0 @@
-- Campaigns: the reader now reads campaign pages whose data follows a long text block (about one page in six), and a few unreadable pages among good ones no longer stop it; `campaignsReader:resume` lifts a stop and queues those pages again. Why: on its first run the reader counted these ordinary pages as failures and stopped itself with 499 campaigns unread.

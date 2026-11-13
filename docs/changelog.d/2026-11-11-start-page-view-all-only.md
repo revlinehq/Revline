@@ -1,1 +1,0 @@
-- Start page: the Recent projects row has one action, View all, shown whenever a project exists; Upload new is gone. Why: the founder asked for it; uploading already lives in the composer above.

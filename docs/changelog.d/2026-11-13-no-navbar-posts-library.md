@@ -1,1 +1,0 @@
-- Dashboard: Posts and Library no longer show the top navbar; the phone menu button sits in each page's header and the Library's phone New folder and Upload moved into its toolbar. Why: the founder asked for those two pages without the bar.

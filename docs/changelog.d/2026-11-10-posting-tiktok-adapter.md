@@ -1,1 +1,0 @@
-- Posting: added the TikTok adapter (connect an account, post a video with Direct Post, read a post's stats) and its setup checklist in `docs/posting/tiktok-setup.md`; it is not wired in or callable until the posting base lands and the app credentials are set. Why: the founder wants posting scaffolded so only the TikTok app credentials are missing.

@@ -1,1 +1,0 @@
-- Editor: the media panel has a new Effects tab beside Media with one-click subtitles on/off, blur background or tight crop, and a hook line, each saved and undoable like any edit. Why: the founder had to message the agent for each of these simple changes on vertical clips.

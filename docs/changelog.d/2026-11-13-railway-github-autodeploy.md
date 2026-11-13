@@ -1,2 +1,0 @@
-- Railway: processor and export slots deploy from GitHub main on every merge. The dispatcher starts each slot's newest good build and never a pinned commit; a build that crashes on boot is held and reported. Workers report the commit Railway built, and `release:status` reads it live.
-- Why: a pinned commit that disagreed with the slots' own copy crash-looped the processor on 2026-11-13, and uploads and imports failed for about 9 hours.

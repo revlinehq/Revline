@@ -1,2 +1,0 @@
-- Campaigns: NEW now means the campaign launched in the last five days, not that Revline first read it then. Why: with the reader switched on, every campaign in production said NEW.
-- Dashboard: the top bar's contents line up with each page's content column, and notifications open as a menu like the account menu. Why: the founder asked for a max width like the landing navbar and a smoother bell.

@@ -1,1 +1,0 @@
-- Editor: the timeline tab row gets ‹ › scroll buttons, a searchable list of every timeline and Ctrl/Cmd+Alt+[ ] to step between them, and always shows the active tab. Why: clipping runs make dozens of timelines and tabs past the row width were unreachable.

@@ -1,1 +1,0 @@
-- Posting: Instagram's Deauthorize and Data Deletion Request callbacks (`/instagram/deauthorize`, `/instagram/data-deletion`) verify Meta's signed request, end or delete the connection, and a public status page shows a deletion request by its confirmation code. Why: Meta's App Review for Instagram Login requires both URLs.

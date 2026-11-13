@@ -1,1 +1,0 @@
-- Posting: accounts can be connected and posted to through Post Bridge (connect links, upload, results, batched stats, disconnect), switched on the server with POSTING_PROVIDER; up to 3 accounts per platform per user. Why: Meta will not review Revline's own app without a registered business, and the founder chose Post Bridge to connect users' accounts.

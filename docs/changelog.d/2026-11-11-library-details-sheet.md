@@ -1,1 +1,0 @@
-- Library: clicking a file opens its details in a shadcn Sheet (from the right, from the bottom on a phone) with ‹ › and arrow-key stepping and its own Add to project, Move to, Download and Delete. Why: the founder asked for the native shadcn sheet instead of the custom side panel.

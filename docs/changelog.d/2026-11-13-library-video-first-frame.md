@@ -1,1 +1,0 @@
-- Library: a video or export with no stored poster (uploaded to the Library or imported from a link, never opened in a project) shows its first frame in the grid, list, folder tiles, details sheet and the editor's Add media dialog instead of a bare camera icon. Why: the founder reported Library thumbnails not loading.

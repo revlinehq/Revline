@@ -1,1 +1,0 @@
-- Exports: captioned reels (any number of static caption clips) now render on the FFmpeg fast path instead of the browser, Standard encodes with x264 `faster`, and large sources download as three ranges. Why: the founder found exports far too slow; a 44 s 1080p60 captioned reel took 68.9 s cold on 4 vCPUs only because it had more than 12 captions, and now takes 23.9 s.

@@ -1,1 +1,0 @@
-- Landing: the hero and feature films autoplay muted and looping while on screen, on desktop and phone, and their files skip the sign-in proxy. Why: the founder reported the landing videos never started; they only played on click.

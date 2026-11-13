@@ -1,1 +1,0 @@
-- Posting: YouTube adapter (`lib/posting/platforms/youtube`) that connects a channel, uploads a Short through a resumable upload that continues across scheduler ticks, and reads its views, likes and comments; setup checklist in `docs/posting/youtube-setup.md`. Why: the founder wants posting scaffolded so that adding the Google app credentials is the only step left.

@@ -1,1 +1,0 @@
-- Workspace: the history page, its search, empty states and the editor's project menu say "projects" instead of "chats". Why: the founder asked for "Your projects", since each entry is a project, not a chat.

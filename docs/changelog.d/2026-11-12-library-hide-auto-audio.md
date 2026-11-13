@@ -1,1 +1,0 @@
-- Media: audio the editor makes by itself (catalog sounds, AI sounds and music, audio pulled out of a video, normalized mixes) stays on the timeline but is no longer listed in the Media tab or the Library; "Save to library" on an audio clip keeps one. Why: the founder saw these audios saved as separate library items.

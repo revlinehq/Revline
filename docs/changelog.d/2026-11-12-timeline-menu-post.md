@@ -1,1 +1,0 @@
-- Editor: the timeline tab menu has "Post this video", which opens the post dialog for that timeline and exports it first. Why: the founder wanted to post a timeline straight from its menu.

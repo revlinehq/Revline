@@ -1,1 +1,0 @@
-- Link import: TikTok and Instagram links are refused again and the Add media link field takes YouTube only; a link pasted in the home composer stays as text and imports when the message is sent. Why: the founder asked to keep only the YouTube downloader and not to open the import shelf on paste.

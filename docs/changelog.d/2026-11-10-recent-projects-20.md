@@ -1,1 +1,0 @@
-- Workspace: "Recent projects" on the start page and "Recent chats" in the editor's title menu show up to 20 projects instead of 6, in one paged request; the menu list scrolls inside the menu and "See all chats" stays the way to older ones. Why: the founder had to open the title menu and "See all chats" to reach anything older than six projects, and wanted no extra button.

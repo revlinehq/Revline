@@ -1,1 +1,0 @@
-- Assistant: Claude models are no longer forced to call a tool after the first edit; Sonnet 5.5 and Opus 5.5 rejected that with a 400 and Haiku 5.5 skipped thinking. Why: every editing run on Sonnet or Opus would have failed one step after its first edit.

@@ -1,1 +1,0 @@
-- Landing: the public pages (home, pricing, blog, use-case, privacy, terms) are light for everyone, with grey cards, a grey footer and dark text; the app and sign-in stay dark. Why: the founder found the dark landing hard to navigate and its sections blended together.

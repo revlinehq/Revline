@@ -1,1 +1,0 @@
-- Assistant: tool descriptions say what a tool does and its argument rules; usage guidance and examples moved to the skill pages (new footage-editing page `effect-tools`). Descriptions are a third shorter (105,315 to 70,941 characters). Why: every step sent every description, so a small edit carried a 75,000-token prompt (run-path audit item 5).

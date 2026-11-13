@@ -1,1 +1,0 @@
-- Assistant: frame, loudness, clip-check and face-measurement jobs are polled with a query and cleaned up with one mutation, so a long job no longer stores a save receipt per poll. Why: run-path audit item 3; one loudness normalization could store up to 540 receipt rows.

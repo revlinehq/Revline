@@ -1,1 +1,0 @@
-- Assistant: every failure an editor run raises now carries a code (conflict, locked, refused, limit, unavailable, invalid, internal) beside its sentence, and a failed turn stores its code. Why: the run and the chat decided behaviour by matching English sentences; this gives them a type to read instead.

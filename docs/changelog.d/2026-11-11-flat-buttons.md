@@ -1,2 +1,0 @@
-- Buttons: filled purple buttons, the send button and segmented controls are flat, with no inner white edge, ring, gradient or shadow; hover and pressed are solid colour steps. Why: the founder dislikes the shadowy button style.
-- Dashboard: the navbar page title uses the softer text grey instead of near-white. Why: the founder found the navbar titles too white against the dark page.

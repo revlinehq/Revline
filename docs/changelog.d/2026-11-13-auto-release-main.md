@@ -1,1 +1,0 @@
-- Releases: every merge to main releases Convex and the changed Cloudflare Workers through `release:prod` in a GitHub workflow, after the release gates. Why: production was deployed by hand on the Mac after each merge.

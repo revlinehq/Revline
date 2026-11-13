@@ -1,1 +1,0 @@
-- Dashboard: Posts, the Post dialog, Connected accounts and Settings follow the new design: one row per clip in Scheduled and Posted, accounts grouped by platform in the dialog, and one centred column of cards for accounts and settings. Why: the founder found the old Posts page confusing and approved the redesign.

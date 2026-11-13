@@ -1,1 +1,0 @@
-- Railway: removed every dependency on the staging environment (proof script, staging workflow, receipts, founder bypass); a pinned-image rollback now accepts only a build production already ran. Why: Railway autodeploys main with its own crash hold, so staging no longer protected production.

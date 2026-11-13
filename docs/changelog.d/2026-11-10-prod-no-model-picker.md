@@ -1,1 +1,0 @@
-- Editor: production shows no model or effort picker and runs paid edits on Haiku 5.5 at medium effort, enforced on the server whatever a client or saved choice asks; development keeps the pickers. Why: the founder asked for one fixed model in production.

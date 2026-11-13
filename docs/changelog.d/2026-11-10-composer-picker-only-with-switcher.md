@@ -1,1 +1,0 @@
-- Editor: the composer shows a model picker only when the server offers the model switcher; the leftover Claude-via-MCP path could show a model name the turn does not run on. Why: the founder saw a model name in production, where paid edits are pinned to Haiku 5.5.

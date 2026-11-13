@@ -1,1 +1,0 @@
-- Railway: the staging promotion proof runs as `service_railway-proof` instead of `service:railway-proof`. Why: the colon put an invalid owner segment in its frame-cache keys, so the media Worker refused the proof's frame upload with 403 and no processor release could pass staging.

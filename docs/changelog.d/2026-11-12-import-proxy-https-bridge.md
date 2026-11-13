@@ -1,1 +1,0 @@
-- Video links: an `https://` `VIDEO_IMPORT_PROXY` now carries range imports too, through a local bridge the processor starts. Why: ffmpeg cannot use an HTTPS proxy and connected directly from Railway, so section downloads skipped the home proxy that the founder's PC runs behind Tailscale Funnel.

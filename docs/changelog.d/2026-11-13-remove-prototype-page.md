@@ -1,1 +1,0 @@
-- Web: Removed the /prototype clip recording page, its scripted demo helpers and its production flag; /prototype now returns the normal 404. Why: the founder asked for the unused page to be deleted.

@@ -1,1 +1,0 @@
-- Editor: the Revline logo is back at the top left of the editor bar and links to the signed-in home, in place of the back arrow. Why: the founder missed the brand in that corner since #287.

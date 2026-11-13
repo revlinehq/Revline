@@ -1,1 +1,0 @@
-- Assistant: the chat shows each thought, tool call and result again while a run works and afterwards, and a failed step shows its tool name with the full reason under it. Why: the founder could not see what the agent was doing with the single status line (#337).

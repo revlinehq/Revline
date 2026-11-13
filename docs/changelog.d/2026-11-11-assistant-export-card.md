@@ -1,1 +1,0 @@
-- Assistant: the editor assistant can export again, through a card showing the timeline and the user's usual settings; nothing renders until they press Export, then the card shows progress and the download. Why: the founder asked it to export and it said it had no export tool.

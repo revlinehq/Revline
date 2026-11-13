@@ -1,1 +1,0 @@
-- Dashboard: the start page shows the 4 most recent projects with "View all", and deleting media in Cloud storage also deletes a project left with no media and no clips. Why: the founder deleted everything in storage and empty projects stayed listed as recent.

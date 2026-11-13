@@ -1,1 +1,0 @@
-- Assistant: GPT-6 Astra is no longer offered in the model picker; old messages keep its label, and a saved or queued Astra pick runs on the plan's default model. Why: the founder asked to remove it.

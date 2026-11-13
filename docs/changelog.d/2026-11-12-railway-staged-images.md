@@ -1,2 +1,0 @@
-- Railway releases: production runs the image digests staging built and proved instead of rebuilding from the repository, staging stops rebuilding every slot, and a retry reuses a valid proof receipt. Why: a processor/exports release took about an hour.
-- Railway releases: every key, token and registry check runs before claims pause, and a stage that fails after the pause restores the previous images and resumes claims. Why: a missing DEEPGRAM_API_KEY took production processing down mid-release.

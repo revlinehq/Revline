@@ -1,1 +1,0 @@
-- Editor: a Post button beside Export posts the open clip to connected accounts now or on a schedule; it exports the clip first (or reuses a finished export of the unchanged clip), shows "Exporting, then posting", then the live links to paste into Content Rewards. Why: the founder wants to post straight from the editor, and posting needs a file.

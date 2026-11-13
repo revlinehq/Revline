@@ -1,1 +1,0 @@
-- Posting: the Post dialog and the editor's Post menu have one main button that reads "Post now" without a date and "Schedule" once a date is picked; a past date shows an inline message. Why: the founder saw "Post now" beside a chosen date, which could post immediately by mistake.

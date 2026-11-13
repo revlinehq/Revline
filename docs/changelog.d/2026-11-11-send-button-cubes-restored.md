@@ -1,1 +1,0 @@
-- Composer: the send button shows the first scatter of larger whitish squares toward its bottom-right corner again, replacing the confetti texture. Why: the founder disliked the confetti and chose the first cubes version.

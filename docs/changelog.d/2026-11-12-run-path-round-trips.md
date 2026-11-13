@@ -1,1 +1,0 @@
-- Assistant: a run makes far fewer Convex calls: one small task read per model step, no 2-second "still active" poll on the runner, the subscription checked at start and resume, and one authorization transaction per bridge call. Why: run-path proposal item 4.

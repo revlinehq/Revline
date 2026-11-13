@@ -1,1 +1,0 @@
-- Campaigns: Make clips opens the AI Editor with the campaign attached, with no instructions dialog in between. Why: the founder asked for the dialog and its pasted-link step to go.

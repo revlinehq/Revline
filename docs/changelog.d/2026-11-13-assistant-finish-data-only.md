@@ -1,1 +1,0 @@
-- Assistant: an edit ends as soon as it is saved; "Checking the result" runs only instant timeline data checks (gaps, overlaps, missing media, lengths, script and captions) with no frame rendering, cut-edge reads or model review of frames. Why: the founder saw a correct crop spend minutes checking footage; the user reviews the result.

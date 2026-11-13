@@ -1,1 +1,0 @@
-- Composer: the send button texture is now a faint, even confetti of small whitish squares and diamonds around the arrow, replacing the blocky scatter of squares. Why: the founder found the first texture terrible and picked this one from six candidates.

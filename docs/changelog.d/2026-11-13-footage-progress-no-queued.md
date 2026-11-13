@@ -1,1 +1,0 @@
-- Editor: footage preparation shows the step ("Preparing audio…") instead of "Queued ·", and says "Starting up, this can take a minute…" only after a task waits over 60 s. Why: workers sleep when idle, so a short wait is normal and "Queued" read as a stall.

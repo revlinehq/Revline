@@ -1,1 +1,0 @@
-- Docs: a design proposal for the assistant run path (history carried per step, cache, polling, round trips, prompt size, error codes, lock, staging) with measured numbers. Why: the founder asked for the larger items as a written proposal before any code.

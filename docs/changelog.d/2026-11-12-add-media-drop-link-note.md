@@ -1,1 +1,0 @@
-- Editor and Library: the Add media link field drops its long supported-sites note. Why: the founder found the text too big.

@@ -1,1 +1,0 @@
-- Posting: Instagram adapter (`lib/posting/platforms/instagram`) that connects a business or creator account with Instagram Login, posts a Reel and reads its views, likes, comments and shares; setup checklist in `docs/posting/instagram-setup.md`. Why: the founder asked for Instagram posting that only needs the app credentials added; not yet run against Instagram.

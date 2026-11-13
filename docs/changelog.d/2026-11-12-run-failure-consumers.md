@@ -1,1 +1,0 @@
-- Assistant: the turn loop, its retry rule and the chat's failure wording now read each failure's code instead of matching its sentence; text stored before codes is still read the old way for one release. Why: rewording a message changed what a run did and what the chat said.

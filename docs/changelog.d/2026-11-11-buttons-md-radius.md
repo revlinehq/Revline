@@ -1,1 +1,0 @@
-- Buttons: app and sign-in buttons are medium-rounded (`--radius-md`) instead of full pills. Why: the founder asked for md-rounded buttons.

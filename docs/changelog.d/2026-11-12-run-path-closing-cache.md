@@ -1,1 +1,0 @@
-- Assistant: the closing step after `finish` keeps the tool list and reads the prompt from cache, and Claude's per-step lane note is a turn-scoped system message. Why: dropping the tools rewrote about 10,000 cached tokens per request and made Claude drop its earlier thinking (run-path proposal item 2).

@@ -1,1 +1,0 @@
-- Editor: the Effects tab has a Caption presets grid (the 11 looks as stills of the real caption) that applies one to the selected captions or every caption and marks the one applied. Why: the founder wants the presets pickable in the editor, not only through the assistant.

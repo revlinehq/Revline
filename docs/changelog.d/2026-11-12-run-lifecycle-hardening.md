@@ -1,2 +1,0 @@
-- Assistant: a run that cannot resume now ends with its reason instead of staying "running"; a busy frame renderer no longer spends a finish attempt; sound and pacing checks past the timeline end complete; a model refusal is named and not retried; cleanup and incident recording can no longer fail a finished step. Why: run-path audit, defects that had not bitten yet.
-- Editor: timelines between 150 and 300 KB can be saved by hand again, and the size-limit message says what filled it. Why: the editor's save refused its own base copy at half the limit.

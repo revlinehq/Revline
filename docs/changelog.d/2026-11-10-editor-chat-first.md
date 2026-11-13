@@ -1,1 +1,0 @@
-- AI Editor: a message from the start page now opens a conversation view where finished clips play in the chat, with Caption copy, Open timeline, Export all and Post; a "Results" choice in the composer switches back to opening the full editor. Why: the founder wants to chat first and choose between the full timeline and clips shown in chat.

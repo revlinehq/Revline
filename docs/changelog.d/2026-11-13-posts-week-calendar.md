@@ -1,1 +1,0 @@
-- Posts: the Posts page is a week calendar, replacing the list. Each post is a card on its day: a clickable thumbnail, its time, caption, each platform's state and the failure reason, with Reschedule, Cancel, Reconnect or Retry; empty days offer "Post here". Why: the founder approved the "everything in the day" design.

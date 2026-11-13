@@ -1,1 +1,0 @@
-- Assistant: earlier requests in a chat now reach the model as the request, the reply and one server line from the turn record (finished or not, revision, edits, failure reason), with no old tool calls or results. Why: a long chat carried every earlier request into every step, and a second run reused an earlier run's staged result.

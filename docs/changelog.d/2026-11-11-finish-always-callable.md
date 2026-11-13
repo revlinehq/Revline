@@ -1,1 +1,0 @@
-- Assistant: finish answers on every task, also once its checks are used up, and a passing finish restarts the failed-check budget. Why: a long clipping task was closed after 8 failed checks across batches and every call, finish included, errored (issue #357).

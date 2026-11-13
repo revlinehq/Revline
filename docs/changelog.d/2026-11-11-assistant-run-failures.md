@@ -1,1 +1,0 @@
-- Assistant: a run no longer loops on a frame check past the end of the timeline, loses its unsaved edits when it stops or fails, or dies on a timeline saved elsewhere; failures in the chat say what happened. Why: production runs on Haiku ended with nothing saved and "This step could not finish".
