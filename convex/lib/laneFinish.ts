@@ -14,7 +14,7 @@ import { isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
-import { CUT_READ_ROUNDS, cutScript, cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
+import { CUT_READ_ROUNDS, cutScript, cutScriptFailures, cutSignature } from '../../lib/ai/lanes/reel/cut-script';
 import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
@@ -87,10 +87,12 @@ export async function finishLane(
   // script was planned and cut is not done until the agent has read the cut back as prose.
   const reel = task.lane === 'reel';
   // After the last round of cuts (CUT_READ_ROUNDS) the agent reports what is left; only spots at the cuts still fail.
-  const cutOutput = cutRead?.output as { accepted?: Record<string, string>; rounds?: number } | undefined;
+  const cutOutput = cutRead?.output as { accepted?: Record<string, string>; rounds?: number; heardCut?: string } | undefined;
   if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys(cutOutput?.accepted ?? {}), !!task.script, reel && (cutOutput?.rounds ?? 0) < CUT_READ_ROUNDS));
-  else if (reel && task.script && touched.footage && cutScript(timeline, assets).words.length)
-    failures.push('The speech was cut but never read back. Call readCutScript, read its prose as the viewer will hear it, and cut any point said twice, abandoned sentence or line that makes no sense before finishing.');
+  // A planned reel's cut is done when the agent read its final prose and said what the viewer hears (heard).
+  const cutNow = reel && task.script && touched.footage ? cutScript(timeline, assets) : undefined;
+  if (cutNow?.words.length && cutOutput?.heardCut !== cutSignature(cutNow))
+    failures.push(`The cut as it is now was not read back. Call readCutScript, read its prose as the viewer will hear it and cut any point said twice, abandoned sentence or half sentence; when it says each point once, call readCutScript {heard} with what the viewer hears.`);
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;

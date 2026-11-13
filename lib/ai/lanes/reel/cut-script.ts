@@ -209,7 +209,11 @@ export function cutProse(script: Pick<CutScript, 'lines'>) {
 /** Rounds of cutting one read cut before the loop stops: finish then holds hints only at the cuts, and the agent reports what is left. */
 export const CUT_READ_ROUNDS = 4;
 /** How the model reads the prose: as the viewer hears it, deciding itself what is said twice. */
-export const CUT_READING = 'Read the prose as the viewer will hear it. Does any point get said more than once, any sentence start and get abandoned, or any line not make sense? A reworded retake is a repeat, the same as an exact one: the same claim, numbers or names said again in other words. Keep the last complete version of each point and cut the rest (drop:[{sentence, text?}] or remove:[flag ids]), then read again. The flags are hints from word overlap; your reading decides.';
+export const CUT_READING = 'Read the prose as the viewer will hear it. Does any point get said more than once, any sentence start and get abandoned, or any line not make sense? A reworded retake is a repeat, the same as an exact one: the same claim, numbers or names said again in other words. A sentence the next one says again more fully is a false start, the opening line included: cut it, and the fuller one becomes the hook. A sentence that stops before its point ("So you can create several accounts and get 1,000.") is a half sentence: cut it. Keep the last complete version of each point and cut the rest (drop:[{sentence, text?}] or remove:[flag ids]), then read again. The flags are hints from word overlap; your reading decides, and accept is only for two sentences that make different points. When a read of the cut as it is now says each point once, call readCutScript {heard} with what the viewer hears in one line.';
+
+/** What the words of a cut are, cheaply: a read's verdict (heard) belongs to the cut with this signature. Captions and
+ * overlays added later leave it unchanged. */
+export const cutSignature = (script: Pick<CutScript, 'words'>) => `${script.words.length}:${script.words.reduce((sum, word) => sum + Math.round(word.source * 100) * 7 + Math.round(word.start * 100), 0)}`;
 
 /** SOURCE ranges that cut one sentence of the read, or the exact words quoted from it, up to the next kept word. */
 export function cutWordsRemoval(script: Pick<CutScript, 'words' | 'lines'>, sentence: number, text?: string) {
