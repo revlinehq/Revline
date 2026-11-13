@@ -6,6 +6,7 @@ import { downloadOwnedMedia } from './owned-media';
 import { uploadMediaFile, type UploadContext } from './upload-media-file';
 import { extractPreviewPoster, inspectPreviewVideo, preparePreviewVideo, probePreviewVideo } from './preview-video';
 import type { ReportMediaActivity } from '../media-analysis/activity';
+import { POSTER_MAX_BYTES, posterTime } from '../editor/poster-frame';
 
 const uploadedPoster = z.object({ storageId: z.string().min(1) });
 
@@ -22,9 +23,9 @@ export async function publishPlaybackPoster(
     input,
     join(directory, 'poster.jpg'),
     signal,
-    Math.min(0.5, (task.asset?.duration ?? 1) / 2),
+    posterTime(task.asset?.duration ?? 1),
   );
-  if (bytes.length > 128 * 1024) throw new Error('The poster exceeded its storage limit.');
+  if (bytes.length > POSTER_MAX_BYTES) throw new Error('The poster exceeded its storage limit.');
   const exclusive = context.exclusive ?? (<T>(work: () => Promise<T>) => work());
   const url = await exclusive(() => context.convex.mutation(api.playback.posterUploadUrl, credentials));
   const response = await fetch(url, {

@@ -24,10 +24,10 @@ export const startConnect = action({
 /**
  * Read the signed-in owner's accounts from Post Bridge into Revline: called when they return from a connect link and
  * when Connected accounts opens. `connected` are the handles this read connected or renewed, `overLimit` how many
- * were refused because the owner is at `cap` accounts for that platform. Does nothing when the accounts were read moments ago.
+ * were refused because the owner is at `cap` accounts in total (null: no limit). Does nothing when the accounts were read moments ago.
  */
 export const syncAccounts = action({
-  args: { afterLink: v.optional(v.boolean()) }, returns: v.object({ connected: v.array(v.string()), overLimit: v.number(), cap: v.number() }),
+  args: { afterLink: v.optional(v.boolean()) }, returns: v.object({ connected: v.array(v.string()), overLimit: v.number(), cap: v.union(v.number(), v.null()) }),
   handler: async (ctx, { afterLink }) => {
     try { return await bridge.syncAccounts(ctx, afterLink === true); }
     catch (error) { throw new ConvexError(bridge.failure(error, error instanceof ConvexError && typeof error.data === 'string' ? error.data : 'Your accounts could not be refreshed. Please try again.')); }

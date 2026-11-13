@@ -11,7 +11,8 @@ import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, POSTING_NOT_SET_UP, TITLE_LIMIT } from '../lib/posting/limits';
 import { postingReady } from '../lib/posting/server';
-import { accountCap, holdsSlot, overCapAccounts, overCapMessage } from './postingBridge';
+import { accountAllowance as ownerAllowance, accountLimit as ownerAccountLimit } from './postingBridge';
+import { atLimit, limitMessage } from '../lib/posting/account-caps';
 import { TIKTOK_VISIBILITY_NAMES, VISIBILITY_OPTIONS, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
 
 // The posting base: connected social accounts, posts to them, and the scheduler state machine.
@@ -77,27 +78,32 @@ export const platforms = query({
 const accountView = v.object({
   id: v.id('postingAccounts'), platform: postingPlatform, username: v.string(), displayName: v.union(v.string(), v.null()), avatarUrl: v.union(v.string(), v.null()),
   status: accountStatus, error: v.union(v.string(), v.null()), connectedAt: v.number(),
-  /** Beyond the plan's per-platform cap (a downgrade or lapse): still connected, but nothing can be posted to it. */
-  overLimit: v.optional(v.boolean()),
 });
 /** The signed-in owner's connected accounts. Tokens are never part of this. */
 export const accounts = query({
   args: {}, returns: v.array(accountView),
   handler: async ctx => {
     const ownerId = await requireOwner(ctx);
-    const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect(), over = await overCapAccounts(ctx, ownerId, rows);
+    const rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
     return Promise.all(rows.filter(row => row.status !== 'disconnected').map(async row => {
       const state = accountState(row);
-      return { id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row), status: state.status, error: optional(state.error), connectedAt: row.createdAt, ...(over.has(row._id) ? { overLimit: true } : {}) };
+      return { id: row._id, platform: row.platform, username: row.username, displayName: optional(row.displayName), avatarUrl: await accountPicture(ctx, row), status: state.status, error: optional(state.error), connectedAt: row.createdAt };
     }));
   },
 });
-/** How many accounts this owner may connect per platform, and the platforms that are full (lib/posting/account-caps.ts). */
+/** How many accounts this owner may connect in total across platforms (`limit`, null: no limit) and how many hold a slot now (lib/posting/account-caps.ts). */
+export const accountAllowance = query({
+  args: {}, returns: v.object({ limit: v.union(v.number(), v.null()), connected: v.number() }),
+  handler: async ctx => {
+    return ownerAllowance(ctx, await requireOwner(ctx));
+  },
+});
+/** Kept in its old per-platform shape for browser tabs opened before the limit became a total (accountAllowance); it can go a release later. */
 export const accountLimit = query({
   args: {}, returns: v.object({ perPlatform: v.number(), full: v.array(postingPlatform) }),
   handler: async ctx => {
-    const ownerId = await requireOwner(ctx), perPlatform = await accountCap(ctx, ownerId), rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
-    return { perPlatform, full: POSTING_PLATFORMS.filter(platform => rows.filter(row => row.platform === platform && holdsSlot(row)).length >= perPlatform) };
+    const { limit, connected } = await ownerAllowance(ctx, await requireOwner(ctx));
+    return { perPlatform: limit ?? Number.MAX_SAFE_INTEGER, full: atLimit(connected, limit) ? [...POSTING_PLATFORMS] : [] };
   },
 });
 /** Kept for browser tabs opened before Post Bridge became the only provider, which still subscribe to these two; they can go a release later. */
@@ -261,7 +267,7 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   const { caption, title } = batchText(args, now);
   const found = await postableExport(ctx, ownerId, args.jobId);
   if (!found.job) throw new ConvexError(found.error);
-  const project = await ctx.db.get(found.job.projectId), over = await overCapAccounts(ctx, ownerId);
+  const project = await ctx.db.get(found.job.projectId);
   const scheduledAt = args.scheduledAt !== undefined && args.scheduledAt > now ? args.scheduledAt : undefined, dueAt = scheduledAt ?? now;
   const batchId = await ctx.db.insert('postingBatches', {
     ownerId, jobId: found.job._id, projectId: found.job.projectId, exportLabel: exportFileName(project?.title ?? 'Video', found.job.label).replace(/\.mp4$/, ''),
@@ -271,7 +277,6 @@ export async function createBatchFor(ctx: MutationCtx, ownerId: string, args: Ba
   for (const target of args.targets) {
     const { account, caption: own, title: ownTitle, choices } = await checkTarget(ctx, ownerId, target), postTitle = ownTitle ?? title;
     if (accountState(account).status !== 'connected') throw new ConvexError(`Reconnect @${account.username} before posting to it.`);
-    if (over.has(account._id)) throw new ConvexError(overCapMessage(account.username, account.platform));
     const postId = await ctx.db.insert('postingPosts', {
       ownerId, batchId, accountId: account._id, platform: account.platform, jobId: found.job._id, caption: own ?? caption, ...(postTitle ? { title: postTitle } : {}),
       ...choices, status: 'scheduled', attempts: 0, ...(scheduledAt ? { scheduledAt } : {}), dueAt, ...(args.campaignId ? { campaignId: args.campaignId } : {}), createdAt: now, updatedAt: now,
@@ -292,7 +297,6 @@ export const retry = mutation({
     if (post.status !== 'failed') throw new ConvexError('Only a failed post can be retried.');
     const account = await ctx.db.get(post.accountId);
     if (!account || accountState(account).status !== 'connected') throw new ConvexError('Reconnect this account before retrying.');
-    if ((await overCapAccounts(ctx, ownerId)).has(account._id)) throw new ConvexError(overCapMessage(account.username, account.platform));
     await ctx.db.patch(postId, { status: 'scheduled', attempts: 0, error: undefined, dueAt: now, claimedAt: undefined, platformJobId: undefined, updatedAt: now });
     await ctx.scheduler.runAfter(0, internal.postingActions.runPost, { postId });
     return null;
@@ -539,8 +543,9 @@ export const claim = internalMutation({
     const account = await ctx.db.get(post.accountId);
     if (!account || account.status === 'disconnected') return fail('This account was disconnected before the post went out.');
     if (accountState(account).status !== 'connected') return fail(`Reconnect @${account.username}, then retry.`);
-    // A scheduled post fires under the plan the owner has now, not the one it was scheduled under.
-    if ((await overCapAccounts(ctx, post.ownerId)).has(account._id)) return fail(overCapMessage(account.username, account.platform));
+    // A scheduled post fires under the plan the owner has now: with none (a lapsed plan) nothing is posted. Above the
+    // plan's account limit after a downgrade, every connected account keeps posting.
+    if (await ownerAccountLimit(ctx, post.ownerId) === 0) return fail(limitMessage(0));
     // Without Post Bridge set up, a due post that could go out is left exactly as it is: still scheduled, not failed,
     // and sent once the key exists. One that could not go out anyway (the checks above) fails with its own reason.
     if (!postingReady()) return null;

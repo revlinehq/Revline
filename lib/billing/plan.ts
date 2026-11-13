@@ -5,8 +5,11 @@ export type PlanTier = typeof PLAN_TIERS[number];
 
 type Plan = { name: string; tagline: string; monthlyPrice: number; currency: 'USD'; lookupKey: string; featured?: boolean; lead?: string; features: readonly string[] };
 
-/** How many social accounts each plan may connect per platform (lib/posting/account-caps.ts enforces it). */
-export const POSTING_ACCOUNTS: Record<PlanTier, number> = { starter: 1, pro: 3, studio: 5 };
+/** How many social accounts each plan may connect in total, across every platform; null: no limit. A free trial gets
+ *  TRIAL_LIMITS_TIER's until its first payment. lib/posting/account-caps.ts and convex/postingBridge.ts enforce it. */
+export const POSTING_ACCOUNTS: Record<PlanTier, number | null> = { starter: 2, pro: 15, studio: null };
+/** A plan's social accounts as people read it: "2 social accounts", "Unlimited social accounts". */
+export const socialAccounts = (limit: number | null) => limit === null ? 'Unlimited social accounts' : `${limit} social ${limit === 1 ? 'account' : 'accounts'}`;
 
 /** Decimal gigabytes, as the Library meter shows sizes. */
 export const GB = 1_000_000_000;
@@ -46,7 +49,7 @@ export const PLANS: Record<PlanTier, Plan> = {
       'Animated subtitles and text effects',
       'Export in 9:16, 1:1 and 16:9',
       '1080p export, no watermark',
-      `Post to ${POSTING_ACCOUNTS.starter} account per platform`,
+      socialAccounts(POSTING_ACCOUNTS.starter),
       'Monthly AI usage included',
       storageLine('starter'),
     ],
@@ -56,7 +59,7 @@ export const PLANS: Record<PlanTier, Plan> = {
     lead: 'Everything in Starter, plus',
     features: [
       'Edit from Claude, Codex or Cursor with MCP',
-      `Post to ${POSTING_ACCOUNTS.pro} accounts per platform`,
+      socialAccounts(POSTING_ACCOUNTS.pro),
       aiUsageLine('pro'),
       storageLine('pro'),
     ],
@@ -69,7 +72,7 @@ export const PLANS: Record<PlanTier, Plan> = {
       'Pick the reasoning effort for every edit',
       '4K export',
       'Faster, parallel exports',
-      `Post to ${POSTING_ACCOUNTS.studio} accounts per platform`,
+      socialAccounts(POSTING_ACCOUNTS.studio),
       aiUsageLine('studio'),
       storageLine('studio'),
     ],

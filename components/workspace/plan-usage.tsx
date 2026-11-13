@@ -4,6 +4,7 @@ import { useConvexAuth, useQuery } from 'convex/react';
 import type { FunctionReturnType } from 'convex/server';
 import { api } from '@/convex/_generated/api';
 import { AI_USAGE_WARNING } from '@/lib/billing/plan';
+import { connectedCount } from '@/lib/posting/account-caps';
 import { formatBytes } from '@/components/library/format';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
@@ -35,13 +36,15 @@ function Meter({ label, detail, share }: { label: string; detail: string; share:
   </div>;
 }
 
-/** Settings → Plan: storage against the plan's limit, AI usage as a percentage, and when it resets. */
+/** Settings → Plan: storage against the plan's limit, connected social accounts against theirs, AI usage as a percentage, and when it resets. */
 export function PlanUsageRows({ usage }: { usage: PlanUsage }) {
   const { storage, ai } = usage, stored = storage.usedBytes + storage.reservedBytes;
+  const { isAuthenticated } = useConvexAuth(), accounts = useQuery(api.posting.accountAllowance, isAuthenticated ? {} : 'skip');
   return <>
     <SettingsRow label="Storage">{storage.limitBytes === null
       ? `${formatBytes(stored)} used`
       : <Meter label={`${formatBytes(stored)} of ${formatBytes(storage.limitBytes)}`} detail={`${percent(stored / storage.limitBytes)}%`} share={stored / storage.limitBytes} />}</SettingsRow>
+    {accounts && <SettingsRow label="Social accounts">{connectedCount(accounts.connected, accounts.limit)}</SettingsRow>}
     {ai && <SettingsRow label="AI usage"><Meter label={ai.blocked === 'day' ? 'Today’s limit reached' : `${percent(ai.used)}% used this period`} detail={ai.today !== null ? `${percent(ai.today)}% of today’s` : ''} share={aiShare(ai)} /></SettingsRow>}
     {ai && <SettingsRow label="Resets">{resetDate(ai.resetsAt)}</SettingsRow>}
   </>;

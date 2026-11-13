@@ -1,4 +1,5 @@
 import type { MediaAsset } from './types';
+import { drawPoster, posterBlob, seekToPoster } from './poster-frame';
 export async function inspectMedia(file:File,onThumbnail?:(image:Blob)=>void,waitForThumbnail=true):Promise<{kind:MediaAsset['kind'];duration?:number;width?:number;height?:number}> {
   const kind=file.type.split('/')[0];if(kind!=='video'&&kind!=='audio'&&kind!=='image')throw new Error(`“${file.name}” is not a supported media file.`);
   if(!file.size)throw new Error('This file is empty.');
@@ -22,13 +23,14 @@ export async function inspectMedia(file:File,onThumbnail?:(image:Blob)=>void,wai
         // Network transfer needs metadata, not a decoded JPEG. Keep the local
         // source alive for the poster while the upload proceeds independently.
         if(!waitForThumbnail)resolve({kind:'video',duration:element.duration,width:video.videoWidth,height:video.videoHeight});
-        const capture=()=>{
+        // The poster is taken where every stored poster is (lib/editor/poster-frame), not on the black first frame.
+        const capture=async()=>{
           if(finished||capturing)return;capturing=true;
-          try{const canvas=document.createElement('canvas'),scale=Math.min(352/video.videoWidth,352/video.videoHeight,1);canvas.width=Math.max(1,Math.round(video.videoWidth*scale));canvas.height=Math.max(1,Math.round(video.videoHeight*scale));
-            canvas.getContext('2d')?.drawImage(video,0,0,canvas.width,canvas.height);canvas.toBlob(blob=>{if(finished)return;if(blob)onThumbnail(blob);finish();},'image/jpeg',.7);
+          try{await seekToPoster(video);if(finished)return;const canvas=document.createElement('canvas');
+            const blob=drawPoster(video,canvas)?await posterBlob(canvas):null;if(finished)return;if(blob)onThumbnail(blob);finish();
           }catch{finish();}
         };
-        if(element.readyState>=2)capture();else element.onloadeddata=capture;
+        if(element.readyState>=2)void capture();else element.onloadeddata=()=>void capture();
       };
       element.onerror=()=>fail('Your browser cannot decode this media. Try an H.264 MP4, WebM, or MP3.');element.src=url;
     });

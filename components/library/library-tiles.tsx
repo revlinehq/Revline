@@ -8,6 +8,7 @@ import type { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
 import { Button } from '@/components/ui/button';
 import { VideoFrame } from '@/components/media/video-frame';
+import { usePosterBackfill } from './use-poster-backfill';
 import { Checkbox } from '@/components/ui/checkbox';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
@@ -102,10 +103,10 @@ export function FolderTile({ folder, renaming, onRename, onRenameEnd, menu, onDr
 
 /** The picture of a file: its thumbnail, its first frame, its waveform, or its type icon; with the duration in a corner. */
 export function FileThumb({ file, badge = true, onImageSize }: { file: LibraryFile; badge?: boolean; onImageSize?: (width: number, height: number) => void }) {
-  const Icon = KIND_ICONS[file.kind];
+  const Icon = KIND_ICONS[file.kind], savePoster = usePosterBackfill();
   return <span className="library-file-thumb" data-kind={file.kind} data-wave={file.waveform ? '' : undefined}>
     {file.thumbnailUrl ? <img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false} onLoad={onImageSize && (event => onImageSize(event.currentTarget.naturalWidth, event.currentTarget.naturalHeight))} />
-      : file.videoUrl ? <VideoFrame key={file.videoUrl} src={file.videoUrl} fallback={<Icon aria-hidden="true" />} onSize={onImageSize} />
+      : file.videoUrl ? <VideoFrame key={file.videoUrl} src={file.videoUrl} fallback={<Icon aria-hidden="true" />} onSize={onImageSize} onPoster={file.kind === 'video' && file.cloudOnly ? savePoster(file.id) : undefined} />
       : file.waveform ? <span className="library-wave" aria-hidden="true">{file.waveform.map((value, index) => <i key={index} style={{ height: `${Math.max(6, value * 100)}%` }} />)}</span>
       : <Icon aria-hidden="true" />}
     {badge && file.duration !== null && <span className="library-file-duration">{formatDuration(file.duration)}</span>}
