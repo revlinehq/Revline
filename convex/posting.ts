@@ -11,8 +11,8 @@ import { dimensions, timelineDuration, type Timeline } from '../lib/editor/types
 import { PLATFORM_NAMES, POSTING_PLATFORMS } from '../lib/posting/platform-names';
 import { CAPTION_LIMIT, MAX_ATTEMPTS, POSTING_NOT_SET_UP, TITLE_LIMIT } from '../lib/posting/limits';
 import { postingReady } from '../lib/posting/server';
-import { accountLimit as ownerAccountLimit, holdsSlot } from './postingBridge';
-import { atLimit } from '../lib/posting/account-caps';
+import { accountAllowance as ownerAllowance, accountLimit as ownerAccountLimit } from './postingBridge';
+import { atLimit, limitMessage } from '../lib/posting/account-caps';
 import { TIKTOK_VISIBILITY_NAMES, VISIBILITY_OPTIONS, YOUTUBE_VISIBILITY_NAMES, isTikTokVisibility, isYouTubeVisibility } from '../lib/posting/visibility';
 
 // The posting base: connected social accounts, posts to them, and the scheduler state machine.
@@ -95,16 +95,15 @@ export const accounts = query({
 export const accountAllowance = query({
   args: {}, returns: v.object({ limit: v.union(v.number(), v.null()), connected: v.number() }),
   handler: async ctx => {
-    const ownerId = await requireOwner(ctx), rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
-    return { limit: await ownerAccountLimit(ctx, ownerId), connected: rows.filter(holdsSlot).length };
+    return ownerAllowance(ctx, await requireOwner(ctx));
   },
 });
 /** Kept in its old per-platform shape for browser tabs opened before the limit became a total (accountAllowance); it can go a release later. */
 export const accountLimit = query({
   args: {}, returns: v.object({ perPlatform: v.number(), full: v.array(postingPlatform) }),
   handler: async ctx => {
-    const ownerId = await requireOwner(ctx), limit = await ownerAccountLimit(ctx, ownerId), rows = await ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
-    return { perPlatform: limit ?? Number.MAX_SAFE_INTEGER, full: atLimit(rows.filter(holdsSlot).length, limit) ? [...POSTING_PLATFORMS] : [] };
+    const { limit, connected } = await ownerAllowance(ctx, await requireOwner(ctx));
+    return { perPlatform: limit ?? Number.MAX_SAFE_INTEGER, full: atLimit(connected, limit) ? [...POSTING_PLATFORMS] : [] };
   },
 });
 /** Kept for browser tabs opened before Post Bridge became the only provider, which still subscribe to these two; they can go a release later. */
@@ -544,6 +543,9 @@ export const claim = internalMutation({
     const account = await ctx.db.get(post.accountId);
     if (!account || account.status === 'disconnected') return fail('This account was disconnected before the post went out.');
     if (accountState(account).status !== 'connected') return fail(`Reconnect @${account.username}, then retry.`);
+    // A scheduled post fires under the plan the owner has now: with none (a lapsed plan) nothing is posted. Above the
+    // plan's account limit after a downgrade, every connected account keeps posting.
+    if (await ownerAccountLimit(ctx, post.ownerId) === 0) return fail(limitMessage(0));
     // Without Post Bridge set up, a due post that could go out is left exactly as it is: still scheduled, not failed,
     // and sent once the key exists. One that could not go out anyway (the checks above) fails with its own reason.
     if (!postingReady()) return null;

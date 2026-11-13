@@ -63,7 +63,7 @@ export function AccountsPage() {
   const accounts = useQuery(api.posting.accounts, isAuthenticated ? {} : 'skip');
   const allowance = useQuery(api.posting.accountAllowance, isAuthenticated ? {} : 'skip');
   // The limit counts every platform together. At or above it (after a downgrade) nothing new connects; what is connected stays and keeps posting.
-  const full = !!allowance && atLimit(allowance.connected, allowance.limit);
+  const full = !allowance || atLimit(allowance.connected, allowance.limit);
   const startConnect = useAction(api.postingActions.startConnect), disconnect = useMutation(api.posting.disconnect);
   const [busy, setBusy] = useState<string | null>(null), [error, setError] = useState('');
   /** Connecting and reconnecting are the same round trip: the platform's consent screen, then back here. `accountId`: the account being reconnected. */
@@ -84,7 +84,7 @@ export function AccountsPage() {
   return <main className="dash-content"><div className="dash-column">
     <h1 className="sr-only">Connected accounts</h1>
     <p className="dash-column-note">Revline posts your clips to the accounts you connect here.{allowance && ` ${connectedCount(allowance.connected, allowance.limit)}.`}</p>
-    {allowance && full && platforms?.some(entry => entry.live) && <p className="dash-column-note" role="note">{limitMessage(allowance.limit)}</p>}
+    {allowance && atLimit(allowance.connected, allowance.limit) && platforms?.some(entry => entry.live) && <p className="dash-column-note" role="note">{limitMessage(allowance.limit)}</p>}
     {platforms && !platforms.some(entry => entry.live) && <p className="dash-column-note" role="status">{POSTING_NOT_SET_UP}</p>}
     <Suspense fallback={null}><ConnectedNote onError={setError} /></Suspense>
     {error && <p className="dash-error" role="alert">{error}</p>}

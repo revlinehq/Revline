@@ -43,6 +43,10 @@ export async function accountLimit(ctx: QueryCtx | MutationCtx, ownerId: string)
 }
 /** An account that takes one of the owner's slots: connected through Post Bridge and not disconnected. */
 export const holdsSlot = (account: Doc<'postingAccounts'>) => account.provider === 'postbridge' && account.status !== 'disconnected';
+/** The owner's account limit and how many accounts hold a slot now. */
+export async function accountAllowance(ctx: QueryCtx | MutationCtx, ownerId: string): Promise<{ limit: AccountLimit; connected: number }> {
+  return { limit: await accountLimit(ctx, ownerId), connected: (await ownerAccounts(ctx, ownerId)).filter(holdsSlot).length };
+}
 const ownerAccounts = (ctx: QueryCtx | MutationCtx, ownerId: string) => ctx.db.query('postingAccounts').withIndex('by_owner', q => q.eq('ownerId', ownerId)).collect();
 export const ownerRef = async (ctx: QueryCtx | MutationCtx, ownerId: string) => (await ctx.db.query('postingConnectRefs').withIndex('by_owner', q => q.eq('ownerId', ownerId)).first())?.ref ?? null;
 
@@ -172,7 +176,7 @@ export const applySync = internalMutation({
  * is trusted: the accounts are the ones Post Bridge lists under the owner's own reference.
  */
 export async function syncAccounts(ctx: ActionCtx, afterLink: boolean): Promise<{ connected: string[]; overLimit: number; cap: AccountLimit }> {
-  const key = postBridgeKey(), nothing = { connected: [], overLimit: 0, cap: 0 };
+  const key = postBridgeKey(), nothing = { connected: [], overLimit: 0, cap: null };
   if (!key) return nothing;
   const state = await ctx.runQuery(internal.postingBridge.syncState, {}), listedAt = Date.now();
   // Every user shares Revline's one API key and its rate limit, so the same accounts are not read again right away.

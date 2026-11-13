@@ -19,6 +19,6 @@ export const connectedCount = (connected: number, limit: AccountLimit) => limit 
 /** What the user reads when connecting another account is refused, at or above the limit. */
 export function limitMessage(limit: AccountLimit) {
   return limit === 0
-    ? 'Connecting accounts is part of a Revline plan. Start your plan, then connect your accounts.'
+    ? 'Connecting and posting to accounts is part of a Revline plan. Start your plan to use them.'
     : `Your plan allows ${limit} connected ${limit === 1 ? 'account' : 'accounts'}. Disconnect one or upgrade.`;
 }

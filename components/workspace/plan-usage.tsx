@@ -39,7 +39,7 @@ function Meter({ label, detail, share }: { label: string; detail: string; share:
 /** Settings → Plan: storage against the plan's limit, connected social accounts against theirs, AI usage as a percentage, and when it resets. */
 export function PlanUsageRows({ usage }: { usage: PlanUsage }) {
   const { storage, ai } = usage, stored = storage.usedBytes + storage.reservedBytes;
-  const accounts = useQuery(api.posting.accountAllowance, {});
+  const { isAuthenticated } = useConvexAuth(), accounts = useQuery(api.posting.accountAllowance, isAuthenticated ? {} : 'skip');
   return <>
     <SettingsRow label="Storage">{storage.limitBytes === null
       ? `${formatBytes(stored)} used`
