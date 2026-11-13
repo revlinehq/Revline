@@ -15,7 +15,7 @@ import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
 import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
-import { requestedLengthFailure, taskCheckLevel } from '../../lib/ai/lanes/checks';
+import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
 import type { LaneEvidence } from '../../lib/ai/lanes/types';
@@ -226,8 +226,6 @@ export async function finishLane(
       warnings.push(...(LANES[task.lane].warn?.(context) ?? []).map((warning) => prefix + warning));
     }
   }
-  // The final level's decode-health check is a checkClip receipt against a registered plan; range cuts have none.
-  if (rangeCuts && taskCheckLevel(task) === 'final') warnings.push('Decode health of the source was not checked: that check needs a registered clip plan, and these clips were cut at given source ranges.');
   if (task.lane === 'clip' && !cheapClip) {
     // The stable task key spans separate MCP calls; the upstream ledger verifies every actual tab.
     failures.push(
