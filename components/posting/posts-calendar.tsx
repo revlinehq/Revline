@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { DashboardMenuButton } from '@/components/dashboard/dashboard-navbar';
 import type { FunctionReturnType } from 'convex/server';
 import { ChevronLeft, ChevronRight, Plus, RotateCw, X } from 'lucide-react';
 import type { api } from '@/convex/_generated/api';
@@ -50,6 +51,7 @@ export function PostsHeader({ week, accounts, onWeek, onNew }: {
 }) {
   return <div className="posts-head">
     <div className="posts-head-row">
+      <DashboardMenuButton />
       <h1>Posts</h1>
       {week !== null && <div className="posts-week-nav">
         <Button variant="ghost" size="icon-sm" aria-label="Previous week" onClick={() => onWeek(addDays(week, -7))}><ChevronLeft /></Button>
@@ -126,7 +128,7 @@ export function PostsCalendar({ week, rows, exporting, ...actions }: { week: num
 /** The page header's rows, still, until the page takes over: the same heights, so nothing moves. */
 export function PostsHeaderSkeleton() {
   return <div className="posts-head">
-    <div className="posts-head-row"><h1>Posts</h1><Skeleton className="ml-auto h-9 w-[106px] rounded-[8px]" /></div>
+    <div className="posts-head-row"><DashboardMenuButton /><h1>Posts</h1><Skeleton className="ml-auto h-9 w-[106px] rounded-[8px]" /></div>
     <div className="posts-accounts-row"><Skeleton className="h-8 w-[360px] max-w-full rounded-[8px]" /></div>
   </div>;
 }

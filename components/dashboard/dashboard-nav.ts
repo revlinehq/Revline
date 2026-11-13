@@ -26,6 +26,13 @@ export function activeDashboardItem(pathname: string | null) {
   return DASHBOARD_NAV.flatMap(group => group.items).find(item => (item.match ?? [item.href]).some(prefix => under(pathname, prefix)));
 }
 
+/** Pages that carry their own header row in place of the navbar: the phone menu button sits in it (DashboardMenuButton). */
+const PAGES_WITHOUT_NAVBAR = ['/posts', '/library'];
+
+export function dashboardShowsNavbar(pathname: string | null) {
+  return !pathname || !PAGES_WITHOUT_NAVBAR.some(prefix => under(pathname, prefix));
+}
+
 /** Shell pages that are not a sidebar item's own page, and the name the navbar shows for them. */
 const PAGE_TITLES: [prefix: string, title: string][] = [['/chats', 'Your projects']];
 
