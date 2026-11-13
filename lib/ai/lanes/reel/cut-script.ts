@@ -37,6 +37,10 @@ const seconds = (value: number) => value.toFixed(2);
 const quote = (text: string) => JSON.stringify(text.length > 70 ? `${text.slice(0, 67)}…` : text);
 // A sentence may lose a leading connective without becoming a half sentence.
 const LEAD_INS = new Set(['like', 'so', 'and', 'but', 'well', 'okay', 'ok', 'now', 'yeah', 'right', 'actually', 'basically', 'look', 'listen', 'anyway']);
+/** SOURCE ranges that cut these words out: per clip, from its first of them to the next kept word of that clip, or the clip's end. */
+function removalRanges(cut: CutWord[], next: CutWord | undefined) {
+  return [...new Set(cut.map(word => word.clipId))].map(clipId => ({ clipId, start: cut.find(word => word.clipId === clipId)!.source, end: next && next.clipId === clipId ? next.source : Infinity }));
+}
 /** Kinds finish holds a speech cut to, where they sit at a cut; a long pause can be a deliberate beat and is only reported. */
 export const CUT_FAILING_KINDS: readonly CutFlag['kind'][] = ['repeat', 'retake', 'clipped-word', 'mid-sentence'];
 
@@ -116,7 +120,7 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
       // A doubled content word set off by a comma inside one piece ("very, very") can be meant; "one one" or one across a cut is a leftover.
       if (!atCut && tokens.length < 2 && !STUTTER_WORDS.has(tokens[0] ?? '') && /[,;:]$/.test(earlier.at(-1)!.text)) continue;
       // The earlier copy goes, up to the next kept word of its clip or to that clip's end.
-      const remove = [...new Set(earlier.map(word => word.clipId))].map(clipId => { const part = earlier.filter(word => word.clipId === clipId); return { clipId, start: part[0].source, end: next && next.clipId === clipId ? next.source : Infinity }; });
+      const remove = removalRanges(earlier, next);
       flags.push({ id: `repeat:${asset._id.slice(-6)}:${seconds(earlier[0].source)}`, kind: 'repeat', at: earlier[0].start, end: next?.start ?? earlier.at(-1)!.end, clipId: earlier[0].clipId, atCut, detail: `${quote(earlier.map(word => word.text).join(' '))} is said again right after${atCut ? ', across a cut' : ''}`, fix: 'Remove the earlier copy and keep the later one: readCutScript {remove:[id]}.', remove });
     }
 
@@ -138,7 +142,7 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
         // A kept line the speaker abandoned: a false start still in the footage.
         if (/(\.\.\.|…)["')\]]?$/.test(line.text)) {
           const said = present.map(word => has(word)!), start = said[0], follows = own.find(word => word.start > said.at(-1)!.start + 1e-6);
-          const remove = [...new Set(said.map(word => word.clipId))].map(clipId => ({ clipId, start: said.find(word => word.clipId === clipId)!.source, end: follows && follows.clipId === clipId ? follows.source : Infinity }));
+          const remove = removalRanges(said, follows);
           flags.push({ id: `mid-sentence:${asset._id.slice(-6)}:${seconds(line.start)}`, kind: 'mid-sentence', at: start.start, end: said.at(-1)!.end, clipId: start.clipId, atCut: false, detail: `${quote(line.text)} trails off unfinished: a false start`, fix: 'Drop it: readCutScript {remove:[id]}.', remove });
         }
         continue;
@@ -154,9 +158,11 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
       for (const hint of retakeHints(sentences.map(line => ({ words: words.slice(line.from, line.to + 1), start: line.start, end: line.end })))) {
         const line = sentences[hint.sentence], again = sentences[hint.again], earlier = words.slice(line.from + hint.from, line.from + hint.to + 1);
         if (!earlier.length || taken.some(flag => flag.at < earlier.at(-1)!.end && flag.end > earlier[0].start)) continue;
+        // A hook said again as the closing line is a callback, not a retake.
+        if (hint.kind === 'reworded' && hint.sentence === 0 && hint.again >= sentences.length - 2) continue;
         const next = own.find(word => word.start > earlier.at(-1)!.start + 1e-6);
         const atCut = !!next && (earlier.some(word => word.piece !== earlier[0].piece) || next.piece !== earlier.at(-1)!.piece);
-        const remove = [...new Set(earlier.map(word => word.clipId))].map(clipId => ({ clipId, start: earlier.find(word => word.clipId === clipId)!.source, end: next && next.clipId === clipId ? next.source : Infinity }));
+        const remove = removalRanges(earlier, next);
         const said = quote(earlier.map(word => word.text).join(' '));
         flags.push({ id: `retake:${asset._id.slice(-6)}:${seconds(earlier[0].source)}`, kind: 'retake', at: earlier[0].start, end: next?.start ?? earlier.at(-1)!.end, clipId: earlier[0].clipId, atCut, detail: hint.kind === 'restart' ? `S${line.n} restarts midway: ${said} is said, then begun again` : `S${line.n} ${said} looks like an earlier take of S${again.n} ${quote(again.text.replace(/‖ /g, ''))}: the same point in other words`, fix: 'If the prose says this point twice, remove the earlier copy: readCutScript {remove:[id]}. If they are two different points, accept it with the reason.', remove });
       }
@@ -200,7 +206,7 @@ export function cutProse(script: Pick<CutScript, 'lines'>) {
   }).join(' ');
 }
 
-/** Reads of one cut before the loop stops and reports what is left. */
+/** Rounds of cutting one read cut before the loop stops: finish then holds hints only at the cuts, and the agent reports what is left. */
 export const CUT_READ_ROUNDS = 4;
 /** How the model reads the prose: as the viewer hears it, deciding itself what is said twice. */
 export const CUT_READING = 'Read the prose as the viewer will hear it. Does any point get said more than once, any sentence start and get abandoned, or any line not make sense? A reworded retake is a repeat, the same as an exact one: the same claim, numbers or names said again in other words. Keep the last complete version of each point and cut the rest (drop:[{sentence, text?}] or remove:[flag ids]), then read again. The flags are hints from word overlap; your reading decides.';
@@ -221,5 +227,5 @@ export function cutWordsRemoval(script: Pick<CutScript, 'words' | 'lines'>, sent
     chosen = all.slice(at[0], at[0] + wanted.length);
   }
   const index = script.words.indexOf(chosen.at(-1)!), next = script.words.slice(index + 1).find(word => word.assetId === chosen[0].assetId);
-  return [...new Set(chosen.map(word => word.clipId))].map(clipId => ({ clipId, start: chosen.find(word => word.clipId === clipId)!.source, end: next && next.clipId === clipId ? next.source : Infinity }));
+  return removalRanges(chosen, next);
 }

@@ -1,6 +1,8 @@
 /** Hints for takes a speaker said again in other words: a sentence mostly re-said by a later one, a sentence restarted
  * midway, the same numbers and names said twice. They sit next to the cut's prose; the model's reading decides. */
 
+import { FILLERS } from './script';
+
 type Word = { text: string };
 type Token = { value: string; word: number };
 export type RetakeHint = {
@@ -16,7 +18,6 @@ export type RetakeHint = {
 
 const CONTRACTIONS: Record<string, string[]> = { "won't": ['will', 'not'], "can't": ['can', 'not'], "cannot": ['can', 'not'], "ain't": ['is', 'not'], "let's": ['let', 'us'] };
 const SUFFIXES: [RegExp, string[]][] = [[/n't$/, ['not']], [/'re$/, ['are']], [/'ll$/, ['will']], [/'ve$/, ['have']], [/'m$/, ['am']], [/'d$/, ['would']], [/'s$/, ['is']]];
-const FILLERS = new Set(['um', 'uh', 'erm', 'er', 'ah', 'hmm', 'mm', 'uhm']);
 const STOP = new Set(['i', 'me', 'my', 'we', 'our', 'you', 'your', 'he', 'she', 'it', 'they', 'them', 'their', 'this', 'that', 'these', 'those', 'a', 'an', 'the', 'and', 'or', 'but', 'so', 'if', 'of', 'to', 'in', 'on', 'at', 'for', 'with', 'from', 'by', 'as', 'is', 'are', 'was', 'were', 'be', 'been', 'am', 'do', 'does', 'did', 'have', 'has', 'had', 'will', 'would', 'can', 'could', 'not', 'just', 'like', 'there', 'here', 'what', 'which', 'who', 'how', 'why', 'when', 'then', 'than', 'also', 'very', 'really', 'actually', 'literally', 'basically', 'okay', 'ok', 'yeah', 'well', 'now', 'right', 'get', 'go', 'going', 'all', 'more', 'some', 'any', 'only', 'even', 'every', 'one']);
 
 /** Plain words a listener hears: lower case, contractions spelled out, numbers without "$" or commas, a plural's "s" off. */
@@ -84,13 +85,13 @@ export function retakeHints(sentences: { words: Word[]; start: number; end: numb
     if (earlier.length < 3 || !sentence.words.length) return;
     for (let other = index + 1; other < sentences.length && other - index <= ahead && sentences[other].start - sentence.end <= window; other++) {
       // A retake split by a full stop still counts: a shorter later sentence may take the one after it.
-      const later = values[other].length < earlier.length && values[other + 1] ? [...values[other], ...values[other + 1]] : values[other];
+      const joined = values[other].length < earlier.length && !!values[other + 1], later = joined ? [...values[other], ...values[other + 1]] : values[other];
       const shared = common(earlier, later), ratio = shared / earlier.length;
       const content = new Set(earlier.filter(value => !STOP.has(value) && later.includes(value))).size;
-      const sameFacts = [...known[index]].filter(fact => known[other].has(fact) || known[other + 1]?.has(fact)).length;
+      const sameFacts = [...known[index]].filter(fact => known[other].has(fact) || joined && known[other + 1].has(fact)).length;
       if (shared >= 3 && content >= 2 && (ratio >= .6 || sameFacts >= 2 && ratio >= .4)) {
         // Name the sentence that says it again: of a pair, the one sharing more of it.
-        const again = later !== values[other] && common(earlier, values[other + 1]) > common(earlier, values[other]) ? other + 1 : other;
+        const again = joined && common(earlier, values[other + 1]) > common(earlier, values[other]) ? other + 1 : other;
         hints.push({ sentence: index, from: 0, to: sentence.words.length - 1, again, kind: 'reworded' });
         return;
       }
