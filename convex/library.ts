@@ -8,7 +8,7 @@ import { requireOwner, requireProject } from './lib/auth';
 import { requireEditorAccess } from './lib/billing_access';
 import { requireMediaTaskCapacity, uploadPreparationTasks } from './lib/account_limits';
 import { mediaDownloadUrl, mediaUrl } from './lib/media_storage';
-import { ownedObjectReferences, recordAssetStorage } from './lib/storage_accounting';
+import { ownedObjectReferences, recordAssetStorage, recordStorageObject } from './lib/storage_accounting';
 import { MAX_FOLDERS, MAX_FOLDER_DEPTH, adjustFolderTotals, folderName, freeName, lineage, liveFolderId, ownedFolder, ownerFolders, requireFreeName, siblingNames, type Folder } from './lib/storage_folders';
 import { beginProjectDeletion, copyMediaFor } from './projects';
 import { importVideoFor } from './mediaTasks';
@@ -16,6 +16,7 @@ import { cancelMediaTask } from './lib/media_queue';
 import { tableRow } from './lib/exact';
 import { attachLibraryUpload, describe, listingReads, storageItem } from './storage';
 import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
+import { POSTER_MAX_BYTES } from '../lib/editor/poster-frame';
 
 const folderId = v.id('storageFolders');
 const folderSummary = { id: folderId, name: v.string(), parentId: v.union(folderId, v.null()), fileCount: v.number(), totalBytes: v.number(), createdAt: v.number(), updatedAt: v.number() };
@@ -51,7 +52,9 @@ async function tileThumbnail(ctx: QueryCtx, row: Doc<'storageObjects'>) {
   if (row.kind !== 'video' && row.kind !== 'image' && row.kind !== 'export') return null;
   const attachments = row.kind === 'export' ? [] : row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(3)
     : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(3) : [];
-  const thumbnail = attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId;
+  const posters = attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId;
+  const library = !posters && row.kind === 'video' && row.r2Key ? await ctx.db.query('cloudMedia').withIndex('by_r2Key', q => q.eq('r2Key', row.r2Key!)).first() : null;
+  const thumbnail = posters ?? (library?.ownerId === row.ownerId ? library.thumbnailStorageId : undefined);
   const url = thumbnail ? await ctx.storage.getUrl(thumbnail) : await mediaUrl(ctx, row);
   return url ? { url, video: !thumbnail && row.kind !== 'image' } : null;
 }
@@ -329,6 +332,43 @@ export const downloadUrl = action({ args: { fileId: v.id('storageObjects') }, re
   const url = await mediaDownloadUrl(ctx, source, source.fileName);
   if (!url) throw new ConvexError('File not found');
   return url;
+} });
+
+// ── Posters ─────────────────────────────────────────────────────────────────────────────────────────────────
+
+/** A Library upload (`uploadId`) or a listed file (`fileId`). */
+const posterTarget = { uploadId: v.optional(v.id('cloudMedia')), fileId: v.optional(v.id('storageObjects')) };
+/** The Library-held video that still needs a poster: a finished upload or link import of the owner's, with no
+ * poster of its own and none from a project holding the same file. Null for anything else. */
+async function posterHolder(ctx: QueryCtx | MutationCtx, ownerId: string, target: { uploadId?: Id<'cloudMedia'>; fileId?: Id<'storageObjects'> }) {
+  const file = target.fileId ? await ctx.db.get(target.fileId) : null;
+  if (target.fileId && (!file || file.ownerId !== ownerId)) return null;
+  const r2Key = file?.r2Key;
+  const library = target.uploadId ? await ctx.db.get(target.uploadId) : r2Key ? await ctx.db.query('cloudMedia').withIndex('by_r2Key', q => q.eq('r2Key', r2Key)).first() : null;
+  if (!library || library.ownerId !== ownerId || !library.completed || library.aborting || library.kind !== 'video' || library.thumbnailStorageId) return null;
+  const posters = await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', ownerId).eq('r2Key', library.r2Key)).take(3);
+  return posters.some(asset => asset.thumbnailStorageId) ? null : library;
+}
+export const posterNeeded = internalQuery({ args: posterTarget, returns: v.boolean(), handler: async (ctx, args) => !!await posterHolder(ctx, await requireOwner(ctx), args) });
+export const attachPoster = internalMutation({ args: { ...posterTarget, storageId: v.id('_storage') }, returns: v.boolean(), handler: async (ctx, { storageId, ...target }) => {
+  const ownerId = await requireOwner(ctx), library = await posterHolder(ctx, ownerId, target), metadata = await ctx.db.system.get(storageId);
+  // Another tab may have saved one meanwhile: the first poster stays.
+  if (!library || !metadata || metadata.contentType !== 'image/jpeg' || metadata.size > POSTER_MAX_BYTES) { await ctx.storage.delete(storageId); return false; }
+  await ctx.db.patch(library._id, { thumbnailStorageId: storageId });
+  await recordStorageObject(ctx, { ownerId, storageId, fileName: `${library.fileName} thumbnail`, size: metadata.size, kind: 'image', createdAt: library.createdAt, auxiliary: true });
+  return true;
+} });
+/** Stores the small JPEG poster of a video only the Library holds (a Library upload or link import), so its tile loads
+ * a picture instead of the video. The browser takes it the way it takes a project upload's poster: at upload, or, for a
+ * link import or an older file, once from the tile that shows the video. A file that has a poster keeps it. */
+export const saveThumbnail = action({ args: { ...posterTarget, image: v.bytes() }, returns: v.boolean(), handler: async (ctx, { image, ...target }): Promise<boolean> => {
+  if (!target.uploadId === !target.fileId) throw new ConvexError('Name one file');
+  const bytes = new Uint8Array(image);
+  if (bytes.length > POSTER_MAX_BYTES || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new ConvexError(`Use a JPEG poster under ${POSTER_MAX_BYTES / 1024} KB`);
+  if (!await ctx.runQuery(internal.library.posterNeeded, target)) return false;
+  const storageId = await ctx.storage.store(new Blob([bytes], { type: 'image/jpeg' }));
+  try { return await ctx.runMutation(internal.library.attachPoster, { ...target, storageId }); }
+  catch (error) { await ctx.storage.delete(storageId); throw error; }
 } });
 /** Puts stored files into an existing project's media (not on its timeline). A file the project already has is left as it is. */
 export const addToProject = mutation({ args: { fileIds: v.array(v.id('storageObjects')), projectId: v.id('projects') }, returns: v.object({ added: v.number(), existing: v.number() }), handler: async (ctx, args) => {

@@ -1,0 +1,1 @@
+- Library: videos uploaded to the Library or imported from a link store a small poster (taken at 1 s, like every stored poster), and older ones get theirs the first time their tile shows. Why: tiles loaded the video itself to draw a frame.
