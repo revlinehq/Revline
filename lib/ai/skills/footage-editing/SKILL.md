@@ -10,7 +10,7 @@ A good footage edit keeps every retained word intact and in sync, removes only w
 1. Run inspectTimeline for current clip IDs, layers and approved work. Edit around approved clips.
 2. For a plain talking-head edit in the reel lane, follow the reel skill. For a small fix to an existing edit, follow footage-editing page `edit-lanes`.
 3. Editing or cleaning up footage with speech: read the saved transcript first (page `speech`). No frames yet, whatever the request lists first. A small named change does only that change.
-4. Make the clean cut from the transcript before anything else: one retainSourceRanges or cleanSpeech call for speech, exact clipIds batches for identical changes. Then read the cut back with readCutScript, remove the repeats and false starts it flags with readCutScript {remove:[ids]}, and fix any clipped word or half sentence before adding anything on top (page `speech`).
+4. Make the clean cut from the transcript before anything else: one retainSourceRanges or cleanSpeech call for speech, exact clipIds batches for identical changes. Then read the cut back with readCutScript, read its prose as the viewer will hear it, cut every point said more than once (reworded retakes too) and every abandoned sentence with readCutScript {drop, remove}, and fix any clipped word or half sentence before adding anything on top (page `speech`).
 5. Then a supplied opening clip or hook, trimmed to the transcript end of its sentence, then b-roll, images and overlays at the timeline time of the word they belong to (page `layers-and-effects`).
 6. Add captions after the final cuts (page `text-styling`).
 7. Add effects only when the user asked for them or authorized creative styling (page `layers-and-effects`).

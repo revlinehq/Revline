@@ -3,6 +3,7 @@ import type { Transcript } from '../../../media-analysis/transcript';
 import { sourceEndOf, timelineTimeAtSource } from '../../../editor/playback-rate';
 import { retakeEvidence, type SpeechCleanup } from '../../../speech-cleanup';
 import { FILLERS, STUTTER_WORDS, scriptOutline, token, wordAnchor } from './script';
+import { retakeHints } from './retakes';
 
 type SpeechAsset = { _id: string; fileName?: string; audioAssetId?: string; analysis?: { transcript?: Transcript; speechCleanup?: SpeechCleanup } };
 /** A word that survives the cut, at its TIMELINE time; `source` and `sourceEnd` are its time in the footage it came from. */
@@ -10,7 +11,8 @@ export type CutWord = { text: string; start: number; end: number; source: number
 export type CutFlag = {
   /** Stable across later edits: the kind, the source and the source second. */
   id: string;
-  kind: 'repeat' | 'clipped-word' | 'mid-sentence' | 'pause';
+  /** retake: a hint that a sentence is said again later in other words, or restarted midway. */
+  kind: 'repeat' | 'retake' | 'clipped-word' | 'mid-sentence' | 'pause';
   /** TIMELINE seconds. */
   at: number;
   end: number;
@@ -25,7 +27,7 @@ export type CutFlag = {
 export type CutScript = {
   words: CutWord[];
   /** The surviving speech as sentences in timeline order; "‖" marks a cut between two words. */
-  lines: { n: number; start: number; end: number; text: string; file?: string; speaker?: number }[];
+  lines: { n: number; start: number; end: number; text: string; file?: string; speaker?: number; from: number; to: number }[];
   /** TIMELINE seconds where one kept piece of speech ends and the next begins. */
   cuts: number[];
   flags: CutFlag[];
@@ -36,7 +38,7 @@ const quote = (text: string) => JSON.stringify(text.length > 70 ? `${text.slice(
 // A sentence may lose a leading connective without becoming a half sentence.
 const LEAD_INS = new Set(['like', 'so', 'and', 'but', 'well', 'okay', 'ok', 'now', 'yeah', 'right', 'actually', 'basically', 'look', 'listen', 'anyway']);
 /** Kinds finish holds a speech cut to, where they sit at a cut; a long pause can be a deliberate beat and is only reported. */
-export const CUT_FAILING_KINDS: readonly CutFlag['kind'][] = ['repeat', 'clipped-word', 'mid-sentence'];
+export const CUT_FAILING_KINDS: readonly CutFlag['kind'][] = ['repeat', 'retake', 'clipped-word', 'mid-sentence'];
 
 /** The script as cut: what the edited timeline now says, read from each clip's source range and the saved word
  * timings, with the problems a listener would hear at the cuts. No audio is read and nothing is transcribed again. */
@@ -91,6 +93,15 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
   const cuts = words.flatMap((word, index) => index && words[index - 1].piece !== word.piece ? [word.start] : []);
   const fileOf = (assetId: string) => assets.find(asset => asset._id === assetId)?.fileName;
 
+  const lines: CutScript['lines'] = [];
+  let from = 0;
+  words.forEach((word, index) => {
+    const next = words[index + 1];
+    if (next && next.assetId === word.assetId && next.speaker === word.speaker && !/[.!?…]["')\]]?$/.test(word.text) && next.start - word.end <= .9) return;
+    const part = words.slice(from, index + 1);
+    lines.push({ n: lines.length + 1, start: part[0].start, end: word.end, text: part.map((item, at) => `${at && part[at - 1].piece !== item.piece ? '‖ ' : ''}${item.text}`).join(' '), ...(fileOf(word.assetId) ? { file: fileOf(word.assetId) } : {}), ...(word.speaker === undefined ? {} : { speaker: word.speaker }), from, to: index });
+    from = index + 1;
+  });
   for (const asset of sources.values()) {
     // Repeats: a word or phrase said, then said again; a sentence said twice. The cleanup's own evidence, on what is
     // left of one source, so layered or simultaneous speech from another source never reads as a doubled word.
@@ -135,6 +146,21 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
       const edge = has(head ? present[0] : present.at(-1)!)!;
       flags.push({ id: `mid-sentence:${asset._id.slice(-6)}:${seconds(line.start)}`, kind: 'mid-sentence', at: head ? edge.start : edge.end, end: head ? edge.start : edge.end, clipId: edge.clipId, atCut: true, detail: head ? `the cut starts mid-sentence at ${quote(present.slice(0, 5).map(word => word.text).join(' '))}, without the start of ${quote(line.text)}` : `${quote(line.text)} stops mid-sentence after ${quote(present.slice(-4).map(word => word.text).join(' '))}`, fix: head ? `Keep the line from source ${seconds(needed[0].start)} s, or drop the rest of it through source ${seconds(line.end)} s.` : `Keep the line through source ${seconds(needed.at(-1)!.end)} s, or drop it from source ${seconds(line.start)} s.` });
     }
+    // Reworded retakes and restarts inside a sentence: hints from word overlap and shared numbers and names, so the
+    // model's own reading of the prose has the likely spots marked. Spots another flag already names are left to it.
+    const taken = flags.filter(flag => flag.kind === 'repeat' || flag.kind === 'mid-sentence');
+    for (const speaker of new Set(own.map(word => word.speaker))) {
+      const sentences = lines.filter(line => words[line.from].assetId === asset._id && words[line.from].speaker === speaker);
+      for (const hint of retakeHints(sentences.map(line => ({ words: words.slice(line.from, line.to + 1), start: line.start, end: line.end })))) {
+        const line = sentences[hint.sentence], again = sentences[hint.again], earlier = words.slice(line.from + hint.from, line.from + hint.to + 1);
+        if (!earlier.length || taken.some(flag => flag.at < earlier.at(-1)!.end && flag.end > earlier[0].start)) continue;
+        const next = own.find(word => word.start > earlier.at(-1)!.start + 1e-6);
+        const atCut = !!next && (earlier.some(word => word.piece !== earlier[0].piece) || next.piece !== earlier.at(-1)!.piece);
+        const remove = [...new Set(earlier.map(word => word.clipId))].map(clipId => ({ clipId, start: earlier.find(word => word.clipId === clipId)!.source, end: next && next.clipId === clipId ? next.source : Infinity }));
+        const said = quote(earlier.map(word => word.text).join(' '));
+        flags.push({ id: `retake:${asset._id.slice(-6)}:${seconds(earlier[0].source)}`, kind: 'retake', at: earlier[0].start, end: next?.start ?? earlier.at(-1)!.end, clipId: earlier[0].clipId, atCut, detail: hint.kind === 'restart' ? `S${line.n} restarts midway: ${said} is said, then begun again` : `S${line.n} ${said} looks like an earlier take of S${again.n} ${quote(again.text.replace(/‖ /g, ''))}: the same point in other words`, fix: 'If the prose says this point twice, remove the earlier copy: readCutScript {remove:[id]}. If they are two different points, accept it with the reason.', remove });
+      }
+    }
   }
 
   // Dead air left between two surviving words.
@@ -145,27 +171,55 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
     if (next && next.start - heardUntil > maxPause) flags.push({ id: `pause:${word.assetId.slice(-6)}:${seconds(word.source)}`, kind: 'pause', at: heardUntil, end: next.start, clipId: word.clipId, atCut: word.piece !== next.piece, detail: `${(next.start - heardUntil).toFixed(1)} s without words after ${quote(word.text)}`, fix: 'Tighten it (cleanSpeech with kinds ["pause"] on that clip, or trim the edge) unless it is a deliberate beat or covered by b-roll.' });
   });
 
-  const lines: CutScript['lines'] = [];
-  let from = 0;
-  words.forEach((word, index) => {
-    const next = words[index + 1];
-    if (next && next.assetId === word.assetId && next.speaker === word.speaker && !/[.!?…]["')\]]?$/.test(word.text) && next.start - word.end <= .9) return;
-    const part = words.slice(from, index + 1);
-    lines.push({ n: lines.length + 1, start: part[0].start, end: word.end, text: part.map((item, at) => `${at && part[at - 1].piece !== item.piece ? '‖ ' : ''}${item.text}`).join(' '), ...(fileOf(word.assetId) ? { file: fileOf(word.assetId) } : {}), ...(word.speaker === undefined ? {} : { speaker: word.speaker }) });
-    from = index + 1;
-  });
   const unique = [...new Map(flags.map(flag => [flag.id, flag])).values()].sort((a, b) => a.at - b.at);
   return { words, lines, cuts, flags: unique };
 }
 
-/** A flag finish fails on: a repeat, clipped word or half sentence that sits at a cut and was not kept on purpose. */
-export const cutFlagFails = (flag: CutFlag, accepted: readonly string[] = []) => flag.atCut && CUT_FAILING_KINDS.includes(flag.kind) && !accepted.includes(flag.id);
+/** A flag finish fails on: a repeat, clipped word or half sentence that sits at a cut and was not kept on purpose. A reel
+ * (everywhere) is a clean script: a repeat, retake or false start fails wherever it sits, untouched footage included. */
+export const cutFlagFails = (flag: CutFlag, accepted: readonly string[] = [], everywhere = false) => (flag.atCut || everywhere && flag.kind !== 'clipped-word') && CUT_FAILING_KINDS.includes(flag.kind) && !accepted.includes(flag.id);
 
 /** finish, for a task that read its cut back: every failing spot of the cut in one result, each with its time and fix. */
-export function cutScriptFailures(timeline: Timeline, assets: SpeechAsset[], accepted: readonly string[] = [], planChecked = false): string[] {
-  // With a saved script plan the reel check already holds each line whole.
-  const failing = cutScript(timeline, assets).flags.filter(flag => cutFlagFails(flag, accepted) && !(planChecked && flag.kind === 'mid-sentence'));
+export function cutScriptFailures(timeline: Timeline, assets: SpeechAsset[], accepted: readonly string[] = [], planChecked = false, everywhere = false): string[] {
+  // With a saved script plan the reel check already holds each line whole; a false start it kept is still one.
+  const failing = cutScript(timeline, assets).flags.filter(flag => cutFlagFails(flag, accepted, everywhere) && !(planChecked && flag.kind === 'mid-sentence' && flag.atCut));
   if (!failing.length) return [];
   return [...failing.slice(0, 30).map(flag => `${flag.kind} at ${seconds(flag.at)} s [${flag.id}]: ${flag.detail}. ${flag.fix}`),
     `${failing.length} spot${failing.length === 1 ? '' : 's'} in the cut's speech. Fix each one, or keep one the request did not ask to change with readCutScript {accept:[{id, reason}]}.`];
+}
+
+/** The cut as one paragraph a listener would hear: no caption breaks or cut marks, each sentence tagged with its number and
+ * TIMELINE range, and a speaker or file named only where it changes. */
+export function cutProse(script: Pick<CutScript, 'lines'>) {
+  let voice = '';
+  return script.lines.map(line => {
+    const who = [line.file, line.speaker === undefined ? undefined : `speaker ${line.speaker}`].filter(Boolean).join(', ');
+    const label = who && who !== voice && script.lines.some(other => other.file !== line.file || other.speaker !== line.speaker) ? ` ${who}` : '';
+    voice = who;
+    return `[S${line.n} ${line.start.toFixed(2)}–${line.end.toFixed(2)}${label}] ${line.text.replace(/‖ /g, '')}`;
+  }).join(' ');
+}
+
+/** Reads of one cut before the loop stops and reports what is left. */
+export const CUT_READ_ROUNDS = 4;
+/** How the model reads the prose: as the viewer hears it, deciding itself what is said twice. */
+export const CUT_READING = 'Read the prose as the viewer will hear it. Does any point get said more than once, any sentence start and get abandoned, or any line not make sense? A reworded retake is a repeat, the same as an exact one: the same claim, numbers or names said again in other words. Keep the last complete version of each point and cut the rest (drop:[{sentence, text?}] or remove:[flag ids]), then read again. The flags are hints from word overlap; your reading decides.';
+
+/** SOURCE ranges that cut one sentence of the read, or the exact words quoted from it, up to the next kept word. */
+export function cutWordsRemoval(script: Pick<CutScript, 'words' | 'lines'>, sentence: number, text?: string) {
+  const line = script.lines.find(item => item.n === sentence);
+  if (!line) throw new Error(`There is no sentence S${sentence}. The read has S1 to S${script.lines.length}.`);
+  // Punctuation-only words ("-") are matched around, never against.
+  const all = script.words.slice(line.from, line.to + 1).filter(word => token(word.text));
+  let chosen = all;
+  if (!all.length) throw new Error(`S${sentence} has no words to cut.`);
+  if (text) {
+    const wanted = text.split(/\s+/).map(token).filter(Boolean), have = all.map(word => token(word.text));
+    const at = have.flatMap((_, index) => wanted.length && wanted.every((value, offset) => have[index + offset] === value) ? [index] : []);
+    if (!at.length) throw new Error(`S${sentence} does not contain the words ${JSON.stringify(text)}. Copy them exactly from: ${JSON.stringify(line.text.replace(/‖ /g, ''))}`);
+    if (at.length > 1) throw new Error(`${JSON.stringify(text)} appears ${at.length} times in S${sentence}. Quote more of the words around the copy to cut.`);
+    chosen = all.slice(at[0], at[0] + wanted.length);
+  }
+  const index = script.words.indexOf(chosen.at(-1)!), next = script.words.slice(index + 1).find(word => word.assetId === chosen[0].assetId);
+  return [...new Set(chosen.map(word => word.clipId))].map(clipId => ({ clipId, start: chosen.find(word => word.clipId === clipId)!.source, end: next && next.clipId === clipId ? next.source : Infinity }));
 }
