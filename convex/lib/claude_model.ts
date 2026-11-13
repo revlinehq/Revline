@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 import { EDITOR_MODELS, CLAUDE_EDIT_MODELS, EDITOR_REASONING_EFFORTS, EDITOR_SPEED_MODES, RETIRED_EDITOR_MODEL_CHOICES } from '../../lib/ai/claude-model';
 
 export const claudeModelChoiceValidator = v.union(...EDITOR_MODELS.map(model => v.literal(model.id)));
-// Accept stale IDs at the boundary: retired ones (Gemini 4 Argon) in queued turns and old clients fall back to the default model.
+// Accept stale IDs at the boundary: retired ones (Gemini 4 Argon, GPT-6 Astra) in queued turns and old clients fall back to the default model.
 export const legacyCompatibleModelChoiceValidator = v.union(claudeModelChoiceValidator,...CLAUDE_EDIT_MODELS.map(model=>v.literal(model.id)),...RETIRED_EDITOR_MODEL_CHOICES.map(id=>v.literal(id)));
 export const editorReasoningEffortValidator = v.union(...EDITOR_REASONING_EFFORTS.map(effort => v.literal(effort)));
 // Saved and incoming strings are normalized before use; new writes use canonical efforts.
