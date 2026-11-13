@@ -3,7 +3,7 @@ import { parseEnv } from 'node:util';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
-import { railway, railwayConfig, railwayLogEvents, verifyRailwayTarget } from '../lib/railway-workers.mjs';
+import { railway, railwayConfig, railwayDeploymentRuns, railwayInstance, railwayLogEvents, verifyRailwayTarget } from '../lib/railway-workers.mjs';
 
 const receiptSchema = z.object({
   config: z.unknown(), projectId: z.string(), processorTaskId: z.string(), exportTaskId: z.string(), ultraTaskId: z.string(), distributedTaskId: z.string().optional(),
@@ -33,13 +33,15 @@ export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFi
     const expectedTask = entry.role === 'processor' ? receipt.processorTaskId : entry.role === 'export' ? receipt.exportTaskId : entry.role === 'ultra' ? receipt.ultraTaskId : receipt.distributedTaskId;
     const slots = processor ? staging.processorServices : entry.role === 'export' ? staging.standardServices : entry.role === 'ultra' ? staging.ultraServices : [...staging.standardServices, ...staging.ultraServices];
     if (entry.taskId !== expectedTask || !slots.includes(entry.serviceId)) throw new Error('Staging job/deployment evidence does not match its lane.');
-    const data = z.object({ deployment: z.object({ serviceId: z.string(), environmentId: z.string(), meta: z.object({ commitHash: z.string() }) }), deploymentLogs: z.unknown() }).parse(await railway({ token,
+    const data = z.object({ deployment: z.object({ serviceId: z.string(), environmentId: z.string(), meta: z.record(z.string(), z.unknown()).nullable() }), deploymentLogs: z.unknown() }).parse(await railway({ token,
       query: 'query($id: String!) { deployment(id: $id) { serviceId environmentId meta } deploymentLogs(deploymentId: $id, limit: 500) { message attributes { key value } } }', variables: { id: entry.deploymentId },
     }));
-    const commit = processor ? staging.processorCommit : staging.exportsCommit;
-    if (data.deployment.serviceId !== entry.serviceId || data.deployment.environmentId !== staging.environmentId || data.deployment.meta.commitHash !== commit) throw new Error('Staging deployment has a different source revision or target.');
+    const commit = processor ? staging.processorCommit : staging.exportsCommit, image = processor ? staging.processorImage : staging.exportsImage;
+    // A repository build names its commit; an image slot runs the digest itself, which is what production then deploys.
+    if (data.deployment.serviceId !== entry.serviceId || data.deployment.environmentId !== staging.environmentId || !railwayDeploymentRuns(data.deployment, { commit, image })) throw new Error('Staging deployment has a different source revision or target.');
+    if (typeof data.deployment.meta?.commitHash !== 'string' && (await railwayInstance({ token, config: staging, serviceId: entry.serviceId })).source?.image !== image) throw new Error('The staging slot no longer runs the proven image digest.');
     const events = railwayLogEvents(data.deploymentLogs);
-    if (!events.some(event => event.event === 'railway-runtime-verified' && event.commit === commit) || !events.some(event => event.event === 'media-completed' && event.taskId === entry.taskId && event.projectId === receipt.projectId)) throw new Error('Authenticated Railway logs do not prove completion of the staging job on the verified build.');
+    if (!events.some(event => event.event === 'railway-runtime-verified' && event.commit === commit && event.image === image) || !events.some(event => event.event === 'media-completed' && event.taskId === entry.taskId && event.projectId === receipt.projectId)) throw new Error('Authenticated Railway logs do not prove completion of the staging job on the verified build.');
     if (entry.role === 'distributed' && (!events.some(event => event.event === 'chunks-launched' && event.machines >= 1) || !events.some(event => event.event === 'remote-chunks-done') || !events.some(event => event.event === 'assembled'))) throw new Error('Staging evidence must prove remote chunks and successful assembly.');
   }
   console.log(`Staging promotion verified: ${receipt.projectId}; processing and configured export lanes completed on the exact source commits and artifacts.`);

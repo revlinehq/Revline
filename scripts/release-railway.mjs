@@ -12,7 +12,7 @@ import { railwayConfig, verifyRailwayTarget, verifyRailwaySlot } from '../lib/ra
 export async function releaseRailway({ target, kind, values, env, dry, founderBypass }) {
   let config = railwayConfig(values.RAILWAY_WORKERS_JSON);
   if (config.convexUrl !== `https://${target.deployment}.convex.cloud`) throw new Error('Release Railway/Convex target mismatch.');
-  if (dry) { console.log(`${target.name}: would build and runtime-preflight Railway ${kind}, drain slots, then stage the verified digest. Queue selection unchanged.`); return; }
+  if (dry) { console.log(`${target.name}: would check every Railway ${kind} setting first, runtime-check the staged digest, pause claims, drain, point the slots at it, verify the queue connection and resume claims (restoring the previous images on any failure). Queue selection unchanged.`); return; }
   const promotionArgs = [];
   if (config.environment === 'production') {
     const receiptFile = env.REVLINE_RAILWAY_STAGING_RECEIPT;
@@ -41,6 +41,23 @@ export async function releaseRailway({ target, kind, values, env, dry, founderBy
   const args = ['scripts/railway-workers.mjs', '--config', file, '--environment', config.environment, '--env-file', target.file, '--kind', kind, '--apply'];
   if (config.environment !== 'production') await command(process.execPath, [args[0], 'build', ...args.slice(1)], { env });
   await command(process.execPath, [args[0], 'stage', ...args.slice(1), ...(kind === 'processor' ? ['--image-first'] : []), ...promotionArgs], { env });
+}
+
+/** Read-only: every value and credential a production `stage` of `kind` needs, checked before the staging proof so a
+ *  missing key stops the release while nothing has changed. It checks the digest staging built for this commit. */
+export async function checkRailway({ target, kind, values, env }) {
+  let config = railwayConfig(values.RAILWAY_WORKERS_JSON);
+  if (config.convexUrl !== `https://${target.deployment}.convex.cloud`) throw new Error('Release Railway/Convex target mismatch.');
+  if (config.environment === 'production') {
+    const { staging } = await stagingManifestFor({ commit: env.GITHUB_SHA, env, file: env.REVLINE_RAILWAY_STAGING_MANIFEST });
+    if (staging.distributedExports !== config.distributedExports) throw new Error('Staging and production differ in distributed-export mode; staging cannot promote to this production.');
+    config = railwayConfig({ ...config, [`${kind}Commit`]: staging[`${kind}Commit`], [`${kind}Image`]: staging[`${kind}Image`] });
+  }
+  const directory = resolve('.data/railway-release');
+  await mkdir(directory, { recursive: true });
+  const file = resolve(directory, `${target.deployment}-${kind}-check.json`);
+  await writeFile(file, JSON.stringify(config, null, 2) + '\n', { mode: 0o600 });
+  await command(process.execPath, ['scripts/railway-workers.mjs', 'check', '--config', file, '--environment', config.environment, '--env-file', target.file, '--kind', kind], { env });
 }
 
 export async function verifyRailway({ deployment, kind, values }) {
