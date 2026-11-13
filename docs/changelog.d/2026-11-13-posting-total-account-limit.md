@@ -1,0 +1,1 @@
+- Billing: the social account limit is a total across platforms: Starter and free trials 2, Pro 15, Studio unlimited; after a downgrade connected accounts stay and keep posting, new ones are refused with a plain message. Why: founder decision, replacing the per-platform caps (1/3/5).

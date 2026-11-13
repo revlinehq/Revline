@@ -48,7 +48,7 @@ Every user's accounts sit in Revline's single Post Bridge workspace, and the API
 
 ## Account cap
 
-Post Bridge bills per connected account (15 on the $39 plan, 99 on the $99 plan, then $1 each). `lib/posting/account-caps.ts` sets how many a Revline user may connect per platform: 3 on Pro (trial and complimentary access included) and on Ultra, 0 without a plan. The server enforces it twice: no link is made at the cap, and an account that arrives over the cap is removed at Post Bridge.
+Post Bridge bills per connected account (15 on the $39 plan, 99 on the $99 plan, then $1 each). `POSTING_ACCOUNTS` (`lib/billing/plan.ts`, read through `lib/posting/account-caps.ts`) sets how many a Revline user may connect in total across platforms: 2 on Starter and during a free trial, 15 on Pro, no limit on Studio, 0 without a plan. The server enforces it twice: no link is made at the limit, and a new account that arrives over it is removed at Post Bridge. Accounts already connected are never removed and keep posting when a downgrade puts the owner above the limit; only new connections are refused.
 
 ## What Post Bridge cannot do
 
