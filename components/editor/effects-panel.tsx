@@ -112,7 +112,7 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
       <span className="effect-label" id="effect-caption-presets-label">Caption presets</span>
       <CaptionPresetPicker value={presetApplied} disabled={locked || styling || !presetTargets.length} onChoose={id => void choosePreset(id)}/>
       <p className="effect-hint">{!presetTargets.length ? 'Turn on subtitles to style them' : presetTargets.length < timeline.clips.filter(clip => clip.kind === 'caption').length ? `Applies to the ${presetTargets.length === 1 ? 'selected caption' : `${presetTargets.length} selected captions`}` : 'Applies to every caption'}</p>
-      {presetTargets.length > 0 && <EffectTextFont id="effect-caption" font={captionFont.font} size={captionFont.size} disabled={locked || styling}
+      {presetTargets.length > 0 && <EffectTextFont id="effect-caption" font={captionFont.font} size={captionFont.size} sizeMixed={captionFont.sizeMixed} disabled={locked || styling}
         onFont={font => chooseFont(presetTargets, font)} onSize={size => resize('caption', presetTargets, size)} onSizeEnd={endResize}/>}
     </section>
     <section className="effect-row">
@@ -129,7 +129,7 @@ export function EffectsPanel({ timeline, assets, locked, onChange, onError, onLo
         onChange={event => typeHook(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') commitHook(draft); }}
         onBlur={() => { commitHook(draft); store.getState().endUndoGroup(); }}/>
-      {hookIds.length > 0 && <EffectTextFont id="effect-hook" font={hookFont.font} size={hookFont.size} disabled={locked}
+      {hookIds.length > 0 && <EffectTextFont id="effect-hook" font={hookFont.font} size={hookFont.size} sizeMixed={hookFont.sizeMixed} disabled={locked}
         onFont={font => chooseFont(hookIds, font)} onSize={size => resize('hook', hookIds, size)} onSizeEnd={endResize}/>}
     </section>
   </div>;

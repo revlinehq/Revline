@@ -170,16 +170,20 @@ export function applyQuickCaptionPreset(timeline: Timeline, id: CaptionPresetId,
 export const TEXT_SIZE_MIN = 8, TEXT_SIZE_MAX = 300;
 /** The hook title's id while it exists, for the font and size controls. */
 export const hookClipIds = (timeline: Timeline) => hookClip(timeline) ? [HOOK_CLIP_ID] : [];
-/** The font and size every target shows (undefined font when they differ); size is the first target's, in 1080-based units. */
-export function textFontState(timeline: Timeline, targetIds: readonly string[]): { font?: TextFontId; size?: number } {
-  const clips = targetIds.flatMap(id => timeline.clips.filter(clip => clip.id === id && (clip.kind === 'caption' || clip.kind === 'graphic')));
+/** The font and size the targets show, in 1080-based units: `font` is undefined when they differ, `size` is the first
+ *  target's and `sizeMixed` says the others differ from it. */
+export function textFontState(timeline: Timeline, targetIds: readonly string[]): { font?: TextFontId; size?: number; sizeMixed?: boolean } {
+  const ids = new Set(targetIds), clips = timeline.clips.filter(clip => ids.has(clip.id) && (clip.kind === 'caption' || clip.kind === 'graphic'));
   if (!clips.length) return {};
-  const fonts = new Set(clips.map(clip => clip.fontFamily ?? UNSET_TEXT_FONT));
-  return { font: fonts.size === 1 ? [...fonts][0] : undefined, size: Math.round(textStyle(clips[0]).fontSize) };
+  const fonts = new Set(clips.map(clip => clip.fontFamily ?? UNSET_TEXT_FONT)), sizes = new Set(clips.map(shownSize));
+  return { font: fonts.size === 1 ? [...fonts][0] : undefined, size: shownSize(clips[0]), sizeMixed: sizes.size > 1 };
 }
+const shownSize = (clip: Clip) => Math.round(textStyle(clip).fontSize);
 /** Set the font or size on caption and text-graphic targets; each keeps its words, timing, preset and look. */
 export function setTextFont(timeline: Timeline, targetIds: string[], changes: { fontFamily?: TextFontId; fontSize?: number }): Timeline {
   const fontSize = changes.fontSize === undefined ? undefined : Math.round(Math.min(TEXT_SIZE_MAX, Math.max(TEXT_SIZE_MIN, changes.fontSize)));
-  const targets = targetIds.filter(id => { const clip = timeline.clips.find(item => item.id === id); return !!clip && (changes.fontFamily !== undefined && clip.fontFamily !== changes.fontFamily || fontSize !== undefined && clip.fontSize !== fontSize); });
+  const ids = new Set(targetIds);
+  // Only clips that would look different: an unsaved font or size already draws its default.
+  const targets = timeline.clips.filter(clip => ids.has(clip.id) && (changes.fontFamily !== undefined && (clip.fontFamily ?? UNSET_TEXT_FONT) !== changes.fontFamily || fontSize !== undefined && shownSize(clip) !== fontSize)).map(clip => clip.id);
   return targets.length ? patchTextStyles(timeline, { ...(changes.fontFamily ? { fontFamily: changes.fontFamily } : {}), ...(fontSize !== undefined ? { fontSize } : {}) }, targets) : timeline;
 }
