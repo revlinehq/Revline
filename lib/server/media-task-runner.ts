@@ -15,7 +15,7 @@ import { normalizeTimelineAudio, enforceNormalizedExportPeak } from './normalize
 import { detectSourceFacecam, trackSourceSpeakers } from './clipping-analysis';
 import type { ExportResolution } from '@/lib/editor/composition';
 import { mkdtemp, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { availableParallelism, freemem, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import type { ConvexHttpClient } from 'convex/browser';
 import type { MediaWorkItem, MediaTaskResult } from '@/convex/lib/media_task_contract';
@@ -35,7 +35,8 @@ import { measureAudioActivity } from './measure-audio-activity';
 import { mediaSourceCacheIdentity, reuseCachedMediaFile, reuseMediaFile } from './media-file-cache';
 import { uploadMediaFile, type UploadContext } from './upload-media-file';
 import { identifyPlayback, prepareTimelinePlayback, publishPlaybackPoster } from './prepare-playback';
-import { runDistributedRender, runRenderWorker } from './render-worker';
+import { prepareExportImages } from './export-images';
+import { RenderStallError, runDistributedRender, runRenderWorker, type RenderProgress } from './render-worker';
 import { importVideoLink } from './import-video-link';
 import { removeBackground } from './remove-background';
 import { deriveMedia, measureColor } from './derive-media';
@@ -61,16 +62,19 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
     const now = Date.now();
     console.log(`[${new Date(now).toISOString()}] Media task ${task.taskId} (${task.kind}): ${phase} ${state}${detail ? ` · ${detail}` : ''} · phase ${((now - phaseStartedAt) / 1000).toFixed(1)}s · total ${((now - startedAt) / 1000).toFixed(1)}s · chat ${task.projectId}${task.aiRunId ? ` · run ${task.aiRunId}` : ''}`);
   };
-  const runPhase = async <T>(phase: string, work: () => Promise<T>): Promise<T> => {
+  // Each phase's wall time, summed by name, for the export's closing log line.
+  const phaseTimes = new Map<string, number>();
+  // `beat` replaces the bare 'still running' heartbeat with what the phase is doing (frames rendered, speed).
+  const runPhase = async <T>(phase: string, work: () => Promise<T>, beat?: () => string): Promise<T> => {
     const phaseStartedAt = Date.now();
     logPhase(phase, 'started', phaseStartedAt);
-    const heartbeat=setInterval(()=>logPhase(phase,'still running',phaseStartedAt),15_000);
+    const heartbeat=setInterval(()=>{ const detail = beat?.(); logPhase(phase, detail ? 'running' : 'still running', phaseStartedAt, detail); },15_000);
     try {
       const result = await work();
       logPhase(phase, 'complete', phaseStartedAt);
       return result;
     } catch (error) { logPhase(phase, 'failed', phaseStartedAt); throw error; }
-    finally { clearInterval(heartbeat); }
+    finally { clearInterval(heartbeat); phaseTimes.set(phase, (phaseTimes.get(phase) ?? 0) + Date.now() - phaseStartedAt); }
   };
   let geminiActivity:MediaTaskActivity|undefined,geminiActivityStartedAt=0,geminiHeartbeat:ReturnType<typeof setInterval>|undefined;
   const reportGeminiActivity:ReportMediaActivity=(activity,diagnostic)=>{
@@ -101,16 +105,38 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       if (task.outputStored) return {};
       const snapshot = task.render;
       onProgress(1);
-      const {assetUrls,audioSourceOffsets}=await runPhase('Preparing export media',()=>prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal));
+      const prepared=await runPhase('Preparing export media',()=>prepareComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],convexUrl,signal));
+      const {audioSourceOffsets}=prepared;
+      // Still WebP becomes PNG and animated WebP a video, so neither forces the browser renderer (export-images.ts).
+      const imagesStartedAt=Date.now();
+      const webp=snapshot.timeline.clips.some(clip=>clip.kind==='image'&&(snapshot.assets as (MediaAsset & {contentType?:string})[]).some(asset=>asset._id===clip.assetId&&(asset.contentType==='image/webp'||/\.webp$/i.test(asset.fileName))));
+      const convertImages=()=>prepareExportImages(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number;contentType?:string})[],prepared.assetUrls,snapshot.fps,signal);
+      const images=webp?await runPhase('Preparing export images',convertImages):await convertImages();
+      if(images.notes.length)logPhase('Export images','prepared',imagesStartedAt,images.notes.join(' · '));
+      onProgress(4);
+      const {timeline,assets,assetUrls}=images;
       onProgress(3);
       const output = join(directory, 'video.mp4'), quality = snapshot.quality as 'draft' | 'standard' | 'high';
       // Report monotonically; a fast-path fallback maps the browser render onto the remaining range.
       let reported = 0, base = 5, span = 90;
-      const renderProgress = (progress: { progress: number }) => { reported = Math.max(reported, base + Math.round(progress.progress / 100 * span)); onProgress(reported); };
+      // The latest renderer stage and frame counts, read by the 15 s heartbeat: "capture 812/1800 frames · 24.0 fps".
+      let latest: RenderProgress | undefined, sample: { at: number; done: number; code: string } | undefined;
+      const renderProgress = (progress: RenderProgress) => { latest = progress; reported = Math.max(reported, base + Math.round(progress.progress / 100 * span)); onProgress(reported); };
+      const frameBeat = () => {
+        const step = latest?.step, now = Date.now();
+        if (!step?.total) return latest?.stage ? `${latest.stage} · ${reported}%` : '';
+        const rate = sample && sample.code === step.code && now > sample.at ? (step.done - sample.done) * 1000 / (now - sample.at) : undefined;
+        sample = { at: now, done: step.done, code: step.code };
+        const unit = step.code === 'assemble' ? 's' : 'frames';
+        return `${step.code} ${step.done}/${step.total} ${unit}${rate !== undefined && unit === 'frames' ? ` · ${rate.toFixed(1)} fps` : ''} · ${reported}%`;
+      };
       // Plain video/audio timelines, stacked layouts, static text and still images skip browser compositing. REVLINE_RENDER_FAST_PATH=0 disables it.
-      const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : plainExportPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.resolution as ExportResolution, snapshot.fps);
+      const decision = process.env.REVLINE_RENDER_FAST_PATH === '0' ? { eligible: false as const, reason: 'disabled by REVLINE_RENDER_FAST_PATH=0' } : images.browserReason ? { eligible: false as const, reason: images.browserReason } : plainExportPlan(timeline, assets, snapshot.resolution as ExportResolution, snapshot.fps);
       // Every export states its path: the FFmpeg fast path, or why it renders in the browser.
       logPhase('Fast export decision', decision.eligible ? 'eligible' : 'rejected', Date.now(), decision.eligible ? `${decision.plan.video.length} segments · ${decision.plan.overlays.length} overlays · ${decision.plan.audio.length} sounds · ${decision.plan.frames} frames` : decision.reason);
+      // One line per export with everything needed to read its timing: lane, path and why, size and host.
+      const { width, height } = dimensions(timeline.aspectRatio, snapshot.resolution as ExportResolution);
+      logPhase('Export', 'plan', startedAt, `lane ${process.env.MEDIA_LANE ?? 'any'} · ${decision.eligible ? 'ffmpeg' : `browser (${decision.reason})`} · ${timelineDuration(timeline).toFixed(1)}s · ${width}x${height} ${snapshot.fps} fps ${quality} · ${availableParallelism()} CPUs · ${(totalmem() / 2 ** 30).toFixed(1)} GiB RAM (${(freemem() / 2 ** 30).toFixed(1)} free)`);
       let rendered = false;
       // Hosted export workers split the render across parallel chunk machines (REVLINE_DISTRIBUTED_EXPORT).
       const distributed = process.env.REVLINE_DISTRIBUTED_EXPORT === 'true' ? { maxChunks: Number(process.env.REVLINE_EXPORT_MAX_CHUNKS ?? 8), ...exportChunkResources({ guest: process.env.REVLINE_EXPORT_CHUNK_GUEST ? JSON.parse(process.env.REVLINE_EXPORT_CHUNK_GUEST) : undefined, env: process.env.REVLINE_EXPORT_CHUNK_ENV ? JSON.parse(process.env.REVLINE_EXPORT_CHUNK_ENV) : undefined }) } : null;
@@ -121,14 +147,14 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
       // An audio-only change to a timeline the fast path cannot draw: the last export of the same picture
       // keeps its video stream, remuxed with freshly mixed sound. (Fast-path timelines reuse their cached
       // segments instead.) REVLINE_RENDER_REUSE=0 disables it; any failure renders normally.
-      const reuse = snapshot.reuseVideo && !decision.eligible && process.env.REVLINE_RENDER_REUSE !== '0' ? plainAudioPlan(snapshot.timeline, snapshot.assets as MediaAsset[], snapshot.fps) : undefined;
+      const reuse = snapshot.reuseVideo && !decision.eligible && process.env.REVLINE_RENDER_REUSE !== '0' ? plainAudioPlan(timeline, assets, snapshot.fps) : undefined;
       const sameRenderer = snapshot.reuseVideo?.renderer === browserRenderer;
       if (snapshot.reuseVideo && reuse?.eligible && !sameRenderer) logPhase('Picture reuse', 'skipped', Date.now(), `the earlier picture was drawn by ${snapshot.reuseVideo.renderer ?? 'an unrecorded renderer'}, this export draws with ${browserRenderer}`);
       else if (snapshot.reuseVideo && reuse?.eligible) {
         const earlier = join(directory, 'earlier-export.mp4'), video = snapshot.reuseVideo;
         try {
           await runPhase('Downloading the unchanged picture', () => downloadOwnedMedia(video.url, earlier, convexUrl, video.size, signal));
-          await runPhase('Remuxing the unchanged picture with new sound', () => remuxExportAudio(directory, output, earlier, reuse.plan, dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), assetUrls, audioSourceOffsets, signal));
+          await runPhase('Remuxing the unchanged picture with new sound', () => remuxExportAudio(directory, output, earlier, reuse.plan, dimensions(timeline.aspectRatio, snapshot.resolution as ExportResolution), assetUrls, audioSourceOffsets, signal));
           rendered = true;
           renderer = video.renderer!;
           renderProgress({ progress: 100 });
@@ -142,8 +168,8 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         try {
           const plan = decision.plan;
           // Segments and text rasters are cached on this worker per backend project, by source file identity.
-          const cache = { scope: JSON.stringify(['export-segments-v1', new URL(convexUrl).origin, task.projectId]), assets: Object.fromEntries((snapshot.assets as (MediaAsset & { size: number; r2Key?: string; storageId?: string })[]).map(asset => [asset._id, JSON.stringify([asset.r2Key ?? asset.storageId ?? asset._id, asset.size])])) };
-          const texts = () => runPhase('Rasterizing static overlays', () => rasterizeOverlays(directory, snapshot.timeline, plan, snapshot.resolution as ExportResolution, signal, { assets: snapshot.assets as MediaAsset[], assetUrls, identities: cache.assets }, cache.scope));
+          const cache = { scope: JSON.stringify(['export-segments-v1', new URL(convexUrl).origin, task.projectId]), assets: Object.fromEntries((assets as (typeof assets[number] & { storageId?: string })[]).map((asset, index) => [asset._id, JSON.stringify([asset.r2Key ?? asset.storageId ?? asset._id, asset.size, ...asset !== snapshot.assets[index] ? [`${asset.kind}:${asset.contentType}:export-images-v1`] : []])])) };
+          const texts = () => runPhase('Rasterizing static overlays', () => rasterizeOverlays(directory, timeline, plan, snapshot.resolution as ExportResolution, signal, { assets, assetUrls, identities: cache.assets }, cache.scope));
           const result = await runPhase('Rendering export with FFmpeg', () => renderPlainExport(directory, output, plan, assetUrls, audioSourceOffsets, quality, renderProgress, signal, texts, cache));
           if (result.segments) logPhase('FFmpeg segments', 'reused', Date.now(), `${result.segments.reused} of ${result.segments.total} segments from cache · ${result.segments.encodedFrames} of ${plan.frames} frames encoded · ${result.segments.concurrency} at once × ${result.segments.threads} x264 threads · ${(result.elapsedMs / 1000).toFixed(1)}s`);
           rendered = true;
@@ -156,15 +182,40 @@ export async function processMediaTask(task: MediaWorkItem, convex: ConvexHttpCl
         }
       } else if (!rendered && !decision.eligible) logPhase('FFmpeg export', 'skipped', Date.now(), decision.reason);
       // Only the browser renderer reads the HTML composition.
-      if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,snapshot.timeline,snapshot.assets as (MediaAsset & {size:number})[],assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
-      if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
-      else if (!rendered) await runPhase('Rendering export',()=>runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal));
+      if (!rendered) await runPhase('Preparing export composition',()=>writeComposition(directory,timeline,assets,assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
+      if (!rendered && distributed) await runPhase('Rendering export across machines',()=>runDistributedRender(directory, output, { fps: snapshot.fps, quality, ...dimensions(timeline.aspectRatio, snapshot.resolution as ExportResolution), exportId: task.taskId, ...distributed }, renderProgress, signal));
+      else if (!rendered) {
+        // A stalled browser render is stopped by the watchdog in runRenderWorker and drawn once more from the
+        // start; a second stall fails the export with a plain message instead of hanging behind its lease.
+        for (let attempt = 1; ; attempt++) {
+          try { await runPhase(attempt === 1 ? 'Rendering export' : 'Rendering export (retry after stall)', () => runRenderWorker(directory, output, { fps: snapshot.fps, quality }, renderProgress, signal), frameBeat); break; }
+          catch (error) {
+            if (!(error instanceof RenderStallError) || signal.aborted) throw error;
+            console.error(`[${new Date().toISOString()}] Media task ${task.taskId} (render): ${error.message} ${attempt === 1 ? 'Rendering again.' : 'Giving up.'}`);
+            if (attempt > 1) {
+              // A time only when the count covers the whole timeline (range captures count from their own start).
+              const frames = Math.round(timelineDuration(timeline) * snapshot.fps);
+              const at = error.step?.code === 'capture' && Math.abs(error.step.total - frames) <= 2 ? Math.floor(error.step.done / snapshot.fps) : undefined;
+              const where = at === undefined ? 'the clip where it stopped' : `the clip at ${Math.floor(at / 60)}:${String(at % 60).padStart(2, '0')}`;
+              throw new AnalysisError(`The export stopped making progress while drawing frames, so it was stopped. Export again; if it stops again, remove or replace ${where}.`, 500, false);
+            }
+            await rm(output, { force: true });
+            latest = undefined; sample = undefined;
+            // The retry draws from frame 0 on the remaining range, so the bar keeps moving instead of
+            // holding at the stalled percent (Convex fails an export that stops moving for 8 minutes).
+            base = Math.max(base, reported); span = Math.max(1, 95 - base);
+            // A killed renderer can leave its GPU strict-effects marker in index.html; write it fresh.
+            await runPhase('Preparing export composition',()=>writeComposition(directory,timeline,assets,assetUrls,snapshot.resolution as ExportResolution,snapshot.fps as 24|30|60,'./',signal,audioSourceOffsets));
+          }
+        }
+      }
       const normalized=snapshot.timeline.clips.filter(c=>c.normalizedAudio&&c.normalizedAudio.key===audioNormalizationKey(snapshot.timeline,c)&&(c.volume??1)>0);
       const master=snapshot.timeline.audioNormalization,ceilings=normalized.flatMap(c=>c.normalizedAudio?[c.normalizedAudio.truePeak]:[]);
       if(master?.key===timelineNormalizationKey(snapshot.timeline))ceilings.push(master.truePeak);
       if(ceilings.length)await runPhase('Verifying encoded true peak',()=>enforceNormalizedExportPeak(output,directory,Math.min(...ceilings),signal));
       onProgress(97);
-      await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(snapshot.timeline), ...dimensions(snapshot.timeline.aspectRatio, snapshot.resolution) }, { ...uploadContext, onPart: (stored, total) => onProgress(Math.round(970 + 20 * stored / total) / 10) }, signal));
+      await runPhase('Uploading export',()=>uploadMediaFile(output, { ...credentials, jobId: task.renderJobId, projectId: task.projectId, fileName: 'video.mp4', contentType: 'video/mp4', kind: 'video', duration: timelineDuration(timeline), ...dimensions(timeline.aspectRatio, snapshot.resolution) }, { ...uploadContext, onPart: (stored, total) => onProgress(Math.round(970 + 20 * stored / total) / 10) }, signal));
+      logPhase('Export', 'finished', startedAt, [...phaseTimes].map(([name, ms]) => `${name} ${(ms / 1000).toFixed(1)}s`).join(' · '));
       // Older backends reject unknown result fields; only report the renderer to one that records it.
       return snapshot.recordsRenderer ? { renderer } : {};
     }

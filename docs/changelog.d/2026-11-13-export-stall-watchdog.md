@@ -1,0 +1,2 @@
+- Exports: browser renders log frames rendered and speed every 15 s, a render whose frames stop for two minutes is killed and drawn once more, then fails with a plain message; every export logs its lane, path, size and host, and its time per phase. Why: a founder export sat at 67% for 5+ minutes with no sign of the stall.
+- Exports: still WebP images take the FFmpeg path like PNG, and animated WebP is converted to video during export prep (opaque ones also take the FFmpeg path); the processor image gains libwebp's tools. Why: one WebP forced the slow browser render.

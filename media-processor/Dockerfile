@@ -20,7 +20,7 @@ ENV NODE_ENV=production \
     PRODUCER_ALLOW_SOFTWARE_WEBGPU=true
 
 RUN apt-get update && apt-get install --no-install-recommends -y \
-    ca-certificates ffmpeg util-linux python3 python3-venv tini unzip fonts-liberation \
+    ca-certificates ffmpeg webp util-linux python3 python3-venv tini unzip fonts-liberation \
     libglib2.0-0 libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
