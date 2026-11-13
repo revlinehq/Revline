@@ -79,7 +79,7 @@ When a verification fails, `release:prod` prints the exact rollback commands for
 
 - **Workers:** `npx wrangler rollback <previous-version-id> --config <config>`. `--auto-rollback` runs these and corrects the state file, for the Worker whose own check failed, or for every Worker of the run when the post-deploy verification failed. A later unrelated failure leaves healthy Workers serving.
 - **Convex:** manual, a redeploy of the previous commit from a detached worktree (commands printed). Once slots run images, a Convex commit from before `imageSlots` holds Railway dispatch (its dispatcher accepts only repository slots): roll Convex back no further than this change, or restage the slots from the repository first. Schema and data written since are not undone, which is why the schema gate only lets additive changes through.
-- **Railway:** a `stage` that fails after pausing claims restores the previous images and resumes claims by itself (below). To undo a stage that succeeded: promote the previous release again through staging.
+- **Railway:** a `stage` that fails after pausing claims restores the previous images and resumes claims by itself (below). To undo a stage that succeeded: stage the previous release's manifest again (`scripts/railway-workers.mjs stage --kind <kind>`). It needs no new staging proof when `.data/railway/promotion-ledger.json` records that commit and digest as run in production; otherwise prove it on staging first.
 
 ## Railway
 
@@ -109,13 +109,26 @@ Image slots need two things; until both exist, `stage` keeps building the commit
 
 1. **Checks, while production still runs and claims:** the project token, every slot variable (`RENDER_WORKER_SECRET`, `MEDIA_WORKER_SECRET_EXPORTS`, `MEDIA_WORKER_URL`, `DEEPGRAM_API_KEY`, `FAL_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`, …), every slot readable and in the Revline namespace, and a GHCR pull check of the staged digests and of the previous release's digests with the registry credentials. `release:prod` also runs these (`railway-workers.mjs check`, read-only) in its pre-flight, before the staging proof.
 2. **Runtime check of each staged image on a temporary service** (no slot touched).
-3. Pause claims, drain, point the slots at the digests, set the manifest, verify each lane's queue connection with claims paused, resume claims.
+3. Pause claims, drain, point the slots at the digests, set the manifest, boot every lane production runs on Railway with claims paused, resume claims.
 
-Any failure in step 3 restores every slot to the manifest that ran before (its previous image, or its previous repository build redeployed without a rebuild), restores the manifest and token in Convex and resumes claims. If the restore itself fails, claims stay paused and the output says so. A stage with no previous manifest on the deployment cannot restore and says so before pausing.
+**The manifest.** A stage of one kind (`--kind processor` or `--kind exports`) changes only that kind's entry of `RAILWAY_WORKERS_JSON`. The other kind's entry is taken from the live Convex env, never from the `--config` file. Before it pauses claims and again right before it writes, the stage checks that the live manifest is still the one it started from. It then reads the manifest back and fails unless both kinds are exactly what it expects. `release:prod` also reads the Convex env again before each Railway target. On 2026-11-13 the exports stage wrote a manifest built from the copy read at startup. That put the processor back on the previous commit, and the next cold start refused to boot (`Railway build revision differs from the verified artifact revision`).
+
+**The boot check.** With claims paused, the first slot of every lane production routes to Railway (and of every staged lane) is started the way the dispatcher starts it, from the manifest just written. Each one must authenticate and exit idle. A slot whose build or image differs from the manifest fails the stage here, and the stage restores itself. The stage never waits for a lane it did not change. If that lane's slot is still finishing a task, the stage compares the slot's current deployment (image, or built commit) with the manifest instead of booting it.
+
+Any failure in step 3 restores every slot to the manifest that ran before (its previous image, or its previous repository build redeployed without a rebuild), restores the manifest (only if this stage wrote it, and reads it back) and token in Convex and resumes claims. If the restore itself fails, claims stay paused and the output says so. A stage with no previous manifest on the deployment cannot restore and says so before pausing.
 
 ### Retrying a release
 
 A retry of the same commit reuses the proof receipt instead of rerunning the jobs: it prints `reusing proof receipt <id>` when `.data/railway/promotion.json` proved the same commit and the same image digests (the newest successful staging build of that commit), is less than 24 hours old, and still passes the full live check production runs. A different commit or digest, an older receipt, or a receipt that no longer verifies reruns the proof. `node scripts/railway-proof.mjs --commit <sha> --fresh` forces a new one.
+
+### Promotion ledger
+
+Staging restages on every push to `main`, so a receipt stops verifying live soon after it was proven. Image-slot evidence in particular requires the staging slot to still run the digest. Each live verification is therefore recorded in `.data/railway/promotion-ledger.json` (ignored, mode 600), per kind: commit, digest and receipt id. A successful production stage marks its entries as run in production. A production `stage`, `cutover` or `resume` always checks a receipt it is given live first. It falls back to this record only when it has no receipt, or when staging no longer verifies the receipt, and only in two cases:
+
+- **Within 24 hours of the live check** for the same commit and digest. This covers the exports stage of the same release after staging moved on, and retries.
+- **At any time once production ran that commit and digest.** This covers a restore or rollback to a previous release.
+
+A digest this checkout never verified live still needs the staging proof. An unreadable record counts as empty. The proof script itself (`railway-proof.mjs`) always checks live.
 
 ### The staging service identity
 

@@ -30,7 +30,7 @@ export async function releaseRailway({ target, kind, values, env, dry, founderBy
       const commit = kind === 'processor' ? staged.processorCommit : staged.exportsCommit;
       if (commit !== env.GITHUB_SHA) throw new Error('Staging must verify the exact main release commit.');
       config = railwayConfig({ ...config, [`${kind}Commit`]: commit, [`${kind}Image`]: staged[`${kind}Image`] });
-      await verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds: [kind] });
+      await verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds: [kind], recorded: true });
       promotionArgs.push('--staging-receipt', receiptFile, '--staging-env-file', stagingEnvFile);
     }
   }

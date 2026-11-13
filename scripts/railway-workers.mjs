@@ -11,7 +11,7 @@ import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
 import { workerCapacity } from '../lib/worker-capacity.mjs';
 import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
-import { verifyStagingPromotion, founderBypassReason } from './railway-promotion.mjs';
+import { verifyStagingPromotion, founderBypassReason, recordProductionStage } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
 import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, railwaySlotSource, verifyRegistryPull, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
@@ -74,7 +74,7 @@ if (founderBypass) {
   await mkdir(resolve('.data/railway'), { recursive: true });
   await appendFile(log, JSON.stringify(entry) + '\n', { mode: 0o600 });
   console.log(`\n*** FOUNDER BYPASS: staging promotion receipt NOT checked for this production stage. Reason: ${founderBypass}. Logged to ${log}. ***\n`);
-} else if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds });
+} else if (config.environment === 'production' && ['stage-repository', 'stage', 'cutover', 'resume'].includes(operation)) await verifyStagingPromotion({ config, receiptFile: values['staging-receipt'], stagingEnvFile: values['staging-env-file'], kinds, recorded: true });
 const settings = values['env-file'] ? parseEnv(await readFile(resolve(values['env-file']), 'utf8')) : {};
 const env = { ...process.env, ...settings };
 mask(env);
@@ -125,6 +125,26 @@ if (config.environment === 'staging' && remote.REVLINE_ISOLATED !== 'true') thro
 // Recovery must still be able to restore Convex routes during a Railway outage.
 if (!['rollback', 'pause'].includes(operation)) await verifyRailwayTarget(target());
 const setEnv = (name, value) => convex(['env', 'set', name], value);
+/** RAILWAY_WORKERS_JSON as the deployment holds it now (not the copy read at startup). */
+const liveManifest = async () => { const live = parseEnv(await convex(['env', 'list'])); mask(live); return live.RAILWAY_WORKERS_JSON; };
+const KIND_FIELDS = { processor: ['processorImage', 'processorCommit', 'processorServices'], exports: ['exportsImage', 'exportsCommit', 'standardServices', 'ultraServices', 'distributedExports', 'artifactBucket', 'artifactEndpoint'] };
+/** `live` with only `stagedKinds`' entries taken from `staged`. */
+const withKinds = (live, staged, stagedKinds) => {
+  const merged = { ...staged };
+  for (const [kind, fields] of Object.entries(KIND_FIELDS)) if (!stagedKinds.includes(kind)) for (const field of fields) {
+    if (live[field] === undefined) delete merged[field]; else merged[field] = live[field];
+  }
+  return railwayConfig(merged);
+};
+/** Reads the manifest back and fails unless both kinds are exactly `expected`. */
+const expectManifest = async (expected, what) => {
+  const raw = await liveManifest();
+  let live = null;
+  try { live = railwayConfig(raw); } catch { live = null; }
+  const describe = manifest => manifest ? `processor ${manifest.processorCommit.slice(0, 7)} ${manifest.processorImage.split('@')[1]?.slice(7, 19)}, exports ${manifest.exportsCommit.slice(0, 7)} ${manifest.exportsImage.split('@')[1]?.slice(7, 19)}` : 'unreadable';
+  if (!live || JSON.stringify(live) !== JSON.stringify(railwayConfig(expected))) throw new Error(`${deployment} RAILWAY_WORKERS_JSON read back after it was ${what} is ${describe(live)}; expected ${describe(railwayConfig(expected))}.`);
+  console.log(`${deployment} RAILWAY_WORKERS_JSON ${what} and read back: ${describe(live)}.`);
+};
 const client = new ConvexHttpClient(config.convexUrl);
 const contract = await client.query(makeFunctionReference('railwayWorkers:contract'), { workerSecret: remote.RENDER_WORKER_SECRET });
 const sourceVersion = Number(/MEDIA_PROCESSOR_VERSION\s*=\s*(\d+)/.exec(await readFile('lib/media-analysis/processor-version.ts', 'utf8'))?.[1]);
@@ -135,11 +155,11 @@ const dispatch = () => convex(['run', 'railwayWorkers:dispatch', '{}']);
 const caps = workerCapacity(remote);
 for (const pool of selectedPools()) if (!Number.isInteger(caps[pool.name]) || pool.ids.length > caps[pool.name]) throw new Error(`${pool.name}: Railway pool exceeds the configured worker capacity; review capacity separately.`);
 
-async function waitStopped(limitMs = 50 * 60_000) {
+async function waitStopped(limitMs = 50 * 60_000, pools = selectedPools()) {
   const deadline = Date.now() + limitMs;
   while (true) {
     let busy = false;
-    for (const { ids } of selectedPools()) for (const serviceId of ids) if (railwayActive(await railwayInstance({ ...target(), serviceId }))) busy = true;
+    for (const { ids } of pools) for (const serviceId of ids) if (railwayActive(await railwayInstance({ ...target(), serviceId }))) busy = true;
     if (!busy) return;
     if (Date.now() > deadline) throw new Error('Workers did not drain; queue remains paused. No running service was replaced.');
     await wait(15_000);
@@ -171,7 +191,7 @@ async function preflight(kind, existingServiceId) {
   } finally { if (!existingServiceId) await deleteRailwayService({ ...target(), serviceId }); }
 }
 
-async function verifyQueueConnection(serviceId) {
+async function verifyQueueConnection(serviceId, lane = 'staged') {
   const id = await deployRailwaySlot({ ...target(), serviceId });
   const deadline = Date.now() + 15 * 60_000;
   while (Date.now() < deadline) {
@@ -180,11 +200,14 @@ async function verifyQueueConnection(serviceId) {
     }));
     const events = railwayLogEvents(result.deploymentLogs);
     if (events.some(event => event.event === 'media-started')) throw new Error('A staged worker claimed a task while paused. Hold cutover and inspect queue routing.');
-    if (['FAILED', 'CRASHED', 'REMOVED'].includes(result.deployment.status)) throw new Error('Railway staged consumer failed; queue remains paused.');
+    if (['FAILED', 'CRASHED', 'REMOVED'].includes(result.deployment.status)) {
+      const revision = JSON.stringify(result.deploymentLogs).includes('Railway build revision differs');
+      throw new Error(`Railway ${lane} consumer ${serviceId} failed to boot${revision ? ': its build revision differs from the manifest (RAILWAY_WORKERS_JSON) it would be started with' : ''}; queue remains paused.`);
+    }
     if (events.some(event => event.event === 'railway-queue-verified') && events.some(event => event.event === 'media-ready') && result.deployment.deploymentStopped) return;
     await wait(10_000);
   }
-  throw new Error('Staged consumer did not authenticate and exit idle; queue remains paused.');
+  throw new Error(`Railway ${lane} consumer ${serviceId} did not authenticate and exit idle; queue remains paused.`);
 }
 
 if (operation === 'status') {
@@ -249,6 +272,16 @@ if (operation === 'status') {
   let previous = null;
   try { previous = remote.RAILWAY_WORKERS_JSON ? railwayConfig(remote.RAILWAY_WORKERS_JSON) : null; } catch { previous = null; }
   if (previous && (previous.environment !== config.environment || previous.environmentId !== config.environmentId)) previous = null;
+  // A stage of one kind changes only that kind's entry of the manifest production runs now; the other kind's entry is
+  // the live one, never the copy in --config (a stale copy put the old processor back on 2026-11-13).
+  if (kinds.length === 1) {
+    if (remote.RAILWAY_WORKERS_JSON && !previous) throw new Error(`${deployment}'s live RAILWAY_WORKERS_JSON cannot be read for this environment; a ${kinds[0]} stage cannot tell what the other kind runs. Stage --kind all.`);
+    if (previous) {
+      const other = kinds[0] === 'processor' ? 'exports' : 'processor';
+      if (config[`${other}Commit`] !== previous[`${other}Commit`] || config[`${other}Image`] !== previous[`${other}Image`]) console.log(`Keeping the live ${other} entry ${previous[`${other}Commit`].slice(0, 7)} (${values.config} has ${config[`${other}Commit`].slice(0, 7)}; a ${kinds[0]} stage does not change it).`);
+      config = withKinds(previous, config, kinds);
+    }
+  }
   const slots = [];
   for (const pool of selectedPools()) for (const serviceId of pool.ids) {
     const instance = await railwayInstance({ ...target(), serviceId });
@@ -284,7 +317,11 @@ if (operation === 'status') {
   if (imageSlots) await Promise.all(kinds.map(kind => preflight(kind)));
 
   // ---- 3. Pause, drain, switch, verify the queue connection, resume. Any failure restores the previous images. ----
-  let changed = false, paused = false;
+  let changed = false, paused = false, manifestWritten = false;
+  const booted = [];
+  const unchangedManifest = async () => {
+    if ((await liveManifest() ?? '') !== (remote.RAILWAY_WORKERS_JSON ?? '')) throw new Error(`${deployment}'s RAILWAY_WORKERS_JSON changed while this stage ran (another stage?); it was not overwritten.`);
+  };
   /** Put every slot back on the manifest that ran before this stage and resume claims. */
   const restore = async cause => {
     console.error(`\nStage failed: ${cause instanceof Error ? cause.message : cause}`);
@@ -297,7 +334,7 @@ if (operation === 'status') {
     try {
       await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
       paused = true;
-      await waitStopped(20 * 60_000);
+      await waitStopped(20 * 60_000, [...selectedPools(), ...booted]);
       for (const slot of slots) {
         if (!slot.restore) { console.error(`  ${slot.serviceId}: not in the previous manifest; left as it is (dispatch does not start it).`); continue; }
         // Each slot keeps the source it has now: one that never switched to an image goes back to its repository build.
@@ -313,7 +350,8 @@ if (operation === 'status') {
         if (source === 'repository' && slot.restore.deployment?.meta?.commitHash === slot.restore.commit) await railway({ token, query: 'mutation($id: String!) { deploymentRedeploy(id: $id, usePreviousImageTag: true) { id } }', variables: { id: slot.restore.deployment.id } });
         console.error(`  ${slot.pool} ${slot.serviceId}: restored (${source === 'image' ? slot.restore.image : `repository build ${slot.restore.commit.slice(0, 7)}`}).`);
       }
-      await setEnv('RAILWAY_WORKERS_JSON', remote.RAILWAY_WORKERS_JSON);
+      // Only a manifest this stage wrote is put back, and it is read back before claims resume.
+      if (manifestWritten) { await setEnv('RAILWAY_WORKERS_JSON', remote.RAILWAY_WORKERS_JSON); await expectManifest(previous, 'restored'); }
       if (remote.RAILWAY_API_TOKEN) await setEnv('RAILWAY_API_TOKEN', remote.RAILWAY_API_TOKEN);
       await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused));
       await dispatch();
@@ -332,20 +370,49 @@ if (operation === 'status') {
       }
       if (kinds.includes('exports') && config.distributedExports) await preflight('exports');
     }
+    await unchangedManifest();
     paused = true;
     await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
     await waitStopped();
     changed = true;
     for (const slot of slots) await configureRailwaySlot({ ...target(), serviceId: slot.serviceId, image: slot.image, variables: slot.variables, registryCredentials, source: imageSlots ? 'image' : 'repository' });
     await setEnv('RAILWAY_API_TOKEN', token);
+    // Right before writing: the live manifest must still be the one this stage merged its kind into.
+    await unchangedManifest();
+    manifestWritten = true;
     await setEnv('RAILWAY_WORKERS_JSON', JSON.stringify(config));
-    // Verify the real consumer/credentials of each lane while the backend forbids
-    // claims, then let it exit at idle before releasing the hold.
-    for (const pool of selectedPools()) if (pool.ids[0]) await verifyQueueConnection(pool.ids[0]);
+    await expectManifest(config, 'staged');
+    // Boot every lane production runs on Railway the way the dispatcher will start it, with the manifest just written,
+    // while the backend forbids claims: a slot whose build or image differs from the manifest fails here, not on the
+    // next upload. Each consumer authenticates and exits at idle before the hold is released. A lane this stage did not
+    // change is never waited for: while one of its slots still finishes a task, its last deployment is compared instead.
+    const staged = new Set(selectedPools().map(pool => pool.name));
+    const lanes = [
+      { name: 'processor', ids: config.processorServices, on: contract.processorBackend === 'railway' },
+      { name: 'standard', ids: config.standardServices, on: contract.renderProvider === 'railway' },
+      { name: 'ultra', ids: config.ultraServices, on: contract.renderProvider === 'railway' },
+    ].filter(lane => lane.ids[0] && (staged.has(lane.name) || lane.on));
+    for (const lane of lanes) {
+      const serviceId = lane.ids[0];
+      const instance = staged.has(lane.name) ? null : await railwayInstance({ ...target(), serviceId });
+      if (instance && railwayActive(instance)) {
+        const image = lane.name === 'processor' ? config.processorImage : config.exportsImage, commit = lane.name === 'processor' ? config.processorCommit : config.exportsCommit;
+        const source = railwaySlotSource(instance);
+        const matches = source === 'image' ? instance.source?.image === image : source === 'repository' && instance.latestDeployment?.meta?.commitHash === commit;
+        if (!matches) throw new Error(`Railway ${lane.name} slot ${serviceId} runs ${source === 'image' ? instance.source?.image : `build ${instance.latestDeployment?.meta?.commitHash?.slice(0, 7) ?? 'unknown'}`}, not ${source === 'image' ? image : commit.slice(0, 7)} from the manifest just written; its next start would fail.`);
+        console.log(`Railway ${lane.name} slot ${serviceId} is finishing a task; its deployment matches the manifest (${source === 'image' ? image : commit.slice(0, 7)}).`);
+        continue;
+      }
+      booted.push(lane);
+      await verifyQueueConnection(serviceId, lane.name);
+    }
   } catch (error) {
     await restore(error).catch(failure => console.error(`AUTOMATIC RESTORE FAILED: ${failure instanceof Error ? failure.message : failure}. Claims may stay PAUSED; restore by hand (docs/releases.md, Rollback).`));
     throw error;
   }
+  // The file now holds what production runs (both kinds), so cutover/resume compare against the live manifest.
+  await writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
+  if (config.environment === 'production') await recordProductionStage({ config, kinds }).catch(error => console.error(`Could not record the production stage in the promotion ledger: ${error instanceof Error ? error.message : error}`));
   await writeFile(`${configPath}.verified.json`, JSON.stringify({ hash: hash(), kinds, at: new Date().toISOString() }) + '\n', { mode: 0o600 });
   await setEnv('RAILWAY_WORKERS_PAUSED', String(contract.paused));
   await dispatch();

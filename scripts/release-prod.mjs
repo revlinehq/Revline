@@ -129,10 +129,10 @@ if (dry) {
   steps.push(`Pre-flight: ${typechecks.map(name => `npm run ${name}`).join(', ')}`);
   if (want('frontend')) steps.push('Pre-flight: npm run build:cloudflare (the only frontend build; the deploy step uploads it)');
   if (want('processor') || want('exports')) steps.push(`Pre-flight: scripts/railway-workers.mjs check for each Railway target production routes to Railway (${railwayFile}): every slot variable and key (DEEPGRAM_API_KEY and the rest), the project token, and registry access to the digests staging built for ${short(sha)}. Read-only`);
-  if (want('processor')) steps.push(`Railway processor image first, if production routes processing to Railway: ${flags['founder-bypass'] ? 'founder bypass (logged), no staging receipt' : `node ${proofScript} --check, then --commit ${short(sha)}: reuses .data/railway/promotion.json ("reusing proof receipt <id>") when it proved this commit and these digests in the last 24 h and still verifies, otherwise runs the three staging proof jobs`}. Then stage with --image-first: checks again, runtime-checks the staged digest on a temporary service, pauses claims, drains, points the slots at the digest (no build; a repository build only until production Convex reports image slots and registry credentials are set), verifies the queue connection, resumes claims. Any failure after the pause restores the previous images and resumes claims. Without the one-time staging setup: "Railway not promoted", the release continues${contractRaised() ? ' EXCEPT that this range raises the processor contract, so Convex and everything after it are held' : ''}`);
+  if (want('processor')) steps.push(`Railway processor image first, if production routes processing to Railway: ${flags['founder-bypass'] ? 'founder bypass (logged), no staging receipt' : `node ${proofScript} --check, then --commit ${short(sha)}: reuses .data/railway/promotion.json ("reusing proof receipt <id>") when it proved this commit and these digests in the last 24 h and still verifies, otherwise runs the three staging proof jobs`}. Then stage with --image-first: checks again, runtime-checks the staged digest on a temporary service, pauses claims, drains, points the slots at the digest (no build; a repository build only until production Convex reports image slots and registry credentials are set), writes only the processor entry of the live RAILWAY_WORKERS_JSON and reads it back, boots every lane production runs on Railway with it, resumes claims. Any failure after the pause restores the previous images and resumes claims. Without the one-time staging setup: "Railway not promoted", the release continues${contractRaised() ? ' EXCEPT that this range raises the processor contract, so Convex and everything after it are held' : ''}`);
   if (want('convex')) steps.push(`Convex: convex deploy --yes --typecheck enable --env-file <production file> --message ${short(sha)} (waits for index backfill and schema validation), then verify the processor contract`);
   for (const target of ['media', 'frontend', 'agent', 'mcp']) if (want(target)) steps.push(`${TARGET_NOTES[target]}: record the serving version${target === 'agent' ? ', sync settings from Convex (sync-agent-runner-env.mjs production)' : ''}, wrangler deploy --config ${WORKERS[target]}, verify 100% traffic${target === 'frontend' ? ' and the live build ID' : ''}`);
-  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: same staging receipt (no second proof), the same checked stage with automatic restore, verify slots');
+  if (want('exports')) steps.push('Railway export workers, if production routes exports to Railway: same staging receipt (no second proof; accepted from .data/railway/promotion-ledger.json if staging moved on since), the same checked stage with automatic restore, reading the Convex env again so only the exports entry of the live manifest changes, verify slots');
   steps.push('Post-deploy: health endpoints (frontend origins, agent runner /health, media Worker refusal, MCP OAuth discovery) and a 30 s read of production Convex logs for argument-validation errors, missing functions, worker auth failures and unknown modes');
   if (want('incident-listener')) steps.push(`Incident listener: if ~/Library/LaunchAgents/${LISTENER}.plist exists, fast-forward its checkout to ${short(sha)}, npm ci when the lockfile changed, launchctl kickstart, confirm running`);
   if (!flags['no-changelog']) steps.push(`Changelog: node ${changelogScript} build, commit docs/changelog.md and docs/changelog.d to main with [skip ci]`);
@@ -208,7 +208,7 @@ async function railway(kind, remote) {
     receipt = { REVLINE_RAILWAY_STAGING_RECEIPT: resolve(proof.receipt), REVLINE_RAILWAY_STAGING_ENV_FILE: resolve(proof.stagingEnvFile) };
   }
   const old = rows.get(kind).old;
-  rollbacks.push({ target: kind, text: `Railway ${kind}: a stage that fails after pausing claims restores the previous images and resumes claims by itself (its output above says whether it did). To undo a stage that succeeded: promote the previous release ${short(old)} again through staging (node ${proofScript} --commit ${old ?? '<previous commit>'}, then scripts/railway-workers.mjs stage; docs/railway-worker-migration.md, "Manual release").` });
+  rollbacks.push({ target: kind, text: `Railway ${kind}: a stage that fails after pausing claims restores the previous images and resumes claims by itself (its output above says whether it did). To undo a stage that succeeded: stage the previous release ${short(old)} again (scripts/railway-workers.mjs stage --kind ${kind} with its manifest; no new staging proof when .data/railway/promotion-ledger.json records it as run in production, otherwise node ${proofScript} --commit ${old ?? '<previous commit>'} first; docs/releases.md, Rollback).` });
   await releaseRailway({ target: { name: 'production', deployment: DEPLOYMENT, file: railwayFile }, kind, values: remote, env: { ...env, GITHUB_SHA: sha, ...receipt }, dry: false, ...(bypass ? { founderBypass: bypass } : {}) });
   await verifyRailway({ deployment: DEPLOYMENT, kind, values: await remoteEnv(DEPLOYMENT, env) });
   await record(kind);
@@ -274,7 +274,7 @@ try {
   if (want('frontend')) { step('Pre-flight: build the frontend once'); await npm('build:cloudflare'); }
 
   deployStartedAt = Date.now();
-  if (want('processor')) await attempt('processor', 'Railway processor image', () => railway('processor', remote));
+  if (want('processor')) await attempt('processor', 'Railway processor image', async () => railway('processor', await remoteEnv(DEPLOYMENT, env)));
   // A raised contract means the new Convex code queues work only the new processor can claim. Whatever the reason
   // the processor is not at this commit (not promoted, not routed to Railway, left out with --only), Convex waits.
   const processorAt = (await readState())?.targets?.processor?.commit ?? baseCommit;
@@ -298,7 +298,9 @@ try {
   if (want('frontend')) await attempt('frontend', 'Frontend Worker', () => worker('frontend'));
   if (want('agent')) await attempt('agent', 'Agent runner Worker', () => worker('agent', () => node(['scripts/sync-agent-runner-env.mjs', 'production'])));
   if (want('mcp')) await attempt('mcp', 'MCP Worker', () => worker('mcp'));
-  if (want('exports')) await attempt('exports', 'Railway export workers', () => railway('exports', remote));
+  // Each Railway stage starts from the Convex env as it is now: the processor stage above changed RAILWAY_WORKERS_JSON,
+  // and the exports manifest built from the copy read at startup put the old processor back (incident 2026-11-13).
+  if (want('exports')) await attempt('exports', 'Railway export workers', async () => railway('exports', await remoteEnv(DEPLOYMENT, env)));
 
   await attempt('verification', 'Post-deploy verification', async () => {
     const problems = await verifyHealth(await remoteEnv(DEPLOYMENT, env));

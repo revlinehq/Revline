@@ -1,4 +1,5 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
+import { dirname, resolve } from 'node:path';
 import { parseEnv } from 'node:util';
 import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
@@ -6,11 +7,67 @@ import { z } from 'zod';
 import { railway, railwayConfig, railwayDeploymentRuns, railwayInstance, railwayLogEvents, verifyRailwayTarget } from '../lib/railway-workers.mjs';
 
 const receiptSchema = z.object({
-  config: z.unknown(), projectId: z.string(), processorTaskId: z.string(), exportTaskId: z.string(), ultraTaskId: z.string(), distributedTaskId: z.string().optional(),
+  id: z.string().optional(), config: z.unknown(), projectId: z.string(), processorTaskId: z.string(), exportTaskId: z.string(), ultraTaskId: z.string(), distributedTaskId: z.string().optional(),
   deployments: z.array(z.object({ role: z.enum(['processor', 'export', 'ultra', 'distributed']), serviceId: z.string().uuid(), deploymentId: z.string().uuid(), taskId: z.string() })).min(3).max(4),
 });
 
-export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds = ['processor', 'exports'] }) {
+// Promotions this checkout verified against live staging, and which of them production then ran. Staging moves on
+// with every push to main, so a receipt stops verifying live soon after it was proven; this record lets the same
+// commit and digest be staged again: within RECORDED_TTL_MS of its live check (the next kind of the same release, a
+// retry), and at any time once production ran it (a restore or rollback). A digest never verified needs live proof.
+const LEDGER = '.data/railway/promotion-ledger.json';
+const RECORDED_TTL_MS = 24 * 3600_000;
+const ledgerSchema = z.array(z.object({
+  kind: z.enum(['processor', 'exports']), commit: z.string().regex(/^[a-f0-9]{40}$/), image: z.string(), distributedExports: z.boolean(),
+  receiptId: z.string(), verifiedAt: z.string().datetime(), productionStagedAt: z.string().datetime().optional(),
+}));
+/** An unreadable record counts as empty: it is only ever a shortcut, never a requirement. */
+async function readLedger() {
+  try { return ledgerSchema.parse(JSON.parse(await readFile(resolve(LEDGER), 'utf8'))); }
+  catch (error) { if (error?.code !== 'ENOENT') console.log(`Ignoring unreadable ${LEDGER} (${error instanceof Error ? error.message : error}).`); return []; }
+}
+/** Atomic replace; drops entries production never ran once they can no longer be used. */
+async function writeLedger(entries) {
+  const kept = entries.filter(entry => entry.productionStagedAt || Date.now() - Date.parse(entry.verifiedAt) < RECORDED_TTL_MS);
+  const path = resolve(LEDGER), temporary = `${path}.${process.pid}.tmp`;
+  await mkdir(dirname(path), { recursive: true });
+  await writeFile(temporary, JSON.stringify(kept, null, 2) + '\n', { mode: 0o600 });
+  await rename(temporary, path);
+}
+// Distributed exports change only what an export digest is proven to do; a processor digest is the same either way.
+const sameDigest = (entry, config, kind) => entry.kind === kind && entry.commit === config[`${kind}Commit`] && entry.image === config[`${kind}Image`] && (kind === 'processor' || entry.distributedExports === config.distributedExports);
+
+/** Marks `kinds` of the production manifest `config` as run in production, when this checkout verified that commit and
+ *  digest against live staging. A founder-bypass stage has no verified entry and is not recorded. */
+export async function recordProductionStage({ config, kinds }) {
+  const entries = await readLedger();
+  const at = new Date().toISOString();
+  let marked = 0;
+  for (const entry of entries) if (kinds.some(kind => sameDigest(entry, config, kind))) { entry.productionStagedAt = at; marked++; }
+  if (marked) console.log(`Recorded in ${LEDGER}: production runs ${kinds.map(kind => `${kind} ${config[`${kind}Commit`].slice(0, 7)}`).join(', ')}.`);
+  if (marked) await writeLedger(entries);
+  return marked;
+}
+
+/** `recorded`: when there is no receipt, or staging no longer verifies it live, accept this checkout's record of an
+ *  earlier live verification of the same commit and digest (see LEDGER). A receipt is always checked live first; the
+ *  promotion proof itself never uses the record. */
+export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFile, kinds = ['processor', 'exports'], recorded = false }) {
+  if (!recorded) return verifyLive({ config, receiptFile, stagingEnvFile, kinds });
+  const fromLedger = async cause => {
+    const entries = await readLedger();
+    const found = kinds.map(kind => entries.filter(entry => sameDigest(entry, config, kind))
+      .find(entry => entry.productionStagedAt || Date.now() - Date.parse(entry.verifiedAt) < RECORDED_TTL_MS));
+    if (!found.every(Boolean)) throw cause;
+    for (const entry of found) console.log(`Staging promotion of ${entry.kind} ${entry.commit.slice(0, 7)} ${entry.image} accepted from ${LEDGER} (${cause.message}): receipt ${entry.receiptId} verified live ${entry.verifiedAt}${entry.productionStagedAt ? `, ran in production ${entry.productionStagedAt}` : ''}.`);
+    return null;
+  };
+  if (!receiptFile || !stagingEnvFile) return fromLedger(new Error(`Production requires a staging receipt and a separate staging environment file, unless ${LEDGER} records this exact commit and digest as verified live within ${RECORDED_TTL_MS / 3600_000} h or run in production`));
+  try { return await verifyLive({ config, receiptFile, stagingEnvFile, kinds }); }
+  catch (error) { return fromLedger(error instanceof Error ? error : new Error(String(error))); }
+}
+
+async function verifyLive({ config, receiptFile, stagingEnvFile, kinds }) {
   if (!receiptFile || !stagingEnvFile) throw new Error('Production requires a staging receipt and a separate staging environment file.');
   const receipt = receiptSchema.parse(JSON.parse(await readFile(receiptFile, 'utf8')));
   const staging = railwayConfig(receipt.config);
@@ -45,6 +102,16 @@ export async function verifyStagingPromotion({ config, receiptFile, stagingEnvFi
     if (entry.role === 'distributed' && (!events.some(event => event.event === 'chunks-launched' && event.machines >= 1) || !events.some(event => event.event === 'remote-chunks-done') || !events.some(event => event.event === 'assembled'))) throw new Error('Staging evidence must prove remote chunks and successful assembly.');
   }
   console.log(`Staging promotion verified: ${receipt.projectId}; processing and configured export lanes completed on the exact source commits and artifacts.`);
+  // The receipt proved both kinds against live staging just now: record them, so a later stage of the same digests
+  // (the other kind of this release after staging moved on, a retry, a restore) does not depend on staging standing still.
+  const entries = await readLedger();
+  const receiptId = receipt.id ?? receipt.projectId;
+  for (const kind of ['processor', 'exports']) {
+    const existing = entries.find(entry => sameDigest(entry, staging, kind));
+    if (existing) Object.assign(existing, { verifiedAt: new Date().toISOString(), receiptId });
+    else entries.push({ kind, commit: staging[`${kind}Commit`], image: staging[`${kind}Image`], distributedExports: staging.distributedExports, receiptId, verifiedAt: new Date().toISOString() });
+  }
+  await writeLedger(entries);
   return staging;
 }
 
