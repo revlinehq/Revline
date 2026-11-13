@@ -1,0 +1,37 @@
+{
+  "targets": {
+    "convex": {
+      "commit": "7796b071139a63f8126ca28e4448097f109016d5",
+      "at": "2026-11-13T17:25:42.220Z",
+      "note": "recorded by hand with release:status --set"
+    },
+    "media": {
+      "commit": "455a9a845fcf922e63dce0d36d897c27e3124e97",
+      "at": "2026-11-11T00:23:54.653Z",
+      "note": "recorded by hand with release:status --set"
+    },
+    "frontend": {
+      "commit": "7796b071139a63f8126ca28e4448097f109016d5",
+      "at": "2026-11-13T17:25:42.245Z",
+      "note": "recorded by hand with release:status --set"
+    },
+    "agent": {
+      "commit": "cc4ce55aa18d13ae5e9c1a9e5221a67bf7364652",
+      "at": "2026-11-13T17:09:53.160Z",
+      "note": "recorded by hand with release:status --set"
+    },
+    "mcp": {
+      "commit": "14c72adc69a2f81ca577f7b71b795269de02358e",
+      "at": "2026-11-12T19:36:27.344Z",
+      "note": "recorded by hand with release:status --set"
+    },
+    "processor": {
+      "commit": "40a877bff523e9412928a1924734b197b0fa8bac",
+      "at": "2026-11-13T04:19:00.060Z"
+    },
+    "exports": {
+      "commit": "40a877bff523e9412928a1924734b197b0fa8bac",
+      "at": "2026-11-13T04:27:57.961Z"
+    }
+  }
+}
