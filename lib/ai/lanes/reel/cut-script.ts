@@ -159,7 +159,7 @@ export function cutScript(timeline: Timeline, assets: SpeechAsset[], options: { 
         const line = sentences[hint.sentence], again = sentences[hint.again], earlier = words.slice(line.from + hint.from, line.from + hint.to + 1);
         if (!earlier.length || taken.some(flag => flag.at < earlier.at(-1)!.end && flag.end > earlier[0].start)) continue;
         // A hook said again as the closing line is a callback, not a retake.
-        if (hint.kind === 'reworded' && hint.sentence === 0 && hint.again >= sentences.length - 2) continue;
+        if (hint.kind === 'reworded' && hint.sentence === 0 && hint.again > 1 && hint.again >= sentences.length - 2) continue;
         const next = own.find(word => word.start > earlier.at(-1)!.start + 1e-6);
         const atCut = !!next && (earlier.some(word => word.piece !== earlier[0].piece) || next.piece !== earlier.at(-1)!.piece);
         const remove = removalRanges(earlier, next);
