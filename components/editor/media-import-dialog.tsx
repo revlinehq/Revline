@@ -5,6 +5,7 @@ import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { ChevronRight, Folder, HardDrive, LoaderCircle, Upload, Film, Image as ImageIcon, Music2, Box } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import type { Id } from '@/convex/_generated/dataModel';
+import { VideoFrame } from '@/components/media/video-frame';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -124,7 +125,7 @@ function StoragePicker({ projectId, folderId, onAdded }: { projectId: Id<'projec
           const reason=blocked?(file.kind==='export'?'Exports cannot be added to a project':'3D models cannot be added'):'';
           return <div key={file.id} role="listitem" className="add-media-file" data-selected={selected||undefined} data-blocked={blocked||undefined} title={reason?`${file.fileName} · ${reason}`:file.fileName}>
             <Button type="button" variant="ghost" className="add-media-file-hit" disabled={blocked} aria-pressed={selected} aria-label={reason?`${file.fileName}: ${reason}`:`${selected?'Deselect':'Select'} ${file.fileName}`} onClick={()=>toggle(file.id)}>
-              <span className="add-media-file-thumb">{file.thumbnailUrl?<img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false}/>:<Icon/>}
+              <span className="add-media-file-thumb">{file.thumbnailUrl?<img src={file.thumbnailUrl} alt="" loading="lazy" decoding="async" draggable={false}/>:file.videoUrl?<VideoFrame key={file.videoUrl} src={file.videoUrl} fallback={<Icon/>}/>:<Icon/>}
                 {file.duration!==null&&<span className="add-media-file-duration">{formatTime(file.duration)}</span>}</span>
               <span className="add-media-file-name">{file.fileName}</span>
             </Button>

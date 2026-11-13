@@ -40,7 +40,7 @@
 .add-media-file-thumb>svg{width:20px;height:20px}
 .add-media-file:hover:not([data-blocked]) .add-media-file-thumb{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--ws-text,#171717) 40%,transparent)}
 .add-media-file[data-selected] .add-media-file-thumb{box-shadow:inset 0 0 0 2px var(--revline-accent)}
-.add-media-file[data-blocked] .add-media-file-thumb>:is(img,svg){opacity:.45}
+.add-media-file[data-blocked] .add-media-file-thumb>:is(img,svg,.video-frame){opacity:.45}
 .add-media-file-duration{position:absolute;bottom:5px;padding:1px 5px;border-radius:4px;background:#000000b3;color:#fff;font:500 10px/14px var(--font-geist,var(--font-inter)),sans-serif;font-variant-numeric:tabular-nums}
 .add-media-file-duration{right:5px}
 .add-media-file-name{overflow:hidden;font-size:12px;text-overflow:ellipsis;white-space:nowrap}

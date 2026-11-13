@@ -20,7 +20,9 @@ import { PROJECT_MEDIA_LIMIT } from '../lib/editor/limits';
 const folderId = v.id('storageFolders');
 const folderSummary = { id: folderId, name: v.string(), parentId: v.union(folderId, v.null()), fileCount: v.number(), totalBytes: v.number(), createdAt: v.number(), updatedAt: v.number() };
 const summarize = (folder: Folder) => ({ id: folder._id, name: folder.name, parentId: folder.parentId ?? null, fileCount: folder.fileCount, totalBytes: folder.totalBytes, createdAt: folder.createdAt, updatedAt: folder.updatedAt });
-const libraryItem = v.object({ ...storageItem.fields, folderId: v.union(folderId, v.null()), duration: v.union(v.number(), v.null()), width: v.union(v.number(), v.null()), height: v.union(v.number(), v.null()), waveform: v.union(v.array(v.number()), v.null()) });
+const libraryItem = v.object({ ...storageItem.fields, folderId: v.union(folderId, v.null()), duration: v.union(v.number(), v.null()), width: v.union(v.number(), v.null()), height: v.union(v.number(), v.null()), waveform: v.union(v.array(v.number()), v.null()),
+  /** A video or export with no poster (one only the Library holds): its own link, so the tile can show its first frame. */
+  videoUrl: v.union(v.string(), v.null()) });
 const visible = (ownerId: string) => ({ ownerId, auxiliary: false, pending: false }) as const;
 const STARTER_FOLDERS = ['Raw footage', 'Exports', 'Audio', 'Images'];
 const WAVEFORM_BARS = 48;
@@ -43,20 +45,23 @@ function waveformBars(waveform: Doc<'assets'>['waveform'] | null) {
   }
   return bars.map(value => Math.round(value / maximum * 100) / 100);
 }
-/** The small picture a folder tile shows for one file: the editor's thumbnail, or the image itself. */
+/** The small picture a folder tile shows for one file: the editor's thumbnail, the image itself, or, for a video
+ * that only the Library holds (no project made a poster for it), the video, whose first frame the tile draws. */
 async function tileThumbnail(ctx: QueryCtx, row: Doc<'storageObjects'>) {
-  if (row.kind !== 'video' && row.kind !== 'image') return null;
-  const attachments = row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(3)
+  if (row.kind !== 'video' && row.kind !== 'image' && row.kind !== 'export') return null;
+  const attachments = row.kind === 'export' ? [] : row.r2Key ? await ctx.db.query('assets').withIndex('by_owner_r2Key', q => q.eq('ownerId', row.ownerId).eq('r2Key', row.r2Key)).take(3)
     : row.storageId ? await ctx.db.query('assets').withIndex('by_owner_storageId', q => q.eq('ownerId', row.ownerId).eq('storageId', row.storageId)).take(3) : [];
   const thumbnail = attachments.find(asset => asset.thumbnailStorageId)?.thumbnailStorageId;
-  return thumbnail ? ctx.storage.getUrl(thumbnail) : row.kind === 'image' ? mediaUrl(ctx, row) : null;
+  const url = thumbnail ? await ctx.storage.getUrl(thumbnail) : await mediaUrl(ctx, row);
+  return url ? { url, video: !thumbnail && row.kind !== 'image' } : null;
 }
+const tileThumbnailValue = v.object({ url: v.string(), video: v.boolean() });
 
 // ── Reading ─────────────────────────────────────────────────────────────────────────────────────────────────
 
 /** The folders directly inside `parentId` (the root when absent), each with its subtree totals and up to three
  * thumbnails from its newest files. */
-export const folders = query({ args: { parentId: v.optional(folderId) }, returns: v.array(v.object({ ...folderSummary, thumbnails: v.array(v.string()) })), handler: async (ctx, args) => {
+export const folders = query({ args: { parentId: v.optional(folderId) }, returns: v.array(v.object({ ...folderSummary, thumbnails: v.array(tileThumbnailValue) })), handler: async (ctx, args) => {
   const ownerId = await requireOwner(ctx);
   if (args.parentId && (await ctx.db.get(args.parentId))?.ownerId !== ownerId) return [];
   const rows = (await ctx.db.query('storageFolders').withIndex('by_owner_parent', q => q.eq('ownerId', ownerId).eq('parentId', args.parentId)).take(MAX_FOLDERS)).filter(row => !row.deleting);
@@ -65,7 +70,7 @@ export const folders = query({ args: { parentId: v.optional(folderId) }, returns
     // Pictures come from the three newest files directly in the folder, by index, for the first tiles only:
     // a long row of folders does not read every folder's files.
     const newest = folder.fileCount && index < THUMBNAIL_FOLDERS ? await ctx.db.query('storageObjects').withIndex('by_owner_folder_created', q => q.eq('ownerId', ownerId).eq('auxiliary', false).eq('pending', false).eq('folderId', folder._id)).order('desc').take(3) : [];
-    const thumbnails = (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(url => url !== null);
+    const thumbnails = (await Promise.all(newest.map(row => tileThumbnail(ctx, row)))).filter(thumbnail => thumbnail !== null);
     return { ...summarize(folder), thumbnails };
   }));
 } });
@@ -102,7 +107,8 @@ export const files = query({ args: { paginationOpts: paginationOptsValidator, fo
     const page = await listing.paginate(args.paginationOpts);
     const reads = listingReads(ctx), rows = await Promise.all(page.page.map(async row => {
       const { peaks, ...file } = await describe(ctx, row, reads);
-      return { ...file, folderId: row.folderId ?? null, waveform: waveformBars(peaks) };
+      const videoUrl = (file.kind === 'video' || file.kind === 'export') && !file.thumbnailUrl ? await mediaUrl(ctx, row) : null;
+      return { ...file, folderId: row.folderId ?? null, waveform: waveformBars(peaks), videoUrl };
     }));
     return { ...page, page: args.unused ? rows.filter(row => row.canDelete && !row.inUse) : rows };
   } });
