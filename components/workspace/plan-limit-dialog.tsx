@@ -29,7 +29,8 @@ export function UpgradeDialog({ open, onOpenChange, status, notice, onChanged }:
 }
 
 /** Opens when an action on this page hits a plan limit (storage_full, usage_limit): the upgrade cards where a
- *  bigger plan exists, otherwise the message alone (Studio: when it resets, or where to free space). */
+ *  bigger plan exists, otherwise the message alone (Studio: when it resets, or where to free space). A free trial's
+ *  limit is the trial's, which no upgrade lifts, so it gets the message alone too. */
 export function PlanLimitDialog() {
   const status = usePlanStatus();
   const [limit, setLimit] = useState<PlanLimit | null>(null);
@@ -37,7 +38,7 @@ export function PlanLimitDialog() {
   if (!limit || !status) return null;
   const close = (open: boolean) => { if (!open) setLimit(null); };
   const notice = { title: TITLES[limit.code], message: limit.message };
-  if (canUpgrade(status)) return <UpgradeDialog open onOpenChange={close} status={status} notice={notice} />;
+  if (canUpgrade(status) && !limit.trial) return <UpgradeDialog open onOpenChange={close} status={status} notice={notice} />;
   return <Dialog open onOpenChange={close}>
     <DialogContent>
       <DialogTitle>{notice.title}</DialogTitle>

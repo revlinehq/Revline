@@ -3,12 +3,12 @@ import { LandingNav } from '@/components/landing/nav';
 import { LandingPricing } from '@/components/landing/pricing';
 import { LandingFaq } from '@/components/landing/faq';
 import { LandingFooter } from '@/components/landing/footer';
-import { PLANS } from '@/lib/billing/plan';
+import { PLANS, TRIAL_DAYS } from '@/lib/billing/plan';
 import '../landing.css';
 
 export const metadata: Metadata = {
   title: 'Revline pricing',
-  description: `Revline Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice} after a ${PLANS.pro.trialDays}-day trial, and Studio $${PLANS.studio.monthlyPrice} USD per month. Pro adds MCP; Studio adds 4K exports.`,
+  description: `Revline Starter is $${PLANS.starter.monthlyPrice}, Pro $${PLANS.pro.monthlyPrice} and Studio $${PLANS.studio.monthlyPrice} USD per month, each after a ${TRIAL_DAYS}-day free trial. Pro adds MCP; Studio adds 4K exports.`,
   alternates: { canonical: '/pricing' },
 };
 

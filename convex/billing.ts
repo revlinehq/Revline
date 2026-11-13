@@ -3,7 +3,7 @@ import Stripe from 'stripe';
 import { ConvexError, v } from "convex/values";
 import { components, internal } from "./_generated/api";
 import { action, internalMutation, query, type ActionCtx } from "./_generated/server";
-import { PLANS, PLAN_RANK, type PlanTier } from "../lib/billing/plan";
+import { PLANS, PLAN_RANK, TRIAL_DAYS, TRIAL_LIMITS_TIER, storageSize, type PlanTier } from "../lib/billing/plan";
 import { NEW_PROJECT_PATH } from '../lib/workspace-routes';
 import { activePlanTier, billingConfigured, billingEnabled, editorSubscriptions, fromStripeSubscription, hasComplimentaryEditorAccess, hasEditorAccess, isEditorSubscription, pinnedPriceId, subscriptionTier } from './lib/billing_access';
 import { activeAppleEntitlement } from './lib/apple_entitlements';
@@ -96,6 +96,12 @@ async function planPrice(client: Stripe, tier: PlanTier) {
 const planArg = v.union(v.literal("starter"), v.literal("pro"), v.literal("studio"), v.literal("ultra"));
 /** 'ultra' is the retired name for Studio, still accepted from older clients. */
 const tierOf = (plan: 'starter' | 'pro' | 'studio' | 'ultra'): PlanTier => plan === 'ultra' ? 'studio' : plan;
+/** What a trial checkout says above its button: the trial runs on TRIAL_LIMITS_TIER's limits until the first payment. */
+function trialCheckoutNote(tier: PlanTier) {
+  const trial = PLANS[TRIAL_LIMITS_TIER].name;
+  const full = tier === TRIAL_LIMITS_TIER ? '' : ` ${PLANS[tier].name}'s full limits, including ${storageSize(tier)} of storage, start with your first payment.`;
+  return `Your ${TRIAL_DAYS}-day free trial includes ${storageSize(TRIAL_LIMITS_TIER)} of storage and ${trial}'s AI usage.${full} Cancel before the trial ends and you won't be charged.`;
+}
 export const createCheckout = action({ args: { plan: planArg }, returns: v.object({ sessionId: v.string(), url: v.union(v.string(), v.null()) }), handler: async (ctx, args): Promise<{sessionId: string; url: string | null}> => {
   const tier = tierOf(args.plan);
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
@@ -117,8 +123,8 @@ export const createCheckout = action({ args: { plan: planArg }, returns: v.objec
   if (remote.has_more) throw new ConvexError('Please manage your existing subscriptions in billing.');
   const editor = remote.data.filter(sub => isEditorSubscription(fromStripeSubscription(sub)));
   if (editor.some(sub => !['canceled', 'incomplete_expired'].includes(sub.status))) throw new ConvexError('You already have a subscription. Manage it in billing.');
-  // Only plans with trialDays (Pro) start with a trial.
-  const reservationArgs = { ownerId: identity.subject, priceId, origin, trialEligible: PLANS[tier].trialDays > 0 && subscriptions.length === 0 && editor.length === 0 };
+  // Every plan starts with a trial, once per customer: any earlier web subscription, on any plan and in any state, rules it out.
+  const reservationArgs = { ownerId: identity.subject, priceId, origin, trialEligible: subscriptions.length === 0 && editor.length === 0 };
   let reservation = await ctx.runMutation(internal.billing.reserveCheckout, reservationArgs);
   if (reservation.sessionId) {
     const previous = await client.checkout.sessions.retrieve(reservation.sessionId);
@@ -138,9 +144,10 @@ export const createCheckout = action({ args: { plan: planArg }, returns: v.objec
     metadata: { userId: identity.subject, app: 'revline-editor', plan: tier },
     subscription_data: {
       metadata: { userId: identity.subject, app: 'revline-editor', plan: tier },
-      ...(reservationArgs.trialEligible ? { trial_period_days: PLANS[tier].trialDays, trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } } } : {}),
+      ...(reservationArgs.trialEligible ? { trial_period_days: TRIAL_DAYS, trial_settings: { end_behavior: { missing_payment_method: 'cancel' as const } } } : {}),
     },
-  }, { idempotencyKey: `revline-checkout-v3-${reservation.requestId}` });
+    ...(reservationArgs.trialEligible ? { custom_text: { submit: { message: trialCheckoutNote(tier) } } } : {}),
+  }, { idempotencyKey: `revline-checkout-v4-${reservation.requestId}` });
   if (!session.url) throw new ConvexError('Stripe did not return a checkout link.');
   await ctx.runMutation(internal.billing.saveCheckout, { ownerId: identity.subject, requestId: reservation.requestId, sessionId: session.id, url: session.url, expiresAt: session.expires_at * 1000 });
   return { sessionId: session.id, url: session.url };
@@ -154,8 +161,9 @@ export const createPortal = action({ args: {}, returns: v.object({ url: v.string
   return await new StripeSubscriptions(components.stripe, {}).createCustomerPortalSession(ctx, { customerId: customer.stripeCustomerId, returnUrl: `${origin}/billing` });
 }});
 /** Moves the one active Stripe subscription to another plan in place, and writes the plan into its metadata.
- *  An upgrade invoices the prorated difference now; a downgrade credits it to the next invoice. Moving off Pro
- *  ends its trial, since only Pro has one. The webhook then syncs the plan. */
+ *  An upgrade invoices the prorated difference now; a downgrade credits it to the next invoice. A free trial keeps
+ *  running (every plan has one), with the trial's limits, and the new plan is billed when it ends. The webhook then
+ *  syncs the plan. */
 async function changeSubscriptionPlan(ctx: ActionCtx, tier: PlanTier) {
   const identity = await ctx.auth.getUserIdentity(); if (!identity) throw new ConvexError("Authentication required");
   if (await ctx.runQuery(internal.appleBilling.hasActive, { ownerId: identity.subject })) throw new ConvexError('Manage or change your subscription in the App Store.');
@@ -176,9 +184,9 @@ async function changeSubscriptionPlan(ctx: ActionCtx, tier: PlanTier) {
     await client.subscriptions.update(subscription.id, {
       items: [{ id: item.id, price: priceId, quantity: 1 }],
       metadata: { ...subscription.metadata, plan: tier },
-      // An upgrade renews the subscription; a downgrade keeps a cancellation the member already scheduled.
-      proration_behavior: upgrade ? 'always_invoice' : 'create_prorations', payment_behavior: 'error_if_incomplete', ...(upgrade ? { cancel_at_period_end: false } : {}),
-      ...(subscription.status === 'trialing' && PLANS[tier].trialDays === 0 ? { trial_end: 'now' as const } : {}),
+      // An upgrade renews a paid subscription; a downgrade, or any change during a free trial (nothing is billed until
+      // it ends), keeps a cancellation the member already scheduled.
+      proration_behavior: upgrade ? 'always_invoice' : 'create_prorations', payment_behavior: 'error_if_incomplete', ...(upgrade && subscription.status !== 'trialing' ? { cancel_at_period_end: false } : {}),
     });
   } catch (error) {
     // No idempotency key: a retry after fixing the card must reach Stripe again, and

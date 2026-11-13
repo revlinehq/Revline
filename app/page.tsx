@@ -7,7 +7,7 @@ import { LandingPricing } from '@/components/landing/pricing';
 import { LandingFaq } from '@/components/landing/faq';
 import { LandingFinalCta } from '@/components/landing/final-cta';
 import { LandingFooter } from '@/components/landing/footer';
-import { PLANS, PLAN_TIERS } from '@/lib/billing/plan';
+import { PLANS, PLAN_TIERS, TRIAL_DAYS } from '@/lib/billing/plan';
 import type { Metadata } from 'next';
 import './landing.css';
 
@@ -30,7 +30,7 @@ const structuredData = {
         '@type': 'Offer', name: `Revline ${PLANS[tier].name}`, url: 'https://tryrevline.com/pricing', price: PLANS[tier].monthlyPrice,
         priceCurrency: PLANS[tier].currency,
         priceSpecification: { '@type': 'UnitPriceSpecification', price: PLANS[tier].monthlyPrice, priceCurrency: PLANS[tier].currency, unitText: 'month' },
-        description: PLANS[tier].trialDays ? `${PLANS[tier].trialDays}-day trial, then $${PLANS[tier].monthlyPrice} USD per month.` : `$${PLANS[tier].monthlyPrice} USD per month.`,
+        description: `${TRIAL_DAYS}-day free trial, then $${PLANS[tier].monthlyPrice} USD per month.`,
       })),
     },
   ],

@@ -55,9 +55,12 @@ export function AiUsageBanner() {
   if (!ai || !status || aiShare(ai) < AI_USAGE_WARNING) return null;
   const day = (ai.today ?? 0) > ai.used;
   const text = ai.blocked
-    ? ai.blocked === 'day' ? 'You’ve used today’s AI usage. It resets at midnight UTC.' : `You’ve used this period’s AI usage. It resets on ${resetDate(ai.resetsAt)}.`
+    ? ai.blocked === 'day' ? 'You’ve used today’s AI usage. It resets at midnight UTC.'
+      : usage?.trial ? `You’ve used your free trial’s AI usage. Your plan’s full allowance starts with your first payment on ${resetDate(ai.resetsAt)}.`
+      : `You’ve used this period’s AI usage. It resets on ${resetDate(ai.resetsAt)}.`
     : day ? `You’ve used ${percent(ai.today ?? 0)}% of today’s AI usage.` : `You’ve used ${percent(ai.used)}% of this period’s AI usage. It resets on ${resetDate(ai.resetsAt)}.`;
-  const upgrade = canUpgrade(status);
+  // A free trial's allowance is the trial's until the first payment; a bigger plan does not raise it.
+  const upgrade = canUpgrade(status) && !usage?.trial;
   return <div className="ai-usage-banner" role="status">
     <p>{text}</p>
     {upgrade && <Button variant="soft" size="sm" onClick={() => setOpen(true)}>Upgrade</Button>}

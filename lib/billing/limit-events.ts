@@ -1,5 +1,5 @@
 /** Plan limits the server reports in a ConvexError's data (convex/lib/plan_limits.ts). */
-export type PlanLimit = { code: 'storage_full' | 'usage_limit'; message: string; tier?: string; resetsAt?: number };
+export type PlanLimit = { code: 'storage_full' | 'usage_limit'; message: string; tier?: string; resetsAt?: number; trial?: boolean };
 const EVENT = 'revline:plan-limit';
 
 /** The plan limit an error carries, if it is one. */

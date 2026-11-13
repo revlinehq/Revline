@@ -1,0 +1,1 @@
+- Billing: every plan (Starter, Pro, Studio) starts with a 3-day free trial, once per customer, and a trial runs on Starter's 10 GB storage and AI allowance until its first payment. Why: founder decision to offer the trial on all plans without raising trial cost.
