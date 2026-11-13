@@ -61,8 +61,7 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
           {section==='upload'?<>
             {onPickProjectMedia&&projectMedia.length>0&&<div className="media-import-project" role="list" aria-label="Media in this project">{projectMedia.map(asset=><button key={asset._id} type="button" role="listitem" className="media-import-project-item" title={asset.fileName} aria-label={`Attach ${asset.fileName}`} onClick={()=>{onOpenChange(false);onPickProjectMedia(asset);}}><MediaThumbnail asset={asset}/><span>{asset.fileName}</span></button>)}</div>}
             <AddMediaUpload layout="stacked" place="this project" disabled={busy} onBusyChange={setLinkBusy} onUpload={attach} onDone={()=>onOpenChange(false)}
-              onImportLink={onImportVideo??(async()=>{throw new Error('Video links can be imported once the current edit finishes.');})}
-              linkNote={busy?'Wait for the current upload to finish.':'Public videos up to 3 hours, added to this project.'}/>
+              onImportLink={onImportVideo??(async()=>{throw new Error('Video links can be imported once the current edit finishes.');})}/>
           </>:projectId&&<StoragePicker key={section} projectId={projectId as Id<'projects'>} folderId={section==='storage'?undefined:section} onAdded={()=>onOpenChange(false)}/>}
         </div>
       </div>

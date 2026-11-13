@@ -14,7 +14,7 @@ export function AddMediaDialog({ place, onClose, onUpload, onImportLink }: {
     <DialogContent className="library-dialog library-add-media" onDragOver={event => { event.preventDefault(); event.stopPropagation(); }} onDrop={event => { event.preventDefault(); event.stopPropagation(); }}>
       <DialogTitle>Add media</DialogTitle>
       <DialogDescription>Upload files or save a video from a link to {place}.</DialogDescription>
-      <AddMediaUpload place={place} linkNote="The video is saved to your Library for later." onUpload={onUpload} onImportLink={onImportLink} onDone={onClose} onBusyChange={setBusy} />
+      <AddMediaUpload place={place} onUpload={onUpload} onImportLink={onImportLink} onDone={onClose} onBusyChange={setBusy} />
     </DialogContent>
   </Dialog>;
 }
