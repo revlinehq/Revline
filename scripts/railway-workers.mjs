@@ -105,6 +105,9 @@ const remote = parseEnv(await convex(['env', 'list']));
 mask(remote);
 // Recovery must still be able to restore Convex routes during a Railway outage.
 if (!['rollback', 'pause'].includes(operation)) await verifyRailwayTarget(target());
+// A production stage is a rollback to a build production already ran (scripts/railway-promotion.mjs); cutover and
+// resume put the same pins in front of the queue, so they are held to the same rule.
+if (config.environment === 'production' && ['stage', 'cutover', 'resume'].includes(operation)) await verifyProductionHistory({ config, kinds, token });
 const setEnv = (name, value) => convex(['env', 'set', name], value);
 /** RAILWAY_WORKERS_JSON as the deployment holds it now (not the copy read at startup). */
 const liveManifest = async () => { const live = parseEnv(await convex(['env', 'list'])); mask(live); return live.RAILWAY_WORKERS_JSON; };
@@ -210,8 +213,6 @@ if (operation === 'status') {
   // ---- 1. Every check, before any claim pause or slot change ----
   // Anything a release can be missing (a key, the project token, registry access, an image) fails here, while
   // production still runs and claims. `check` stops after this block.
-  // A production stage is a rollback to a build production already ran (scripts/railway-promotion.mjs).
-  if (operation === 'stage' && config.environment === 'production') await verifyProductionHistory({ config, kinds, token });
   const artifactVariables = {};
   const maxChunks = z.coerce.number().int().min(2).max(16).parse(settings.REVLINE_EXPORT_MAX_CHUNKS ?? 8);
   if (kinds.includes('exports') && config.distributedExports) {

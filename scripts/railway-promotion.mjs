@@ -1,13 +1,14 @@
 import { readFile, writeFile, mkdir, rename } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { z } from 'zod';
-import { railwayDeployments, railwayDeploymentCommit, railwayGoodDeployments } from '../lib/railway-workers.mjs';
+import { railwayBootCrashed, railwayDeployments, railwayDeploymentCommit, railwayGoodDeployments } from '../lib/railway-workers.mjs';
 
 // A pinned-image production `stage` is a rollback: it may only put a lane back on a build production already ran.
 // There is no staging environment any more (Railway slots deploy from GitHub main, and production holds a build that
 // crashes before media-ready). Production history is either of:
 //   1. this checkout's ledger of earlier production stages of the same commit and digest (LEDGER), or
-//   2. Railway's own deployment history: a production slot of that lane built and ran the commit from GitHub main.
+//   2. Railway's own deployment history: a production slot of that lane built and ran the commit from GitHub main
+//      (among each slot's 50 newest deployments; older builds need the ledger, or a redeploy in the Railway dashboard).
 // The image itself is then proven by the stage's runtime preflight, which refuses unless the image reports exactly the
 // pinned commit and digest, before any slot changes.
 const LEDGER = '.data/railway/promotion-ledger.json';
@@ -56,9 +57,12 @@ export async function verifyProductionHistory({ config, kinds, token }) {
     if (recorded) { console.log(`Production history: ${kind} ${commit.slice(0, 7)} ${image} was staged in production ${recorded.productionStagedAt} (${LEDGER}).`); continue; }
     let ran = null;
     for (const serviceId of laneServices(config, kind)) {
-      // Builds that ran (SUCCESS, SLEEPING) and superseded ones (REMOVED); FAILED and CRASHED builds never count.
-      const found = railwayGoodDeployments(await railwayDeployments({ token, config, serviceId, first: 50 })).find(deployment => railwayDeploymentCommit(deployment) === commit);
-      if (found) { ran = { serviceId, deployment: found }; break; }
+      // Builds that ran (SUCCESS, SLEEPING) count as they are. A superseded one (REMOVED) may have been cancelled before
+      // it built, so it counts only when its worker logged media-ready. FAILED and CRASHED builds never count.
+      for (const deployment of railwayGoodDeployments(await railwayDeployments({ token, config, serviceId, first: 50 })).filter(deployment => railwayDeploymentCommit(deployment) === commit)) {
+        if (deployment.status !== 'REMOVED' || !await railwayBootCrashed({ token, deploymentId: deployment.id })) { ran = { serviceId, deployment }; break; }
+      }
+      if (ran) break;
     }
     if (!ran) throw new Error(`Production never ran ${kind} ${commit.slice(0, 7)}: it is not in ${LEDGER} and no production ${kind} slot has a deployment of it in Railway. A pinned-image stage only rolls a lane back to a build production already ran; ship anything else through main.`);
     console.log(`Production history: ${kind} ${commit.slice(0, 7)} ran on production slot ${ran.serviceId} (Railway deployment ${ran.deployment.id}, ${ran.deployment.status}). The runtime preflight checks ${image} reports that commit.`);
