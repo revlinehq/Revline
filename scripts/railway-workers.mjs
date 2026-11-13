@@ -13,11 +13,11 @@ import { ConvexHttpClient } from 'convex/browser';
 import { makeFunctionReference } from 'convex/server';
 import { z } from 'zod';
 import { command, mask } from './release-command.mjs';
-import { workerCapacity } from '../lib/worker-capacity.mjs';
+import { workerCapacity, alwaysOnProcessors } from '../lib/worker-capacity.mjs';
 import { IMAGE_REGISTRY, REPOSITORY, isRevlineRepository } from '../lib/repository.mjs';
 import { verifyStagingPromotion, founderBypassReason, recordProductionStage } from './railway-promotion.mjs';
 import { removeExpiredRailwayArtifacts } from './render-artifacts.mjs';
-import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, railwaySlotSource, verifyRegistryPull, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
+import { railwayConfig, railway, railwayLogEvents, verifyRailwayTarget, railwayInstance, railwayActive, configureRailwaySlot, verifyRailwaySlot, deployRailwaySlot, createRailwayService, deleteRailwayService, reapRailwayServices, railwaySlotSource, verifyRegistryPull, railwayWarmSlots, RAILWAY_CPU_ENV } from '../lib/railway-workers.mjs';
 
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   config: { type: 'string' }, environment: { type: 'string' }, 'env-file': { type: 'string' },
@@ -157,6 +157,9 @@ if (operation === 'check' && contract.processorVersion > sourceVersion) throw ne
 if (['stage', 'verify', 'cutover'].includes(operation) && (values['image-first'] ? contract.processorVersion > sourceVersion : contract.processorVersion !== sourceVersion)) throw new Error('Deploy the matching Convex worker contract before cutover.');
 const dispatch = () => convex(['run', 'railwayWorkers:dispatch', '{}']);
 const caps = workerCapacity(remote);
+/** Whether a slot is one of the deployment's always-on processor slots (MEDIA_PROCESSOR_ALWAYS_ON): it keeps its
+ *  restart-on-failure policy through a stage. */
+const warm = (serviceId, manifest = config) => railwayWarmSlots(manifest, alwaysOnProcessors(remote)).includes(serviceId);
 for (const pool of selectedPools()) if (!Number.isInteger(caps[pool.name]) || pool.ids.length > caps[pool.name]) throw new Error(`${pool.name}: Railway pool exceeds the configured worker capacity; review capacity separately.`);
 
 async function waitStopped(limitMs = 50 * 60_000, pools = selectedPools()) {
@@ -176,7 +179,7 @@ async function preflight(kind, existingServiceId) {
   try {
     // A permanent slot is checked with the source it already has; a temporary service always runs the image.
     const source = existingServiceId && railwaySlotSource(await railwayInstance({ ...target(), serviceId })) === 'image' ? 'image' : undefined;
-    await configureRailwaySlot({ ...target(), serviceId, image, registryCredentials, source, variables: {
+    await configureRailwaySlot({ ...target(), serviceId, image, registryCredentials, source, warm: !!existingServiceId && warm(serviceId), variables: {
       ...RAILWAY_CPU_ENV, NEXT_PUBLIC_CONVEX_URL: config.convexUrl, RAILWAY_WORKERS_JSON: JSON.stringify(config),
       MEDIA_WORKER_CONCURRENCY: '1', REVLINE_RAILWAY_MODE: 'preflight', REVLINE_RAILWAY_IMAGE: image,
     } });
@@ -341,7 +344,7 @@ if (operation === 'status') {
         const kind = railwaySlotSource(await railwayInstance({ ...target(), serviceId: slot.serviceId }));
         let source = null, lastError;
         for (const candidate of kind === 'repository' ? ['repository'] : kind === 'image' ? ['image'] : ['image', 'repository']) {
-          try { await configureRailwaySlot({ ...target(), config: previous, serviceId: slot.serviceId, image: slot.restore.image, variables: slot.restore.variables, registryCredentials, source: candidate }); source = candidate; break; }
+          try { await configureRailwaySlot({ ...target(), config: previous, serviceId: slot.serviceId, image: slot.restore.image, variables: slot.restore.variables, registryCredentials, source: candidate, warm: warm(slot.serviceId, previous) }); source = candidate; break; }
           catch (error) { lastError = error; }
         }
         if (!source) throw lastError;
@@ -365,7 +368,7 @@ if (operation === 'status') {
     await setEnv('RAILWAY_WORKERS_PAUSED', 'true');
     await waitStopped();
     changed = true;
-    for (const slot of slots) await configureRailwaySlot({ ...target(), serviceId: slot.serviceId, image: slot.image, variables: slot.variables, registryCredentials, source: imageSlots ? 'image' : 'repository' });
+    for (const slot of slots) await configureRailwaySlot({ ...target(), serviceId: slot.serviceId, image: slot.image, variables: slot.variables, registryCredentials, source: imageSlots ? 'image' : 'repository', warm: warm(slot.serviceId) });
     await setEnv('RAILWAY_API_TOKEN', token);
     // Right before writing: the live manifest must still be the one this stage merged its kind into.
     await unchangedManifest();

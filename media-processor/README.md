@@ -6,7 +6,7 @@ Production uses three Railway services: Media Processing, Video Export, and Ultr
 
 The Dockerfile packages a full `railway-processor` target and a lean `railway-exports` target. The full processor includes FFmpeg, Chromium, Python trackers, CPU Torch, the checksum-pinned Beat This model, PySceneDetect, and yt-dlp. Export services omit the analysis models. The default `processor` target remains available for the Cloudflare container backend.
 
-Railway services use unprivileged ephemeral scratch, authenticate against their selected Convex deployment, process one task at a time, and exit after the configured idle period. Enqueueing work wakes the matching service. Standard and Ultra queues retain separate account seats and worker pools.
+Railway services use unprivileged ephemeral scratch, authenticate against their selected Convex deployment, process one task at a time, and exit after the configured idle period, except the always-on processor slots (`MEDIA_PROCESSOR_ALWAYS_ON` in Convex; docs/releases.md, Railway), which stay up and claim new work at once. Enqueueing work wakes the matching service. Standard and Ultra queues retain separate account seats and worker pools.
 
 Import checkpoints live under `TMPDIR/revline-imports-v1` (the OS temporary directory when `TMPDIR` is unset), scoped by backend and task. Railway sets `TMPDIR=/tmp/revline`, owned by the runtime user. Checkpoints survive process retries within the same container; container replacement can discard them. The application directory does not need write access.
 

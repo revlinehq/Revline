@@ -24,8 +24,10 @@ export function railway(args: { token: string; query: string; variables?: Record
 export function verifyRailwayTarget(args: Target): Promise<void>;
 export function railwayInstance(args: Slot): Promise<Instance>;
 export function railwayActive(instance: Instance): boolean;
+export function railwayWarmSlots(config: RailwayConfig, count: number): string[];
+export const RAILWAY_WARM_RESTART: Readonly<{ restartPolicyType: 'ON_FAILURE'; restartPolicyMaxRetries: number }>;
 export function verifyRailwaySlot(args: Slot & { image?: string }): Promise<Instance>;
-export function configureRailwaySlot(args: Slot & { image?: string; variables: Record<string, string>; registryCredentials?: { username: string; password: string } }): Promise<void>;
+export function configureRailwaySlot(args: Slot & { image?: string; variables: Record<string, string>; registryCredentials?: { username: string; password: string }; warm?: boolean }): Promise<void>;
 export function deployRailwaySlot(args: Slot & { deployment?: Deployment | null }): Promise<string>;
 export function railwayDeployments(args: Slot & { first?: number }): Promise<Deployment[]>;
 export function railwayDeploymentCommit(deployment: Deployment | null | undefined): string | null;
