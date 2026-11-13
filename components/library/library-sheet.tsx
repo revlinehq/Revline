@@ -3,7 +3,7 @@
 import { useEffect, useEffectEvent, useState, type CSSProperties } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery } from 'convex/react';
-import { ChevronLeft, ChevronRight, Clapperboard, Download, FolderInput, Pencil, Play, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, ChevronLeft, ChevronRight, Clapperboard, Download, FolderInput, Pencil, Play, Trash2 } from 'lucide-react';
 import { api } from '@/convex/_generated/api';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/components/ui/sheet';
@@ -16,6 +16,8 @@ type SheetProps = {
   file: LibraryFile | null; position: number; count: number; folderName: string;
   onClose: () => void; onStep: (offset: -1 | 1) => void;
   onAddToProject: () => void; onMove: () => void; onDownload: () => void; onDelete: () => void;
+  /** An archived file (the Archived view) can be restored or downloaded; nothing else. */
+  archived: boolean; onArchive: () => void; onRestore: () => void;
 };
 
 /** One file in a shadcn Sheet over the page (from the right; from the bottom on a phone): preview, name, facts, projects and actions. */
@@ -51,7 +53,7 @@ export function LibrarySheet({ file, position, count, folderName, onClose, onSte
   </Sheet>;
 }
 
-function FileDetails({ file, folderName, onAddToProject, onMove, onDownload, onDelete }: { file: LibraryFile; folderName: string } & Pick<SheetProps, 'onAddToProject' | 'onMove' | 'onDownload' | 'onDelete'>) {
+function FileDetails({ file, folderName, archived, onAddToProject, onMove, onDownload, onDelete, onArchive, onRestore }: { file: LibraryFile; folderName: string } & Pick<SheetProps, 'onAddToProject' | 'onMove' | 'onDownload' | 'onDelete' | 'archived' | 'onArchive' | 'onRestore'>) {
   const rename = useMutation(api.library.renameFile);
   const [playing, setPlaying] = useState(false), [renaming, setRenaming] = useState(false), [error, setError] = useState('');
   const playable = file.kind === 'video' || file.kind === 'audio' || file.kind === 'export';
@@ -76,15 +78,19 @@ function FileDetails({ file, folderName, onAddToProject, onMove, onDownload, onD
     </div>
     <div className="library-sheet-name">
       {renaming ? <RenameInput value={file.fileName} label={`Rename ${file.fileName}`} onSubmit={name => void save(name)} onCancel={() => setRenaming(false)} />
-        : <><strong title={file.fileName}>{file.fileName}</strong><Button variant="ghost" size="icon" className="dash-more" aria-label={`Rename ${file.fileName}`} onClick={() => setRenaming(true)}><Pencil /></Button></>}
+        : <><strong title={file.fileName}>{file.fileName}</strong>{!archived && <Button variant="ghost" size="icon" className="dash-more" aria-label={`Rename ${file.fileName}`} onClick={() => setRenaming(true)}><Pencil /></Button>}</>}
     </div>
     {error && <p className="dash-error" role="alert">{error}</p>}
-    <div className="library-sheet-actions">
+    {archived ? <div className="library-sheet-actions">
+      <Button variant="soft" onClick={onRestore}><ArchiveRestore aria-hidden="true" />Restore</Button>
+      <Button variant="soft" onClick={onDownload}><Download aria-hidden="true" />Download</Button>
+    </div> : <div className="library-sheet-actions">
       <Button variant="soft" onClick={onAddToProject}><Clapperboard aria-hidden="true" />Add to project</Button>
       <Button variant="soft" onClick={onMove}><FolderInput aria-hidden="true" />Move to</Button>
       <Button variant="soft" onClick={onDownload}><Download aria-hidden="true" />Download</Button>
+      <Button variant="soft" onClick={onArchive}><Archive aria-hidden="true" />Archive</Button>
       <Button variant="soft" disabled={!file.canDelete} title={file.canDelete ? undefined : file.protectedReason ?? 'Cannot be deleted right now'} onClick={onDelete}><Trash2 aria-hidden="true" />Delete</Button>
-    </div>
+    </div>}
     <dl className="library-sheet-facts">{facts.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     <div className="library-sheet-used">
       <h3>Used in</h3>

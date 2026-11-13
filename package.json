@@ -88,6 +88,7 @@
     "react-dom": "^19.3.1",
     "react-resizable-panels": "^4.14.3",
     "react-server-dom-webpack": "^19.3.1",
+    "sonner": "^2.0.8",
     "stripe": "^22.6.2",
     "svix": "^2.9.1",
     "vinext": "^1.2.1",

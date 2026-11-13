@@ -63,6 +63,17 @@
 .library-sort { height: 36px; padding: 0 12px; gap: 6px; border: 0; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500; }
 .library-sort:hover, .library-sort[data-state=open] { background: var(--dash-pill-hover); }
 .library-sort svg { width: 15px; height: 15px; color: var(--dash-muted); }
+/* The Archived view's switch, beside sort and filter: a soft button that stays lit while the view is open. */
+.library-archived-toggle[data-slot=toggle] { height: 36px; padding: 0 12px; gap: 6px; border-radius: var(--radius-md); background: var(--dash-pill); color: var(--dash-text); font-size: 14px; font-weight: 500; box-shadow: none; outline: none; }
+.library-archived-toggle[data-slot=toggle]:hover { background: var(--dash-pill-hover); }
+.library-archived-toggle[data-slot=toggle][data-state=on] { background: #3A3A3A; }
+.library-archived-toggle svg { width: 15px; height: 15px; color: var(--dash-muted); }
+.library-archived-toggle[data-state=on] svg { color: var(--dash-text); }
+.library-crumbs .library-crumb-button { height: auto; padding: 0; border: 0; border-radius: 0; background: none; color: var(--dash-muted); font-size: inherit; font-weight: inherit; line-height: inherit; }
+.library-crumbs .library-crumb-button:hover { background: none; color: var(--dash-text); }
+.library-folder[data-archived] .library-folder-link { cursor: default; }
+/* Toasts appear and leave in place: no slide or fade. */
+.library-toaster [data-sonner-toast] { transition: none !important; animation: none !important; }
 .library-view[data-slot=toggle-group] [data-slot=toggle-group-item] { width: 32px; padding: 0; }
 .library-view svg { width: 15px; height: 15px; }
 .library-menu [data-slot=dropdown-menu-radio-item] { min-height: 34px; border-radius: 8px; font-size: 14px; cursor: pointer; }
@@ -263,6 +274,8 @@
   .library-phone-action[data-slot=button] { display: inline-flex; }
   .library-head { gap: 10px; }
   .library-view { margin-left: auto; }
+  .library-archived-toggle[data-slot=toggle] { width: 36px; padding: 0; }
+  .library-archived-toggle span { display: none; }
   .library-head { flex-wrap: wrap; }
   .library-folders, .library-files { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
   .library-files { row-gap: 18px; }
