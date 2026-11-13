@@ -1,0 +1,1 @@
+- Editor: the Effects tab sets the font (every installed font, TikTok Sans included) and size of captions and the hook, live in preview and the same in export. Why: the founder asked why Effects had no font or size control.
