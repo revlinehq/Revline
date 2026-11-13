@@ -88,7 +88,7 @@ The processor slot and the standard and Ultra export slots deploy themselves fro
 ```mermaid
 flowchart LR
   Merge[Merge to main] -->|GitHub autodeploy| Build[Railway builds the commit per slot]
-  Build --> Boot[Worker boots: reports RAILWAY_GIT_COMMIT_SHA, idles out]
+  Build --> Boot[Worker boots: reports RAILWAY_GIT_COMMIT_SHA; idles out, except the always-on processor]
   Task[New upload or export] --> Dispatch[Convex dispatcher]
   Dispatch -->|redeploy the slot's newest good build, no commit chosen| Slot[Railway slot]
   Slot -->|crashed before media-ready| Hold[Hold that build 30 min, incident, run the previous build]
@@ -105,7 +105,9 @@ flowchart LR
 
 **What runs now.** `npm run release:status` reads each production slot live (the Convex CLI's sign-in on the release Mac) and shows the commit a cold start runs, the latest deployment and its status, and how far behind `origin/main` it is. `--recorded` shows only the state file.
 
-**Slot settings** (per service and environment; `verifyRailwaySlot` checks the first five on every dispatch): one replica in the pinned region, start command `sh media-processor/railway-entry.sh`, restart policy `NEVER`, sleep off, no health check. In addition: source `revlinehq/Revline`, branch `main`, automatic deploys on, Dockerfile path `media-processor/Dockerfile`, variable `REVLINE_FINAL_TARGET` (`railway-processor` or `railway-exports`), draining 3000 s, overlap 0, and no `REVLINE_BUILD_COMMIT` variable (it would be passed to the build as an argument).
+**Always-on processor.** `MEDIA_PROCESSOR_ALWAYS_ON` (Convex, a count, default 0) keeps the first that many `processorServices` running while idle, so an upload or import is claimed at once instead of waiting for a container to boot. The dispatcher starts those slots whenever they are down (its cron runs every minute), demand or not, through the same boot-crash hold; a running idle one counts as free capacity, so the other processor slots are cold-started only while it is busy. The worker asks Convex (`railwayWorkers:alwaysOn` with its service id) at boot and about once a minute while idle whether it is one, so setting the count to 0, or pausing claims for a stage, lets it exit within about a minute. A backend without that function answers no, and the worker sleeps as before. Other processor slots and all export slots exit when idle as before. An always-on slot restarts on failure (`ON_FAILURE`, 3 retries per deployment); after that its deployment stays CRASHED and the hold above decides what runs.
+
+**Slot settings** (per service and environment; `verifyRailwaySlot` checks the first five on every dispatch): one replica in the pinned region, start command `sh media-processor/railway-entry.sh`, restart policy `NEVER` (always-on processor slots: `ON_FAILURE` with 3 max retries; any processor slot may have either, so turning the setting off never trips the check), sleep off, no health check. In addition: source `revlinehq/Revline`, branch `main`, automatic deploys on, Dockerfile path `media-processor/Dockerfile`, variable `REVLINE_FINAL_TARGET` (`railway-processor` or `railway-exports`), draining 3000 s, overlap 0, and no `REVLINE_BUILD_COMMIT` variable (it would be passed to the build as an argument).
 
 ### Pinned-image rollback
 

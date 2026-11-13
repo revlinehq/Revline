@@ -1,0 +1,1 @@
+- Railway: one media-processor slot can stay running while idle (`MEDIA_PROCESSOR_ALWAYS_ON`), so uploads and imports start without a cold boot; extra slots and exports still sleep. Why: the founder asked to keep it awake instead of queueing behind a boot.
