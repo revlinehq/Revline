@@ -378,7 +378,7 @@ export function NewConversation() {
     void send().catch(cause => setError(userError(cause, 'Could not start your edit.'))).finally(() => done?.());
   }, [sendAfterImport, linkImporting, cloudIds, cloudMedia]);
   const linkProgress: LinkImportProgress | undefined = !linkImport ? undefined
-    : !linkTask || linkTask.status === 'queued' ? { label: 'Queued…' }
+    : !linkTask || linkTask.status === 'queued' ? { label: 'Importing…' }
     : linkTask.status === 'retrying' ? { label: 'Retrying…' }
     : { label: 'Importing', percent: Math.min(99, Math.round(linkTask.progress)) };
   async function submit() {

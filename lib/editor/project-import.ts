@@ -7,7 +7,7 @@ import { rememberFootageProgress } from './footage-progress-store';
 import type { EditingPreparationActivity } from './prepare-media-for-editing';
 
 export type ImportFile = { id: string; file: File };
-export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'processing' | 'watching' | 'listening' | 'opening'; activity?: string; index: number; total: number; percent: number };
+export type ProjectImportProgress = { phase: 'preparing' | SourceUploadPhase | 'processing' | 'watching' | 'listening' | 'opening'; activity?: string; note?: string; index: number; total: number; percent: number };
 export type ProjectImportSession = { projectId?: Id<'projects'>; uploaded: Map<string, Id<'assets'>>; completed: Set<string>; progress: Map<string, number> };
 export const createProjectImportSession = (): ProjectImportSession => ({ uploaded: new Map(), completed: new Set(), progress: new Map() });
 

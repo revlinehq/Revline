@@ -34,7 +34,8 @@ import { timelineCover } from '@/lib/editor/timeline-cover';
 import { addMediaClip, separateVideoClips } from '@/lib/editor/operations';
 import { prepareVideoAudio, prepareAudioWaveform } from '@/lib/editor/prepare-video-audio';
 import { prepareMediaForEditing } from '@/lib/editor/prepare-media-for-editing';
-import { mediaTaskActivityLabel } from '@/lib/media-analysis/activity';
+import { mediaTaskActivityLabel, SLOW_START_LABEL } from '@/lib/media-analysis/activity';
+import { useSlowStart } from '@/lib/editor/use-slow-start';
 import { createPlaybackOpeningGate } from '@/lib/editor/editor-opening';
 import { isCasualChat } from '@/lib/editor/chat-request';
 import { uploadSourceFile } from '@/lib/editor/upload-source';
@@ -103,6 +104,8 @@ function ProjectEditor({project,storedTimeline,latestRevision}: {project:Doc<'pr
   const taskHistory=useQuery(api.mediaTasks.list,{projectId,includeProgress:false});
   const taskProgress=useQuery(api.mediaTasks.progressForProject,{projectId});
   const mediaTasks=useMemo(()=>taskHistory?.map(task=>({...task,progress:taskProgress?.find(row=>row.taskId===task._id)?.progress??task.progress})),[taskHistory,taskProgress]);
+  // Playback preparation waiting on a sleeping worker shows its step; only a long wait says so.
+  const playbackSlowStart=useSlowStart(!!mediaTasks?.some(task=>task.kind==='preview'&&task.status==='queued'));
   const startOverview=useMutation(api.mediaTasks.startOverview);const startMediaTask=useMutation(api.mediaTasks.start);
   const requestedOverviews=useRef(new Set<string>());
   // The app the user connected over MCP most recently (null: none yet, undefined: loading), for the timeline's MCP pill.
@@ -302,7 +305,7 @@ function ProjectEditor({project,storedTimeline,latestRevision}: {project:Doc<'pr
           let asset:MediaAsset=await convex.query(api.assets.get,{projectId,assetId});
           if(asset.kind!=='image')asset=await prepareMediaForEditing(convex,projectId,assetId,status=>{
             report(index,status.percent,status.phase==='processing'?'preparing':status.phase);
-            setUpload(current=>current?{...current,activity:status.activity}:current);
+            setUpload(current=>current?{...current,activity:status.note??status.activity}:current);
           });
           rememberFootageProgress(`asset:${assetId}`,preparedFootageProgress(asset));
           report(index,preparedFootageProgress(asset),'saving');
@@ -364,7 +367,7 @@ function ProjectEditor({project,storedTimeline,latestRevision}: {project:Doc<'pr
     const task=tasks.find(task=>task?.status==='running')??tasks[0];
     const preparingAsset=pendingPlayback.find(asset=>asset._id===task?.assetId)??pendingPlayback[0];
     const error=previewPreparationError||(failed?'Could not prepare this footage for editing. Your original footage and saved edit are intact.':'');
-    return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={title} backHref={NEW_PROJECT_PATH}/><FootagePreparation thumbnail={preparingAsset.thumbnailUrl??openingFootage(projectId)?.thumbnail} fileName={preparingAsset.fileName} progressKey={`project:${projectId}`} progress={footageProgress} label={task?.status==='retrying'?'Retrying playback preparation…':'Preparing playback…'} activity={task?.status==='queued'?'Queued for playback preparation…':task?.activity==='downloading'?'Loading your footage…':task?.progress===100?'Saving your editing preview…':'Optimizing footage for smooth editing…'} detail="Your footage is saved. The editor opens when the footage on your timeline is ready." error={error} onRetry={error?()=>{setPreviewPreparationError('');void preparePlayback({projectId,assetIds:pendingPlayback.map(asset=>asset._id as Id<'assets'>)}).catch(()=>setPreviewPreparationError('Could not prepare this footage for editing. Your original footage and saved edit are intact.'));}:undefined}/></div>;
+    return <div className="editor-app footage-preparation-boot dash-theme"><WorkspaceNav title={title} backHref={NEW_PROJECT_PATH}/><FootagePreparation thumbnail={preparingAsset.thumbnailUrl??openingFootage(projectId)?.thumbnail} fileName={preparingAsset.fileName} progressKey={`project:${projectId}`} progress={footageProgress} label={task?.status==='retrying'?'Retrying playback preparation…':'Preparing playback…'} activity={task?.status==='queued'&&playbackSlowStart?SLOW_START_LABEL:task?.status==='queued'?'Loading your footage…':task?.activity==='downloading'?'Loading your footage…':task?.progress===100?'Saving your editing preview…':'Optimizing footage for smooth editing…'} detail="Your footage is saved. The editor opens when the footage on your timeline is ready." error={error} onRetry={error?()=>{setPreviewPreparationError('');void preparePlayback({projectId,assetIds:pendingPlayback.map(asset=>asset._id as Id<'assets'>)}).catch(()=>setPreviewPreparationError('Could not prepare this footage for editing. Your original footage and saved edit are intact.'));}:undefined}/></div>;
   }
   // The models and efforts the server offers this account; the composer's pickers list exactly these.
   const assistantSettings={paidModelAccess:ai?.paidModelAccess,modelSwitcher:ai?.modelSwitcher,effortSwitcher:ai?.effortSwitcher,allowedModels:ai?.allowedModels,allowedEfforts:ai?.allowedEfforts,defaultModelChoice:ai?.defaultModelChoice,defaultReasoningEffort:ai?.defaultReasoningEffort};
