@@ -1,4 +1,5 @@
 import { canChooseReasoningEffort, hasPaidModelAccess, productionOffer, requireEditorAccess } from './lib/billing_access';
+import { runFailure } from '../lib/ai/run-failure';
 import { freeEditorModel, offeredEditorModel, withPlanReasoning } from '../lib/ai/claude-model';
 import { patchTurn, syncTurnView } from './lib/assistant_turn_data';
 import { refusalReason } from '../lib/ai/failure-text';
@@ -264,7 +265,7 @@ export const draft = internalQuery({
   ): Promise<{ timeline: Timeline; revision: number } | null> => {
     const run = await projectRun(ctx, args.projectId, args.ownerId);
     if (!run.aiRunning || run.aiRunId !== args.runId)
-      throw new ConvexError("AI run is no longer active");
+      throw runFailure('locked', 'AI run is no longer active.');
     const project = await ctx.db.get(args.projectId),
       preview = await ctx.db
         .query("aiTimelinePreviews")

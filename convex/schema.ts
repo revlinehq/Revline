@@ -28,6 +28,7 @@ import { alertFields } from './lib/discord_alert';
 import { saveIncidentCondition, saveIncidentEvidence, saveIncidentPublication } from './lib/save_incidents';
 import { toolWriteReceipt } from './lib/tool_write_receipt';
 import { assistantRunArgs, assistantRecoveryValidator } from './lib/assistant_run';
+import { runFailureCodeValidator } from '../lib/ai/run-failure';
 
 export const brandColorValidator = v.object({ name: v.string(), value: v.string() });
 export const brandFontValidator = v.object({ family: v.string(), weight: v.string(), role: v.union(v.literal('heading'), v.literal('body'), v.literal('other')), url: v.string() });
@@ -317,7 +318,9 @@ export default defineSchema({
     claimToken: v.optional(v.string()), claimedAt: v.optional(v.number()), prUrl: v.optional(v.string()), deliveryError: v.optional(v.string()),
     samples: v.array(v.object({ at: v.number(), context: v.string(), projectId: v.optional(v.id('projects')), runId: v.optional(v.string()) })),
   }).index('by_kind', ['kind']).index('by_fingerprint', ['fingerprint']).index('by_delivery_priority', ['delivery', 'priority', 'firstSeen']),
-  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),resuming:v.boolean(),
+  assistantTurnViews:defineTable({projectId:v.id('projects'),promptMessageId:v.string(),runId:v.string(),turnId:v.id('assistantTurns'),segment:v.number(),status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),
+    // What kind of failure `error` is (lib/ai/run-failure); absent on turns that failed before codes and on uncoded failures.
+    errorCode:v.optional(runFailureCodeValidator),resuming:v.boolean(),
     // Copied from the turn: what its latest run resolved at inference time; absent until that run records it and on older turns.
     model:v.optional(v.string()),effort:v.optional(v.string())}).index('by_run',['runId']).index('by_prompt',['projectId','promptMessageId']).index('by_project',['projectId']),
   // Where each run's time went (lib/ai/step-timing.ts): names, times and token counts only, no user content, no owner.
@@ -328,6 +331,7 @@ export default defineSchema({
     args:v.object(assistantRunArgs),timelineId:v.string(),pass:v.number(),segment:v.number(),savedEdits:v.number(),
     pendingFastFrames:v.array(v.number()),feedback:v.optional(v.string()),
     status:v.union(v.literal('running'),v.literal('completed'),v.literal('failed'),v.literal('stopped')),error:v.optional(v.string()),updatedAt:v.number(),
+    errorCode:v.optional(runFailureCodeValidator),
     // The API model id and effort the latest run resolved at inference time (assistant.recordEffort); args.pinnedModel is what was asked.
     model:v.optional(v.string()),effort:v.optional(v.string()),
     // The timeline revision when the request ended (finish or Stop): the next requests' history line names it.
@@ -408,6 +412,10 @@ export default defineSchema({
    * kept current by every write that adds, removes or moves a file or folder, so a folder tile never scans its contents. */
   storageFolders: defineTable({ ownerId:v.string(), name:v.string(), parentId:v.optional(v.id('storageFolders')), createdAt:v.number(), updatedAt:v.number(), fileCount:v.number(), totalBytes:v.number(), deleting:v.optional(v.boolean()) })
     .index('by_owner_parent',['ownerId','parentId']),
+  /** Video links imported from the Library. Each runs as a `sourcesOnly` import in a holding project of its own; when it
+   * ends, `library.settleLinkImport` keeps the video as a Library file in `folderId` and removes the holder. */
+  libraryLinkImports: defineTable({ ownerId:v.string(), taskId:v.id('mediaTasks'), projectId:v.id('projects'), folderId:v.optional(v.id('storageFolders')), createdAt:v.number() })
+    .index('by_task',['taskId']).index('by_owner_created',['ownerId','createdAt']),
   storageAccounting: defineTable({ name:v.string(), ready:v.boolean() }).index('by_name',['name']),
   editorEntitlements: defineTable({ ownerId: v.string(), reason: v.string(), grantedAt: v.number(), updatedAt: v.number(), expiresAt: v.optional(v.number()), revokedAt: v.optional(v.number()), plan: v.optional(v.literal('ultra')) }).index('by_owner', ['ownerId']),
   appleBillingAccounts: defineTable({ ownerId: v.string(), appAccountToken: v.string(), createdAt: v.number() }).index('by_owner', ['ownerId']).index('by_token', ['appAccountToken']),

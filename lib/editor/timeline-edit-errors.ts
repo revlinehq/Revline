@@ -1,5 +1,7 @@
 /** A rejected local gesture is a no-op, rather than an operational failure. */
 export class TimelineGestureRejection extends Error {
+  /** For an assistant run (lib/ai/run-failure): approved work refuses the edit; an overlap is a placement that cannot be used. */
+  get failureCode(): 'refused' | 'invalid' { return this.code === 'approved' ? 'refused' : 'invalid'; }
   constructor(message: string, readonly code?: 'overlap' | 'approved') {
     super(message);
     this.name = 'TimelineGestureRejection';

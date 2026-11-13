@@ -1,0 +1,2 @@
+- Library: Upload opens an Add media dialog with Upload and Paste a link pages; a pasted link is saved to the open folder with no project. Why: the founder wants inspiration videos kept in the Library for later.
+- Link import: TikTok videos (including short links) and Instagram reels and posts import, with curl_cffi in the importer and an import:tiktok processor gate. Why: inspiration videos come from TikTok and Instagram, not only YouTube.

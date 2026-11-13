@@ -235,6 +235,8 @@ type ImportStrategy = {
   fragments: string;
   args: string[];
   youtubeOnly?: boolean;
+  /** Routed through VIDEO_IMPORT_PROXY: paid per gigabyte, so only after a direct attempt is refused. */
+  proxy?: boolean;
 };
 const client = (value: string) => [
   "--force-ipv4",
@@ -266,14 +268,39 @@ const IMPORT_STRATEGIES: ImportStrategy[] = [
     youtubeOnly: true,
   },
 ];
-/** The strategy that last worked on this worker goes first next time. */
-let preferredStrategy = IMPORT_STRATEGIES[0];
+/** Hosting addresses are refused by YouTube ("Sign in to confirm you're not a bot"), and Instagram and TikTok
+ * answer them with empty or blocked responses, whichever client asks. A residential proxy is the route that works
+ * from a datacenter; with VIDEO_IMPORT_PROXY set, one direct attempt is followed by these through the proxy. */
+const PROXY_STRATEGIES: ImportStrategy[] = [
+  { name: "proxy", fragments: "4", args: [], proxy: true },
+  {
+    name: "proxy-web_safari",
+    fragments: "1",
+    args: client("web_safari"),
+    youtubeOnly: true,
+    proxy: true,
+  },
+  {
+    name: "proxy-mobile-360p",
+    fragments: "1",
+    args: client("mweb,tv_simply,android"),
+    youtubeOnly: true,
+    proxy: true,
+  },
+];
+const importStrategies = () =>
+  process.env.VIDEO_IMPORT_PROXY
+    ? [IMPORT_STRATEGIES[0], ...PROXY_STRATEGIES]
+    : IMPORT_STRATEGIES;
+/** The strategy that last worked for a site on this worker goes first for that site next time,
+ * so one site needing the proxy does not send the others through it. */
+const preferredStrategy = new Map<string, string>();
 /** Nothing another client or route can fix. */
 const PERMANENT_REFUSAL =
-  /private video|video unavailable|has been removed|copyright|age.restricted|confirm your age|members.only|subscribers?.only|only available (?:to|for) subscribers|not available in your country/i;
+  /private video|video (?:is )?unavailable|has been removed|copyright|age.restricted|confirm your age|members.only|subscribers?.only|only available (?:to|for) subscribers|not available in your country/i;
 /** The site answered but would not hand over the media: another client, format or route may work. */
 const SITE_REFUSAL =
-  /HTTP Error 40[13]|HTTP Error 429|unable to download video data|sign in|confirm.*bot|requested format.*not available|no video formats|needs to be reloaded|po.?token/i;
+  /HTTP Error 40[13]|HTTP Error 429|unable to download video data|sign in|confirm.*bot|requested format.*not available|no video formats|needs to be reloaded|po.?token|empty media response|login required|rate.?limit|ip address is blocked|unable to extract (?:universal data|webpage video data)|try again later|proxy|tunnel connection failed/i;
 
 const DAY = 24 * 3600_000;
 let importer:
@@ -340,6 +367,27 @@ export function videoImporter() {
   }
   return importer.ready;
 }
+/** The proxy URL and its credentials, in every form yt-dlp may print them. */
+function redactProxy(text: string) {
+  const proxy = process.env.VIDEO_IMPORT_PROXY;
+  if (!proxy) return text;
+  const secrets = [proxy];
+  try {
+    const url = new URL(proxy);
+    for (const part of [url.password, url.username])
+      if (part) secrets.push(part, decodeURIComponent(part));
+  } catch {
+    /* Not a URL: the whole value is still redacted. */
+  }
+  return secrets
+    .filter((secret) => secret.length >= 3)
+    .sort((a, b) => b.length - a.length)
+    .reduce((value, secret) => value.replaceAll(secret, "[proxy]"), text);
+}
+const proxyArguments = (strategy: ImportStrategy) =>
+  strategy.proxy && process.env.VIDEO_IMPORT_PROXY
+    ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
+    : [];
 /** yt-dlp prints this before its filters run, so a filtered-out video still says why. */
 const META = "REVLINE_META";
 /** With a range, only that window downloads, cut on exact frames. A whole video is limited to
@@ -361,7 +409,8 @@ function youtubeArguments(
   const filters = range
     ? [
         "--match-filters",
-        `duration > ${range.start} & !is_live`,
+        // Instagram posts may not report a length.
+        `duration ${/(^|\.)instagram\.com$/.test(new URL(link.url).hostname) ? ">?" : ">"} ${range.start} & !is_live`,
         "--match-filters",
         `duration >= ${range.end} & is_live`,
       ]
@@ -393,9 +442,7 @@ function youtubeArguments(
     ...filters,
     ...window,
     ...strategy.args,
-    ...(process.env.VIDEO_IMPORT_PROXY
-      ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
-      : []),
+    ...proxyArguments(strategy),
     "--js-runtimes",
     `node:${process.execPath}`,
     // Twitch clip renditions carry their audio; at equal size prefer H.264 so nothing re-encodes.
@@ -480,9 +527,7 @@ function twitchVodArguments(link: VideoLink, strategy: ImportStrategy) {
     "--extractor-retries",
     "2",
     ...strategy.args,
-    ...(process.env.VIDEO_IMPORT_PROXY
-      ? ["--proxy", process.env.VIDEO_IMPORT_PROXY]
-      : []),
+    ...proxyArguments(strategy),
     "--simulate",
     "-f",
     "b[height<=1080]/b",
@@ -748,10 +793,18 @@ export async function importVideoLink(
   if (link.kind !== "file") {
     const executable = videoImporterPath();
     const { version, pythonPath } = await videoImporter();
+    const host = new URL(link.url).hostname;
+    const available = importStrategies();
+    const preferred = available.find(
+      (item) => item.name === preferredStrategy.get(host),
+    );
     const strategies = [
-      preferredStrategy,
-      ...IMPORT_STRATEGIES.filter((item) => item !== preferredStrategy),
-    ].filter((item) => link.kind === "youtube" || !item.youtubeOnly);
+      ...(preferred ? [preferred] : []),
+      ...available.filter((item) => item !== preferred),
+    ]
+      .filter((item) => link.kind === "youtube" || !item.youtubeOnly)
+      // ffmpeg reads a VOD's segments itself, outside the proxy.
+      .filter((item) => !(vod && item.proxy));
     const refusals: string[] = [];
     for (const strategy of strategies) {
       try {
@@ -772,10 +825,12 @@ export async function importVideoLink(
           };
         playlistUrl = lines.find((line) => line.startsWith(PLAYLIST))?.split(" ")[1];
         title = lines.filter((line) => !line.startsWith(META) && !line.startsWith(PLAYLIST)).at(-1) || title;
-        preferredStrategy = strategy;
+        // A proxy success is not remembered: the proxy is paid per gigabyte, so each import still tries directly first.
+        if (strategy.proxy) preferredStrategy.delete(host);
+        else preferredStrategy.set(host, strategy.name);
         if (refusals.length)
           console.log(
-            `Video import: strategy "${strategy.name}" worked after ${refusals.length} refused (yt-dlp ${version}).`,
+            `Video import: ${host} strategy "${strategy.name}" worked after ${refusals.length} refused (yt-dlp ${version}).`,
           );
         break;
       } catch (error) {
@@ -785,7 +840,8 @@ export async function importVideoLink(
             "Video-link import is unavailable on this media worker. Install yt-dlp first.",
             503,
           );
-        const stderr = String((error as { stderr?: string }).stderr ?? "");
+        // The proxy URL carries its credentials: never let it reach a log or a message.
+        const stderr = redactProxy(String((error as { stderr?: string }).stderr ?? ""));
         const reason =
           stderr
             .replace(/https?:\/\/\S+/g, "[video URL]")
@@ -793,7 +849,8 @@ export async function importVideoLink(
             .filter((line) => line.startsWith("ERROR"))
             .at(-1)
             ?.slice(0, 300) ?? "The downloader returned no diagnostic.";
-        if (PERMANENT_REFUSAL.test(stderr))
+        // "Video unavailable. This content isn't available, try again later" is YouTube rate-limiting this address.
+        if (PERMANENT_REFUSAL.test(stderr) && !/try again later/i.test(stderr))
           throw new AnalysisError(
             "The video site will not serve this video to our servers: it is private, removed, restricted by age, subscription or region, or blocked. Download it on your device and upload the file instead.",
             400,
@@ -811,7 +868,7 @@ export async function importVideoLink(
         refusals.push(`${strategy.name}: ${reason}`);
         // The raw lines stay in the worker log; the user gets the plain sentence below.
         console.warn(
-          `Video import: strategy "${strategy.name}" refused (yt-dlp ${version}): ${reason}`,
+          `Video import: ${host} strategy "${strategy.name}" refused (yt-dlp ${version}): ${reason}`,
         );
         // Another client picks other formats, so earlier partial files cannot resume.
         for (const name of await readdir(directory))
@@ -819,11 +876,16 @@ export async function importVideoLink(
             await rm(join(directory, name), { force: true });
       }
     }
-    if (refusals.length === strategies.length)
+    if (refusals.length === strategies.length) {
+      if (!process.env.VIDEO_IMPORT_PROXY)
+        console.warn(
+          `Video import: every strategy for ${host} was refused and VIDEO_IMPORT_PROXY is unset; this host's addresses need a residential proxy for this site.`,
+        );
       throw new AnalysisError(
         `The video site refused this download from our servers, so the link could not be imported. Download the video on your device and upload the file instead. (Ref: yt-dlp ${version}, ${refusals.length} ways tried, ${/HTTP Error \d+/.exec(refusals.at(-1)!)?.[0] ?? "refused"}.)`,
         400,
       );
+    }
   } else {
     await downloadMp4(link.url, source, signal, onProgress, maxBytes);
     try {

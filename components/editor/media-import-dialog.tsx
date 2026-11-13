@@ -33,21 +33,22 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
   projectId?:string;
 }) {
   const [section,setSection]=useState<Section>('upload');
-  const [dragging,setDragging]=useState(false);
+  // While a link import is starting the dialog stays open, so its answer or error is seen.
+  const [linkBusy,setLinkBusy]=useState(false);
   const busy=disabled;
   function attach(files:File[]) {
     if(busy||!files.length)return;
-    setDragging(false);onOpenChange(false);onUpload(files);
+    onOpenChange(false);onUpload(files);
   }
-  return <Dialog open={open} onOpenChange={value=>{setDragging(false);if(!value)setSection('upload');onOpenChange(value);}}>
+  return <Dialog open={open} onOpenChange={value=>{if(!value&&linkBusy)return;if(!value)setSection('upload');onOpenChange(value);}}>
     <DialogContent className="media-import-dialog add-media-dialog" data-storage={projectId?'':undefined} onDragEnter={event=>{
       if(hasFiles(event))event.stopPropagation();
     }} onDragOver={event=>{
       if(!hasFiles(event))return;
-      event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect=busy?'none':'copy';if(!busy){setDragging(true);setSection('upload');}
-    }} onDragLeave={event=>{event.stopPropagation();if(!event.currentTarget.contains(event.relatedTarget as Node))setDragging(false);}} onDrop={event=>{
+      event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect=busy?'none':'copy';if(!busy)setSection('upload');
+    }} onDragLeave={event=>event.stopPropagation()} onDrop={event=>{
       if(!hasFiles(event))return;
-      event.preventDefault();event.stopPropagation();setDragging(false);attach(Array.from(event.dataTransfer.files));
+      event.preventDefault();event.stopPropagation();attach(Array.from(event.dataTransfer.files));
     }}>
       <DialogTitle className="sr-only">Add media</DialogTitle>
       <DialogDescription className="sr-only">Upload files, paste a video link{projectId?', or add media from your storage':''}.</DialogDescription>
@@ -59,8 +60,9 @@ export function MediaImportDialog({ open, onOpenChange, onUpload, onImportVideo,
         <div className="add-media-main">
           {section==='upload'?<>
             {onPickProjectMedia&&projectMedia.length>0&&<div className="media-import-project" role="list" aria-label="Media in this project">{projectMedia.map(asset=><button key={asset._id} type="button" role="listitem" className="media-import-project-item" title={asset.fileName} aria-label={`Attach ${asset.fileName}`} onClick={()=>{onOpenChange(false);onPickProjectMedia(asset);}}><MediaThumbnail asset={asset}/><span>{asset.fileName}</span></button>)}</div>}
-            <AddMediaUpload dragging={dragging} disabled={busy} disabledReason="Wait for the current upload to finish" linkUnavailable="Video links can be imported once the current edit finishes." onFiles={attach} onImportLink={onImportVideo&&(async url=>{await onImportVideo(url);onOpenChange(false);})}
-              linkHint="Public videos up to 3 hours, added to this project. Twitch, X and direct video links work too."/>
+            <AddMediaUpload layout="stacked" place="this project" disabled={busy} onBusyChange={setLinkBusy} onUpload={attach} onDone={()=>onOpenChange(false)}
+              onImportLink={onImportVideo??(async()=>{throw new Error('Video links can be imported once the current edit finishes.');})}
+              linkNote={busy?'Wait for the current upload to finish.':'Public videos up to 3 hours, added to this project.'}/>
           </>:projectId&&<StoragePicker key={section} projectId={projectId as Id<'projects'>} folderId={section==='storage'?undefined:section} onAdded={()=>onOpenChange(false)}/>}
         </div>
       </div>
