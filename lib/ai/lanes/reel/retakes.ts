@@ -85,7 +85,8 @@ export function retakeHints(sentences: { words: Word[]; start: number; end: numb
     if (earlier.length < 3 || !sentence.words.length) return;
     for (let other = index + 1; other < sentences.length && other - index <= ahead && sentences[other].start - sentence.end <= window; other++) {
       // A retake split by a full stop still counts: a shorter later sentence may take the one after it.
-      const joined = values[other].length < earlier.length && !!values[other + 1], later = joined ? [...values[other], ...values[other + 1]] : values[other];
+      // ...but only when the first half carries some of its content: function words alone ("do not") join anything.
+      const joined = values[other].length < earlier.length && !!values[other + 1] && values[other].some(value => !STOP.has(value) && earlier.includes(value)), later = joined ? [...values[other], ...values[other + 1]] : values[other];
       const shared = common(earlier, later), ratio = shared / earlier.length;
       const content = new Set(earlier.filter(value => !STOP.has(value) && later.includes(value))).size;
       const sameFacts = [...known[index]].filter(fact => known[other].has(fact) || joined && known[other + 1].has(fact)).length;
