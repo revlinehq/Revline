@@ -45,6 +45,8 @@ The looks read is the one caller that passes `{ whenUnreported: true }`: a proce
 
 ## Releasing production
 
+Every merge to `main` now releases Convex and the Cloudflare Workers automatically (below, "Automatic release on merge"). The Mac command stays the fallback, and it is still how Railway and the incident listener are released by hand.
+
 On the Mac that holds the production credentials, in a primary checkout (not a worktree) of `main` at `origin/main`:
 
 ```sh
@@ -71,7 +73,7 @@ Flags: `--only <target,…>`, `--base <commit>` (comparison commit when nothing 
 
 **First run on the Mac:** record what production runs now, once: `npm run release:status -- --set all=<commit on production>`. Without it every target counts as changed and the compat check is skipped.
 
-The older `deploy-main.yml` workflow (self-hosted PC runner) is unchanged and still refuses to run while the release lock exists.
+The older `deploy-main.yml` workflow (self-hosted PC runner) is unchanged and still refuses to run while the release lock exists. Keep it disabled: `Release production` replaces it, and both run on every push to `main`.
 
 ## Rollback
 
@@ -152,3 +154,49 @@ The production issue publisher runs on the Mac as the LaunchAgent `com.revline.i
 ## After a release
 
 Development checkouts are not part of the release: pull the Mac dev checkout and restart its dev server after merges as before.
+
+## Automatic release on merge
+
+`.github/workflows/release-production.yml` (`Release production`) runs `release:prod` on a GitHub-hosted runner for every push to `main`. It is the same command in CI mode (`REVLINE_RELEASE_CI=1`), not a second release path.
+
+```mermaid
+flowchart LR
+  Merge[Merge to main] --> Gates[Gates: changelog, compat, run path]
+  Gates -->|fail| Stop[No release]
+  Gates --> Convex[Convex different-gnu-398]
+  Convex --> Workers[Changed Workers: media, frontend, agent runner, MCP]
+  Workers --> Checks[Health and Convex log checks]
+  Checks --> State[release-state branch]
+  Merge -.->|Railway GitHub deploy| Railway[Railway workers]
+```
+
+- **Gates first.** The `gates` job runs the changelog check, `compat-check.mjs` on the pushed range and `run-path-check.mjs`. If one fails, the release job is skipped. `release:prod` then runs the compat check again, from the oldest commit still deployed, and the typechecks, before it deploys anything.
+- **What it releases.** Convex first, then only the Workers whose inputs changed (media, frontend, agent runner, MCP), then the post-deploy checks. It never touches Railway or the incident listener. Railway deploys its workers itself from GitHub. The incident listener is updated by the next release from the Mac.
+- **One at a time.** Releases share the concurrency group `revline-production-release`. A running release is never cancelled. A newer push replaces a release that is still waiting, and the newer release includes the older commits, because each target is compared with its own deployed commit. A run whose commit is behind `main` still releases, unless production already runs something newer. That happens on a re-run of an old run, which then exits without deploying. A dispatched dry run gets its own group.
+- **On failure** the run stops and fails, prints the rollback commands, and comments on the commit. Nothing is rolled back automatically (no `--auto-rollback`).
+- **Raised processor contract.** A range that changes `lib/media-analysis/processor-version.ts` holds Convex until the processor is recorded at the release commit. Once Railway runs it, record it with `npm run release:status -- --set processor=<sha> --push` and re-run the workflow.
+- **Retry** with "Run workflow" on `main` and `dry_run` unticked.
+- **Production only.** The workflow writes a Convex env file outside the checkout, and only accepts a deploy key that starts with `prod:different-gnu-398|`. The Convex CLI calls (`env list`, `logs`, the agent settings sync) refuse any other key. Builds never receive the key.
+
+### Shared release state
+
+The deployed commit of each target lives in `deployed.json` on the `release-state` branch of origin. `release:prod` reads it before planning, on the Mac and in the workflow, and merges it with the local `.data/production-releases/deployed.json`. For each target the newer record wins. After deploying, it publishes the result, including after a failure. A stale record is safe: the next plan only compares against an older commit and releases more. `npm run release:status -- --pull` and `-- --push` sync it by hand.
+
+### Manual fallback
+
+`npm run release:prod` on the Mac works as before. It now also reads and publishes the shared state, so the workflow does not release the same targets again. If origin cannot be read, it warns and plans from its local file. It refuses while a `Release production` run is in progress (it asks `gh`; without `gh` it warns, so check by hand). The Mac's lock file does not stop the workflow.
+
+### One-time setup (founder)
+
+1. **Seed the shared state.** On the Mac, in the release checkout: `npm run release:status -- --push`. Until this is done, the workflow refuses to deploy and says why. The alternative is to run the workflow by hand with `base` set to the commit production runs.
+2. **GitHub environment `production`** (Settings → Environments): under deployment branches, allow only `main`. Add:
+
+   | Kind | Name | Where it comes from |
+   | --- | --- | --- |
+   | Secret | `CONVEX_DEPLOY_KEY` | Convex dashboard → project → production deployment `different-gnu-398` → Settings → Generate production deploy key. It starts with `prod:different-gnu-398\|`. |
+   | Secret | `CLOUDFLARE_API_TOKEN` | Cloudflare → My Profile → API Tokens → "Edit Cloudflare Workers" template, limited to the Revline account (`701645e9…`) and the `tryrevline.com` zone. Add Zone → DNS: Edit if the first deploy reports a custom-domain permission error. |
+   | Variable | `NEXT_PUBLIC_SENTRY_DSN`, `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, `NEXT_PUBLIC_TELEMETRY_ENABLED`, `NEXT_PUBLIC_MCP_ORIGIN` | The same values as the Mac's `.env.production.local`. Leave out any that the file does not set. The other public settings are committed in `wrangler.jsonc`. |
+
+   No account ID is needed: every Worker config pins `account_id`.
+3. **Avoid double deploys.** In Cloudflare → Workers & Pages, open `revline-web`, `revline-agent-runner-production`, `revline-editor-media-production` and `revline-mcp-production`. Under Settings → Build, disconnect any connected Git repository (Workers Builds). `revline-web` was connected once, to `codex/mvp`. Keep `deploy-main.yml` disabled.
+4. **Check.** Run the workflow by hand with `dry_run` ticked. It prints the plan and uses no credentials. Then let the next merge release.

@@ -13,7 +13,12 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.argv[2];
 const dryRun = process.argv.includes('--dry-run');
 if (target !== 'dev' && target !== 'production') throw new Error('Usage: node scripts/sync-agent-runner-env.mjs dev|production');
-const prod = ['--deployment', target === 'production' ? 'different-gnu-398' : 'majestic-alpaca-541'];
+const deployment = target === 'production' ? 'different-gnu-398' : 'majestic-alpaca-541';
+// The release workflow has no Convex sign-in: its production deploy key selects the deployment, and the CLI refuses
+// `--deployment` next to a key. Any other key in the environment would silently pick its own deployment, so refuse it.
+const key = process.env.CONVEX_DEPLOY_KEY;
+if (key && !(target === 'production' && key.startsWith(`prod:${deployment}|`))) throw new Error(`CONVEX_DEPLOY_KEY in the environment does not belong to ${deployment}; unset it or use the matching key.`);
+const prod = key ? [] : ['--deployment', deployment];
 const config = join(root, 'cf-workers/agent-runner', target === 'production' ? 'wrangler.production.jsonc' : 'wrangler.jsonc');
 /** Read by the turn (lib/ai, convex/lib/editorToolkit.ts, convex/lib/media_storage.ts). Add a name when the turn starts reading it. */
 const TURN_ENV = ['ANTHROPIC_API_KEY', 'ANTHROPIC_BASE_URL', 'OPENAI_API_KEY', 'OPENAI_BASE_URL', 'GOOGLE_GENERATIVE_AI_API_KEY', 'ELEVENLABS_API_KEY', 'GEMINI_VIDEO_MODEL', 'GEMINI_FRAME_MODEL',
