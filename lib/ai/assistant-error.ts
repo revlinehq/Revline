@@ -3,6 +3,29 @@
 export const MODEL_SILENCE_LIMITS = { firstChunkMs: 8 * 60_000, chunkMs: 5 * 60_000 } as const;
 const SILENT_MODEL = /\b(?:First chunk|Chunk) timeout of (\d+)ms exceeded/;
 
+const EXHAUSTED_CREDIT = /credit balance|credits are (?:depleted|exhausted)|insufficient (?:credits|funds|quota)|insufficient_quota|billing.*(?:balance|limit)|exceeded your current quota/i;
+
+/** What kind of failure a model provider's error is (lib/ai/run-failure), from its HTTP status: exhausted credit is a
+ * limit, a key or model the account cannot use is refused, anything else it answered with or a call that went
+ * silent is unavailable. Null when the error did not come from the provider. */
+export function providerFailureCode(error: unknown): 'limit' | 'refused' | 'unavailable' | null {
+  const seen = new Set<object>();
+  function inspect(value: unknown, depth: number): 'limit' | 'refused' | 'unavailable' | null {
+    if (!value || typeof value !== 'object' || depth > 4 || seen.has(value)) return null;
+    seen.add(value);
+    const item = value as { statusCode?: unknown; message?: unknown; responseBody?: unknown; cause?: unknown; lastError?: unknown };
+    // Exhausted credit is a limit (as assistantFailureReason words it); a rate limit passes, so the call may be tried again.
+    if (item.statusCode === 402 || (item.statusCode === 400 || item.statusCode === 429) && EXHAUSTED_CREDIT.test(`${item.message ?? ''} ${item.responseBody ?? ''}`)) return 'limit';
+    if (item.statusCode === 401 || item.statusCode === 403) return 'refused';
+    const deeper = inspect(item.lastError, depth + 1) ?? inspect(item.cause, depth + 1);
+    if (deeper) return deeper;
+    if (item.statusCode === 404) return /model/i.test(`${item.message ?? ''} ${item.responseBody ?? ''}`) ? 'refused' : 'unavailable';
+    if (typeof item.statusCode === 'number' || typeof item.responseBody === 'string' || typeof item.message === 'string' && SILENT_MODEL.test(item.message)) return 'unavailable';
+    return null;
+  }
+  return inspect(error, 0);
+}
+
 /** Safe recovery text for provider failures, without exposing request bodies or credentials. */
 export function assistantFailureReason(error: unknown, provider: 'anthropic' | 'gateway' | 'openai' = 'anthropic'): string | null {
   const name = provider === 'openai' ? 'OpenAI' : provider === 'gateway' ? 'The AI Gateway' : 'Claude';
@@ -12,7 +35,7 @@ export function assistantFailureReason(error: unknown, provider: 'anthropic' | '
     seen.add(value);
     const item = value as { statusCode?: number; message?: unknown; responseBody?: unknown; cause?: unknown; lastError?: unknown };
     const detail = [item.message, item.responseBody].filter(part => typeof part === 'string').join(' ');
-    if ((item.statusCode === 400 || item.statusCode === 402 || item.statusCode === 429) && /credit balance|credits are (?:depleted|exhausted)|insufficient (?:credits|funds|quota)|insufficient_quota|billing.*(?:balance|limit)|exceeded your current quota/i.test(detail)) {
+    if ((item.statusCode === 400 || item.statusCode === 402 || item.statusCode === 429) && EXHAUSTED_CREDIT.test(detail)) {
       return provider === 'openai' ? 'OpenAI API credits or spending limits are exhausted. Your saved edits remain. Check billing in the OpenAI API platform before continuing.' : provider === 'gateway' ? 'The AI Gateway reached its billing limit. Your saved edits remain. Check the Convex team billing before continuing.' : 'Claude API credits are exhausted. Your saved edits remain. Restore credits in the Claude Console before continuing.';
     }
     if (item.statusCode === 401) return `${name} API authentication failed. Check the backend API key before continuing.`;

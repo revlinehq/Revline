@@ -410,7 +410,7 @@ function youtubeArguments(
     ? [
         "--match-filters",
         // Instagram posts may not report a length.
-        `duration ${link.kind === "social" ? ">?" : ">"} ${range.start} & !is_live`,
+        `duration ${/(^|\.)instagram\.com$/.test(new URL(link.url).hostname) ? ">?" : ">"} ${range.start} & !is_live`,
         "--match-filters",
         `duration >= ${range.end} & is_live`,
       ]

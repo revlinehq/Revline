@@ -1,4 +1,5 @@
 import { textOf } from '../lib/ai/history-compaction';
+import { codedAs, runFailure, runFailureCodeValidator } from '../lib/ai/run-failure';
 import { tableRow } from './lib/exact';
 import { customMutation } from 'convex-helpers/server/customFunctions';
 import { persistVideoUnavailable } from './lib/video_unavailable';
@@ -124,9 +125,8 @@ export const status = query({ args: { projectId: v.id("projects"), clientPlatfor
   const settings = await editorComposerSettings(ctx, ownerId);
   const ready=!settings.paidModelAccess ? configured(false) : args.clientPlatform==='ios'?mobileConfigured(true):configured();
   const editing=!!project.aiRunning&&(project.aiEditing??project.aiUndoRecorded??false);
-  // Run-scoped analysis remains evidence of the editing workflow while the
-  // model plans its next step; a plain reply never acquires this workflow lock.
-  const workflowActive=await editingWorkflowActive(ctx,project,requests.length>0);
+  // The timeline is locked for the whole run, planning included.
+  const workflowActive=await editingWorkflowActive(ctx,project);
   // The row outlives its run so the development effort switcher can show the last pick.
   const budgetRow=await ctx.db.query('aiBudgets').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const budget=project.aiRunning&&project.aiRunId?budgetRow:null;
@@ -217,7 +217,7 @@ export const retry = mutation({args:{projectId:v.id('projects'),promptMessageId:
   if(turn?.timelineId&&turn.timelineId!==activeTabOf(project))await openTabFor(ctx,ownerId,{projectId:args.projectId,timelineId:turn.timelineId});
   const resumed={...(turn?.args??{}),projectId:args.projectId,ownerId,runId,threadId:prompt.threadId,promptMessageId:args.promptMessageId,pinnedModel,...(recovery?{recovery}:{}),continuation:{segment:0,repairPass:0,savedEdits:0,pendingFastFrames:turn?.pendingFastFrames??[],feedback:'Resume the original request in place. Inspect the saved timeline and finish only unfinished work; never repeat a completed edit.'}};
   await writeProject(ctx,project._id,{aiRunning:true,aiEditing:false,aiAgentName:undefined,aiAgentActiveUntil:undefined,aiRunId:runId,aiError:undefined,aiQueuePaused:false,aiWorkflowId:undefined,aiAnalysisUsage:{runId,enqueued:0},aiRequest:{prompt:text,messageId:args.promptMessageId,startedRevision:project.revision??0},...(!sameUndoGroup?{aiUndoRecorded:false,aiCheckpointRevision:undefined}:{})});
-  if(turn)await patchTurn(ctx,turn,{runId,args:resumed,pass:0,segment:0,status:'running',error:undefined,savedEdits:0,revision:undefined,feedback:resumed.continuation.feedback,updatedAt:Date.now()});
+  if(turn)await patchTurn(ctx,turn,{runId,args:resumed,pass:0,segment:0,status:'running',error:undefined,errorCode:undefined,savedEdits:0,revision:undefined,feedback:resumed.continuation.feedback,updatedAt:Date.now()});
   else await rememberTurn(ctx,resumed,project);
   await dispatchTurn(ctx,resumed);
   return null;
@@ -271,7 +271,7 @@ export const messages = query({
     const display = args.paginationOpts.numItems === 0 ? null : await ctx.db.query('assistantMessageThreads').withIndex('by_thread', q => q.eq('threadId', project.threadId!)).unique();
     const page = args.paginationOpts.numItems === 0 ? { page: [], isDone: true, continueCursor: "" } : display?.completed && (!args.paginationOpts.cursor || args.paginationOpts.cursor.startsWith('display:')) && (!args.paginationOpts.endCursor || args.paginationOpts.endCursor.startsWith('display:')) ? await listMessageViews(ctx, project.threadId, args.paginationOpts) : await listUIMessages(ctx, components.agent, { threadId: project.threadId, paginationOpts: args.paginationOpts });
     const streams = await syncStreams(ctx, components.agent, { threadId: project.threadId, streamArgs: args.streamArgs });
-    const visible=await Promise.all(page.page.map(async message=>{if(message.role!=='user')return message;const view=await ctx.db.query('assistantTurnViews').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();if(view)return {...message,turnState:view.status,turnError:view.error,turnResuming:view.resuming,turnModel:view.model,turnEffort:view.effort};const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();return turn?{...message,turnState:turn.status,turnError:turn.error,turnResuming:turn.status==='running'&&(turn.pass>0||!!turn.args.continuation)}:message;}));
+    const visible=await Promise.all(page.page.map(async message=>{if(message.role!=='user')return message;const view=await ctx.db.query('assistantTurnViews').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();if(view)return {...message,turnState:view.status,turnError:view.error,...(view.error&&view.errorCode?{turnErrorCode:view.errorCode}:{}),turnResuming:view.resuming,turnModel:view.model,turnEffort:view.effort};const turn=await ctx.db.query('assistantTurns').withIndex('by_prompt',q=>q.eq('projectId',args.projectId).eq('promptMessageId',message.id)).unique();return turn?{...message,turnState:turn.status,turnError:turn.error,...(turn.error&&turn.errorCode?{turnErrorCode:turn.errorCode}:{}),turnResuming:turn.status==='running'&&(turn.pass>0||!!turn.args.continuation)}:message;}));
     return { ...page, page: plainValues(visible), streams: streams ?? { kind: "list" as const, messages: [] } };
   },
 });
@@ -394,13 +394,13 @@ export const recordBudget = internalMutation({ args: { ...runArgs, used: v.numbe
 }});
 async function requireRunState(ctx: QueryCtx | MutationCtx, args: {projectId:Doc<'projects'>['_id'];ownerId:string;runId:string}) {
   const project=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!holdsRun(project,args.runId))throw new ConvexError('AI run is no longer active');
+  if(!holdsRun(project,args.runId))throw runFailure('locked', 'AI run is no longer active.');
   return project;
 }
 /** Project tools used inside an existing editor run keep its lock and ownership checks. */
 async function requireActiveRun(ctx: QueryCtx | MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string }) {
   const project = await readProject(ctx, args.projectId);
-  if (!project || project.deleting || project.ownerId !== args.ownerId || !holdsRun(project, args.runId)) throw new ConvexError('AI run is no longer active');
+  if (!project || project.deleting || project.ownerId !== args.ownerId || !holdsRun(project, args.runId)) throw runFailure('locked', 'AI run is no longer active.');
   return project;
 }
 export const listRunTimelines = internalQuery({ args: runArgs, handler: async (ctx, args) => {
@@ -410,7 +410,7 @@ export const listRunTimelines = internalQuery({ args: runArgs, handler: async (c
 const runTabArgs = { ...runArgs, expectedRevision: v.number() };
 async function prepareRunTab(ctx: MutationCtx, args: { projectId: Doc<'projects'>['_id']; ownerId: string; runId: string; expectedRevision: number }) {
   const project = await requireActiveRun(ctx, args);
-  if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Inspect the current timeline before continuing.');
+  if ((project.revision ?? 0) !== args.expectedRevision) throw runFailure('conflict', 'The timeline changed elsewhere. Inspect the current timeline before continuing.');
   const preview = await ctx.db.query('aiTimelinePreviews').withIndex('by_project', q => q.eq('projectId', args.projectId)).unique();
   if (preview && (preview.runId !== args.runId || preview.baseRevision !== args.expectedRevision || !equalTimelineValue(preview.timeline, currentTimeline(project)))) throw new ConvexError('Finish the current timeline draft before opening another timeline.');
   await clearLivePreview(ctx, args.projectId);
@@ -461,7 +461,7 @@ export const proposeRunExport = internalMutation({ args: { ...runArgs, timelineI
 
 export const beginEditing = internalMutation({ args: runArgs, returns: v.null(), handler: async (ctx, args) => {
   const project = await projectRun(ctx,args.projectId,args.ownerId);
-  if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError('AI run is no longer active');
+  if (!project.aiRunning || project.aiRunId !== args.runId) throw runFailure('locked', 'AI run is no longer active.');
   if (!project.aiEditing) await writeRunState(ctx,project._id,{aiEditing:true});
   return null;
 }});
@@ -482,7 +482,7 @@ export const modelForRun = internalQuery({
 });
 export const isRunActive = internalQuery({ args: runArgs, returns: v.boolean(), handler: (ctx, args) => runIsActive(ctx, args) });
 export const getRun = internalQuery({args:runArgs,returns:v.object({project:projectDocument,assets:v.array(assetDocument)}),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw runFailure('locked', 'AI run is no longer active.');
   const raw=(await ctx.db.get(args.projectId))!,payload=await runPayload(ctx,args.projectId);
   // Full model context still needs recovery/request text; run-state checks deliberately do not.
   const project={...raw,...(payload?{aiRequest:payload.aiRequest,aiRecovery:payload.aiRecovery}:{})};
@@ -493,7 +493,7 @@ export const getRun = internalQuery({args:runArgs,returns:v.object({project:proj
   return {project:{...project,...run,timeline:(currentTimeline(project))},assets};
 }});
 export const getRunTimeline=internalQuery({args:runArgs,returns:v.object({timeline:timelineValidator,revision:v.number()}),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   const project=(await ctx.db.get(args.projectId))!,tab=mcpRunTab(args.runId);
   const timeline=tab?await storedTabTimeline(ctx,project,tab):currentTimeline(project);
   if(!timeline)throw new ConvexError('That timeline no longer exists.');
@@ -504,7 +504,7 @@ const runTab=(project:Doc<'projects'>,runId:string)=>boundRunTab(runId)??activeT
 /** A fix note belongs to a saved edit, not the brief or the next timeline revision. */
 export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),revision:v.number(),summary:v.string(),verification:v.string()},returns:v.any(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
-  if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   const project=(await ctx.db.get(args.projectId))!,timelineId=runTab(project,args.runId);
   const row=await ctx.db.query('revisionLog').withIndex('by_project_tab_revision',q=>q.eq('projectId',project._id).eq('timelineId',timelineId).eq('revision',args.revision)).first();
   if(!row||!row.clipIds.includes(args.clipId))throw new ConvexError('That saved revision did not change this clip on this tab, or is no longer retained. Read listRevisions with clipId first.');
@@ -519,7 +519,7 @@ export const recordFix=scopedRunMutation({args:{...runArgs,clipId:v.string(),rev
 }});
 /** listRevisions: recent saved edits, newest first, for one tab or clip. Read-only runs may call it. */
 export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.optional(v.string()),clipId:v.optional(v.string()),revision:v.optional(v.number()),limit:v.number()},returns:v.any(),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw runFailure('locked', 'AI run is no longer active.');
   const project=(await ctx.db.get(args.projectId))!,current=project.revision??0;
   const namedTab=boundRunTab(args.runId);
   const timelineId=args.timelineId??(args.clipId||namedTab?runTab(project,args.runId):undefined);
@@ -529,7 +529,7 @@ export const revisionHistory=internalQuery({args:{...runArgs,timelineId:v.option
 }});
 /** restoreClip/restoreTimeline: each changed clip's state at a revision on the run's tab (one clip, or all). */
 export const revisionChanges=internalQuery({args:{...runArgs,revision:v.number(),clipId:v.optional(v.string())},returns:v.any(),handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   const project=(await ctx.db.get(args.projectId))!,current=project.revision??0,timelineId=runTab(project,args.runId);
   const start=await historyStart(ctx,project._id,current);
   if(!Number.isInteger(args.revision)||args.revision>current)throw new ConvexError(`Revision ${args.revision} does not exist yet; the project is at revision ${current}. Call listRevisions for revision numbers.`);
@@ -540,19 +540,19 @@ export const revisionChanges=internalQuery({args:{...runArgs,revision:v.number()
   return {timelineId,currentRevision:current,changes};
 }});
 export const getRunAsset=internalQuery({args:{...runArgs,assetId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   const id=ctx.db.normalizeId('assets',args.assetId),asset=id?await ctx.db.get(id):null;
   if(!asset||asset.ownerId!==args.ownerId||asset.projectId!==args.projectId)throw new ConvexError('Media not found');return transportAsset(ctx,asset);
 }});
 /** The assistant's addSoundEffect attaches the shared catalog sound to this project before placing it. */
 export const attachRunStockAudio=internalMutation({args:{...runArgs,catalogId:v.string()},returns:assetDocument,handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   return transportAsset(ctx,await attachStockAudio(ctx,args.ownerId,args.projectId,args.catalogId));
 }});
 /** Reserve before each paid audio HTTP request, from either MCP or an editor turn. */
 export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null(),handler:async(ctx,args)=>{
   const run=await projectRun(ctx,args.projectId,args.ownerId);
-  if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw new ConvexError('AI run is no longer active');
+  if(!args.runId.startsWith(READ_ONLY_RUN_PREFIX)&&(run.aiRunId!==args.runId||!run.aiRunning))throw runFailure('locked', 'AI run is no longer active.');
   await requireEditorAccess(ctx,args.ownerId);
   await consumeAudioRequest(ctx,args.ownerId);
   return null;
@@ -560,7 +560,7 @@ export const reserveAudioRequest=internalMutation({args:runArgs,returns:v.null()
 /** Register a sound the assistant rendered and uploaded; storage counts like an upload, with no analysis tasks. It stays
  * out of the Media tab and the Library unless the user asked to save it there. */
 export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.string(),fileName:v.string(),size:v.number(),duration:v.number(),waveform:waveformValidator,recipe:v.optional(v.string()),beats:v.optional(beatsValidator),transcript:v.optional(transcriptValidator),contentType:v.optional(v.union(v.literal('audio/wav'),v.literal('audio/mpeg'))),saveToLibrary:v.optional(v.boolean())},returns:assetDocument,handler:async(ctx,args)=>{
-  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw new ConvexError('AI run is no longer active');
+  const run=await projectRun(ctx,args.projectId,args.ownerId);if(run.aiRunId!==args.runId||!run.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   if(!args.r2Key.startsWith(projectMediaPrefix(args.ownerId,args.projectId)))throw new ConvexError('Generated sound key is outside this project');
   const count=await ctx.db.query('assets').withIndex('by_ownerId_projectId',q=>q.eq('ownerId',args.ownerId).eq('projectId',args.projectId)).take(PROJECT_MEDIA_LIMIT);
   if(count.length>=PROJECT_MEDIA_LIMIT)throw new ConvexError(`A project supports up to ${PROJECT_MEDIA_LIMIT} media files`);
@@ -574,7 +574,7 @@ export const saveGeneratedSound=internalMutation({args:{...runArgs,r2Key:v.strin
 export const apply = scopedRunMutation({ args: { ...runArgs, expectedRevision: v.number(), timeline: timelineValidator,publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string()})),stagedPublication:v.optional(v.boolean()),tool:v.optional(v.string()) }, returns: v.number(), handler: async (ctx, args) => {
   const note=args.tool?{tool:args.tool}:undefined;
   const project = await requireProject(ctx, args.projectId, args.ownerId, false);
-  if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError("AI run is no longer active");
+  if (project.aiRunId !== args.runId || !project.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
   if(args.publication&&project.threadId!==args.publication.threadId)throw new ConvexError('Publication conversation does not match this project.');
   // A stale revision is refused below; compare overlaps only against the base this draft was built on.
   if((project.revision??0)===args.expectedRevision)rejectNewLayerOverlaps(currentTimeline(project),args.timeline);
@@ -590,21 +590,21 @@ export const apply = scopedRunMutation({ args: { ...runArgs, expectedRevision: v
     if (args.stagedPublication) await publishIncidentRun(ctx, args.runId, args.expectedRevision, revision);
     return revision;
   };
+  if ((project.revision ?? 0) !== args.expectedRevision) throw runFailure('conflict', TIMELINE_CONFLICT);
   if (project.aiUndoRecorded && project.aiCheckpointRevision === args.expectedRevision) {
-    if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError(TIMELINE_CONFLICT);
-    const timeline = await validateTimeline(ctx, project, args.timeline);
+    const timeline = await codedAs('invalid', () => validateTimeline(ctx, project, args.timeline));
     const revision = args.expectedRevision + 1;
     await writeProject(ctx,project._id, { timeline, aspectRatio: timeline.aspectRatio, revision, aiCheckpointRevision: revision, updatedAt: Date.now() }, undefined, note); return receipt(revision);
   }
-  const revision = await commitTimeline(ctx, project, args.timeline, args.expectedRevision, undefined, undefined, undefined, note);
+  const revision = await codedAs('invalid', () => commitTimeline(ctx, project, args.timeline, args.expectedRevision, undefined, undefined, undefined, note));
   await writeProject(ctx,project._id, { aiUndoRecorded: true, aiCheckpointRevision: revision }); return receipt(revision);
 }});
 /** Undo only stored history before this model turn publishes its own checkpoints. */
 export const undoLatestEdit=scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),overrideApproved:v.optional(v.boolean())},returns:v.object({undone:v.boolean(),revision:v.number(),timeline:timelineValidator}),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId,true);
-  if(project.aiRunId!==args.runId||!project.aiRunning)throw new ConvexError('AI run is no longer active');
+  if(project.aiRunId!==args.runId||!project.aiRunning)throw runFailure('locked', 'AI run is no longer active.');
   if(project.aiUndoRecorded)throw new ConvexError('Undo the latest saved edit before making changes in this turn.');
-  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Inspect it before undoing.');
+  if((project.revision??0)!==args.expectedRevision)throw runFailure('conflict', 'The timeline changed elsewhere. Inspect it before undoing.');
   const history=(project.history??[]).map(normalizeTimeline),previous=history.pop();
   if(!previous)return {undone:false,revision:project.revision??0,timeline:currentTimeline(project)};
   // Undo is an edit too: it may not take back approved work, or the approval itself, unless the user asked.
@@ -612,9 +612,9 @@ export const undoLatestEdit=scopedRunMutation({args:{...runArgs,expectedRevision
     const current=currentTimeline(project),kept=new Map(previous.clips.map(clip=>[clip.id,clip]));
     const unmarked=current.clips.filter(clip=>isApproved(clip)&&!isApproved(kept.get(clip.id)??clip)).map(clip=>({clipId:clip.id,name:clip.scene?.title||clip.kind,what:'remove its approval'}));
     const touched=[...approvalViolations(current,previous),...unmarked];
-    if(touched.length)throw new ConvexError(approvalRefusal(touched));
+    if(touched.length)throw runFailure('refused', approvalRefusal(touched));
   }
-  const timeline=await validateTimeline(ctx,project,previous),revision=args.expectedRevision+1;
+  const timeline=await codedAs('invalid',()=>validateTimeline(ctx,project,previous)),revision=args.expectedRevision+1;
   await writeProject(ctx,project._id,{timeline,aspectRatio:timeline.aspectRatio,history,revision,aiEditing:true,aiCheckpointRevision:undefined,updatedAt:Date.now()},undefined,{tool:'undoLatestEdit'});
   return {undone:true,revision,timeline};
 }});
@@ -628,18 +628,18 @@ export const validateDraft = internalQuery({ args: { ...runArgs, expectedRevisio
     if(!timeline)throw new ConvexError('That timeline no longer exists.');
     project={...project,activeTimelineId:tab,timeline,aspectRatio:timeline.aspectRatio};
   }
-  if (project.aiRunId !== args.runId || !project.aiRunning) throw new ConvexError('AI run is no longer active');
-  if ((project.revision ?? 0) !== args.expectedRevision) throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
-  await validateTimeline(ctx, project, args.timeline);
+  if (project.aiRunId !== args.runId || !project.aiRunning) throw runFailure('locked', 'AI run is no longer active.');
+  if ((project.revision ?? 0) !== args.expectedRevision) throw runFailure('conflict', 'The timeline changed elsewhere. Your replacement was not saved.');
+  await codedAs('invalid', () => validateTimeline(ctx, project, args.timeline));
   rejectNewLayerOverlaps(currentTimeline(project), args.timeline);
   return null;
 }});
 /** A read-only client projection. This never publishes a draft or adds undo history. */
 export const previewDraft = scopedRunMutation({args:{...runArgs,expectedRevision:v.number(),timeline:timelineValidator},returns:v.null(),handler:async(ctx,args)=>{
   const project=await requireProject(ctx,args.projectId,args.ownerId);
-  if(!project.aiRunning||project.aiRunId!==args.runId)throw new ConvexError('AI run is no longer active');
-  if((project.revision??0)!==args.expectedRevision)throw new ConvexError('The timeline changed elsewhere. Your replacement was not saved.');
-  const timeline=await validateTimeline(ctx,project,args.timeline);
+  if(!project.aiRunning||project.aiRunId!==args.runId)throw runFailure('locked', 'AI run is no longer active.');
+  if((project.revision??0)!==args.expectedRevision)throw runFailure('conflict', 'The timeline changed elsewhere. Your replacement was not saved.');
+  const timeline=await codedAs('invalid',()=>validateTimeline(ctx,project,args.timeline));
   rejectNewLayerOverlaps(currentTimeline(project),timeline);
   const previous=await ctx.db.query('aiTimelinePreviews').withIndex('by_project',q=>q.eq('projectId',project._id)).unique();
   const current=previous?.runId===args.runId&&previous.baseRevision===args.expectedRevision?previous:null;
@@ -650,7 +650,7 @@ export const previewDraft = scopedRunMutation({args:{...runArgs,expectedRevision
   return null;
 }});
 const aiFieldsForFinish=(payload:Awaited<ReturnType<typeof runPayload>>)=>({aiRequest:payload?.aiRequest,aiRecovery:payload?.aiRecovery});
-export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})),segment:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
+export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v.string()), errorCode: v.optional(runFailureCodeValidator), savedEdits:v.optional(v.number()),publication:v.optional(v.object({threadId:v.string(),promptMessageId:v.string(),stagedRevision:v.number(),status:v.union(v.literal('failed'),v.literal('aborted'))})),segment:v.optional(v.number()) }, returns: v.null(), handler: async (ctx, args) => {
   const timeout=await ctx.db.query('mcpRunTimeouts').withIndex('by_run',q=>q.eq('runId',args.runId)).unique();
   if(timeout?.ownerId===args.ownerId&&timeout.projectId===args.projectId){
     const scheduled=await ctx.db.system.get(timeout.scheduledId);
@@ -676,7 +676,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
     await savePublicationReceipt(ctx,args.ownerId,kept===null?{...receipt,status:publication.status}:{...receipt,status:'saved',revision:kept.revision});
   }
   const error = committed ? undefined : kept === null ? args.error : `${args.error!.replace(/\s*(?:The pending replacement was not saved\.|No timeline changes were saved\.)/g, '')} ${keptDraftNote(kept)}`.trim();
-  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000),revision:kept?.revision??(committed?written?.receipt?.revision:undefined)??state?.revision});
+  if(turn&&turn.status==='running')await settleTurn(ctx,turn,{status:error?'failed':'completed',error:error?.slice(0,1000),errorCode:args.errorCode,revision:kept?.revision??(committed?written?.receipt?.revision:undefined)??state?.revision});
   await safely('finishIncidentRun', () => finishIncidentRun(ctx, args.runId, committed && publication && written?.receipt ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: written.receipt.revision } : publication && kept !== null ? { status: 'saved', stagedRevision: publication.stagedRevision, revision: kept.revision } : publication));
   if (error && project?.ownerId === args.ownerId && project.aiRunId === args.runId) await recordIncidentSafely(ctx, {
     source: 'assistant', kind: 'turn-failure', message: error,
@@ -704,7 +704,7 @@ export const finish = internalMutation({ args: { ...runArgs, error: v.optional(v
 export const requestAnalysis = internalMutation({ args: { ...runArgs, assetId: v.string(), mode: analysisMode, highlightSkipGemini:v.optional(v.string()),highlightSourceType:v.optional(highlightSourceTypeValidator), speakerRequest:v.optional(speakerRequestValidator), frameRequest: v.optional(frameRequestValidator), videoRequest: v.optional(videoRequestValidator) }, returns: v.id("analysisRequests"), handler: async (ctx, args) => {
   if (args.mode === 'understand') throw new ConvexError('Optional footage overviews start after the editor opens.');
   const project = await requireProject(ctx, args.projectId, args.ownerId);
-  if (!project.aiRunning || project.aiRunId !== args.runId) throw new ConvexError("AI run is no longer active");
+  if (!project.aiRunning || project.aiRunId !== args.runId) throw runFailure('locked', 'AI run is no longer active.');
   const assetId = ctx.db.normalizeId("assets", args.assetId); const asset = assetId ? await ctx.db.get(assetId) : null;
   if (!asset || asset.ownerId !== args.ownerId || asset.projectId !== args.projectId || asset.kind === "image" || ((args.mode === 'highlights' || args.mode === 'reference' || args.mode === "shots" || args.mode === "track" || args.mode === "facecam" || args.mode === "speakers" || args.mode === 'frames' || args.mode === 'video') && asset.kind !== "video")) throw new ConvexError("Choose suitable media from this project");
   if(args.mode==='speakers'){
@@ -772,7 +772,7 @@ export const currentPrompt = internalQuery({
   args: { ...runArgs, threadId: v.string(), promptMessageId: v.string() }, returns: v.string(),
   handler: async (ctx, args) => {
     const project = await requireProject(ctx, args.projectId, args.ownerId);
-    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw new ConvexError('AI run is no longer active');
+    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw runFailure('locked', 'AI run is no longer active.');
     const [prompt] = await ctx.runQuery(components.agent.messages.getMessagesByIds, { messageIds: [args.promptMessageId] });
     if (!prompt || prompt.threadId !== args.threadId || prompt.message?.role !== 'user') throw new ConvexError('The current editing prompt is unavailable');
     const content = prompt.message.content;
@@ -787,7 +787,7 @@ export const earlierRequests = internalQuery({
   returns: v.array(v.object({ text: v.string(), turn: v.union(v.null(), v.object({ status: v.union(v.literal('running'), v.literal('completed'), v.literal('failed'), v.literal('stopped')), savedEdits: v.number(), revision: v.optional(v.number()), error: v.optional(v.string()) })) })),
   handler: async (ctx, args) => {
     const project = await requireProject(ctx, args.projectId, args.ownerId);
-    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw new ConvexError('AI run is no longer active');
+    if (!project.aiRunning || project.aiRunId !== args.runId || project.threadId !== args.threadId) throw runFailure('locked', 'AI run is no longer active.');
     const { page } = await ctx.runQuery(components.agent.messages.listMessagesByThreadId, { threadId: args.threadId, order: 'desc', upToAndIncludingMessageId: args.promptMessageId, statuses: ['success'], excludeToolMessages: true, paginationOpts: { cursor: null, numItems: 100 } });
     const prompts = page.filter(message => message._id !== args.promptMessageId && message.message?.role === 'user').reverse();
     return Promise.all(prompts.map(async message => {

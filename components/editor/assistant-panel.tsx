@@ -33,6 +33,7 @@ import { Button } from '@/components/ui/button';
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from '@/components/ui/empty';
 import { liveActivity, savedEditComparison, summarizeTools, turnPublicationReceipt, type AssistantEditSnapshot } from './assistant-results';
 import type { ChatMessage } from './chat-types';
+import type { RunFailureCode } from '@/lib/ai/run-failure';
 import './assistant-results.css';
 import './assistant-editing.css';
 import './assistant-panel.css';
@@ -78,6 +79,13 @@ const ConnectedConversation = memo(function ConnectedConversation({conversation,
   return null;
 });
 /** Stream subscriptions live inside the conversation, away from preview/timeline. */
+/** The failure a turn reports: the live error while this turn is current, else the one its run stored, with the code
+ * stored beside it when that is the text shown. */
+function turnFailure(live:string|null|undefined,request?:ChatMessage):{error?:string|null;errorCode?:RunFailureCode} {
+  const error=live||request?.turnError;
+  return {error,errorCode:request?.turnError&&error===request.turnError?request.turnErrorCode:undefined};
+}
+
 export function AssistantPanel(props:PanelProps) {
   const [conversationState,setConversationState]=useState<ConversationState>();
   const current=props.conversation&&conversationState?.threadId===props.conversation.threadId?conversationState:undefined;
@@ -166,7 +174,7 @@ function AssistantPanelBody({ messages, running, configured, error, onSend, onRe
       const publicationReceipt=turnPublicationReceipt(group.messages);
       const draftFailed=!running&&group.id===turnId&&(!!error||replies.some(message=>message.status==='failed'||message.status==='aborted'));
       const cards=summarizeTools(steps,{publicationReceipt,publishedRevision:legacyPublications.current.get(group.id),draftFailed,draftPending:group.id===turnId&&(answering||replies.some(message=>message.status==='pending'||message.status==='streaming'))});
-      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),error:(group.id===turnId?(localError||(!waiting?error:null)):null)||group.messages.find(message=>message.role==='user')?.turnError});
+      const presentation=assistantTurnPresentation(replies,cards,{receipt:publicationReceipt,active:group.id===turnId&&answering,recovered:group.messages.some(message=>message.role==='user'&&message.turnState==='completed'),...turnFailure(group.id===turnId?(localError||(!waiting?error:null)):null,group.messages.find(message=>message.role==='user'))});
       return {...group,comparison,...presentation,run:turnActivity(presentation.replies,group.id===turnId&&waiting)};
     });
   },[messages,turnId,editSnapshot,running,error,localError,waiting,optimisticRequest,answering]);

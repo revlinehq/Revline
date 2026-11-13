@@ -1,13 +1,11 @@
 import type { Doc } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 
-type Run = Pick<Doc<'projects'>, '_id' | 'aiRunning' | 'aiRunId' | 'aiEditing' | 'aiUndoRecorded'>;
+type Run = Pick<Doc<'projects'>, 'aiRunning'>;
 
-/** Persisted workflow evidence survives analysis → planning and client reloads. */
-export async function editingWorkflowActive(ctx: QueryCtx | MutationCtx, project: Run, hasRunAnalysis?: boolean) {
-  if (!project.aiRunning) return false;
-  if (project.aiEditing || project.aiUndoRecorded) return true;
-  if (hasRunAnalysis !== undefined) return hasRunAnalysis;
-  if (!project.aiRunId) return false;
-  return !!await ctx.db.query('analysisRequests').withIndex('by_projectId_runId', q => q.eq('projectId', project._id).eq('aiRunId', project.aiRunId!)).first();
+/** The timeline is locked for the whole run, from the moment it starts: while the model reads and plans, no user
+ * save, undo or background placement (import, upscale, cut-out) moves the revision under it. Placements wait for
+ * the run to end. `ctx` stays for the callers' shape. */
+export async function editingWorkflowActive(_ctx: QueryCtx | MutationCtx, project: Run) {
+  return !!project.aiRunning;
 }

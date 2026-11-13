@@ -2,6 +2,7 @@ import { plainFailureText } from './failure-text';
 import { isOverlapPlacementRejection } from '../editor/timeline-edit-errors';
 import type { EffectPlan } from './edit-plan';
 import { isPassiveRead } from './read-only-tools';
+import type { RunFailureCode } from './run-failure';
 
 function stable(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -90,7 +91,9 @@ function passingReview(input:unknown,output:Record<string,unknown>,revision:numb
 }
 
 /** Derive state from completed steps: the SDK can reevaluate a stop condition. */
-/** A deployment without a configured review service cannot review; that is not a failed check. */
+/** A deployment without a configured review service cannot review; that is not a failed check. previewRender says so
+ * with reviewUnavailable; the sentence is read only for results stored before that flag. A review that timed out is
+ * also `unavailable` by code, but it is a failed check, so the code alone cannot decide this. */
 const REVIEW_UNAVAILABLE = /composition review is not configured/i;
 function reviewUnavailable(part: { toolName?: string; error?: unknown; output?: unknown }) {
   if (part.toolName !== 'previewRender') return false;
@@ -353,14 +356,19 @@ export function completionRepairFeedback(steps: ToolSteps, finishReason: string,
 
 /** The model declined the request under its provider's safety rules. Asking again gets the same answer. */
 export class AssistantRefusalError extends Error {
+  readonly failureCode: RunFailureCode = 'refused';
   constructor(){super('The model declined this request under its safety rules, so the edit was not continued. Your saved edits remain. Rephrase the request, or pick another model and send it again.');this.name='AssistantRefusalError';}
 }
 
+/** The result did not pass its visual check: input the next pass can correct. */
 export class AssistantRenderReviewError extends Error {
+  readonly failureCode: RunFailureCode = 'invalid';
   constructor(){super('The saved edit did not pass the final visual check. Some requested changes remain unfinished.');this.name='AssistantRenderReviewError';}
 }
 
+/** The run refuses to repeat a command that failed the same way three times. */
 export class AssistantToolRetryError extends Error {
+  readonly failureCode: RunFailureCode = 'refused';
   constructor(failure?: { tool: string; reason: string }) {
     // Name the step and its reason: "the same command failed" tells the user nothing they can act on.
     super(failure
