@@ -239,10 +239,14 @@ export function beatsToDrop(beats: { index: number; priority: number; seconds: n
 type CheckAsset = { _id: string; audioAssetId?: string; analysis?: { transcript?: Transcript } };
 
 /** Finish: the cut must begin on the script's opening line, end on its closing line, and keep each line whole. */
-export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], script?: SavedScript | null): string[] {
+export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], script?: SavedScript | null, readCuts: { assetId: string; start: number; end: number }[] = []): string[] {
   if (!script) return [];
   const asset = assets.find(item => item._id === script.assetId), transcript = asset?.analysis?.transcript;
   if (!asset || !transcript?.words.length) return [];
+  // What the agent cut after reading the cut back (readCutScript): a retake or false start it heard, the opening line
+  // included. Those words are removed on purpose, so the opening, closing and whole-line checks follow them.
+  const dropped = readCuts.filter(cut => cut.assetId === asset._id || !!asset.audioAssetId && cut.assetId === asset.audioAssetId);
+  const cutByReading = (word: Word) => { const onset = wordAnchor(word); return dropped.some(cut => onset >= cut.start - .02 && onset < cut.end); };
   const pieces = timeline.clips.filter(clip => (clip.kind === 'video' || clip.kind === 'audio') && (clip.assetId === asset._id || !!asset.audioAssetId && clip.assetId === asset.audioAssetId));
   const span = (clip: Timeline['clips'][number]) => ({ start: clip.sourceStart, end: sourceEndOf(clip) });
   const shown = pieces.map(span);
@@ -257,16 +261,19 @@ export function reelScriptFailures(timeline: Timeline, assets: CheckAsset[], scr
   const retained = words.filter(kept);
   if (!retained.length) return [];
   const failures: string[] = [], head = retained[0], tail = retained.at(-1)!;
+  // The opening and closing the cut must reach: the script's own, or the first and last of their words the reading kept.
+  const openingStart = words.find(word => word.start >= script.opening.start - .05 && !cutByReading(word))?.start ?? script.opening.start;
+  const closingEnd = [...words].reverse().find(word => word.end <= script.closing.end + .05 && !cutByReading(word))?.end ?? script.closing.end;
   const said = (from: Word[]) => quote(from.map(word => word.text).join(' '), 5);
-  if (head.start > script.opening.start + .5)
+  if (head.start > openingStart + .5)
     failures.push(`The cut starts mid-script at ${said(retained.slice(0, 5))} (source ${seconds(head.start)}). The script opens with ${quote(script.opening.text)} at source ${seconds(script.opening.start)}: begin the reel on that line.`);
-  else if (head.start < script.opening.start - .5)
+  else if (head.start < openingStart - .5)
     failures.push(`The cut starts at ${said(retained.slice(0, 5))} (source ${seconds(head.start)}), before the script's opening line ${quote(script.opening.text)} at source ${seconds(script.opening.start)}. Remove that setup talk or earlier take.`);
-  if (tail.end < script.closing.end - .5)
+  if (tail.end < closingEnd - .5)
     failures.push(`The cut ends at ${quote(retained.slice(-5).map(word => word.text).join(' '), 5, true)} (source ${seconds(tail.end)}), before the script's closing line ${quote(script.closing.text, 7, true)} that ends at source ${seconds(script.closing.end)}. Keep the ending.`);
   else if (tail.end > script.closing.end + .5)
     failures.push(`The cut runs past the script's closing line ${quote(script.closing.text, 7, true)} (ends at source ${seconds(script.closing.end)}) into ${quote(retained.slice(-5).map(word => word.text).join(' '), 5, true)}. Remove the talk after the script.`);
-  const removed = (word: Word) => { const middle = (word.start + word.end) / 2; return FILLERS.has(token(word.text)) || !token(word.text) || outline.removable.some(cut => middle >= cut.start && middle < cut.end); };
+  const removed = (word: Word) => { const middle = (word.start + word.end) / 2; return FILLERS.has(token(word.text)) || !token(word.text) || cutByReading(word) || outline.removable.some(cut => middle >= cut.start && middle < cut.end); };
   for (const line of lines) {
     const all = words.slice(line.from, line.to + 1), present = all.filter(kept);
     if (!present.length) continue;

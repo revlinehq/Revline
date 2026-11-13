@@ -14,7 +14,7 @@ import { isPlainReelTimeline } from '../../lib/ai/fast-frame-review';
 import { captionAdvice } from '../../lib/ai/lanes/caption-data';
 import { reelCaptionFailures, reelFinishKey } from '../../lib/ai/lanes/reel/check';
 import { reelScriptFailures, type SavedScript } from '../../lib/ai/lanes/reel/script';
-import { cutScriptFailures } from '../../lib/ai/lanes/reel/cut-script';
+import { CUT_READ_ROUNDS, cutScript, cutScriptFailures, cutSignature } from '../../lib/ai/lanes/reel/cut-script';
 import { requestedLengthFailure } from '../../lib/ai/lanes/checks';
 import { summarizeTimeline } from './inspectTimeline';
 import type { EditorRun, LaneTask } from './run_types';
@@ -78,12 +78,22 @@ export async function finishLane(
   if (task.lane === 'reel' && (touched.footage || touched.captions)) failures.push(...reelCaptionFailures(timeline, assets));
   if (task.lane === 'reel' && touched.footage) {
     // The cut is held to the script the agent read: its opening and closing lines and whole sentences.
-    failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined));
+    const read = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId)?.output as { cutAway?: { assetId: string; start: number; end: number }[] } | undefined;
+    failures.push(...reelScriptFailures(timeline, assets, task.script as SavedScript | undefined, read?.cutAway));
   }
   // The script as cut: a task that read its cut back is held to it. Repeats, clipped words and half sentences left at
   // the cuts come back in one result. A task that never read the cut changed no speech on purpose and is not judged.
   const cutRead = [...task.evidence].reverse().find(item => item.tool === 'readCutScript' && item.timelineId === timelineId);
-  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys((cutRead.output as { accepted?: Record<string, string> }).accepted ?? {}), !!task.script));
+  // A reel is a clean script: its repeats, reworded retakes and false starts fail wherever they sit, and a reel whose
+  // script was planned and cut is not done until the agent has read the cut back as prose.
+  const reel = task.lane === 'reel';
+  // After the last round of cuts (CUT_READ_ROUNDS) the agent reports what is left; only spots at the cuts still fail.
+  const cutOutput = cutRead?.output as { accepted?: Record<string, string>; rounds?: number; heardCut?: string } | undefined;
+  if (cutRead) failures.push(...cutScriptFailures(timeline, assets, Object.keys(cutOutput?.accepted ?? {}), !!task.script, reel && touched.footage && (cutOutput?.rounds ?? 0) < CUT_READ_ROUNDS));
+  // A planned reel's cut is done when the agent read its final prose and said what the viewer hears (heard).
+  const cutNow = reel && task.script && touched.footage ? cutScript(timeline, assets) : undefined;
+  if (cutNow?.words.length && cutOutput?.heardCut !== cutSignature(cutNow))
+    failures.push(`The cut as it is now was not read back. Call readCutScript, read its prose as the viewer will hear it and cut any point said twice, abandoned sentence or half sentence; when it says each point once, call readCutScript {heard} with what the viewer hears.`);
   const tabs = (await ctx.runQuery(internal.lanes.timelines, scope)) as {
     timelineId: string;
     timeline: Timeline | null;

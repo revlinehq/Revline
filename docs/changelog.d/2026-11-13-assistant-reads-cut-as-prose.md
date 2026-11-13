@@ -1,0 +1,1 @@
+- Assistant: after a speech cut the assistant reads the cut back as prose and cuts every point said twice, reworded retakes and abandoned sentences included, before a reel can finish; asked to show the script, it points out leftover repeats and offers to cut them. Why: a production reel kept three takes of the same line because only near-exact repeats were flagged.
